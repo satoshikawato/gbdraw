@@ -660,9 +660,9 @@ options:
   --legend_rows FILE    Legend row edits: a TSV with the header "key name
                         hidden position", one line per Legend row by its key;
                         name renames the row (blank: keep its name), hidden
-                        true hides it, position (1, 2, ...) on every row or on
-                        none orders the rows. A key the Legend does not draw
-                        is ignored.
+                        true hides it, position (1, 2, ...) on every shown row
+                        or on none orders the rows. A key the Legend does not
+                        draw is ignored.
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes shorter than the short/long
@@ -997,7 +997,7 @@ quote is part of the cell it is in:
 | `key` | The row's key, as the SVG writes it in `data-legend-key`, such as `CDS` or `GC content`. Spaces around it are ignored. Each key on one line. |
 | `name` | The row's new name; blank keeps its name. |
 | `hidden` | `true` hides the row; `false` or blank shows it. |
-| `position` | The row's place, from 1, on every line or on none. Rows the table does not list follow the listed ones in their order. |
+| `position` | The row's place, from 1, on every shown line or on none; a hidden row may leave it blank. Rows the table does not list follow the listed ones in their order. |
 
 A key the Legend does not draw is ignored. Two shown rows with one name and
 one swatch are drawn as one row; with different swatches their names are
@@ -1768,9 +1768,9 @@ options:
   --legend_rows FILE    Legend row edits: a TSV with the header "key name
                         hidden position", one line per Legend row by its key;
                         name renames the row (blank: keep its name), hidden
-                        true hides it, position (1, 2, ...) on every row or on
-                        none orders the rows. A key the Legend does not draw
-                        is ignored.
+                        true hides it, position (1, 2, ...) on every shown row
+                        or on none orders the rows. A key the Legend does not
+                        draw is ignored.
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes shorter than the short/long

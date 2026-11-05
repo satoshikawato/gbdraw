@@ -4344,6 +4344,7 @@
                                     </select>
                                 </div>
                                 <p v-if="figureSizeLine" class="ui-hint" data-figure-size-line>{{ figureSizeLine }}</p>
+                                <p v-if="figureSizeFitting" class="ui-hint" role="status" data-figure-size-fitting>{{ figureSizeFitting }}</p>
                                 <p v-if="figureSizeLarger" class="ui-hint" data-figure-size-larger>{{ figureSizeLarger }}</p>
                             </div>
                             <template v-if="mode === 'linear'">
@@ -6824,34 +6825,34 @@
                     </div>
 
                     <!-- Canvas padding controls panel -->
-                    <div v-if="showCanvasControls && svgContent"
+                    <div v-if="showCanvasControls && svgContent" data-setting="canvas-padding"
                          class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-56">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-bold text-slate-700">{{ t('Canvas Padding') }}</span>
+                            <span class="text-xs font-bold text-slate-700 flex items-center gap-1">{{ t('Canvas Padding') }} <help-tip id="canvas-padding-help" :label="t('About Canvas Padding')" :text="settingApplicationHelp('canvas-padding')"></help-tip></span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800" :disabled="!semanticMutationAvailable">{{ t('Reset') }}</button>
                         </div>
                         <div class="grid grid-cols-3 gap-1 text-center">
                             <div></div>
                             <div>
                                 <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">{{ t('Top') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" :value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0); $event.target.value = String(canvasPadding.top)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-left" class="text-[10px] text-slate-500 block">{{ t('Left') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" :value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0); $event.target.value = String(canvasPadding.left)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
                                 <label for="canvas-padding-right" class="text-[10px] text-slate-500 block">{{ t('Right') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" :value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0); $event.target.value = String(canvasPadding.right)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-bottom" class="text-[10px] text-slate-500 block">{{ t('Bottom') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" :value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0); $event.target.value = String(canvasPadding.bottom)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                         </div>

@@ -421,6 +421,13 @@ test('canvas padding reaches every batch Result through Generate and applies onc
     const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
     return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
   }));
+  // Python draws the padded width as one sum and the Web's Reset subtracts the padding from it again, so a width can
+  // differ from the unpadded one in the last bit of a double. Padding applied twice would differ by 150 px.
+  /** @param {number[]} widths @param {number[]} expected */
+  const expectWidths = (widths, expected) => {
+    expect(widths).toHaveLength(expected.length);
+    widths.forEach((width, index) => expect(width).toBeCloseTo(expected[index], 6));
+  };
   const base = await canvases();
   await page.getByRole('button', { name: 'Toggle canvas padding controls' }).click();
   const right = page.locator('.preview-canvas-padding input[type=number]').nth(2);
@@ -430,15 +437,15 @@ test('canvas padding reaches every batch Result through Generate and applies onc
   for (let run = 0; run < 2; run += 1) {
     await generateAndWaitForResult(page);
     await settle(page);
-    expect((await canvases()).map((box) => box[2])).toEqual(base.map((box) => box[2] + 150));
+    expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2] + 150));
   }
   await selectResult(page, 1);
-  expect(await page.evaluate(() => Number(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
-    .getAttribute('viewBox').trim().split(/[\s,]+/)[2]))).toBe(base[1][2] + 150);
+  expectWidths([await page.evaluate(() => Number(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+    .getAttribute('viewBox').trim().split(/[\s,]+/)[2]))], [base[1][2] + 150]);
   await page.locator('.preview-canvas-padding').getByRole('button', { name: 'Reset', exact: true }).click();
   await settle(page);
   await selectResult(page, 0);
-  expect((await canvases()).map((box) => box[2])).toEqual(base.map((box) => box[2]));
+  expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2]));
 });
 
 test('Escape that closes the Editor returns focus to the Editor toggle', async ({ browser }) => {

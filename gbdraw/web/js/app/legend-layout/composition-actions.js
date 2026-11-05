@@ -5,10 +5,11 @@ import {
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
+import { normalizeCanvasPadding } from '../../services/canvas-padding.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
-/** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
+/** @import { LayoutBox, CompositionCanvasPaddingPx, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
 /**
@@ -375,7 +376,46 @@ const validateSpacing = (value) => {
       'composition.spacing.overlayClearancePx'
     ),
     stackGapPx: nonNegativeNumber(value.stackGapPx, 'composition.spacing.stackGapPx'),
-    titleGapPx: nonNegativeNumber(value.titleGapPx, 'composition.spacing.titleGapPx')
+    titleGapPx: nonNegativeNumber(value.titleGapPx, 'composition.spacing.titleGapPx'),
+    // The canvas padding Python drew (`canvas.padding`), recorded only when a side is not 0.
+    ...(value.canvasPadding === undefined ? {} : { canvasPadding: validateCanvasPaddingPx(value.canvasPadding) })
+  };
+};
+
+/**
+ * @param {unknown} value
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const validateCanvasPaddingPx = (value) => {
+  if (!isPlainObject(value)) fail('composition.spacing.canvasPadding must be an object.');
+  /** @param {'top' | 'right' | 'bottom' | 'left'} side */
+  const side = (side) => nonNegativeNumber(value[side], `composition.spacing.canvasPadding.${side}`);
+  return { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+};
+
+/**
+ * The canvas padding Python drew a Result with (`spacing.canvasPadding` of its composition metadata), the one
+ * reader of it: zero on each side for a Result that records none (one drawn without padding, or saved before
+ * Python drew it).
+ * @param {CompositionMetadata | null} metadata
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const recordedCanvasPadding = (metadata) => metadata?.spacing.canvasPadding
+  ?? { top: 0, right: 0, bottom: 0, left: 0 };
+
+/**
+ * The padding the Web adds to a Result on each side (PD-OI-064: the padding Python already drew is never applied
+ * twice): the drawing's padding as the Web draws it (`normalizeCanvasPadding`) minus the padding the Result records.
+ * @param {CompositionMetadata | null} metadata The Result's composition metadata; null for none.
+ * @param {Readonly<Partial<Record<keyof CompositionCanvasPaddingPx, unknown>>> | null | undefined} value The drawing's padding.
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const addedCanvasPadding = (metadata, value) => {
+  const drawn = normalizeCanvasPadding(value);
+  const recorded = recordedCanvasPadding(metadata);
+  return {
+    top: drawn.top - recorded.top, right: drawn.right - recorded.right,
+    bottom: drawn.bottom - recorded.bottom, left: drawn.left - recorded.left
   };
 };
 
@@ -1002,24 +1042,6 @@ const wireBounds = (bounds) => ({
   y: wireNumber(bounds.y)
 });
 
-const CANVAS_PADDING_SIDES = Object.freeze(['top', 'right', 'bottom', 'left']);
-
-/**
- * Normalize editor canvas padding; invalid or negative sides are 0.
- * @param {Partial<Record<string, unknown>> | null | undefined} value
- * @returns {Record<string, number>}
- */
-export const normalizeCanvasPadding = (value) => Object.fromEntries(
-  CANVAS_PADDING_SIDES.map((side) => {
-    const number = Number(value?.[side]);
-    return [side, Number.isFinite(number) && number >= 0 ? number : 0];
-  })
-);
-
-/** @param {Partial<Record<string, unknown>> | null | undefined} value */
-export const hasCanvasPadding = (value) => (
-  Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0)
-);
 
 /**
  * @param {Element} svg
@@ -1093,18 +1115,25 @@ const viewBoxBounds = (value) => {
 };
 
 /**
- * What a root drawn to a requested size was asked for, and the canvas before
+ * What a root drawn to a requested size was asked for, the canvas before
  * Canvas padding and moved items grew it (the recorded automatic canvas, else
- * the viewBox), for the Figure size line; null for a root drawn at Auto or
- * without composition metadata.
+ * the viewBox), and whether the Web pads it beyond the padding Python drew
+ * (`addsPadding`, given the drawing's padding), for the Figure size line; null
+ * for a root drawn at Auto or without composition metadata.
  * @param {Element} svg
- * @returns {{ requested: RequestedCanvas, base: { width: number, height: number } } | null}
+ * @returns {{ requested: RequestedCanvas, base: { width: number, height: number },
+ *   addsPadding: (value: Readonly<Partial<Record<keyof CompositionCanvasPaddingPx, unknown>>>) => boolean } | null}
  */
 export const requestedCanvasOf = (svg) => {
   if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== String(COMPOSITION_SCHEMA_VERSION)) return null;
-  const requested = parseCompositionMetadata(svg).requestedCanvas;
+  const metadata = parseCompositionMetadata(svg);
+  const { requestedCanvas: requested } = metadata;
   const base = viewBoxBounds(svg.getAttribute('data-original-view-box') || svg.getAttribute('viewBox'));
-  return requested && base ? { requested, base: { width: base.width, height: base.height } } : null;
+  return requested && base ? {
+    requested,
+    base: { width: base.width, height: base.height },
+    addsPadding: (value) => Object.values(addedCanvasPadding(metadata, value)).some((side) => side > 0)
+  } : null;
 };
 
 // A root size in px: a number, with or without `px`.
@@ -1162,16 +1191,25 @@ const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width
  * @returns {boolean}
  */
 export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = {}) => {
-  const padding = normalizeCanvasPadding(value);
-  const padded = Object.values(padding).some((number) => number !== 0);
-  let moved = movedDecorationBounds(binding
-    || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null));
+  const bound = binding
+    || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null);
+  const metadata = bound?.metadata ?? null;
+  const padded = Object.values(addedCanvasPadding(metadata, value)).some((number) => number !== 0);
+  let moved = movedDecorationBounds(bound);
   const recordedBase = svg.getAttribute('data-original-view-box');
   if (!recordedBase && !padded && !moved.length) return false;
   // A missing viewBox gives NaN below and throws, so `base` is a string past that check.
   const base = /** @type {string} */ (recordedBase || svg.getAttribute('viewBox'));
   const automatic = viewBoxBounds(base);
   if (!automatic) throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
+  // Review M1: the canvas holds each moved item, then the padding (Owner, 2026-10-23). Moved items grow the
+  // unpadded frame (the automatic canvas less the padding Python drew), and the whole drawing padding goes around it.
+  const recorded = recordedCanvasPadding(metadata);
+  const frame = {
+    x: automatic.x + recorded.left, y: automatic.y + recorded.top,
+    width: automatic.width - recorded.left - recorded.right, height: automatic.height - recorded.top - recorded.bottom
+  };
+  const padding = normalizeCanvasPadding(value);
   /** @param {CompositionBounds} canvas */
   const outerViewBox = (canvas) => [
     canvas.x - padding.left, canvas.y - padding.top,
@@ -1187,9 +1225,10 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
       && maxX(bounds) <= maxX(shown) + EPSILON && maxY(bounds) <= maxY(shown) + EPSILON
     )) : [];
   }
-  const { x, y, width, height } = automatic;
+  const { width, height } = automatic;
+  const { x, y } = frame;
   const grows = moved.some((bounds) => (
-    bounds.x < x || bounds.y < y || maxX(bounds) > x + width || maxY(bounds) > y + height
+    bounds.x < x || bounds.y < y || maxX(bounds) > x + frame.width || maxY(bounds) > y + frame.height
   ));
   if (!recordedBase && !padded && !grows) return false;
   const baseWidth = svg.getAttribute('data-original-width') || sizeRecord(svg.getAttribute('width'), width);
@@ -1213,7 +1252,7 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
     changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
   }
   // `grows` holds only when a moved item exists, so the union has it.
-  const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([automatic, ...moved])) : automatic;
+  const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([frame, ...moved])) : frame;
   const outerWidth = canvas.width + padding.left + padding.right;
   const outerHeight = canvas.height + padding.top + padding.bottom;
   /** @param {string} record @param {number} extent @param {number} outerExtent */
@@ -1286,10 +1325,14 @@ export const applyCompositionEdit = (svg, options = {}) => {
   let legendPayload = null;
   if (legendTarget && metadata.legend) {
     const placement = plan.placements.legend;
+    // D-36: a shown Legend that lays out no row is an empty item the plan does not place; Python binds it at
+    // [0, 0] (`apply_composition_plan`).
+    const empty = legendSide !== 'none' && legendLocalBox !== null && !placement
+      && legendLocalBox.maxX <= legendLocalBox.minX && legendLocalBox.maxY <= legendLocalBox.minY;
     const automatic = placement
       ? placement.automaticTranslation
-      : metadata.legend.automaticTranslation;
-    if (placement) setLeading(legendTarget, automatic, deltas.legend || [0, 0]);
+      : (empty ? [0, 0] : metadata.legend.automaticTranslation);
+    if (placement || empty) setLeading(legendTarget, automatic, deltas.legend || [0, 0]);
     if (legendSide === 'none') legendTarget.setAttribute('display', 'none');
     else legendTarget.removeAttribute('display');
     legendPayload = targetPayload(

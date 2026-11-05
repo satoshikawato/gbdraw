@@ -60,6 +60,13 @@ write-up of a release.
   `canvas.padding`). A requested figure size fits the edited Legend and the
   padding, and a saved Session keeps them. The rows are drawn as the Web app's
   Legend editor draws them (#1427).
+- Changed: the Web app's Legend renames, deletions, Restore, Move, and Sort, and
+  Canvas padding are now drawn by Python. A figure with a Figure size is redrawn
+  to fit after them, and the CLI, the Python API, and `gbdraw render --session`
+  draw the same figure. A Legend whose rows are all deleted takes no room. A CLI
+  or Python Session with these edits opens with them in the Legend editor and
+  Canvas padding, and Run Info writes `--legend_rows` and `--canvas_padding`. In a
+  `--legend_rows` table, a hidden row may leave `position` blank (#1427).
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
   `RenderOutputRequest` scale PNG pixels by `dpi / 96`.

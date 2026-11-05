@@ -326,5 +326,49 @@ export const WORK_ALLOWLIST = [
       await resetSettings(page);
     },
     run: async (page) => { await showResult(page, 1); await settleLive(page); }
+  },
+  // Figure size (PD-OI-114 rev 2, Q-D1 A): on a figure drawn to a requested
+  // size, a Legend rename, deletion, Restore, Move, or Sort, or a Canvas
+  // padding change shows at once as on an Auto figure (the rows above), and
+  // the automatic rerender then fits the figure with it (`render`); its Undo
+  // fits it again. A Legend row color stays the Web's: no rerender.
+  {
+    kind: 'Legend rename on a sized figure', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['render'],
+    // Reset Settings above left one Result's settings: the batch is set again, at 1200 px wide.
+    before: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.form.labels_mode = 'out';
+        app.form.multi_record_canvas = false;
+        app.adv.circular_grouping_intent = 'batch';
+        app.form.figure_width = '1200px';
+      });
+      await generate(page);
+      if (await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(page, 0);
+    },
+    // The Legend editor's name field is one History step when it loses focus; here the step is run directly.
+    run: async (page) => {
+      await evaluateWithRetainedPromise(page, () => {
+        const app = window.__GBDRAW_APP__;
+        return window.__GBDRAW_HISTORY__.runUndoable('Rename legend item', () => app.renameLegendEntry(
+          app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC %'));
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    kind: 'History step (Undo of a Legend rename on a sized figure)', stages: ['legend', 'legendFills'], compiles: 1,
+    requests: ['render'], run: (page) => history(page, 'undo')
+  },
+  { kind: 'Legend row color on a sized figure', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#2a9d8f') },
+  {
+    kind: 'Canvas padding on a sized figure', stages: [], compiles: 0, requests: ['render'],
+    before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; }),
+    run: async (page) => {
+      const top = page.locator('#canvas-padding-top');
+      await top.fill('40');
+      await top.press('Tab');
+      await settleLive(page);
+    }
   }
 ];

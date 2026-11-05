@@ -178,6 +178,7 @@ import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
 import { rekeyLegendRecords } from './legend-svg.js';
+import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { SettingsSlice } from './drawing/settings.js' */
@@ -1820,6 +1821,47 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
 
 
 /**
+ * A Session 51 whose drawing holds its Legend row edits and canvas padding only in its request (the config leaves
+ * of a CLI or Python Session) with the Web editor state of them, read once before anything validates or splits the
+ * drafts (`editorStateOfLegendEditLeaves`): its `editorState.legend` when it has none and its `ui.canvasPadding`
+ * when it has none, so the Legend editor, Canvas padding, and every reconcile show what Python drew (issue #1427).
+ * A drawing with that state keeps it; one without the leaves is left as it is.
+ * @template {object} T
+ * @param {T} data
+ * @param {typeof DOMParser | undefined} [parser]
+ * @returns {T}
+ */
+const adoptRequestLegendEdits = (data, parser = globalThis.DOMParser) => {
+  const document = /** @type {{ drawings?: unknown }} */ (data);
+  if (!Array.isArray(document.drawings) || typeof parser !== 'function') return data;
+  const entries = document.drawings.map((entry) => {
+    if (!isPlainObject(entry)) return entry;
+    const editorState = isPlainObject(entry.editorState) ? entry.editorState : {};
+    const ui = isPlainObject(entry.ui) ? entry.ui : {};
+    const takesLegend = !Object.hasOwn(editorState, 'legend');
+    const takesPadding = !Object.hasOwn(ui, 'canvasPadding');
+    const leaves = takesLegend || takesPadding ? readLegendEditLeaves(entry.renderRequest) : {};
+    if (Object.keys(leaves).length === 0) return entry;
+    const results = Array.isArray(entry.results) ? entry.results : [];
+    const shown = /** @type {{ content?: unknown } | undefined} */ (results[Number.isInteger(ui.selectedResultIndex) ? Number(ui.selectedResultIndex) : 0]);
+    const root = typeof shown?.content === 'string'
+      ? new parser().parseFromString(shown.content, 'image/svg+xml').documentElement : null;
+    const svg = root?.localName === 'svg' ? /** @type {SVGSVGElement} */ (/** @type {Element} */ (root)) : null;
+    const { legend, canvasPadding } = editorStateOfLegendEditLeaves(leaves, svg);
+    const adoptedLegend = takesLegend && legend ? legend : null;
+    const adoptedPadding = takesPadding && canvasPadding ? canvasPadding : null;
+    if (!adoptedLegend && !adoptedPadding) return entry;
+    return {
+      ...entry,
+      ...(adoptedLegend ? { editorState: { ...editorState, legend: adoptedLegend } } : {}),
+      ...(adoptedPadding ? { ui: { ...ui, canvasPadding: adoptedPadding } } : {})
+    };
+  });
+  return entries.some((entry, index) => entry !== /** @type {unknown[]} */ (document.drawings)[index])
+    ? /** @type {T} */ ({ ...document, drawings: entries }) : data;
+};
+
+/**
  * A Session's stored drafts (the flat `config` of a Session 27-44, each
  * Session 46 slice's `config` and each Session 51 drawing's) with the preserved overrides that are now
  * settings moved into them (`adoptPromotedPreservedOverrides`), read once
@@ -2708,7 +2750,8 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     });
     // A Session 51's drafts take their promoted preserved settings once, so
     // the projected view and every drawing's entry read the same draft.
-    const readSets = drawingsBand ? adoptPromotedPreservedSettings(catalogSets, repairs, leafReadings) : catalogSets;
+    const readSets = drawingsBand
+      ? adoptRequestLegendEdits(adoptPromotedPreservedSettings(catalogSets, repairs, leafReadings)) : catalogSets;
     const projectedAt = storedResultSets(rawData).find((entry) => entry.projected)?.at;
     validatedFeatureCatalog = projectedAt === undefined ? null : setCatalogs.get(projectedAt) ?? null;
     recordSessionLifecycleEvent('feature-catalog-validation-end');

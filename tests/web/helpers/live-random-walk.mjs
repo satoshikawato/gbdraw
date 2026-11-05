@@ -39,8 +39,9 @@ import { shrinkWalk } from './live-random-walk-shrink.mjs';
 
 // The step kind that walks the path of each row of the R3 work allowlist
 // (tests/web/helpers/live-work-allowlist.mjs), or null for a row whose path
-// the walk does not draw: a Save that races a Result display, and Embedded
-// Only label rendering with its Feature Edits TSV.
+// the walk does not draw: a Save that races a Result display, Embedded Only
+// label rendering with its Feature Edits TSV, and a figure drawn to a
+// requested size.
 export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'feature stroke (popup)': 'stroke',
   'Legend row stroke': 'stroke',
@@ -75,7 +76,12 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'Session Load': 'load',
   'Legend rename onto a deleted row (Restore and merge)': 'legendRename',
   'Reset Settings': 'reset',
-  'Result display after Reset Settings': 'resultSwitch'
+  'Result display after Reset Settings': 'resultSwitch',
+  // The walk draws Auto figures only: a sized figure's refit is the work guard's.
+  'Legend rename on a sized figure': null,
+  'History step (Undo of a Legend rename on a sized figure)': null,
+  'Legend row color on a sized figure': null,
+  'Canvas padding on a sized figure': null
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),

@@ -37,7 +37,8 @@ const { createLegendEntryActions } = await import(
 );
 // The root's reader of the colors Legend rows show (app-setup.js); without a
 // displayed Result, a row shows the color it records.
-const { displayedLegendRowColors, draftLegendRows } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
+const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
+const { draftLegendRows } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );

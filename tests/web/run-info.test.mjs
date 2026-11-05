@@ -1883,3 +1883,65 @@ test('the download description counts its helper files', () => {
   assert.equal(description(['/one']).text, 'Exact replay file: {files}.');
   assert.equal(description(['/one', '/two']).text, 'Exact replay files: {files}.');
 });
+
+// R12, issue #1427: the Legend row edits and the canvas padding of a request are written as `--legend_rows` (a
+// generated table) and `--canvas_padding`, and read back through the CLI's own readers to the same leaves; a hidden
+// row with an edited order of the others needs OV-2514. A leaf the table cannot carry makes the recipe unavailable.
+const legendLeavesReadBack = async (recipe) => {
+  const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-legend-rows-'));
+  const args = [];
+  for (const token of recipe.args) {
+    const generated = recipe.generatedFiles.find((file) => file.path === token);
+    if (generated) {
+      const file = join(runDir, generated.name);
+      await writeFile(file, generated.data, 'utf8');
+      args.push(file);
+    } else args.push(recipe.fileMetadata.get(token)?.name || token);
+  }
+  return evaluatePython([
+    'from gbdraw.circular import _get_args',
+    'from gbdraw.cli_utils.common import legend_row_overrides, figure_size_overrides',
+    'args = _get_args(payload["args"])',
+    'leaves = {**legend_row_overrides(args), "canvas.padding": figure_size_overrides(args)["canvas.padding"]}',
+    'result = {path: value for path, value in leaves.items() if value is not None}'
+  ].join('\n'), { args });
+};
+
+test('Legend row edits and canvas padding read back from the Source recipe (R12, OV-2514)', async () => {
+  const leaves = {
+    'objects.legends.row_names': [['rRNA', 'Ribosomal RNA'], ['CDS', 'Genes "all" (5\')']],
+    'objects.legends.hidden_rows': ['tRNA'],
+    'objects.legends.row_order': ['rRNA', 'CDS'],
+    'canvas.padding': [10, 20.5, 0, 40]
+  };
+  for (const set of [leaves, { 'objects.legends.hidden_rows': ['tRNA', 'CDS'] }, { 'canvas.padding': [0, 8, 0, 0] }]) {
+    const session = structuredClone(circularCanonical);
+    session.renderRequest.diagramOptions.configOverrides = { ...(session.renderRequest.diagramOptions.configOverrides || {}), ...set };
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    assert.equal(recipe.args.includes('--legend_rows'), Object.keys(set).some((path) => path.startsWith('objects.legends.')));
+    assert.deepEqual(await legendLeavesReadBack(recipe), set, JSON.stringify(recipe.generatedFiles.map((file) => file.data)));
+  }
+  const none = await buildSourceRecipe(circularCanonical);
+  assert.equal(none.args.includes('--legend_rows') || none.args.includes('--canvas_padding'), false);
+  for (const set of [
+    // A cell the table cannot carry: a tab or a line break, a key with outer spaces, a blank name.
+    { 'objects.legends.row_names': [['CDS', 'Genes\tall']] },
+    { 'objects.legends.row_names': [['CDS', 'Genes\nall']] },
+    { 'objects.legends.hidden_rows': [' tRNA'] },
+    { 'objects.legends.row_names': [['CDS', ' ']] },
+    // One key on two lines, and a shown row the edited order does not place.
+    { 'objects.legends.row_names': [['CDS', 'A'], ['CDS', 'B']] },
+    { 'objects.legends.row_order': ['CDS', 'CDS'] },
+    { 'objects.legends.row_order': ['rRNA'], 'objects.legends.row_names': [['CDS', 'Genes']] },
+    // Names or hidden rows in an order the table's lines cannot give back.
+    { 'objects.legends.row_order': ['rRNA', 'CDS'], 'objects.legends.row_names': [['CDS', 'A'], ['rRNA', 'B']] },
+    { 'canvas.padding': [1, 2, 3] },
+    { 'canvas.padding': [1, 2, -3, 4] }
+  ]) {
+    const session = structuredClone(circularCanonical);
+    session.renderRequest.diagramOptions.configOverrides = { ...(session.renderRequest.diagramOptions.configOverrides || {}), ...set };
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, false, JSON.stringify(set));
+  }
+});

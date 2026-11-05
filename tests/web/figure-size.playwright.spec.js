@@ -136,3 +136,132 @@ test('a Linear 85 mm width with a wide side Legend is refused, naming the parts,
   expect(outcome.errorSummary, 'the sentence names Figure width; no Setting line').not.toContain('Setting:');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), 'the figure is kept').toBe(shown);
 });
+
+// PD-OI-114 rev 2 (Q-D1 A): on a figure drawn to a requested size, a Legend rename and a Canvas padding change show
+// at once, the line under the field says the figure is being fitted, and the automatic rerender then draws it again
+// (Python fits it with the edit); the edit and its rerender are one History step, and its Undo fits the figure again.
+// A rename the box cannot hold is refused through the automatic rerender's failure note. On Auto nothing is redrawn.
+test('a Legend rename and Canvas padding on a sized figure are fitted again by the automatic rerender; on Auto they are not', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openWithGenBank(page, path.join(root, HMMT));
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__holdRender = null;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async (...args) => {
+        window.__renders += 1;
+        if (window.__holdRender) await window.__holdRender;
+        return render?.(...args);
+      }
+    };
+  });
+  const renders = () => page.evaluate(() => window.__renders);
+  const countFrom = () => page.evaluate(() => { window.__renders = 0; });
+  const rename = (from, to) => evaluateWithRetainedPromise(page, async (names) => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === names.from), names.to);
+  }, { from, to }).then(() => settle(page));
+  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
+
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await countFrom();
+  await rename('CDS', 'Genes');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'Genes'))).toBe(true);
+  await undo(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'CDS'))).toBe(true);
+  expect(await renders(), 'an Auto figure is not redrawn').toBe(0);
+
+  await openLayout(page);
+  await setSide(page, 'width', 160, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const MM_160_PX = 160 * 96 / 25.4;
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_160_PX, 2);
+
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const legendTexts = () => page.evaluate(() => [...document.querySelectorAll('.gbdraw-preview-surface svg #legend text')]
+    .map((text) => text.textContent));
+  const feedback = () => page.evaluate(() => document.querySelector('[data-live-application-feedback]')?.textContent?.trim() ?? null);
+
+  // The rerender is held: the edit shows at once and the line says the figure is being fitted.
+  const steps = await undoCount();
+  await page.evaluate(() => { window.__renders = 0; window.__holdRender = new Promise((resolve) => { window.__releaseRender = resolve; }); });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), 'Genes');
+  });
+  await expect.poll(fittingLine).toBe('Fitting the figure to the requested size.');
+  expect(await legendTexts(), 'the rename shows at once').toContain('Genes');
+  expect(await page.evaluate(() => document.querySelector('[data-figure-size-larger]'))).toBe(null);
+  await page.evaluate(() => { window.__holdRender = null; window.__releaseRender(); });
+  await settle(page);
+  await expect.poll(renders).toBe(1);
+  await settle(page);
+  const fitted = await sizeState(page);
+  expect(await fittingLine()).toBe(null);
+  expect(fitted.larger).toBe(null);
+  expect(px(fitted.root.width)).toBeCloseTo(MM_160_PX, 2);
+  expect(await legendTexts()).toContain('Genes');
+  expect(await undoCount(), 'the rename and its rerender are one step').toBe(steps + 1);
+
+  // One Undo reverts the rename with its rerender: History restores the fitted figure before it, so Python does not
+  // run. Redo shows the fitted figure the rerender drew, again without a Python run (D-24).
+  await countFrom();
+  await undo(page);
+  await settle(page);
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_160_PX, 2);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'CDS'))).toBe(true);
+  expect(await legendTexts()).not.toContain('Genes');
+  expect(await undoCount()).toBe(steps);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  const redone = await sizeState(page);
+  expect(await legendTexts()).toContain('Genes');
+  expect(px(redone.root.width)).toBeCloseTo(MM_160_PX, 2);
+  expect(redone.larger).toBe(null);
+  expect(await renders(), 'Undo and Redo of a fitted step run no Python').toBe(0);
+  await undo(page);
+
+  // A rename that makes the figure unable to fit: Python refuses the rerender, which reports it through the automatic
+  // rerender's failure note; the edit stays as the Web drew it, and the size line says why the figure is larger.
+  // One Undo reverts it and shows the fitted figure before it.
+  const LONG = 'Protein-coding genes of the mitochondrion';
+  await countFrom();
+  await rename('CDS', LONG);
+  await expect.poll(renders).toBe(1);
+  await settle(page);
+  const refused = await sizeState(page);
+  const note = await feedback();
+  console.log(`figure-size refit refused: note=${JSON.stringify(note)} line=${JSON.stringify(refused.line)} larger=${JSON.stringify(refused.larger)}`);
+  expect(note).toContain('Live edit failed');
+  expect(note).toContain('The figure cannot be 160 mm wide');
+  expect(await legendTexts(), 'the edit is kept as the Web drew it').toContain(LONG);
+  expect(px(refused.root.width)).toBeGreaterThan(MM_160_PX);
+  expect(refused.larger).toBe('Larger than the requested 160 mm width: the edit could not be fitted (see the note above the preview).');
+  expect(await undoCount()).toBe(steps + 1);
+  await countFrom();
+  await undo(page);
+  await settle(page);
+  const restored = await sizeState(page);
+  console.log(`figure-size refused refit undone: note=${JSON.stringify(await feedback())} larger=${JSON.stringify(restored.larger)}`);
+  expect(px(restored.root.width)).toBeCloseTo(MM_160_PX, 2);
+  expect(restored.larger).toBe(null);
+  expect(await legendTexts()).not.toContain(LONG);
+  expect(await renders(), 'the figure before the rename is drawn: no Python run').toBe(0);
+
+  // A Canvas padding change is fitted again too: the padding is inside the requested width.
+  await countFrom();
+  await page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; });
+  const left = page.locator('#canvas-padding-left');
+  await left.fill('40');
+  await left.press('Tab');
+  await expect.poll(renders).toBe(1);
+  await settle(page);
+  const padded = await sizeState(page);
+  expect(px(padded.root.width)).toBeCloseTo(MM_160_PX, 2);
+  expect(padded.larger).toBe(null);
+});

@@ -357,7 +357,8 @@ def test_the_cli_options_draw_the_edits_and_a_saved_session_replays_them(
         ("CDS\tGenes\n", "the first line must be the header"),
         ("key\tname\thidden\tposition\nCDS\t\tmaybe\t\n", "hidden must be true or false"),
         ("key\tname\thidden\tposition\nCDS\t\t\t0\n", "position must be a whole number from 1"),
-        ("key\tname\thidden\tposition\nCDS\t\t\t1\ntRNA\t\t\t\n", "give a position on every row or on none"),
+        ("key\tname\thidden\tposition\nCDS\t\t\t1\ntRNA\t\t\t\n", "give a position on every shown row or on none"),
+        ("key\tname\thidden\tposition\nCDS\t\ttrue\t1\ntRNA\t\t\t\n", "give a position on every shown row or on none"),
         ("key\tname\thidden\tposition\nCDS\t\t\t1\ntRNA\t\t\t1\n", "each position must be on one row"),
         ("key\tname\thidden\tposition\nCDS\tA\t\t\nCDS\tB\t\t\n", "each key must be on one row"),
     ],
@@ -385,6 +386,9 @@ HEADER = "key\tname\thidden\tposition\n"
         (HEADER + "CDS\ufeff\tX\t\t\n\u3000tRNA\u2028\t\ttrue\t\n", ((("CDS", "X"),), ("tRNA",), ())),
         # A UTF-8 byte order mark (Excel) is skipped (N2).
         ("\ufeff" + HEADER + "CDS\tX\t\t\n", ((("CDS", "X"),), (), ())),
+        # A hidden row may leave its position blank while the shown rows have one (OV-2514): the Web's edited order
+        # lists the shown rows only.
+        (HEADER + "tRNA\t\ttrue\t\nrRNA\t\t\t1\nCDS\tGenes\t\t2\n", ((("CDS", "Genes"),), ("tRNA",), ("rRNA", "CDS"))),
     ],
 )
 def test_the_rows_table_reads_cells_as_written(text: str, expected: tuple, tmp_path: Path) -> None:

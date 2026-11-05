@@ -126,13 +126,17 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
   shown = { first: '180 × 143.2 mm', second: '680 × 541 px', larger: null };
   assert.equal(field.figureSizeLine.value, 'Figure: 180 × 143.2 mm (680 × 541 px)');
   assert.equal(field.figureSizeLarger.value, '');
-  // Section 6: a canvas that Web-only additions grew past the requested box says so, naming them.
+  // Section 6: a canvas grown past the requested box says so. Python fits the figure to Legend edits and Canvas
+  // padding (PD-OI-114 rev 2), so when they still leave it larger, the fit was refused: the note above says why
+  // (review S3, D-60).
   shown = { first: '190 × 143.2 mm', second: '718 × 541 px', larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['legend-edits', 'canvas-padding'] } };
   assert.equal(field.figureSizeLine.value, 'Figure: 190 × 143.2 mm (718 × 541 px)');
-  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width after Legend edits and Canvas padding, which the fit does not include.');
-  // Review finding 4: one sentence for one cause or several, whatever the number of the cause's noun.
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width: the edit could not be fitted (see the note above the preview).');
   shown = { ...shown, larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['canvas-padding'] } };
-  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width after Canvas padding, which the fit does not include.');
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width: the edit could not be fitted (see the note above the preview).');
+  shown = { ...shown, larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['legend-edits', 'moved-items'] } };
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width: the edit could not be fitted (see the note above the preview).');
+  // A move is never fitted: the sentence names it.
   shown = { ...shown, larger: { sides: [{ side: 'height', length: '120 mm' }], causes: ['moved-items'] } };
   assert.equal(field.figureSizeLarger.value, 'Larger than the requested 120 mm height after moves of the Legend, title, or scale, which the fit does not include.');
 });

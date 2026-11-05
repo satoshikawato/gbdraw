@@ -11,6 +11,7 @@ import {
 import { loadRepair } from '../utils/load-repairs.js';
 import { DECIMAL_NUMBER_PATTERN } from '../utils/optional-positive-number.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
+import { isDrawablePaddingSide } from './canvas-padding.js';
 import {
   CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES, CIRCULAR_MULTI_RECORD_SIZE_MODES, LINEAR_LABEL_PLACEMENT_ALIASES, LINEAR_LABEL_PLACEMENTS,
   LINEAR_TRACK_LAYOUT_ALIASES, LINEAR_TRACK_LAYOUTS, PAIRWISE_MATCH_STYLES, PROTEIN_BLASTP_MODES, migratePersistedWebStateFieldNames
@@ -1014,8 +1015,11 @@ const SESSION_UI_TABLE = Object.freeze([
 ]);
 
 /** @type {FieldReader<number>} */
-const readPaddingSide = numberOr(Number.isFinite, 0);
-/** A drawing's Canvas padding: a side that is no number is 0. @type {FieldReader<Record<'top' | 'right' | 'bottom' | 'left', number>>} */
+const readPaddingSide = numberOr(isDrawablePaddingSide, 0);
+/**
+ * A drawing's Canvas padding: a side the canvas cannot draw (no number, or a negative one) is 0, and Load lists it.
+ * @type {FieldReader<Record<'top' | 'right' | 'bottom' | 'left', number>>}
+ */
 export const readCanvasPadding = (value) => {
   const stored = isPlainObject(value) ? value : {};
   /** @type {FieldLeaf[]} */

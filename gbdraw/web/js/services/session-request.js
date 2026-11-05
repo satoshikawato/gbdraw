@@ -59,6 +59,8 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
+import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
+/** @import { LegendEditConfigLeaves } from './legend-draft-rows.js' */
 import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
@@ -403,8 +405,13 @@ const requestDrawingMode = (drawing) => {
  * the state a Gallery Session's request is rebuilt from.
  * @typedef {RequestLabelState & {
  *   paletteDefinitions: ExportRef<Record<string, Record<string, string>>>,
- *   canonicalPublicationFiles?: Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>
+ *   canonicalPublicationFiles?: Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>,
+ *   originalLegendOrder?: ExportRef<readonly string[]>,
+ *   results?: ExportRef<readonly { content?: unknown }[]>
  * }} RequestTableState
+ *   `originalLegendOrder`: the shown Result's generated Legend inventory (Python's keys); `results`: the shown
+ *   drawing's Results. By both the request names the Legend rows Python draws; a state rebuilt without a Result (a
+ *   Gallery publication) has neither.
  */
 /**
  * What the request reads of `state` (state.js), or of the state a Gallery
@@ -876,6 +883,8 @@ export const managedConfigOverridePathsForMode = (mode) => {
   );
   paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
   Object.values(MODE_ADV_CONFIG_PATHS[mode]).forEach((path) => paths.add(path));
+  // The Legend row edits and the canvas padding: the paint and canvas slices hold them (`requestLegendEditLeaves`).
+  Object.values(LEGEND_EDIT_CONFIG_PATHS).forEach((path) => paths.add(path));
   for (const path of [
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
@@ -2707,14 +2716,16 @@ const trackFlagOverrides = (form, circular, depthRequested) => ({
 
 /**
  * @param {RequestDrawing} drawing
- * @param {{ depthRequested?: boolean, hasComparisonIntent?: boolean, linearHasSharedRow?: boolean }} [options]
+ * @param {{ depthRequested?: boolean, hasComparisonIntent?: boolean, linearHasSharedRow?: boolean,
+ *   legendEditLeaves?: LegendEditConfigLeaves }} [options] `legendEditLeaves`: `requestLegendEditLeaves`.
  */
 const buildConfigOverrides = (
   drawing,
   {
     depthRequested = Boolean(drawing.form.show_depth),
     hasComparisonIntent = false,
-    linearHasSharedRow = false
+    linearHasSharedRow = false,
+    legendEditLeaves = {}
   } = {}
 ) => {
   const mode = requestDrawingMode(drawing);
@@ -2891,7 +2902,8 @@ const buildConfigOverrides = (
     : {};
   return {
     ...plainPreservedOverrides,
-    ...managedOverrides
+    ...managedOverrides,
+    ...legendEditLeaves
   };
 };
 
@@ -2926,6 +2938,29 @@ export const requestLabelProjection = (state, drawing) => {
     sourceText: entry?.sourceText
   })).filter((target) => target.identityKey);
   return buildBulkLabelProjection(bulk, { labelTargets, featureOverrides: drawing.featureOverrides });
+};
+
+/**
+ * The config leaves of the drawing's Legend row edits and canvas padding (`legendEditConfigLeaves`): the one
+ * projection Generate's request and the automatic rerender's write (issue #1427). The drawing is the shown one.
+ * Python's rows are those of every Result of the drawing (`pythonLegendRowKeys`), so the leaves do not depend on
+ * which Result of a batch is shown. The drawing view a Gallery publication rebuilds holds no paint or canvas slice,
+ * and sends none of these leaves.
+ * @param {RequestTableState} state
+ * @param {RequestDrawing} drawing
+ * @returns {LegendEditConfigLeaves}
+ */
+export const requestLegendEditLeaves = (state, drawing) => {
+  if (!drawing.slices) return {};
+  const inventory = state.originalLegendOrder ? state.originalLegendOrder.value : [];
+  return legendEditConfigLeaves({
+    legendEntries: drawing.legendEntries.value,
+    deletedLegendEntries: drawing.deletedLegendEntries.value,
+    originalLegendOrder: inventory,
+    pythonRowKeys: pythonLegendRowKeys(inventory, state.results ? state.results.value : []),
+    rules: drawing.manualSpecificRules,
+    canvasPadding: drawing.canvasPadding
+  });
 };
 
 /**
@@ -4518,6 +4553,7 @@ const projectCanonicalRenderInput = ({
       bulkLabelText: labelProjection.bulkLabelText
     }),
     configOverrides: buildConfigOverrides(drawing, {
+      legendEditLeaves: requestLegendEditLeaves(state, drawing),
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,
       linearHasSharedRow: mode === 'linear' && linearRecordLayoutHasSharedRow(
@@ -8005,6 +8041,28 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
   };
 };
 
+/**
+ * The Legend row edits and canvas padding of a cloned committed request replaced by the drawing's: the leaves of
+ * its overrides, and those its full config holds (a request the CLI or Python saved), which the drawing's now state.
+ * @param {{ configOverrides?: unknown, config?: unknown }} options The clone's `diagramOptions`.
+ * @param {LegendEditConfigLeaves} leaves
+ */
+const replaceLegendEditLeaves = (options, leaves) => {
+  /** @type {Record<string, unknown>} */
+  const overrides = isPlainRecord(options.configOverrides) ? options.configOverrides : {};
+  for (const path of Object.values(LEGEND_EDIT_CONFIG_PATHS)) {
+    delete overrides[path];
+    const keys = path.split('.');
+    const holder = keys.slice(0, -1).reduce(
+      (/** @type {unknown} */ node, key) => (isPlainRecord(node) ? node[key] : undefined), options.config
+    );
+    if (isPlainRecord(holder)) delete holder[/** @type {string} */ (keys.at(-1))];
+  }
+  if (isPlainRecord(options.configOverrides) || Object.keys(leaves).length > 0) {
+    options.configOverrides = { ...overrides, ...leaves };
+  }
+};
+
 const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
   colors: ['colors'],
   ...EDITOR_TABLE_OPTIONS
@@ -8069,6 +8127,7 @@ export const projectCommittedEditorIntent = ({
   retired.forEach((resourceId) => {
     if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
   });
+  replaceLegendEditLeaves(options, requestLegendEditLeaves(/** @type {RequestTableState} */ (state), drawing));
   const resources = createResourceBuilder();
   const labelProjection = requestLabelProjection(state, drawing);
   // Per-feature edits are live editor intent too (design Q4).

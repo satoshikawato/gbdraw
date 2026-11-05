@@ -173,3 +173,17 @@ test('Generate resolves its drawing once, at its entry', () => {
   assert.equal(calls.length, 1, 'run-analysis.js resolves the shown drawing only in runAnalysis');
   assert.match(source, /const runAnalysis = async \([^)]*\) => \{\s*const drawing = state\.activeDrawing\(\);/);
 });
+
+// Figure size (PD-OI-114 rev 2): the sized refit after a Legend edit or Canvas padding reads the shown drawing, the
+// drawing whose History step the router passes (it passes the shown drawing's steps only, R11), and the shown
+// drawing's Result root; it resolves the drawing once, after that root is known to be drawn to a requested size and
+// the step to have changes.
+test('the sized refit reads the shown drawing of the History step it follows', () => {
+  const source = readFileSync(join(JS, 'app', 'app-setup.js'), 'utf8');
+  const refit = source.match(/const refitSizedFigure = \(changes, direction, undrawn\) => \{([\s\S]*?)\n {2}\};/);
+  assert.ok(refit, 'app-setup.js defines refitSizedFigure');
+  assert.equal([...refit[1].matchAll(/\bactiveDrawing\s*\(/g)].length, 1, 'it resolves the shown drawing once');
+  assert.match(refit[1], /if \(!root \|\| !requestedCanvasOf\(root\)\) return;[\s\S]*?return;\s*\}\s*const drawing = state\.activeDrawing\(\);/);
+  assert.match(source, /history\.setSettingsStepListener\(\(changes, direction, undrawn\) => \{[\s\S]*?refitSizedFigure\(changes, direction, undrawn\);\s*\}\);/,
+    'only the History step listener calls it');
+});

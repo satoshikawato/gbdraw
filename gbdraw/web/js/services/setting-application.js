@@ -31,8 +31,21 @@ import { msg, t, tm } from '../utils/i18n.js';
  * live row it names the part that waits for Generate); `partialNote` is a live
  * row's note while the shown Result can draw only some of its request paths.
  * `help` is the opening sentence of an editor tab's help, which says what the
- * tab's edits change at once (`settingApplicationHelp`).
- * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths }} SettingApplicationRow
+ * tab's edits change at once (`settingApplicationHelp`). `refitPaths` name
+ * the draft fields of an editor row that Python draws and sizes, by their
+ * dotted path in the drawing's History intent (as in `SettingRequestPaths`):
+ * on a figure drawn to a requested size, a History step that changes what
+ * they draw asks the automatic rerender to fit the figure again (Figure size,
+ * PD-OI-114 rev 2; `refitFieldsBeforeStep`), and the help says so in
+ * `refitHelp`, which names the edits that do (review S4, D-61).
+ * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths, readonly refitPaths?: Readonly<Record<string, RefitField>>, readonly refitHelp?: string }} SettingApplicationRow
+ */
+/**
+ * A drawing's draft field that Python draws and sizes: the Legend's listed and
+ * deleted rows (the paint slice), the color rules, whose captions name the
+ * rows Python draws from them (a Legend rename of a feature type row can write
+ * them; the color rules slice), and the Canvas padding (the canvas slice).
+ * @typedef {'legendEntries' | 'deletedLegendEntries' | 'rules' | 'canvasPadding'} RefitField
  */
 /**
  * How a `<setting-note>` shows its note (PD-OI-037 rev 3): `clock`, a clock
@@ -160,9 +173,21 @@ export const SETTING_APPLICATION = Object.freeze([
     note: msg('Adding a Depth file, or a series while a Depth file is loaded, turns Show Depth on, and removing the last Depth file or its genome file turns Show Depth off; turning Show Depth off hides the drawn Depth track at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest, and a Depth track from changed files, apply on Generate.') },
   ...rows('live', ['colors']),
   // Editor intent the Result shows at once (the Legend and Features tabs of
-  // the editor, the feature popup's Appearance): no mark.
-  { id: 'legend-editor', application: /** @type {const} */ ('live'),
-    help: msg('Live edit: legend text, order, stroke, and removal update the current Result.') },
+  // the editor, the feature popup's Appearance, Canvas padding): no mark. The
+  // Legend names, deletions and order, and the Canvas padding, are drawn by
+  // Python too (the request's config leaves, `legendEditConfigLeaves`): a
+  // figure drawn to a requested size is fitted again after them (PD-OI-114
+  // rev 2); the colors and strokes stay the Web's.
+  /** @type {SettingApplicationRow} */ ({ id: 'legend-editor', application: 'live',
+    help: msg('Live edit: legend text, order, stroke, and removal update the current Result.'),
+    refitPaths: Object.freeze({
+      'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
+    }),
+    refitHelp: msg('With a Figure size set, a rename, removal, or reorder then redraws the figure to fit it.') }),
+  /** @type {SettingApplicationRow} */ ({ id: 'canvas-padding', application: 'live',
+    help: msg('Live edit: the padding updates the current Result.'),
+    refitPaths: Object.freeze({ 'ui.canvasPadding': 'canvasPadding' }),
+    refitHelp: msg('With a Figure size set, the figure is then redrawn to fit it.') }),
   { id: 'features-editor', application: /** @type {const} */ ('live'),
     help: msg('Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.') },
   { id: 'feature-appearance', application: /** @type {const} */ ('live') },
@@ -229,8 +254,15 @@ export const settingClassNote = (application) => noteOf(application, TEXT[applic
 /** The accessible name of the clock: "Applies on Generate". */
 export const settingClockLabel = () => tm(TEXT.generate);
 
-/** The opening sentence of an editor tab's help. @param {SettingApplicationId} id */
-export const settingApplicationHelp = (id) => tm(rowOf(id).help || '');
+/**
+ * The opening sentences of an editor tab's help: what its edits change at
+ * once, and, for a row with `refitPaths`, which of them fit a sized figure again (`refitHelp`).
+ * @param {SettingApplicationId} id
+ */
+export const settingApplicationHelp = (id) => {
+  const row = rowOf(id);
+  return [row.help || '', row.refitHelp || ''].filter((text) => text !== '').map((text) => tm(text)).join(' ');
+};
 
 /** The row's timing inside a help text or a dialog description. @param {SettingApplicationId} id */
 export const settingApplicationSentence = (id) => (rowOf(id).application === 'generate' ? t('Changes apply on Generate.') : '');
@@ -287,6 +319,60 @@ export const changedTrackHides = (changes) => {
  * @returns {Set<UndoneTrackHide>}
  */
 export const trackHidesOn = (form) => new Set(HIDE_CONTROLS.filter(({ control }) => form[control]).map(({ track }) => track));
+
+/**
+ * One changed value of a History step (`HistoryIntentChange` in services/history.js).
+ * @typedef {{ readonly path?: readonly (string | number)[], readonly before?: unknown, readonly after?: unknown,
+ *   readonly beforeHas?: boolean, readonly afterHas?: boolean }} HistoryChangeLike
+ */
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+/**
+ * `root` with the value at `keys` replaced (removed when `has` is false); each object on the way is copied.
+ * @param {unknown} root @param {readonly string[]} keys @param {boolean} has @param {unknown} value
+ * @returns {unknown}
+ */
+const withValueAt = (root, keys, has, value) => {
+  if (keys.length === 0) return has ? value : undefined;
+  const copy = isRecord(root) ? { ...root } : {};
+  const [key, ...rest] = keys;
+  const next = withValueAt(copy[key], rest, has, value);
+  if (next === undefined) delete copy[key];
+  else copy[key] = next;
+  return copy;
+};
+/**
+ * The refit fields (`refitPaths`) on the other side of a History step of the
+ * shown drawing: `current` holds them as the step left them (after its commit
+ * or Redo; before it, for its Undo), and each one the step changed takes the
+ * value it had on the other side. Null when the step changed none of them.
+ * @param {readonly HistoryChangeLike[] | null | undefined} changes
+ * @param {Readonly<Record<RefitField, unknown>>} current
+ * @param {boolean} undone The step is being undone.
+ * @returns {Record<RefitField, unknown> | null}
+ */
+export const refitFieldsBeforeStep = (changes, current, undone) => {
+  const side = undone ? 'after' : 'before';
+  const fields = SETTING_APPLICATION.flatMap((row) => Object.entries(row.refitPaths || {}))
+    .map(([path, field]) => /** @type {const} */ ([path.split('.'), field]));
+  /** @type {Record<RefitField, unknown>} */
+  const other = { ...current };
+  let changed = false;
+  for (const change of Array.isArray(changes) ? changes : []) {
+    const path = Array.isArray(change?.path) ? change.path.map(String) : [];
+    const has = Boolean(change[`${side}Has`]);
+    for (const [keys, field] of fields) {
+      const shared = Math.min(keys.length, path.length);
+      if (path.length === 0 || !keys.slice(0, shared).every((key, index) => key === path[index])) continue;
+      changed = true;
+      // A change at the field or above it holds the whole value; one below it, a part of the value.
+      other[field] = path.length <= keys.length
+        ? keys.slice(path.length).reduce((/** @type {unknown} */ node, key) => (isRecord(node) ? node[key] : undefined), has ? change[side] : undefined)
+        : withValueAt(other[field], path.slice(keys.length), has, change[side]);
+    }
+  }
+  return changed ? other : null;
+};
 
 /** Every request path a live setting row applies, as Reset Settings and an artifact restore request them. */
 export const allLiveSettingRequestPaths = () => [...new Set(SETTING_APPLICATION.flatMap((row) => Object.values(row.requestPaths || {}).flat()))];

@@ -25,29 +25,34 @@ import { computed, ref } from '../utils/reactivity.js';
 /**
  * The shown Result's size (`shownFigureSize`), and the requested sides it is larger than with the Web-only
  * additions that made it so (`figureGrowth`; null when it is not larger). `length` names a requested side: `180 mm`.
- * @typedef {{ first: string, second: string,
+ * `fitting`: the automatic rerender is fitting the figure, drawn to a requested size, again (after a Legend edit or
+ * Canvas padding, PD-OI-114 rev 2); until it ends the Result shows the edit as the Web drew it at once.
+ * @typedef {{ first: string, second: string, fitting: boolean,
  *   larger: { sides: { side: FigureSide, length: string }[], causes: FigureGrowthCause[] } | null }} ShownFigureSize
  */
 
 /** Which part of a side an edit comes from. @typedef {'amount' | 'unit'} FigureSizeFieldPart */
 
-/** @type {Record<FigureGrowthCause, string>} */
-const GROWTH_CAUSES = {
-  'legend-edits': msg('Legend edits'),
-  'canvas-padding': msg('Canvas padding'),
-  'moved-items': msg('moves of the Legend, title, or scale')
-};
+const MOVED_ITEMS = msg('moves of the Legend, title, or scale');
+/** The causes Python fits a figure to (PD-OI-114 rev 2): when they leave it larger, the fit was refused. */
+const FITTED_CAUSES = /** @type {readonly FigureGrowthCause[]} */ (['legend-edits', 'canvas-padding']);
 
-/** @param {NonNullable<ShownFigureSize['larger']>} larger */
+/**
+ * Why the shown figure is larger than requested. Python fits a figure drawn to a requested size to its Legend edits
+ * and Canvas padding, so either cause left after the automatic rerender means the fit was refused, which the
+ * rerender's note above the preview explains (review S3, D-60); a move of the Legend, title, or scale is never fitted.
+ * @param {NonNullable<ShownFigureSize['larger']>} larger
+ */
 const largerSentence = ({ sides, causes }) => {
   const size = listText(sides.map(({ side, length }) => (
     side === 'width' ? t('{length} width', { length }) : t('{length} height', { length })
   )));
-  return causes.length === 0
-    ? t('Larger than the requested {size}.', { size })
-    : t('Larger than the requested {size} after {causes}, which the fit does not include.', {
-      size, causes: listText(causes.map((cause) => tm(GROWTH_CAUSES[cause])))
-    });
+  if (causes.some((cause) => FITTED_CAUSES.includes(cause))) {
+    return t('Larger than the requested {size}: the edit could not be fitted (see the note above the preview).', { size });
+  }
+  return causes.includes('moved-items')
+    ? t('Larger than the requested {size} after {causes}, which the fit does not include.', { size, causes: tm(MOVED_ITEMS) })
+    : t('Larger than the requested {size}.', { size });
 };
 
 /** @param {FigureSizeFieldPorts} ports */
@@ -75,15 +80,16 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
   const figureWidthAmount = computed(() => figureLengthAmountText(form().figure_width));
   const figureHeightAmount = computed(() => figureLengthAmountText(form().figure_height));
   const amounts = { width: figureWidthAmount, height: figureHeightAmount };
-  // One line under the field: the shown Result's size; none while the drawing shows no Result. Under it, why the
-  // shown Result is larger than requested, when it is.
+  // One line under the field: the shown Result's size; none while the drawing shows no Result. Under it, that the
+  // figure is being fitted while the rerender runs, else why the shown Result is larger than requested, when it is.
   const figureSizeLine = computed(() => {
     const size = shownSize();
     return size === null ? '' : t('Figure: {first} ({second})', { first: size.first, second: size.second });
   });
+  const figureSizeFitting = computed(() => (shownSize()?.fitting ? t('Fitting the figure to the requested size.') : ''));
   const figureSizeLarger = computed(() => {
-    const larger = shownSize()?.larger;
-    return larger ? largerSentence(larger) : '';
+    const size = shownSize();
+    return size?.larger && !size.fitting ? largerSentence(size.larger) : '';
   });
   /**
    * @param {Event} event A change of a side's number or unit.
@@ -105,6 +111,6 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
   return {
     figureLengthUnits: FIGURE_LENGTH_UNITS,
     figureWidthUnit: units.width, figureHeightUnit: units.height, figureWidthAmount, figureHeightAmount,
-    figureSizeLine, figureSizeLarger, changeFigureSize
+    figureSizeLine, figureSizeFitting, figureSizeLarger, changeFigureSize
   };
 };

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `117`
+- Contract revision: `118`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4440,6 +4440,52 @@ Status: active Product authority
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 118 changes: `PD-OI-114` gains scenario revision `2` (concern
+  `web.layout.figure-size`, the same outcome `WEB-FIGURE-SIZE-CONTROL`).
+  Legend renames, row deletions and Restore, row order (Move and Sort), and
+  Canvas padding go into the drawing's request, and Python draws and fits
+  them, so Generate, the automatic rerender, the CLI and Python, and a
+  `--session` redraw give the same figure. These edits still show at once.
+  On a sized figure Python then redraws automatically and fits the map to
+  the box with the edits; until the redraw ends, the figure shown at once
+  stays, and the line under the Figure size field says the figure is being
+  fitted. An Auto figure is not redrawn. Deleting every Legend row removes
+  the Legend's room. The CLI and Python take `--legend_rows` and
+  `--canvas_padding`, and the Run Info CLI command writes them.
+  - The question came from the Owner's reply to the first scenario revision
+    `1` draft, 「最も大きな残存リスク: なんとかならないの？」, and the reply
+    「A（推奨）: 次の PR で直す」, both quoted in the Revision 116 entry above
+    (`DECISIONS.md` `D-26`).
+  - On `2026-11-05` the Claude Code session `f4ce67e1` of the campaign
+    `figure-size-1427` showed the complete draft receipt of scenario
+    revision `2` and three items. The second and third were:
+    「2. **Q-D1**: 大きさを指定した図で Legend を編集したり Canvas padding を変えたりした後の動き。A（推奨）: 編集はすぐ図に出し、そのあと自動で描き直して枠に合わせる / B: 次の Generate で合わせる / C: 編集そのものを Generate まで図に出さない」
+    and
+    「3. **上の受領書の承認か、修正点**」
+    The first asked about the merge of PR `#1612`. Reply:
+    「Merged. A. 承認」 (`DECISIONS.md` `D-39` and `D-40`).
+  - The reply chose option A for Q-D1 and approved the shown draft. The last
+    line of the shown draft was the placeholder
+    「Decision date: （承認の日）」. The serialized receipt fills it with the
+    date of the approval, `2026-11-05`, and changes nothing else (shown
+    draft SHA-256 `be77e581a50a5ee988b5ec6fec9df61bf4866d726744c12b6f218b168ff2bcaa`).
+  - Only the approved receipt is serialized, as scenario revision `2`. The
+    earlier drafts are not.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-114` scenario revision `2`
+    `be5fd0aed8eb23a4978a627b08285305eb370fea83f7261077084e11397b49c6`.
+  - `PD-OI-114` scenario revision `2` supersedes scenario revision `1`; its
+    May retire names what is retired. The scenario revision `1` receipt and
+    JSON are kept as they were approved.
+  - The runtime, tests, and documentation of scenario revision `1` merged in
+    PRs `#1609` and `#1610`. The Python and CLI part of scenario revision `2`
+    (the request leaves, `--legend_rows`, and `--canvas_padding`) merged in
+    PR `#1613`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
@@ -11376,21 +11422,35 @@ Decision date: 2026-11-04
 ### PD-OI-114: Web control for the figure size
 
 - Concern key: `web.layout.figure-size`
-- Scenario revision: `1`
-- Supersedes: none. No earlier record fixed a Web control for the figure
-  size; until now the Web had no way to set it.
+- Scenario revision: `2`
+- Supersedes: `PD-OI-114`, scenario revision `1` (Revision 116 entry above).
+  The scenario revision `2` receipt repeats the scenario revision `1`
+  receipt, changes its fifth and seventh Choice items, adds one sentence to
+  the Rationale, changes Must preserve and the Accepted residual risk, and
+  retires what its May retire names. Scenario revision `1` superseded none:
+  no earlier record fixed a Web control for the figure size; until then the
+  Web had no way to set it.
 - Status: `ACCEPTED`
-- Selected outcome: `WEB-FIGURE-SIZE-CONTROL`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION`
-  receipt and its nine-field JSON representation below.
-- Decision source: the Owner decisions of `2026-11-04` on issue `#1427` and
-  the Owner replies of `2026-11-04` quoted in the Revision 116 entry above.
-  The receipt and JSON below reproduce all nine fields of the approved
-  receipt without translation or additional terms. The runtime, tests, and
-  documentation that implement it merge with it (static Product Contract
-  co-change); this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcome: `WEB-FIGURE-SIZE-CONTROL` (scenario revisions `1` and `2`)
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
+  The scenario revision `1` receipt and JSON are kept as they were approved.
+- Decision source (scenario revision `1`): the Owner decisions of
+  `2026-11-04` on issue `#1427` and the Owner replies of `2026-11-04` quoted
+  in the Revision 116 entry above. The receipt and JSON below reproduce all
+  nine fields of the approved receipt without translation or additional
+  terms. The runtime, tests, and documentation that implement it merged with
+  it in PR `#1609`.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `fe2d5aef4ffb3acb9b2664d80db69cc290c2f9b5bac9cb4fb769d55edb3af520`.
+- Decision source (scenario revision `2`): the Owner reply of `2026-11-05`
+  quoted in the Revision 118 entry above (Q-D1 and the approval). The receipt
+  and JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `be5fd0aed8eb23a4978a627b08285305eb370fea83f7261077084e11397b49c6`.
 
 ```text
 PRODUCT_DECISION
@@ -11484,6 +11544,41 @@ Decision date: 2026-11-04
   "acceptedResidualRisk": "原点をまたぐ領域は新しい drawing にできない。popup が図の一部を覆うことがある（置き場所は図の Legend とラベルを避ける）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-04"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: web.layout.figure-size（Web で図の大きさを指定する）
+Scenario revision: 2
+Choice: WEB-FIGURE-SIZE-CONTROL
+  - Circular と Linear の設定の Layout の先頭に「Figure size」の欄を置く。Width と Height は、それぞれ数値と単位（mm / cm / in / px）で入れる。空欄は Auto で、初めは両方とも Auto。空欄の単位の初めの値は px。Auto と Auto のときは今と同じ図になる。Linear の Wrap Rows は今の位置（Normalize Record Lengths の近く）のまま。大きさは描画ごとに持つ。Export のダイアログには置かず、PNG の DPI は Export に残す。雑誌ごとの大きさの一覧は作らない。
+  - 大きさの意味と合わせ方は CLI・Python（`--figure_width`、`--figure_height`、`canvas.figure_width`、`canvas.figure_height`）と同じ。大きさは凡例と題を含む図全体。文字の大きさと線の太さは変えず、地図（Circular の半径、Linear の配列の幅）を枠に合わせる。Circular は幅と高さの両方に収まるいちばん大きい地図にする。枠のほうが高いときは図を上下の中央に置き、引き伸ばさない。大きさは Generate で図に反映する（Layout の「Applies on Generate」の印のまま）。
+  - 欄の下に、表示中の図の大きさを出す。大きさを指定した図は要求した単位と px で（例: 180 × 143.2 mm (680 × 541 px)）、Auto の図は px と mm で（例: 1400 × 1450 px (370.4 × 383.6 mm)）出す。図がまだないときは出さない。
+  - 縮まない部分が枠に収まらないときは、Generate は図を描かず、前の図を残し、収まらない部分（Linear はいちばん小さくしたレコード、Circular はいちばん小さくした地図、凡例、題、余白）とその大きさ、収まるいちばん小さい大きさを言う。凡例が横にあるときは、凡例を上か下に置く案も出す。配置を自動では変えない。地図を小さくしてラベルが置けなくなったときは、今のラベルの判断（止める、警告する）に、欄の名前と目安の値を入れた「図を大きくする（Figure width を約 X mm に）」の案を加える。
+  - 凡例の位置、題、凡例の文字の大きさを変えると、今と同じく Python で描き直すので、枠に合わせ直す。Legend の編集のうち、名前の変更、行の削除と Restore、並べ替え（Move、Sort）と、Canvas padding は、描画の request に入り、Python が描いて合わせる（Generate、自動の描き直し、CLI・Python、`--session` の描き直しで同じ図になる）。これらの編集は今と同じくすぐ図に出る。大きさを指定した図では、そのあと Python が自動で描き直し、編集を含めて地図を枠に合わせ直す。描き直しが終わるまでは、すぐ出した図（枠より大きいことがある）が見え、欄の下の大きさの表示が合わせ直している最中だと言う。Auto の図では描き直さず、次の Generate でも同じ図になる。凡例・題・目盛りのドラッグは今と同じくすぐ図に出て、地図は合わせ直さない。枠に収まれば枠の中央に置き、収まらないときは図が枠より大きくなり、欄の下の大きさの表示がそのことと理由を言う。このために、大きさを指定した図の配置の情報（composition metadata）に、要求した枠の大きさを加える。Legend の行をすべて削除すると、凡例の場所はなくなり、図はその分小さくなる（大きさを指定した図では地図がその分大きくなる）。Legend の行の色と線の編集は大きさを変えないので、今と同じく Web で図に加える。
+  - 大きさを指定した図の SVG は、CLI と同じく width と height を要求した単位で書く（viewBox は px のまま）。PDF は今の書き出しのままで要求した大きさのページになる（PD-OI-072: 1 px を 0.75 pt にする）。PNG は今の書き出しのままで px × DPI ÷ 96 の画素数になり、DPI の値も PNG に書くので、DPI を読むソフトでは要求した大きさで開く。Interactive SVG はブラウザの窓いっぱいに開く書き出しなので、今と同じく窓に合わせて開く。Auto の図の書き出しは今と同じ。
+  - 大きさは入れたとおり（"180mm"）描画の設定と request に保存され、読み込むと欄に戻る。大きさのない Session は Auto として読む。CLI の `--save_session` や Python で保存した、大きさの入った Session も欄に戻る。Duplicate と New drawing with this style は大きさも引き継ぎ、Reset Settings は Auto に戻す。1 回の変更は Undo 1 回で戻る。CLI と Python でも Legend の名前・削除・並べ替え（`--legend_rows`、行の鍵と名前と削除と順番の表のファイル）と Canvas padding（`--canvas_padding`、上・右・下・左の px）を指定できる。Run Info の CLI コマンドには `--figure_width`、`--figure_height` を書き、Legend の名前・削除・並べ替えがあれば `--legend_rows`、Canvas padding があれば `--canvas_padding` を書く。
+  - ラベルが収まらないかもしれないという処理中の知らせは、大きさに合わせて描き直している間も出す。
+Rationale: 雑誌の段の幅（85 mm、180 mm）に合わせるとき、今の Web では 2000 px などの図を書き出した後に縮めるしかなく、文字が 2〜4 pt になる。CLI と Python は #1597 と #1601 で大きさを指定できるようになったので、Web には欄と大きさの表示と文言だけを足し、合わせ方と断り方は CLI と同じものを使う。r2: r1 では Legend の名前・削除・並べ替えと Canvas padding が合わせた後に Web で加わるので、大きさを指定した図が枠より大きくなり、Generate しても直らなかった。それらを request に入れて Python が描いて合わせると、枠に収まり、CLI・Python でも Web と同じ図になる。
+Must preserve: Legend の編集も Canvas padding もない描画では、大きさが Auto のときの描き方、書き出し、request（今と同じ内容）。Legend の名前・削除・並べ替えか Canvas padding のある Auto の描画は、request にそれが加わるが、図と書き出しは今と同じ。Auto の描画を保存した Session には空の大きさの欄（null）が 2 つ加わるだけで、読み込んだときの図と設定は今と同じ。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること（大きさを指定した図では自動の描き直しが終わった後）。Legend の編集の Undo・Redo、Restore、Sort by default、結果ごとの元の並び。PD-OI-052（装飾の delta とキャンバスの拡大）、PD-OI-061（名前の衝突の Merge / Keep both）、PD-OI-063（並べ替えを Generate の後も保つ）、PD-OI-064（Canvas padding を Generate の後も保ち、二重にかけない）、PD-OI-072（PDF の物理的な大きさ）、PD-OI-084（凡例の side の即時移動）、PD-OI-095（同じ名前の行の名前）、PD-OI-113（Wrap Rows の位置と動作）。0.14.5 までに保存した Session の開き方と図。プレビューの Fit・ズーム・パン。
+May retire: Web では図の大きさを指定できず、書き出した後に縮めるしかなかった扱い。ラベルの判断の「Make the figure larger.」だけの案内。大きさを指定した図が、Legend の名前・削除・並べ替えや Canvas padding の後に枠より大きくなり、Generate しても直らなかった扱い。それらが CLI・Python と `--session` の描き直しに届かなかった扱い。Legend の行をすべて削除しても、凡例の場所が空いたまま残った扱い。
+Accepted residual risk: 小さい大きさではラベルが混み、置けないラベルは今のラベルの判断による。ラベルの多い Circular では、大きさを指定した Generate が何度か描き直すので遅くなり（MjeNMV でラベルを両側に出した図は、Web で Auto が 13 秒、400 mm が 18 秒。地図を小さくしてラベルが収まらないときは、止まるまでに 300 mm で 49 秒、180 mm で 92 秒かかる）、大きさを指定した図では Legend の名前・削除・並べ替えや Canvas padding を変えるたびに、その描き直しが走る。凡例・題・目盛りをドラッグして枠の外に出すと、図は枠より大きくなり、Generate しても直らない（ドラッグで戻すか Reset positions で戻す）。Legend の行の色と線の編集と、Python が描かない Web で加えた行は、今と同じく Web だけで図に加わり、CLI・Python の図には入らない。収まらないときに示すいちばん小さい大きさは、見つけた中でいちばん小さい図からの値で、もっと小さくても収まる場合がある。ラベルの置き方の候補が 1 つもないとき（NO-ROW-WAYS）は、大きさの案を出さない。新しい文言は翻訳バッチまで英語。
+Owner: satoshikawato
+Decision date: 2026-11-05
+```
+
+```json
+{
+  "concern": "web.layout.figure-size（Web で図の大きさを指定する）",
+  "scenarioRevision": 2,
+  "choice": "WEB-FIGURE-SIZE-CONTROL\n  - Circular と Linear の設定の Layout の先頭に「Figure size」の欄を置く。Width と Height は、それぞれ数値と単位（mm / cm / in / px）で入れる。空欄は Auto で、初めは両方とも Auto。空欄の単位の初めの値は px。Auto と Auto のときは今と同じ図になる。Linear の Wrap Rows は今の位置（Normalize Record Lengths の近く）のまま。大きさは描画ごとに持つ。Export のダイアログには置かず、PNG の DPI は Export に残す。雑誌ごとの大きさの一覧は作らない。\n  - 大きさの意味と合わせ方は CLI・Python（`--figure_width`、`--figure_height`、`canvas.figure_width`、`canvas.figure_height`）と同じ。大きさは凡例と題を含む図全体。文字の大きさと線の太さは変えず、地図（Circular の半径、Linear の配列の幅）を枠に合わせる。Circular は幅と高さの両方に収まるいちばん大きい地図にする。枠のほうが高いときは図を上下の中央に置き、引き伸ばさない。大きさは Generate で図に反映する（Layout の「Applies on Generate」の印のまま）。\n  - 欄の下に、表示中の図の大きさを出す。大きさを指定した図は要求した単位と px で（例: 180 × 143.2 mm (680 × 541 px)）、Auto の図は px と mm で（例: 1400 × 1450 px (370.4 × 383.6 mm)）出す。図がまだないときは出さない。\n  - 縮まない部分が枠に収まらないときは、Generate は図を描かず、前の図を残し、収まらない部分（Linear はいちばん小さくしたレコード、Circular はいちばん小さくした地図、凡例、題、余白）とその大きさ、収まるいちばん小さい大きさを言う。凡例が横にあるときは、凡例を上か下に置く案も出す。配置を自動では変えない。地図を小さくしてラベルが置けなくなったときは、今のラベルの判断（止める、警告する）に、欄の名前と目安の値を入れた「図を大きくする（Figure width を約 X mm に）」の案を加える。\n  - 凡例の位置、題、凡例の文字の大きさを変えると、今と同じく Python で描き直すので、枠に合わせ直す。Legend の編集のうち、名前の変更、行の削除と Restore、並べ替え（Move、Sort）と、Canvas padding は、描画の request に入り、Python が描いて合わせる（Generate、自動の描き直し、CLI・Python、`--session` の描き直しで同じ図になる）。これらの編集は今と同じくすぐ図に出る。大きさを指定した図では、そのあと Python が自動で描き直し、編集を含めて地図を枠に合わせ直す。描き直しが終わるまでは、すぐ出した図（枠より大きいことがある）が見え、欄の下の大きさの表示が合わせ直している最中だと言う。Auto の図では描き直さず、次の Generate でも同じ図になる。凡例・題・目盛りのドラッグは今と同じくすぐ図に出て、地図は合わせ直さない。枠に収まれば枠の中央に置き、収まらないときは図が枠より大きくなり、欄の下の大きさの表示がそのことと理由を言う。このために、大きさを指定した図の配置の情報（composition metadata）に、要求した枠の大きさを加える。Legend の行をすべて削除すると、凡例の場所はなくなり、図はその分小さくなる（大きさを指定した図では地図がその分大きくなる）。Legend の行の色と線の編集は大きさを変えないので、今と同じく Web で図に加える。\n  - 大きさを指定した図の SVG は、CLI と同じく width と height を要求した単位で書く（viewBox は px のまま）。PDF は今の書き出しのままで要求した大きさのページになる（PD-OI-072: 1 px を 0.75 pt にする）。PNG は今の書き出しのままで px × DPI ÷ 96 の画素数になり、DPI の値も PNG に書くので、DPI を読むソフトでは要求した大きさで開く。Interactive SVG はブラウザの窓いっぱいに開く書き出しなので、今と同じく窓に合わせて開く。Auto の図の書き出しは今と同じ。\n  - 大きさは入れたとおり（\"180mm\"）描画の設定と request に保存され、読み込むと欄に戻る。大きさのない Session は Auto として読む。CLI の `--save_session` や Python で保存した、大きさの入った Session も欄に戻る。Duplicate と New drawing with this style は大きさも引き継ぎ、Reset Settings は Auto に戻す。1 回の変更は Undo 1 回で戻る。CLI と Python でも Legend の名前・削除・並べ替え（`--legend_rows`、行の鍵と名前と削除と順番の表のファイル）と Canvas padding（`--canvas_padding`、上・右・下・左の px）を指定できる。Run Info の CLI コマンドには `--figure_width`、`--figure_height` を書き、Legend の名前・削除・並べ替えがあれば `--legend_rows`、Canvas padding があれば `--canvas_padding` を書く。\n  - ラベルが収まらないかもしれないという処理中の知らせは、大きさに合わせて描き直している間も出す。",
+  "rationale": "雑誌の段の幅（85 mm、180 mm）に合わせるとき、今の Web では 2000 px などの図を書き出した後に縮めるしかなく、文字が 2〜4 pt になる。CLI と Python は #1597 と #1601 で大きさを指定できるようになったので、Web には欄と大きさの表示と文言だけを足し、合わせ方と断り方は CLI と同じものを使う。r2: r1 では Legend の名前・削除・並べ替えと Canvas padding が合わせた後に Web で加わるので、大きさを指定した図が枠より大きくなり、Generate しても直らなかった。それらを request に入れて Python が描いて合わせると、枠に収まり、CLI・Python でも Web と同じ図になる。",
+  "mustPreserve": "Legend の編集も Canvas padding もない描画では、大きさが Auto のときの描き方、書き出し、request（今と同じ内容）。Legend の名前・削除・並べ替えか Canvas padding のある Auto の描画は、request にそれが加わるが、図と書き出しは今と同じ。Auto の描画を保存した Session には空の大きさの欄（null）が 2 つ加わるだけで、読み込んだときの図と設定は今と同じ。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること（大きさを指定した図では自動の描き直しが終わった後）。Legend の編集の Undo・Redo、Restore、Sort by default、結果ごとの元の並び。PD-OI-052（装飾の delta とキャンバスの拡大）、PD-OI-061（名前の衝突の Merge / Keep both）、PD-OI-063（並べ替えを Generate の後も保つ）、PD-OI-064（Canvas padding を Generate の後も保ち、二重にかけない）、PD-OI-072（PDF の物理的な大きさ）、PD-OI-084（凡例の side の即時移動）、PD-OI-095（同じ名前の行の名前）、PD-OI-113（Wrap Rows の位置と動作）。0.14.5 までに保存した Session の開き方と図。プレビューの Fit・ズーム・パン。",
+  "mayRetire": "Web では図の大きさを指定できず、書き出した後に縮めるしかなかった扱い。ラベルの判断の「Make the figure larger.」だけの案内。大きさを指定した図が、Legend の名前・削除・並べ替えや Canvas padding の後に枠より大きくなり、Generate しても直らなかった扱い。それらが CLI・Python と `--session` の描き直しに届かなかった扱い。Legend の行をすべて削除しても、凡例の場所が空いたまま残った扱い。",
+  "acceptedResidualRisk": "小さい大きさではラベルが混み、置けないラベルは今のラベルの判断による。ラベルの多い Circular では、大きさを指定した Generate が何度か描き直すので遅くなり（MjeNMV でラベルを両側に出した図は、Web で Auto が 13 秒、400 mm が 18 秒。地図を小さくしてラベルが収まらないときは、止まるまでに 300 mm で 49 秒、180 mm で 92 秒かかる）、大きさを指定した図では Legend の名前・削除・並べ替えや Canvas padding を変えるたびに、その描き直しが走る。凡例・題・目盛りをドラッグして枠の外に出すと、図は枠より大きくなり、Generate しても直らない（ドラッグで戻すか Reset positions で戻す）。Legend の行の色と線の編集と、Python が描かない Web で加えた行は、今と同じく Web だけで図に加わり、CLI・Python の図には入らない。収まらないときに示すいちばん小さい大きさは、見つけた中でいちばん小さい図からの値で、もっと小さくても収まる場合がある。ラベルの置き方の候補が 1 つもないとき（NO-ROW-WAYS）は、大きさの案を出さない。新しい文言は翻訳バッチまで英語。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-05"
 }
 ```
 
