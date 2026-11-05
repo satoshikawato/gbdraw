@@ -603,6 +603,44 @@ failures in optional/additional jobs. Matrix aggregates must succeed. Workflows
 start on all relevant events and filter at job level; they never use workflow
 `paths` filters that could omit an aggregate.
 
+### Dev state on pull requests
+
+dev is red when the newest `Tests` run of a push to `dev` that has a result
+failed (`failure`, `timed_out`, or `startup_failure`). A run's result is that
+of its newest attempt that finished with one. An attempt still running, or one
+that ended `cancelled`, `skipped`, `neutral`, `stale`, or `action_required`,
+does not count, and the attempt before it decides; a run with no such attempt
+is skipped. A failed run therefore stays red until an attempt of it passes,
+also while a rerun runs or after a rerun is cancelled. `PR / gate` reads this through the Actions REST API with
+`actions: read` (`readDevTestsState` in `tools/check-promotion-readiness.mjs`,
+called by the `gate` command of the trusted `tools/ci-impact.mjs`). While dev is
+red it fails with `DEV_RED`, naming the run and its head SHA, unless the pull
+request carries the label `dev-red-fix`; `AGENTS.md` ("When dev is red") limits
+that label to the pull request that fixes the failure. The gate fails closed
+with `DEV_STATE_UNAVAILABLE` and the reader's code when the run list or an
+attempt cannot be read or does not match the run (`API_REQUEST_FAILED`,
+`RUN_IDENTITY_MISMATCH`, and the other verifier codes), when no run among the
+newest 100 has a result (`NO_DEV_STATE`), and when any listed run or read
+attempt has an unknown conclusion (`UNKNOWN_RUN_CONCLUSION`). The step summary shows the dev
+state and the label either way. The `dev`, release, and Gallery gates do not
+read it.
+
+The gate reads dev once, when it runs. A pull request held this way passes
+after dev turns green by rerunning its `PR / gate` job (about a minute); adding
+or removing a label starts a new run. The gate does not hold a pull request
+whose gate passed before dev turned red, nor one whose `pull_request.base.sha`
+predates this check because its head or base was not updated since, including
+reruns of older runs: such a run uses that base's helper. A new run started by
+`labeled`, `unlabeled`, or `reopened` may keep the old base SHA too. Updating
+the pull request from `dev` (`gh pr update-branch`) gives it a run with the
+current helper; the rule text still asks for a check before merging.
+
+The check took effect in two steps, because a checker changes separately from
+the workflow that feeds it ([`WEB_CHANGE_POLICY.md`](WEB_CHANGE_POLICY.md)).
+The workflow change passed the repository, labels, and token to `PR / gate`
+first; the base helper ignored them. The pull request that added the check ran
+that base helper too, so it was not held by the red `dev` it was written for.
+
 ## Verification and rollback
 
 Install locked Node dependencies, then run `node --test tests/ci/*.test.mjs` and

@@ -396,6 +396,13 @@ const validateJob = (job, run, expected, repositoryApiPath) => {
   return job;
 };
 
+// Newest run first: by creation time, then run number, then run ID.
+const newestRunFirst = (left, right) => (
+  Date.parse(right.created_at) - Date.parse(left.created_at)
+  || right.run_number - left.run_number
+  || right.id - left.id
+);
+
 const exactRunSnapshot = ({ run, selectedRun, expected, repositoryApiPath }) => {
   validateRun(run, expected);
   validateRunUrls(run, repositoryApiPath, expected);
@@ -502,11 +509,7 @@ export const verifyWorkflowEvidence = async ({
     validateRun(run, runExpected);
     validateRunUrls(run, repositoryApiPath, runExpected);
   });
-  const matchingRuns = runs.filter((run) => runMatches(run, runExpected)).sort((left, right) => (
-    Date.parse(right.created_at) - Date.parse(left.created_at)
-    || right.run_number - left.run_number
-    || right.id - left.id
-  ));
+  const matchingRuns = runs.filter((run) => runMatches(run, runExpected)).sort(newestRunFirst);
   if (!matchingRuns.length) {
     fail('NO_MATCHING_RUN', 'No workflow run matches the exact promotion evidence identity.', {
       expected: runExpected,
@@ -654,6 +657,120 @@ export const verifyWorkflowEvidence = async ({
     },
     records
   };
+};
+
+// SELECTIVE_CI.md "Dev state on pull requests": dev is red or green by the newest `Tests` push
+// run on dev with a result. A run's result is that of its newest attempt that finished with
+// one: a running attempt and an attempt that ended cancelled, skipped, neutral, stale, or
+// action_required pass to the attempt before it, and a run without such an attempt is skipped.
+const DEV_STATE_IDENTITY = Object.freeze({ workflowPath: '.github/workflows/test.yml', event: 'push', branch: 'dev' });
+const DEV_RUN_STATES = Object.freeze({
+  success: 'green',
+  failure: 'red',
+  timed_out: 'red',
+  startup_failure: 'red',
+  cancelled: null,
+  skipped: null,
+  neutral: null,
+  stale: null,
+  action_required: null
+});
+
+/**
+ * @typedef {object} DevTestsState
+ * @property {'green' | 'red'} state
+ * @property {string} conclusion The conclusion that decides the state, such as `success` or `failure`.
+ * @property {number} runId
+ * @property {number} attempt The run attempt whose conclusion decides the state.
+ * @property {boolean} rerunning True when a later attempt of the run is still running.
+ * @property {string} runUrl The run's page on github.com.
+ * @property {string} headSha The dev commit the run tested.
+ */
+
+/** @returns {Promise<DevTestsState>} */
+export const readDevTestsState = async ({ repository, token, fetchImpl = globalThis.fetch }) => {
+  const [owner, repo] = repositoryParts(repository);
+  const expected = { repository, ...DEV_STATE_IDENTITY };
+  if (typeof token !== 'string' || !token.trim()) {
+    fail('MISSING_TOKEN', 'A GitHub token with Actions read access is required.', {
+      expected,
+      observed: { token: 'missing' }
+    });
+  }
+  if (typeof fetchImpl !== 'function') {
+    fail('MISSING_FETCH', 'A fetch implementation is required.', { expected });
+  }
+  const repositoryApiPath = `/repos/${owner}/${repo}`;
+  // Each listed run and each read attempt must be a Tests push run on dev with a known conclusion.
+  const devRun = (run, attempt = null) => {
+    validateRun(run, expected);
+    if (run.path !== DEV_STATE_IDENTITY.workflowPath || run.event !== DEV_STATE_IDENTITY.event
+        || run.head_branch !== DEV_STATE_IDENTITY.branch || run.repository.full_name !== repository
+        || (attempt !== null && (run.id !== attempt.runId || run.run_attempt !== attempt.number
+          || run.status !== 'completed'))) {
+      fail('RUN_IDENTITY_MISMATCH', 'A run is not the expected Tests push run on dev.', {
+        expected: { ...expected, ...(attempt ?? {}) },
+        observed: runIdentity(run)
+      });
+    }
+    if (run.status === 'completed' && !Object.hasOwn(DEV_RUN_STATES, run.conclusion)) {
+      fail('UNKNOWN_RUN_CONCLUSION', 'A completed dev run has an unknown conclusion.', {
+        expected,
+        observed: runIdentity(run)
+      });
+    }
+    return run;
+  };
+  const workflowFile = encodeURIComponent(DEV_STATE_IDENTITY.workflowPath.split('/').at(-1));
+  const runsUrl = new URL(`${API_ORIGIN}${repositoryApiPath}/actions/workflows/${workflowFile}/runs`);
+  [
+    ['branch', DEV_STATE_IDENTITY.branch],
+    ['event', DEV_STATE_IDENTITY.event],
+    ['exclude_pull_requests', 'true'],
+    ['per_page', String(PER_PAGE)]
+  ].forEach(([name, value]) => runsUrl.searchParams.set(name, value));
+  const { body } = await requestJson({
+    url: runsUrl.toString(),
+    token,
+    fetchImpl,
+    expected,
+    notFoundCode: 'WORKFLOW_NOT_FOUND'
+  });
+  if (!isObject(body) || !Array.isArray(body.workflow_runs)) {
+    fail('MALFORMED_API_RESPONSE', 'GitHub workflow_runs response shape is malformed.', { expected });
+  }
+  const runs = body.workflow_runs.map((run) => {
+    validateRunUrls(devRun(run), repositoryApiPath, expected);
+    return run;
+  }).sort(newestRunFirst);
+  const hasResult = (run) => run.status === 'completed' && DEV_RUN_STATES[run.conclusion] !== null;
+  for (const run of runs) {
+    let decided = hasResult(run) ? run : null;
+    for (let number = run.run_attempt - 1; decided === null && number >= 1; number -= 1) {
+      const attempt = { runId: run.id, number };
+      const { body: earlier } = await requestJson({
+        url: `${API_ORIGIN}${repositoryApiPath}/actions/runs/${run.id}/attempts/${number}`,
+        token,
+        fetchImpl,
+        expected: { ...expected, ...attempt }
+      });
+      if (hasResult(devRun(earlier, attempt))) decided = earlier;
+    }
+    if (decided === null) continue;
+    return Object.freeze({
+      state: DEV_RUN_STATES[decided.conclusion],
+      conclusion: decided.conclusion,
+      runId: run.id,
+      attempt: decided.run_attempt,
+      rerunning: run.status !== 'completed',
+      runUrl: run.html_url,
+      headSha: run.head_sha.toLowerCase()
+    });
+  }
+  fail('NO_DEV_STATE', 'No recent Tests push run on dev has finished with a result.', {
+    expected,
+    observed: { runs: runs.length }
+  });
 };
 
 export const runGit = (repositoryRoot, args) => spawnSync('git', args, {
