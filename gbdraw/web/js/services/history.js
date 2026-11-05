@@ -615,7 +615,7 @@ export const createHistoryManager = ({
   // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
-  /** @type {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} */
+  /** @type {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} */
   let settingsStepListener = () => {};
   /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
@@ -1406,6 +1406,16 @@ export const createHistoryManager = ({
   // While the last step is a checkpoint and nothing is open, the state is the
   // one its after side holds, so a side not yet drawn keeps the figure the
   // rerender drew: Redo then shows it without another Python run.
+  // A rerender a checkpoint step's listener asked for after its commit (the
+  // fit of a figure drawn to a requested size, PD-OI-114 rev 2) makes the
+  // step's figure one its state does not draw: History then keeps the
+  // rerender's figure as the step's (`keepRedrawnResult`), and a restore of the
+  // figure before that names it undrawn. A last step that is not a
+  // checkpoint restores its intent, which the Result shows again; no mark.
+  const markLastStepUndrawn = () => {
+    const entry = topEntry(undoStack);
+    if (entry?.type === 'checkpoint' && !openTransaction()) entry.after.drawn = false;
+  };
   const keepRedrawnResult = async () => {
     const entry = topEntry(undoStack);
     if (entry?.type !== 'checkpoint') return false;
@@ -1883,8 +1893,9 @@ export const createHistoryManager = ({
       restoring.value = false;
     }
     // A checkpoint's figure can predate the apply of its live values (the
-    // Redo of Reset Settings); one already equal applies nothing.
-    settingsStepListener(null);
+    // Redo of Reset Settings); one already equal applies nothing. `undrawn`:
+    // its caller said the figure is not the one its state draws (D-24).
+    settingsStepListener(null, undefined, record.drawn === false);
     setCurrentCheckpoint(record);
     await refreshCurrentIntent();
   };
@@ -2074,8 +2085,9 @@ export const createHistoryManager = ({
    * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
    * restore). The composition root registers it once both History and the
    * automatic rerender exist (R1 (c), PD-OI-102).
-   * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} listener
-   *   `direction`: set when the call restores an intent step, which way it went.
+   * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} listener
+   *   `direction`: set when the call restores an intent step, which way it went. `undrawn`: a checkpoint
+   *   restore whose figure its step said is not the one its state draws.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 
@@ -2106,6 +2118,7 @@ export const createHistoryManager = ({
     markChangeOutsideHistory,
     historyAvailability,
     keepRedrawnResult,
+    markLastStepUndrawn,
     adoptDrawnWrite,
     intentStepSerial: () => intentStepSerial,
     traversalPending: () => traversals.value > 0,
@@ -2378,7 +2391,9 @@ export const createHistoryRouter = ({
   /** @param {DrawingId} drawingId @param {DrawingHistory} manager */
   const listenToSettingsSteps = (drawingId, manager) => {
     const listener = settingsStepListener;
-    if (listener) manager.setSettingsStepListener((changes, direction) => { if (drawingId === activeDrawingId()) listener(changes, direction); });
+    if (listener) {
+      manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
+    }
   };
   /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
   const installMember = (drawingId) => {

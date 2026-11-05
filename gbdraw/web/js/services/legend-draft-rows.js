@@ -11,9 +11,11 @@ import {
 } from './legend-svg.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
 import { normalizeCanvasPadding } from './legend-layout.js';
+import { refitFieldsBeforeStep } from './setting-application.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
+/** @import { HistoryChangeLike, RefitField } from './setting-application.js' */
 
 /**
  * A Legend entry as the compile reads it: a listed, deleted, or dormant row
@@ -152,6 +154,41 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, ...legend }) => {
   if (order.length) leaves[LEGEND_EDIT_CONFIG_PATHS.rowOrder] = order;
   if (sides.some((side) => side !== 0)) leaves[LEGEND_EDIT_CONFIG_PATHS.canvasPadding] = sides;
   return leaves;
+};
+
+/**
+ * What Python draws and sizes of a Legend draft and its canvas padding, as the request's config leaves carry it
+ * (`legendEditConfigLeaves`), with a rule row's name too: without rules the projection names every renamed row
+ * Python draws, and a rule row's name reaches Python through its rule. Colors, strokes, and the rows only the Web
+ * draws are not part of it.
+ * @param {Readonly<Record<RefitField, unknown>> & { originalLegendOrder: readonly string[] }} draft
+ * @returns {string}
+ */
+const drawnLegendKey = ({ legendEntries, deletedLegendEntries, originalLegendOrder, canvasPadding }) => {
+  /** @param {unknown} value @returns {readonly (LegendEntryInput | null | undefined)[]} */
+  const list = (value) => (Array.isArray(value) ? value : []);
+  const padding = /** @type {Readonly<Partial<Record<keyof CanvasPadding, unknown>>>} */ (
+    canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : {});
+  return JSON.stringify(legendEditConfigLeaves({
+    rules: [], canvasPadding: padding,
+    legendEntries: list(legendEntries), deletedLegendEntries: list(deletedLegendEntries), originalLegendOrder
+  }));
+};
+
+/**
+ * Whether a History step of the shown drawing changed what Python draws and sizes of its Legend rows or its canvas
+ * padding (`drawnLegendKey`): a rename (a rule row's too), a deletion, a Restore, a Move, a Sort, or a padding change,
+ * and the Undo or Redo of one; not a color or stroke edit. On a figure drawn to a requested size such a step asks the
+ * automatic rerender to fit the figure again (PD-OI-114 rev 2, Q-D1 A).
+ * @param {readonly HistoryChangeLike[] | null | undefined} changes The step's changes.
+ * @param {'undo' | 'redo' | undefined} direction Undefined for the step's commit.
+ * @param {Readonly<Record<RefitField, unknown>> & { originalLegendOrder: readonly string[] }} current The drawing's
+ *   values as the step left them, and the shown Result's inventory.
+ */
+export const stepRefitsDrawnLegend = (changes, direction, current) => {
+  const other = refitFieldsBeforeStep(changes, current, direction === 'undo');
+  return other !== null
+    && drawnLegendKey(current) !== drawnLegendKey({ ...other, originalLegendOrder: current.originalLegendOrder });
 };
 
 /** @param {unknown} value @returns {value is string} */

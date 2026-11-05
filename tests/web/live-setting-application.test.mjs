@@ -87,7 +87,7 @@ test('the G1 rows are the live setting rows, and each request path has its proje
     'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'comparison-height', 'track-geometry', 'record-names',
     'track-visibility']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
-  for (const id of ['colors', 'feature-visibility', 'legend-editor', 'features-editor', 'feature-appearance']) {
+  for (const id of ['colors', 'feature-visibility', 'legend-editor', 'canvas-padding', 'features-editor', 'feature-appearance']) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);
     assert.equal(row.application, 'live', id);
     assert.equal(row.requestPaths, undefined, `${id} is editor intent, not a draft setting`);
@@ -417,9 +417,10 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
 test('no live note text is written outside the owner', async () => {
   const html = await readFile(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
   assert.deepEqual([...html.matchAll(/Live edit:|Updates the current Result/g)].map((match) => match[0]), []);
-  // The Legend and Features tab helps open with their row's sentence; the
-  // feature popup's Appearance shows no mark (PD-OI-037 rev 3).
-  for (const id of ['legend-editor', 'features-editor']) {
+  // The Legend and Features tab helps and the Canvas Padding panel's help
+  // open with their row's sentence; the feature popup's Appearance shows no
+  // mark (PD-OI-037 rev 3).
+  for (const id of ['legend-editor', 'canvas-padding', 'features-editor']) {
     assert.match(html, new RegExp(`settingApplicationHelp\\('${id}'\\)`), id);
   }
   assert.doesNotMatch(html, /feature-appearance'\)/);

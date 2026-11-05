@@ -396,11 +396,27 @@ const validateCanvasPaddingPx = (value) => {
  * The canvas padding Python drew a Result with (`spacing.canvasPadding` of its composition metadata), the one
  * reader of it: zero on each side for a Result that records none (one drawn without padding, or saved before
  * Python drew it).
- * @param {CompositionBinding | null} binding
+ * @param {CompositionMetadata | null} metadata
  * @returns {CompositionCanvasPaddingPx}
  */
-const recordedCanvasPadding = (binding) => binding?.metadata.spacing.canvasPadding
+const recordedCanvasPadding = (metadata) => metadata?.spacing.canvasPadding
   ?? { top: 0, right: 0, bottom: 0, left: 0 };
+
+/**
+ * The padding the Web adds to a Result on each side (PD-OI-064: the padding Python already drew is never applied
+ * twice): the drawing's padding as the Web draws it (`normalizeCanvasPadding`) minus the padding the Result records.
+ * @param {CompositionMetadata | null} metadata The Result's composition metadata; null for none.
+ * @param {Readonly<Partial<Record<keyof CompositionCanvasPaddingPx, unknown>>> | null | undefined} value The drawing's padding.
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const addedCanvasPadding = (metadata, value) => {
+  const drawn = normalizeCanvasPadding(value);
+  const recorded = recordedCanvasPadding(metadata);
+  return {
+    top: drawn.top - recorded.top, right: drawn.right - recorded.right,
+    bottom: drawn.bottom - recorded.bottom, left: drawn.left - recorded.left
+  };
+};
 
 /**
  * @param {unknown} value
@@ -1098,18 +1114,25 @@ const viewBoxBounds = (value) => {
 };
 
 /**
- * What a root drawn to a requested size was asked for, and the canvas before
+ * What a root drawn to a requested size was asked for, the canvas before
  * Canvas padding and moved items grew it (the recorded automatic canvas, else
- * the viewBox), for the Figure size line; null for a root drawn at Auto or
- * without composition metadata.
+ * the viewBox), and whether the Web pads it beyond the padding Python drew
+ * (`addsPadding`, given the drawing's padding), for the Figure size line; null
+ * for a root drawn at Auto or without composition metadata.
  * @param {Element} svg
- * @returns {{ requested: RequestedCanvas, base: { width: number, height: number } } | null}
+ * @returns {{ requested: RequestedCanvas, base: { width: number, height: number },
+ *   addsPadding: (value: Readonly<Partial<Record<keyof CompositionCanvasPaddingPx, unknown>>>) => boolean } | null}
  */
 export const requestedCanvasOf = (svg) => {
   if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== String(COMPOSITION_SCHEMA_VERSION)) return null;
-  const requested = parseCompositionMetadata(svg).requestedCanvas;
+  const metadata = parseCompositionMetadata(svg);
+  const { requestedCanvas: requested } = metadata;
   const base = viewBoxBounds(svg.getAttribute('data-original-view-box') || svg.getAttribute('viewBox'));
-  return requested && base ? { requested, base: { width: base.width, height: base.height } } : null;
+  return requested && base ? {
+    requested,
+    base: { width: base.width, height: base.height },
+    addsPadding: (value) => Object.values(addedCanvasPadding(metadata, value)).some((side) => side > 0)
+  } : null;
 };
 
 // A root size in px: a number, with or without `px`.
@@ -1169,13 +1192,7 @@ const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width
 export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = {}) => {
   const bound = binding
     || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null);
-  // PD-OI-064: the padding Python already drew is never applied twice; the Web adds the drawing's padding minus it.
-  const drawn = normalizeCanvasPadding(value);
-  const recorded = recordedCanvasPadding(bound);
-  const padding = {
-    top: drawn.top - recorded.top, right: drawn.right - recorded.right,
-    bottom: drawn.bottom - recorded.bottom, left: drawn.left - recorded.left
-  };
+  const padding = addedCanvasPadding(bound?.metadata ?? null, value);
   const padded = Object.values(padding).some((number) => number !== 0);
   let moved = movedDecorationBounds(bound);
   const recordedBase = svg.getAttribute('data-original-view-box');

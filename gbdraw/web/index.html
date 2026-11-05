@@ -4344,6 +4344,7 @@
                                     </select>
                                 </div>
                                 <p v-if="figureSizeLine" class="ui-hint" data-figure-size-line>{{ figureSizeLine }}</p>
+                                <p v-if="figureSizeFitting" class="ui-hint" role="status" data-figure-size-fitting>{{ figureSizeFitting }}</p>
                                 <p v-if="figureSizeLarger" class="ui-hint" data-figure-size-larger>{{ figureSizeLarger }}</p>
                             </div>
                             <template v-if="mode === 'linear'">
@@ -6824,10 +6825,10 @@
                     </div>
 
                     <!-- Canvas padding controls panel -->
-                    <div v-if="showCanvasControls && svgContent"
+                    <div v-if="showCanvasControls && svgContent" data-setting="canvas-padding"
                          class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-56">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-bold text-slate-700">{{ t('Canvas Padding') }}</span>
+                            <span class="text-xs font-bold text-slate-700 flex items-center gap-1">{{ t('Canvas Padding') }} <help-tip id="canvas-padding-help" :label="t('About Canvas Padding')" :text="settingApplicationHelp('canvas-padding')"></help-tip></span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800" :disabled="!semanticMutationAvailable">{{ t('Reset') }}</button>
                         </div>
                         <div class="grid grid-cols-3 gap-1 text-center">

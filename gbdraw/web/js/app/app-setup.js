@@ -190,6 +190,8 @@ import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../u
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 import { formatElapsedMs, reproducibilityLabel, shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
+import { stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
+/** @import { HistoryChangeLike } from '../services/setting-application.js' */
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -1718,6 +1720,9 @@ export const createAppSetup = () => {
   };
   // Bumped by each edit of the displayed Result's root (R1).
   const resultEditRevision = shallowRef(0);
+  // Counts the Result roots the binder made ready: a History restore can mount a root whose content equals the
+  // content the preview already held (its live edits were never serialized), which neither ref above shows.
+  const mountedResultRevision = shallowRef(0);
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg, editRevision: resultEditRevision });
   setPreviewRuntime({
     clearActiveRuntime: previewRuntime.clearActiveRuntime,
@@ -3737,6 +3742,7 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
+      mountedResultRevision.value += 1;
       // OV-1280: a Result a mode switch shows again, whose drawing changed its
       // rules while it was not shown (a file card's Remove, an Undo or Redo
       // there), is drawn again when its Legend cannot show them, as after a
@@ -3913,9 +3919,37 @@ export const createAppSetup = () => {
   // preset), and their Undo and Redo that change live setting rows of the
   // shown drawing ask the automatic rerender to apply them (the router passes
   // the shown drawing's steps only).
-  history.setSettingsStepListener((changes, direction) => {
+  // Figure size (PD-OI-114 rev 2, Q-D1 A): a step that changes what Python
+  // draws of the shown drawing's Legend rows or its Canvas padding (its
+  // commit, Undo, or Redo) shows at once, and a figure drawn to a requested
+  // size is then fitted again by the automatic rerender, which draws them
+  // (`projectCommittedEditorIntent`). An Auto figure is not redrawn. A
+  // committed checkpoint step's figure is then not the one its state draws,
+  // so History keeps the rerender's figure as the step's, and the restore of a
+  // checkpoint figure History knows is not drawn fits it again (D-24).
+  /**
+   * @param {readonly HistoryChangeLike[] | null} changes
+   * @param {'undo' | 'redo' | undefined} direction
+   * @param {boolean | undefined} undrawn
+   */
+  const refitSizedFigure = (changes, direction, undrawn) => {
+    const root = svgContainer.value?.querySelector?.('svg');
+    if (!root || !requestedCanvasOf(root)) return;
+    if (!changes) {
+      if (undrawn) featureActions.requestAutomaticRerender();
+      return;
+    }
+    const drawing = state.activeDrawing();
+    if (!stepRefitsDrawnLegend(changes, direction, {
+      legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
+      canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value
+    })) return;
+    if (featureActions.requestAutomaticRerender() && !direction) history.markLastStepUndrawn();
+  };
+  history.setSettingsStepListener((changes, direction, undrawn) => {
     requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
       changes ? changedTrackHides(changes) : undefined, direction === 'undo');
+    refitSizedFigure(changes, direction, undrawn);
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -5564,9 +5598,11 @@ export const createAppSetup = () => {
   // Figure size (issue #1427): the line under the field reads the shown Result's root (px) after each change of it,
   // and its committed request's sides; none while the drawing shows no Result of its own.
   // A root drawn to a requested size also names its requested canvas and the canvas before Web-only additions grew it.
+  // While the automatic rerender runs on such a root (the shown drawing: a switch waits for it), the line says the
+  // figure is being fitted (PD-OI-114 rev 2): a Legend edit or Canvas padding shows at once, then Python fits it.
   /** @type {{ value: { px: { width: number, height: number }, sized: ReturnType<typeof requestedCanvasOf> } | null }} */
   const shownFigureRoot = shallowRef(null);
-  watch(() => [svgContent.value, resultEditRevision.value, state.activeDrawingId.value], () => {
+  watch(() => [svgContent.value, resultEditRevision.value, mountedResultRevision.value, state.activeDrawingId.value], () => {
     const root = svgContainer.value?.querySelector?.('svg') ?? null;
     const px = getSvgDimensions(root);
     shownFigureRoot.value = root && px ? { px, sized: requestedCanvasOf(root) } : null;
@@ -5582,10 +5618,11 @@ export const createAppSetup = () => {
       const requested = requestFigureSizeLeaves(request);
       const growth = root.sized && figureGrowth({
         shown: root.px, base: root.sized.base, requested: root.sized.requested,
-        padded: canvasPadded(drawing), moved: decorationsMoved()
+        padded: root.sized.addsPadding(drawing.canvasPadding), moved: decorationsMoved()
       });
       return {
         ...shownFigureSize({ widthPx: root.px.width, heightPx: root.px.height, requested }),
+        fitting: Boolean(root.sized) && labelReflowProcessing.value,
         larger: growth ? {
           sides: growth.sides.map((side) => ({ side, length: requestedLengthText(requested[side]) ?? `${Math.round(root.px[side])} px` })),
           causes: growth.causes
