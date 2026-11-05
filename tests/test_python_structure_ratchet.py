@@ -308,7 +308,6 @@ FUNCTION_PARAMETERS: dict[str, int] = {
     "gbdraw/diagrams/circular/assemble.py::_record_label_layout": 13,
     "gbdraw/diagrams/circular/assemble.py::_resolve_radial_layout_fitting_definition": 13,
     "gbdraw/diagrams/circular/assemble.py::_slot_paint_data": 11,
-    "gbdraw/diagrams/circular/assemble.py::assemble_circular_diagram": 28,
     "gbdraw/diagrams/circular/assemble.py::build_circular_legend_table": 16,
     "gbdraw/diagrams/circular/assemble.py::circular_labels": 25,
     "gbdraw/diagrams/circular/assemble.py::circular_legend_table": 11,

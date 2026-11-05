@@ -427,8 +427,8 @@ during an intermediate phase, they may only receive values copied from a
 
 ### 7.5 Preserve public low-level assembler contracts
 
-`assemble_circular_diagram` and other release-backed low-level entry points keep
-their current public return shapes. Add an internal result such as
+`assemble_circular_diagram` was removed because nothing called it. The other
+release-backed low-level entry points keep their current public return shapes. Add an internal result such as
 `CircularAssemblyResult(drawing, legend_measurement, content_bounds, ...)` and
 use a private/internal entry point where multi-record assembly needs the extra
 geometry. The public wrapper returns the same values it returns today.
