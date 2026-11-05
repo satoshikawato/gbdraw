@@ -7,6 +7,7 @@ import { TextDecoder } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import {
   PromotionReadinessError,
+  readDevTestsState,
   verifyWorkflowEvidence
 } from './check-promotion-readiness.mjs';
 import {
@@ -55,6 +56,9 @@ const PULL_REQUEST_EVIDENCE_CONTRACT = Object.freeze({
 // The `CI impact plan` job of a pull request run uploads an artifact named
 // `<prefix><tested tree>` followed by `.<job ID>` for each planned job.
 export const PR_PLAN_RECORD_PREFIX = 'ci-impact-pr-plan.';
+// SELECTIVE_CI.md "Dev state on pull requests": while dev is red, `PR / gate` passes only a
+// pull request with this label.
+export const DEV_RED_FIX_LABEL = 'dev-red-fix';
 
 const isPlainObject = (value) => value !== null
   && typeof value === 'object'
@@ -836,7 +840,55 @@ const runPlanCommand = async ({
   }
 };
 
-const runGateCommand = ({ env, stdout, appendFileImpl }) => {
+const formatDevStateSummary = ({ devState, labeled, failure = null }) => [
+  '## Dev state',
+  '',
+  failure
+    ? `- Dev state: unavailable — \`${html(failure.code)}\` ${html(failure.reason)}`
+    : `- Dev state: \`${devState.state}\` (\`${devState.conclusion}\`) — [run ${devState.runId}](${devState.runUrl}) attempt ${devState.attempt}${devState.rerunning ? ' (a rerun is in progress)' : ''} on \`${devState.headSha}\``,
+  `- Label \`${DEV_RED_FIX_LABEL}\`: ${labeled ? 'yes' : 'no'}`,
+  ''
+].join('\n');
+
+const readPullRequestLabels = (env) => {
+  const labels = parseJsonEnvironment(env, 'CI_IMPACT_PR_LABELS_JSON');
+  if (!Array.isArray(labels) || labels.some((label) => typeof label !== 'string')) {
+    fail('INVALID_LABELS', 'CI_IMPACT_PR_LABELS_JSON must be a JSON array of label names.');
+  }
+  return labels;
+};
+
+// A pull request gate also fails while dev is red, unless the pull request carries the fix label.
+const checkDevState = async ({ env, fetchImpl, writeSummary }) => {
+  const labeled = readPullRequestLabels(env).includes(DEV_RED_FIX_LABEL);
+  const repository = requiredEnvironment(env, 'CI_IMPACT_REPOSITORY');
+  let devState;
+  try {
+    devState = await readDevTestsState({ repository, token: env.GITHUB_TOKEN, fetchImpl });
+  } catch (error) {
+    if (!(error instanceof PromotionReadinessError)) throw error;
+    const failure = evidenceFailure(error.code, error.message, env.GITHUB_TOKEN);
+    writeSummary(formatDevStateSummary({ labeled, failure }));
+    fail('DEV_STATE_UNAVAILABLE', `The state of dev could not be read: [${failure.code}] ${failure.reason}`, {
+      evidenceCode: failure.code
+    });
+  }
+  writeSummary(formatDevStateSummary({ devState, labeled }));
+  if (devState.state === 'red' && !labeled) {
+    fail('DEV_RED',
+      `dev is red: Tests run ${devState.runUrl} on ${devState.headSha} ended ${devState.conclusion} `
+      + `in attempt ${devState.attempt}${devState.rerunning ? ', and its rerun has not finished' : ''}. `
+      + `Merge only the fix (label ${DEV_RED_FIX_LABEL}), and rerun the PR / gate job after dev turns green.`, {
+        runUrl: devState.runUrl,
+        headSha: devState.headSha,
+        conclusion: devState.conclusion,
+        attempt: devState.attempt,
+        rerunning: devState.rerunning
+      });
+  }
+};
+
+const runGateCommand = async ({ env, stdout, appendFileImpl, fetchImpl }) => {
   const plan = parseJsonEnvironment(env, 'CI_IMPACT_PLAN_JSON');
   const needs = parseJsonEnvironment(env, 'CI_IMPACT_NEEDS_JSON');
   const expectedProfile = requiredEnvironment(env, 'CI_IMPACT_EXPECTED_PROFILE');
@@ -847,10 +899,12 @@ const runGateCommand = ({ env, stdout, appendFileImpl }) => {
     knownJobs: knownJobsFor(expectedProfile),
     expected: { profile: expectedProfile, workflowSha: expectedWorkflowSha }
   });
+  const writeSummary = (content) => {
+    if (env.GITHUB_STEP_SUMMARY) appendOutput(env.GITHUB_STEP_SUMMARY, content, appendFileImpl);
+  };
+  if (expectedProfile === 'pr') await checkDevState({ env, fetchImpl, writeSummary });
   stdout.write(`${JSON.stringify(result)}\n`);
-  if (env.GITHUB_STEP_SUMMARY) {
-    appendOutput(env.GITHUB_STEP_SUMMARY, formatGateSummary({ plan, result }), appendFileImpl);
-  }
+  writeSummary(formatGateSummary({ plan, result }));
 };
 
 const optionValues = (argv, names) => {
@@ -903,7 +957,8 @@ export const runCiImpactCli = async ({
   stderr = process.stderr,
   appendFileImpl = appendFileSync,
   runGitImpl = runGit,
-  verifyWorkflowEvidenceImpl = verifyWorkflowEvidence
+  verifyWorkflowEvidenceImpl = verifyWorkflowEvidence,
+  fetchImpl = globalThis.fetch
 } = {}) => {
   try {
     const command = argv[0];
@@ -927,7 +982,7 @@ export const runCiImpactCli = async ({
         verifyWorkflowEvidenceImpl
       });
     } else {
-      runGateCommand({ env, stdout, appendFileImpl });
+      await runGateCommand({ env, stdout, appendFileImpl, fetchImpl });
     }
     return 0;
   } catch (error) {
