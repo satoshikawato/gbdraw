@@ -181,8 +181,8 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
  * @returns {string}
  */
 const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLegendOrder, canvasPadding }) => {
-  // Read as lists here, not handed to a helper: the paint intent writer guard counts a paint member passed to a
-  // function it does not know as a write.
+  // The paint lists reach `legendEditConfigLeaves` under these local names, and it only reads them. The paint intent
+  // writer guard does not follow a local name, so this read-only use is not in its reader list (`SLICE_READERS`).
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
   const listed = Array.isArray(legendEntries) ? legendEntries : [];
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
