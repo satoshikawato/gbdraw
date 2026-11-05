@@ -279,6 +279,7 @@ import {
 } from '../services/linear-comparisons.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
+  bindingKeyOfRequestRecord,
   circularRecordDrawKey,
   circularRecordRequestKeys,
   circularRecordsToDraw,
@@ -7852,7 +7853,15 @@ export const createAppSetup = () => {
     },
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
-    addRegionAnnotation: annotationEditor.addRegionAnnotation,
+    // The row binds its record by the catalog key the record select writes, found from the Result's record key. The
+    // popup is teleported out of the app root, where the History adapter listens, so the action is its own step.
+    addRegionAnnotation: ({ recordKey, start, end }) => history.runUndoable(msg('Add to annotation set'), () => {
+      const drawing = state.activeDrawing();
+      const owners = drawing.mode === 'circular'
+        ? circularRecordSettingsOwners(drawing)
+        : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
+      return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
+    }),
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.
     readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
@@ -7917,6 +7926,7 @@ export const createAppSetup = () => {
     regionSelect,
     regionSelectOn: regionSelect.active,
     regionSelectAvailable: regionSelect.available,
+    regionSelectUnavailableReason: regionSelect.unavailableReason,
     regionOverlay: regionSelect.overlay,
     regionOverlayMatrix: regionSelect.overlayMatrix,
     regionPopup: regionSelect.popup,

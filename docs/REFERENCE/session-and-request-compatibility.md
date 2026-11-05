@@ -39,7 +39,8 @@ The Web app keeps them in each drawing's `config.form.figure_width` and
 A Session without the leaves reads as auto.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
-`axis`, which the Web app's **Select region** reads. A saved Result without them
+`axis` (with `axis.source.isCircular`, whether a selected span may cross the
+record's origin), which the Web app's **Select region** reads. A saved Result without them
 (written before they existed) loads as before; Select region stays off with the
 reason "Generate to enable region selection" until the next Generate.
 

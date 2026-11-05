@@ -1,7 +1,7 @@
 // @ts-check
 import { setClassToken } from '../services/svg-serialization.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
-import { holdTextSelection } from '../utils/gesture-text-selection.js';
+import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 
 const { computed, reactive } = window.Vue;
 
@@ -310,8 +310,8 @@ export const createFeatureSelection = ({
   let statusTimeoutId = null;
   /** @type {{ svg: Element, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
   let pendingDrag = null;
-  /** Ends the marquee's hold on text selection (OV-2478). */
-  let releaseTextSelection = () => {};
+  /** Ends the marquee's hold on the pointer: its capture and the hold on text selection (OV-2478). */
+  let releaseGesture = () => {};
   /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
@@ -664,14 +664,13 @@ export const createFeatureSelection = ({
     featureSelectionDrag.currentX = event.clientX;
     featureSelectionDrag.currentY = event.clientY;
     featureSelectionDrag.additive = pendingDrag.additive;
-    releaseTextSelection = holdTextSelection();
-    if (typeof svg.setPointerCapture === 'function' && Number.isFinite(event.pointerId)) {
-      try {
-        svg.setPointerCapture(event.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    const releaseText = holdTextSelection();
+    const releaseCapture = capturePointer(svg, event.pointerId);
+    releaseGesture = () => {
+      releaseCapture();
+      releaseText();
+      releaseGesture = () => {};
+    };
     return true;
   };
 
@@ -699,13 +698,7 @@ export const createFeatureSelection = ({
     const wasActive = featureSelectionDrag.active;
     featureSelectionDrag.currentX = Number.isFinite(event.clientX) ? event.clientX : featureSelectionDrag.currentX;
     featureSelectionDrag.currentY = Number.isFinite(event.clientY) ? event.clientY : featureSelectionDrag.currentY;
-    if (typeof pendingDrag.svg?.releasePointerCapture === 'function' && Number.isFinite(event.pointerId)) {
-      try {
-        pendingDrag.svg.releasePointerCapture(event.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    releaseGesture();
     if (wasActive) {
       selectIntersectingFeatures(
         pendingDrag.svg,
@@ -717,20 +710,12 @@ export const createFeatureSelection = ({
     }
     featureSelectionDrag.active = false;
     pendingDrag = null;
-    releaseTextSelection();
     return wasActive;
   };
 
   const cancelMarqueePointer = () => {
-    if (pendingDrag?.svg && typeof pendingDrag.svg.releasePointerCapture === 'function') {
-      try {
-        pendingDrag.svg.releasePointerCapture(pendingDrag.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    releaseGesture();
     pendingDrag = null;
-    releaseTextSelection();
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;
   };

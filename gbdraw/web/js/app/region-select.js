@@ -17,7 +17,7 @@ import {
 import { copyPendingTextToClipboard } from '../utils/clipboard.js';
 import { normalizeCaughtError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { holdTextSelection } from '../utils/gesture-text-selection.js';
+import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 import { isClickAtPress } from '../utils/popup-bounds.js';
 import { computed, reactive, ref, shallowRef } from '../utils/reactivity.js';
 import { t, tn } from '../utils/i18n.js';
@@ -26,11 +26,10 @@ import { t, tn } from '../utils/i18n.js';
 const BAND_SLACK_PX = 6;
 
 /**
- * The region an action works on, in source coordinates (1-based, both ends included).
+ * The region an action works on: the record by its request key, in source coordinates (1-based, both ends included;
+ * `start > end` across the origin of a circular record).
  * @typedef {object} RegionTarget
  * @property {string} recordKey
- * @property {string} recordId
- * @property {number} recordIndex
  * @property {number} start
  * @property {number} end
  */
@@ -54,28 +53,43 @@ const BAND_SLACK_PX = 6;
  */
 
 /**
- * Where the Region popup opens: the release point, and the boxes it keeps clear of besides the band (D-28).
- * @typedef {{ clientX: number, clientY: number, obstacles: PopupBounds[] }} RegionPopupAnchor
+ * Where the Region popup opens: the release point, the boxes it keeps clear of besides the band (D-28), and the
+ * rectangle it stays inside (above the preview toolbar, D-30).
+ * @typedef {{ clientX: number, clientY: number, obstacles: PopupBounds[], within: PopupBounds | null }} RegionPopupAnchor
  */
+
+// The preview's own controls (the page's markup): the export bar and the search bar are obstacles like the Legend;
+// the toolbar of the preview, where Select region is turned off, is a limit the popup stays above (D-30).
+const PREVIEW_BARS_SELECTOR = '.preview-toolbar, .preview-feature-search';
+const PREVIEW_CONTROLS_SELECTOR = '.preview-controls';
+
+/** @param {Element} element @returns {PopupBounds | null} The element's screen box; null when it is not shown. */
+const shownBox = (element) => {
+  const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+  return width > 0 && height > 0 ? { left, right, top, bottom } : null;
+};
 
 /**
- * The screen boxes of the shown Result's Legend, feature labels and record definitions, which the Region popup keeps
- * clear of.
+ * Where the Region popup may go: clear of the shown Result's Legend, feature labels and record definitions and of
+ * the export and search bars, and above the preview toolbar (an obstacle instead when the toolbar is in the upper
+ * half of the window).
  * @param {SVGSVGElement | null} root
- * @returns {PopupBounds[]}
+ * @returns {{ obstacles: PopupBounds[], within: PopupBounds | null }}
  */
-const popupObstacles = (root) => Array.from(
-  root?.querySelectorAll(`${LEGEND_GROUP_SELECTOR}, ${FEATURE_LABEL_SELECTOR}, ${RECORD_DEFINITION_SELECTOR}`) ?? []
-)
-  .map((element) => element.getBoundingClientRect())
-  .filter((box) => box.width > 0 && box.height > 0)
-  .map(({ left, right, top, bottom }) => ({ left, right, top, bottom }));
+const popupLimits = (root) => {
+  const drawn = root ? Array.from(root.querySelectorAll(`${LEGEND_GROUP_SELECTOR}, ${FEATURE_LABEL_SELECTOR}, ${RECORD_DEFINITION_SELECTOR}`)) : [];
+  const obstacles = [...drawn, ...document.querySelectorAll(PREVIEW_BARS_SELECTOR)].flatMap((element) => shownBox(element) ?? []);
+  const controls = document.querySelector(PREVIEW_CONTROLS_SELECTOR);
+  const toolbar = controls ? shownBox(controls) : null;
+  if (toolbar && toolbar.top <= window.innerHeight / 2) obstacles.push(toolbar);
+  const within = toolbar && toolbar.top > window.innerHeight / 2
+    ? { top: -Infinity, left: -Infinity, right: Infinity, bottom: toolbar.top }
+    : null;
+  return { obstacles, within };
+};
 
 /** @param {RegionSelection} selection @returns {RegionTarget} */
-const targetOf = (selection) => ({
-  recordKey: selection.recordKey, recordId: selection.recordId, recordIndex: selection.recordIndex,
-  start: selection.source.start, end: selection.source.end
-});
+const targetOf = (selection) => ({ recordKey: selection.recordKey, start: selection.source.start, end: selection.source.end });
 
 /** @param {RegionAxis} axis @param {number} start @param {number} current @param {number} sweep */
 const dragSpan = (axis, start, current, sweep) => (axis.kind === 'circular'
@@ -93,6 +107,8 @@ export const createRegionSelect = ({
   /** Whether the shown Result has an axis to select on (one predicate for the toggle and the gesture). */
   const available = computed(() => readAxisRecords().length > 0);
   const active = computed(() => on.value && available.value);
+  /** Why the toggle is unavailable: a shown Result without the axis (saved before Python wrote it, Q-A1). */
+  const unavailableReason = computed(() => (available.value ? '' : t('Generate to enable region selection')));
 
   /** Turning Select region on turns Layout edit off. */
   const toggle = () => {
@@ -114,7 +130,7 @@ export const createRegionSelect = ({
    * The drag in progress: its record, where it started along the axis, and the span so far.
    * @type {{ pointerId: number, startX: number, startY: number, moved: boolean, record: RegionAxisRecord,
    *   frame: SVGGraphicsElement, start: number, previous: number, sweep: number, row: number, span: DisplaySpan,
-   *   clientX: number, clientY: number } | null}
+   *   clientX: number, clientY: number, owner: Element } | null}
    */
   let pending = null;
   const drag = reactive({ active: false, recordIndex: -1, span: /** @type {DisplaySpan} */ ({ start: 0, length: 0 }), x: 0, y: 0 });
@@ -145,16 +161,17 @@ export const createRegionSelect = ({
     return null;
   };
 
-  /** Ends the hold on text selection that a drag takes. */
-  let releaseTextSelection = () => {};
+  /** Ends the hold a drag takes on the pointer: on text selection from the press, and its capture once it moves. */
+  let releaseGesture = () => {};
 
   /**
    * A press with Select region on: on a record's feature tracks it starts a drag (and no pan); anywhere else, or
-   * with Shift, Ctrl, or Meta held, it keeps its meaning.
+   * with Shift, Ctrl, or Meta held, it keeps its meaning. A touch drags the same way (the canvas takes no touch pan
+   * while the tool is on, `.region-select-on`).
    * @param {PointerEvent} event
    */
   const pointerDown = (event) => {
-    if (!active.value || event.button !== 0 || event.isPrimary === false) return;
+    if (!active.value || event.button !== 0 || event.isPrimary === false || !(event.currentTarget instanceof Element)) return;
     if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
     const hit = recordAt(event.clientX, event.clientY);
     if (!hit) return;
@@ -164,9 +181,9 @@ export const createRegionSelect = ({
       pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false,
       record: hit.record, frame: hit.frame, start: hit.position.position, previous: hit.position.position, sweep: 0,
       row: hit.position.row, span: { start: Math.floor(hit.position.position), length: 1 },
-      clientX: event.clientX, clientY: event.clientY
+      clientX: event.clientX, clientY: event.clientY, owner: event.currentTarget
     };
-    releaseTextSelection = holdTextSelection();
+    releaseGesture = holdTextSelection();
   };
 
   /** @param {PointerEvent} event */
@@ -189,7 +206,15 @@ export const createRegionSelect = ({
       current = linearRowPosition(axis, pending.row, mapped.point.x).position;
     }
     if (!pending.moved) {
+      // From here the press is a drag: the canvas captures the pointer, so a release over the toolbar or outside the
+      // window still ends it. A press that stays put keeps no capture, so its click reaches what it was on.
       pending.moved = true;
+      const releaseCapture = capturePointer(pending.owner, pending.pointerId);
+      const releaseText = releaseGesture;
+      releaseGesture = () => {
+        releaseCapture();
+        releaseText();
+      };
       closeRegionPopup();
     }
     pending.span = dragSpan(axis, pending.start, current, pending.sweep);
@@ -203,8 +228,9 @@ export const createRegionSelect = ({
   const endDrag = () => {
     pending = null;
     drag.active = false;
-    releaseTextSelection();
-    releaseTextSelection = () => {};
+    const release = releaseGesture;
+    releaseGesture = () => {};
+    release();
   };
 
   /** The band element the popup opens beside; bound by the template. @type {Element | null} */
@@ -235,15 +261,23 @@ export const createRegionSelect = ({
       if (shownSelection.value !== selection) return;
       // Once open, the popup holds the selection: it goes when the popup closes.
       if (bandElement) {
-        openRegionPopup(selection, bandElement, {
-          clientX: finished.clientX, clientY: finished.clientY, obstacles: popupObstacles(shownRoot())
-        });
+        openRegionPopup(selection, bandElement, { clientX: finished.clientX, clientY: finished.clientY, ...popupLimits(shownRoot()) });
       }
       shownSelection.value = null;
     });
   };
 
-  const pointerCancel = () => { if (pending) endDrag(); };
+  /**
+   * A cancelled pointer (a touch the browser took), or a capture the drag lost, ends the drag with no selection. Only
+   * the canvas's own capture counts: a touch press is captured by the element under it, and that capture moves to
+   * the canvas when the drag starts (OV-2483).
+   * @param {PointerEvent} event
+   */
+  const pointerCancel = (event) => {
+    if (!pending || event.pointerId !== pending.pointerId) return;
+    if (event.type === 'lostpointercapture' && event.target !== pending.owner) return;
+    endDrag();
+  };
 
   /**
    * The selection whose band shows between the release and the popup's open (shallow: the release compares it).
@@ -328,9 +362,10 @@ export const createRegionSelect = ({
     const chosen = openSelection();
     if (!chosen) return null;
     const featureIds = featuresInside(chosen);
+    const featureText = tn(featureIds.length, '{count} feature', '{count} features');
     return {
       featureCount: featureIds.length,
-      featureText: tn(featureIds.length, '{count} feature', '{count} features'),
+      featureText: chosen.source.wrapsOrigin ? t('{features} · crosses the origin', { features: featureText }) : featureText,
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
       newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
       // The Copy FASTA state of this selection only.
@@ -381,7 +416,7 @@ export const createRegionSelect = ({
   };
 
   return {
-    on, available, active, toggle, toggleLayoutEdit,
+    on, available, active, unavailableReason, toggle, toggleLayoutEdit,
     pointerDown, pointerMove, pointerUp, pointerCancel,
     overlay, overlayMatrix, bindOverlay, bindBand, popup,
     selectFeaturesInside, addToAnnotationSet, newDrawing, copyFasta

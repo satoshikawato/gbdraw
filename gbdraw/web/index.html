@@ -1404,7 +1404,8 @@
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
-        .preview-canvas.region-select-on { cursor: crosshair !important; }
+        /* While Select region is on, a touch drag selects: the canvas takes no touch pan or zoom. */
+        .preview-canvas.region-select-on { cursor: crosshair !important; touch-action: none; }
         .feature-selection-toolbar {
             position: absolute;
             top: 8.5rem;
@@ -6864,6 +6865,7 @@
                          @pointermove.capture="regionSelect.pointerMove"
                          @pointerup.capture="regionSelect.pointerUp"
                          @pointercancel.capture="regionSelect.pointerCancel"
+                         @lostpointercapture.capture="regionSelect.pointerCancel"
                          @wheel.prevent="handleWheel"
                          @mousedown="startPan"
                          @mousemove="doPan"
@@ -7416,8 +7418,16 @@
                             <color-swatch v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
                                  class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
                                  :color="(previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8'"></color-swatch>
-                            <i v-else class="ph text-slate-500 mt-1 shrink-0" :class="previewItemView && previewItemView.kind === 'region' ? 'ph-selection' : 'ph-text-aa'" aria-hidden="true"></i>
-                            <div v-if="previewItemView" class="min-w-0">
+                            <!-- A selected region's marker has the band's look. -->
+                            <svg v-else-if="previewItemView.kind === 'region'" class="w-4 h-4 shrink-0 mt-1" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" class="region-select-band"></rect></svg>
+                            <i v-else class="ph ph-text-aa text-slate-500 mt-1 shrink-0" aria-hidden="true"></i>
+                            <div v-if="previewItemView && previewItemView.kind === 'region'" class="min-w-0 flex-1">
+                                <div class="text-base font-bold text-slate-700 truncate" data-match-popup-title>{{ previewItemView.title }}</div>
+                                <div class="text-sm text-slate-600 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
+                                <div class="text-xs text-slate-500 mt-0.5 break-all" data-region-span>{{ previewItemView.span }}</div>
+                                <div v-if="regionPopup" class="text-xs text-slate-500 break-all" data-region-feature-count>{{ regionPopup.featureText }}</div>
+                            </div>
+                            <div v-else-if="previewItemView" class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
                                 <div v-if="previewItemView.subtitle" class="text-xs text-slate-500 mt-0.5 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
                             </div>
@@ -7519,24 +7529,26 @@
                                     </div>
                                     <p v-else class="match-muted" data-preview-record-unmatched>{{ previewItemView.editHint }}</p>
                                 </div>
-                                <!-- Region: the features fully inside the span and its actions (app/region-select.js). -->
-                                <div v-else-if="previewItemView && previewItemView.kind === 'region' && regionPopup" :key="`region-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="region">
-                                    <p class="text-xs text-slate-600" tabindex="-1" data-dialog-initial-focus data-region-feature-count>{{ regionPopup.featureText }}</p>
-                                    <div class="match-actions">
-                                        <button type="button" class="match-link" data-history-ignore data-region-select-features
-                                                :disabled="regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()">{{ regionPopup.selectFeaturesText }}</button>
-                                        <button type="button" class="match-link" data-region-add-annotation
-                                                :disabled="!semanticMutationAvailable" @click="regionSelect.addToAnnotationSet()">{{ t('Add to annotation set') }}</button>
-                                        <button type="button" class="match-link" data-history-ignore data-region-new-drawing
+                                <!-- Region: its actions, one full-width button each, as the approved design shows them
+                                     (app/region-select.js); a disabled action keeps its button with its reason under it. -->
+                                <div v-else-if="previewItemView && previewItemView.kind === 'region' && regionPopup" :key="`region-popup-${previewItemView.identity}`" v-dialog-focus class="flex flex-col gap-1.5" data-preview-item-popup="region">
+                                    <div>
+                                        <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-copy-fasta data-dialog-initial-focus
+                                                :disabled="regionPopup.copying" :aria-busy="regionPopup.copying ? 'true' : 'false'"
+                                                @click="regionSelect.copyFasta()"><i class="ph ph-copy" aria-hidden="true"></i><span>{{ regionPopup.copying ? t('Copying FASTA…') : t('Copy FASTA') }}</span></button>
+                                        <p v-if="regionPopup.copyStatus" :class="regionPopup.copyFailed ? 'text-xs text-red-700' : 'text-xs text-slate-500'" class="mt-0.5 px-1" role="status" data-region-copy-status>{{ regionPopup.copyStatus }}</p>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-select-features
+                                            :disabled="regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()"><i class="ph ph-selection-plus" aria-hidden="true"></i><span>{{ regionPopup.selectFeaturesText }}</span></button>
+                                    <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-region-add-annotation
+                                            :disabled="!semanticMutationAvailable" @click="regionSelect.addToAnnotationSet()"><i class="ph ph-note-pencil" aria-hidden="true"></i><span>{{ t('Add to annotation set') }}</span></button>
+                                    <div>
+                                        <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-new-drawing
                                                 :disabled="!drawingSwitchAvailable || !!regionPopup.newDrawingReason"
                                                 :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
-                                                @click="regionSelect.newDrawing()">{{ t('New drawing from region') }}</button>
-                                        <button type="button" class="match-link" data-history-ignore data-region-copy-fasta
-                                                :disabled="regionPopup.copying" :aria-busy="regionPopup.copying ? 'true' : 'false'"
-                                                @click="regionSelect.copyFasta()">{{ regionPopup.copying ? t('Copying FASTA…') : t('Copy FASTA') }}</button>
+                                                @click="regionSelect.newDrawing()"><i class="ph ph-file-plus" aria-hidden="true"></i><span>{{ t('New drawing from region') }}</span></button>
+                                        <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="text-xs text-slate-500 mt-0.5 px-1" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
                                     </div>
-                                    <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="match-muted" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
-                                    <p v-if="regionPopup.copyStatus" :class="regionPopup.copyFailed ? 'text-xs text-red-700' : 'match-muted'" role="status" data-region-copy-status>{{ regionPopup.copyStatus }}</p>
                                 </div>
                                 <p v-else class="match-muted">{{ t('This item is no longer in the diagram.') }}</p>
                             </template>
@@ -9015,14 +9027,14 @@
                                 class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 :class="regionSelectOn ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
                                 :disabled="!regionSelectAvailable"
-                                :title="regionSelectAvailable ? t('Drag along a record to select a region') : t('Generate to enable region selection')"
+                                :title="regionSelectAvailable ? t('Drag along a record to select a region') : regionSelectUnavailableReason"
                                 :aria-pressed="regionSelectOn"
                                 :aria-describedby="regionSelectAvailable ? null : 'region-select-unavailable'"
                                 :aria-label="t('Toggle region selection')">
                             <i class="ph ph-selection" aria-hidden="true"></i>
                             <span>{{ t('Select region') }}</span>
                         </button>
-                        <span v-if="svgContent && !regionSelectAvailable" id="region-select-unavailable" class="sr-only">{{ t('Generate to enable region selection') }}</span>
+                        <span v-if="svgContent && !regionSelectAvailable" id="region-select-unavailable" class="sr-only">{{ regionSelectUnavailableReason }}</span>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>

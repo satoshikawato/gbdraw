@@ -194,26 +194,25 @@ export const createAnnotationEditor = ({
   };
   /**
    * Select region's Add to annotation set: one coordinate-span row labelled "Region N" (the next number no row of the
-   * set uses) in the default style, in the drawing's first annotation set, which it adds when there is none. The
-   * record is the catalog's record of that ID drawn at `recordIndex`, else the only one of that ID, else the ID.
-   * @param {{ recordId: string, recordIndex: number, start: number, end: number }} region Source coordinates.
+   * set uses) in the default style, in the drawing's first annotation set, which it adds when there is none. The row
+   * is bound to its record by the record's catalog key (`bindingKey`, the key the record select writes); a key the
+   * catalog does not hold leaves the row unbound, as a new coordinate row is.
+   * @param {{ bindingKey: string, start: number, end: number }} region Source coordinates.
    */
-  const addRegionAnnotation = ({ recordId, recordIndex, start, end }) => {
+  const addRegionAnnotation = ({ bindingKey, start, end }) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const records = (getRecordCatalog?.()?.records ?? []).filter((record) => record.recordId === recordId);
-    const record = records.find((entry) => entry.index === recordIndex) ?? (records.length === 1 ? records[0] : null);
     const set = drawing.annotationSets[0]
       ?? addSetToDrawing(drawing.slices.annotationSets, createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, 'annotations') }));
     const used = new Set(set.annotations.map((item) => /^Region (\d+)$/.exec(String(item.label ?? ''))?.[1]).filter(Boolean).map(Number));
     let number = 1;
     while (used.has(number)) number += 1;
-    const target = record
-      ? { ...coordinateTarget({ start, end }), record: record.backendSelector }
-      : coordinateTarget({ start, end, recordId, recordIndex });
-    const item = { id: nextAnnotationId(set.annotations, 'region'), target, label: `Region ${number}`, mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
-    return addAnnotations(drawing.slices.annotationSets, set, [item])[0] ?? null;
+    const item = { id: nextAnnotationId(set.annotations, 'region'), target: coordinateTarget({ start, end }), label: `Region ${number}`, mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
+    const [added] = addAnnotations(drawing.slices.annotationSets, set, [item]);
+    if (!added) return null;
+    recordSelector.setValue(drawing.slices.annotationSets, added, bindingKey);
+    return added;
   };
   /** @param {AnnotationSetRow | null | undefined} set */
   const addSelectedFeatures = (set) => {

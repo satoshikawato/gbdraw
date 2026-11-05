@@ -60,7 +60,8 @@ Session 51 also adds two keys to each record of a drawing's `runMetadata.trackSl
 `recordKey`, the request's record key, and `axis`, where the record's axis lies in the frame of its drawn group
 (Circular: `radiusPx`, the feature band `bandInnerPx` to `bandOuterPx`, `startAngleDeg`, `degreesPerBp`; Linear: one
 row each with `xStartPx`, `xEndPx`, `yPx`, `bandTopPx`, `bandBottomPx`, `displayStart`, `displayEnd`) and which
-source base each drawn base shows (`source`: `anchorBase`, `recordBase`, `step`, `sourceLength`, `drawnLength`).
+source base each drawn base shows (`source`: `anchorBase`, `recordBase`, `step`, `sourceLength`, `drawnLength`, and
+`isCircular`, the record's circularity from the record planner: only then may a selected span cross its origin).
 Python writes them (`gbdraw/render/track_slot_metadata.py`); the Web app's Select region reads them
 (`services/region-axis.js`). The Session shape keeps `trackSlotGeometry` opaque (`unknown`), so the generated
 contracts and the version do not change. A saved Result without them loads as before, and Select region stays off

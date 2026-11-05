@@ -131,6 +131,6 @@ test('the editor tabs, Close editor, and Layout edit are History navigation (OV-
   for (const marker of [
     `@click="openRightDrawerTab('legend')"`, `@click="openRightDrawerTab('features')"`,
     `@click="openRightDrawerTab('orthogroups')"`, `:aria-label="t('Close editor')"`,
-    '@click="toggleRightDrawer"', '@click="layoutRepositionMode = !layoutRepositionMode"'
+    '@click="toggleRightDrawer"', '@click="regionSelect.toggleLayoutEdit()"'
   ]) assert.match(openTag(marker), /\sdata-history-ignore[\s>]/, marker);
 });

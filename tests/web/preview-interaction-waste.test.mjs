@@ -39,7 +39,9 @@ for (const source of [
   // feature-placement.js reads the record keys of a drawing from their owner.
   'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',
   // feature-identity.js reads a record source's files from the input-type table.
-  'services/input-types.js'
+  'services/input-types.js',
+  // feature-selection.js reads a Shift+click range on the record axis and holds its gesture.
+  'services/region-axis.js', 'services/record-options.js', 'utils/pointer-gesture.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');

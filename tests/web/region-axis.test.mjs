@@ -43,6 +43,10 @@ test('the reader takes the records of one Result and drops a record without an a
   assert.deepEqual(readRegionAxisRecords(null, 0), []);
   const broken = { ...geometry, records: [{ ...geometry.records[0], axis: { ...geometry.records[0].axis, source: { step: 2 } } }] };
   assert.deepEqual(readRegionAxisRecords(broken, 0), []);
+  // The record's circularity is required: without it a drag could not tell whether it may cross the origin.
+  const { isCircular: _circular, ...withoutCircularity } = geometry.records[0].axis.source;
+  const unknownTopology = { ...geometry, records: [{ ...geometry.records[0], axis: { ...geometry.records[0].axis, source: withoutCircularity } }] };
+  assert.deepEqual(readRegionAxisRecords(unknownTopology, 0), []);
 });
 
 test('a Circular drag across the display origin gives a span that wraps the source origin', () => {
@@ -57,8 +61,38 @@ test('a Circular drag across the display origin gives a span that wraps the sour
   // Across display index 0 (12 o'clock) on a whole record.
   assert.deepEqual(circularDragSpan(axis, 16_560.5, 20), { start: 16_560, length: 21 });
   assert.deepEqual(sourceSpanOf(axis.source, { start: 16_560, length: 21 }), { start: 15_991, end: 16_011, length: 21, wrapsOrigin: false });
-  // A sweep of a whole turn or more is the whole record.
-  assert.equal(circularDragSpan(axis, 10, -20_000).length, axis.source.drawnLength);
+});
+
+test('a whole turn selects the whole record, 1 to its length, not a span across the origin', () => {
+  const [mito] = caseRecords('circular-display-start');
+  const { axis } = mito;
+  const whole = { start: 0, length: 16_569 };
+  for (const [start, sweep] of [[10, -20_000], [4_142.5, 16_569], [100.5, -16_570]]) {
+    assert.deepEqual(circularDragSpan(axis, start, sweep), whole, `from ${start}, sweep ${sweep}`);
+  }
+  // Display start 16,000 draws base 16,000 first; the whole record is still 1-16,569.
+  assert.deepEqual(sourceSpanOf(axis.source, whole), { start: 1, end: 16_569, length: 16_569, wrapsOrigin: false });
+  // Every feature lies inside it, also one that crosses the display origin or the source origin.
+  assert.ok(partsInsideSpan(axis.source, whole, [{ start: 15_990, end: 16_010 }]));
+  assert.ok(partsInsideSpan(axis.source, whole, [{ start: 16_560, end: 16_569 }, { start: 0, end: 9 }]));
+});
+
+test('a Circular drag on a record that is not circular stops at its ends and never crosses its origin', () => {
+  for (const name of ['circular-linear-topology', 'circular-fasta-only']) {
+    const [record] = caseRecords(name);
+    const { axis } = record;
+    const length = axis.source.drawnLength;
+    assert.equal(axis.source.isCircular, false, name);
+    assert.equal(length, axis.source.sourceLength, `${name} draws the whole record`);
+    // Clockwise through 12 o'clock: the span ends at the last base.
+    const late = circularDragSpan(axis, length - 999.5, 2_000);
+    assert.deepEqual(late, { start: length - 1_000, length: 1_000 }, name);
+    assert.deepEqual(sourceSpanOf(axis.source, late), { start: length - 999, end: length, length: 1_000, wrapsOrigin: false }, name);
+    // Counter-clockwise through 12 o'clock: the span starts at the first base.
+    assert.deepEqual(circularDragSpan(axis, 500.5, -1_000), { start: 0, length: 501 }, name);
+    // A whole turn is the whole record.
+    assert.deepEqual(sourceSpanOf(axis.source, circularDragSpan(axis, 0.5, length + 10)), { start: 1, end: length, length, wrapsOrigin: false }, name);
+  }
 });
 
 test('a Linear drag stays on its row, and a reversed crop gives its span on the source strand', () => {

@@ -1,13 +1,13 @@
 {
   "purpose": "Positive fixture of Session 51 whose saved track-slot geometry carries each record's recordKey and axis (PD-OI-115): a Web Save Session of a generated Circular HmmtDNA drawing with default settings. Load reads the axis back, so Select region is available without Generate.",
-  "sourceCommit": "0107d9ad3 plus the uncommitted changes of branch feat/region-select (PR-A)",
+  "sourceCommit": "45ce5f956 plus the uncommitted round-3 changes of branch feat/region-select (PR-A)",
   "history": "branch feat/region-select; Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
   "route": "tests/web/region-select.playwright.spec.js, test 'Save Session keeps the axis of the Result ...': open the Web app, upload HmmtDNA.gbk, Generate, Save Session with an empty title; the downloaded file was decompressed and written again with gzip -n -9",
   "inputs": {
     "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
   },
-  "values": "drawings[0].runMetadata.trackSlotGeometry.records[0]: recordKey \"record-1\", recordId \"NC_012920.1\", axis {kind \"circular\", radiusPx 390, bandInnerPx 308.1, bandOuterPx 386.1, startAngleDeg -90, source {anchorBase 1, recordBase 1, step 1, sourceLength 16569, drawnLength 16569}}",
-  "decompressedSha256": "6dfb069cc0d18f2d081541c9ac14f317fbd6439e90995c35b4fae1a712483910",
+  "values": "drawings[0].runMetadata.trackSlotGeometry.records[0]: recordKey \"record-1\", recordId \"NC_012920.1\", axis {kind \"circular\", radiusPx 390, bandInnerPx 308.1, bandOuterPx 386.1, startAngleDeg -90, source {anchorBase 1, recordBase 1, step 1, sourceLength 16569, drawnLength 16569, isCircular true}}",
+  "decompressedSha256": "a799133062c00c5fef8cf1b548cf54b3e5a224feb1cd2b8cb0213185890cc64c",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
   "requestSchema": 9

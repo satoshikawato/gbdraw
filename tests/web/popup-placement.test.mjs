@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../../gbdraw/web/js/utils/popup-bounds.js';
+import {
+  MAX_POPUP_PLACES, placePopupNearPoint, placePopupWithin, popupPlaces, popupViewportBounds
+} from '../../gbdraw/web/js/utils/popup-bounds.js';
 
 // OV-371 and OV-384: the first placement of a popup opened at a clicked point.
 const desktop = { top: 56, bottom: 968, left: 0, right: 1600 };
@@ -164,4 +166,42 @@ test('with no clear place the popup covers the least of the obstacles', () => {
   assert.deepEqual(placed, { x: 512, y: 288, maxHeight: 300 });
   assert.equal(overlap(placed, 400, 300, wide), 0);
   assert.equal(overlap(placed, 400, 300, upper), (350 - 288) * 400);
+});
+
+// D-30 (e): a Result can draw thousands of labels; the places tried stay a fixed number, and each place is measured
+// only against the boxes near it, so a release opens the popup at once.
+test('the places a popup tries are a fixed number, however many labels it keeps clear of', () => {
+  const bounds = { top: 56, bottom: 968, left: 0, right: 1600 };
+  const ring = (count) => Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * 2 * Math.PI;
+    const x = 800 + 420 * Math.cos(angle);
+    const y = 500 + 420 * Math.sin(angle);
+    return { left: x - 30, right: x + 30, top: y - 5, bottom: y + 5 };
+  });
+  const legend = { left: 1300, right: 1500, top: 100, bottom: 300 };
+  const point = { x: 900, y: 300, avoid: { left: 850, right: 1000, top: 200, bottom: 320 } };
+  const request = { width: 360, height: 300, bounds };
+  const beside = { x: 1012, y: 150, maxHeight: 800 };
+  const few = popupPlaces({ ...request, point: { ...point, obstacles: ring(4) } }, beside, ring(4));
+  const many = popupPlaces({ ...request, point: { ...point, obstacles: ring(1_500) } }, beside, ring(1_500));
+  assert.ok(many.length <= MAX_POPUP_PLACES, `${many.length} places`);
+  assert.ok(few.length <= MAX_POPUP_PLACES && MAX_POPUP_PLACES <= 21 * 21);
+  const obstacles = [legend, ...ring(1_500)];
+  const placed = placePopupNearPoint({ ...request, point: { ...point, obstacles } });
+  // Inside the ring of labels there is room: the popup is clear of every label, the Legend and the band.
+  for (const box of [...obstacles, point.avoid]) assert.equal(overlap(placed, 360, 300, box), 0, JSON.stringify({ placed, box }));
+});
+
+// D-30 (c): a selected region's popup stays above the preview toolbar; `within` cuts the bounds.
+test('a popup stays inside the rectangle its anchor gives besides the bounds', () => {
+  const toolbarTop = 880;
+  const within = { top: -Infinity, left: -Infinity, right: Infinity, bottom: toolbarTop };
+  for (const y of [300, 700, 870, 950]) {
+    const placed = placePopupNearPoint({ point: { x: 700, y, within }, width: 400, height: 500, bounds: desktop });
+    assert.ok(placed.y + Math.min(500, placed.maxHeight) <= toolbarTop - 12, JSON.stringify({ y, placed }));
+    assert.ok(placed.y >= desktop.top + 12);
+  }
+  const obstacles = [{ left: 0, right: 1600, top: 56, bottom: 400 }];
+  const clear = placePopupNearPoint({ point: { x: 700, y: 600, within, obstacles }, width: 400, height: 300, bounds: desktop });
+  assert.ok(clear.y >= 412 && clear.y + 300 <= toolbarTop - 12, JSON.stringify(clear));
 });

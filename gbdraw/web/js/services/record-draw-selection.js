@@ -557,6 +557,24 @@ const recordEditMatcher = (owners) => {
 };
 
 /**
+ * The record-catalog key an annotation binds the request record `recordKey` by (a Result's record key): the binding
+ * key of the record that draws it. A Linear card that draws every record of its file owns `<uid>:<k>`, the k-th of
+ * its records in the file; its binding keys follow the file's order. '' when no record draws it.
+ * @param {readonly RecordSettingsOwner[]} owners
+ * @param {string} recordKey
+ * @returns {string}
+ */
+export const bindingKeyOfRequestRecord = (owners, recordKey) => {
+  for (const owner of owners) {
+    if (owner.requestKeys.includes(recordKey)) return owner.bindingKeys.length === 1 ? owner.bindingKeys[0] : '';
+    if (!owner.ownsExpansions) continue;
+    const k = owner.requestKeys.map((key) => recordKeyExpansion(recordKey, key)).find((value) => value !== null);
+    if (k != null) return owner.bindingKeys[k - 1] ?? '';
+  }
+  return '';
+};
+
+/**
  * Walks the edits of `owners` in a drawing's data: `visit(key, remove)` for each.
  * @param {readonly RecordSettingsOwner[]} owners
  * @param {RecordEditData} data

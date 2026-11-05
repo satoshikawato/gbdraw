@@ -11,13 +11,15 @@ import { t } from '../utils/i18n.js';
 /**
  * Which source base a drawn base shows. Display index `i` (0 to `drawnLength - 1` along the axis) shows source base
  * `(anchorBase - 1 + step * i) mod sourceLength + 1`; the record's own base `k` (its feature coordinates, 0-based)
- * is source base `(recordBase - 1 + step * k) mod sourceLength + 1`.
+ * is source base `(recordBase - 1 + step * k) mod sourceLength + 1`. `isCircular` is the record's circularity (Python's
+ * `ResolvedRecordProvenance.is_circular`): only a circular record drawn whole has an origin a span may cross.
  * @typedef {object} AxisSourceMap
  * @property {number} anchorBase
  * @property {number} recordBase
  * @property {1 | -1} step
  * @property {number} sourceLength
  * @property {number} drawnLength
+ * @property {boolean} isCircular
  */
 
 /**
@@ -111,13 +113,14 @@ const mod = (value, modulus) => ((value % modulus) + modulus) % modulus;
 /** @param {unknown} value @returns {AxisSourceMap | null} */
 const readSource = (value) => {
   if (!isObject(value)) return null;
-  const { anchorBase, recordBase, step, sourceLength, drawnLength } = value;
+  const { anchorBase, recordBase, step, sourceLength, drawnLength, isCircular } = value;
   if (!whole(sourceLength) || sourceLength < 1 || !whole(drawnLength) || drawnLength < 1 || drawnLength > sourceLength) {
     return null;
   }
   if (!whole(anchorBase) || !whole(recordBase) || anchorBase < 1 || recordBase < 1) return null;
   if (anchorBase > sourceLength || recordBase > sourceLength || (step !== 1 && step !== -1)) return null;
-  return { anchorBase, recordBase, step, sourceLength, drawnLength };
+  if (typeof isCircular !== 'boolean') return null;
+  return { anchorBase, recordBase, step, sourceLength, drawnLength, isCircular };
 };
 
 /** @param {unknown} value @returns {LinearAxisRow | null} */
@@ -234,20 +237,24 @@ export const linearRowPosition = (axis, row, x) => {
   return { position: Math.min(Math.max(position, displayStart), displayEnd - 1e-9), row };
 };
 
+/** Whether a span may pass display index 0: on a circular record drawn whole. @param {AxisSourceMap} source */
+const wraps = (source) => source.isCircular && source.drawnLength === source.sourceLength;
+
 /**
- * The span of a Circular drag that started at `start` and has turned `sweep` bases (negative counter-clockwise);
- * it crosses display index 0 only on a whole record and never covers more than the record.
+ * The span of a Circular drag that started at `start` and has turned `sweep` bases (negative counter-clockwise).
+ * It crosses display index 0 only on a circular record drawn whole; on any other record it stops at the record's
+ * ends. A whole turn or more is the whole record.
  * @param {CircularAxisGeometry} axis
  * @param {number} start
  * @param {number} sweep
  * @returns {DisplaySpan}
  */
 export const circularDragSpan = (axis, start, sweep) => {
-  const { drawnLength, sourceLength } = axis.source;
+  const { drawnLength } = axis.source;
   const from = Math.floor(start);
-  if (Math.abs(sweep) >= drawnLength) return { start: drawnLength === sourceLength ? from : 0, length: drawnLength };
+  if (Math.abs(sweep) >= drawnLength) return { start: 0, length: drawnLength };
   const to = Math.floor(start + sweep);
-  if (drawnLength < sourceLength) {
+  if (!wraps(axis.source)) {
     const low = Math.max(0, Math.min(from, to));
     const high = Math.min(drawnLength - 1, Math.max(from, to));
     return { start: low, length: high - low + 1 };
@@ -286,6 +293,7 @@ export const sourceBaseAt = (source, index) => displaySourceBase(source, mod(ind
  * @returns {SourceSpan}
  */
 export const sourceSpanOf = (source, span) => {
+  if (span.length >= source.sourceLength) return { start: 1, end: source.sourceLength, length: source.sourceLength, wrapsOrigin: false };
   const first = sourceBaseAt(source, span.start);
   const last = sourceBaseAt(source, span.start + span.length - 1);
   const [start, end] = source.step === 1 ? [first, last] : [last, first];
@@ -311,6 +319,7 @@ export const displayIndexOfRecordOffset = (source, offset) => mod(
 export const partsInsideSpan = (source, span, parts) => parts.length > 0 && parts.every(({ start, end }) => {
   const length = end - start;
   if (!(length > 0)) return false;
+  if (span.length >= source.sourceLength) return true;
   const offset = mod(displayIndexOfRecordOffset(source, start) - span.start, source.sourceLength);
   return offset + length <= span.length;
 });
@@ -405,10 +414,11 @@ export const regionSpanText = (source) => ({
 });
 
 /**
- * The Region popup's heading, from the selection alone: the record and "start-end (N bp)".
+ * The Region popup's heading, from the selection alone: "Region", the record, and "start-end (N bp)".
  * @param {RegionSelection} selection
  */
 export const regionSelectionHeading = (selection) => ({
-  title: selection.recordId || selection.recordKey,
-  subtitle: t('{start}-{end} ({length} bp)', regionSpanText(selection.source))
+  title: t('Region'),
+  subtitle: selection.recordId || selection.recordKey,
+  span: t('{start}-{end} ({length} bp)', regionSpanText(selection.source))
 });

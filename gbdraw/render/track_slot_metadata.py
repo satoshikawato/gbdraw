@@ -28,6 +28,9 @@ class AxisSourceMap(TypedDict):
     ``recordBase`` is the source base of the drawn record's first base (its
     feature coordinates count from it): record base ``k`` (0-based) is source
     base ``(recordBase - 1 + step * k) mod sourceLength + 1``.
+    ``isCircular`` says whether the record is circular (``RecordDisplayTransform.is_circular``,
+    which the record planner sets from ``ResolvedRecordProvenance.is_circular``): only then may
+    a span cross its origin.
     """
 
     anchorBase: int
@@ -35,6 +38,7 @@ class AxisSourceMap(TypedDict):
     step: Literal[-1, 1]
     sourceLength: int
     drawnLength: int
+    isCircular: bool
 
 
 class CircularAxisGeometry(TypedDict):
@@ -93,6 +97,7 @@ def axis_source_map(transform: RecordDisplayTransform, drawn_length: int) -> Axi
         "step": transform.source_step,
         "sourceLength": int(transform.length),
         "drawnLength": int(drawn_length),
+        "isCircular": bool(transform.is_circular),
     }
 
 

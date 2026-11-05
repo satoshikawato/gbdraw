@@ -362,7 +362,8 @@ export const createFeatureSvgActions = ({
           x: Number(eventLike?.clientX), y: Number(eventLike?.clientY),
           avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom },
           panel: eventLike?.panel,
-          obstacles: eventLike?.obstacles
+          obstacles: eventLike?.obstacles,
+          within: eventLike?.within
         }
       : null;
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });

@@ -25,6 +25,7 @@ from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     CircularMultiRecordOptions,
+    FastaInputSource,
     GenBankInputSource,
     LinearDiagramRequest,
     RecordDisplayOptions,
@@ -36,6 +37,7 @@ from gbdraw.io.regions import parse_region_spec
 INPUTS = Path(__file__).parent / "test_inputs"
 LAMBDA = INPUTS / "NC_001416.gb"
 MITO = INPUTS / "HmmtDNA.gbk"
+FASTA = INPUTS / "NC_013668.fasta"
 VECTORS = Path(__file__).parent / "fixtures" / "region_axis_geometry_vectors.json"
 SVG = "{http://www.w3.org/2000/svg}"
 
@@ -46,10 +48,22 @@ def _linear(*records: RecordInput, overrides: dict[str, object] | None = None) -
     ).build().drawing
 
 
+def _circular_plan(*records: RecordInput, grid: bool = False) -> Any:
+    return plan_request(CircularDiagramRequest(records=records, layout=CircularMultiRecordOptions() if grid else None))
+
+
 def _circular(*records: RecordInput, grid: bool = False) -> Any:
-    return plan_request(
-        CircularDiagramRequest(records=records, layout=CircularMultiRecordOptions() if grid else None)
-    ).build()
+    return _circular_plan(*records, grid=grid).build()
+
+
+# Circular mode draws every record as a circle; only a circular record (its
+# display option, else its file's topology) has an origin a span may cross.
+NOT_CIRCULAR = {
+    # lambda's LOCUS line says linear.
+    "circular-linear-topology": (RecordInput(GenBankInputSource(str(LAMBDA)), record_key="lambda"),),
+    # A FASTA record has no topology, and "Circular record" is off by default.
+    "circular-fasta-only": (RecordInput(FastaInputSource(str(FASTA)), record_key="fasta"),),
+}
 
 
 def _drawings() -> dict[str, Any]:
@@ -83,6 +97,7 @@ def _drawings() -> dict[str, Any]:
             RecordInput(GenBankInputSource(str(LAMBDA)), record_key="lambda", display=RecordDisplayOptions(is_circular=True)),
             grid=True,
         ),
+        **{name: _circular(*records) for name, records in NOT_CIRCULAR.items()},
     }
 
 
@@ -186,6 +201,24 @@ def test_source_bases_are_the_input_file_coordinates() -> None:
     assert _record_offset(mito, 16_000) == 15_999
     crop = _case("linear-two-records-crop-reverse")[0]["axis"]["source"]
     assert _record_offset(crop, 9_000) == 0 and _record_offset(crop, 1_001) == 7_999
+
+
+def test_the_axis_says_whether_the_record_is_circular() -> None:
+    """The axis carries the circularity of the record's one owner, so the Web wraps a drag only on a circular record."""
+
+    circular = {name: [record["axis"]["source"]["isCircular"] for record in _case(name)] for name in (
+        "circular-display-start", "circular-multi-record-canvas", *NOT_CIRCULAR
+    )}
+    assert circular == {
+        "circular-display-start": [True],
+        "circular-multi-record-canvas": [True, True],
+        "circular-linear-topology": [False],
+        "circular-fasta-only": [False],
+    }
+    for name, records in NOT_CIRCULAR.items():
+        assert [item.is_circular for item in _circular_plan(*records).provenance] == circular[name]
+    # A crop draws part of the record: its drawn axis has no origin to cross.
+    assert [record["axis"]["source"]["isCircular"] for record in _case("linear-two-records-crop-reverse")] == [False, False]
 
 
 def _translate(element: ElementTree.Element) -> tuple[float, float]:

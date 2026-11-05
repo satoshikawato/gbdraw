@@ -733,8 +733,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when each record's track-slot geometry took its
     # `recordKey` and `axis` (Select region): with those two keys removed, the
     # reply has the earlier digest.
-    "similarity_groups": "ee057a4d7fa7a152ffb928c17b2f2645abf9bd377d254e66dee475ab1fa57f73",
-    "collinear": "cf1a2c0040706090d0eb0bc4ef58ad985f757a15635403c5cec3e158036894ef",
+    # Updated again when each axis source took `isCircular` (Select region, a
+    # drag may cross the origin only of a circular record): with that key
+    # removed, the reply has the earlier digest.
+    "similarity_groups": "2d341082e3a5f3e9cd6823ae444e54a0c8d6ab4d27313ce52fc22b5185334749",
+    "collinear": "62084ef5b16d27a9fc2f46e6544e6117d62b915d8a839c01c8c4775ee2477d85",
 }
 
 

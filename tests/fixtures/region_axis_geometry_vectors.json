@@ -24,7 +24,8 @@
        "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
-       "drawnLength": 48502
+       "drawnLength": 48502,
+       "isCircular": false
       }
      },
      "probes": [
@@ -119,7 +120,8 @@
        "recordBase": 48502,
        "step": -1,
        "sourceLength": 48502,
-       "drawnLength": 48502
+       "drawnLength": 48502,
+       "isCircular": false
       }
      },
      "probes": [
@@ -196,7 +198,8 @@
        "recordBase": 9000,
        "step": -1,
        "sourceLength": 48502,
-       "drawnLength": 8000
+       "drawnLength": 8000,
+       "isCircular": false
       }
      },
      "probes": [
@@ -268,7 +271,8 @@
        "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
-       "drawnLength": 48502
+       "drawnLength": 48502,
+       "isCircular": false
       }
      },
      "probes": [
@@ -339,7 +343,8 @@
        "recordBase": 1,
        "step": 1,
        "sourceLength": 16569,
-       "drawnLength": 16569
+       "drawnLength": 16569,
+       "isCircular": true
       }
      },
      "probes": [
@@ -410,7 +415,8 @@
        "recordBase": 1,
        "step": 1,
        "sourceLength": 16569,
-       "drawnLength": 16569
+       "drawnLength": 16569,
+       "isCircular": true
       }
      },
      "probes": [
@@ -476,7 +482,8 @@
        "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
-       "drawnLength": 48502
+       "drawnLength": 48502,
+       "isCircular": true
       }
      },
      "probes": [
@@ -524,6 +531,150 @@
        "displayIndex": 48501,
        "sourceBase": 48502,
        "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-linear-topology",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "lambda",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.00742237433507853,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.023809,
+        -367.574999
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.071426,
+        -367.574993
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        318.32532,
+        183.794373
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 16168,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        -0.023809,
+        367.574999
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24252,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        -0.023809,
+        -367.574999
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 48502,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-fasta-only",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "fasta",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 367.57500000000005,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.0014485405953479358,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 248526,
+       "drawnLength": 248526,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.004764,
+        -376.8375
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.014291,
+        -376.8375
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        326.348466,
+        188.422875
+       ],
+       "displayIndex": 82842,
+       "sourceBase": 82843,
+       "recordOffset": 82842
+      },
+      {
+       "point": [
+        -0.004764,
+        376.8375
+       ],
+       "displayIndex": 124263,
+       "sourceBase": 124264,
+       "recordOffset": 124263
+      },
+      {
+       "point": [
+        -0.004764,
+        -376.8375
+       ],
+       "displayIndex": 248525,
+       "sourceBase": 248526,
+       "recordOffset": 248525
       }
      ]
     }

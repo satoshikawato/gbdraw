@@ -894,3 +894,48 @@ test('an annotation bound to an OFF record stays in the draft and leaves the req
   assert.equal(circular.omittedRecordKeys.length, 1);
   assert.match(circular.omittedRecordKeys[0], /^circ::\[1,"C2",20\]$/);
 });
+
+// Select region's Add to annotation set (PD-OI-115): the row binds its record by the record's catalog key, the key
+// the record select writes, found from the Result's record key; never by the record ID and a position from another
+// numbering. Two records with the same ID are told apart.
+test('Add to annotation set binds the Region row to the record of the Result, also when two records share an ID', async () => {
+  const { bindingKeyOfRequestRecord } = await load('services/record-draw-selection.js');
+  const { ANNOTATION_RECORD_BINDING_KEY } = await load('services/annotation-state.js');
+  const [first, second] = duplicateCatalog.records;
+  // The records of the drawing as Delete settings finds them: each Linear card's request key and its catalog key.
+  const owners = [
+    { key: 'card-a', requestKeys: ['dup-a'], ownsExpansions: true, bindingKeys: [first.key], displaySource: 'dup-a', displaySelector: null },
+    { key: 'card-b', requestKeys: ['dup-b'], ownsExpansions: true, bindingKeys: [second.key], displaySource: 'dup-b', displaySelector: null }
+  ];
+  assert.equal(bindingKeyOfRequestRecord(owners, 'dup-b'), second.key);
+  assert.equal(bindingKeyOfRequestRecord(owners, 'dup-a'), first.key);
+  assert.equal(bindingKeyOfRequestRecord(owners, 'elsewhere'), '');
+  // A card that draws every record of its file owns `<uid>:<k>`, the k-th record of the file.
+  const whole = [{ key: 'file', requestKeys: ['file'], ownsExpansions: true, bindingKeys: ['k1', 'k2', 'k3'], displaySource: 'file', displaySelector: null }];
+  assert.deepEqual(['file:1', 'file:3', 'file:4', 'file'].map((key) => bindingKeyOfRequestRecord(whole, key)), ['k1', 'k3', '', '']);
+  // A Circular record: drawn alone or on the Multi-Record Canvas, by either of its request keys.
+  const circular = [
+    { key: '#1', requestKeys: ['record-1', 'circular-dup-1'], bindingKeys: ['c1'], displaySource: 'circular', displaySelector: '#1' },
+    { key: '#2', requestKeys: ['record-2', 'circular-dup-2'], bindingKeys: ['c2'], displaySource: 'circular', displaySelector: '#2' }
+  ];
+  assert.deepEqual(['record-2', 'circular-dup-2', 'circular-dup-1'].map((key) => bindingKeyOfRequestRecord(circular, key)), ['c2', 'c2', 'c1']);
+
+  const regionState = { annotationSets: [], selectedFeatures: { value: [] } };
+  const actions = createAnnotationEditor({ state: withDrawings(regionState), getRecordCatalog: () => duplicateCatalog });
+  const added = actions.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, 'dup-b'), start: 3, end: 8 });
+  const [setRow] = withDrawings(regionState).activeDrawing().annotationSets;
+  assert.equal(setRow.id, 'annotations', 'a drawing without a set gets one');
+  assert.equal(added.label, 'Region 1');
+  assert.deepEqual(added.target.record, second.backendSelector);
+  assert.equal(added.metadata[ANNOTATION_RECORD_BINDING_KEY], second.key);
+  assert.deepEqual({ start: added.target.start, end: added.target.end, wrapsOrigin: added.target.wrapsOrigin }, { start: 3, end: 8, wrapsOrigin: false });
+  // The next row takes the next free number; a span across the origin of a circular record wraps it.
+  const next = actions.addRegionAnnotation({ bindingKey: first.key, start: 9, end: 2 });
+  assert.equal(next.label, 'Region 2');
+  assert.equal(next.target.wrapsOrigin, true);
+  assert.equal(next.metadata[ANNOTATION_RECORD_BINDING_KEY], first.key);
+  // A key the catalog does not hold leaves the row unbound, as a new coordinate row is.
+  const unbound = actions.addRegionAnnotation({ bindingKey: 'gone', start: 1, end: 2 });
+  assert.equal(unbound.target.record, null);
+  assert.equal(unbound.metadata[ANNOTATION_RECORD_BINDING_KEY], undefined);
+});
