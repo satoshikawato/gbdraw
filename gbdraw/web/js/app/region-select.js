@@ -423,6 +423,12 @@ export const createRegionSelect = ({
    * @type {{ selection: RegionSelection | null, name: RegionAction | '', busy: boolean, status: string, failed: boolean }}
    */
   const action = reactive({ selection: null, name: '', busy: false, status: '', failed: false });
+  /**
+   * Whether an action of this selection runs: the one state that disables every action button of its popup and that
+   * makes every action refuse a click until it ends (OV-2561).
+   * @param {RegionSelection} chosen
+   */
+  const selectionBusy = (chosen) => action.selection === chosen && action.busy;
   /** @param {RegionSelection} chosen @param {RegionAction} name The state of one action of this selection. */
   const actionView = (chosen, name) => {
     const own = action.selection === chosen && action.name === name;
@@ -440,7 +446,8 @@ export const createRegionSelect = ({
       featureText: chosen.source.wrapsOrigin ? t('{features} · crosses the origin', { features: featureText }) : featureText,
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
       newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
-      // The state of this selection's actions only.
+      // Every action button is disabled while one of them runs; each action's own state is its label and status.
+      busy: selectionBusy(chosen),
       copy: actionView(chosen, 'copy'),
       add: actionView(chosen, 'add')
     };
@@ -449,10 +456,11 @@ export const createRegionSelect = ({
   /** Select N features: the feature selection owner selects them by id. */
   const selectFeaturesInside = () => {
     const chosen = openSelection();
-    if (chosen) selectFeatures(featuresInside(chosen));
+    if (chosen && !selectionBusy(chosen)) selectFeatures(featuresInside(chosen));
   };
   /**
-   * Runs one action of the open selection; another action of it waits until this one ends.
+   * Runs one action of the open selection. While it runs, every action of the selection is refused (false) and its
+   * button is disabled (`popup.busy`), so a second click is never dropped behind an enabled button.
    * @param {RegionAction} name
    * @param {(chosen: RegionSelection) => Promise<unknown>} run
    * @param {string} doneText
@@ -460,7 +468,7 @@ export const createRegionSelect = ({
    */
   const runAction = async (name, run, doneText, operation) => {
     const chosen = openSelection();
-    if (!chosen || (action.selection === chosen && action.busy)) return false;
+    if (!chosen || selectionBusy(chosen)) return false;
     Object.assign(action, { selection: chosen, name, busy: true, status: '', failed: false });
     try {
       await run(chosen);
@@ -479,7 +487,7 @@ export const createRegionSelect = ({
   /** New drawing from region; refused by Python, and disabled here, for a span across the origin. */
   const newDrawing = async () => {
     const chosen = openSelection();
-    if (!chosen || chosen.source.wrapsOrigin) return null;
+    if (!chosen || chosen.source.wrapsOrigin || selectionBusy(chosen)) return null;
     const outcome = await newDrawingFromRegion(targetOf(chosen));
     closeRegionPopup();
     return outcome;

@@ -7530,25 +7530,26 @@
                                     <p v-else class="match-muted" data-preview-record-unmatched>{{ previewItemView.editHint }}</p>
                                 </div>
                                 <!-- Region: its actions, one full-width button each, as the approved design shows them
-                                     (app/region-select.js); a disabled action keeps its button with its reason under it. -->
+                                     (app/region-select.js); a disabled action keeps its button with its reason under it.
+                                     While one action runs, every action button is disabled (regionPopup.busy). -->
                                 <div v-else-if="previewItemView && previewItemView.kind === 'region' && regionPopup" :key="`region-popup-${previewItemView.identity}`" v-dialog-focus class="flex flex-col gap-1.5" data-preview-item-popup="region">
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-copy-fasta data-dialog-initial-focus
-                                                :disabled="regionPopup.copy.busy" :aria-busy="regionPopup.copy.busy ? 'true' : 'false'"
+                                                :disabled="regionPopup.busy" :aria-busy="regionPopup.copy.busy ? 'true' : 'false'"
                                                 @click="regionSelect.copyFasta()"><i class="ph ph-copy" aria-hidden="true"></i><span>{{ regionPopup.copy.busy ? t('Copying FASTA…') : t('Copy FASTA') }}</span></button>
                                         <p v-if="regionPopup.copy.status" :class="regionPopup.copy.failed ? 'text-xs text-red-700' : 'text-xs text-slate-500'" class="mt-0.5 px-1" role="status" data-region-copy-status>{{ regionPopup.copy.status }}</p>
                                     </div>
                                     <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-select-features
-                                            :disabled="regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()"><i class="ph ph-selection-plus" aria-hidden="true"></i><span>{{ regionPopup.selectFeaturesText }}</span></button>
+                                            :disabled="regionPopup.busy || regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()"><i class="ph ph-selection-plus" aria-hidden="true"></i><span>{{ regionPopup.selectFeaturesText }}</span></button>
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-region-add-annotation
-                                                :disabled="!semanticMutationAvailable || regionPopup.add.busy" :aria-busy="regionPopup.add.busy ? 'true' : 'false'"
+                                                :disabled="!semanticMutationAvailable || regionPopup.busy" :aria-busy="regionPopup.add.busy ? 'true' : 'false'"
                                                 @click="regionSelect.addToAnnotationSet()"><i class="ph ph-note-pencil" aria-hidden="true"></i><span>{{ t('Add to annotation set') }}</span></button>
                                         <p v-if="regionPopup.add.status" class="text-xs text-red-700 mt-0.5 px-1" role="status" data-region-add-status>{{ regionPopup.add.status }}</p>
                                     </div>
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-new-drawing
-                                                :disabled="!drawingSwitchAvailable || !!regionPopup.newDrawingReason"
+                                                :disabled="regionPopup.busy || !drawingSwitchAvailable || !!regionPopup.newDrawingReason"
                                                 :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
                                                 @click="regionSelect.newDrawing()"><i class="ph ph-file-plus" aria-hidden="true"></i><span>{{ t('New drawing from region') }}</span></button>
                                         <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="text-xs text-slate-500 mt-0.5 px-1" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>

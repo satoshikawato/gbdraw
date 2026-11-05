@@ -1,6 +1,7 @@
 // Select region's owner (gbdraw/web/js/app/region-select.js, PD-OI-115): the toggle and its exclusivity with Layout
 // edit, the reason it is unavailable, and the drag gesture (pointer capture, cancel, a record that is not circular).
-// The axis comes from the same vectors as tests/test_region_axis_geometry.py.
+// The axis comes from the same vectors as tests/test_region_axis_geometry.py. The actions that wait on Python (one at
+// a time per selection, and a failure's text) are here too.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -45,7 +46,7 @@ const frame = { contains: () => false, getScreenCTM: () => identity, isConnected
 const root = { querySelectorAll: (selector) => (selector.startsWith('g[data-gbdraw-record-index') ? [frame] : []) };
 
 /** An owner over one record of `axis`; `records` empties when the shown Result has no axis. */
-const setup = ({ axis = axisOf('circular-display-start'), withAxis = true } = {}) => {
+const setup = ({ axis = axisOf('circular-display-start'), withAxis = true, ports = {} } = {}) => {
   const layoutEdit = { value: false };
   const opened = [];
   const pans = [];
@@ -68,7 +69,8 @@ const setup = ({ axis = axisOf('circular-display-start'), withAxis = true } = {}
     readRegionFasta: async () => '',
     panStart: (event) => pans.push(['start', event.pointerId]),
     panMove: (event) => pans.push(['move', event.pointerId]),
-    panEnd: (event) => pans.push(['end', event.pointerId])
+    panEnd: (event) => pans.push(['end', event.pointerId]),
+    ...ports
   });
   owner.bindBand({});
   return { owner, layoutEdit, opened, pans, canvas: new FakeElement() };
@@ -229,4 +231,58 @@ test('with the tool on, a touch outside the tracks pans through the pan owner; a
   owner.pointerUp(press(canvas, pointAt(axis, 900.5), touch));
   assert.deepEqual(pans, [], 'a touch on the tracks selects');
   assert.equal(opened.length, 1);
+});
+
+/** A promise and its settle functions. */
+const deferred = () => {
+  let resolve;
+  let reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+};
+/** An owner whose popup is open on a span of `axis`; `ports` replaces the action ports. */
+const openPopup = (ports) => {
+  const axis = axisOf('circular-display-start');
+  const made = setup({ axis, ports });
+  made.owner.toggle();
+  made.owner.pointerDown(press(made.canvas, pointAt(axis, 100.5)));
+  made.owner.pointerMove(press(made.canvas, pointAt(axis, 900.5)));
+  made.owner.pointerUp(press(made.canvas, pointAt(axis, 900.5)));
+  assert.ok(made.owner.popup.value, 'the Region popup is open');
+  return made;
+};
+
+test('while an action of the selection runs, every action of its popup is disabled and refused (OV-2561)', async () => {
+  const add = deferred();
+  const calls = [];
+  const { owner } = openPopup({
+    addRegionAnnotation: (region) => { calls.push(['add', region]); return add.promise; },
+    readRegionFasta: async () => { calls.push(['copy']); return '>r\nACGT\n'; },
+    newDrawingFromRegion: async () => { calls.push(['new']); return null; },
+    selectFeatures: () => calls.push(['select'])
+  });
+  assert.equal(owner.popup.value.busy, false);
+  const adding = owner.addToAnnotationSet();
+  // The buttons read this one state; the second click is refused instead of being dropped behind an enabled button.
+  assert.deepEqual([owner.popup.value.busy, owner.popup.value.add.busy, owner.popup.value.copy.busy], [true, true, false]);
+  assert.equal(await owner.copyFasta(), false);
+  assert.equal(await owner.newDrawing(), null);
+  owner.selectFeaturesInside();
+  assert.equal(await owner.addToAnnotationSet(), false);
+  assert.deepEqual(calls.map(([name]) => name), ['add']);
+  add.resolve(null);
+  assert.equal(await adding, true);
+  assert.equal(owner.popup.value.busy, false);
+});
+
+test('Add to annotation set that fails shows the normalized error under its button, tagged with its operation (OV-2562)', async () => {
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
+  const failure = normalizeUserFacingError({ code: 'INPUT_UNREADABLE' }, { operation: 'listSequenceRecords', stage: 'helper' });
+  const { owner } = openPopup({ addRegionAnnotation: async () => { throw failure; } });
+  assert.equal(await owner.addToAnnotationSet(), false);
+  assert.deepEqual(owner.popup.value.add, { busy: false, status: errorText(failure.summaryParts), failed: true });
+  assert.equal(owner.popup.value.busy, false);
+  // The operation the action names is one the normalizer knows, not 'unknown'.
+  assert.equal(normalizeUserFacingError(failure, { operation: 'addRegionAnnotation', stage: 'helper' }).operation, 'addRegionAnnotation');
 });

@@ -546,3 +546,46 @@ test('Add to annotation set right after a Load reads the records first and binds
   const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')).join(''));
   expect(drawn).toContain(`data-gbdraw-annotation-id="${row.id}"`);
 });
+
+test('Linear: Add to annotation set whose record read fails adds nothing, takes no History step, and says what the record list says', async ({ browser }, testInfo) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.linear);
+  try {
+    await generate(page);
+    // The Gallery Session has a title, so Save asks for none.
+    const saved = testInfo.outputPath('lambda-axis.gbdraw-session.json.gz');
+    await download(page, 'Save Session', saved);
+    await loadSessionFile(page, saved);
+    // A Load reads no records (OV-373). From now on the card's file cannot be read, as a file gone from the disk.
+    // The card's record select, as the template reads it: disabled until its records are read, and its error.
+    const card = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const [seq] = state.activeDrawing().linearSeqs;
+      const app = window.__GBDRAW_APP__;
+      return { disabled: app.linearRecordSelectorDisabled(seq), error: app.linearRecordSelectorError(seq) };
+    });
+    expect(await card()).toEqual({ disabled: true, error: '' });
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const unreadable = new File(['LOCUS'], 'gone.gb');
+      const refuse = () => Promise.reject(new DOMException('The file could not be read.', 'NotReadableError'));
+      Object.defineProperties(unreadable, { arrayBuffer: { value: refuse }, text: { value: refuse } });
+      state.inputFiles.fileOf = (ref) => (ref ? unreadable : null);
+    });
+    await turnOn(page);
+    await dragAlong(page, 0, [10_000.5, 12_000.5, 15_000.5]);
+    const popup = regionPopup(page);
+    const before = await undoLabels(page);
+    await popup.locator('[data-region-add-annotation]').click();
+    const status = popup.locator('[data-region-add-status]');
+    await expect(status).toBeVisible();
+    const { error: listed } = await card();
+    expect(listed).not.toBe('');
+    await expect(status).toHaveText(listed);
+    await expect(popup.locator('[data-region-add-annotation]')).toBeEnabled();
+    expect(await regionRows(page)).toEqual([]);
+    expect(await undoLabels(page)).toEqual(before);
+  } finally {
+    await page.context().close();
+  }
+});

@@ -5276,6 +5276,16 @@ export const createAppSetup = () => {
     const issue = catalog.issues[0];
     return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
   };
+  /**
+   * Why a drawing's record catalog is not ready, as its record list says it: for Linear, the first drawn card's own
+   * read error (its record select's), else the catalog's first issue. Generate and Add to annotation set read it here.
+   * @param {DrawingState} drawing
+   * @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog
+   */
+  const recordCatalogError = (drawing, catalog) => (drawing.mode === 'linear'
+    // A stored '' (no error) has no `code`: the read is undefined, as for null.
+    && drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code))
+    || catalogIssueError(catalog);
   async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
@@ -5316,14 +5326,7 @@ export const createAppSetup = () => {
       }
       catalog = getAnnotationRecordCatalog(drawing);
     }
-    return catalog.status === 'ready'
-      ? { catalog, error: '' }
-      : {
-          catalog: null,
-          // A stored '' (no error) has no `code`: the read is undefined, as for null.
-          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code)
-            || catalogIssueError(catalog)
-        };
+    return catalog.status === 'ready' ? { catalog, error: '' } : { catalog: null, error: recordCatalogError(drawing, catalog) };
   }
 
   const runAnalysis = () => {
@@ -7857,13 +7860,14 @@ export const createAppSetup = () => {
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
     // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
-    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why. The popup
+    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why, as the
+    // record list does (`recordCatalogError`), under the operation addRegionAnnotation (OV-2562). The popup
     // is teleported out of the app root, where the History adapter listens, so the action is its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
       if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
       const catalog = getAnnotationRecordCatalog(drawing);
-      if (catalog.status !== 'ready') throw catalogIssueError(catalog);
+      if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
       if (drawing !== state.activeDrawing()) return null;
       return history.runUndoable(msg('Add to annotation set'), () => {
         const owners = drawing.mode === 'circular'
