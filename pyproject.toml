@@ -123,9 +123,9 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Floor for total line coverage in the dev-tier `Core (Python 3.14)` job (0: report only).
+# Floor for total line coverage in the dev-tier `Core (Python 3.14)` job.
 # Set it from dev-tier results and only raise it; lowering it needs the Owner.
-fail_under = 0
+fail_under = 93
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
