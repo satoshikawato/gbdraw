@@ -1650,9 +1650,7 @@ export const createAppSetup = () => {
       selector: seq.region_record_id,
       drawn,
       hasInput: complete,
-      status: linearRecordSelector.statusFor(drawing, seq),
-      error: linearRecordSelector.errorFor(drawing, seq),
-      records: linearRecordSelector.recordsFor(drawing, seq)
+      ...linearRecordSelector.catalogStateFor(drawing, seq)
     };
   };
   /**
@@ -1679,9 +1677,9 @@ export const createAppSetup = () => {
       const recordsOff = new Set(drawing.recordsOff);
       return linearSourcesOverride || drawing.linearSeqs.map((seq) => linearAnnotationSource(drawing, seq, !recordsOff.has(seq.uid)));
     };
-    return buildAnnotationRecordCatalog(/** @type {any} */ (drawing.mode === 'linear'
+    return buildAnnotationRecordCatalog(drawing.mode === 'linear'
       ? { mode: 'linear', linearSources: linearSources() }
-      : { mode: 'circular', circularSource: circularSource() }));
+      : { mode: 'circular', circularSource: circularSource() });
   };
   // R10 (D-15-46): each transition that changes the annotation record catalog
   // (a discovery that ends, a mode switch, record selection, a Linear source
@@ -5349,7 +5347,9 @@ export const createAppSetup = () => {
           const records = await readInputRecords(inputType, primaryFile, pairedFile);
           return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'ready', records };
         } catch (error) {
-          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
+          /** @type {UserFacingError | ''} The model the card's record select would store for this failure. */
+          const model = normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) || '';
+          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: model, records: [] };
         }
       }));
       const catalog = getAnnotationRecordCatalog(drawing, sources);

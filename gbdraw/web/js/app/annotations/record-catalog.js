@@ -26,7 +26,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
  *   drawn records; `omittedRecordKeys` are the keys of the OFF records (record selection), whose
  *   annotations stay in the draft and leave the request.
  * @typedef {{
- *   sourceKey?: string, hasInput: boolean, status: string, error?: any, selector?: string,
+ *   sourceKey?: string, hasInput: boolean, status: string, error?: UserFacingError | '', selector?: string,
  *   records?: Record<string, any>[], drawn?: boolean, omittedRecords?: Record<string, unknown>[]
  * }} AnnotationCatalogSource A discovered input: the Circular discovery state or a Linear source.
  *   Each record carries `recordId` or `record_id`, `recordLength` or `record_length`, and `selector`.

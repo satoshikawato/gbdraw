@@ -420,6 +420,15 @@ export const createLinearRecordSelector = ({
     const error = errorModelFor(drawing, seq);
     return error && typeof error === 'object' ? errorText(error.summaryParts) : error;
   };
+  /**
+   * The card's share of its annotation catalog source: the status, records and error model the
+   * record select shows, so the catalog says what the card says.
+   * @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq
+   */
+  const catalogStateFor = (drawing, seq) => {
+    const { status, records, error } = stateFor(drawing, seq);
+    return { status, records: records.slice(), error };
+  };
   /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
   const warningFor = (drawing, seq) => {
     const selectorState = stateFor(drawing, seq);
@@ -439,6 +448,7 @@ export const createLinearRecordSelector = ({
     isDisabled,
     errorFor,
     errorModelFor,
+    catalogStateFor,
     warningFor
   };
 };

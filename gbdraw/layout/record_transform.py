@@ -36,11 +36,15 @@ def detected_topology(record: SeqRecord, source_kind: str) -> DetectedTopology:
 
 def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
     """The transform of a record no plan bound one to: the one the record planner binds to the record given in
-    memory with no display option (its coordinate map, and circular when its file says so)."""
+    memory with no display option (its coordinate map, the complete source length a crop recorded, and circular
+    when its file says so)."""
 
     base, step = _read_coord_map(record)
     length = len(record.seq)
     is_circular = detected_topology(record, "memory") == "circular"
+    source_length = record.annotations.get("gbdraw_source_length")
+    if record.annotations.get("gbdraw_region_applied") and isinstance(source_length, int):
+        return RecordDisplayTransform(source_length, base, 1 if step == 1 else -1, None, is_circular)
     if step == 1:
         return RecordDisplayTransform(base + length - 1, base, 1, None, is_circular)
     return RecordDisplayTransform(max(base, length), base, -1, None, is_circular)
