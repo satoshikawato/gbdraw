@@ -24,6 +24,7 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.circular.assemble import _serialize_circular_track_slot_geometry
 from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
+from gbdraw.layout.record_transform import unset_record_transform
 from gbdraw.render.track_slot_metadata import RecordAxisInput
 from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 
@@ -67,7 +68,7 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
         feature_dict={"a": _Feature()},
     )
     payload = _serialize_circular_track_slot_geometry(
-        drawn=RecordAxisInput(record, "record"),
+        drawn=RecordAxisInput(record, "record", unset_record_transform(record)),
         radial_layout=radial_layout,
         layout_slots=slots,
         base_radius_px=radius_px,

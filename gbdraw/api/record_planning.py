@@ -52,6 +52,7 @@ from gbdraw.io.record_select import (
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import detected_topology
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -1280,11 +1281,6 @@ def _similarity_candidate_from_orthogroup_member(
     )
 
 
-def _detected_topology(record: SeqRecord, source_kind: str):
-    value = str(record.annotations.get("topology", "")).strip().lower()
-    return value if source_kind != "gff_fasta" and value in {"circular", "linear"} else "unknown"
-
-
 @dataclass(frozen=True)
 class RecordInputManifest:
     """Unresolved typed record inputs derived from CLI path syntax."""
@@ -1855,7 +1851,7 @@ def resolve_record_inputs(
                 display=record_input.display,
                 source_length=(source_record.annotations.get("gbdraw_source_length")
                                if source_cropped else len(source_record)),
-                detected_topology=_detected_topology(source_record, source_kind),
+                detected_topology=detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,

@@ -488,3 +488,66 @@ def test_projection_rejects_out_of_source_domain():
 def test_series_rejects_nonfinite_or_coerced_values(position, value):
     with pytest.raises(ValidationError):
         SeriesPoint(position, value)
+
+
+@pytest.mark.parametrize("topology", ["circular", "linear", None, "CIRCULAR "])
+@pytest.mark.parametrize("coord_map", [None, (200, -1)])
+def test_unbound_transform_is_the_one_the_planner_binds_to_an_in_memory_record(topology, coord_map):
+    # A low-level builder called with no transform (gbdraw.api.diagram's builders, resolve_annotations) draws the
+    # record by the transform the planner binds to it, circularity included: one owner of circularity.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api.record_planning import resolve_record_inputs
+    from gbdraw.api.requests import InMemoryRecordSource
+    from gbdraw.layout.record_transform import unset_record_transform
+
+    record = SeqRecord(Seq("ACGT" * 50), id="memory")
+    if topology is not None:
+        record.annotations["topology"] = topology
+    if coord_map is not None:
+        record.annotations["gbdraw_coord_base"], record.annotations["gbdraw_coord_step"] = coord_map
+    planned = resolve_record_inputs(
+        [RecordInput(InMemoryRecordSource(record), record_key="memory")],
+        gff_candidate_features=None,
+        gff_keep_all_features=False,
+    )
+    assert unset_record_transform(record) == planned.transforms[0]
+    assert planned.provenance[0].is_circular is (str(topology).strip().lower() == "circular")
+
+
+def test_whether_a_span_may_cross_the_origin_is_the_bound_transforms_circularity():
+    # The file's topology no longer decides it: the transform the planner (or the unbound fallback) bound does.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.layout.record_transform import spans_may_cross_origin
+
+    record = SeqRecord(Seq("A" * 10), id="r", annotations={"topology": "circular"})
+    linear = RecordDisplayTransform(10, 1, 1, None, False)
+    circular = RecordDisplayTransform(10, 1, 1, None, True)
+    assert spans_may_cross_origin(record, linear) is False
+    record.annotations["topology"] = "linear"
+    assert spans_may_cross_origin(record, circular) is True
+    record.annotations["gbdraw_region_applied"] = True
+    assert spans_may_cross_origin(record, circular) is False
+    with pytest.raises(AttributeError):
+        spans_may_cross_origin(record, None)  # type: ignore[arg-type]
+
+
+def test_a_wrapped_unbound_circular_record_keeps_its_origin_crossing_annotation():
+    # OV-2564: with no planner transform, the wrap bound a transform that was never circular, so a circular record
+    # refused an origin-crossing annotation when wrapped and drew it when not.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.annotations.models import AnnotationSet, CoordinateSpan, RegionAnnotation
+    from gbdraw.annotations.resolve import resolve_annotations
+    from gbdraw.layout.linear_wrap import resolve_wrap
+
+    record = SeqRecord(Seq("A" * 1000), id="r", annotations={"topology": "circular"})
+    sets = [AnnotationSet("s", (RegionAnnotation("a", CoordinateSpan(None, 900, 100, wraps_origin=True)),))]
+    wrapped, _summary = resolve_wrap(400, [record], None)
+    for transforms in (None, wrapped):
+        bundle = resolve_annotations(sets, [record], mode="linear", record_transforms=transforms)
+        assert [item.segments for item in bundle.annotations] == [((0, 100), (899, 1000))]

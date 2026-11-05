@@ -1693,7 +1693,7 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
 
 def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths of a GenBank file, or of a FASTA file given without GFF3."""
-    from gbdraw.api.record_planning import _detected_topology
+    from gbdraw.layout.record_transform import detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
         infer_record_source_metadata,
@@ -1729,7 +1729,7 @@ def list_sequence_records(path, format):
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
-                    "topology": _detected_topology(record, format),
+                    "topology": detected_topology(record, format),
                     "organism": organism,
                     "strain": strain,
                     "inferred_definition": inferred_def,
