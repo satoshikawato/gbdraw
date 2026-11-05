@@ -252,6 +252,7 @@ request and complete them.
   - [ ] Random walk (Procedure step 6): seed <run ID>, the promotion covering plan (at most 50 steps per walk), no mismatch, or each mismatch is an OV-xx, with the minimal reproduction from `walk-shrunk.json`, that is fixed or marked `test.fail` in the parity spec: <rows>
   - [ ] Count baselines (Procedure step 7): no `BASELINE may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
+  - [ ] Release records for <version>: each `## Unreleased:` heading in `docs/internal/SESSION_FORMAT_HISTORY.md` whose entry this promotion ships starts with `<version>:` instead, and the Supported versions table of `SECURITY.md` lists the <version> line (any other change to that table is the Owner's)
 ```
 
 ### First promotion after the 2026-09-30 audit
