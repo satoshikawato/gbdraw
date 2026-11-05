@@ -19,6 +19,11 @@ split, independently implemented, or adopted without merging the submitted
 patch. Contributing does not imply roadmap priority, repository access, a
 merge, or maintainer status.
 
+Where another document owns a rule, this guide links to it instead of
+repeating it. The [norms index](./docs/internal/NORMS_INDEX.md) lists the
+design rules and Product Contract records with the tests and CI jobs that check
+them.
+
 ## Most useful contributions
 
 The project particularly values:
@@ -99,6 +104,9 @@ Open a [GitHub issue](https://github.com/satoshikawato/gbdraw/issues/new) with:
 Do not upload confidential, restricted, or otherwise non-shareable genomic
 data. A synthetic or redacted input that preserves the failure is welcome.
 
+Report a security vulnerability privately as [`SECURITY.md`](./SECURITY.md)
+describes, not in a public issue.
+
 ## Proposing a change
 
 Begin with the user problem rather than a preferred implementation. Describe:
@@ -152,7 +160,7 @@ ruff check gbdraw/
 # Fast test suite (excludes slow/regression-heavy tests)
 pytest tests/ -v -m "not slow"
 
-# Full suite, including slow tests (runs in integrated staging and release CI)
+# Full suite, including slow tests (CI runs it in release acceptance only)
 pytest tests/ -v
 ```
 
@@ -174,9 +182,8 @@ python tools/prepare_browser_wheel.py
 npx playwright test tests/web/<focused-test>.playwright.spec.js
 ```
 
-The JavaScript Playwright specifications require Node's `@playwright/test`.
-When only Python Playwright is available, use an equivalent focused browser
-check rather than omitting browser verification.
+Which Playwright installation runs which check, and what to use when Node's
+`@playwright/test` is missing: [Browser / Playwright Checks](./AGENTS.md#browser--playwright-checks).
 
 ## Changing rendered SVG output
 
@@ -185,7 +192,8 @@ Many tests compare generated SVGs against tracked references in
 geometry:
 
 ```bash
-# 1. Confirm the differences are the ones you intended
+# 1. Confirm the differences are the ones you intended. Actual output is
+#    retained under pytest's temporary directory, not reference_outputs/.
 pytest tests/test_output_comparison.py::TestOutputComparison -v
 
 # 2. Regenerate references only after reviewing that output
@@ -197,23 +205,43 @@ git diff -- tests/reference_outputs/
 pytest tests/test_output_comparison.py::TestOutputComparison -v
 ```
 
+Without `--update-reference-outputs`, reference-generation tests are skipped and
+normal test runs do not write to `tests/reference_outputs/`.
+
 Do not update reference outputs merely to make a failing test pass. First
 confirm that the new geometry is intentional and correct; the reference files
 record the project's intended rendering behavior.
 
 ## Changing documentation
 
-Use [`docs/DOCS.md`](./docs/DOCS.md) as the stable index for
+Public documentation has four teaching routes:
 [Tutorials](./docs/TUTORIALS/README.md),
 [Technical documentation](./docs/REFERENCE/README.md),
 [FAQ](./docs/FAQ.md), and [Gallery](./docs/GALLERY.md).
+[`docs/DOCS.md`](./docs/DOCS.md) is their stable index and the navigation
+authority.
 
-Before adding a page, identify which existing document owns the reader's
-question. A new interface or test scenario does not automatically require a
-new top-level page. Technical documentation owns exact contracts; FAQ pages
-answer choices and troubleshooting by linking to those contracts. Internal
-plans, audits, and executable evidence registries belong under
-`docs/internal/`.
+- Use the fewest public pages that answer distinct reader questions. Coverage
+  does not require one page per capability, workflow, or interface; a new
+  interface or test scenario does not automatically require a new top-level
+  page.
+- Before adding a public page, identify which existing document owns the
+  reader's question, and record the reader question, the existing owner, and a
+  `keep`, `merge`, `delete`, or `new` disposition. Add a page only when editing
+  an existing owner cannot answer the question clearly.
+- A Tutorial needs a deliberate learning progression to a finished result.
+  Separate GUI, CLI, or Python evidence does not by itself justify separate
+  public pages.
+- Technical documentation owns exact behavior and contracts. FAQ owns concise
+  decisions and troubleshooting, and links to the technical owner. Gallery is
+  for discovering finished outcomes.
+- Executable scenarios may support one public page or no public page. Do not
+  turn an evidence inventory into a public-page inventory. Internal plans,
+  audits, and executable evidence registries belong under `docs/internal/`.
+- Keep user- and maintainer-facing prose concise, concrete, and technically
+  accurate. Optimize internal implementation plans for execution fidelity.
+- Preserve exact technical terms, UI labels, CLI options, identifiers, and
+  scientifically necessary qualifications.
 
 Tutorial commands, public code blocks, and internal evidence scenarios are
 checked against the current CLI, Web, and Python interfaces:
@@ -228,9 +256,9 @@ pytest tests/ -v -k documentation
   `snake_case` for functions and modules, `PascalCase` for classes,
   `UPPER_SNAKE_CASE` for constants, and the `logging` module for diagnostics
   instead of bare `print` calls.
-- Extend an existing configurator, drawer, group, or typed boundary instead of
-  adding a parallel path. The CLI, Web, and Python interfaces should converge
-  on shared internals.
+- Extend an existing boundary instead of adding a parallel path, so that the
+  CLI, Web, and Python interfaces converge on shared internals:
+  [Key Architecture](./CLAUDE.md#key-architecture) in `CLAUDE.md`.
 - Do not add speculative options, fallbacks, or abstractions for hypothetical
   future use. Keep changes within the agreed problem.
 - Architecture-bearing changes must follow the
@@ -239,22 +267,13 @@ pytest tests/ -v -k documentation
 
 ## Branch roles
 
-- Approved work starts from the latest merged `dev`.
-- Work-branch pull requests target `dev` and use the fast implementation
-  admission checks.
-- `dev` is the integration branch. Heavy supported-version, slow, browser, and
-  Gallery checks run after merge against the exact integrated `dev` SHA.
-- `main` is the release branch. A maintainer promotion pull request from `dev`
-  contains no implementation changes and uses trusted exact-SHA readiness and
-  tree evidence.
-- A push to `main` performs release verification, build, and deployment against
-  the exact release SHA.
-- Direct `main` hotfixes are unsupported. Urgent fixes still go through `dev`
-  staging and promotion.
-
-See the normative
-[Web change, review, and delivery policy](./docs/internal/WEB_CHANGE_POLICY.md)
-for lifecycle ownership and trust boundaries.
+Approved work starts from the latest merged `dev`, and a maintainer opens the
+promotion pull request from `dev` to `main`. The roles of work branches,
+`dev`, and `main`, what each admits and runs, and the rule that direct `main`
+hotfixes are unsupported are in
+[Delivery lifecycle](./docs/internal/WEB_CHANGE_POLICY.md#delivery-lifecycle)
+of the normative Web change, review, and delivery policy, which also defines
+lifecycle ownership and trust boundaries.
 
 For a fork, keep your fork as `origin`, add this repository as `upstream`, and
 create a non-tracking work branch from `upstream/dev`:
@@ -287,20 +306,20 @@ Select exactly one change class in the pull request template:
 - `PROMOTION` only for a no-implementation `dev` to `main` release-admission
   pull request.
 
-An ordinary architecture-bearing `STANDARD` change supplies concise owner/path
-evidence and removes superseded locations; it does not need an empty OE/PE/CB
-packet or a dedicated approval permalink. Full sets, arithmetic, alternatives,
-removal conditions, and the maintainer's approval are reserved for
-`ARCHITECTURE_EXCEPTION`.
+An ordinary architecture-bearing `STANDARD` change removes every superseded
+owner or path in the same change
+([Merge acceptance](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#merge-acceptance)).
+What it records, and what only `ARCHITECTURE_EXCEPTION` needs:
+[Required author evidence](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
 
 Apply the `architecture-change` label to a Web implementation that changes an
 architecture owner, canonical path, compatibility path, privileged boundary, or
 lifecycle responsibility. The label selects the architecture size-review
 profile and routes attention. It does not waive deterministic gates.
 
-Policy reports distinguish `Gate: PASS | FAIL` from `Review: CLEAR | REQUIRED`.
-Gate controls the CI exit status. `Review: REQUIRED` means a human must examine
-the identified risk; by itself it exits zero and is not a CI failure.
+Policy reports give `Gate: PASS | FAIL` and `Review: CLEAR | REQUIRED`
+separately:
+[Gate and Review are independent](./docs/internal/WEB_CHANGE_POLICY.md#gate-and-review-are-independent).
 
 Record pull request baselines in proportion to the change. Ordinary
 non-architecture pull requests use the normal concise template. Product-impact
@@ -331,10 +350,10 @@ corresponding issue. Then:
    [pull request template](./.github/pull_request_template.md), then explain the
    problem, agreed behavior, implementation boundary, validation, compatibility
    effects, scientific-output effects, and any intentional rendering changes.
-7. For an ordinary architecture-bearing change, provide the concise owner/path,
-   behavior-verification, deterministic-check, and rollback evidence required by
-   the [architecture fitness-function ratchet](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
-   Complete the full OE/PE/CB packet only for `ARCHITECTURE_EXCEPTION`.
+7. For an architecture-bearing change, provide the evidence that
+   [Required author evidence](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence)
+   lists for its change class; an ordinary change removes every superseded
+   owner or path in the same change.
 8. If SVG output changes, review the actual output and the reference diff, and
    identify every intentional rendering change.
 

@@ -2,6 +2,10 @@
 
 Guidance for automated agents working in this repository.
 
+Where another document owns a rule, this file links to it instead of repeating
+it. The [norms index](docs/internal/NORMS_INDEX.md) lists the design rules and
+Product Contract records with the tests and CI jobs that check them.
+
 ## Read First
 - コード1行増やすごとに技術負債が増えると心得よ。負債は行数ではなく、増えた変更点・分岐・重複で数える。
 - See `CLAUDE.md` for project-wide guidance.
@@ -75,32 +79,13 @@ Guidance for automated agents working in this repository.
 
 ## Common Commands
 
-```bash
-# Fast tests (skip slow)
-pytest tests/ -v -m "not slow"
-
-# Full tests
-pytest tests/ -v
-
-# Compare generated SVGs with tracked references (read-only)
-pytest tests/test_output_comparison.py::TestOutputComparison -v
-
-# Update tracked references only for an intentional, reviewed geometry change
-pytest tests/test_output_comparison.py::TestGenerateReferences --update-reference-outputs -v
-
-# Lint
-ruff check gbdraw/
-
-# Prepare the generated browser wheel for offline web packaging/tests
-python tools/prepare_browser_wheel.py
-
-# Prepare the hosted bundle (wheel URL carries the wheel's content hash)
-python tools/prepare_cloudflare_pages.py
-
-# Build
-python -m build
-```
-
+- Test, lint, and reference-output commands:
+  [Running the checks CI runs](CONTRIBUTING.md#running-the-checks-ci-runs) and
+  [Changing rendered SVG output](CONTRIBUTING.md#changing-rendered-svg-output)
+  in `CONTRIBUTING.md`.
+- Browser wheel, hosted bundle, and build commands:
+  [Local build and verification](gbdraw/web/CLAUDE.md#local-build-and-verification)
+  in `gbdraw/web/CLAUDE.md`.
 - Allow at least 30 minutes for test commands before treating them as timed
   out, and monitor long runs incrementally. Keep shorter test-owned timeout
   assertions unchanged unless the task explicitly requires changing them.
@@ -123,16 +108,25 @@ python -m build
 - Audit production-code and test diffs separately before handoff. Optimize for
   fewer change points, branches, and duplicated behavior rather than raw line counts.
 - Follow the [architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md)
-  for every architecture-bearing change. Ordinary non-increasing changes use
-  concise owner/path evidence and remove superseded paths in the same change.
-  Complete before/after OE, PE, and CB sets are reserved for the exception
-  conditions defined by that policy.
-- Keep the web UI as a single-page app with no build step; `gbdraw/web/index.html` hosts HTML/CSS/templates and loads ES modules from `gbdraw/web/js/` (`app.js` entry with `app/`, `services/`, `utils/`).
-- Keep larger UI modules split into focused subfolders under `gbdraw/web/js/app/` (for example `legend/`, `legend-layout/`, `feature-editor/`) and keep the `create*` entry points in the top-level `app/*.js` files.
-- If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.
-- Treat `tests/reference_outputs/` as read-only during normal tests. If diagram output changes intentionally, regenerate it with `--update-reference-outputs`, review the SVG diff, and rerun `TestOutputComparison`.
+  for every architecture-bearing change. An ordinary change removes every
+  superseded owner or path in the same change
+  ([Merge acceptance](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#merge-acceptance));
+  the evidence each change class records is in
+  [Required author evidence](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
+- Web UI layout (a single-page app with no build step, ES modules under
+  `gbdraw/web/js/`, `create*` entry points in `app/*.js` with larger helpers in
+  feature subfolders): [Non-negotiable properties](gbdraw/web/CLAUDE.md#non-negotiable-properties)
+  and [Module ownership](gbdraw/web/CLAUDE.md#module-ownership) in `gbdraw/web/CLAUDE.md`.
+- Do not add a CDN or other runtime network dependency; vendor the dependency
+  and keep the CSP aligned with same-origin needs:
+  [Assets, CSP, and privacy](gbdraw/web/CLAUDE.md#assets-csp-and-privacy).
+- `tests/reference_outputs/` is read-only in normal test runs; regenerate it
+  only for an intentional, reviewed change:
+  [Changing rendered SVG output](CONTRIBUTING.md#changing-rendered-svg-output).
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
-- Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.
+- The browser wheel `gbdraw/web/gbdraw-<version>-py3-none-any.whl` is generated
+  and gitignored; do not commit it:
+  [Non-negotiable properties](gbdraw/web/CLAUDE.md#non-negotiable-properties).
 
 ## Owners and Boundaries in Every Fix
 
@@ -156,8 +150,9 @@ cleanup beyond it.
   Python and the Web, in a Session): a named JSDoc typedef, dataclass, or
   `TypedDict` that says which fields are required. Use no `any` or `Any`, and no
   optional chaining that hides a missing required field. A type baseline never
-  rises without the Owner's approval (R14 in `gbdraw/web/CLAUDE.md`, "Type
-  checking" in `CLAUDE.md`).
+  rises without the Owner's approval (R14 in `gbdraw/web/CLAUDE.md`,
+  [Type checking](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking)
+  in the architecture ratchet).
 - Do not hand-copy a Python-owned value or rule into JavaScript. Carry it
   through an existing generator with a `--check` test (for example
   `tools/generate_web_contracts.py`); a twin that cannot be avoided follows R9.
