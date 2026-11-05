@@ -7,7 +7,9 @@
 // and is not exported.
 /**
  * @import { DisplaySpan, RegionAxis, RegionAxisRecord, RegionFeatureRow, RegionSelection } from '../services/region-axis.js'
+ * @import { PopupBounds } from '../utils/popup-bounds.js'
  */
+import { FEATURE_LABEL_SELECTOR, LEGEND_GROUP_SELECTOR } from '../services/drawn-groups.js';
 import {
   axisPosition, circularDragSpan, featureParts, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
   regionBandPath, regionSpanText, sourceSpanOf
@@ -39,8 +41,9 @@ const BAND_SLACK_PX = 6;
  * @property {() => SVGSVGElement | null} shownRoot The mounted root of the shown Result.
  * @property {{ value: boolean }} layoutEdit Layout edit; this owner is the one that turns it on and off.
  * @property {() => RegionSelection | null} openSelection The selection the open Region popup holds, else null.
- * @property {(selection: RegionSelection, element: Element, anchor: { clientX: number, clientY: number }) => boolean} openRegionPopup
- *   Opens the Region popup (the one Result popup); false when popups cannot open now.
+ * @property {(selection: RegionSelection, element: Element, anchor: RegionPopupAnchor) => boolean} openRegionPopup
+ *   Opens the Region popup (the one Result popup) beside the band, clear of the anchor's obstacles; false when popups
+ *   cannot open now.
  * @property {() => void} closeRegionPopup
  * @property {() => readonly RegionFeatureRow[]} drawnFeatures The features the shown Result draws.
  * @property {(featureIds: readonly string[]) => void} selectFeatures The feature selection owner's selection by id.
@@ -49,6 +52,21 @@ const BAND_SLACK_PX = 6;
  * @property {(region: RegionTarget) => Promise<string>} readRegionFasta The FASTA text of the region, which Python
  *   reads from the request the shown Result was made from (a Worker helper, started by Copy FASTA only).
  */
+
+/**
+ * Where the Region popup opens: the release point, and the boxes it keeps clear of besides the band (D-28).
+ * @typedef {{ clientX: number, clientY: number, obstacles: PopupBounds[] }} RegionPopupAnchor
+ */
+
+/**
+ * The screen boxes of the shown Result's Legend and feature labels, which the Region popup keeps clear of.
+ * @param {SVGSVGElement | null} root
+ * @returns {PopupBounds[]}
+ */
+const popupObstacles = (root) => Array.from(root?.querySelectorAll(`${LEGEND_GROUP_SELECTOR}, ${FEATURE_LABEL_SELECTOR}`) ?? [])
+  .map((element) => element.getBoundingClientRect())
+  .filter((box) => box.width > 0 && box.height > 0)
+  .map(({ left, right, top, bottom }) => ({ left, right, top, bottom }));
 
 /** @param {RegionSelection} selection @returns {RegionTarget} */
 const targetOf = (selection) => ({
@@ -210,11 +228,14 @@ export const createRegionSelect = ({
       recordId: record.recordId, span: finished.span, source: sourceSpanOf(record.axis.source, finished.span)
     };
     shownSelection.value = selection;
-    const anchor = { clientX: finished.clientX, clientY: finished.clientY };
     window.requestAnimationFrame(() => {
       if (shownSelection.value !== selection) return;
       // Once open, the popup holds the selection: it goes when the popup closes.
-      if (bandElement) openRegionPopup(selection, bandElement, anchor);
+      if (bandElement) {
+        openRegionPopup(selection, bandElement, {
+          clientX: finished.clientX, clientY: finished.clientY, obstacles: popupObstacles(shownRoot())
+        });
+      }
       shownSelection.value = null;
     });
   };

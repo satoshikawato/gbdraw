@@ -55,6 +55,41 @@ const dragAlong = async (page, recordIndex, positions) => {
 const regionPopup = (page) => page.locator('[data-preview-item-popup="region"]');
 
 /**
+ * The Region popup frame covers neither the band, nor the Legend, nor any feature label (D-28). The popup is placed
+ * again once rendered, so the boxes are read when its place has settled.
+ * @param {import('@playwright/test').Page} page
+ */
+const expectPopupClear = async (page) => {
+  const boxes = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const box = (element) => {
+      const { left, right, top, bottom } = element.getBoundingClientRect();
+      return { left, right, top, bottom };
+    };
+    const svg = state.svgContainer.value.querySelector('svg');
+    return {
+      popup: box(document.querySelector('[data-preview-item-popup="region"]').closest('.pairwise-match-popup')),
+      band: box(document.querySelector('[data-region-select-band]')),
+      legend: box(svg.querySelector('[data-gbdraw-composition-role="legend"]')),
+      labels: Array.from(svg.querySelectorAll('text[data-label-feature-id]'), box).filter((label) => label.right > label.left)
+    };
+  });
+  let last = '';
+  await expect.poll(async () => {
+    const now = JSON.stringify((await boxes()).popup);
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
+  const { popup, band, legend, labels } = await boxes();
+  const meets = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  expect(labels.length, 'the Result draws feature labels').toBeGreaterThan(0);
+  expect(meets(popup, band), 'popup over the band').toBe(false);
+  expect(meets(popup, legend), 'popup over the Legend').toBe(false);
+  expect(labels.filter((label) => meets(popup, label)), 'labels under the popup').toEqual([]);
+};
+
+/**
  * Toggles Select region on after a Generate; Layout edit turns off. The figure is fitted to the preview first, so
  * every point of the drags is on the screen.
  * @param {import('@playwright/test').Page} page
@@ -126,6 +161,7 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
     await expect(page.locator('[data-region-select-band]')).toHaveCount(1);
     await expect(page.locator('[data-match-popup-title]')).toHaveText('NC_012920.1');
     await expect(page.locator('[data-preview-item-subtitle]')).toHaveText('4,001-6,001 (2,001 bp)');
+    await expectPopupClear(page);
     await expect(popup.locator('[data-region-feature-count]')).toHaveText(/^\d+ features?$/);
     await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
     expect(record).toBe(16_569);
@@ -203,6 +239,7 @@ test('Linear: a drag along a row selects a span that Add to annotation set draws
     const popup = regionPopup(page);
     await expect(popup).toBeVisible();
     await expect(page.locator('[data-preview-item-subtitle]')).toHaveText('10,001-15,001 (5,001 bp)');
+    await expectPopupClear(page);
     await popup.locator('[data-region-add-annotation]').click();
     const [row] = await regionRows(page);
     expect(row).toEqual(expect.objectContaining({ label: 'Region 1', target: expect.objectContaining({ start: 10_001, end: 15_001 }) }));

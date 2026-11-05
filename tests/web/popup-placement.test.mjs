@@ -127,3 +127,41 @@ test('the notice limits the popup top only while it ends in the upper half under
     assert.equal(boundsWith(noticeBottom).top, 135, `notice bottom ${noticeBottom}`);
   }
 });
+
+// Select region (D-28): the Region popup keeps clear of the band (`avoid`), the
+// Legend and the label boxes (`obstacles`); when no place inside the bounds is
+// clear of them all, it takes the place that covers the least of them.
+const overlap = (placed, width, height, box) => (
+  Math.max(0, Math.min(placed.x + width, box.right) - Math.max(placed.x, box.left))
+  * Math.max(0, Math.min(placed.y + height, box.bottom) - Math.max(placed.y, box.top))
+);
+
+test('a popup keeps clear of the obstacles it is given, and opens where it would without them when that place is clear', () => {
+  const avoid = { left: 600, right: 700, top: 400, bottom: 500 };
+  const point = { x: 650, y: 450, avoid };
+  const request = { width: 400, height: 300, bounds: desktop };
+  const free = placePopupNearPoint({ ...request, point });
+  assert.equal(free.x, 712);
+  // An obstacle elsewhere changes nothing.
+  assert.deepEqual(placePopupNearPoint({ ...request, point: { ...point, obstacles: [{ left: 0, right: 100, top: 60, bottom: 160 }] } }), free);
+  // The Legend right of the band: the popup goes to the nearest clear place.
+  const legend = { left: 720, right: 1300, top: 200, bottom: 700 };
+  const placed = placePopupNearPoint({ ...request, point: { ...point, obstacles: [legend] } });
+  for (const box of [legend, avoid]) assert.equal(overlap(placed, 400, 300, box), 0, JSON.stringify({ placed, box }));
+  assert.ok(placed.x >= desktop.left + 12 && placed.x + 400 <= desktop.right - 12);
+  assert.ok(placed.y >= desktop.top + 12 && placed.y + 300 <= desktop.bottom - 12);
+  assert.ok(placed.maxHeight >= 300);
+  assert.equal(placed.x, 600 - 12 - 400, 'left of the band, the nearest clear side');
+});
+
+test('with no clear place the popup covers the least of the obstacles', () => {
+  const bounds = { top: 0, bottom: 600, left: 0, right: 1000 };
+  // The left half is covered, and the right half is clear only 250 px down from 350.
+  const wide = { left: 0, right: 500, top: 0, bottom: 600 };
+  const upper = { left: 500, right: 1000, top: 0, bottom: 350 };
+  const point = { x: 250, y: 300, obstacles: [wide, upper] };
+  const placed = placePopupNearPoint({ point, width: 400, height: 300, bounds });
+  assert.deepEqual(placed, { x: 512, y: 288, maxHeight: 300 });
+  assert.equal(overlap(placed, 400, 300, wide), 0);
+  assert.equal(overlap(placed, 400, 300, upper), (350 - 288) * 400);
+});

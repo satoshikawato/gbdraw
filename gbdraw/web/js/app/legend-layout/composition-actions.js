@@ -7,7 +7,7 @@ import {
 import { planLegendComposition } from '../../services/legend-layout.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
-import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
+import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 /** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
@@ -117,7 +117,7 @@ export const COMPOSITION_ROLE_ATTRIBUTE = 'data-gbdraw-composition-role';
 
 const ROLE_SELECTORS = Object.freeze({
   primary: '[data-gbdraw-composition-role="primary"]',
-  legend: '[data-gbdraw-composition-role="legend"]',
+  legend: LEGEND_GROUP_SELECTOR,
   title: '[data-gbdraw-composition-role="title"]'
 });
 // The legend sides of every mode. A loaded Result's side is one of its own
