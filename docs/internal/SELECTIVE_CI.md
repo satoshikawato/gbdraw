@@ -641,6 +641,20 @@ The workflow change passed the repository, labels, and token to `PR / gate`
 first; the base helper ignored them. The pull request that added the check ran
 that base helper too, so it was not held by the red `dev` it was written for.
 
+### Repository growth on pull requests
+
+The step summary of `PR / gate` shows how many MB of new Git objects merging
+the pull request adds to `dev`. It is a report and never fails a job. The CI
+impact plan job measures it on the merge commit: the size of a thin pack of
+the objects reachable from the merge commit and not from `dev`, with objects
+already in `dev` as delta bases. This is close to what the merge adds to the
+repository's storage. Its full-history checkout has no old file contents, so
+the step first fetches, in one request, the blobs the merge adds and `dev`'s
+versions of the paths it modifies; Git fetches any other delta base it needs by
+itself. The step gives up after 3 minutes, because every job waits for the CI
+impact plan job. A Gallery regeneration that rewrites every Session shows as
+tens of MB; most pull requests add well under 1 MB.
+
 ## Verification and rollback
 
 Install locked Node dependencies, then run `node --test tests/ci/*.test.mjs` and

@@ -101,6 +101,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          # All commits and trees; the baseline worktree fetches its file contents in one request.
+          filter: blob:none
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"

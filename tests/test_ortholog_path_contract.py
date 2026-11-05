@@ -225,7 +225,7 @@ def test_s01_full_selector_paths_and_archived_oracle(size):
         result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=size, path_representation="exhaustive")
     check_inferred(pm, result.orthogroups)
     assert len(result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]) == 2**(size-2)
-    archive = ROOT / f"docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/oracles/path-{size}.selector.json.gz"
+    archive = ROOT / f"tests/fixtures/ortholog_path_oracles/path-{size}.selector.json.gz"
     assert baseline.json_bytes(baseline.canonical(result)) == gzip.decompress(archive.read_bytes())
 
 

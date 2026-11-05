@@ -35,6 +35,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
+      growth: ${{ steps.growth.outputs.summary }}
     steps:
       - name: Checkout complete history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -102,6 +103,30 @@ jobs:
           path: ${{ runner.temp }}/ci-impact-plan.json
           overwrite: true
           retention-days: 30
+
+      # Report only, never blocks: PR / gate shows the result
+      # (docs/internal/SELECTIVE_CI.md "Repository growth on pull requests").
+      - name: Measure the objects the merge adds to dev
+        if: github.event_name == 'pull_request'
+        id: growth
+        continue-on-error: true
+        # Every job waits for this one; a slow measurement gives up instead of delaying them.
+        timeout-minutes: 3
+        # An explicit bash shell runs with pipefail.
+        shell: bash
+        run: |
+          # This checkout holds no old file contents. Fetch in one request the blobs that the
+          # merge adds and dev's versions of the paths it modifies (the thin pack's delta bases).
+          { git rev-list --objects --missing=print HEAD^1..HEAD | sed -n 's/^?//p'
+            git diff-tree -r --no-renames HEAD^1 HEAD | awk '$3 !~ /^0+$/ && $4 !~ /^0+$/ { print $3 }'
+          } | sort -u > "$RUNNER_TEMP/growth-blobs"
+          if [[ -s "$RUNNER_TEMP/growth-blobs" ]]; then
+            git -c fetch.negotiationAlgorithm=noop fetch -q origin --no-tags --no-write-fetch-head \
+              --recurse-submodules=no --filter=blob:none --stdin < "$RUNNER_TEMP/growth-blobs"
+          fi
+          bytes="$(printf '%s\n^%s\n' HEAD HEAD^1 | git pack-objects --revs --thin --stdout -q | wc -c)"
+          megabytes="$(awk -v bytes="$bytes" 'BEGIN { printf "%.2f", bytes / 1000000 }')"
+          echo "summary=Merging this pull request adds ${megabytes} MB of new Git objects to dev (a thin pack against dev)." >> "$GITHUB_OUTPUT"
 
       - name: Build dev CI impact plan
         if: github.event_name != 'pull_request'
@@ -1732,6 +1757,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Report repository growth (report only)
+        env:
+          REPOSITORY_GROWTH: ${{ needs.ci-impact.outputs.growth || 'Not measured (the CI impact plan job did not report it).' }}
+        run: printf '## Repository growth\n\n%s\n\n' "$REPOSITORY_GROWTH" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout trusted CI policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -17,7 +17,6 @@ from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
 from gbdraw.api import load_session_document, materialize_session, session_to_request, save_session_document, render_request
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data'
 
 
 def main():
