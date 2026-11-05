@@ -37,8 +37,8 @@ COLLINEARITY_WORDS_TARGET = REPO_ROOT / "tools" / "i18n" / "collinearity-words.g
 # readers outside gbdraw: documentation, not a Web module.
 SESSION_JSON_SCHEMA_TARGET = REPO_ROOT / "docs" / "REFERENCE" / "schemas" / "gbdraw-session.schema.json"
 REQUEST_JSON_SCHEMA_TARGET = SESSION_JSON_SCHEMA_TARGET.with_name("gbdraw-render-request.schema.json")
-# The page whose generated block holds the model diagrams of the same descriptions.
-CONTRACT_MODEL_PAGE = REPO_ROOT / "docs" / "REFERENCE" / "session-and-request-compatibility.md"
+# The page of the schemas, with model diagrams of the same descriptions.
+SCHEMA_README_TARGET = SESSION_JSON_SCHEMA_TARGET.with_name("README.md")
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps
@@ -486,15 +486,48 @@ JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 _SHAPE_BOUNDS = ("minimum", "exclusiveMinimum", "maximum", "minItems", "pattern")
 
 
+def _runs(values: list[int]) -> list[list[int]]:
+    """Sorted integers as runs of consecutive values."""
+    runs: list[list[int]] = []
+    for value in values:
+        if runs and value == runs[-1][-1] + 1:
+            runs[-1].append(value)
+        else:
+            runs.append([value])
+    return runs
+
+
+def _portable_pattern(pattern: str) -> str:
+    """``pattern`` as an ECMA-262 pattern that matches what Python's ``re.search`` matches.
+
+    ECMA-262, the dialect of JSON Schema, reads ``\\s`` as other characters
+    than Python (it adds U+FEFF and leaves out U+001C-U+001F and U+0085), so
+    ``\\s`` and ``\\S`` are spelled as the characters Python matches; no
+    character above U+FFFF is one. A pattern whose ``\\s`` sits in a class, or
+    whose ``$`` does not end ``\\s*`` (Python's ``$`` also matches before a
+    final newline), has no such spelling here and raises.
+    """
+    if re.search(r"\[[^\]]*\\[sS]|\\\\[sS]|(?<!\\s\*)\$", pattern):
+        raise ValueError(f"No portable spelling of the pattern {pattern!r}.")
+    spaces = [code for code in range(0x10000) if re.fullmatch(r"\s", chr(code))]
+    body = "".join(
+        f"\\u{run[0]:04x}" + (f"-\\u{run[-1]:04x}" if len(run) > 1 else "") for run in _runs(spaces)
+    )
+    return pattern.replace("\\S", f"[^{body}]").replace("\\s", f"[{body}]")
+
+
 def json_schema(shape: Mapping[str, Any]) -> Any:
     """One shape of ``gbdraw.contract_shapes`` as a JSON Schema 2020-12 subschema.
 
     A ``ref`` points into ``$defs``; a bound keeps its name, which JSON Schema
-    shares. Python's checker refuses a number with a fraction (``1.0``) where an
+    shares, and a pattern is spelled for ECMA-262 (:func:`_portable_pattern`).
+    Python's checker refuses a number with a fraction (``1.0``) where an
     integer or a literal is declared; JSON Schema reads ``1.0`` as ``1``.
     """
     kind = shape["kind"]
     bounds = {name: shape[name] for name in _SHAPE_BOUNDS if name in shape}
+    if "pattern" in bounds:
+        bounds["pattern"] = _portable_pattern(bounds["pattern"])
     if kind == "unknown":
         return True
     if kind == "ref":
@@ -549,13 +582,7 @@ def _json_schema_document(
 
 def _versions_text(versions: list[int]) -> str:
     """``[27, 28, 29, 30, 40, 42]`` as ``27–30, 40, 42``."""
-    runs: list[list[int]] = []
-    for version in versions:
-        if runs and version == runs[-1][-1] + 1:
-            runs[-1].append(version)
-        else:
-            runs.append([version])
-    return ", ".join(f"{run[0]}–{run[-1]}" if len(run) > 2 else ", ".join(map(str, run)) for run in runs)
+    return ", ".join(f"{run[0]}–{run[-1]}" if len(run) > 2 else ", ".join(map(str, run)) for run in _runs(versions))
 
 
 def render_session_json_schema() -> str:
@@ -588,15 +615,15 @@ def render_request_json_schema() -> str:
         title=f"gbdraw canonical render request, schema {CANONICAL_REQUEST_SCHEMA}",
         owner="describe_canonical_request() in gbdraw/session_request_codec.py",
         about=(
-            f"A canonical render request of schema {CANONICAL_REQUEST_SCHEMA} as gbdraw writes and reads it: "
-            "the renderRequest of a Session drawing. The gbdraw command line and Python API refuse a request "
-            "outside this schema; they also check values and references that the schema does not state."
+            f"A canonical render request of schema {CANONICAL_REQUEST_SCHEMA} as gbdraw writes it: "
+            f"the renderRequest of a Session drawing. The gbdraw command line and Python API refuse a schema "
+            f"{CANONICAL_REQUEST_SCHEMA} request outside this schema, except a retired value of "
+            "collinearityAnchorMode, which they read as its default with a warning; they also check values and "
+            "references that the schema does not state. A request of an older schema is converted, not described."
         ),
     )
 
 
-CONTRACT_MODEL_BEGIN = "<!-- BEGIN GENERATED CONTRACT MODEL: tools/generate_web_contracts.py -->"
-CONTRACT_MODEL_END = "<!-- END GENERATED CONTRACT MODEL -->"
 # A class with more fields than this lists none: the schema holds them.
 _DIAGRAM_MEMBERS = 20
 
@@ -686,8 +713,9 @@ def _session_bands_diagram(admission: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_contract_model_block() -> str:
-    """The generated block of the compatibility page: the model diagrams of the descriptions."""
+def render_schema_readme() -> str:
+    """The page of the schemas: the files and the model diagrams of their descriptions."""
+    from gbdraw import session_io as sio
     from gbdraw.session_contract import describe_session_admission, describe_session_document
     from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, describe_canonical_request
 
@@ -695,6 +723,11 @@ def render_contract_model_block() -> str:
     writer = describe_session_document()
     request = describe_canonical_request()
     project = admission["bands"][-1]
+    versions = sorted(sio.SUPPORTED_SESSION_VERSIONS)
+    mode_scoped = _versions_text([
+        version for version in versions
+        if sio.MODE_SCOPED_SESSION_MIN_VERSION <= version <= sio.MODE_SCOPED_SESSION_MAX_VERSION
+    ])
     figures = [
         (
             "Version bands of the Session reader",
@@ -704,15 +737,16 @@ def render_contract_model_block() -> str:
         ),
         (
             f"A Session {_versions_text(project['versions'])} file",
-            "The project and its drawings as the reader checks them; gbdraw checks each drawing's parts on "
-            "its one-drawing view (`describe_session_admission()`).",
+            "The project and its drawings as the reader checks them; it checks each drawing's parts on the "
+            "drawing's one-drawing view (`describe_session_admission()`).",
             _class_diagram(admission["types"], [project["root"]]),
         ),
         (
-            "A Session 46–50 document",
-            "The writer's object (`describe_session_document()`). gbdraw checks the one-drawing view of each "
-            f"Session 51 drawing as it checks this document. A class with more than {_DIAGRAM_MEMBERS} fields "
-            "shows only their number.",
+            f"A Session {mode_scoped} document",
+            f"The layout that gbdraw writes for a Session {mode_scoped} (`describe_session_document()`); the "
+            f"one-drawing view of a Session {_versions_text(project['versions'])} drawing has this layout. The "
+            "reader checks less than it holds: the Session schema states what. A class with more than "
+            f"{_DIAGRAM_MEMBERS} fields shows only their number.",
             _class_diagram(writer["types"], [writer["root"]], external=request["types"]),
         ),
         (
@@ -722,19 +756,27 @@ def render_contract_model_block() -> str:
             _class_diagram(request["types"], [request["root"]], members=False),
         ),
     ]
-    parts = [CONTRACT_MODEL_BEGIN, ""]
+    parts = [
+        "[Documentation home](../../DOCS.md) | [Tutorials](../../TUTORIALS/README.md) | "
+        "[Technical documentation](../README.md) | [FAQ](../../FAQ.md)",
+        "",
+        "# Session and request JSON Schema",
+        "",
+        "<!-- Generated by tools/generate_web_contracts.py from gbdraw/session_contract.py and "
+        "gbdraw/session_request_codec.py; do not edit manually. -->",
+        "",
+        f"- [`{SESSION_JSON_SCHEMA_TARGET.name}`]({SESSION_JSON_SCHEMA_TARGET.name}): a stored Session of "
+        f"any supported version ({_versions_text(versions)}).",
+        f"- [`{REQUEST_JSON_SCHEMA_TARGET.name}`]({REQUEST_JSON_SCHEMA_TARGET.name}): a canonical render "
+        f"request of schema {CANONICAL_REQUEST_SCHEMA}.",
+        "",
+        "Both are JSON Schema draft 2020-12. What gbdraw refuses outside them, and what it reads anyway, is in "
+        "[Session and request structure](../session-and-request-compatibility.md#session-and-request-structure).",
+        "",
+    ]
     for title, caption, diagram in figures:
-        parts += [f"### {title}", "", caption, "", "```mermaid", diagram, "```", ""]
-    return "\n".join([*parts, CONTRACT_MODEL_END])
-
-
-def render_contract_model_page() -> str:
-    """The compatibility page with its generated block replaced."""
-    page = CONTRACT_MODEL_PAGE.read_text(encoding="utf-8")
-    if page.count(CONTRACT_MODEL_BEGIN) != 1 or page.count(CONTRACT_MODEL_END) != 1:
-        raise RuntimeError(f"{CONTRACT_MODEL_PAGE.name} must hold one generated contract model block.")
-    head, rest = page.split(CONTRACT_MODEL_BEGIN)
-    return head + render_contract_model_block() + rest.split(CONTRACT_MODEL_END, 1)[1]
+        parts += [f"## {title}", "", caption, "", "```mermaid", diagram, "```", ""]
+    return "\n".join(parts)
 
 
 def render_builtin_color_tables_module() -> str:
@@ -850,7 +892,7 @@ def main() -> int:
         COLLINEARITY_WORDS_TARGET: render_collinearity_words_module(),
         SESSION_JSON_SCHEMA_TARGET: render_session_json_schema(),
         REQUEST_JSON_SCHEMA_TARGET: render_request_json_schema(),
-        CONTRACT_MODEL_PAGE: render_contract_model_page(),
+        SCHEMA_README_TARGET: render_schema_readme(),
     }
     if args.check:
         stale = [

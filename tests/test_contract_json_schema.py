@@ -1,9 +1,8 @@
 """The published JSON Schema files agree with the structural checker of gbdraw.contract_shapes.
 
-`tools/generate_web_contracts.py` writes docs/REFERENCE/schemas/ and the model
-diagrams of docs/REFERENCE/session-and-request-compatibility.md from the same
-descriptions; a standard validator (`jsonschema`, the `dev` extra) reads the
-schemas here.
+`tools/generate_web_contracts.py` writes docs/REFERENCE/schemas/ (the two
+schemas and their page of model diagrams) from the descriptions; a standard
+validator (`jsonschema`, the `dev` extra) reads the schemas here.
 """
 
 from __future__ import annotations
@@ -16,6 +15,9 @@ import pytest
 
 from gbdraw.contract_shapes import shape_violations
 from gbdraw.session_contract import describe_session_admission
+from gbdraw.session_io import validate_session
+from gbdraw.session_request_codec import _as_decoded_settings
+from gbdraw.exceptions import ValidationError
 from tests.test_canonical_request_shape import _stored_requests
 from tests.test_contract_shape_vectors import VECTORS as SHAPE_VECTORS
 from tests.test_session_admission_vectors import VECTORS as ADMISSION_VECTORS, _edited
@@ -29,6 +31,17 @@ ADMISSION = describe_session_admission()
 BAND_ROOT = {version: band["root"] for band in ADMISSION["bands"] for version in band["versions"]}
 # JSON Schema reads 1.0 as the integer 1, as JSON.parse does; Python's json reads a float.
 READ_AS_THE_WEB_READS = {"integral-fraction-at-an-integer"}
+# Sessions that hold a retired value, which stored_json_files() leaves out.
+RETIRED_SESSIONS = sorted((REPO_ROOT / "tests" / "retired_sessions").glob("*.gbdraw-session.json*"))
+
+
+def _sessions() -> list[tuple[str, dict[str, Any]]]:
+    found = []
+    for path in [*stored_json_files(), *RETIRED_SESSIONS]:
+        document = load_json(path)
+        if isinstance(document, dict) and document.get("format") == "gbdraw-session":
+            found.append((str(path.relative_to(REPO_ROOT)), document))
+    return found
 
 
 def _validator(schema: dict[str, Any]) -> Any:
@@ -73,7 +86,7 @@ def test_the_published_schemas_and_diagrams_are_current() -> None:
     published = {
         generator.SESSION_JSON_SCHEMA_TARGET: generator.render_session_json_schema(),
         generator.REQUEST_JSON_SCHEMA_TARGET: generator.render_request_json_schema(),
-        generator.CONTRACT_MODEL_PAGE: generator.render_contract_model_page(),
+        generator.SCHEMA_README_TARGET: generator.render_schema_readme(),
     }
     stale = [path.name for path, text in published.items() if path.read_text(encoding="utf-8") != text]
 
@@ -104,19 +117,23 @@ def test_a_request_type_vector_fits_the_request_schema_when_the_checker_reports_
 
 def test_a_stored_session_fits_the_session_schema_when_it_is_inside_its_band() -> None:
     validator = _published_validator("SESSION_JSON_SCHEMA_TARGET")
-    disagreements: list[str] = []
-    fitting = 0
-    for path in stored_json_files():
-        document = load_json(path)
-        if not isinstance(document, dict) or document.get("format") != "gbdraw-session":
-            continue
-        fits = validator.is_valid(document)
-        fitting += fits
-        if fits != _in_band(document):
-            disagreements.append(str(path.relative_to(REPO_ROOT)))
+    disagreements = [name for name, document in _sessions() if validator.is_valid(document) != _in_band(document)]
 
     assert disagreements == []
-    assert fitting >= 50
+
+
+def test_every_stored_session_python_accepts_fits_the_session_schema() -> None:
+    validator = _published_validator("SESSION_JSON_SCHEMA_TARGET")
+    accepted: list[str] = []
+    for name, document in _sessions():
+        try:
+            validate_session(document)
+        except ValidationError:
+            continue
+        accepted.append(name)
+
+    assert [name for name, document in _sessions() if name in accepted and not validator.is_valid(document)] == []
+    assert len(accepted) >= 50 and any(name.startswith("tests/retired_sessions/") for name in accepted)
 
 
 @pytest.mark.parametrize("vector", ADMISSION_VECTORS, ids=lambda vector: vector["id"])
@@ -126,15 +143,39 @@ def test_an_admission_vector_fits_the_session_schema_when_it_is_inside_its_band(
     assert _published_validator("SESSION_JSON_SCHEMA_TARGET").is_valid(document) == _in_band(document)
 
 
-def test_every_stored_request_of_the_current_schema_fits_the_request_schema() -> None:
+def test_every_stored_request_fits_the_request_schema_once_its_retired_anchor_modes_are_read() -> None:
+    """The decoder reads a retired collinearityAnchorMode before it checks the
+    description; that is the one stored form outside the schema that it reads."""
     validator = _published_validator("REQUEST_JSON_SCHEMA_TARGET")
     refused: list[str] = []
+    repaired: list[str] = []
     modes: list[str] = []
-    for path in stored_json_files():
-        for request in _stored_requests(load_json(path)):
+    for name, document in _sessions():
+        for request in _stored_requests(document):
             modes.append(request["mode"])
-            if not validator.is_valid(request):
-                refused.append(str(path.relative_to(REPO_ROOT)))
+            if not validator.is_valid(_as_decoded_settings(request)):
+                refused.append(name)
+            elif not validator.is_valid(request):
+                repaired.append(name)
 
     assert refused == []
+    assert repaired and all(name.startswith("tests/retired_sessions/") for name in repaired)
     assert modes.count("circular") >= 4 and modes.count("linear") >= 4
+
+
+def _patterns(value: object) -> list[str]:
+    if isinstance(value, dict):
+        own = [value["pattern"]] if isinstance(value.get("pattern"), str) else []
+        return own + [pattern for item in value.values() for pattern in _patterns(item)]
+    return [pattern for item in value for pattern in _patterns(item)] if isinstance(value, list) else []
+
+
+def test_a_published_pattern_names_the_characters_python_reads_as_spaces() -> None:
+    """ECMA-262, the pattern dialect of JSON Schema, reads \\s as other characters than Python."""
+    patterns = [pattern for target in ("SESSION_JSON_SCHEMA_TARGET", "REQUEST_JSON_SCHEMA_TARGET")
+                for pattern in _patterns(_published(target))]
+
+    assert patterns and not any("\\s" in pattern or "\\S" in pattern for pattern in patterns)
+    for unportable in ("[\\s,]", "^x$"):
+        with pytest.raises(ValueError):
+            _generator()._portable_pattern(unportable)
