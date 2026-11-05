@@ -99,25 +99,72 @@ const expectFailure = ({ code, profile = 'first-generate', overrides = {}, event
   assert.equal(failures.some((failure) => failure.startsWith(`${code} `)), true, failures.join('\n'));
 };
 
+const savedState = {
+  selectedResultCount: 1,
+  currentCatalog: true,
+  activeDraftCommittedDistinct: true,
+  interactiveProbePassed: true
+};
+const savedMetrics = (workerCalls, mounts) => ({
+  workerConstructionCount: workerCalls,
+  workerInitializationCount: workerCalls,
+  workerHelperCount: workerCalls,
+  previewMountAdoptionCount: mounts,
+  previewBinderInvocationCount: mounts,
+  previewReadyReceiptAcceptedCount: mounts
+});
+// A Session 27-44: its stored figure is ready before Python's conversion returns.
+const convertedLoadEvents = ['preview.ready-receipt-accepted', 'current-session-preflight-start',
+  'preview.ready-receipt-accepted'];
+
 test('accepts saved-preview, first Generate, and second Generate matrices', () => {
   assert.deepEqual(evaluateSessionRegenerationContract({
     profile: 'saved-preview',
-    metrics: {
-      workerConstructionCount: 0,
-      workerInitializationCount: 0,
-      previewMountAdoptionCount: 1,
-      previewBinderInvocationCount: 1,
-      previewReadyReceiptAcceptedCount: 1
-    },
-    state: {
-      selectedResultCount: 1,
-      currentCatalog: true,
-      activeDraftCommittedDistinct: true,
-      interactiveProbePassed: true
-    }
+    metrics: savedMetrics(0, 1),
+    state: savedState
   }), []);
   assert.deepEqual(evaluateSuccess('first-generate'), []);
   assert.deepEqual(evaluateSuccess('second-generate'), []);
+});
+
+test('a Session that Python converts at Load starts the Worker once and shows its stored figure first', () => {
+  const converted = (metrics, events = convertedLoadEvents) => evaluateSessionRegenerationContract({
+    profile: 'saved-preview', metrics, events, pythonConvertsAtLoad: true, state: savedState
+  });
+  assert.deepEqual(converted(savedMetrics(1, 2)), []);
+  assert.deepEqual(converted(savedMetrics(0, 1)), [
+    'SAVED_WORKER_CONSTRUCTION [SWC-WEB-REGEN-001] workerConstructionCount must be 1; received 0.',
+    'SAVED_WORKER_INITIALIZATION [SWC-WEB-REGEN-001] workerInitializationCount must be 1; received 0.',
+    'SAVED_WORKER_HELPER [SWC-WEB-REGEN-001] workerHelperCount must be 1; received 0.',
+    'SAVED_PREVIEW_ADOPTION [SWC-WEB-PREVIEW-001] previewMountAdoptionCount must be 2; received 1.',
+    'SAVED_PREVIEW_BINDER [SWC-WEB-PREVIEW-001] previewBinderInvocationCount must be 2; received 1.',
+    'SAVED_PREVIEW_READY [SWC-WEB-PREVIEW-001] previewReadyReceiptAcceptedCount must be 2; received 1.'
+  ]);
+  assert.deepEqual(converted(savedMetrics(1, 2), ['current-session-preflight-start', 'preview.ready-receipt-accepted']), [
+    'SAVED_STORED_FIGURE_FIRST [LIFECYCLE] preview.ready-receipt-accepted must occur before current-session-preflight-start.'
+  ]);
+  // A version 46 or later Session opens without the Worker.
+  assert.deepEqual(evaluateSessionRegenerationContract({
+    profile: 'saved-preview', metrics: savedMetrics(1, 1), state: savedState
+  }), [
+    'SAVED_WORKER_CONSTRUCTION [SWC-WEB-REGEN-001] workerConstructionCount must be 0; received 1.',
+    'SAVED_WORKER_INITIALIZATION [SWC-WEB-REGEN-001] workerInitializationCount must be 0; received 1.',
+    'SAVED_WORKER_HELPER [SWC-WEB-REGEN-001] workerHelperCount must be 0; received 1.'
+  ]);
+  // The first Generate after that Load reuses the Worker.
+  const firstAfterConversion = (workerStarts) => evaluateSessionRegenerationContract({
+    profile: 'first-generate',
+    metrics: { ...successMetrics('first-generate'), workerConstructionCount: workerStarts, workerInitializationCount: workerStarts },
+    events: successEvents('first-generate'),
+    pythonConvertsAtLoad: true,
+    resultCount: 1,
+    state: { terminalOutcome: 'success', interactiveProbePassed: true }
+  });
+  assert.deepEqual(firstAfterConversion(0), []);
+  assert.deepEqual(firstAfterConversion(1), [
+    'FIRST_WORKER_CONSTRUCTION [SWC-WEB-REGEN-001] workerConstructionCount must be 0; received 1.',
+    'FIRST_WORKER_INITIALIZATION [SWC-WEB-REGEN-001] workerInitializationCount must be 0; received 1.'
+  ]);
 });
 
 test('accepts failure-before-activation, rollback-restoration, and stale matrices', () => {
@@ -341,7 +388,7 @@ test('rejects a missing or non-finite metric instead of reading it as zero', () 
   expectFailure({ code: 'REGEN_EMPTY_SERIALIZATION', overrides: { svgSerializationCount: '0' } });
   assert.deepEqual(evaluateSessionRegenerationContract({
     profile: 'saved-preview',
-    metrics: { workerConstructionCount: 0, workerInitializationCount: 0, previewBinderInvocationCount: 1, previewReadyReceiptAcceptedCount: 1 },
+    metrics: { workerConstructionCount: 0, workerInitializationCount: 0, workerHelperCount: 0, previewBinderInvocationCount: 1, previewReadyReceiptAcceptedCount: 1 },
     state: { selectedResultCount: 1, currentCatalog: true, activeDraftCommittedDistinct: true, interactiveProbePassed: true }
   }), ['SAVED_PREVIEW_ADOPTION [SWC-WEB-PREVIEW-001] previewMountAdoptionCount was not observed; a missing metric is not read as zero.']);
 });

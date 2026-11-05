@@ -1238,7 +1238,9 @@ test.describe('Structural Contract', () => {
         await ensureDenseRegionVisible(page);
         const geometry = await readGeometry(page);
         const loadWorker = workerTotals(await getDiagramWorkerActivity(page));
-        expect(loadWorker).toEqual({ constructions: 0, initializations: 0, helpers: 0, runs: 0 });
+        // The fixture is a Session 40: Python converts it once at Load, in one
+        // helper call, and renders nothing (PD-OI-044 scenario revision 4).
+        expect(loadWorker).toEqual({ constructions: 1, initializations: 1, helpers: 1, runs: 0 });
 
         const prewarmMetricDelta = thermalState === 'warm'
           ? await prewarmHoverIndexes(page, geometry)

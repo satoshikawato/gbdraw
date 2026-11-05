@@ -32,10 +32,16 @@ const eventIndexes = (events) => {
   return indexes;
 };
 
+// `pythonConvertsAtLoad`: the Session opened is a version 27-44 one. Python
+// converts it once at Load, in one Worker helper call, and its stored figure
+// shows before that call returns; the converted Session then mounts it again,
+// and the first Generate reuses that Worker (PD-OI-044 scenario revision 4).
+// A version 46 or later Session opens without the Worker.
 const evaluateSessionRegenerationContract = ({
   profile,
   metrics = {},
   events = [],
+  pythonConvertsAtLoad = false,
   resultCount = 1,
   state = {}
 } = {}) => {
@@ -66,11 +72,17 @@ const evaluateSessionRegenerationContract = ({
   };
 
   if (profile === 'saved-preview') {
-    exact('workerConstructionCount', 0, 'SAVED_WORKER_CONSTRUCTION', 'SWC-WEB-REGEN-001');
-    exact('workerInitializationCount', 0, 'SAVED_WORKER_INITIALIZATION', 'SWC-WEB-REGEN-001');
-    exact('previewMountAdoptionCount', 1, 'SAVED_PREVIEW_ADOPTION', 'SWC-WEB-PREVIEW-001');
-    exact('previewBinderInvocationCount', 1, 'SAVED_PREVIEW_BINDER', 'SWC-WEB-PREVIEW-001');
-    exact('previewReadyReceiptAcceptedCount', 1, 'SAVED_PREVIEW_READY', 'SWC-WEB-PREVIEW-001');
+    const workerCalls = pythonConvertsAtLoad ? 1 : 0;
+    const mounts = pythonConvertsAtLoad ? 2 : 1;
+    exact('workerConstructionCount', workerCalls, 'SAVED_WORKER_CONSTRUCTION', 'SWC-WEB-REGEN-001');
+    exact('workerInitializationCount', workerCalls, 'SAVED_WORKER_INITIALIZATION', 'SWC-WEB-REGEN-001');
+    exact('workerHelperCount', workerCalls, 'SAVED_WORKER_HELPER', 'SWC-WEB-REGEN-001');
+    exact('previewMountAdoptionCount', mounts, 'SAVED_PREVIEW_ADOPTION', 'SWC-WEB-PREVIEW-001');
+    exact('previewBinderInvocationCount', mounts, 'SAVED_PREVIEW_BINDER', 'SWC-WEB-PREVIEW-001');
+    exact('previewReadyReceiptAcceptedCount', mounts, 'SAVED_PREVIEW_READY', 'SWC-WEB-PREVIEW-001');
+    if (pythonConvertsAtLoad) {
+      before('preview.ready-receipt-accepted', 'current-session-preflight-start', 'SAVED_STORED_FIGURE_FIRST');
+    }
     if (count(state.selectedResultCount) !== 1) {
       add('SAVED_SELECTED_RESULT', 'SWC-WEB-PREVIEW-001', 'Saved Session must select exactly one Result.');
     }
@@ -134,8 +146,9 @@ const evaluateSessionRegenerationContract = ({
     exact('previewPollingIterationCount', 0, 'PREVIEW_POLLING_AUTHORITY', 'SWC-WEB-PREVIEW-001');
 
     if (profile === 'first-generate') {
-      exact('workerConstructionCount', 1, 'FIRST_WORKER_CONSTRUCTION', 'SWC-WEB-REGEN-001');
-      exact('workerInitializationCount', 1, 'FIRST_WORKER_INITIALIZATION', 'SWC-WEB-REGEN-001');
+      const workerStarts = pythonConvertsAtLoad ? 0 : 1;
+      exact('workerConstructionCount', workerStarts, 'FIRST_WORKER_CONSTRUCTION', 'SWC-WEB-REGEN-001');
+      exact('workerInitializationCount', workerStarts, 'FIRST_WORKER_INITIALIZATION', 'SWC-WEB-REGEN-001');
     } else {
       exact('workerConstructionCount', 0, 'SECOND_WORKER_CONSTRUCTION', 'SWC-WEB-REGEN-001');
       exact('workerInitializationCount', 0, 'SECOND_WORKER_INITIALIZATION', 'SWC-WEB-REGEN-001');
