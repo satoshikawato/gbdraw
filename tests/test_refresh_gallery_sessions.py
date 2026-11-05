@@ -2514,3 +2514,30 @@ def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_va
 
     with pytest.raises(ValidationError, match="Current Web comparison draft requires config.linearComparisonPlan"):
         _validate_staged_gallery_session(tmp_path / "no-plan.gbdraw-session.json", session)
+
+
+def test_publication_bridge_writes_a_gz_session_through_the_python_session_writer(
+    tmp_path: Path,
+) -> None:
+    """The Node bridge hands its JSON to ``write_serialized_session``; it compresses nothing itself."""
+
+    import io
+    import os
+
+    from gbdraw.io.rsyncable_gzip import MIN_CHUNK, RsyncableGzipWriter
+
+    output = tmp_path / "prepared.gbdraw-session.json.gz"
+    refresh_gallery_sessions_module._run_publication_bridge(
+        "prepare",
+        _session_path("HmmtDNA_basic_circular"),
+        output,
+        env=dict(os.environ),
+    )
+    compressed = output.read_bytes()
+    expected = io.BytesIO()
+    with RsyncableGzipWriter(expected) as writer:
+        writer.write(gzip.decompress(compressed))
+
+    # Long enough for content-defined cuts, where the two writers' bytes would differ.
+    assert len(gzip.decompress(compressed)) > 3 * MIN_CHUNK
+    assert compressed == expected.getvalue()

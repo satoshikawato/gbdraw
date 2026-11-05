@@ -9,7 +9,6 @@ import base64
 import binascii
 import copy
 import csv
-import gzip
 import hashlib
 import io
 import json
@@ -17,6 +16,8 @@ import math
 import os
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -28,7 +29,6 @@ from typing import (
     MutableMapping,
     NoReturn,
     Sequence,
-    TextIO,
     TypedDict,
     TypeGuard,
     cast,
@@ -64,6 +64,7 @@ from .core.numeric import (
 )
 from .config.models.root import read_stored_font_size
 from .io.input_text import GZIP_ERRORS, open_input_text
+from .io.rsyncable_gzip import RsyncableGzipWriter
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
@@ -5847,6 +5848,49 @@ def _write_validated_session_json(
     """
 
     serialized_payload = compact_session_feature_catalog(expanded_payload)
+    with _staged_session_file(path, overwrite=overwrite) as output:
+        if isinstance(output, RsyncableGzipWriter):
+            # Streamed, so the JSON text is never held whole; the gzip bytes do
+            # not depend on the write chunks.
+            with io.TextIOWrapper(output, encoding="utf-8") as text_file:
+                json.dump(
+                    serialized_payload,
+                    text_file,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+        else:
+            # json.dumps encodes in C at once; json.dump encodes in Python.
+            output.write(
+                json.dumps(
+                    serialized_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+
+
+def write_serialized_session(path: str | Path, data: bytes, *, overwrite: bool = True) -> None:
+    """Write Session JSON text that is serialized already, unchanged, as ``path``.
+
+    It is not validated. The Gallery tools write the Sessions they edit and the
+    Web publication serializes through it, so they are compressed as the CLI's.
+    """
+
+    with _staged_session_file(path, overwrite=overwrite) as output:
+        output.write(data)
+
+
+@contextmanager
+def _staged_session_file(path: str | Path, *, overwrite: bool) -> Iterator[io.BufferedIOBase]:
+    """The one stream every Session file is written to.
+
+    A name that ends in ``.gz`` gets rsyncable gzip (``gbdraw.io.rsyncable_gzip``),
+    so a regenerated Session shares most compressed bytes with its previous
+    version; any other name gets the bytes as written. The file is staged in the
+    same directory and becomes ``path`` only when the block ends without an error.
+    """
+
     output_path = Path(path)
     temp_path: Path | None = None
     temp_fd: int | None = None
@@ -5858,42 +5902,16 @@ def _write_validated_session_json(
             dir=output_path.parent,
         )
         temp_path = Path(temp_name)
-        text_file: TextIO
-        if output_path.suffix.lower() == ".gz":
-            raw_file = os.fdopen(temp_fd, "wb")
-            temp_fd = None
-            with raw_file:
-                with gzip.GzipFile(
-                    filename="",
-                    mode="wb",
-                    fileobj=raw_file,
-                    compresslevel=6,
-                    mtime=0,
-                ) as compressed_file:
-                    # Streamed: the gzip bytes depend on the write chunks.
-                    with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
-                        json.dump(
-                            serialized_payload,
-                            text_file,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        )
-                raw_file.flush()
-                os.fsync(raw_file.fileno())
-        else:
-            text_file = os.fdopen(temp_fd, "w", encoding="utf-8")
-            temp_fd = None
-            with text_file:
-                # json.dumps encodes in C at once; json.dump encodes in Python.
-                text_file.write(
-                    json.dumps(
-                        serialized_payload,
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    )
-                )
-                text_file.flush()
-                os.fsync(text_file.fileno())
+        raw_file = os.fdopen(temp_fd, "wb")
+        temp_fd = None
+        with raw_file:
+            if output_path.suffix.lower() == ".gz":
+                with RsyncableGzipWriter(raw_file) as compressed_file:
+                    yield compressed_file
+            else:
+                yield raw_file
+            raw_file.flush()
+            os.fsync(raw_file.fileno())
         commit_staged_output_file(
             temp_path,
             output_path,
@@ -7644,5 +7662,6 @@ __all__ = [
     "validate_session",
     "validate_current_session_artifacts",
     "validate_current_web_state_field_names",
+    "write_serialized_session",
     "write_session_json",
 ]

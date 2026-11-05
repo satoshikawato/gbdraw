@@ -3,8 +3,9 @@
 import { spawn } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-comparisons.js';
 import {
   createGallerySessionPublication, galleryPublicationDocument, galleryPublicationView
@@ -20,9 +21,10 @@ import {
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-// The publication's draft split is Python's `split_draft_into_modes`
-// (gbdraw/session_io.py). `tools/refresh_gallery_sessions.py` names its own
-// interpreter in PYTHON.
+// The publication's draft split is Python's `split_draft_into_modes`, and its
+// Session files are written by Python's `write_serialized_session` (both in
+// gbdraw/session_io.py), so a `.gz` Session is compressed as the CLI's.
+// `tools/refresh_gallery_sessions.py` names its own interpreter in PYTHON.
 const SPLIT_DRAFT = `
 import json, sys
 from gbdraw.session_io import split_draft_into_modes
@@ -34,10 +36,22 @@ json.dump(split_draft_into_modes(
     palette_colors=context['paletteColors'],
 ), sys.stdout)
 `;
+const WRITE_SESSION = `
+import sys
+from gbdraw.session_io import write_serialized_session
+write_serialized_session(sys.argv[1], sys.stdin.buffer.read())
+`;
 
-/** @type {import('../gbdraw/web/js/services/gallery-session-publication.js').PublicationDraftSplit} */
-const pythonDraftSplit = (draft, context) => new Promise((resolve, reject) => {
-  const child = spawn(process.env.PYTHON || 'python', ['-c', SPLIT_DRAFT], {
+/**
+ * Run Python `source` with `args` and `input` on its standard input.
+ * @param {string} task what the code does, for the error
+ * @param {string} source
+ * @param {string[]} args
+ * @param {string} input
+ * @returns {Promise<string>} its standard output
+ */
+const runPython = (task, source, args, input) => new Promise((resolve, reject) => {
+  const child = spawn(process.env.PYTHON || 'python', ['-c', source, ...args], {
     cwd: REPO_ROOT,
     stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -47,11 +61,16 @@ const pythonDraftSplit = (draft, context) => new Promise((resolve, reject) => {
   child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
   child.on('error', reject);
   child.on('close', (code) => {
-    if (code === 0) resolve(JSON.parse(stdout));
-    else reject(new Error(`Python's draft split failed (exit ${code}):\n${stderr}`));
+    if (code === 0) resolve(stdout);
+    else reject(new Error(`Python's ${task} failed (exit ${code}):\n${stderr}`));
   });
-  child.stdin.end(JSON.stringify({ draft, context }));
+  child.stdin.end(input);
 });
+
+/** @type {import('../gbdraw/web/js/services/gallery-session-publication.js').PublicationDraftSplit} */
+const pythonDraftSplit = async (draft, context) => JSON.parse(
+  await runPython('draft split', SPLIT_DRAFT, [], JSON.stringify({ draft, context }))
+);
 
 const {
   finalizeGallerySessionPublication,
@@ -78,13 +97,7 @@ const readSession = async (path) => {
 };
 
 const writeSession = async (path, session) => {
-  const payload = Buffer.from(JSON.stringify(session), 'utf8');
-  await writeFile(
-    path,
-    path.toLowerCase().endsWith('.gz')
-      ? gzipSync(payload, { level: 6, mtime: 0 })
-      : payload
-  );
+  await runPython('Session write', WRITE_SESSION, [resolvePath(path)], JSON.stringify(session));
 };
 
 const safeReport = (session, equivalence) => ({
