@@ -90,13 +90,12 @@ const expectPopupClear = async (page) => {
 };
 
 /**
- * Toggles Select region on after a Generate; Layout edit turns off. The figure is fitted to the preview first, so
- * every point of the drags is on the screen.
+ * Fits the figure to the preview. The fit animates the preview transform, so screen points are read once it has
+ * settled.
  * @param {import('@playwright/test').Page} page
  */
-const turnOn = async (page) => {
+const fitToPreview = async (page) => {
   await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
-  // The fit animates the preview transform: the points are read once it has settled.
   let last = '';
   await expect.poll(async () => {
     const now = await page.evaluate(() => JSON.stringify(document.querySelector('.gbdraw-preview-surface').getBoundingClientRect()));
@@ -104,6 +103,15 @@ const turnOn = async (page) => {
     last = now;
     return settled;
   }, { intervals: [250] }).toBe(true);
+};
+
+/**
+ * Toggles Select region on after a Generate; Layout edit turns off. The figure is fitted to the preview first, so
+ * every point of the drags is on the screen.
+ * @param {import('@playwright/test').Page} page
+ */
+const turnOn = async (page) => {
+  await fitToPreview(page);
   const toggle = page.locator('[data-region-select-toggle]');
   await expect(toggle).toBeEnabled();
   await toggle.click();
@@ -294,7 +302,7 @@ test('Circular: Shift+click selects the features between two features along the 
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'ARC1.gbk', mimeType: 'text/plain', buffer: Buffer.from(arcGenbank()) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
   await generateAndWaitForResult(page);
-  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  await fitToPreview(page);
   // A feature by its record start (0-based): f1 100, f2 400, f3 700, f4 1,000.
   const centre = (start) => page.evaluate((from) => {
     const feature = window.__GBDRAW_APP__.extractedFeatures.find((entry) => Number(entry.start) === from);
