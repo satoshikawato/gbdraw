@@ -70,6 +70,7 @@ import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFoc
 import { createRegionDrawing } from './region-drawing.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords } from '../services/region-axis.js';
+import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -7852,7 +7853,13 @@ export const createAppSetup = () => {
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
     addRegionAnnotation: annotationEditor.addRegionAnnotation,
-    newDrawingFromRegion: regionDrawings.openWithRegion
+    newDrawingFromRegion: regionDrawings.openWithRegion,
+    // Python reads the bases from the committed request, the one the shown Result was made from.
+    readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
+      getCommittedCanonicalSession(), [{ recordKey, start, end }],
+      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+    )).fasta
   });
   return {
     hostedBuild: readHostedBuild(document),

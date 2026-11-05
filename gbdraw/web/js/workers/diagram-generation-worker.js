@@ -1080,6 +1080,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Copy FASTA of Select region: Python slices the records of the request the shown Result was made from.
+  [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: {
+    keys: ['canonicalRequest', 'spans'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_record_span_sequences_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.spans, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],

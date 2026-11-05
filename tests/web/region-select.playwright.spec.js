@@ -161,6 +161,26 @@ test('Circular: a span across the origin leaves New drawing from region disabled
     await expect(page.locator('[data-preview-item-subtitle]')).toHaveText('16,001-501 (1,070 bp)');
     await expect(popup.locator('[data-region-new-drawing]')).toBeDisabled();
     await expect(popup.locator('[data-region-new-drawing-reason]')).toHaveText('A region that crosses the origin cannot be drawn on its own.');
+
+    // Copy FASTA: the popup started no Python; the click asks Python for the bases on the source strand.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+    await page.evaluate(() => {
+      const hooks = window.__GBDRAW_TEST_HOOKS__;
+      const metric = hooks.onStructuralMetric;
+      window.__SPAN_READS__ = 0;
+      hooks.onStructuralMetric = (event) => {
+        metric?.(event);
+        if (event.name === 'diagramHelperRequest' && event.operation === 'readRecordSpanSequences') window.__SPAN_READS__ += 1;
+      };
+    });
+    await popup.locator('[data-region-copy-fasta]').click();
+    await expect(popup.locator('[data-region-copy-status]')).toHaveText('Copied FASTA');
+    expect(await page.evaluate(() => window.__SPAN_READS__)).toBe(1);
+    const fasta = await page.evaluate(() => navigator.clipboard.readText());
+    const [header, ...lines] = fasta.trim().split('\n');
+    expect(header).toBe('>NC_012920.1:16001-501');
+    expect(lines.join('')).toMatch(/^[ACGTN]{1070}$/);
+    expect(lines.slice(0, -1).every((line) => line.length === 60)).toBe(true);
     await popup.locator('[data-region-add-annotation]').click();
     expect(await regionRows(page)).toEqual([expect.objectContaining({
       target: expect.objectContaining({ start: 16_001, end: 501, wrapsOrigin: true })

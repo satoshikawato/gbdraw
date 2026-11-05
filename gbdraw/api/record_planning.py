@@ -197,6 +197,12 @@ class ResolvedRecordProvenance:
         return Path(self.source_paths[0]).name if self.source_paths else "in-memory record"
 
     @property
+    def is_circular(self) -> bool:
+        """Whether the record is drawn as circular: its display option, else its detected topology."""
+        display = self.resolved_display
+        return display.is_circular if display is not None else self.detected_topology == "circular"
+
+    @property
     def source_feature_catalog(self) -> tuple[SourceFeatureIdentity, ...]:
         """The identities of the original source's features, built on first read."""
         return self.source_features.entries

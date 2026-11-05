@@ -12,6 +12,9 @@ import {
   axisPosition, circularDragSpan, featureParts, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
   regionBandPath, regionSpanText, sourceSpanOf
 } from '../services/region-axis.js';
+import { copyPendingTextToClipboard } from '../utils/clipboard.js';
+import { normalizeCaughtError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
 import { holdTextSelection } from '../utils/gesture-text-selection.js';
 import { isClickAtPress } from '../utils/popup-bounds.js';
 import { computed, reactive, ref, shallowRef } from '../utils/reactivity.js';
@@ -43,6 +46,8 @@ const BAND_SLACK_PX = 6;
  * @property {(featureIds: readonly string[]) => void} selectFeatures The feature selection owner's selection by id.
  * @property {(region: RegionTarget) => unknown} addRegionAnnotation The annotation owner's "Region N" row.
  * @property {(region: RegionTarget) => Promise<unknown>} newDrawingFromRegion The region drawing owner's derivation.
+ * @property {(region: RegionTarget) => Promise<string>} readRegionFasta The FASTA text of the region, which Python
+ *   reads from the request the shown Result was made from (a Worker helper, started by Copy FASTA only).
  */
 
 /** @param {RegionSelection} selection @returns {RegionTarget} */
@@ -61,7 +66,7 @@ const dragSpan = (axis, start, current, sweep) => (axis.kind === 'circular'
  */
 export const createRegionSelect = ({
   readAxisRecords, shownRoot, layoutEdit, openSelection, openRegionPopup, closeRegionPopup, drawnFeatures,
-  selectFeatures, addRegionAnnotation, newDrawingFromRegion
+  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta
 }) => {
   const on = ref(false);
   /** Whether the shown Result has an axis to select on (one predicate for the toggle and the gesture). */
@@ -289,6 +294,11 @@ export const createRegionSelect = ({
     });
   };
 
+  /** Copy FASTA of the open selection: busy while Python reads the bases, then copied or the failure's text. */
+  const copy = reactive({
+    /** @type {RegionSelection | null} */ selection: null, busy: false, status: '', failed: false
+  });
+
   /** The Region popup's body: the feature count and the actions. */
   const popup = computed(() => {
     const chosen = openSelection();
@@ -298,7 +308,11 @@ export const createRegionSelect = ({
       featureCount: featureIds.length,
       featureText: tn(featureIds.length, '{count} feature', '{count} features'),
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
-      newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : ''
+      newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
+      // The Copy FASTA state of this selection only.
+      copying: copy.selection === chosen && copy.busy,
+      copyStatus: copy.selection === chosen ? copy.status : '',
+      copyFailed: copy.selection === chosen && copy.failed
     };
   });
 
@@ -321,10 +335,31 @@ export const createRegionSelect = ({
     return outcome;
   };
 
+  /**
+   * Copy FASTA: Python reads the region's bases on the source strand; the clipboard write starts with the click, so it
+   * is allowed when the bases arrive.
+   */
+  const copyFasta = async () => {
+    const chosen = openSelection();
+    if (!chosen || (copy.selection === chosen && copy.busy)) return false;
+    Object.assign(copy, { selection: chosen, busy: true, status: '', failed: false });
+    try {
+      await copyPendingTextToClipboard(readRegionFasta(targetOf(chosen)));
+      if (copy.selection === chosen) Object.assign(copy, { busy: false, status: t('Copied FASTA'), failed: false });
+      return true;
+    } catch (error) {
+      if (copy.selection === chosen) {
+        const failure = normalizeCaughtError(error, { operation: 'readRecordSpanSequences', stage: 'helper' });
+        Object.assign(copy, { busy: false, status: errorText(failure.summaryParts), failed: true });
+      }
+      return false;
+    }
+  };
+
   return {
     on, available, active, toggle, toggleLayoutEdit,
     pointerDown, pointerMove, pointerUp, pointerCancel,
     overlay, overlayMatrix, bindOverlay, bindBand, popup,
-    selectFeaturesInside, addToAnnotationSet, newDrawing
+    selectFeaturesInside, addToAnnotationSet, newDrawing, copyFasta
   };
 };

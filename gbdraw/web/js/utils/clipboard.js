@@ -25,3 +25,26 @@ export const copyTextToClipboard = async (text) => {
     textarea.remove();
   }
 };
+
+/**
+ * Copies text that an asynchronous call makes. A click allows a clipboard write only while it is current, so the
+ * write starts at once with a `ClipboardItem` that waits for the text; without one (or when that write is refused),
+ * the text is copied once it is ready. A failure of the call itself is the caller's to report.
+ * @param {Promise<string>} pending
+ * @returns {Promise<string>} The copied text.
+ */
+export const copyPendingTextToClipboard = async (pending) => {
+  const Item = globalThis.ClipboardItem;
+  if (globalThis.isSecureContext && Item && navigator.clipboard?.write) {
+    const blob = pending.then((text) => new Blob([text], { type: 'text/plain' }));
+    try {
+      await navigator.clipboard.write([new Item({ 'text/plain': blob })]);
+      return await pending;
+    } catch {
+      // The call's own failure is thrown below; a refused write falls back to plain text.
+    }
+  }
+  const text = await pending;
+  await copyTextToClipboard(text);
+  return text;
+};

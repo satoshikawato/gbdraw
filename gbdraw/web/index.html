@@ -7531,8 +7531,12 @@
                                                 :disabled="!drawingSwitchAvailable || !!regionPopup.newDrawingReason"
                                                 :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
                                                 @click="regionSelect.newDrawing()">{{ t('New drawing from region') }}</button>
+                                        <button type="button" class="match-link" data-history-ignore data-region-copy-fasta
+                                                :disabled="regionPopup.copying" :aria-busy="regionPopup.copying ? 'true' : 'false'"
+                                                @click="regionSelect.copyFasta()">{{ regionPopup.copying ? t('Copying FASTA…') : t('Copy FASTA') }}</button>
                                     </div>
                                     <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="match-muted" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
+                                    <p v-if="regionPopup.copyStatus" :class="regionPopup.copyFailed ? 'text-xs text-red-700' : 'match-muted'" role="status" data-region-copy-status>{{ regionPopup.copyStatus }}</p>
                                 </div>
                                 <p v-else class="match-muted">{{ t('This item is no longer in the diagram.') }}</p>
                             </template>
