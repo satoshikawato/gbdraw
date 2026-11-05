@@ -59,7 +59,7 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
-import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves } from './legend-draft-rows.js';
+import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendKeysOfResults } from './legend-draft-rows.js';
 /** @import { LegendEditConfigLeaves } from './legend-draft-rows.js' */
 import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
@@ -406,10 +406,12 @@ const requestDrawingMode = (drawing) => {
  * @typedef {RequestLabelState & {
  *   paletteDefinitions: ExportRef<Record<string, Record<string, string>>>,
  *   canonicalPublicationFiles?: Partial<Record<'d_color' | 't_color' | 'whitelist' | 'qualifier_priority', ResourceEntry | null>>,
- *   originalLegendOrder?: ExportRef<readonly string[]>
+ *   originalLegendOrder?: ExportRef<readonly string[]>,
+ *   results?: ExportRef<readonly { content?: unknown }[]>
  * }} RequestTableState
- *   `originalLegendOrder`: the shown Result's generated Legend inventory (Python's keys), by which the request names
- *   the Legend rows Python draws; a state rebuilt without a Result (a Gallery publication) has none.
+ *   `originalLegendOrder`: the shown Result's generated Legend inventory (Python's keys); `results`: the shown
+ *   drawing's Results. By both the request names the Legend rows Python draws; a state rebuilt without a Result (a
+ *   Gallery publication) has neither.
  */
 /**
  * What the request reads of `state` (state.js), or of the state a Gallery
@@ -2940,20 +2942,27 @@ export const requestLabelProjection = (state, drawing) => {
 
 /**
  * The config leaves of the drawing's Legend row edits and canvas padding (`legendEditConfigLeaves`): the one
- * projection Generate's request and the automatic rerender's write (issue #1427). The drawing is the shown one,
- * whose Result's inventory names Python's rows. The drawing view a Gallery publication rebuilds holds no paint or
- * canvas slice, and sends none of these leaves.
+ * projection Generate's request and the automatic rerender's write (issue #1427). The drawing is the shown one.
+ * Python's rows are those of the shown Result's inventory and those Python drew in every Result of the drawing, so
+ * the leaves do not depend on which Result of a batch is shown (review S1, D-58). The drawing view a Gallery
+ * publication rebuilds holds no paint or canvas slice, and sends none of these leaves.
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @returns {LegendEditConfigLeaves}
  */
-export const requestLegendEditLeaves = (state, drawing) => (drawing.slices ? legendEditConfigLeaves({
-  legendEntries: drawing.legendEntries.value,
-  deletedLegendEntries: drawing.deletedLegendEntries.value,
-  originalLegendOrder: state.originalLegendOrder ? state.originalLegendOrder.value : [],
-  rules: drawing.manualSpecificRules,
-  canvasPadding: drawing.canvasPadding
-}) : {});
+export const requestLegendEditLeaves = (state, drawing) => {
+  if (!drawing.slices) return {};
+  const inventory = state.originalLegendOrder ? state.originalLegendOrder.value : [];
+  const contents = (state.results ? state.results.value : []).flatMap(({ content }) => (typeof content === 'string' ? [content] : []));
+  return legendEditConfigLeaves({
+    legendEntries: drawing.legendEntries.value,
+    deletedLegendEntries: drawing.deletedLegendEntries.value,
+    originalLegendOrder: inventory,
+    pythonRowKeys: [...new Set([...inventory, ...pythonLegendKeysOfResults(contents)])],
+    rules: drawing.manualSpecificRules,
+    canvasPadding: drawing.canvasPadding
+  });
+};
 
 /**
  * @param {RequestTableState} state

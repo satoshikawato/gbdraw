@@ -11,8 +11,8 @@ import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
-const { legendEditConfigLeaves, readLegendEditLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
-const { managedConfigOverridePathsForMode } = await import('../../gbdraw/web/js/services/session-request.js');
+const { legendEditConfigLeaves, pythonLegendKeysOfResults, readLegendEditLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { managedConfigOverridePathsForMode, requestLegendEditLeaves } = await import('../../gbdraw/web/js/services/session-request.js');
 const { applyCanvasToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createLegendLayoutActions } = await import('../../gbdraw/web/js/app/legend/layout-actions.js');
 const { CANVAS_SLICE, setCanvasPaddingSide } = await import('../../gbdraw/web/js/services/drawing/canvas.js');
@@ -20,7 +20,8 @@ const { CANVAS_SLICE, setCanvasPaddingSide } = await import('../../gbdraw/web/js
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
 const leavesOf = (draft) => legendEditConfigLeaves({
-  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], canvasPadding: NO_PADDING, ...draft
+  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], canvasPadding: NO_PADDING,
+  pythonRowKeys: draft.originalLegendOrder ?? [], ...draft
 });
 
 test('a drawing without Legend edits or padding writes no leaf', () => {
@@ -149,6 +150,32 @@ test('D-36: a Legend whose rows are all hidden lays out as an empty box, not nul
   const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
   await actions.prepareLegendLayout();
   assert.deepEqual(actions.layOutLegend(svg), { minX: 0, minY: 0, maxX: 0, maxY: 0 });
+});
+
+// Review S1 (D-58): the leaves do not depend on which Result of a Circular batch is shown. Result B draws tRNA,
+// Result A does not; tRNA deleted while B was shown stays hidden in the request built while A is shown, from the
+// rows Python drew in every Result. An editor row, which no Result's Python rows hold, stays the Web's.
+test('D-58: a row deleted on one Result of a batch stays hidden in the request while another Result is shown', () => {
+  const resultB = galleryRoot('HmmtDNA_basic_circular');
+  const resultA = galleryRoot('HmmtDNA_basic_circular');
+  // A draws no tRNA row: the editor's own row stands where B's tRNA row is.
+  resultA.querySelectorAll('g[data-legend-key="tRNA"]').forEach((element) => {
+    element.setAttribute('data-legend-key', 'Added row');
+    element.setAttribute('data-legend-owner', 'direct-editor');
+  });
+  const contents = [resultA, resultB].map((svg) => new XMLSerializer().serializeToString(svg));
+  const keysOfA = ['CDS', 'rRNA', 'GC content', 'GC skew (+)', 'GC skew (-)'];
+  const state = { originalLegendOrder: { value: keysOfA }, results: { value: contents.map((content) => ({ content })) } };
+  const drawing = {
+    slices: {},
+    legendEntries: { value: keysOfA.map((key) => row(key)) },
+    deletedLegendEntries: { value: [row('tRNA'), row('Added row')] },
+    manualSpecificRules: [],
+    canvasPadding: NO_PADDING
+  };
+  assert.deepEqual(requestLegendEditLeaves(state, drawing), { 'objects.legends.hidden_rows': ['tRNA'] });
+  // The keys Python drew in each Result, the editor's rows left out.
+  assert.deepEqual(pythonLegendKeysOfResults(contents).sort(), ['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)', 'rRNA', 'tRNA']);
 });
 
 // Load reads the leaves of a stored request once (`readLegendEditLeaves`): a Web request's overrides, else a CLI or

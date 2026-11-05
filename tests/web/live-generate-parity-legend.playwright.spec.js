@@ -2416,9 +2416,20 @@ const deleteEveryRow = async (page, { sized, renders }) => {
     await settleLive(page);
   }
 };
+// Review S5: a featureless row (GC content) is renamed through `objects.legends.row_names`, not color rules. The
+// Legend tab's name field records the rename as one History step (D-52); the rule commit of a feature type row
+// records its own.
+const GC_RENAME = ['GC content', 'GC percent'];
+const FEATURELESS_RENAME = ['rename of a featureless row', (page) => evaluateWithRetainedPromise(page, ([from, to]) => (
+  window.__GBDRAW_HISTORY__.runUndoable('Rename legend item', () => {
+    const app = window.__GBDRAW_APP__;
+    return app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === from), to);
+  })
+), GC_RENAME), { rowName: GC_RENAME }];
 const LEGEND_FIT_JOURNEY = {
   circular: [
     ['rename', (page) => renameRow(page, 'CDS', 'Coding sequences')],
+    FEATURELESS_RENAME,
     // A color rule that adds a row asks for the automatic rerender itself, also on Auto; a sized figure is fitted by
     // that one rerender.
     ['color rule that adds a Legend row', (page) => addColorRule(page, ALPHA_ROW), { autoRenders: 1 }],
@@ -2431,6 +2442,7 @@ const LEGEND_FIT_JOURNEY = {
   ],
   linear: [
     ['rename', (page) => renameRow(page, 'CDS', 'Coding sequences')],
+    FEATURELESS_RENAME,
     ['Move', (page) => legendAction(page, 'Move legend item', 'moveLegendEntry', 0, 1)],
     ['Sort by default', (page) => legendAction(page, 'Sort legend', 'sortLegendEntriesByDefault')],
     ['Sort Z-A', (page) => legendAction(page, 'Sort legend', 'sortLegendEntries', 'desc')],
@@ -2445,6 +2457,11 @@ for (const mode of ['circular', 'linear']) {
     test(`Legend row edits and Canvas padding reach Python: live equals Generate (${mode}, Figure width ${size})`, async ({ page }) => {
       test.setTimeout(600_000);
       await open(page, { mode, results: 'single', reflow: 'off' });
+      if (mode === 'linear') {
+        // The featureless row the journey renames: Linear draws no GC content track by default.
+        await page.evaluate(() => { window.__GBDRAW_APP__.form.show_gc = true; });
+        if (!sized) await generate(page);
+      }
       const requested = sized ? Number.parseFloat(size) * MM_PX : null;
       if (sized) {
         await page.evaluate((width) => { window.__GBDRAW_APP__.form.figure_width = width; }, size);
@@ -2465,7 +2482,7 @@ for (const mode of ['circular', 'linear']) {
         expect(placeDifferences(live, generated), `${label}: the figure size and the Legend row places equal Generate's`).toEqual([]);
         return { live, generated };
       };
-      for (const [label, edit, { autoRenders = 0 } = {}] of LEGEND_FIT_JOURNEY[mode]) {
+      for (const [label, edit, { autoRenders = 0, rowName = null } = {}] of LEGEND_FIT_JOURNEY[mode]) {
         const before = await renders();
         await edit(page);
         const expected = sized ? 1 : autoRenders;
@@ -2473,6 +2490,11 @@ for (const mode of ['circular', 'linear']) {
         await settleLive(page);
         expect(await renders(), sized ? `${label}: one refit` : `${label}: the rerenders of an Auto figure`).toBe(before + expected);
         await check(label);
+        if (rowName) {
+          const names = await page.evaluate(async () => (await import('./js/services/config.js'))
+            .getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['objects.legends.row_names'] ?? null);
+          expect(names, `${label}: the request names the row by its key`).toContainEqual(rowName);
+        }
       }
       const shownBefore = await legendPlaces(page);
       await deleteEveryRow(page, { sized, renders });

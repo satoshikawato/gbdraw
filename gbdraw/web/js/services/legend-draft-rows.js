@@ -118,21 +118,38 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
  */
 
 /**
- * The draft a request projects into `LegendEditConfigLeaves`.
- * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], canvasPadding: Readonly<CanvasPadding> }} LegendEditDraft
+ * The draft a request projects into `LegendEditConfigLeaves`. `pythonRowKeys`: the keys of the rows Python drew, by
+ * which a row is Python's and not the editor's; `originalLegendOrder` stays the shown Result's inventory, by which an
+ * order is edited.
+ * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], canvasPadding: Readonly<CanvasPadding>,
+ *   pythonRowKeys: readonly string[] }} LegendEditDraft
  */
+
+/**
+ * The keys of the Legend rows Python drew in each Result (`resultLegendRows`; the editor's own rows left out): the
+ * rows of every Result of a drawing, which a request names whichever Result is shown (review S1, D-58).
+ * @param {readonly string[]} contents The Results' SVG text.
+ * @param {typeof DOMParser} [parser]
+ * @returns {PythonLegendKey[]}
+ */
+export const pythonLegendKeysOfResults = (contents, parser = globalThis.DOMParser) => [...new Set(contents.flatMap((content) => {
+  const root = new parser().parseFromString(content, 'image/svg+xml').documentElement;
+  // An `image/svg+xml` document's root element is the Result's `<svg>`.
+  const svg = root.localName === 'svg' ? /** @type {SVGSVGElement} */ (/** @type {Element} */ (root)) : null;
+  return (resultLegendRows(svg) ?? []).filter((row) => !row.editor).map((row) => row.key);
+}))];
 
 /**
  * The one projection of a drawing's Legend row edits and canvas padding into the config leaves Python draws them
  * from (Generate's request and the automatic rerender's). A row is named by its Python key (`originalCaption`),
- * never by its caption. Only rows the shown Result's inventory holds are Python's: an editor row stays the Web's.
+ * never by its caption. Only rows Python drew (`pythonRowKeys`) are Python's: an editor row stays the Web's.
  * A rule's row is renamed through its rule's caption, which the color table carries, so its name is not sent. The
  * canvas padding is sent as the slice holds it (R7): its writer keeps only sides the canvas draws (D-59).
  * @param {LegendEditDraft} draft
  * @returns {LegendEditConfigLeaves}
  */
-export const legendEditConfigLeaves = ({ rules, canvasPadding, ...legend }) => {
-  const rows = draftLegendRows(legend);
+export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ...legend }) => {
+  const rows = draftLegendRows({ ...legend, originalLegendOrder: pythonRowKeys });
   const ruleRowOf = ruleLegendCaptions({
     rules: [...rules], pythonRows: new Map(), features: [], originalLegendOrder: [...rows.originalCaptions]
   });
@@ -176,7 +193,9 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLe
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
   return JSON.stringify([legendEditConfigLeaves({
-    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder
+    // A step edits rows of the shown Result: its inventory names Python's rows.
+    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder,
+    pythonRowKeys: originalLegendOrder
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);
 };
 
