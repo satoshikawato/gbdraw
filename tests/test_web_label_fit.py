@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -653,6 +654,13 @@ def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_fi
             assert label_fit_row(drawings["gone"], row.kind) == label_fit_row(drawings["kept"], row.kind)
 
 
+# The OV-732 tests pin that rows compute without the input files, not how fast, so their searches have no
+# bound. A bounded search starts a verification only while one more first-pass assembly fits before the bound
+# (CircularLabelFitSearch), and the first assembly of the same figure took 4 s to over 30 s from run to run.
+# The bound itself is pinned by test_a_web_row_stops_at_its_bound_and_says_no_value_was_found.
+NO_ROW_BOUND = math.inf
+
+
 def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_with_it(tmp_path) -> None:
     """OV-732: the Web deletes the staged files after Generate; "Choose a fix" rows still compute."""
 
@@ -667,7 +675,7 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
     ).to_dict())
-    searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
+    searches = {name: LabelFitRowSearches(row_search_seconds=NO_ROW_BOUND) for name in ("kept", "gone")}
     entries = {}
     for name, search in searches.items():
         (entries[name],) = _web_render(document, tmp_path / name, search)["metadata"]["labelFitReports"]
@@ -749,7 +757,7 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
     ).to_dict())
-    searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
+    searches = {name: LabelFitRowSearches(row_search_seconds=NO_ROW_BOUND) for name in ("kept", "gone")}
     entries = {}
     for name, search in searches.items():
         (entries[name],) = _web_render(document, tmp_path / name, search)["metadata"]["labelFitReports"]
