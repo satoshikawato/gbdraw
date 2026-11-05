@@ -3,8 +3,8 @@
 The API builds them for each record (``gbdraw.api.diagram``): the record and
 its data frames, the requested track slots and region annotations, and how the
 record's definition is presented. ``CircularPlannedTracks`` is what annotation
-planning makes of the track inputs; the drawing reads the planned slots and
-annotations, never the requested ones.
+planning makes of the track inputs; the drawing reads only it, never the
+requested slots.
 """
 
 from __future__ import annotations
@@ -63,11 +63,18 @@ class CircularTrackInputs:
 
 
 class CircularPlannedTracks(NamedTuple):
-    """The slots, annotations and annotation track layouts that annotation planning made for one record."""
+    """What annotation planning made of one record's track inputs, and what the drawing reads of them.
+
+    ``slots``, ``annotations`` and ``annotation_track_layouts`` are the
+    planned ones; ``circular_track_axis_index`` and ``annotation_record_index``
+    are the track inputs' (``CircularTrackInputs``).
+    """
 
     slots: list[CircularTrackSlot] | None
     annotations: ResolvedAnnotationBundle
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack]
+    circular_track_axis_index: int | None
+    annotation_record_index: int
 
 
 @dataclass(frozen=True, slots=True)

@@ -798,7 +798,6 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
 
 
 __all__ = [
-    "CompositionInputs",
     "CompositionItem",
     "CompositionPlacement",
     "CompositionPlan",

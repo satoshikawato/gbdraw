@@ -280,11 +280,9 @@ def plan_circular_annotation_slots(
 
 def _prepare_circular_annotation_tracks(
     gb_record: SeqRecord,
-    annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
-    slots: list[CircularTrackSlot] | None,
+    tracks: CircularTrackInputs,
     *,
     canvas_config: CircularCanvasConfigurator,
-    record_index: int,
     show_ticks: bool,
     show_depth: bool,
     show_gc: bool,
@@ -292,10 +290,11 @@ def _prepare_circular_annotation_tracks(
     depth_track_count: int,
     record_transform: RecordDisplayTransform | None = None,
 ) -> CircularPlannedTracks:
+    record_index = tracks.annotation_record_index
     slots, bundle = plan_circular_annotation_slots(
-        annotations,
+        tracks.annotations,
         [gb_record],
-        slots,
+        tracks.circular_track_slots,
         show_ticks=show_ticks,
         show_depth=show_depth,
         show_gc=show_gc,
@@ -305,13 +304,13 @@ def _prepare_circular_annotation_tracks(
         record_indices=(record_index,),
     )
     if not bundle.set_ids and not bundle.annotations:
-        return CircularPlannedTracks(slots, bundle, {})
+        return CircularPlannedTracks(slots, bundle, {}, tracks.circular_track_axis_index, record_index)
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
     updated, layouts = _layout_circular_annotation_tracks(
         gb_record, slots, bundle, canvas_config=canvas_config, record_index=record_index
     )
-    return CircularPlannedTracks(updated, bundle, layouts)
+    return CircularPlannedTracks(updated, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
 
 def _layout_circular_annotation_tracks(
@@ -2746,20 +2745,19 @@ def add_record_on_circular_canvas(
     canvas_config: CircularCanvasConfigurator,
     configurators: DiagramConfigurators,
     record: CircularRecordData,
-    tracks: CircularTrackInputs,
     planned: CircularPlannedTracks,
     presentation: CircularPresentationInputs,
-    legend_measurement: LegendMeasurement,
     legend_table: LegendTable,
 ) -> _CircularPlotAssembly:
     """Draw one record's tracks, labels, definition and legend on a Circular canvas, uncomposed.
 
-    ``planned`` holds the slots and annotations that annotation planning made
-    of ``tracks``; the axis index and the record index come from ``tracks``.
+    ``planned`` holds what annotation planning made of the record's track
+    inputs: the slots, the annotations, the axis index and the record's index
+    on its canvas. The requested slots are not passed.
     """
     annotation_track_layouts = planned.annotation_track_layouts
     primary_target_start = len(getattr(canvas, "elements", []))
-    record_key = str(record_key_at(record.gb_record, tracks.annotation_record_index))
+    record_key = str(record_key_at(record.gb_record, planned.annotation_record_index))
     profile = canvas_config.profile
     cfg = profile.config
     depth_tracks_by_index = (
@@ -2813,7 +2811,7 @@ def add_record_on_circular_canvas(
                 track_ids=tuple(canvas_config.track_ids.items()),
                 dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
             ),
-            axis_index=tracks.circular_track_axis_index,
+            axis_index=planned.circular_track_axis_index,
         )
         layout_slots = list(radial_plan.slots)
         preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
@@ -2908,13 +2906,13 @@ def add_record_on_circular_canvas(
             resolved_annotations,
             annotation_track_layouts,
             canvas_config=canvas_config,
-            record_index=tracks.annotation_record_index,
+            record_index=planned.annotation_record_index,
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
     annotation_label_rooms = _circular_annotation_label_rooms(
         annotation_track_layouts,
-        record_index=tracks.annotation_record_index,
+        record_index=planned.annotation_record_index,
         record_length=len(record.gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
@@ -2975,7 +2973,7 @@ def add_record_on_circular_canvas(
                 plot_title=presentation.plot_title,
                 record_presentation=presentation.record_presentation,
             ),
-            record_index=int(tracks.annotation_record_index),
+            record_index=int(planned.annotation_record_index),
             record_count=int(presentation.definition_record_count),
         )
 
@@ -3015,7 +3013,7 @@ def add_record_on_circular_canvas(
                     configurators.feature.block_stroke_color, configurators.feature.block_stroke_width
                 ),
                 annotation_track_layouts=annotation_track_layouts,
-                annotation_record_index=tracks.annotation_record_index,
+                annotation_record_index=planned.annotation_record_index,
                 use_slot_tick_options=user_slot_mode,
             ),
             labels,
@@ -3136,7 +3134,7 @@ def add_record_on_circular_canvas(
         labels_by_slot = _circular_annotation_labels_by_slot(
             radial_layout,
             annotation_track_layouts,
-            record_index=tracks.annotation_record_index,
+            record_index=planned.annotation_record_index,
             record_length=len(record.gb_record.seq),
             font_family=str(cfg.objects.text.font_family),
             obstacles=_feature_label_obstacles(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
@@ -3283,7 +3281,7 @@ def add_record_on_circular_canvas(
             use_feature_anchor_override=user_slot_mode,
             annotation_track_layouts=annotation_track_layouts,
             annotation_labels=annotation_labels,
-            annotation_record_index=tracks.annotation_record_index,
+            annotation_record_index=planned.annotation_record_index,
             record_transform=presentation.record_transform,
             record_key=record_key,
         )
@@ -3302,7 +3300,7 @@ def add_record_on_circular_canvas(
     definition_target: Group | None = None
     if definition_shown:
         definition_kwargs: dict[str, Any] = {}
-        definition_kwargs["record_index"] = int(tracks.annotation_record_index)
+        definition_kwargs["record_index"] = int(planned.annotation_record_index)
         definition_kwargs["record_count"] = int(presentation.definition_record_count)
         if presentation.plot_title is not None:
             definition_kwargs["plot_title"] = presentation.plot_title
@@ -3342,7 +3340,7 @@ def add_record_on_circular_canvas(
             else None
         ),
         # The index the record's definition group carries (``definition_kwargs``).
-        record_index=int(tracks.annotation_record_index),
+        record_index=int(planned.annotation_record_index),
         definition_text=definition_text,
         radial_refused=radial_refused,
         capacity=label_capacity,
@@ -3638,10 +3636,8 @@ def _assemble_circular_diagram_result(
     )
     planned = _prepare_circular_annotation_tracks(
         record.gb_record,
-        tracks.annotations,
-        tracks.circular_track_slots,
+        tracks,
         canvas_config=canvas_config,
-        record_index=tracks.annotation_record_index,
         show_ticks=bool(cfg.objects.scale.show),
         show_depth=bool(profile.show_depth and configurators.depth is not None),
         show_gc=profile.show_gc,
@@ -3652,12 +3648,6 @@ def _assemble_circular_diagram_result(
 
     legend_sources = LegendSources.of(configurators.feature, configurators.gc, configurators.skew)
     legend_table = LegendTable()
-    legend_measurement = measure_legend(
-        configurators.legend,
-        legend_table,
-        placement=canvas_config.legend_position,
-        wrap_width=canvas_config.total_width,
-    )
     if canvas_config.legend_position != "none":
         legend_table = circular_legend_table(
             [record.gb_record],
@@ -3686,10 +3676,8 @@ def _assemble_circular_diagram_result(
         canvas_config,
         configurators,
         record,
-        tracks,
         planned,
         presentation,
-        legend_measurement,
         legend_table,
     )
     return _compose_circular_plot(plot, composition)
