@@ -19,6 +19,12 @@ its name, and reads it as the plain file it holds, in the command line, the
 Python API, and the Web app alike. A Session saved from a gzip upload holds the
 plain file under the uploaded name. bzip2, xz, and zstd files are not read.
 
+A flat file, GFF3, or FASTA file, a comparison genome included, is read as
+UTF-8. A file that is not UTF-8 is read again in the computer's locale
+encoding, so a file that a Windows editor saved in its code page (for example
+cp1252 or cp932) still reads there. Where the locale is UTF-8, as on Linux,
+macOS, and in the Web app, such a file stops with an error.
+
 Before parsing, the reader repairs two layouts that other tools write: a
 `LOCUS` name that contains spaces (Geneious) is read with each run of spaces
 as one `_`, and tabs that indent a feature-table line, or separate a feature

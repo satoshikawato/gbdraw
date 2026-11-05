@@ -6,7 +6,7 @@ import logging
 from contextlib import contextmanager
 from itertools import chain
 from collections import Counter
-from collections.abc import Set as AbstractSet
+from collections.abc import Iterator, Set as AbstractSet
 from typing import Callable, List, Dict
 
 from Bio import SeqIO
@@ -23,9 +23,8 @@ from .input_text import (
     flat_file_format,
     flat_file_stream,
     gff3_stream,
-    open_input_text,
     read_input_bytes,
-    text_lines,
+    read_sequence_text,
 )
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
@@ -95,23 +94,26 @@ def read_flat_file_records(path: str) -> list[SeqRecord]:
     """
 
     fmt: FlatFileFormat = "genbank"
-    with open_input_text(path) as handle:
-        lines = text_lines(handle)
+
+    def parse(lines: Iterator[str]) -> list[SeqRecord]:
+        nonlocal fmt
         head: list[str] = []
-        try:  # A file that is not text stops at its first line: UnicodeDecodeError is a ValueError.
-            for line in lines:
-                head.append(line)
-                if line.strip():
-                    break
-            fmt = flat_file_format(head[-1] if head else "")
-            records = list(SeqIO.parse(flat_file_stream(chain(head, lines), fmt), fmt))
-        except (ValueError, *GZIP_ERRORS) as e:
-            name = FLAT_FILE_FORMAT_NAMES[fmt]
-            raise ParseError(
-                f"The {name} parser stopped: {_parser_reason(e)}. "
-                f"Error parsing {name} file {path}. It may be corrupt or in the wrong format.",
-                diagnostic=_UNREADABLE_FLAT_FILE,
-            ) from e
+        for line in lines:
+            head.append(line)
+            if line.strip():
+                break
+        fmt = flat_file_format(head[-1] if head else "")
+        return list(SeqIO.parse(flat_file_stream(chain(head, lines), fmt), fmt))
+
+    try:  # A file that is not text stops at its first line: UnicodeDecodeError is a ValueError.
+        records = read_sequence_text(path, parse)
+    except (ValueError, *GZIP_ERRORS) as e:
+        name = FLAT_FILE_FORMAT_NAMES[fmt]
+        raise ParseError(
+            f"The {name} parser stopped: {_parser_reason(e)}. "
+            f"Error parsing {name} file {path}. It may be corrupt or in the wrong format.",
+            diagnostic=_UNREADABLE_FLAT_FILE,
+        ) from e
     if not records:
         diagnostic = genbank_absence_diagnostic(path)
         raise ValidationError(_ABSENCE_MESSAGES[diagnostic["reason"]].format(path=path), diagnostic=diagnostic)
@@ -546,12 +548,19 @@ def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
     Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
     """
 
-    with open_input_text(fasta_file) as handle:
-        lines = text_lines(handle)
-        for line in lines:
-            if line.startswith(">"):
-                return list(SeqIO.parse(LineStream(chain([line], lines)), "fasta"))
-    raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+    records = read_sequence_text(fasta_file, _fasta_entries)
+    if records is None:
+        raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+    return records
+
+
+def _fasta_entries(lines: Iterator[str]) -> list[SeqRecord] | None:
+    """The entries of a FASTA file's lines, or ``None`` when no line starts one."""
+
+    for line in lines:
+        if line.startswith(">"):
+            return list(SeqIO.parse(LineStream(chain([line], lines)), "fasta"))
+    return None
 
 
 def read_sequence_file_records(path: str, fmt: str) -> list[SeqRecord]:
@@ -594,8 +603,7 @@ def parse_gff_fasta(
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
-        with open_input_text(gff_file) as gff_handle:
-            gff_records = list(GFF.parse(gff3_stream(text_lines(gff_handle))))
+        gff_records = read_sequence_text(gff_file, lambda lines: list(GFF.parse(gff3_stream(lines))))
         for record in gff_records:
             canonicalize_feature_types(record.features)
             _normalize_gff3_multipart_features(record)

@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: GenBank, EMBL, GFF3, and FASTA files, comparison genomes included, are
+  read as UTF-8 on every computer, and a file that is not UTF-8 is read in the
+  computer's locale encoding as before. On Windows, a UTF-8 file with characters
+  such as `µ` or `é` no longer stops or shows garbled text. `crop_genbank`
+  writes UTF-8.
+- Fixed: grouping orthologs no longer stops with a RecursionError when more
+  than about 1,000 proteins join one group in a chain.
 - Added: a Linear figure can be drawn to a requested size with a unit
   (`--figure_width 180mm`, `--figure_height 12cm`; `figure_width` and
   `figure_height` on `LinearOptions`; `canvas.figure_width` and
