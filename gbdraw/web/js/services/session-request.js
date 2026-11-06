@@ -2447,8 +2447,15 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
         if (!draftItem || !annotationItemColorsLive(set, item)) return item;
         const drawn = item.style ?? createDefaultAnnotationStyle(set.defaultStyle);
         const draft = draftItem.style ?? createDefaultAnnotationStyle(set.defaultStyle);
-        return drawn.fill === draft.fill && drawn.stroke === draft.stroke
-          ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke } };
+        // A gradient row's two colours are its colours too (receipt `web.sequence-search`); its direction
+        // and query positions stay as drawn.
+        const gradient = drawn.gradient && draft.gradient
+          ? { ...drawn.gradient, startColor: draft.gradient.startColor, endColor: draft.gradient.endColor }
+          : null;
+        const sameGradient = !gradient || !drawn.gradient
+          || (gradient.startColor === drawn.gradient.startColor && gradient.endColor === drawn.gradient.endColor);
+        return drawn.fill === draft.fill && drawn.stroke === draft.stroke && sameGradient
+          ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke, ...(gradient ? { gradient } : {}) } };
       }) };
     }), ...added]]];
   },
@@ -3239,7 +3246,10 @@ const automaticCircularAnnotationSlots = (drawing) => {
           params: { set_id: setId, marks: laneMarks }
         });
       }
-      if (marks.includes('highlight')) {
+      // A set that keeps its highlight overlay (a sequence search's) gets it from Python's rule for an explicit
+      // stack (`prepare_annotation_track_slots`), as in a custom stack, so a search's live draw and Generate
+      // send the same slots.
+      if (marks.includes('highlight') && set.keepHighlightOverlay !== true) {
         slots.push({
           id: `annotations_${index + 1}${laneMarks.length > 0 ? '_highlight' : ''}`,
           renderer: 'annotations',

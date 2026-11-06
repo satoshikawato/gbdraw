@@ -276,7 +276,10 @@ def search_hit_annotation_set(
             qend=qend,
         ))
     return SearchAnnotationResult(
-        annotation_set=AnnotationSet(id=set_id, annotations=tuple(annotations)) if annotations else None,
+        annotation_set=(
+            AnnotationSet(id=set_id, annotations=tuple(annotations), keep_highlight_overlay=True)
+            if annotations else None
+        ),
         hits=tuple(hits),
         tally=tally,
         unmatched_rows=len(frame) - len(known),

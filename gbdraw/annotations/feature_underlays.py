@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 
 from Bio.SeqRecord import SeqRecord
@@ -137,11 +138,7 @@ def merge_feature_underlays(
     if not resolved:
         return bundle, None
     return (
-        ResolvedAnnotationBundle(
-            annotations=(*bundle.annotations, *resolved),
-            warnings=bundle.warnings,
-            set_ids=(*bundle.set_ids, set_id),
-        ),
+        replace(bundle, annotations=(*bundle.annotations, *resolved), set_ids=(*bundle.set_ids, set_id)),
         set_id,
     )
 

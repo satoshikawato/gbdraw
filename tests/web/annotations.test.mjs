@@ -960,3 +960,23 @@ test('Add to annotation set binds the Region row to the record of the Result, al
   assert.equal(unbound.target.record, null);
   assert.equal(unbound.metadata[ANNOTATION_RECORD_BINDING_KEY], undefined);
 });
+
+// Receipt web.sequence-search: an annotation TSV export writes a gradient row as a plain row in its end colour,
+// in the PD-OI-040 columns; a sequence search's set keeps its marker in the Web draft.
+test('a gradient row exports as a plain row in its end color, and a search set keeps its marker', () => {
+  const gradient = { startColor: '#f6c9d8', endColor: '#123456', direction: 'forward' };
+  const searched = createAnnotationSet({
+    id: 'Search 1', keepHighlightOverlay: true,
+    annotations: [{ id: 'q#1', target: coordinateTarget({ start: 5, end: 9 }), mark: 'highlight',
+      style: { fill: '#5b1a4a', gradient } }]
+  });
+  assert.equal(searched.keepHighlightOverlay, true);
+  assert.equal(Object.hasOwn(createAnnotationSet({ id: 'plain' }), 'keepHighlightOverlay'), false);
+  const text = encodeAnnotationTable([searched]);
+  const [header, row] = text.trim().split('\n').map((line) => line.split('\t'));
+  assert.equal(header.includes('gradient'), false);
+  assert.equal(row[header.indexOf('fill')], '#123456');
+  const [restored] = parseAnnotationTable(text);
+  assert.equal(restored.annotations[0].style.fill, '#123456');
+  assert.equal(restored.annotations[0].style.gradient, undefined);
+});

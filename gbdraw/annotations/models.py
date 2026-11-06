@@ -353,6 +353,9 @@ class AnnotationSet:
     annotations: tuple[RegionAnnotation, ...]
     default_style: RegionAnnotationStyle = field(default_factory=RegionAnnotationStyle)
     legend_label: str | None = None
+    # A sequence search's set (PD-OI-116): its highlights keep the automatic overlay behind the features also in an
+    # explicit track stack that names no slot for the set (``prepare_annotation_track_slots``).
+    keep_highlight_overlay: bool = False
 
     def __post_init__(self) -> None:
         set_id = str(self.id).strip()
@@ -367,6 +370,11 @@ class AnnotationSet:
             raise ValidationError(f"Duplicate annotation id {duplicate!r} in set {set_id!r}.")
         if not isinstance(self.default_style, RegionAnnotationStyle):
             raise ValidationError("AnnotationSet default_style must be RegionAnnotationStyle.")
+        if not isinstance(self.keep_highlight_overlay, bool):
+            raise ValidationError(
+                "AnnotationSet keep_highlight_overlay must be a boolean.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
         object.__setattr__(self, "id", set_id)
         object.__setattr__(self, "annotations", annotations)
         object.__setattr__(self, "legend_label", None if self.legend_label is None else str(self.legend_label))
@@ -606,6 +614,9 @@ class ResolvedAnnotationBundle:
     annotations: tuple[ResolvedRegionAnnotation, ...]
     warnings: tuple[ResolutionWarning, ...] = ()
     set_ids: tuple[str, ...] = ()
+    # The sets whose highlights keep their automatic overlay in an explicit track stack
+    # (``AnnotationSet.keep_highlight_overlay``).
+    highlight_overlay_set_ids: tuple[str, ...] = ()
 
 
 def effective_annotation_style(

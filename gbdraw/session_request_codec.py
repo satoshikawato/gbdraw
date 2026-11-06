@@ -3460,6 +3460,8 @@ def encode_annotation_set(annotation_set: AnnotationSet) -> dict[str, Any]:
         "annotations": items,
         "defaultStyle": _encode_annotation_style(annotation_set.default_style),
         "legendLabel": annotation_set.legend_label,
+        # Written only when set, so a set without it encodes as before.
+        **({"keepHighlightOverlay": True} if annotation_set.keep_highlight_overlay else {}),
     }
 
 
@@ -3492,10 +3494,10 @@ def _decode_annotations(
     sets: list[AnnotationSet] = []
     for set_index, raw_set in enumerate(raw_sets):
         set_path = f"{path}.sets[{set_index}]"
-        set_payload = _object(
-            raw_set,
-            path=set_path,
-            required={"id", "annotations", "defaultStyle", "legendLabel"},
+        set_payload = _object(raw_set, path=set_path)
+        _require_exact_fields(
+            set_payload, path=set_path, required={"id", "annotations", "defaultStyle", "legendLabel"},
+            optional={"keepHighlightOverlay"},
         )
         raw_items = _array(set_payload["annotations"], path=f"{set_path}.annotations")
         annotations: list[RegionAnnotation] = []
@@ -3571,6 +3573,9 @@ def _decode_annotations(
                 annotations=tuple(annotations),
                 default_style=_decode_annotation_style(set_payload["defaultStyle"], path=f"{set_path}.defaultStyle"),
                 legend_label=_optional_string(set_payload["legendLabel"], f"{set_path}.legendLabel"),
+                keep_highlight_overlay=_boolean(
+                    set_payload.get("keepHighlightOverlay", False), f"{set_path}.keepHighlightOverlay"
+                ),
             )
         )
     table = (
@@ -5853,7 +5858,7 @@ def describe_canonical_request() -> dict[str, Any]:
     data(FeatureSpan, kind="featureSpan", replace={"selectors": bound(FeatureSpan, "selectors", minItems=1)})
     data(FeatureIdentitySpan, kind="featureIdentity")
     data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
-    data(AnnotationSet)
+    data(AnnotationSet, optional=frozenset({"keep_highlight_overlay"}))
     data(AnnotationOptions, files=frozenset({"table_file"}))
     scalar = data(ScalarSpec)
     data(CircularTrackSlot, kind="circularTrackSlot")

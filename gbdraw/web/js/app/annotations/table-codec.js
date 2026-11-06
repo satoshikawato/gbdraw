@@ -230,7 +230,8 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
       feature_selector: coordinate ? '' : selectors, envelope: coordinate ? '' : target.envelope, circular_path: coordinate ? '' : target.circularPath,
       label: annotation.label, lane: annotation.lane ?? '', legend_label: annotation.legendLabel ?? set.legendLabel ?? '', stroke: style.stroke ?? '',
       stroke_width: style.strokeWidth ?? '', stroke_dasharray: (style.strokeDasharray || []).join(','), line_cap: style.lineCap ?? '',
-      fill: style.fill ?? '', fill_opacity: style.fillOpacity ?? '', hatch_angle: hatch.angle ?? '', hatch_spacing: hatch.spacing ?? '',
+      // A gradient row is written as a plain row in its end colour (receipt `web.sequence-search`; PD-OI-040 columns).
+      fill: style.gradient ? style.gradient.endColor : (style.fill ?? ''), fill_opacity: style.fillOpacity ?? '', hatch_angle: hatch.angle ?? '', hatch_spacing: hatch.spacing ?? '',
       hatch_color: hatch.color ?? '', hatch_width: hatch.width ?? '', hatch_cross: hatch.cross ? 'true' : '', label_color: style.labelColor ?? '',
       label_font_size: style.labelFontSize ?? '', label_orientation: style.labelOrientation ?? '', label_position: style.labelPosition ?? '', label_offset: style.labelOffset ?? ''
     };

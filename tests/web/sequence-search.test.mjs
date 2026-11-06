@@ -178,3 +178,32 @@ test('the helper replies are checked against their typed shapes', () => {
   assert.throws(() => search.readSequenceSearchReply({ annotationSet: null, hits: [{}] }), (error) => error.code === 'RESULT_INVALID');
   assert.deepEqual(search.panelQueries([{ name: 'q', length: 4, fasta: '' }], [{ name: 'q', length: 4, fasta: '', color: '#000000' }])[0].color, '#000000');
 });
+
+// PD-OI-116 (Q-B10 A): with a custom track stack, or the Circular track sizes (an explicit stack too), the search's
+// set is sent with its marker and the stack unchanged; Python places it, so the live request equals Generate's.
+const STACKS = [
+  ['circular', 'custom stack', (drawing) => set(drawing.adv, 'circular_track_slots_enabled', true)],
+  ['circular', 'track sizes', (drawing) => set(drawing.adv, 'feature_width_circular', 30)],
+  ['linear', 'custom stack', (drawing) => set(drawing.adv, 'linear_track_slots_enabled', true)]
+];
+for (const [mode, label, explicit] of STACKS) {
+  test(`${mode}, ${label}: a search's set is drawn at once with the stack unchanged`, () => {
+    const drawing = modeDrawing(state, mode);
+    const before = [...drawing.annotationSets];
+    try {
+      explicit(drawing);
+      const committed = generate(mode);
+      const tracks = structuredClone(committed.renderRequest.diagramOptions.tracks);
+      assert.ok(tracks.circularTrackSlots || tracks.linearTrackSlots, 'an explicit stack');
+      drawing.annotationSets.push(createAnnotationSet({ ...searchSet('Search 1'), keepHighlightOverlay: true }));
+      const live = applied(committed, projectSearch(committed, mode, ['Search 1']));
+      const draft = generate(mode);
+      assert.deepEqual(live.renderRequest, draft.renderRequest);
+      assert.deepEqual(draft.renderRequest.diagramOptions.tracks, tracks);
+      assert.equal(draft.renderRequest.diagramOptions.annotations.sets[0].keepHighlightOverlay, true);
+    } finally {
+      drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
+      undoAll();
+    }
+  });
+}

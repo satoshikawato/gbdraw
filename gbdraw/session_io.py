@@ -4171,6 +4171,7 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
                 "annotations": annotations,
                 "defaultStyle": _draft_annotation_style(source.get("defaultStyle")),
                 "legendLabel": None if legend_label is None else _js_string(legend_label),
+                **({"keepHighlightOverlay": True} if source.get("keepHighlightOverlay") is True else {}),
             }
         )
     return result

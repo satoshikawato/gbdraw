@@ -210,6 +210,7 @@
  * @property {CanonicalRegionAnnotation[]} annotations
  * @property {CanonicalRegionAnnotationStyle} defaultStyle
  * @property {string | null} legendLabel
+ * @property {boolean} [keepHighlightOverlay]
  */
 /**
  * @typedef {object} CanonicalAnnotationOptions

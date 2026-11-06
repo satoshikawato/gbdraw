@@ -52,7 +52,10 @@ A region annotation's style in a Session 51 request may hold a **gradient**
 `queryEnd`, fractions from 0 to 1), which a `band` or `highlight` mark draws
 along the region in place of its fill; Sequence search writes it for the gradient by query position. A style
 without one is written as before, without the key, and reads as no gradient.
-gbdraw 0.14.5 reads Sessions up to 50 and so never meets the key.
+A set that Sequence search wrote has `keepHighlightOverlay: true`: its highlights are drawn in front of the
+feature track, covering the features, also with a custom track stack that names no slot for the set. Other sets are written as before,
+without the key.
+gbdraw 0.14.5 reads Sessions up to 50 and so never meets these keys.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the

@@ -109,6 +109,15 @@ of the request description (`CanonicalAnnotationGradient`). Session 51 has not r
 not change; `main`'s build (0.14.5) refuses every Session 51 file. Positive fixture:
 `tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz` (Python `save_session_document`).
 
+Session 51 also adds an optional `keepHighlightOverlay` to an annotation set (`diagramOptions.annotations.sets[]`,
+and the Web draft `config.annotationSets[]`; the same receipt, its custom-stack line): `true` on a set that
+Sequence search wrote (`gbdraw/annotations/search_hits.py`, the only writer). Its highlights are then drawn in front of
+the feature track, covering its features, also in an explicit track stack (Use custom stack) that has no enabled slot naming the
+set: `prepare_annotation_track_slots` adds the set's automatic highlight overlay after the stack's slots, in front of
+the stack's feature track. A slot that names the set takes its place; other sets keep following the stack. The writer
+writes the key only when it is true, so every other set encodes as before; the reader reads an absent key as false.
+Request schema 9 is unchanged (a new optional field of `CanonicalAnnotationSet`). The same positive fixture holds it.
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

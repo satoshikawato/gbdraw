@@ -276,6 +276,19 @@ export const createAnnotationEditor = ({
     setAnnotationStyleField(drawing.slices.annotationSets, set, item, field, value, defaults);
   };
   /**
+   * One end colour of a gradient row (receipt `web.sequence-search`): the row keeps its direction and query
+   * positions; the change applies as the row's other colours do (`annotation-style`).
+   * @param {AnnotationSetRow} set
+   * @param {AnnotationRow} item
+   * @param {'startColor' | 'endColor'} end
+   * @param {string} value
+   */
+  const setAnnotationGradientColor = (set, item, end, value) => {
+    const gradient = (item.style || set.defaultStyle).gradient;
+    if (!gradient) return undefined;
+    return setAnnotationStyle(set, item, 'gradient', { ...gradient, [end]: value });
+  };
+  /**
    * @param {AnnotationSetRow | null | undefined} set
    * @param {AnnotationRow | null | undefined} item
    * @param {string} kind
@@ -393,7 +406,7 @@ export const createAnnotationEditor = ({
   };
   return {
     addAnnotationSet, renameAnnotationSet, setAnnotationSetLegendLabel, duplicateAnnotationSet, removeAnnotationSet,
-    addCoordinateAnnotation, addRegionAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
+    addCoordinateAnnotation, addRegionAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationGradientColor, setAnnotationStyle, setAnnotationTargetKind,
     setAnnotationField,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,

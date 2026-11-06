@@ -5480,6 +5480,7 @@ export const createAppSetup = () => {
     importAnnotationTableFile: undoableAction(msg('Import annotations'), annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
+    setAnnotationGradientColor: annotationEditor.setAnnotationGradientColor,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
     downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
     annotationFeatureCaption: annotationEditor.featureTargetCaption,

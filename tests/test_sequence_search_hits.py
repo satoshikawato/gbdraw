@@ -377,3 +377,59 @@ def test_a_query_that_cannot_be_searched_is_refused_with_its_reason(
         read_search_queries(str(path))
     assert error.value.diagnostic is not None
     assert (error.value.diagnostic["code"], error.value.diagnostic.get("reason")) == (code, reason)
+
+
+def test_a_search_set_keeps_its_highlight_overlay_through_the_request(tmp_path: Path) -> None:
+    result = _search()
+    assert result.annotation_set is not None and result.annotation_set.keep_highlight_overlay
+    record = SeqRecord(Seq("ACGT" * 500), id="rec1", annotations={"molecule_type": "DNA"})
+    searched = AnnotationSet("Search 1", tuple(
+        row for row in result.annotation_set.annotations if row.target.record.record_id == "rec1"
+    ), keep_highlight_overlay=True)
+    plain = AnnotationSet("plain", (RegionAnnotation("p", CoordinateSpan(None, 10, 50), mark="band"),))
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=LinearDiagramOptions(annotations=AnnotationOptions(sets=(searched, plain))),
+    )
+    encoded = encode_canonical_request(request)
+    sets = encoded.payload["diagramOptions"]["annotations"]["sets"]
+    # Written only on the search's set; every other set is written as before.
+    assert sets[0]["keepHighlightOverlay"] is True and "keepHighlightOverlay" not in sets[1]
+    resource_paths = {}
+    for resource in encoded.resources:
+        target = tmp_path / resource.name
+        target.write_bytes(resource.content or b"")
+        resource_paths[resource.resource_id] = target
+    decoded = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert [item.keep_highlight_overlay for item in decoded.options.annotations.sets] == [True, False]
+    bad = json.loads(json.dumps(encoded.payload))
+    bad["diagramOptions"]["annotations"]["sets"][0]["keepHighlightOverlay"] = "yes"
+    with pytest.raises(Exception, match="keepHighlightOverlay must be a boolean"):
+        decode_canonical_request(bad, resource_paths=resource_paths, output_directory=tmp_path / "out")
+
+
+def _custom_stack_svg(mode: str, *, keep: bool) -> str:
+    from gbdraw.api.options import CircularRequestTrackOptions, LinearRequestTrackOptions
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="rec1", annotations={"molecule_type": "DNA", "topology": "circular"})
+    hit = RegionAnnotation("q#1", CoordinateSpan(None, 1000, 4000), mark="highlight",
+                           style=RegionAnnotationStyle(fill="#c8607e"))
+    annotations = AnnotationOptions(sets=(AnnotationSet("Search 1", (hit,), keep_highlight_overlay=keep),))
+    if mode == "circular":
+        options = CircularDiagramOptions(annotations=annotations, tracks=CircularRequestTrackOptions(circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"), CircularTrackSlot(id="ticks", renderer="ticks"),
+        ]))
+        return build_circular_diagram(record, options=options).tostring()
+    options = LinearDiagramOptions(annotations=annotations, tracks=LinearRequestTrackOptions(linear_track_slots=[
+        LinearTrackSlot(id="features", renderer="features"),
+    ]))
+    return build_linear_diagram([record], options=options).tostring()
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_custom_stack_draws_a_search_set_behind_its_features(mode: str) -> None:
+    # PD-OI-116: with a custom track stack a search's set is drawn without a slot of its own.
+    assert 'data-gbdraw-annotation-id="q#1"' in _custom_stack_svg(mode, keep=True)
+    # Another set keeps following the stack: no slot names it, so it is not drawn.
+    assert 'data-gbdraw-annotation-id="q#1"' not in _custom_stack_svg(mode, keep=False)

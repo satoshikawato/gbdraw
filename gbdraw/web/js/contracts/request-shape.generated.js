@@ -534,9 +534,10 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         legendLabel: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
-        })
+        }),
+        keepHighlightOverlay: Object.freeze({kind: "boolean"})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["keepHighlightOverlay"]),
       open: false,
       defaults: Object.freeze({legendLabel: null})
     }),

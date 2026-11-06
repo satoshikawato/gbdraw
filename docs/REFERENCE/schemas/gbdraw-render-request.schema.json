@@ -1118,6 +1118,9 @@
             }
           ],
           "default": null
+        },
+        "keepHighlightOverlay": {
+          "type": "boolean"
         }
       },
       "required": [
