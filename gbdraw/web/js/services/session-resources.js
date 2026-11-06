@@ -1,7 +1,7 @@
 // @ts-check
 import {
   bytesToBase64,
-  encodedFilePayloadOf,
+  fileDescriptorOf,
   getSessionResourceSource,
   readFileBytes,
   sha256Hex
@@ -9,8 +9,13 @@ import {
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
+  fileBackedDescriptor,
+  fileBackedReaderOf,
+  resourcePayloadKey,
   sessionResourceSource
 } from './session-resource-backing.js';
+import { MAX_EXPANDED_SESSION_BYTES, sessionSaveSizeLimit } from './session-file.js';
+import { testByteCap } from './runtime-test-hooks.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
@@ -19,7 +24,6 @@ import {
 } from './canonical-resource-references.js';
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
-/** @import { EncodedFilePayload } from './file-content-cache.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { BoundFileValue, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
@@ -35,13 +39,12 @@ import {
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
- * What the allocator reads of a resource's source: a Session resource
- * (`descriptor`, `readBytes`), a File with the payload it was encoded as
- * (`encoded`, `readBytes`), or bytes read from a file.
+ * What the allocator reads of a resource's source: a Session resource or the
+ * file-backed descriptor Generate made of a File (`descriptor`, `readBytes`),
+ * or bytes read from a file.
  * @typedef {object} ResourceSource
  * @property {string} [resourceId]
  * @property {RawSessionResourceDescriptor} [descriptor]
- * @property {EncodedFilePayload} [encoded]
  * @property {Uint8Array} [bytes]
  * @property {() => Promise<Uint8Array>} [readBytes]
  */
@@ -79,16 +82,59 @@ const bindingForFile = (file, resourceId) => ({
 });
 
 /**
- * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} left
- * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} right
+ * @param {RawSessionResourceDescriptor} left
+ * @param {RawSessionResourceDescriptor} right
  */
 const sameEncodedPayload = (left, right) => (
   left === right || (
     left.encoding === right.encoding
-    && left.data === right.data
+    && resourcePayloadKey(left) === resourcePayloadKey(right)
     && Number(left.size) === Number(right.size)
   )
 );
+
+/**
+ * The descriptor under another name; a file-backed one stays file-backed.
+ * @param {RawSessionResourceDescriptor} descriptor
+ * @param {string} name
+ * @returns {RawSessionResourceDescriptor}
+ */
+const renamedDescriptor = (descriptor, name) => {
+  const readFile = fileBackedReaderOf(descriptor);
+  const fields = { ...descriptor, name };
+  return readFile ? fileBackedDescriptor(/** @type {typeof fields & { type: string, size: number, lastModified: number }} */ (fields), readFile) : fields;
+};
+
+/**
+ * The resources a Session document writes: each file-backed descriptor (a File
+ * Generate described, `fileBackedDescriptor`) encoded as base64 text, read
+ * once; the others as they are. The base64 text of a Session over its expanded
+ * cap would not load again (and past the engine's string limit cannot be made),
+ * so it is refused first with `SESSION_SIZE_LIMIT`, naming at least the
+ * characters of its resources. The table given is not changed.
+ * @param {Readonly<Record<string, RawSessionResourceDescriptor>>} resources
+ * @returns {Promise<Record<string, RawSessionResourceDescriptor>>}
+ */
+export const encodeSessionResources = async (resources) => {
+  const maxBytes = testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES;
+  const payloadCharacters = Object.values(resources).reduce((total, descriptor) => total + (
+    fileBackedReaderOf(descriptor) ? 4 * Math.ceil(Number(descriptor.size) / 3)
+      : typeof descriptor.data === 'string' ? descriptor.data.length : 0
+  ), 0);
+  if (payloadCharacters > maxBytes) throw sessionSaveSizeLimit({ resources }, payloadCharacters, maxBytes);
+  /** @type {Record<string, RawSessionResourceDescriptor>} */
+  const encoded = { ...resources };
+  for (const [id, descriptor] of Object.entries(resources)) {
+    const readFile = fileBackedReaderOf(descriptor);
+    if (!readFile) continue;
+    const bytes = await readFile();
+    if (bytes.byteLength !== descriptor.size) throw new Error(`Session resource ${id} byte size does not match its descriptor.`);
+    recordStructuralMetric('base64EncodeCount', 1, { resourceName: descriptor.name });
+    recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: descriptor.name });
+    encoded[id] = { ...descriptor, encoding: 'base64', data: bytesToBase64(bytes) };
+  }
+  return encoded;
+};
 
 // A reference is replaced by another string id, so the rewritten value has the shape of `value`.
 /**
@@ -268,14 +314,14 @@ export const buildSessionDrawingResources = async (state, sets) => {
   /** @param {ResourceSource} source */
   const candidateFor = (source) => {
     // A source has a descriptor, an encoded payload, or bytes.
-    const key = /** @type {WeakKey} */ (source.descriptor || source.encoded || source.bytes);
+    const key = /** @type {WeakKey} */ (source.descriptor || source.bytes);
     if (candidatesByDescriptor.has(key)) {
       return /** @type {ResourceCandidate} */ (candidatesByDescriptor.get(key));
     }
     /** @type {ResourceCandidate} */
     const candidate = {
       ...source,
-      size: source.descriptor?.size ?? source.encoded?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
+      size: source.descriptor?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
       bytesPromise: null,
       identityPromise: null
     };
@@ -312,11 +358,12 @@ export const buildSessionDrawingResources = async (state, sets) => {
       bucket = { encoded: new Map(), identities: new Map(), pending: new Map() };
       candidatesBySize.set(candidate.size, bucket);
     }
-    const descriptor = candidate.descriptor || candidate.encoded;
+    const descriptor = candidate.descriptor;
     if (descriptor) {
       let encoded = bucket.encoded.get(descriptor.encoding);
       if (!encoded) bucket.encoded.set(descriptor.encoding, encoded = new Map());
-      if (!encoded.has(descriptor.data)) encoded.set(descriptor.data, id);
+      const key = resourcePayloadKey(descriptor);
+      if (!encoded.has(key)) encoded.set(key, id);
     }
     bucket.pending.set(id, candidate);
     // `id` is in `resources` or `reserved`.
@@ -326,8 +373,8 @@ export const buildSessionDrawingResources = async (state, sets) => {
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
     if (!bucket) return null;
-    const descriptor = candidate.descriptor || candidate.encoded;
-    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
+    const descriptor = candidate.descriptor;
+    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(resourcePayloadKey(descriptor));
     if (encodedId) return encodedId;
     const identity = await identityFor(candidate);
     if (bucket.identities.has(identity)) return /** @type {string} */ (bucket.identities.get(identity));
@@ -373,25 +420,15 @@ export const buildSessionDrawingResources = async (state, sets) => {
         name = `${id}-${safeResourceLeaf(metadata.name)}`;
       }
       if (descriptor) {
-        resources[id] = safePreferred ? descriptor : { ...descriptor, name };
+        resources[id] = safePreferred ? descriptor : renamedDescriptor(descriptor, String(name));
       } else {
-        // A File Generate already encoded keeps that text; other bytes are encoded here.
-        /** @type {{ data: string, size: number }} */
-        let encoded;
-        if (source.encoded) {
-          encoded = source.encoded;
-        } else {
-          const bytes = await bytesFor(candidate);
-          recordStructuralMetric('base64EncodeCount', 1, { resourceName: metadata.name });
-          recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: metadata.name });
-          encoded = { data: bytesToBase64(bytes), size: bytes.byteLength };
-        }
-        resources[id] = {
-          kind: String(metadata.kind || 'web-file'), name,
+        // Bytes read here are encoded with the other files at the end (`encodeSessionResources`).
+        const bytes = await bytesFor(candidate);
+        resources[id] = fileBackedDescriptor({
+          kind: String(metadata.kind || 'web-file'), name: String(name),
           type: String(metadata.type || 'application/octet-stream'),
-          size: encoded.size, lastModified: Number(metadata.lastModified) || 0,
-          encoding: 'base64', data: encoded.data
-        };
+          size: bytes.byteLength, lastModified: Number(metadata.lastModified) || 0
+        }, async () => bytes);
       }
       register(id, candidate);
       return id;
@@ -423,12 +460,12 @@ export const buildSessionDrawingResources = async (state, sets) => {
       const key = JSON.stringify([descriptor.kind, Object.hasOwn(hints, id) ? hints[id] : null, descriptor.encoding, descriptor.size]);
       let byData = firstIds.get(key);
       if (!byData) firstIds.set(key, byData = new Map());
-      const equal = byData.get(descriptor.data);
+      const equal = byData.get(resourcePayloadKey(descriptor));
       if (equal) {
         aliases.set(id, named.has(id) ? use(equal) : equal);
         return;
       }
-      byData.set(descriptor.data, id);
+      byData.set(resourcePayloadKey(descriptor), id);
       if (named.has(id)) resources[id] = descriptor;
       else reserved.set(id, descriptor);
       aliases.set(id, id);
@@ -500,10 +537,17 @@ export const buildSessionDrawingResources = async (state, sets) => {
       return { kind: 'composite', components, ...metadata };
     }
     if (source?.descriptor) return bindSource(source, file);
-    // The payload Generate encoded for this File matches the committed resource
-    // by its text, so binding it reads, hashes and decodes nothing.
-    const encoded = encodedFilePayloadOf(file);
-    if (encoded) return bindSource({ encoded, readBytes: () => readFileBytes(file) }, file);
+    // The descriptor Generate made of this File names the committed resource
+    // by its reader, so binding it reads, hashes and decodes nothing.
+    const described = fileDescriptorOf(file);
+    const readFile = fileBackedReaderOf(described);
+    if (described && readFile) {
+      const descriptor = fileBackedDescriptor({
+        kind: 'web-file', name: String(file.name ?? 'file'), type: String(file.type || 'application/octet-stream'),
+        size: Number(described.size), lastModified: Number(file.lastModified) || 0
+      }, readFile);
+      return bindSource({ descriptor, readBytes: readFile }, file);
+    }
     return bindSource({ bytes: await readFileBytes(file) }, file);
   };
 
@@ -591,7 +635,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
     const webFiles = rewriteOriginalNameHints(set.committed?.webFiles, setAlias);
     written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing) } : webFiles });
   }
-  return { resources, written };
+  return { resources: await encodeSessionResources(resources), written };
 };
 
 /**

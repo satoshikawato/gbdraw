@@ -122,7 +122,6 @@ import { savedDrawingsOf } from './session-drawings.js';
 import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
-  bytesToBase64,
   fileDescriptorOf,
   getSessionResourceSource,
   readFileBytes,
@@ -131,6 +130,7 @@ import {
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
+  fileBackedDescriptor,
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
@@ -3536,20 +3536,14 @@ const serializeFile = async (file) => {
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')
   });
-  recordStructuralMetric('base64EncodeCount', 1, {
-    resourceName: String(view?.name || 'file')
-  });
-  recordStructuralMetric('encodedByteCount', bytes.byteLength, {
-    resourceName: String(view?.name || 'file')
-  });
-  const descriptor = {
-    name: view?.name || 'file',
-    type: view?.type || '',
+  // File-backed: the request and the committed Session name the File's bytes;
+  // a Session writer encodes them (`encodeSessionResources`, OV-2612).
+  const descriptor = fileBackedDescriptor({
+    name: String(view?.name || 'file'),
+    type: String(view?.type || ''),
     size: bytes.byteLength,
-    lastModified: view?.lastModified ?? Date.now(),
-    encoding: 'base64',
-    data: bytesToBase64(bytes)
-  };
+    lastModified: Number(view?.lastModified ?? Date.now())
+  }, () => readFileBytes(file));
   return cacheSerializedFileDescriptor(owner, descriptor);
 };
 

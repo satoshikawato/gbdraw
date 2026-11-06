@@ -25,7 +25,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  */
 /**
  * A Session resource after `validateDescriptor`: a base64 text, or an encoded
- * depth table (`encoding` names which `data` holds).
+ * depth table (`encoding` names which `data` holds). A file-backed descriptor
+ * (`fileBackedDescriptor`) has neither: its reader gives its bytes.
  * @typedef {{
  *   kind?: unknown, name?: unknown, type?: unknown, encoding: string, data: string | DepthFilePayload,
  *   size: number, lastModified?: number, checksum?: unknown
@@ -86,6 +87,47 @@ const tableBackings = new WeakMap();
 const fileViewBackings = new WeakMap();
 const LF_BYTE = 0x0A;
 
+/**
+ * The reader of each file-backed descriptor: a descriptor of the page, never
+ * of a Session file, whose bytes a File (or a Session resource view) holds. It
+ * has no `encoding` and no `data`; a Session writer encodes it
+ * (`encodeSessionResources`), so Generate keeps no base64 text of an input
+ * (OV-2612). One reader per File: it is also the payload's key.
+ * @typedef {() => Promise<Uint8Array>} FileBackedReader
+ * @type {WeakMap<object, FileBackedReader>}
+ */
+const fileBackedReaders = new WeakMap();
+
+/**
+ * A file-backed descriptor of these fields, whose bytes `readBytes` reads.
+ * @template {{ kind?: unknown, name: string, type: string, size: number, lastModified: number }} F
+ * @param {F} fields
+ * @param {FileBackedReader} readBytes
+ * @returns {F}
+ */
+export const fileBackedDescriptor = (fields, readBytes) => {
+  const descriptor = { ...fields };
+  fileBackedReaders.set(descriptor, readBytes);
+  return descriptor;
+};
+
+/**
+ * The reader of a file-backed descriptor, or null for any other value.
+ * @param {unknown} descriptor
+ * @returns {FileBackedReader | null}
+ */
+export const fileBackedReaderOf = (descriptor) => (
+  descriptor && typeof descriptor === 'object' ? fileBackedReaders.get(descriptor) ?? null : null
+);
+
+/**
+ * What names a descriptor's payload until its bytes change: the reader of a
+ * file-backed descriptor, else its `data` (base64 text, or a Depth payload).
+ * @param {RawSessionResourceDescriptor} descriptor
+ * @returns {unknown}
+ */
+export const resourcePayloadKey = (descriptor) => fileBackedReaderOf(descriptor) ?? descriptor.data;
+
 const CHECKSUM_PATTERN = /^[0-9a-f]{64}$/;
 /** @param {unknown} value A checked checksum: absent, or a SHA-256 digest text. */
 const normalizedChecksum = (value) => (typeof value === 'string' && value !== ''
@@ -109,10 +151,10 @@ const resourceDescriptorFaults = (descriptor) => {
   }
   /** @type {ResourceDescriptorFault[]} */
   const faults = [];
-  const supportedPayload = descriptor.encoding === 'base64'
+  const supportedPayload = fileBackedReaders.has(descriptor) || (descriptor.encoding === 'base64'
     ? typeof descriptor.data === 'string'
     // A `data` that is not an object (a string, or nothing) has no `schema`, so the guard reads false.
-    : isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (descriptor));
+    : isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (descriptor)));
   if (!supportedPayload) faults.push({ field: null });
   if (typeof descriptor.size !== 'number' || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
     faults.push({ field: null });
@@ -408,6 +450,8 @@ const requireBacking = (table, resourceId) => {
  * @returns {Promise<Uint8Array>}
  */
 const decodedResourceBytes = async (backing) => {
+  const readFile = fileBackedReaderOf(backing.descriptor);
+  if (readFile) return readFile();
   // `validateDescriptor` paired `encoding` with `data`: a depth table when the guard holds, base64 text otherwise.
   if (isEncodedDepthFileEntry(/** @type {DepthEntryProbe} */ (backing.descriptor))) {
     return textToBytes(decodeDepthText(/** @type {DepthFilePayload} */ (backing.descriptor.data)));
@@ -654,7 +698,7 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   // A combined view has no descriptor of its own until one is verified below: it equals none (OV-574).
   /** @param {SessionResourceDescriptor | null} entry */
   const matches = (entry) => entry !== null && entry.encoding === descriptor.encoding
-    && entry.data === descriptor.data;
+    && resourcePayloadKey(entry) === resourcePayloadKey(descriptor);
   if (matches(backing.descriptor)) return true;
   if (!backing.sourceBackings) return false;
   if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;

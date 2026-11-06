@@ -302,7 +302,7 @@ const largestInputNames = (data) => {
  * @param {number} sessionByteLimit The cap it exceeds.
  * @param {boolean} [file] The size is the gzip file's, not the expanded JSON's.
  */
-const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
+export const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
   'SESSION_SIZE_LIMIT',
   { sessionBytes, sessionByteLimit, ...(file && { sessionSizeKind: 'file' }), largestInputs: largestInputNames(data) },
   { stage: 'write', operation: 'session-save' }

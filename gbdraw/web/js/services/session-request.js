@@ -218,6 +218,8 @@ import {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
+  fileBackedDescriptor,
+  fileBackedReaderOf,
   validateWebFileBindings,
   webBindingInputSlot,
   webFileBindingsWithoutDepth
@@ -1239,16 +1241,19 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const identity = getResourcePayloadIdentity(entry);
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
-    /** @type {RawSessionResourceDescriptor} */
-    const descriptor = {
+    const fields = {
       kind: effectiveKind,
       name: normalizeResourceName(resourceId, entry.name),
       type: String(entry.type || 'application/octet-stream'),
       size: Number(entry.size) || 0,
-      lastModified: Number(entry.lastModified) || 0,
-      encoding: encodedEntry.encoding || 'base64',
-      data: encodedEntry.data
+      lastModified: Number(entry.lastModified) || 0
     };
+    // A File Generate described stays file-backed; a Session's resource keeps its payload.
+    const readFile = fileBackedReaderOf(encodedEntry);
+    /** @type {RawSessionResourceDescriptor} */
+    const descriptor = readFile
+      ? fileBackedDescriptor(fields, readFile)
+      : { ...fields, encoding: encodedEntry.encoding || 'base64', data: encodedEntry.data };
     if (typeof encodedEntry.checksum === 'string' && encodedEntry.checksum.trim()) {
       descriptor.checksum = encodedEntry.checksum;
     }
@@ -4829,7 +4834,8 @@ const compositionSourceIdentity = (source, resources) => {
     return [key, parts.map((entry) => {
       const part = /** @type {UnvalidatedFields<'data' | 'size' | 'encoding'>} */ (entry);
       return {
-        payload: typeof part?.data === 'string' ? part.data : part,
+        // A file-backed part is named by its File's reader, not by its metadata.
+        payload: typeof part?.data === 'string' ? part.data : fileBackedReaderOf(part) ?? part,
         size: part?.size,
         encoding: part?.encoding || 'file'
       };
@@ -7173,6 +7179,8 @@ const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWith
 const publicationBytes = async (resource, id) => {
   if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`Canonical request resource '${id}' is missing.`);
   if (typeof resource.readBytes === 'function') return resource.readBytes();
+  const readFile = fileBackedReaderOf(resource);
+  if (readFile) return readFile();
   if (resource.data instanceof Uint8Array) return resource.data;
   if (resource.encoding === 'base64') { const binary = atob(String(resource.data || '')), bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return bytes; }
   if (typeof resource.data === 'string') return textToBytes(resource.data);

@@ -69,6 +69,8 @@ import {
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
+import { encodeSessionResources } from '../services/session-resources.js';
+/** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
 import {
@@ -960,7 +962,7 @@ const makeSafeFilename = (name) => {
  * (`sessionDocumentOfViews`), so the CLI loads it as it loads a Save (OV-1806).
  * @param {{
  *   drawing: { id: string, name: string }, startedAtIso: string | null,
- *   renderRequest: { mode: 'circular' | 'linear' }, resources: unknown,
+ *   renderRequest: { mode: 'circular' | 'linear' }, resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
  *   publishedArtifact: { results: unknown, featureCatalog: unknown }
  * }} replay
  */
@@ -970,8 +972,10 @@ const createCanonicalReplayTextBuilder = ({
   renderRequest,
   resources,
   publishedArtifact
-}) => () => {
+}) => async () => {
   recordSessionLifecycleEvent('canonical-replay-json-start');
+  // The Session document holds each input's bytes; Generate described them by their File.
+  const writtenResources = await encodeSessionResources(resources);
   const replayText = JSON.stringify(sessionDocumentOfViews([{
     id: drawing.id,
     name: drawing.name,
@@ -979,7 +983,7 @@ const createCanonicalReplayTextBuilder = ({
       format: 'gbdraw-session',
       createdAt: startedAtIso || new Date().toISOString(),
       renderRequest,
-      resources,
+      resources: writtenResources,
       // Export only after successful generation; reuse the published artifact.
       results: publishedArtifact.results,
       editorState: { featureCatalog: publishedArtifact.featureCatalog },
@@ -1329,7 +1333,11 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 
 /**
  * A file of the CLI reproducibility bundle: its content, or the builder that makes it when the bundle is written.
- * @typedef {RecipeGeneratedFile & { retainedBytes?: number }} GeneratedCliFile
+ * A reproducibility file: its builder may read files (the exact replay encodes
+ * the inputs Generate described, `encodeSessionResources`).
+ * @typedef {Omit<RecipeGeneratedFile, 'buildData'> & {
+ *   buildData?: () => string | Uint8Array | Promise<string>, retainedBytes?: number
+ * }} GeneratedCliFile
  */
 
 /**
@@ -1932,10 +1940,10 @@ export const createRunAnalysis = ({
       showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
-    const materializedFiles = latestCliHelperFiles.map((file) => ({
+    const materializedFiles = await Promise.all(latestCliHelperFiles.map(async (file) => ({
       name: file.name,
-      data: typeof file.buildData === 'function' ? file.buildData() : file.data
-    }));
+      data: typeof file.buildData === 'function' ? await file.buildData() : file.data
+    })));
     const archiveNames = new Set();
     materializedFiles.forEach((file) => {
       const name = String(file.name || '');

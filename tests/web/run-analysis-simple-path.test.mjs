@@ -42,6 +42,9 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 let activePrimaryReads = 0;
 let inactiveFileReads = 0;
 
+/** A copy of a canonical Session whose resource descriptors stay shared, as `projectCommittedRecordTransform` copies one. */
+const cloneSharingResources = ({ resources, ...rest }) => ({ ...structuredClone(rest), resources: { ...resources } });
+
 class AuditFile extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);
@@ -828,7 +831,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         throw new Error('forced late canonical artifact adoption failure');
       }
       adoptedArtifacts += 1;
-      lastAdoptedCanonical = structuredClone(canonical);
+      // The committed Session shares its file descriptors (a File Generate described is file-backed).
+      lastAdoptedCanonical = cloneSharingResources(canonical);
     },
     prepareCandidateCommit: ({
       generationResponse,
@@ -920,8 +924,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(structuralMetrics.generatedArtifactFinalizeCount, 1);
   assert.equal(structuralMetrics.historyReplacementCount, 1);
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount || 0, 0);
-  runner.downloadCliHelperFiles();
+  const readsBeforeReplay = activePrimaryReads;
+  await runner.downloadCliHelperFiles();
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount, 1);
+  assert.equal(activePrimaryReads, readsBeforeReplay + 1, 'the replay Session reads the input once to encode it');
   assert.equal(downloadedFilename, 'audit-simple-cli-files.zip');
   const helperEntries = await storedZipEntries(downloadedBlob);
   assertDownloadedFilesMatchCommands(state.lastRunInfo.value, helperEntries);
@@ -953,7 +959,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let committedExtractedFeatureIdentity = state.extractedFeatures.value;
   let committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
 
-  const targetCandidate = structuredClone(lastAdoptedCanonical);
+  const targetCandidate = cloneSharingResources(lastAdoptedCanonical);
   targetCandidate.renderRequest.records[0].display.startCoordinate = 3;
   targetCandidate.renderRequest.records[0].presentation.reverseComplement = true;
   const committedOutputPrefix = targetCandidate.renderRequest.output.prefix;
@@ -1252,8 +1258,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   // GE-09: a Cancel with no Worker request keeps the warm Worker and its staged
-  // primary source, so later runs do not read the file again.
-  assert.equal(activePrimaryReads, 1);
+  // primary source, so later runs do not read the file again. The second read is the
+  // reproducibility download's, whose replay Session encodes the input (OV-2612).
+  assert.equal(activePrimaryReads, 2);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 2);
   assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
@@ -1272,7 +1279,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
   assert.equal(state.failedGeneratePreservedResult.value, false);
-  assert.equal(activePrimaryReads, 1);
+  assert.equal(activePrimaryReads, 2);
 
   // Cancel requested while preparation is pending ends before rendering.
   const runCount = () => workerMessages.filter(({ type }) => type === 'run').length;
@@ -2115,7 +2122,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       /Download reproducibility files/
     );
     assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw-session\.json/);
-    runner.downloadCliHelperFiles();
+    await runner.downloadCliHelperFiles();
     assert.equal(downloadedFilename, 'lazy-linear-cli-files.zip');
     const linearHelperEntries = await storedZipEntries(downloadedBlob);
     assertDownloadedFilesMatchCommands(state.lastRunInfo.value, linearHelperEntries);
