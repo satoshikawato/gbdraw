@@ -14,6 +14,10 @@ from gbdraw.legend.table import LegendTable
 from gbdraw.render.patterns import hatch_pattern_paint
 
 
+# The scale of an annotation gradient's legend bar: the start and the end of what its regions stand for.
+GRADIENT_SCALE_LABELS = ("start", "end")
+
+
 def sync_annotation_legend_entries(
     out: LegendTable,
     bundle: ResolvedAnnotationBundle,
@@ -36,6 +40,23 @@ def sync_annotation_legend_entries(
             ):
                 continue
             style = effective_annotation_style(annotation, params)
+            gradient = style.gradient if annotation.mark in {"band", "highlight"} else None
+            if gradient is not None:
+                # One bar per caption and pair of colours, whichever way each region runs.
+                gradient_signature = (annotation.legend_label, "gradient", gradient.start_color, gradient.end_color)
+                if gradient_signature in seen:
+                    continue
+                seen.add(gradient_signature)
+                out.add_source(str(annotation.legend_label), {
+                    "type": "gradient",
+                    "min_color": gradient.start_color,
+                    "max_color": gradient.end_color,
+                    "stroke": "none",
+                    "width": 0,
+                    "min_label": GRADIENT_SCALE_LABELS[0],
+                    "max_label": GRADIENT_SCALE_LABELS[1],
+                })
+                continue
             hatch = style.hatch
             signature = (
                 annotation.legend_label,
@@ -65,4 +86,4 @@ def sync_annotation_legend_entries(
     return out
 
 
-__all__ = ["sync_annotation_legend_entries"]
+__all__ = ["GRADIENT_SCALE_LABELS", "sync_annotation_legend_entries"]

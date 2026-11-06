@@ -202,6 +202,41 @@ class HatchStyle:
 
 
 @dataclass(frozen=True)
+class AnnotationGradient:
+    """A fill that runs along a region from ``start_color`` to ``end_color``.
+
+    The colours are in the order of what the region stands for (a search hit:
+    the query's start, then its end). ``direction`` says which way that order
+    runs on the record's source strand: ``forward`` from the region's lower
+    source coordinate, ``reverse`` from its higher one. A ``band`` or
+    ``highlight`` mark draws it in place of its fill; other marks have no fill.
+    """
+
+    start_color: str
+    end_color: str
+    direction: Literal["forward", "reverse"] = "forward"
+
+    def __post_init__(self) -> None:
+        for name in ("start_color", "end_color"):
+            text = str(getattr(self, name) or "").strip()
+            try:
+                color = normalize_hex_color(resolve_color_to_hex(text)) if text else None
+            except (TypeError, ValueError, ValidationError):
+                color = None
+            if color is None:
+                raise ValidationError(
+                    f"Annotation gradient {name} is not a valid color: {text!r}.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
+                )
+            object.__setattr__(self, name, color)
+        if self.direction not in {"forward", "reverse"}:
+            raise ValidationError(
+                "Annotation gradient direction must be 'forward' or 'reverse'.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
+
+
+@dataclass(frozen=True)
 class RegionAnnotationStyle:
     stroke: str = "#404040"
     stroke_width: float = 1.5
@@ -216,6 +251,8 @@ class RegionAnnotationStyle:
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
     label_position: Literal["center", "start", "end"] = "center"
     label_offset: float = 4.0
+    # A fill along the region in place of ``fill`` (band and highlight marks).
+    gradient: AnnotationGradient | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "stroke", _color(self.stroke, "annotation stroke"))
@@ -231,6 +268,15 @@ class RegionAnnotationStyle:
         object.__setattr__(self, "fill_opacity", opacity)
         if self.hatch is not None and not isinstance(self.hatch, HatchStyle):
             raise ValidationError("hatch must be HatchStyle or None.")
+        if self.gradient is not None and not isinstance(self.gradient, AnnotationGradient):
+            raise ValidationError(
+                "gradient must be AnnotationGradient or None.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"}
+            )
+        if self.gradient is not None and self.hatch is not None:
+            raise ValidationError(
+                "An annotation style has a hatch or a gradient, not both.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
         object.__setattr__(self, "label_color", _color(self.label_color, "label color"))
         if self.label_font_size is not None:
             object.__setattr__(self, "label_font_size", _finite(self.label_font_size, "label_font_size", positive=True))
@@ -462,6 +508,9 @@ class ResolvedRegionAnnotation:
     # end, into its first, which starts at 0 (``segments_cross_origin``).
     crosses_origin: bool = False
 
+    # How the record's local axis runs on its source: -1 on a reverse-complemented record.
+    source_step: Literal[-1, 1] = 1
+
     def __post_init__(self) -> None:
         if self.crosses_origin and (len(self.segments) < 2 or not any(start == 0 for start, _end in self.segments)):
             raise ValueError(
@@ -554,6 +603,7 @@ def annotation_label_font_size(style: RegionAnnotationStyle, feature_label_font_
 
 
 __all__ = [
+    "AnnotationGradient",
     "AnnotationOptions",
     "AnnotationSet",
     "AnnotationTrackParams",

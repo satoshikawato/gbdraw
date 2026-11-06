@@ -4,8 +4,14 @@ from dataclasses import dataclass
 from typing import Literal, Mapping
 
 from ..core.text import drawn_text_box
-from .circular_layout import gradient_label_text
-from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
+from .metrics import (
+    GradientScaleLayout,
+    gradient_scale_texts,
+    legend_line_height,
+    legend_text_x_offset,
+    single_gradient_block_x,
+    stack_compact_gradient_rows,
+)
 from .table import LegendRowKey, as_legend_table
 
 
@@ -43,6 +49,12 @@ class LinearGradientEntryLayout:
 
 @dataclass(frozen=True, slots=True)
 class LinearGradientLegendLayout:
+    """The gradient block: every gradient row (``entries``, in drawn order) and its scale lines.
+
+    The rows that share scale texts share one scale line below them. The ``min_label_*``, ``max_label_*`` and
+    ``scale_label_y`` fields are the first group's scale line; ``more_scales`` holds the later groups' lines, each
+    below its own rows (a compact block only)."""
+
     compact: bool
     entries: tuple[LinearGradientEntryLayout, ...]
     width: float
@@ -53,6 +65,16 @@ class LinearGradientLegendLayout:
     min_label_x: float
     max_label_x: float
     scale_label_y: float
+    more_scales: tuple[GradientScaleLayout, ...] = ()
+
+    @property
+    def scales(self) -> tuple[GradientScaleLayout, ...]:
+        """Every scale line of the block, the first group's first."""
+
+        first = GradientScaleLayout(
+            self.min_label_text, self.max_label_text, self.min_label_x, self.max_label_x, self.scale_label_y
+        )
+        return (first, *self.more_scales)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,10 +157,6 @@ def _build_gradient_layout(
 
     drawn_names = table.names()
     bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
-    min_label_text = gradient_label_text(
-        gradient_entries[0][1].get("min_value", 0)
-    )
-    max_label_text = gradient_label_text(gradient_entries[0][1]["max_value"])
     # The scale labels share one line box, whatever their digits.
     scale_label_height = drawn_text_box("100%", font_family, font_size)[1]
     if len(gradient_entries) > 1:
@@ -151,33 +169,38 @@ def _build_gradient_layout(
             for key, _ in gradient_entries
         )
         bar_x = label_width + (GRADIENT_LABEL_GAP_RATIO * color_rect_size)
+        stack = stack_compact_gradient_rows(
+            [gradient_scale_texts(properties) for _, properties in gradient_entries],
+            color_rect_size=color_rect_size,
+            line_height=line_height,
+            label_height=scale_label_height,
+            min_label_x=bar_x,
+            max_label_x=bar_x + bar_width,
+        )
         entries = tuple(
             LinearGradientEntryLayout(
-                key=key,
-                properties=properties,
+                key=gradient_entries[index][0],
+                properties=gradient_entries[index][1],
                 title_x=0.0,
-                title_y=(color_rect_size / 2.0) + (index * line_height),
+                title_y=y,
                 bar_x=bar_x,
-                bar_y=(color_rect_size / 2.0) + (index * line_height),
+                bar_y=y,
             )
-            for index, (key, properties) in enumerate(gradient_entries)
+            for index, y in stack.rows
         )
-        scale_label_y = (
-            color_rect_size
-            + ((len(gradient_entries) - 1) * line_height)
-            + 2.0
-        )
+        first_scale = stack.scales[0]
         return LinearGradientLegendLayout(
             compact=True,
             entries=entries,
             width=bar_x + bar_width,
-            height=scale_label_y + scale_label_height,
+            height=stack.height,
             bar_width=bar_width,
-            min_label_text=min_label_text,
-            max_label_text=max_label_text,
-            min_label_x=bar_x,
-            max_label_x=bar_x + bar_width,
-            scale_label_y=scale_label_y,
+            min_label_text=first_scale.min_label_text,
+            max_label_text=first_scale.max_label_text,
+            min_label_x=first_scale.min_label_x,
+            max_label_x=first_scale.max_label_x,
+            scale_label_y=first_scale.scale_label_y,
+            more_scales=stack.scales[1:],
         )
 
     key, properties = gradient_entries[0]
@@ -186,6 +209,7 @@ def _build_gradient_layout(
         font_family,
         font_size,
     )
+    min_label_text, max_label_text = gradient_scale_texts(properties)
     width, bar_x = single_gradient_block_x(bar_width, title_width)
     bar_y = title_height + (color_rect_size / 2.0)
     scale_label_y = bar_y + (color_rect_size / 2.0) + 2.0

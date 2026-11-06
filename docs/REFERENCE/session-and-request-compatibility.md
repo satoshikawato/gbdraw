@@ -46,6 +46,12 @@ Each record of a Session 51 drawing's saved track-slot geometry
 record's origin), which the Web app's **Select region** reads. A saved Result without them
 (written before they existed) loads as before; Select region stays off with the
 reason "Generate to enable region selection" until the next Generate.
+A region annotation's style in a Session 51 request may hold a **gradient**
+(`style.gradient`: `startColor`, `endColor`, and `direction`, `forward` or
+`reverse`), which a `band` or `highlight` mark draws along the region in place of
+its fill; Sequence search writes it for the gradient by query position. A style
+without one is written as before, without the key, and reads as no gradient.
+gbdraw 0.14.5 reads Sessions up to 50 and so never meets the key.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the

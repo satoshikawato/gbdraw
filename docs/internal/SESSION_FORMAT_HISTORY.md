@@ -96,6 +96,18 @@ and title at the bottom and states them in what it saves. The format does not ch
 request this way before; only the Web's reading changes. Positive fixture:
 `tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
 
+Session 51 also adds an optional `gradient` to a region annotation's style in the canonical request
+(`diagramOptions.annotations.sets[].defaultStyle` and `.annotations[].style`; PR-B, the Web's Sequence search, receipt
+`web.sequence-search` rev 1): `startColor` and `endColor`, the colours at the start and at the end of what the region
+stands for (a search hit: its query), and `direction`, `forward` or `reverse`, which way that order runs on the
+record's source strand. A `band` or `highlight` mark draws it along the region in place of its fill (`gbdraw/render/drawers/annotation_marks.py`,
+`gradient_steps`), and the Legend draws one bar per caption and pair of colours, from "start" to "end". The writer
+writes the key only when a style has a gradient, so every request without one encodes byte for byte as before; the
+reader reads an absent or null key as no gradient. Request schema 9 is unchanged: the key is a new optional field
+of the request description (`CanonicalAnnotationGradient`). Session 51 has not reached `main`, so the version does
+not change; `main`'s build (0.14.5) refuses every Session 51 file. Positive fixture:
+`tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz` (Python `save_session_document`).
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

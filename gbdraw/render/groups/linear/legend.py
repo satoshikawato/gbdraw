@@ -11,6 +11,7 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
+from ....legend.metrics import GradientScaleLayout
 from ....legend.table import as_legend_table, LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
@@ -141,7 +142,7 @@ class LegendGroup:
     def _add_gradient_scale_labels(
         self,
         group: Group,
-        layout: LinearGradientLegendLayout,
+        layout: GradientScaleLayout,
     ) -> None:
         label_0 = generate_text_path(
             layout.min_label_text,
@@ -233,11 +234,13 @@ class LegendGroup:
             grad_rect.translate(entry.bar_x, entry.bar_y)
             entry_group.add(grad_rect)
             if not layout.compact:
-                self._add_gradient_scale_labels(entry_group, layout)
+                self._add_gradient_scale_labels(entry_group, layout.scales[0])
             group.add(entry_group)
 
         if layout.compact:
-            self._add_gradient_scale_labels(group, layout)
+            # One scale line per group of rows that share scale texts.
+            for scale in layout.scales:
+                self._add_gradient_scale_labels(group, scale)
         return group
 
     def _build_orientation_group(

@@ -25,9 +25,12 @@ from gbdraw.annotations.layout import PlacedRegionAnnotation
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
+    MarkPart,
     annotation_dom_id,
     cap_size,
     dom_token,
+    gradient_fill_group,
+    gradient_steps,
     label_ink_offsets,
     mark_parts,
     mark_reach,
@@ -120,6 +123,38 @@ def _solid_fill(annotation: ResolvedRegionAnnotation, style: RegionAnnotationSty
     """The fill colour of a ``band`` or ``highlight`` mark without hatching (``none`` for none)."""
 
     return style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+
+
+def _band_paint(
+    target: Group,
+    definitions: dict[str, BaseElement],
+    annotation: ResolvedRegionAnnotation,
+    style: RegionAnnotationStyle,
+    part: MarkPart,
+    start: float,
+    end: float,
+    record_length: int,
+    scale: float,
+    band: tuple[float, float],
+) -> str:
+    """The fill of one part of a band or highlight mark: its hatch pattern (added to ``definitions``), its solid
+    fill, or ``none`` over the steps of its gradient (added to ``target`` before the mark's outline). ``band``
+    is the part's top and height."""
+
+    if style.hatch:
+        definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
+        return hatch_pattern_paint(style.hatch)
+    if style.gradient is None:
+        return _solid_fill(annotation, style)
+    top, height = band
+    x2 = float(end) * scale
+    steps = gradient_steps(
+        annotation, style.gradient, part, start, end, record_length=record_length, length_px=x2 - start * scale
+    )
+    target.add(gradient_fill_group(steps, style.fill_opacity, lambda step, color: Rect(
+        insert=(float(step) * scale, top), size=(max(0.1, x2 - float(step) * scale), height), fill=color, stroke="none",
+    )))
+    return "none"
 
 
 def _label_boxes(
@@ -459,11 +494,10 @@ def linear_annotation_track_content(
                 lane_height = _lane_height(track, placements, frame.height_px, params)
                 lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
             if annotation.mark in {"band", "highlight"}:
-                if style.hatch:
-                    definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
-                fill = hatch_pattern_paint(style.hatch) if style.hatch else _solid_fill(annotation, style)
                 height_factor = _band_height_factor(annotation.mark)
                 rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)
+                fill = _band_paint(part_target, definitions, annotation, style, part, part.start, part.end,
+                                   record_length, scale, (rect_y, rect_height))
                 rect = Rect(
                     insert=(rect_x, rect_y),
                     size=(rect_width, rect_height),

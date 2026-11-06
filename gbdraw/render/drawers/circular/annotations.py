@@ -38,6 +38,8 @@ from gbdraw.render.drawers.annotation_marks import (
     MarkPart,
     annotation_dom_id,
     cap_size,
+    gradient_fill_group,
+    gradient_steps,
     label_ink_offsets,
     mark_parts,
     mark_reach,
@@ -685,6 +687,36 @@ def _band_fill(mark: str, style: RegionAnnotationStyle) -> str:
     )
 
 
+def _band_paint(
+    target: Group,
+    definitions: dict[str, BaseElement],
+    annotation: ResolvedRegionAnnotation,
+    style: RegionAnnotationStyle,
+    part: MarkPart,
+    start: float,
+    end: float,
+    record_length: int,
+    inner: float,
+    outer: float,
+) -> str:
+    """The fill of one part of a band or highlight mark: its hatch pattern (added to ``definitions``), its solid
+    fill, or ``none`` over the steps of its gradient (added to ``target`` before the mark's outline)."""
+
+    if style.hatch:
+        definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
+    if style.gradient is None:
+        return _band_fill(annotation.mark, style)
+    steps = gradient_steps(
+        annotation, style.gradient, part, start, end, record_length=record_length,
+        length_px=math.radians(_span_deg(start, end, record_length)) * 0.5 * (inner + outer),
+    )
+    target.add(gradient_fill_group(steps, style.fill_opacity, lambda step, color: Path(
+        d=_band_path(step, end, record_length, inner, outer), fill=color, stroke="none",
+    )))
+    return "none"
+
+
+
 def _piece_ends(start: float, end: float, part: MarkPart) -> tuple[tuple[float, bool], tuple[float, bool]]:
     """Each end of one drawn piece of a part (``_safe_segments``) and whether it is drawn: not where the part was
     split into pieces or cut."""
@@ -850,9 +882,8 @@ def circular_annotation_track_content(
                 ends = _piece_ends(start, end, part)
                 closed = all(capped for _position, capped in ends)
                 if annotation.mark in {"band", "highlight"}:
-                    if style.hatch:
-                        definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
-                    fill = _band_fill(annotation.mark, style)
+                    fill = _band_paint(item_group, definitions, annotation, style, part, start, end,
+                                       record_length, lane_inner, lane_outer)
                     path = Path(
                         d=_band_path(start, end, record_length, lane_inner, lane_outer),
                         fill=fill,

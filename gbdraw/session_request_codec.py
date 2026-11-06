@@ -111,6 +111,7 @@ from gbdraw.tracks.circular import (
 )
 from gbdraw.tracks.linear import _normalize_renderer as _linear_renderer_name
 from gbdraw.annotations import (
+    AnnotationGradient,
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
@@ -1404,6 +1405,12 @@ def _encode_selector(selector: RecordSelector | None) -> dict[str, Any] | None:
     if selector.record_id is not None:
         return {"kind": "recordId", "value": selector.record_id}
     return {"kind": "recordIndex", "index": selector.record_index}
+
+
+def decode_record_selector(value: object, *, path: str) -> RecordSelector | None:
+    """A record selector as the canonical request writes it (``recordId`` or ``recordIndex``), or null."""
+
+    return _decode_selector(value, path=path)
 
 
 def _decode_selector(value: object, *, path: str) -> RecordSelector | None:
@@ -3324,19 +3331,41 @@ def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
         "labelOrientation": style.label_orientation,
         "labelPosition": style.label_position,
         "labelOffset": style.label_offset,
+        # Written only when set, so a style without one encodes as before.
+        **(
+            {"gradient": {
+                "startColor": style.gradient.start_color,
+                "endColor": style.gradient.end_color,
+                "direction": style.gradient.direction,
+            }}
+            if style.gradient is not None
+            else {}
+        ),
     }
 
 
 def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationStyle:
-    payload = _object(
-        value,
+    payload = _object(value, path=path)
+    _require_exact_fields(
+        payload,
         path=path,
         required={
             "stroke", "strokeWidth", "strokeDasharray", "lineCap", "fill",
             "fillOpacity", "hatch", "labelColor", "labelFontSize",
             "labelOrientation", "labelPosition", "labelOffset",
         },
+        optional={"gradient"},
     )
+    gradient = None
+    if payload.get("gradient") is not None:
+        raw_gradient = _object(
+            payload["gradient"], path=f"{path}.gradient", required={"startColor", "endColor", "direction"}
+        )
+        gradient = AnnotationGradient(
+            start_color=_string(raw_gradient["startColor"], f"{path}.gradient.startColor"),
+            end_color=_string(raw_gradient["endColor"], f"{path}.gradient.endColor"),
+            direction=raw_gradient["direction"],
+        )
     hatch_payload = payload["hatch"]
     hatch = None
     if hatch_payload is not None:
@@ -3360,70 +3389,73 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
         label_orientation=payload["labelOrientation"],
         label_position=payload["labelPosition"],
         label_offset=payload["labelOffset"],
+        gradient=gradient,
     )
+
+
+def encode_annotation_set(annotation_set: AnnotationSet) -> dict[str, Any]:
+    """One annotation set as the canonical request writes it (``diagramOptions.annotations.sets[]``)."""
+
+    items = []
+    for annotation in annotation_set.annotations:
+        target = annotation.target
+        target_payload: dict[str, Any]
+        if isinstance(target, CoordinateSpan):
+            target_payload = {
+                "kind": "coordinateSpan",
+                "record": _encode_selector(target.record),
+                "start": target.start,
+                "end": target.end,
+                "coordinateSpace": target.coordinate_space,
+                # CoordinateSpan reads wraps_origin by truth (OV-632).
+                "wrapsOrigin": bool(target.wraps_origin),
+                "outOfBounds": target.out_of_bounds,
+            }
+        elif isinstance(target, FeatureSpan):
+            target_payload = {
+                "kind": "featureSpan",
+                "record": _encode_selector(target.record),
+                "selectors": [
+                    {"key": selector.key, "value": selector.value}
+                    for selector in target.selectors
+                ],
+                "envelope": target.envelope,
+                "circularPath": target.circular_path,
+            }
+        elif isinstance(target, FeatureIdentitySpan):
+            target_payload = {
+                "kind": "featureIdentity",
+                "recordKey": target.record_key,
+                "biologicalFeatureId": target.biological_feature_id,
+                "envelope": target.envelope,
+                "circularPath": target.circular_path,
+            }
+        else:  # pragma: no cover - RegionAnnotation validates the union.
+            raise CanonicalRequestEncodingError("Unsupported annotation target.")
+        items.append(
+            {
+                "id": annotation.id,
+                "target": target_payload,
+                "label": annotation.label,
+                "mark": annotation.mark,
+                "lane": annotation.lane,
+                "style": _encode_annotation_style(annotation.style) if annotation.style else None,
+                "legendLabel": annotation.legend_label,
+                "metadata": dict(annotation.metadata),
+            }
+        )
+    return {
+        "id": annotation_set.id,
+        "annotations": items,
+        "defaultStyle": _encode_annotation_style(annotation_set.default_style),
+        "legendLabel": annotation_set.legend_label,
+    }
 
 
 def _encode_annotations(value: object, *, resources: RequestResources) -> dict[str, Any]:
     if not isinstance(value, AnnotationOptions):
         raise CanonicalRequestEncodingError("diagramOptions.annotations must be AnnotationOptions.")
-    sets = []
-    for annotation_set in value.sets:
-        items = []
-        for annotation in annotation_set.annotations:
-            target = annotation.target
-            target_payload: dict[str, Any]
-            if isinstance(target, CoordinateSpan):
-                target_payload = {
-                    "kind": "coordinateSpan",
-                    "record": _encode_selector(target.record),
-                    "start": target.start,
-                    "end": target.end,
-                    "coordinateSpace": target.coordinate_space,
-                    # CoordinateSpan reads wraps_origin by truth (OV-632).
-                    "wrapsOrigin": bool(target.wraps_origin),
-                    "outOfBounds": target.out_of_bounds,
-                }
-            elif isinstance(target, FeatureSpan):
-                target_payload = {
-                    "kind": "featureSpan",
-                    "record": _encode_selector(target.record),
-                    "selectors": [
-                        {"key": selector.key, "value": selector.value}
-                        for selector in target.selectors
-                    ],
-                    "envelope": target.envelope,
-                    "circularPath": target.circular_path,
-                }
-            elif isinstance(target, FeatureIdentitySpan):
-                target_payload = {
-                    "kind": "featureIdentity",
-                    "recordKey": target.record_key,
-                    "biologicalFeatureId": target.biological_feature_id,
-                    "envelope": target.envelope,
-                    "circularPath": target.circular_path,
-                }
-            else:  # pragma: no cover - RegionAnnotation validates the union.
-                raise CanonicalRequestEncodingError("Unsupported annotation target.")
-            items.append(
-                {
-                    "id": annotation.id,
-                    "target": target_payload,
-                    "label": annotation.label,
-                    "mark": annotation.mark,
-                    "lane": annotation.lane,
-                    "style": _encode_annotation_style(annotation.style) if annotation.style else None,
-                    "legendLabel": annotation.legend_label,
-                    "metadata": dict(annotation.metadata),
-                }
-            )
-        sets.append(
-            {
-                "id": annotation_set.id,
-                "annotations": items,
-                "defaultStyle": _encode_annotation_style(annotation_set.default_style),
-                "legendLabel": annotation_set.legend_label,
-            }
-        )
+    sets = [encode_annotation_set(annotation_set) for annotation_set in value.sets]
     return {
         "sets": sets,
         "table": (
@@ -5663,10 +5695,7 @@ def describe_canonical_request() -> dict[str, Any]:
     table_ref = named("TableRef", obj({"resourceId": STRING, "representation": literal("canonicalTsv")}))
     file_ref = named("FileRef", obj({"resourceId": STRING, "representation": literal("file")}))
     # _encode_selector.
-    selector = kinds("RecordSelector", "Selector", {
-        "recordId": {"value": STRING},
-        "recordIndex": {"index": INTEGER},
-    })
+    selector = kinds("RecordSelector", "Selector", {"recordId": {"value": STRING}, "recordIndex": {"index": INTEGER}})
 
     # The shape of a class the encoder writes its own way, by class.
     wire: dict[object, Shape] = {
@@ -5693,13 +5722,13 @@ def describe_canonical_request() -> dict[str, Any]:
         extra: Mapping[str, Shape] | None = None,
         kind: str | None = None,
         defaults: Mapping[str, object] | None = None,
+        optional: frozenset[str] = frozenset(),
     ) -> Shape:
         """The object the encoder writes for a dataclass: one camelCase key per field.
 
-        ``files`` are the fields written as resource references, ``replace``
-        the fields the encoder writes its own way, ``extra`` the keys it adds,
-        ``kind`` the tag it adds, and ``defaults`` the values a repair of a
-        stored request puts at a field (the encoder's form of the default).
+        ``files`` are the fields written as resource references, ``replace`` the fields the encoder writes its own
+        way, ``extra`` the keys it adds, ``kind`` the tag it adds, ``defaults`` the values a repair of a stored
+        request puts at a field (the encoder's form of the default), and ``optional`` the fields written when set.
         """
 
         hints = _class_type_hints(cls)
@@ -5708,7 +5737,8 @@ def describe_canonical_request() -> dict[str, Any]:
             members[_camel(item.name)] = (replace or {}).get(item.name) or (
                 resource if item.name in files else of
             )(hints[item.name])
-        wire[cls] = named(name or cls.__name__, obj({**members, **(extra or {})}, defaults=defaults))
+        shape = obj({**members, **(extra or {})}, optional=sorted(map(_camel, optional)), defaults=defaults)
+        wire[cls] = named(name or cls.__name__, shape)
         return wire[cls]
 
     # _encode_record: RecordInput; _SOURCE_FILE_RESOURCES names each source's resources.
@@ -5795,14 +5825,15 @@ def describe_canonical_request() -> dict[str, Any]:
     ))
     hatch_default, style_default = HatchStyle(), RegionAnnotationStyle()
     data(HatchStyle, replace={"color": color}, defaults={"color": hatch_default.color})
-    data(RegionAnnotationStyle, replace={  # RegionAnnotationStyle.__post_init__
+    # AnnotationGradient.__post_init__: two colors; _encode_annotation_style writes it only when set.
+    gradient = data(AnnotationGradient, replace={"start_color": color, "end_color": color})
+    data(RegionAnnotationStyle, optional=frozenset({"gradient"}), replace={  # RegionAnnotationStyle.__post_init__
         "fill_opacity": bound(RegionAnnotationStyle, "fill_opacity", minimum=0, maximum=1),
-        "stroke": color, "label_color": color,
+        "stroke": color, "label_color": color, "gradient": nullable(gradient),
         "fill": union(color, bounded(STRING, pattern=BLANK_TEXT_PATTERN), NULL),
     }, defaults={"stroke": style_default.stroke, "labelColor": style_default.label_color, "fill": style_default.fill})
     data(FeatureSelector)
-    # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74);
-    # the decoder reads its integer part.
+    # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74); the decoder reads its integer part.
     # CoordinateSpan.__post_init__: 1-based.
     data(CoordinateSpan, kind="coordinateSpan", replace={
         "start": bounded(NUMBER, minimum=1), "end": bounded(NUMBER, minimum=1),
@@ -6061,6 +6092,8 @@ def describe_canonical_request() -> dict[str, Any]:
 
 
 __all__ = [
+    "decode_record_selector",
+    "encode_annotation_set",
     "CANONICAL_REQUEST_SCHEMA",
     "SUPPORTED_CANONICAL_REQUEST_SCHEMAS",
     "UNKNOWN_FIELD_POLICY",

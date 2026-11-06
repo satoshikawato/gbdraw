@@ -139,6 +139,12 @@
  * @property {boolean} cross
  */
 /**
+ * @typedef {object} CanonicalAnnotationGradient
+ * @property {CanonicalAnnotationColor} startColor
+ * @property {CanonicalAnnotationColor} endColor
+ * @property {'forward' | 'reverse'} direction
+ */
+/**
  * @typedef {object} CanonicalRegionAnnotationStyle
  * @property {CanonicalAnnotationColor} stroke
  * @property {number} strokeWidth
@@ -152,6 +158,7 @@
  * @property {'auto' | 'horizontal' | 'tangent' | 'radial' | 'arc'} labelOrientation
  * @property {'center' | 'start' | 'end'} labelPosition
  * @property {number} labelOffset
+ * @property {CanonicalAnnotationGradient | null} [gradient]
  */
 /**
  * @typedef {object} CanonicalFeatureSelector

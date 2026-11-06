@@ -400,6 +400,7 @@ def resolve_annotation_set(
                 legend_label=annotation.legend_label or annotation_set.legend_label,
                 metadata=annotation.metadata,
                 crosses_origin=segments_cross_origin(segments, len(record.seq), is_circular=is_circular),
+                source_step=-1 if _read_coord_map(record)[1] < 0 else 1,
             )
         )
     return ResolvedAnnotationBundle(tuple(resolved), tuple(warnings), (annotation_set.id,))

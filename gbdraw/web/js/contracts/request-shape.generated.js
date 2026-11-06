@@ -366,6 +366,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({color: "#666666"})
     }),
+    CanonicalAnnotationGradient: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        startColor: Object.freeze({kind: "ref", name: "CanonicalAnnotationColor"}),
+        endColor: Object.freeze({kind: "ref", name: "CanonicalAnnotationColor"}),
+        direction: Object.freeze({kind: "literal", values: Object.freeze(["forward", "reverse"])})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
     CanonicalRegionAnnotationStyle: Object.freeze({
       kind: "object",
       fields: Object.freeze({
@@ -396,9 +406,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         }),
         labelOrientation: Object.freeze({kind: "literal", values: Object.freeze(["auto", "horizontal", "tangent", "radial", "arc"])}),
         labelPosition: Object.freeze({kind: "literal", values: Object.freeze(["center", "start", "end"])}),
-        labelOffset: Object.freeze({kind: "number"})
+        labelOffset: Object.freeze({kind: "number"}),
+        gradient: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "ref", name: "CanonicalAnnotationGradient"}),
+            Object.freeze({kind: "null"})
+          ])
+        })
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["gradient"]),
       open: false,
       defaults: Object.freeze({fill: null, hatch: null, labelColor: "#202020", labelFontSize: null, stroke: "#404040"})
     }),

@@ -704,6 +704,29 @@
       ],
       "additionalProperties": false
     },
+    "CanonicalAnnotationGradient": {
+      "type": "object",
+      "properties": {
+        "startColor": {
+          "$ref": "#/$defs/CanonicalAnnotationColor"
+        },
+        "endColor": {
+          "$ref": "#/$defs/CanonicalAnnotationColor"
+        },
+        "direction": {
+          "enum": [
+            "forward",
+            "reverse"
+          ]
+        }
+      },
+      "required": [
+        "startColor",
+        "endColor",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
     "CanonicalRegionAnnotationStyle": {
       "type": "object",
       "properties": {
@@ -791,6 +814,16 @@
         },
         "labelOffset": {
           "type": "number"
+        },
+        "gradient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalAnnotationGradient"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
