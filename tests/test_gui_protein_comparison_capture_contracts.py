@@ -45,7 +45,7 @@ WEB_INDEX_PATH = WEB_ROOT / "index.html"
 GALLERY_SVG_PATH = (
     WEB_ROOT / "gallery" / "examples" / "BGC0000708-BGC0000713.svg"
 )
-APP_SETUP_PATH = WEB_ROOT / "js" / "app" / "app-setup.js"
+LINEAR_COMPARISON_EDITS_PATH = WEB_ROOT / "js" / "app" / "linear-comparison-edits.js"
 RUN_ANALYSIS_PATH = WEB_ROOT / "js" / "app" / "run-analysis.js"
 CANDIDATE_RENDER_PATH = WEB_ROOT / "js" / "app" / "candidate-render.js"
 SVG_ACTIONS_PATH = WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js"
@@ -905,7 +905,7 @@ def test_protein_comparison_screenshots_are_full_pinned_viewports() -> None:
 
 
 def test_protein_popup_state_uses_catalog_commit_path() -> None:
-    app_setup = APP_SETUP_PATH.read_text(encoding="utf-8")
+    comparison_edits = LINEAR_COMPARISON_EDITS_PATH.read_text(encoding="utf-8")
     run_analysis = RUN_ANALYSIS_PATH.read_text(encoding="utf-8")
     candidate_render = CANDIDATE_RENDER_PATH.read_text(encoding="utf-8")
     svg_actions = SVG_ACTIONS_PATH.read_text(encoding="utf-8")
@@ -917,8 +917,8 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
         "const deactivateLinearComparisonLosatFilename = (id) => shownAction('linear', (drawing) => {",
         "const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {",
     ):
-        start = app_setup.index(fragment)
-        body = app_setup[start : start + 1_600]
+        start = comparison_edits.index(fragment)
+        body = comparison_edits[start : start + 1_600]
         assert "replaceLinearComparisonPlan(drawing, next, { invalidate: false });" in body
 
     for fragment in (
