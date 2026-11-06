@@ -17,7 +17,7 @@ write-up of a release.
   the same, the fit ends instead of trying smaller sizes down to the smallest
   one that can be drawn. A Circular map whose centre definition keeps its
   tracks out stops shrinking this way: the MjeNMV map at `--figure_width 120mm`
-  is refused after 4 passes instead of 11 (0.4 s instead of 0.9 s in CPython),
+  is refused after 4 passes instead of 11 (about 0.35 s instead of 0.85 s in CPython),
   with the same sizes in the message. The fit assumes that a figure that has
   stopped shrinking does not shrink again at a smaller size.
 - Fixed: a Circular map too small for its scale labels (a small
@@ -32,7 +32,8 @@ write-up of a release.
   the DPI from `--dpi` alone, not from the PNG DPI a web app Session stores.
   Every PNG that the command line or Python writes now carries a pHYs chunk with
   that DPI (96 when none is given), as the web app's PNG does.
-  `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive).
+  `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
+  (#1663).
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was

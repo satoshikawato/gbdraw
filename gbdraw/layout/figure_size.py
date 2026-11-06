@@ -520,6 +520,7 @@ __all__ = [
     "MeasuredBase",
     "check_figure_height",
     "figure_size_excess",
+    "figure_size_parts",
     "figure_size_refusal",
     "figure_too_narrow",
     "figure_too_short",

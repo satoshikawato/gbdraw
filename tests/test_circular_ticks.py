@@ -242,7 +242,7 @@ def test_a_tick_label_longer_than_its_circle_is_a_track_that_does_not_fit(radius
 
 def test_a_map_too_small_for_its_tick_labels_is_refused_as_a_track_that_does_not_fit() -> None:
     """OV-2559: the mitochondrial map with labels on both sides at radius 25 raised a bare ValueError from the arc
-    of a tick label; it is now the track layout refusal, with the row of the tick slot, before labels are placed."""
+    of a tick label; it is now the track layout refusal, with the row of the tick slot."""
 
     records = gbdraw.read_genbank(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
     with pytest.raises(ValidationError) as caught:
@@ -254,3 +254,28 @@ def test_a_map_too_small_for_its_tick_labels_is_refused_as_a_track_that_does_not
         )
     assert track_layout_reason(caught.value) == "CANNOT_FIT"
     assert caught.value.diagnostic["slotIndex"] >= 0
+    assert caught.value.diagnostic["slotTrack"] == "ticks"
+
+
+def test_radial_labels_refuse_scale_labels_longer_than_their_circle_when_the_slot_is_drawn() -> None:
+    """OV-2559 with radial labels, which can move the tracks: the early check is skipped, and drawing the tick slot
+    refuses with its row instead of the bare ValueError of the arc."""
+
+    records = gbdraw.read_genbank(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
+    slots = ["features:features", "ticks:ticks@tick_label_layout=label_only", "gc_content:dinucleotide_content"]
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_circular(
+            records,
+            options=gbdraw.CircularOptions(
+                config_overrides={
+                    "canvas.circular.radius": 25,
+                    "labels.circular.scope": "both",
+                    "labels.circular.placement": "radial",
+                    "objects.definition.circular.show": False,
+                },
+                tracks=gbdraw.CircularTrackOptions(slots=slots),
+            ),
+        )
+    assert track_layout_reason(caught.value) == "CANNOT_FIT"
+    assert caught.value.diagnostic["slotIndex"] == 1
+    assert caught.value.diagnostic["slotTrack"] == "ticks"

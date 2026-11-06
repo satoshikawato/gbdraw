@@ -454,7 +454,7 @@ def tick_group_content(
     slot_id: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ) -> GroupContent:
-    """The tick group of a tick slot: its ticks and scale labels (a render stage, so a second build is reused)."""
+    """The tick group of a tick slot: its ticks and scale labels (a render stage: a Worker transaction reuses a second build)."""
     return render_stage(
         "ticks_content",
         build_group_content,

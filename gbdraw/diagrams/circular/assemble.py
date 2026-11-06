@@ -1919,7 +1919,7 @@ def _refuse_unfit_scale_labels(
     """Refuse the figure, before its feature labels are placed, when a tick slot of the layout it draws has scale
     labels longer than their circle (OV-2559): the slot's row does not fit, and a radius too small for its scale
     labels fails at once, so a requested figure size tries it cheaply. It builds the tick groups the figure draws (a
-    render stage, so drawing them reuses the build); drawing a slot refuses the same way.
+    render stage: within a Worker transaction, drawing them reuses the build); drawing a slot refuses the same way.
     """
 
     for slot in radial_layout.slots:
