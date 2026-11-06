@@ -28,12 +28,14 @@ from gbdraw.annotations.search_hits import (
     SEARCH_GRADIENT_START_COLOR,
     SEARCH_HIT_METADATA_KEYS,
     SEARCH_QUERY_COLORS,
+    SearchQuery,
     SearchSubject,
     search_hit_annotation_set,
 )
 from gbdraw.api.diagram import build_circular_diagram, build_linear_diagram
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import InMemoryRecordSource, LinearDiagramRequest, RecordInput
+from gbdraw.core.color import interpolate_color
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.record_select import parse_record_selector
@@ -56,6 +58,8 @@ ROWS = "\n".join(
         ("qA", "other", "99.000", "100", "0", "0", "1", "100", "1", "100", "1e-40", "200"),
     )
 )
+# qA is 600 bp and its hit covers all of it; qB is 400 bp.
+QUERIES = (SearchQuery("qA", 600), SearchQuery("qB", 400))
 SUBJECTS = (
     SearchSubject("rec1:1-5000", parse_record_selector("rec1"), "record-1"),
     SearchSubject("rec2:1-3000", parse_record_selector("rec2"), "record-2", source_start=1001),
@@ -69,7 +73,7 @@ def _search(**kwargs: object):
         subjects=SUBJECTS,
         thresholds=THRESHOLDS,
         program="blastn",
-        queries=["qA", "qB"],
+        queries=QUERIES,
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -109,7 +113,7 @@ def test_no_hit_gives_no_set() -> None:
     strict = ComparisonThresholds(evalue=1e-2, bitscore=5000.0, identity=70.0, alignment_length=0)
     result = search_hit_annotation_set(
         read_comparison_table(io.StringIO(ROWS)), set_id="Search 1", subjects=SUBJECTS, thresholds=strict,
-        program="blastn", queries=["qA", "qB"],
+        program="blastn", queries=QUERIES,
     )
     assert result.annotation_set is None and result.hits == ()
     assert result.rows_removed_by_thresholds == 4
@@ -129,6 +133,10 @@ def test_gradient_hits_carry_their_direction_and_one_legend_caption() -> None:
     assert {(row.style.gradient.start_color, row.style.gradient.end_color) for row in rows} == {
         (SEARCH_GRADIENT_START_COLOR, SEARCH_GRADIENT_END_COLOR)
     }
+    # Each hit's place in its query (D-44): qA covers all of it, qB 320-365 and 1-200 of 400.
+    assert [(row.style.gradient.query_start, row.style.gradient.query_end) for row in rows] == [
+        (0.0, 1.0), (319 / 400, 365 / 400), (0.0, 0.5),
+    ]
     # The end colour is the plain fill an annotation TSV export writes (receipt).
     assert {row.style.fill for row in rows} == {SEARCH_GRADIENT_END_COLOR}
     assert {row.legend_label for row in rows} == {QUERY_POSITION_LEGEND_LABEL}
@@ -139,7 +147,7 @@ def test_ambiguous_subject_id_is_refused() -> None:
     with pytest.raises(ValidationError) as error:
         search_hit_annotation_set(
             read_comparison_table(io.StringIO(ROWS)), set_id="S", subjects=twice, thresholds=THRESHOLDS,
-            program="blastn", queries=["qA"],
+            program="blastn", queries=QUERIES[:1],
         )
     assert error.value.diagnostic == {"code": "COMPARISON_INPUT", "reason": "RECORD_ID", "column": 2}
 
@@ -152,12 +160,19 @@ def test_worker_helper_returns_the_set_as_the_request_writes_it() -> None:
             {"subjectId": "rec2:1-3000", "record": {"kind": "recordId", "value": "rec2"}, "recordKey": "record-2", "sourceStart": 1001},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
-        "program": "blastn", "queries": ["qA", "qB"], "colorMode": "gradient", "queryColors": {},
+        "program": "blastn", "queries": [{"name": "qA", "length": 600}, {"name": "qB", "length": 400}],
+        "colorMode": "gradient", "queryColors": {},
     }
     reply = json.loads(sequence_search_annotation_set_json(json.dumps(payload)))
     assert [row["id"] for row in reply["annotationSet"]["annotations"]] == ["qA#1", "qB#1", "qB#2"]
-    assert reply["annotationSet"]["annotations"][1]["style"]["gradient"] == {
+    gradients = [row["style"]["gradient"] for row in reply["annotationSet"]["annotations"]]
+    # The whole query writes no query positions; a part writes both.
+    assert gradients[0] == {
+        "startColor": SEARCH_GRADIENT_START_COLOR, "endColor": SEARCH_GRADIENT_END_COLOR, "direction": "forward",
+    }
+    assert gradients[1] == {
         "startColor": SEARCH_GRADIENT_START_COLOR, "endColor": SEARCH_GRADIENT_END_COLOR, "direction": "reverse",
+        "queryStart": 319 / 400, "queryEnd": 365 / 400,
     }
     assert (reply["rowsRead"], reply["rowsKept"], reply["unmatchedRows"]) == (4, 3, 1)
     assert reply["hits"][1]["strand"] == "-"
@@ -174,6 +189,24 @@ def test_gradient_style_validation_has_typed_reasons() -> None:
     with pytest.raises(ValidationError) as both:
         RegionAnnotationStyle(hatch=HatchStyle(), gradient=AnnotationGradient("#ffffff", "#000000"))
     assert both.value.diagnostic == {"code": "INPUT_INVALID", "reason": "FIELDS"}
+
+
+@pytest.mark.parametrize(
+    ("query_start", "query_end", "reason"),
+    [
+        (-0.1, 1.0, "NONNEGATIVE"),
+        (0.0, 1.5, "ORDER"),
+        (0.8, 0.2, "ORDER"),
+        (float("nan"), 1.0, "FINITE"),
+        ("half", 1.0, "FINITE"),
+        (True, 1.0, "FINITE"),
+    ],
+)
+def test_gradient_query_positions_are_fractions_in_query_order(query_start: object, query_end: object, reason: str) -> None:
+    assert AnnotationGradient("#ffffff", "#000000", query_start=0.25, query_end=0.75).query_end == 0.75
+    with pytest.raises(ValidationError) as error:
+        AnnotationGradient("#ffffff", "#000000", query_start=query_start, query_end=query_end)  # type: ignore[arg-type]
+    assert error.value.diagnostic == {"code": "INPUT_INVALID", "reason": reason}
 
 
 def test_gradient_style_round_trips_through_the_request(tmp_path: Path) -> None:
@@ -193,6 +226,11 @@ def test_gradient_style_round_trips_through_the_request(tmp_path: Path) -> None:
     sets = encoded.payload["diagramOptions"]["annotations"]["sets"]
     # A style without a gradient is written as before: no key.
     assert "gradient" not in sets[1]["annotations"][0]["style"]
+    # A hit over a part of its query writes where it lies in the query.
+    assert [
+        (row["style"]["gradient"].get("queryStart"), row["style"]["gradient"].get("queryEnd"))
+        for row in sets[0]["annotations"]
+    ] == [(None, None), (319 / 400, 365 / 400)]
     resource_paths = {}
     for resource in encoded.resources:
         target = tmp_path / resource.name
@@ -203,8 +241,12 @@ def test_gradient_style_round_trips_through_the_request(tmp_path: Path) -> None:
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
-def _resolved(direction: str, source_step: int) -> tuple[ResolvedRegionAnnotation, AnnotationGradient]:
-    gradient = AnnotationGradient("#ffffff", "#000000", direction)  # type: ignore[arg-type]
+def _resolved(
+    direction: str, source_step: int, query_start: float = 0.0, query_end: float = 1.0
+) -> tuple[ResolvedRegionAnnotation, AnnotationGradient]:
+    gradient = AnnotationGradient(
+        "#ffffff", "#000000", direction, query_start=query_start, query_end=query_end  # type: ignore[arg-type]
+    )
     style = RegionAnnotationStyle(fill="#000000", gradient=gradient)
     annotation = ResolvedRegionAnnotation(
         id="a", set_id="s", record_index=0, segments=((100, 200),), midpoint_bp=150.0, span_bp=100, label="",
@@ -229,6 +271,18 @@ def test_gradient_steps_follow_the_hit_strand_and_the_record_direction(
     # A part of the region takes the colours of its place in the whole region.
     half = gradient_steps(annotation, gradient, part, 150.0, 200.0, record_length=1000, length_px=20.0)
     assert half[-1][1] == last
+
+
+@pytest.mark.parametrize("direction", ["forward", "reverse"])
+def test_a_partial_hit_draws_only_its_part_of_the_query_scale(direction: str) -> None:
+    # The hit covers query positions 301-600 of 600: from the mid colour to the dark end (D-44).
+    annotation, gradient = _resolved(direction, 1, query_start=0.5, query_end=1.0)
+    steps = gradient_steps(annotation, gradient, 0, 100.0, 200.0, record_length=1000, length_px=40.0)
+    # Each of the 20 steps takes the colour at its middle: 1/40 of the span in from each end.
+    near_mid = interpolate_color("#ffffff", "#000000", 0.5 + 0.5 / 40)
+    near_end = interpolate_color("#ffffff", "#000000", 1.0 - 0.5 / 40)
+    low_end, high_end = steps[0][1], steps[-1][1]
+    assert (low_end, high_end) == ((near_mid, near_end) if direction == "forward" else (near_end, near_mid))
 
 
 def _gradient_svg(mode: str) -> str:
@@ -286,4 +340,7 @@ def test_session_fixture_keeps_the_gradient_through_load_and_save(tmp_path: Path
     sets = request.options.annotations.sets
     assert [row.style.gradient for row in sets[0].annotations] == [None, None, None]
     assert [row.style.gradient.direction for row in sets[1].annotations] == ["forward", "forward", "reverse"]
+    assert [(row.style.gradient.query_start, row.style.gradient.query_end) for row in sets[1].annotations] == [
+        (0.0, 1.0), (16 / 650, 171 / 650), (319 / 650, 365 / 650),
+    ]
     assert encoded == stored["diagramOptions"]["annotations"]["sets"]

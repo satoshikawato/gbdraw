@@ -143,6 +143,8 @@
  * @property {CanonicalAnnotationColor} startColor
  * @property {CanonicalAnnotationColor} endColor
  * @property {'forward' | 'reverse'} direction
+ * @property {number} [queryStart]
+ * @property {number} [queryEnd]
  */
 /**
  * @typedef {object} CanonicalRegionAnnotationStyle

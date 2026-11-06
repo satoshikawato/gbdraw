@@ -718,6 +718,16 @@
             "forward",
             "reverse"
           ]
+        },
+        "queryStart": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "queryEnd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": [

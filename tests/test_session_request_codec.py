@@ -2357,7 +2357,7 @@ def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
                         mark="highlight",
                         style=RegionAnnotationStyle(
                             fill="#5b1a4a",
-                            gradient=AnnotationGradient("#f6c9d8", "#5b1a4a", "reverse"),
+                            gradient=AnnotationGradient("#f6c9d8", "#5b1a4a", "reverse", query_start=0.25, query_end=0.75),
                         ),
                     ),
                 ),

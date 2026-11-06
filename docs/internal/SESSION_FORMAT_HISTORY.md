@@ -99,8 +99,9 @@ request this way before; only the Web's reading changes. Positive fixture:
 Session 51 also adds an optional `gradient` to a region annotation's style in the canonical request
 (`diagramOptions.annotations.sets[].defaultStyle` and `.annotations[].style`; PR-B, the Web's Sequence search, receipt
 `web.sequence-search` rev 1): `startColor` and `endColor`, the colours at the start and at the end of what the region
-stands for (a search hit: its query), and `direction`, `forward` or `reverse`, which way that order runs on the
-record's source strand. A `band` or `highlight` mark draws it along the region in place of its fill (`gbdraw/render/drawers/annotation_marks.py`,
+stands for (a search hit: its query); `queryStart` and `queryEnd`, where the region's two ends lie on that scale as
+fractions from 0 to 1 in query order (a hit over a part of its query), written only when they are not 0 and 1; and
+`direction`, `forward` or `reverse`, which way that order runs on the record's source strand. A `band` or `highlight` mark draws it along the region in place of its fill (`gbdraw/render/drawers/annotation_marks.py`,
 `gradient_steps`), and the Legend draws one bar per caption and pair of colours, from "start" to "end". The writer
 writes the key only when a style has a gradient, so every request without one encodes byte for byte as before; the
 reader reads an absent or null key as no gradient. Request schema 9 is unchanged: the key is a new optional field

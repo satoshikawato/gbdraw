@@ -205,8 +205,12 @@ class HatchStyle:
 class AnnotationGradient:
     """A fill that runs along a region from ``start_color`` to ``end_color``.
 
-    The colours are in the order of what the region stands for (a search hit:
-    the query's start, then its end). ``direction`` says which way that order
+    The colours are the two ends of a scale in the order of what the region
+    stands for (a search hit: the query's start, then its end).
+    ``query_start`` and ``query_end`` are where the region's two ends lie on
+    that scale, as fractions from 0 (the query's start) to 1 (its end), in
+    that order: a hit over the second half of its query runs from the
+    middle colour to ``end_color``. ``direction`` says which way that order
     runs on the record's source strand: ``forward`` from the region's lower
     source coordinate, ``reverse`` from its higher one. A ``band`` or
     ``highlight`` mark draws it in place of its fill; other marks have no fill.
@@ -215,6 +219,8 @@ class AnnotationGradient:
     start_color: str
     end_color: str
     direction: Literal["forward", "reverse"] = "forward"
+    query_start: float = 0.0
+    query_end: float = 1.0
 
     def __post_init__(self) -> None:
         for name in ("start_color", "end_color"):
@@ -233,6 +239,24 @@ class AnnotationGradient:
             raise ValidationError(
                 "Annotation gradient direction must be 'forward' or 'reverse'.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
+        for name in ("query_start", "query_end"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+                raise ValidationError(
+                    f"Annotation gradient {name} must be a finite number.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "FINITE"},
+                )
+            if value < 0:
+                raise ValidationError(
+                    f"Annotation gradient {name} must be 0 or more.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE"},
+                )
+            object.__setattr__(self, name, float(value))
+        if not self.query_start <= self.query_end <= 1:
+            raise ValidationError(
+                "Annotation gradient query positions run from query_start to query_end, at most 1.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "ORDER"},
             )
 
 

@@ -3,7 +3,7 @@
 The page sends the raw outfmt 6 text LOSAT wrote, the sequences it searched
 (each with the ID LOSAT names it by, the drawing's record selector, the
 request's record key, and the source coordinate of its first base), the
-panel's thresholds, the program, the queries in order, and the colour mode.
+panel's thresholds, the program, the queries in order with their lengths, and the colour mode.
 Python reads the table with ``read_comparison_table`` and builds the set with
 ``search_hit_annotation_set``; the reply is data (the set as the canonical
 request writes it, the hit table, and the threshold tally). It renders nothing.
@@ -19,6 +19,7 @@ from typing import Literal, TypedDict, cast
 from gbdraw.annotations.search_hits import (
     SearchColorMode,
     SearchProgram,
+    SearchQuery,
     SearchSubject,
     search_hit_annotation_set,
 )
@@ -45,13 +46,20 @@ class SearchThresholdsInput(TypedDict):
     alignmentLength: int
 
 
+class SearchQueryInput(TypedDict):
+    """One query: its FASTA ID and its length (bases, or residues for a protein query)."""
+
+    name: str
+    length: int
+
+
 class SequenceSearchInput(TypedDict):
     table: str
     setId: str
     subjects: list[SearchSubjectInput]
     thresholds: SearchThresholdsInput
     program: SearchProgram
-    queries: list[str]
+    queries: list[SearchQueryInput]
     colorMode: SearchColorMode
     queryColors: dict[str, str]
 
@@ -109,6 +117,12 @@ def _subject(value: object, index: int) -> SearchSubject:
     return SearchSubject(value["subjectId"], record, value["recordKey"], value["sourceStart"])
 
 
+def _query(value: object) -> SearchQuery:
+    if not (isinstance(value, Mapping) and set(value) == {"name", "length"} and isinstance(value["name"], str)):
+        raise _protocol_error("A search query has a name and a length.")
+    return SearchQuery(value["name"], cast(int, value["length"]))  # SearchQuery checks the length.
+
+
 def sequence_search_annotation_set(payload: Mapping[str, object]) -> SequenceSearchReply:
     """The annotation set of one search, from the page's ``payload`` (``SequenceSearchInput``)."""
 
@@ -119,8 +133,7 @@ def sequence_search_annotation_set(payload: Mapping[str, object]) -> SequenceSea
     )
     if not (
         isinstance(payload["table"], str) and isinstance(payload["setId"], str) and isinstance(subjects, list)
-        and isinstance(thresholds, Mapping) and isinstance(queries, list)
-        and all(isinstance(name, str) for name in queries) and isinstance(colors, Mapping)
+        and isinstance(thresholds, Mapping) and isinstance(queries, list) and isinstance(colors, Mapping)
         and all(isinstance(key, str) and isinstance(color, str) for key, color in colors.items())
     ):
         raise _protocol_error("A sequence search payload has a value of the wrong type.")
@@ -136,7 +149,7 @@ def sequence_search_annotation_set(payload: Mapping[str, object]) -> SequenceSea
             alignment_length=cast(int, thresholds.get("alignmentLength")),
         ),
         program=cast(SearchProgram, payload["program"]),
-        queries=list(queries),
+        queries=[_query(item) for item in queries],
         color_mode=cast(SearchColorMode, payload["colorMode"]),
         query_colors=dict(colors),
     )
@@ -170,6 +183,7 @@ def sequence_search_annotation_set_json(payload_json: str) -> str:
 
 __all__ = [
     "SearchHitReply",
+    "SearchQueryInput",
     "SearchSubjectInput",
     "SearchThresholdsInput",
     "SequenceSearchInput",

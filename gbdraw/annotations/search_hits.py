@@ -79,6 +79,24 @@ class SearchSubject:
 
 
 @dataclass(frozen=True)
+class SearchQuery:
+    """One query of a search: the name the LOSAT table gives it (its FASTA ID) and its length (bases, or residues
+    for a protein query), which places each hit in the query."""
+
+    name: str
+    length: int
+
+    def __post_init__(self) -> None:
+        if not str(self.name).strip():
+            raise ValidationError("A search query needs a name.", diagnostic={"code": "INPUT_INVALID", "reason": "REQUIRED"})
+        if isinstance(self.length, bool) or not isinstance(self.length, int) or self.length < 1:
+            raise ValidationError(
+                "A search query's length must be a positive integer.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE_INTEGER"},
+            )
+
+
+@dataclass(frozen=True)
 class SearchHit:
     """One hit as the hit table lists it, and the annotation that draws it."""
 
@@ -136,20 +154,23 @@ def search_hit_annotation_set(
     subjects: Sequence[SearchSubject],
     thresholds: ComparisonFilter,
     program: SearchProgram,
-    queries: Sequence[str],
+    queries: Sequence[SearchQuery],
     color_mode: SearchColorMode = "query",
     query_colors: Mapping[str, str] | None = None,
 ) -> SearchAnnotationResult:
     """The annotation set of one search: one ``highlight`` row per hit that passes ``thresholds``.
 
     ``table`` holds outfmt 6 rows (``read_comparison_table``); ``queries`` are
-    the query names in the panel's order, which gives each query its default
-    colour; ``query_colors`` replaces a query's colour. A hit's target is the
+    the queries in the panel's order, which gives each query its default
+    colour, with their lengths; ``query_colors`` replaces a query's colour. A hit's target is the
     span ``sstart``..``send`` of the subject it names, in source coordinates;
     its metadata holds ``SEARCH_HIT_METADATA_KEYS``. With ``color_mode``
-    ``gradient`` every hit runs from ``SEARCH_GRADIENT_START_COLOR`` at the
-    query's start to ``SEARCH_GRADIENT_END_COLOR`` at its end, following the
-    hit's strand, and its Legend row is ``QUERY_POSITION_LEGEND_LABEL``.
+    ``gradient`` the scale runs from ``SEARCH_GRADIENT_START_COLOR`` at the
+    query's start to ``SEARCH_GRADIENT_END_COLOR`` at its end; each hit draws
+    its part of the scale (``qstart``..``qend`` of the query's length),
+    following the hit's strand, and its Legend row is
+    ``QUERY_POSITION_LEGEND_LABEL``. A row whose query is not in ``queries``,
+    or that runs past its query's length, is refused.
     """
 
     if program not in {"blastn", "tblastn"}:
@@ -173,7 +194,11 @@ def search_hit_annotation_set(
     known = frame[~frame["subject"].astype(str).str.strip().isin(unknown)]
     tally = comparison_row_tally(known, thresholds)
     kept = filter_comparison_dataframe(known, thresholds)
-    colors = {name: (query_colors or {}).get(name) or search_query_color(order) for order, name in enumerate(queries)}
+    lengths = {query.name: query.length for query in queries}
+    colors = {
+        query.name: (query_colors or {}).get(query.name) or search_query_color(order)
+        for order, query in enumerate(queries)
+    }
     annotations: list[RegionAnnotation] = []
     hits: list[SearchHit] = []
     taken: set[str] = set()
@@ -184,6 +209,16 @@ def search_hit_annotation_set(
         subject = subjects[named[str(values["subject"]).strip()][0]]
         sstart, send = int(values["sstart"]), int(values["send"])
         qstart, qend = int(values["qstart"]), int(values["qend"])
+        if query not in lengths:
+            raise ValidationError(
+                f"The search query {query!r} is not one of the queries searched.",
+                diagnostic={"code": "COMPARISON_INPUT", "column": 1},
+            )
+        if max(qstart, qend) > lengths[query]:
+            raise ValidationError(
+                f"A hit of {query!r} ends past the query's length {lengths[query]}.",
+                diagnostic={"code": "COMPARISON_INPUT", "column": 8},
+            )
         offset = subject.source_start - 1
         forward = (sstart <= send) == (qstart <= qend)
         counts[query] = counts.get(query, 0)
@@ -199,13 +234,13 @@ def search_hit_annotation_set(
                 fill=SEARCH_GRADIENT_END_COLOR,
                 fill_opacity=SEARCH_GRADIENT_FILL_OPACITY,
                 gradient=AnnotationGradient(
-                    SEARCH_GRADIENT_START_COLOR, SEARCH_GRADIENT_END_COLOR, "forward" if forward else "reverse"
+                    SEARCH_GRADIENT_START_COLOR, SEARCH_GRADIENT_END_COLOR, "forward" if forward else "reverse",
+                    query_start=(min(qstart, qend) - 1) / lengths[query], query_end=max(qstart, qend) / lengths[query],
                 ),
             )
             legend_label = QUERY_POSITION_LEGEND_LABEL
         else:
-            color = colors.get(query) or search_query_color(len(colors))
-            colors.setdefault(query, color)
+            color = colors[query]
             style = RegionAnnotationStyle(stroke=color, fill=color, fill_opacity=SEARCH_HIT_FILL_OPACITY)
             legend_label = query
         start, end = min(sstart, send) + offset, max(sstart, send) + offset
@@ -259,6 +294,7 @@ __all__ = [
     "SearchColorMode",
     "SearchHit",
     "SearchProgram",
+    "SearchQuery",
     "SearchSubject",
     "search_hit_annotation_set",
     "search_query_color",

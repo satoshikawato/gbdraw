@@ -104,6 +104,7 @@ from gbdraw.annotations import (
 from gbdraw.annotations.search_hits import (
     SearchAnnotationResult,
     SearchHit,
+    SearchQuery,
     SearchSubject,
     search_hit_annotation_set,
 )
@@ -283,6 +284,7 @@ __all__ = [
     "resolve_annotations",
     "SearchAnnotationResult",
     "SearchHit",
+    "SearchQuery",
     "SearchSubject",
     "search_hit_annotation_set",
     "CircularMultiRecordOptions",

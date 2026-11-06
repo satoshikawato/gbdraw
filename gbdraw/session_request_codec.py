@@ -3333,14 +3333,21 @@ def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
         "labelOffset": style.label_offset,
         # Written only when set, so a style without one encodes as before.
         **(
-            {"gradient": {
-                "startColor": style.gradient.start_color,
-                "endColor": style.gradient.end_color,
-                "direction": style.gradient.direction,
-            }}
+            {"gradient": _encode_annotation_gradient(style.gradient)}
             if style.gradient is not None
             else {}
         ),
+    }
+
+
+def _encode_annotation_gradient(gradient: AnnotationGradient) -> dict[str, Any]:
+    # The query positions are written only for a region over a part of its query.
+    part = (gradient.query_start, gradient.query_end) != (0.0, 1.0)
+    return {
+        "startColor": gradient.start_color,
+        "endColor": gradient.end_color,
+        "direction": gradient.direction,
+        **({"queryStart": gradient.query_start, "queryEnd": gradient.query_end} if part else {}),
     }
 
 
@@ -3358,13 +3365,17 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
     )
     gradient = None
     if payload.get("gradient") is not None:
-        raw_gradient = _object(
-            payload["gradient"], path=f"{path}.gradient", required={"startColor", "endColor", "direction"}
+        raw_gradient = _object(payload["gradient"], path=f"{path}.gradient")
+        _require_exact_fields(
+            raw_gradient, path=f"{path}.gradient", required={"startColor", "endColor", "direction"},
+            optional={"queryStart", "queryEnd"},
         )
         gradient = AnnotationGradient(
             start_color=_string(raw_gradient["startColor"], f"{path}.gradient.startColor"),
             end_color=_string(raw_gradient["endColor"], f"{path}.gradient.endColor"),
             direction=raw_gradient["direction"],
+            query_start=raw_gradient.get("queryStart", 0.0),
+            query_end=raw_gradient.get("queryEnd", 1.0),
         )
     hatch_payload = payload["hatch"]
     hatch = None
@@ -5825,8 +5836,10 @@ def describe_canonical_request() -> dict[str, Any]:
     ))
     hatch_default, style_default = HatchStyle(), RegionAnnotationStyle()
     data(HatchStyle, replace={"color": color}, defaults={"color": hatch_default.color})
-    # AnnotationGradient.__post_init__: two colors; _encode_annotation_style writes it only when set.
-    gradient = data(AnnotationGradient, replace={"start_color": color, "end_color": color})
+    fraction = bounded(NUMBER, minimum=0, maximum=1)  # a query position (AnnotationGradient.__post_init__)
+    gradient = data(AnnotationGradient, optional=frozenset({"query_start", "query_end"}), replace={
+        "start_color": color, "end_color": color, "query_start": fraction, "query_end": fraction,
+    })
     data(RegionAnnotationStyle, optional=frozenset({"gradient"}), replace={  # RegionAnnotationStyle.__post_init__
         "fill_opacity": bound(RegionAnnotationStyle, "fill_opacity", minimum=0, maximum=1),
         "stroke": color, "label_color": color, "gradient": nullable(gradient),
@@ -5835,9 +5848,7 @@ def describe_canonical_request() -> dict[str, Any]:
     data(FeatureSelector)
     # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74); the decoder reads its integer part.
     # CoordinateSpan.__post_init__: 1-based.
-    data(CoordinateSpan, kind="coordinateSpan", replace={
-        "start": bounded(NUMBER, minimum=1), "end": bounded(NUMBER, minimum=1),
-    })
+    data(CoordinateSpan, kind="coordinateSpan", replace={"start": bounded(NUMBER, minimum=1), "end": bounded(NUMBER, minimum=1)})
     # FeatureSpan.__post_init__: at least one selector.
     data(FeatureSpan, kind="featureSpan", replace={"selectors": bound(FeatureSpan, "selectors", minItems=1)})
     data(FeatureIdentitySpan, kind="featureIdentity")

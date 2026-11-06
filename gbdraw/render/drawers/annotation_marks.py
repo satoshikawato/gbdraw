@@ -204,14 +204,17 @@ def gradient_steps(
 
     Each step is its start and its colour, the colour at its middle; a step is
     drawn from its start to ``end``, over the steps before it, so that adjacent
-    steps leave no seam. The colour follows the region on its record:
-    ``start_color`` at the start of what it stands for, by the gradient's
-    ``direction`` on the source strand and the record's ``source_step``, the
-    same over every part and row of the region.
+    steps leave no seam. The colour follows the region on its record: the
+    scale at ``query_start`` where what it stands for starts, by the
+    gradient's ``direction`` on the source strand and the record's
+    ``source_step``, to ``query_end`` where it ends, the same over every part
+    and row of the region.
     """
 
     share = _gradient_share(annotation, record_length)
     forward = (gradient.direction == "forward") == (annotation.source_step == 1)
+    # The region covers query_start..query_end of the scale, from its query start.
+    scale_start, span = gradient.query_start, gradient.query_end - gradient.query_start
     count = max(1, min(GRADIENT_MAX_STEPS, math.ceil(max(0.0, float(length_px)) / GRADIENT_STEP_PX)))
     width = (float(end) - float(start)) / count
     steps = []
@@ -220,7 +223,9 @@ def gradient_steps(
         position = share(part.local_start + (middle - part.start))
         steps.append((
             float(start) + index * width,
-            interpolate_color(gradient.start_color, gradient.end_color, position if forward else 1.0 - position),
+            interpolate_color(gradient.start_color, gradient.end_color, scale_start + span * (
+                position if forward else 1.0 - position
+            )),
         ))
     return tuple(steps)
 

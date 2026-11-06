@@ -47,9 +47,10 @@ record's origin), which the Web app's **Select region** reads. A saved Result wi
 (written before they existed) loads as before; Select region stays off with the
 reason "Generate to enable region selection" until the next Generate.
 A region annotation's style in a Session 51 request may hold a **gradient**
-(`style.gradient`: `startColor`, `endColor`, and `direction`, `forward` or
-`reverse`), which a `band` or `highlight` mark draws along the region in place of
-its fill; Sequence search writes it for the gradient by query position. A style
+(`style.gradient`: `startColor`, `endColor`, `direction`, `forward` or
+`reverse`, and, for a region over a part of its query, `queryStart` and
+`queryEnd`, fractions from 0 to 1), which a `band` or `highlight` mark draws
+along the region in place of its fill; Sequence search writes it for the gradient by query position. A style
 without one is written as before, without the key, and reads as no gradient.
 gbdraw 0.14.5 reads Sessions up to 50 and so never meets the key.
 
