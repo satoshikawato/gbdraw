@@ -151,6 +151,23 @@ Non-SVG export also needs system Cairo/Pango libraries; see
 [Installation](./docs/INSTALL.md#4-source-installation-for-development) for
 platform-specific package names.
 
+### Large test inputs
+
+Input files of 2 MiB or more under `tests/test_inputs/` and `examples/` are
+not in git. They are assets of a test-data GitHub Release, listed with their
+sha256 in `tests/test_data.json`. pytest places them at the start of a run,
+from your cache (`~/.cache/gbdraw/test-data`), from git history, or from the
+Release. Tools that read them outside pytest need one run of:
+
+```bash
+python tools/test_data.py fetch
+```
+
+To add or change such an input, put it at its path and run
+`python tools/test_data.py add <path>` (it uploads to the Release, so it
+needs write access), then commit `tests/test_data.json` and `.gitignore`.
+Generated figures and Sessions stay in git.
+
 ## Running the checks CI runs
 
 ```bash

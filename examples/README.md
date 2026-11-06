@@ -7,6 +7,9 @@ downloadable inputs by [Gallery](../docs/GALLERY.md), the
 Tutorial and technical documentation pages. It is a media and fixture store,
 not a curated "getting started" example gallery.
 
+Input files of 2 MiB or more are not in git: `python tools/test_data.py fetch`
+places them here ([Large test inputs](../CONTRIBUTING.md#large-test-inputs)).
+
 ## Where to find runnable examples
 
 For copyable, currently tested example code and commands, use:

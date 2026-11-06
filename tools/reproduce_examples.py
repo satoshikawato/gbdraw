@@ -20,6 +20,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from tools import test_data  # noqa: E402
 from tools.reproduce_examples_manifest import (  # noqa: E402
     BlastPreparation,
     CliRecipe,
@@ -796,6 +797,8 @@ def print_list_status(reproducer: Reproducer, figure_ids: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    # Large inputs live in the test-data Release; a missing one is reported per figure below.
+    test_data.fetch()
     figures = build_figure_specs()
     selected_ids = select_figures(figures, args.group, args.figure)
     output_root = args.output_root if args.output_root.is_absolute() else PROJECT_ROOT / args.output_root

@@ -1,0 +1,186 @@
+{
+  "files": [
+    {
+      "path": "examples/NC_010162.gb",
+      "size": 30796740,
+      "sha256": "9a76f5c49c8860775f395d7b1257c26493fd70ec8d49185ce85c7b3c707353e3",
+      "gitBlob": "c73c7622735f6608296f898b4f5e02e89f8a8d7b",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/9a76f5c49c88-NC_010162.gb"
+    },
+    {
+      "path": "examples/PemoMJNVA.PeseMJNV.tblastx.out",
+      "size": 2511804,
+      "sha256": "fa2c9ed87ed04de0c03295c2aaafbf90b6cec979ec846bc53eb1250296e5a6a4",
+      "gitBlob": "d4bdbf0ddbcb5ac1419d19b6efa38051ff1480d0",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/fa2c9ed87ed0-PemoMJNVA.PeseMJNV.tblastx.out"
+    },
+    {
+      "path": "examples/PeseMJNV.PemoMJNVB.tblastx.out",
+      "size": 3336859,
+      "sha256": "33abddcafd32dfb319f8b4b426e3b5942a3174918bb8212285a23acd4f777c81",
+      "gitBlob": "be09976794954dcd38d35e7629e2fa3ddd9a3805",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/33abddcafd32-PeseMJNV.PemoMJNVB.tblastx.out"
+    },
+    {
+      "path": "tests/test_inputs/AP027078.DRR394944.depth.tsv",
+      "size": 13424500,
+      "sha256": "0e503a0ae9c50fb4a722ceb45816d22ca703f9a7dff1e514552d9fbcabeb37ca",
+      "gitBlob": "dfc364a1a2f2d9b958feb713b90f68fdc0d5b553",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/0e503a0ae9c5-AP027078.DRR394944.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/AP027078_AP027131.tblastx.out",
+      "size": 2291084,
+      "sha256": "b0797574aa5fda5247b67d3b951e0a52aae8d309b159459c32ec77a29e632169",
+      "gitBlob": "27211a490b864818e9091a29bf248cb5dd1d7e07",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/b0797574aa5f-AP027078_AP027131.tblastx.out"
+    },
+    {
+      "path": "tests/test_inputs/AP027131.DRR394921.depth.tsv",
+      "size": 13796434,
+      "sha256": "688322404e3a91d55f5c59830592cd03851b3be586b6be847abe258028c49494",
+      "gitBlob": "288e7b045dc67ae580e6b22dc699788ad1e26d22",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/688322404e3a-AP027131.DRR394921.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/AP027132.DRR394921.depth.tsv",
+      "size": 14035195,
+      "sha256": "812f3b5b555dd42f126ede58c9c6fa9b4a97d7a6c5bdbfc7267ce37654e8b28d",
+      "gitBlob": "83fb48f848cf028af12e5d0aa6a11d6476719509",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/812f3b5b555d-AP027132.DRR394921.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/AP027132_NZ_CP006932.tblastx.out",
+      "size": 4939189,
+      "sha256": "f52db757ed7222cd5a9caabca051974eadc891b6be4fc59bd9126c9eb978359e",
+      "gitBlob": "118a6b473003ae13115125ac264078df416ee90f",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/f52db757ed72-AP027132_NZ_CP006932.tblastx.out"
+    },
+    {
+      "path": "tests/test_inputs/AP027133.DRR394922.depth.tsv",
+      "size": 12610982,
+      "sha256": "dd685990decefbd52a392de160f2a4b4a146a1e470ae197ef7135aef16fc6080",
+      "gitBlob": "5c6652887923c449c0f145de61bfaf5ff53acf7b",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/dd685990dece-AP027133.DRR394922.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/AP027133_AP027132.tblastx.out",
+      "size": 4197702,
+      "sha256": "585c3f00b12265663009e508ea61d0a6e59e3f8373871e81269cf99291649d51",
+      "gitBlob": "4354ccc1694fcf1fc2095c7637137ec95f05a9be",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/585c3f00b122-AP027133_AP027132.tblastx.out"
+    },
+    {
+      "path": "tests/test_inputs/EDL933.gbk",
+      "size": 14178393,
+      "sha256": "bb7f62b3811fc7f01eb2950169848cffd3354bb17745bd8d26626dcefffe7558",
+      "gitBlob": "da21737d1fbd239fd351cfea462c2ba7301ae87d",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/bb7f62b3811f-EDL933.gbk"
+    },
+    {
+      "path": "tests/test_inputs/GCF_000196095.1_ASM19609v1_genomic.gbff",
+      "size": 13513689,
+      "sha256": "c785f2feed7dbef0a7ad881aef4a43860f65318e1a44db66b032fc65c9cc34dc",
+      "gitBlob": "7a7034d89568d206e81cbf2d664a9a8589d9998d",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/c785f2feed7d-GCF_000196095.1_ASM19609v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_000354175.2_ASM35417v2_genomic.gbff",
+      "size": 13030087,
+      "sha256": "4357443d248ab3d5c08b1854dcbcca1f59adbf064640fd99d5504f6ee4d59096",
+      "gitBlob": "bf3185c9b0c6a838ebd118c8d86c54b05aa03ef8",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/4357443d248a-GCF_000354175.2_ASM35417v2_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff",
+      "size": 16294030,
+      "sha256": "a11f12277c34c46e2161f354e50ef39bdca4c5b618dd1905c1829ba20b35d5d1",
+      "gitBlob": "d7281b14b397ece94fa9ef7a373175c4a4225256",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/a11f12277c34-GCF_000801275.2_ASM80127v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_002021755.1_ASM202175v1_genomic.gbff",
+      "size": 15418477,
+      "sha256": "483ecea116a7399b87a37040b49095a26f5e8c02b4931c607364a0a46e07321f",
+      "gitBlob": "dfdea7b1261209768febe515f6f9341de61c06fd",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/483ecea116a7-GCF_002021755.1_ASM202175v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "size": 14197022,
+      "sha256": "6238c42c332f9e0ef65ea6d9f6e5da41d7a5a13d1eb135aeb2b14b700d643908",
+      "gitBlob": "c6a9f5a32c297d1b4b2fcdb9e7e8868502947bf3",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/6238c42c332f-GCF_002906475.1_ASM290647v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff",
+      "size": 17494876,
+      "sha256": "a2f696d584451866032339eb17de4eadad55372a36bc87b9eb85583a482ad027",
+      "gitBlob": "9ccfe39e757576cfff07c99ef9bed42a8098a0a8",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/a2f696d58445-GCF_015097735.1_ASM1509773v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/GCF_030060435.1_ASM3006043v1_genomic.gbff",
+      "size": 15424207,
+      "sha256": "ea46567f79954c1680e6a4324833b171809adc0251ca1ad7dfa845acc8fdf379",
+      "gitBlob": "0a2bbd7910e90e3250602c9c04782f8fa7e8e31e",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/ea46567f7995-GCF_030060435.1_ASM3006043v1_genomic.gbff"
+    },
+    {
+      "path": "tests/test_inputs/MG1655.gbk",
+      "size": 11882063,
+      "sha256": "86dffeb6923729e542e73ef814d94688d3c7d079196e4a59d2a5a597c3ae0910",
+      "gitBlob": "c2accf951f7dcee650e7b3585f6f5b595d641560",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/86dffeb69237-MG1655.gbk"
+    },
+    {
+      "path": "tests/test_inputs/MelaMJNV.DRR394934.depth.tsv",
+      "size": 6207110,
+      "sha256": "375fb2d6d792722d0cb2a6354976b5cf0b8b10ad36243f932870cbfa4d257ba9",
+      "gitBlob": "d0110e002dcda6246e2c86855bb0bd76d7e92ab9",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/375fb2d6d792-MelaMJNV.DRR394934.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/MjeNMV.DRR271272.depth.tsv",
+      "size": 6927364,
+      "sha256": "e9810517ed1f5fee5a4dcfa962c114d0c2b630d272efb6e5fc9225ef84199363",
+      "gitBlob": "7b16334dcbfd8f4b20c310aa596a090e8c5882a0",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/e9810517ed1f-MjeNMV.DRR271272.depth.tsv"
+    },
+    {
+      "path": "tests/test_inputs/NC_002745.gb",
+      "size": 7171880,
+      "sha256": "55e32e72b82d1659cb86fa4e24b62f351a9fcc361f321ecccf88e7c0655680ea",
+      "gitBlob": "55b2b38bbe704729f79658f3d9182251e228364c",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/55e32e72b82d-NC_002745.gb"
+    },
+    {
+      "path": "tests/test_inputs/NC_002951.gb",
+      "size": 7452014,
+      "sha256": "490518459dd8419d1c69b52e596c4edbdd4ee8cb1374062691bb758c90140c6d",
+      "gitBlob": "eee65abbaa128f622c0806c6f682e766cbe7c76e",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/490518459dd8-NC_002951.gb"
+    },
+    {
+      "path": "tests/test_inputs/NC_003923.gb",
+      "size": 7192570,
+      "sha256": "c7b46bea816fb19d49012d5e61d532a5e2be691bb92ecdc29ed62853e78fc343",
+      "gitBlob": "a0d0f831e6727bc05687a500d374a7fae7572b73",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/c7b46bea816f-NC_003923.gb"
+    },
+    {
+      "path": "tests/test_inputs/NC_007795.gb",
+      "size": 6335645,
+      "sha256": "f194b4146ca93028259b75588f5cf52c2de2dd5bfaf262dd4467516670a496aa",
+      "gitBlob": "3c14636afe086fa5693e0f617fe7f41bad07e7bd",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/f194b4146ca9-NC_007795.gb"
+    },
+    {
+      "path": "tests/test_inputs/Sakai.gbk",
+      "size": 11935135,
+      "sha256": "d41c8d33ea76c88bbf90763c7150e9b98f03fd7bd030b01d34dfb184bb17519c",
+      "gitBlob": "a7be63b377bca2d14bd614d96723ed7cd41dfe13",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/d41c8d33ea76-Sakai.gbk"
+    }
+  ]
+}

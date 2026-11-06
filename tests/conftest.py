@@ -14,6 +14,7 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from gbdraw.session_io import load_session
+from tools import test_data
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -100,14 +101,46 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "render_stage_universe: render-stage universe tests, run only with --render-stage-universe",
     )
+    if not hasattr(config, "workerinput"):
+        # Once per run, before pytest-xdist starts its workers. CI must have every input.
+        try:
+            test_data.fetch(require=bool(os.environ.get("CI")))
+        except FileNotFoundError as error:
+            raise pytest.UsageError(str(error)) from error
+
+
+@cache
+def _module_source(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _skip_tests_that_name_missing_inputs(items: list[pytest.Item]) -> None:
+    """Outside CI, skip the test modules that name an input fetch could not place."""
+
+    missing = {
+        Path(entry.path).name
+        for entry in test_data.load_manifest()
+        if not (PROJECT_ROOT / entry.path).is_file()
+    }
+    if not missing:
+        return
+    for item in items:
+        named = sorted(name for name in missing if name in _module_source(item.path))
+        if named:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=f"test data {', '.join(named)} is missing: run python tools/test_data.py fetch"
+                )
+            )
 
 
 def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Skip each write or hours-long operation unless its option was given."""
+    """Skip tests whose inputs are missing, and each write or hours-long operation unless its option was given."""
 
+    _skip_tests_that_name_missing_inputs(items)
     gated = (
         ("--update-reference-outputs", "reference_generation", "reference generation"),
         ("--render-stage-universe", "render_stage_universe", "the render-stage universe"),

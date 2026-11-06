@@ -386,8 +386,9 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=65,
         command_kind="runnable",
         command_note=(
-            "Run from a source checkout: the records table is under "
-            "examples/ and reads the two GBFF files under tests/test_inputs/."
+            "Run from a source checkout after python tools/test_data.py fetch: "
+            "the records table is under examples/ and reads the two GBFF files "
+            "under tests/test_inputs/."
         ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,

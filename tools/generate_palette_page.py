@@ -89,7 +89,7 @@ def render_palette_page() -> str:
             "",
             "## Reproduce the `ajisai` examples",
             "",
-            "From a source checkout, these commands reproduce the Circular and Linear `ajisai` figures shown above:",
+            "From a source checkout, run `python tools/test_data.py fetch` once to place the large inputs. These commands then reproduce the Circular and Linear `ajisai` figures shown above:",
             "",
             "```bash",
             "gbdraw circular \\",
