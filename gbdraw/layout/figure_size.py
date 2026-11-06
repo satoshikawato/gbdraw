@@ -38,6 +38,10 @@ _MIN_SLOPE = 0.25
 # out ends only when even this slope reaches the box at or below that pass. Content that jumps (a legend that moves to
 # another side) can shrink faster; the search can then end before a base that keeps the content and fits.
 _STEEPEST_SLOPE_FACTOR = 2.0
+# Two passes whose parts (``MeasuredBase.parts_px``) differ by no more than this have the same size. The parts that do
+# not shrink are added in another order at another base, so the same size can differ in its last digits (1e-13 px
+# measured).
+_SAME_SIZE_PX = 1e-6
 
 # The primary item a refusal names, by the id its diagnostic carries (``primaryItem``): the Linear records at their
 # smallest (``record_ends``: what stays of them as the sequence shrinks), the Linear records, the Circular map, or a
@@ -77,13 +81,15 @@ class MeasuredBase(Generic[Built]):
     """What a mode's ``measure`` drew at one base length: how far its composed content is over the requested box
     (negative when under) and what it assembled.
 
-    ``left_out`` marks content drawn without a part that does not fit at this base, which no smaller base fits
-    either (Circular labels not placed for lack of room, CAPACITY-STOP): such a pass is under the box only because of
-    what it left out, so its excess says nothing about the size of the figure with that part.
+    ``parts_px`` is what a refusal at this base would state (``figure_size_parts``): two passes with the same parts
+    state the same refusal. ``left_out`` marks content drawn without a part that does not fit at this base, which no
+    smaller base fits either (Circular labels not placed for lack of room, CAPACITY-STOP): such a pass is under the
+    box only because of what it left out, so its excess says nothing about the size of the figure with that part.
     """
 
     excess_px: float
     built: Built
+    parts_px: tuple[float, ...]
     left_out: bool = False
 
 
@@ -93,6 +99,7 @@ class _Pass(Generic[Built]):
     the pass is kept."""
 
     fit: BaseLengthFit[Built]
+    parts_px: tuple[float, ...]
     left_out: bool
     caught: tuple[warnings.WarningMessage, ...]
 
@@ -119,6 +126,25 @@ def _step(start: BaseLengthFit[Built], slope: float) -> int:
 
 def _slope(a: BaseLengthFit[Built], b: BaseLengthFit[Built]) -> float:
     return (b.excess_px - a.excess_px) / (b.base - a.base)
+
+
+def _flat_at_smallest(drawn: dict[int, _Pass[Built]]) -> bool:
+    """Whether the two smallest drawn passes have the same parts, so a refusal at either states the same sizes: the
+    content no longer shrinks with the base there, because the parts that do not shrink set it (a Circular map whose
+    centre definition keeps the tracks out, D-13). The excess alone can stay the same while the map still shrinks,
+    when another part (a legend beside the map) sets the side that is over.
+
+    The search assumes that such content shrinks no further below: it is the larger of the parts that do not shrink
+    and the parts that grow with the base. Content that shrinks again below a stretch of the same size (a legend that
+    moves to another side) could fit at a smaller base that the search no longer tries.
+    """
+
+    smallest = [drawn[base].parts_px for base in sorted(drawn)[:2]]
+    return (
+        len(smallest) == 2
+        and len(smallest[0]) == len(smallest[1])
+        and all(abs(a - b) <= _SAME_SIZE_PX for a, b in zip(*smallest))
+    )
 
 
 def _costly_passes(drawn: dict[int, _Pass[Built]]) -> int:
@@ -166,6 +192,10 @@ def _next_base(
         # The secant between the bracket's ends, kept strictly inside it: one rounded down onto the pass under still
         # has a base above it to try.
         return min(max(_step(under, _slope(under, over)), under.base + 1), over.base - 1)
+    if under is None and _flat_at_smallest(drawn):
+        # Every pass is over the box and the content stopped shrinking: no smaller base fits, and the smallest pass
+        # has the size of the figure at its smallest.
+        return None
     last = drawn[order[-1]].fit
     guess = _step(last, first_slope if len(order) < 2 else _slope(drawn[order[-2]].fit, last))
     if under is not None:
@@ -197,10 +227,12 @@ def fit_base_length(
     too small to draw is not tried: the step halves the way to it instead. After 8 drawn passes that kept their
     content, or 12 that were too small to draw or left content out, the widest pass under is kept.
 
-    With no pass under, the target is refused (``fits`` False) with the smallest drawn pass. Before refusing, the
-    middle of that pass and the next drawn pass above it is measured once, if not yet measured, since a measure
-    that is not monotonic may fit there. Only the kept pass's Python warnings reach the caller, once; a refusal
-    emits none.
+    With no pass under, the target is refused (``fits`` False) with the smallest drawn pass. The search then ends as
+    soon as the two smallest drawn passes have the same parts (``parts_px``, within float rounding): the content
+    stopped shrinking, so no smaller base fits, and the refusal states the sizes of the figure at its smallest. Otherwise, before
+    refusing, the middle of the smallest pass and the next drawn pass above it is measured once, if not yet measured,
+    since a measure that is not monotonic may fit there. Only the kept pass's Python warnings reach the caller, once;
+    a refusal emits none.
     """
 
     drawn: dict[int, _Pass[Built]] = {}
@@ -216,7 +248,9 @@ def fit_base_length(
             undrawable.add(base)
         else:
             excess = result.excess_px
-            current = _Pass(BaseLengthFit(base, excess, result.built, fits=excess <= 0.0), result.left_out, caught)
+            current = _Pass(
+                BaseLengthFit(base, excess, result.built, fits=excess <= 0.0), result.parts_px, result.left_out, caught
+            )
             if current.fit.fits and excess >= -_ACCEPT_UNDER_PX:
                 return _kept(current)
             drawn[base] = current
@@ -228,6 +262,7 @@ def fit_base_length(
             middle = None if above is None else (lowest + above) // 2
             if (
                 not checked_middle
+                and not _flat_at_smallest(drawn)
                 and _costly_passes(drawn) < _MAX_PASSES
                 and middle is not None
                 and lowest < middle
@@ -349,6 +384,19 @@ def check_figure_height(plan: CompositionPlan, size: RequestedFigureSize, *, pri
 
     if size.height is not None and plan.content_bounds.height > size.height.px:
         raise figure_too_short(plan, size.height, size.width, primary=primary)
+
+
+def figure_size_parts(plan: CompositionPlan) -> tuple[float, ...]:
+    """What a refusal of a requested size states about ``plan``: the primary item, the legend, the title, and the
+    padding along each axis (``_axis_parts``, as the refusals read them), so a mode's measure reports them
+    (``MeasuredBase.parts_px``)."""
+
+    return tuple(
+        part
+        for axis in ("x", "y")
+        for parts in (_axis_parts(plan, axis, legend_role="legend", title_role="title"),)
+        for part in (parts.primary, parts.legend, parts.title, parts.padding)
+    )
 
 
 def figure_size_excess(plan: CompositionPlan, size: RequestedFigureSize) -> float:

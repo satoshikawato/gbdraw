@@ -214,7 +214,7 @@ def test_each_fit_pass_sends_its_capacity_notice_while_the_caller_gets_the_kept_
         ratio = round(base / 1000, 2)
         check_label_capacity("r", [CircularLabelCapacity(
             "circular_outer", LabelCapacityRecord(195, 14.0, ratio, ()), 1.0, "near")])
-        return MeasuredBase(base + 100.0 - 500.0, base)
+        return MeasuredBase(base + 100.0 - 500.0, base, (base + 100.0,))
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
