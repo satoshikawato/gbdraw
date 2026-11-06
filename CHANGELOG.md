@@ -154,7 +154,7 @@ write-up of a release.
   computed". Such a run can take up to the limit longer; the limits and their
   messages are unchanged (OV-2527).
 
-## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
+## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-03
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
   saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).

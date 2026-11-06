@@ -32,3 +32,8 @@ and "Carrying evidence to a later commit" in
    schema or version literals that changed since `main`.
 5. Fill every item of the checklist with links. Report each item that is not
    met, and the evidence for it, to the Owner instead of working around it.
+6. After the Owner publishes the release, read the `Publish Python
+   distributions` run. Its job `Release-tier evidence carries to the tag`
+   must pass before `pypi-publish` starts. When it fails, follow
+   "Release evidence check" in `docs/internal/WEB_PERIODIC_AUDIT.md`, and
+   report the job summary to the Owner.

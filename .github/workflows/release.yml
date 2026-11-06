@@ -71,8 +71,37 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  # The tagged commit must carry the evidence of a release-tier `Tests` run on dev
+  # (docs/internal/WEB_PERIODIC_AUDIT.md, "Release evidence check").
+  release-evidence:
+    name: Release-tier evidence carries to the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the tagged commit and main and dev history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          # All commits and trees; classify reads only the few file contents it needs.
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Require release-tier evidence that carries to the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/check-release-evidence.mjs --tag-commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
+
   pypi-publish:
-    needs: build-release-distributions
+    needs: [build-release-distributions, release-evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pypi
