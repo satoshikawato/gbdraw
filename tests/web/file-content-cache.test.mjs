@@ -124,6 +124,30 @@ assert.equal(await readFileText(gzipFile), 'LOCUS gzipped');
 const plainNamedGz = { name: 'plain.gb.gz', async arrayBuffer() { return encoder.encode('LOCUS plain').buffer; } };
 assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');
 
+// A gzip input expands to at most MAX_EXPANDED_INPUT_BYTES (Python's cap, from the
+// generated contracts): past it the read rejects with INPUT_UNREADABLE, naming the
+// file and the cap in MiB. A test hook stands in for the 512 MiB cap.
+{
+  const { MAX_EXPANDED_INPUT_BYTES } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  assert.equal(MAX_EXPANDED_INPUT_BYTES, 512 * 1024 * 1024);
+  const cap = 1024 * 1024;
+  const gzipOf = (name, size) => ({ name, async arrayBuffer() { return Uint8Array.from(gzipSync(Buffer.alloc(size, 0x41))).buffer; } });
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };
+  try {
+    assert.equal((await readFileBytes(gzipOf('at-cap.gb.gz', cap))).byteLength, cap);
+    await assert.rejects(readFileBytes(gzipOf('big genome.gbff.gz', cap + 1)), (error) => {
+      assert.deepEqual([error.code, error.stage, error.context],
+        ['INPUT_UNREADABLE', 'read', { reason: 'GZIP_EXPANDED_SIZE', inputName: 'big genome.gbff.gz', limit: 1 }]);
+      return true;
+    });
+    // A plain file larger than the cap reads whole.
+    const plainBig = { name: 'plain.gb', async arrayBuffer() { return new Uint8Array(cap * 2).buffer; } };
+    assert.equal((await readFileBytes(plainBig)).byteLength, cap * 2);
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+}
+
 // OV-2563: a File the browser refuses to read (Chromium rejects arrayBuffer()
 // with NotReadableError for a file changed or removed on disk after it was
 // picked) rejects at the read owner with INPUT_UNREADABLE, so every surface

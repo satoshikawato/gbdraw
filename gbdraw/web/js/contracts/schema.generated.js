@@ -135,6 +135,9 @@ export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
 
+// gbdraw/io/input_text.py: MAX_EXPANDED_INPUT_BYTES
+export const MAX_EXPANDED_INPUT_BYTES = 536870912;
+
 // gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
 /** @type {readonly string[]} */
 export const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);

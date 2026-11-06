@@ -695,9 +695,9 @@ def _read_session_json(path: str | Path) -> object:
 
 
 def _read_session_text(path: str | Path) -> str:
-    """Read UTF-8 session JSON, plain or gzip (told by its signature, as every input file is)."""
+    """Read UTF-8 session JSON, plain or gzip (told by its signature, as every input file is), with no size cap."""
 
-    with open_input_text(path, encoding="utf-8") as session_file:
+    with open_input_text(path, encoding="utf-8", capped=False) as session_file:
         return session_file.read()
 
 

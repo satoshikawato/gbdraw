@@ -269,6 +269,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
 | [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 2 | scenario revision 1 | 8 |
 | [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 6 |
+| [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
 
 ### Test files that cite each record
 
@@ -707,6 +708,10 @@ are listed under "Cited ids without a record".
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/region-select.playwright.spec.js`
   - `tests/web/region-select.test.mjs`
+- [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap)
+  - `tests/test_gzip_inputs.py`
+  - `tests/web/byte-utils-capped-stream.test.mjs`
+  - `tests/web/gzip-inputs.playwright.spec.js`
 
 ### Cited ids without a record
 

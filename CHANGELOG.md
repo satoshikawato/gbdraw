@@ -20,6 +20,13 @@ write-up of a release.
   writing a file; it no longer extracts package files gbdraw does not ship.
   `tools/vendored-web-assets/package.json` lists the vendored npm packages so
   that Dependabot reports their advisories. The vendored files do not change.
+- Changed: a gzip-compressed input file (GenBank/DDBJ/EMBL, GFF3, FASTA, TSV
+  tables, depth files, comparison tables) is read up to 512 MiB expanded. A
+  larger one is refused on the command line, in the Python API, and in the Web
+  app with a message that names the file and the limit, because a small gzip
+  file can expand to many gigabytes and use up the memory of the command line
+  or close the browser tab. Decompress such a file and give the plain file,
+  which has no size limit. Session files keep their limits.
 - Changed: a Circular figure with a requested size whose map is too small for
   its labels usually stops sooner. A radius whose labels were not placed for
   lack of room no longer steers the fit; it steps by the radii with labels and

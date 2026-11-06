@@ -67,6 +67,8 @@ Every file input also takes a gzip-compressed file (`.gb.gz`, `.fna.gz`,
 `.gff.gz`, a gzip TSV): it is read as the plain file it holds, told by its
 first two bytes, and a saved Session keeps the plain file
 ([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)).
+A gzip file that expands to more than 512 MiB is refused with its name; choose
+its plain file instead.
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA

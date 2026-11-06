@@ -187,6 +187,8 @@ const REASONS = Object.freeze({
   FASTA_IN_GENBANK: 'This file looks like FASTA. Choose FASTA (or GFF3 + FASTA when it has a GFF3 file) as the input type, or use a GenBank/DDBJ flat file.',
   // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
   GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
+  // A gzip input that expands past its cap (gbdraw/io/input_text.py MAX_EXPANDED_INPUT_BYTES); the cap is PHRASES.gzipLimit.
+  GZIP_EXPANDED_SIZE: 'Decompress the gzip file and choose the plain file.',
   SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
   GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
   FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
@@ -367,6 +369,8 @@ const PHRASES = Object.freeze({
   sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
   sessionFileNotSaved: 'The Session was not saved: its file would be {size} MB, and the browser loads files of at most {limit} MB.',
   largestInputs: 'Largest inputs: {inputs}.',
+  // INPUT_UNREADABLE of a gzip input over its expanded cap: the file the browser read, and the cap in MiB.
+  inputFile: 'File: {name}.', gzipLimit: 'gbdraw reads gzip files that expand to at most {limit} MiB.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
@@ -505,7 +509,9 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
- * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT).
+ * @property {string} [inputName] The name of the input file that could not be read (a gzip file over its expanded cap).
+ * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT), or the expanded size
+ *   cap of a gzip input in MiB (GZIP_EXPANDED_SIZE).
  * @property {number} [width] The figure's width in the export format's unit (EXPORT_LIMIT).
  * @property {number} [height] The figure's height in the export format's unit (EXPORT_LIMIT).
  * @property {number} [rowLength] The longer Wrap Rows length in bp that should fit (EXPORT_LIMIT).
@@ -783,6 +789,8 @@ const contextFor = (value) => {
   if (context.sessionBytes !== undefined && value.sessionSizeKind === 'file') context.sessionSizeKind = 'file';
   const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
   if (inputs) context.largestInputs = inputs;
+  const inputName = typeof value.inputName === 'string' ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  if (inputName) context.inputName = inputName;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
@@ -955,7 +963,7 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
-  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs } = result.context;
+  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName } = result.context;
   const { limit, width, height, rowLength, dpi } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
@@ -982,6 +990,8 @@ export const normalizeUserFacingError = (value, {
     queryRecordIndex !== undefined && subjectRecordIndex !== undefined
       && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
     featureCaption !== undefined && { text: PHRASES.featureCaption, params: { caption: featureCaption } },
+    inputName !== undefined && { text: PHRASES.inputFile, params: { name: inputName } },
+    reason === 'GZIP_EXPANDED_SIZE' && limit !== undefined && { text: PHRASES.gzipLimit, params: { limit } },
     recordName !== undefined && { text: PHRASES.record, params: { record: recordName } },
     recordName === undefined && recordPosition !== undefined && { text: PHRASES.recordPosition, params: { position: recordPosition } },
     row !== undefined && { text: PHRASES.line, params: { row } },
@@ -1026,8 +1036,9 @@ export const normalizeUserFacingError = (value, {
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
-  // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined || saveOverCap ? ['select-input'] : [...actions];
+  // A table stored in a Session is corrected in the Session file, not in this page; a refused
+  // gzip file is replaced by its plain file.
+  result.actions = sessionTable !== undefined || saveOverCap || reason === 'GZIP_EXPANDED_SIZE' ? ['select-input'] : [...actions];
   return result;
 };
 

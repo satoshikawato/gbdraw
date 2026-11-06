@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
-import { GZIP_SIGNATURE, isGzipBytes } from './byte-utils.js';
-import { testSessionByteCap } from './runtime-test-hooks.js';
+import { GZIP_SIGNATURE, isGzipBytes, readCappedStream } from './byte-utils.js';
+import { testByteCap } from './runtime-test-hooks.js';
 
 // The largest Session file, gzip or plain, that Load reads; Save refuses to
 // write a larger one (OV-2245).
@@ -34,28 +34,12 @@ export const largeSessionDownloadMegabytes = (blob) => {
  * @returns {Promise<string>}
  */
 const readUtf8Stream = async (stream, maxBytes) => {
-  const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  let byteCount = 0;
   let text = '';
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      byteCount += value.byteLength;
-      if (byteCount > maxBytes) {
-        throw diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' });
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-    return text + decoder.decode();
-  } catch (error) {
-    await reader.cancel(error).catch(() => {});
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
+  await readCappedStream(stream, maxBytes, (chunk) => {
+    text += decoder.decode(chunk, { stream: true });
+  }, () => diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' }));
+  return text + decoder.decode();
 };
 
 /** @param {Blob} file */
@@ -410,14 +394,14 @@ export const compressSessionData = async (data) => {
   }
   /** @type {{ error: Error | null }} */
   const refused = { error: null };
-  const compressedStream = jsonByteStream(data, testSessionByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES, refused)
+  const compressedStream = jsonByteStream(data, testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES, refused)
     .pipeThrough(new CompressionStream('gzip'));
   const blob = await new Response(compressedStream, {
     headers: { 'Content-Type': 'application/gzip' }
   }).blob().catch((error) => {
     throw refused.error ?? error;
   });
-  const maxFileBytes = testSessionByteCap('maxSessionFileBytes') ?? MAX_SESSION_FILE_BYTES;
+  const maxFileBytes = testByteCap('maxSessionFileBytes') ?? MAX_SESSION_FILE_BYTES;
   if (blob.size > maxFileBytes) throw sessionSaveSizeLimit(data, blob.size, maxFileBytes, true);
   return blob;
 };

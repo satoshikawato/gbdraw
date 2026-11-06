@@ -17,6 +17,8 @@ import {
   textToBytes
 } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { MAX_EXPANDED_INPUT_BYTES } from '../contracts/schema.generated.js';
+import { testByteCap } from './runtime-test-hooks.js';
 
 export {
   base64ToBytes,
@@ -66,12 +68,26 @@ const refusedReadError = (error) => (
     : error
 );
 
+const MIB = 1024 * 1024;
+/**
+ * The plain bytes of a File's bytes: a gzip file expands to at most Python's
+ * `MAX_EXPANDED_INPUT_BYTES`, and past it rejects with `INPUT_UNREADABLE`
+ * (`GZIP_EXPANDED_SIZE`), naming the file and the cap in MiB.
+ * @param {string} name The File's name.
+ * @param {Uint8Array<ArrayBuffer>} bytes
+ */
+const expandInputBytes = (name, bytes) => {
+  const maxBytes = testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
+  return expandGzipBytes(bytes, maxBytes, () => diagnosticError('INPUT_UNREADABLE',
+    { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' }));
+};
+
 /**
  * The bytes of an uploaded File, the one place they are read: a gzip file
  * (NCBI's `.gbff.gz`, `.fna.gz`, `.gff.gz`) reads as the plain file it holds,
  * told by its first two bytes, so every browser reader, the Worker and the
  * Session see the plain bytes. A read the browser refuses rejects with
- * `INPUT_UNREADABLE`.
+ * `INPUT_UNREADABLE`, as a gzip file over the expanded cap does.
  * @param {unknown} file A `File`, a Session resource view, or any value (rejected unless it has `arrayBuffer()`).
  * @returns {Promise<Uint8Array>}
  */
@@ -91,11 +107,12 @@ export const readFileBytes = (file) => {
     }
     let pending = fileByteCache.get(key);
     if (!pending) {
+      // The `typeof` check above holds here; narrowing does not reach the closures.
+      const readable = /** @type {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} */ (file);
       pending = Promise.resolve()
-        // The `typeof` check above holds here; narrowing does not reach the closure.
-        .then(() => /** @type {{ arrayBuffer: () => Promise<ArrayBuffer> }} */ (file).arrayBuffer())
+        .then(() => readable.arrayBuffer())
         .then(asBytes, (error) => { throw refusedReadError(error); })
-        .then(expandGzipBytes);
+        .then((bytes) => expandInputBytes(String(readable.name ?? ''), bytes));
       fileByteCache.set(key, pending);
       pending.catch(() => {
         if (fileByteCache.get(key) === pending) fileByteCache.delete(key);

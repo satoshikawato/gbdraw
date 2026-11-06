@@ -45,3 +45,22 @@ test('a gzip GenBank upload lists its record, generates, and saves the plain fil
   // The Web prefixes an embedded resource's name with its resource id.
   expect(genbank[0].name).toMatch(/NC_001416\.gb\.gz$/);
 });
+
+// A gzip upload that expands past the cap (Python's MAX_EXPANDED_INPUT_BYTES; a
+// test hook stands in for 512 MiB) is refused with its name and the cap, and
+// no record is listed (PD-OI-116 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md).
+test('a gzip upload past the expanded cap is refused with its name and the cap', async ({ page }, info) => {
+  test.setTimeout(240000);
+  const cap = 1024 * 1024;
+  const gzipped = info.outputPath('big genome.gb.gz');
+  fs.writeFileSync(gzipped, gzipSync(Buffer.alloc(cap + 1, 0x41)));
+  await page.addInitScript((maxExpandedInputBytes) => {
+    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxExpandedInputBytes };
+  }, cap);
+  await openFresh(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(gzipped);
+  await expect(page.getByText('An input could not be read. Replace or reselect it. File: big genome.gb.gz. '
+    + 'gbdraw reads gzip files that expand to at most 1 MiB. Decompress the gzip file and choose the plain file.'))
+    .toBeVisible({ timeout: 60_000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(0);
+});
