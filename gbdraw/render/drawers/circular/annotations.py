@@ -24,7 +24,6 @@ from gbdraw.annotations import (
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.annotations.layout import PlacedRegionAnnotation
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
-from gbdraw.layout.record_coordinates import DisplayFragment
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
 from gbdraw.layout.spatial import Aabb
@@ -36,9 +35,11 @@ from gbdraw.layout.text_geometry import (
     segment_intersects_polygon,
 )
 from gbdraw.render.drawers.annotation_marks import (
+    MarkPart,
     annotation_dom_id,
     cap_size,
     label_ink_offsets,
+    mark_parts,
     mark_reach,
     past_span_edge,
 )
@@ -684,22 +685,18 @@ def _band_fill(mark: str, style: RegionAnnotationStyle) -> str:
     )
 
 
-def _cap_positions(
-    start: float, end: float, raw_start: float, raw_end: float, fragment: DisplayFragment | None
-) -> tuple[float, ...]:
-    """The ends of one drawn part of a bracket that get an end cap: not where the part was split or cut."""
+def _piece_ends(start: float, end: float, part: MarkPart) -> tuple[tuple[float, bool], tuple[float, bool]]:
+    """Each end of one drawn piece of a part (``_safe_segments``) and whether it is drawn: not where the part was
+    split into pieces or cut."""
 
-    return tuple(
-        position
-        for position in (start, end)
-        if not (
-            fragment is not None
-            and (
-                (position == start and (start != raw_start or fragment.artificial_start))
-                or (position == end and (end != raw_end or fragment.artificial_end))
-            )
-        )
-    )
+    return (start, start == part.start and part.capped_start), (end, end == part.end and part.capped_end)
+
+
+def _turn(position: float, record_length: int) -> float:
+    """A display position in turns of the circle; a part joined across the origin ends past one turn."""
+
+    turn = position / record_length
+    return turn - 1.0 if turn > 1.0 else turn
 
 
 def circular_annotation_track_ink(
@@ -733,10 +730,10 @@ def circular_annotation_track_ink(
         )
         radius = 0.5 * (lane_inner + lane_outer)
         pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
-        for segment_index, (raw_start, raw_end) in enumerate(annotation.geometry_segments):
-            fragment = annotation.display_parts[segment_index] if annotation.display_parts is not None else None
-            for start, end in _safe_segments(raw_start, raw_end, record_length):
-                start_turn, end_turn = start / record_length, end / record_length
+        for part in mark_parts(annotation, join_origin=True):
+            for start, end in _safe_segments(part.start, part.end, record_length):
+                start_turn, end_turn = _turn(start, record_length), _turn(end, record_length)
+                ends = _piece_ends(start, end, part)
                 if annotation.mark in {"band", "highlight"}:
                     if _band_fill(annotation.mark, style) != "none":
                         inks.append(CircularInkRing(RadialBand(lane_inner - pad, lane_outer + pad), start_turn, end_turn))
@@ -751,7 +748,8 @@ def circular_annotation_track_ink(
                                 _point(position, record_length, lane_outer),
                                 pad,
                             )
-                            for position in (start, end)
+                            for position, capped in ends
+                            if capped
                         )
                     continue
                 if pad <= 0:
@@ -767,7 +765,8 @@ def circular_annotation_track_ink(
                             _point(position, record_length, radius + cap),
                             pad,
                         )
-                        for position in _cap_positions(start, end, raw_start, raw_end, fragment)
+                        for position, capped in ends
+                        if capped
                     )
         label = labels_by_id.get(annotation.id)
         if label is not None:
@@ -842,15 +841,14 @@ def circular_annotation_track_content(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        part_count = sum(
-            len(_safe_segments(start, end, record_length))
-            for start, end in annotation.geometry_segments
-        )
+        parts = mark_parts(annotation, join_origin=True)
+        part_count = sum(len(_safe_segments(part.start, part.end, record_length)) for part in parts)
         part_index = 0
-        for segment_index, (raw_start, raw_end) in enumerate(annotation.geometry_segments):
-            fragment = annotation.display_parts[segment_index] if annotation.display_parts is not None else None
-            for start, end in _safe_segments(raw_start, raw_end, record_length):
+        for part in parts:
+            for start, end in _safe_segments(part.start, part.end, record_length):
                 part_index += 1
+                ends = _piece_ends(start, end, part)
+                closed = all(capped for _position, capped in ends)
                 if annotation.mark in {"band", "highlight"}:
                     if style.hatch:
                         definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
@@ -868,7 +866,7 @@ def circular_annotation_track_content(
                         fill="none",
                         stroke=style.stroke,
                         stroke_width=style.stroke_width,
-                        stroke_linecap=("butt" if fragment is not None and (fragment.artificial_start or fragment.artificial_end) else "round"),
+                        stroke_linecap="round" if part.capped_start and part.capped_end else "butt",
                     )
                 if dash:
                     path.attribs["stroke-dasharray"] = dash
@@ -883,10 +881,10 @@ def circular_annotation_track_content(
                         include_stable_id=False,
                     )
                 item_group.add(path)
-                if annotation.mark in {"band", "highlight"} and not auto_feature_underlay and fragment is not None and (fragment.artificial_start or fragment.artificial_end):
+                if annotation.mark in {"band", "highlight"} and not auto_feature_underlay and not closed:
                     path.attribs["stroke"] = "none"
                     outline = _arc_path(start, end, record_length, lane_inner) + " " + _arc_path(start, end, record_length, lane_outer)
-                    for position, capped in ((start, not fragment.artificial_start), (end, not fragment.artificial_end)):
+                    for position, capped in ends:
                         if capped:
                             x1, y1 = _point(position, record_length, lane_inner)
                             x2, y2 = _point(position, record_length, lane_outer)
@@ -897,7 +895,7 @@ def circular_annotation_track_content(
                     item_group.add(border)
                 if annotation.mark == "bracket" and style.line_cap != "none":
                     cap = cap_size(lane_width)
-                    for position in _cap_positions(start, end, raw_start, raw_end, fragment):
+                    for position in (position for position, capped in ends if capped):
                         x1, y1 = _point(position, record_length, radius - cap)
                         x2, y2 = _point(position, record_length, radius + cap)
                         cap_path = Path(

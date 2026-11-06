@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from gbdraw.annotations import RegionAnnotationStyle, ResolvedRegionAnnotation, is_auto_feature_underlay
@@ -36,14 +36,58 @@ def cap_size(lane_width: float) -> float:
     return min(5.0, 0.35 * lane_width)
 
 
-def capped_ends(annotation: ResolvedRegionAnnotation, part_index: int) -> tuple[bool, bool]:
-    """Whether a mark part draws its start and end: a display fragment's cut ends are open."""
+@dataclass(frozen=True)
+class MarkPart:
+    """One drawn part of a mark, in display bp on its ``row``, and whether it draws each of its ends.
 
-    fragment = annotation.display_parts[part_index] if annotation.display_parts is not None else None
-    return (
-        fragment is None or not fragment.artificial_start,
-        fragment is None or not fragment.artificial_end,
+    An end it does not draw is a cut, where the region goes on: the display cut, a row boundary, or the origin of
+    a span across it. A cut gets no edge stroke, cap or arrow head. A part joined across the origin ends past the
+    record's length.
+    """
+
+    start: int
+    end: int
+    capped_start: bool
+    capped_end: bool
+    row: int = 0
+
+
+def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
+    """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut.
+
+    A span across the origin (``crosses_origin``) is cut there: its part that ends at the record's end and its
+    part that starts at 0 leave those ends open, or with ``join_origin`` (a circle drawn whole) become one part.
+    """
+
+    fragments = annotation.display_parts
+    parts = [
+        MarkPart(start, end, True, True)
+        for start, end in annotation.segments
+    ] if fragments is None else [
+        MarkPart(part.display_start, part.display_end, not part.artificial_start, not part.artificial_end, part.row)
+        for part in fragments
+    ]
+    if not annotation.crosses_origin:
+        return tuple(parts)
+    local_bounds = (
+        annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
     )
+    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
+    record_end = max(end for _start, end in local_bounds)
+    before = next(index for index, (_start, end) in enumerate(local_bounds) if end == record_end)
+    after = next(index for index, (start, _end) in enumerate(local_bounds) if start == 0)
+    if join_origin:
+        joined = parts[after]
+        parts[before] = replace(
+            parts[before],
+            end=parts[before].end + joined.end - joined.start,
+            capped_end=joined.capped_end,
+        )
+        del parts[after]
+        return tuple(parts)
+    parts[before] = replace(parts[before], capped_end=False)
+    parts[after] = replace(parts[after], capped_start=False)
+    return tuple(parts)
 
 
 def _half_stroke(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> float:
@@ -82,10 +126,10 @@ def mark_reach(
     reach = half_stroke
     if annotation.mark == "bracket" and style.line_cap != "none":
         cap = cap_size(lane_width)
-        ends = [capped_ends(annotation, index) for index in range(len(annotation.geometry_segments))]
-        if any(start for start, _end in ends):
+        parts = mark_parts(annotation, join_origin=False)
+        if any(part.capped_start for part in parts):
             reach = max(reach, cap)
-        if any(end for _start, end in ends):
+        if any(part.capped_end for part in parts):
             # An arrow's butt-capped diagonals reach half the stroke times cos 45 degrees past the cap.
             head = half_stroke * math.sqrt(0.5) if arrow_heads and style.line_cap == "arrow" else 0.0
             reach = max(reach, cap + head)
@@ -124,12 +168,13 @@ def label_ink_offsets(
 
 
 __all__ = [
+    "MarkPart",
     "MarkReach",
     "annotation_dom_id",
     "cap_size",
-    "capped_ends",
     "dom_token",
     "label_ink_offsets",
+    "mark_parts",
     "mark_reach",
     "past_span_edge",
 ]

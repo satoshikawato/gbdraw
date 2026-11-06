@@ -256,6 +256,18 @@ def _envelope_segments(
     return _FeatureSegments(((segments[-1][0], length), (0, segments[0][1])) if use_wrap else normal)
 
 
+def segments_cross_origin(segments: Sequence[tuple[int, int]], record_length: int, *, is_circular: bool) -> bool:
+    """Whether a span's segments go on across the origin: on a record whose spans may cross it, one segment starts
+    at 0 and another ends at the record's end, so the two are one stretch of the circle."""
+
+    return (
+        is_circular
+        and len(segments) > 1
+        and min(start for start, _end in segments) == 0
+        and max(end for _start, end in segments) == record_length
+    )
+
+
 def annotation_midpoint(
     segments: Sequence[tuple[int, int]],
     record_length: int,
@@ -387,6 +399,7 @@ def resolve_annotation_set(
                 style_is_annotation_override=annotation.style is not None,
                 legend_label=annotation.legend_label or annotation_set.legend_label,
                 metadata=annotation.metadata,
+                crosses_origin=segments_cross_origin(segments, len(record.seq), is_circular=is_circular),
             )
         )
     return ResolvedAnnotationBundle(tuple(resolved), tuple(warnings), (annotation_set.id,))

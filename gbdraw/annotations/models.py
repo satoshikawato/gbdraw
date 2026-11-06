@@ -458,6 +458,9 @@ class ResolvedRegionAnnotation:
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
     display_parts: tuple[DisplayFragment, ...] | None = None
+    # The span goes on across the origin of a circular record: from its last segment, which ends at the record's
+    # end, into its first, which starts at 0 (``segments_cross_origin``).
+    crosses_origin: bool = False
 
     @property
     def geometry_segments(self) -> tuple[tuple[int, int], ...]:
