@@ -31,6 +31,7 @@ from gbdraw.labels.linear import (
 from gbdraw.layout.spatial import Aabb
 from tests.utils.label_fit_warnings import assert_no_label_warning
 from gbdraw.labels.circular_fit import (
+    CircularLabelFitSearch,
     CircularLabelLayout,
     CircularLabelPlacement,
     check_circular_label_fit,
@@ -459,7 +460,7 @@ def test_the_web_error_of_a_refused_record_states_the_refusal_not_its_counts() -
 
 def test_one_budget_covers_the_switches_then_the_font_scan(monkeypatch: pytest.MonkeyPatch) -> None:
     """OD-F15: 30 s for inner labels when nothing is drawn; a verification starts only
-    if one more assembly ends before the deadline; the error computes the rest."""
+    if one more, as long as the last, ends before the deadline; the error computes the rest."""
 
     clock = [0.0]
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
@@ -470,7 +471,7 @@ def test_one_budget_covers_the_switches_then_the_font_scan(monkeypatch: pytest.M
         return verify(values)
 
     with pytest.raises(LabelsDoNotFitError) as raised:
-        check_circular_label_fit([_inner_layout()], slow, assembly_seconds=12.0)
+        check_circular_label_fit([_inner_layout()], slow)
 
     # labels_out starts at 0 s and radial at 12 s; the font scan would end after 36 s.
     assert calls == [{SCOPE_PATH: "outer"}, {PLACEMENT_PATH: "radial"}]
@@ -481,12 +482,35 @@ def test_one_budget_covers_the_switches_then_the_font_scan(monkeypatch: pytest.M
     assert row is not None and row.values == {path: 12.0 for path in FONT_SIZE_PATHS}
 
 
+def test_the_first_verification_starts_while_any_time_is_left_and_the_next_waits_for_its_measure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-2527: no estimate before a verification is measured, so the first starts with 1 s left, even if it then
+    takes 5 s (a row passes its bound by at most one verification); the next would end after the deadline and does
+    not start."""
+
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    verify, calls = _assembly(_p1_inner)
+
+    def slow(values: Mapping[str, object]) -> LabelFitVerification:
+        clock[0] += 5.0
+        return verify(values)
+
+    search = CircularLabelFitSearch([_inner_layout()], slow, offer_notice_rows=True)
+    clock[0] = 29.0
+
+    assert search.row("labels_out", deadline=30.0).status == "not_found"
+    assert search.row("radial", deadline=30.0).status == "not_computed"
+    assert calls == [{SCOPE_PATH: "outer"}]
+
+
 def test_the_outer_error_path_computes_every_row_past_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(circular_fit_module, "SWITCH_SEARCH_SECONDS", 0.0)
     verify, _calls = _verifier(_p1_like)
 
     with pytest.raises(LabelsDoNotFitError) as raised:
-        check_circular_label_fit([_layout("P1", _p1_like)], verify, assembly_seconds=60.0)
+        check_circular_label_fit([_layout("P1", _p1_like)], verify)
 
     assert "not_computed" not in {row.status for row in raised.value.report.rows}
 

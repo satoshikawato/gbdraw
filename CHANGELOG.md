@@ -128,6 +128,12 @@ write-up of a release.
 - Removed: `gbdraw.diagrams.circular.assemble_circular_diagram`, an internal assembler that no
   code called. Draw a Circular diagram with `gbdraw.draw_circular` or the `gbdraw.api`
   render functions such as `render_request`.
+- Fixed: when a Circular figure's labels do not fit and the first drawing took
+  longer than the search limit (30 seconds for each "Choose a fix" row in the Web
+  app, 5 or 30 seconds on the command line and in Python), the search now tries
+  at least one setting instead of stopping at once with every row "not
+  computed". Such a run can take up to the limit longer; the limits and their
+  messages are unchanged (OV-2527).
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 

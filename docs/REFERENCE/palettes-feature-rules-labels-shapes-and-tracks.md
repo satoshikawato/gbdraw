@@ -395,8 +395,9 @@ a smaller size than the one offered may not fit.
 When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
 rows it did not reach. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
-search share 30 seconds, and a setting is tried only if drawing the figure once
-more ends within that time. Linear feature labels get only the separate
+search share 30 seconds. The first setting is always tried; each later one
+is tried only if drawing the figure once more, as long as the last try took,
+ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
 apart. Linear region labels and Circular region labels that are cut or lie
 on other tracks get no row.

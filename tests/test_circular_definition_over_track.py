@@ -302,7 +302,7 @@ def test_a_verified_definition_row_survives_the_deadline_and_a_later_ask_walks_o
         clock[0] += 2.0
         return fits_below(values)
 
-    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False, assembly_seconds=2.0)
+    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False)
 
     row = search.row("smaller_definition_font", deadline=5.0)
     assert (row.status, row.values) == ("found", {DEFINITION_FONT_PATH: 17.0})

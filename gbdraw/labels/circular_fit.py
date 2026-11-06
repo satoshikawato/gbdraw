@@ -428,7 +428,6 @@ class CircularLabelFitSearch:
         verify: CircularLabelFitVerifier,
         *,
         offer_notice_rows: bool,
-        assembly_seconds: float = 0.0,
     ) -> None:
         self.layouts = tuple(layouts)
         self._offer_notice_rows = offer_notice_rows
@@ -438,8 +437,9 @@ class CircularLabelFitSearch:
         self._outer_only = all(layout.outer_only for layout in label_layouts)
         label_layouts = label_layouts or list(self.layouts)
         self._verify_assembly = verify
-        # A verification starts only if one more assembly fits before the deadline.
-        self._assembly_seconds = float(assembly_seconds)
+        # A verification starts only if one more, as long as the last, ends before the deadline; the first one
+        # starts whenever the deadline has not passed (OV-2527: a full first assembly is no estimate of it).
+        self._verification_seconds = 0.0
         # Multi-record rows start from the strongest current value among the failing records.
         self._x_offset = max(layout.x_radius_offset for layout in label_layouts)
         self._y_offset = max(layout.y_radius_offset for layout in label_layouts)
@@ -512,10 +512,10 @@ class CircularLabelFitSearch:
     def _verify(self, kind: LabelFitRowKind, values: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         key = _settings_key(values)
         if key not in self._verifications:
-            self._check_deadline(self._assembly_seconds)
+            self._check_deadline(self._verification_seconds)
             started = time.monotonic()
             self._verifications[key] = self._verify_assembly(values)
-            self._assembly_seconds = time.monotonic() - started
+            self._verification_seconds = time.monotonic() - started
         return _row_verification(kind, self._verifications[key])
 
     # --- rows ---
@@ -779,7 +779,6 @@ def check_circular_label_fit(
     verify: CircularLabelFitVerifier,
     *,
     warn_search_seconds: float = WARN_SEARCH_SECONDS,
-    assembly_seconds: float = 0.0,
     larger_figure: Callable[[float], LargerFigure] | None = None,
 ) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
     """Raise, warn, or pass for a drawn figure's records.
@@ -792,8 +791,8 @@ def check_circular_label_fit(
     definition text, or the definition text reaches into a track (D-12), warns with ``LabelLeadersCrossWarning`` and returns the
     report (rows searched for ``warn_search_seconds``; 0 leaves every row
     ``not_computed``) and the search that computes the other rows.
-    ``assembly_seconds`` is the time of one full assembly, so a verification
-    that would overrun a deadline is not started. A record whose labels need
+    A verification that would overrun a deadline, if it takes as long as the
+    last one, is not started; the first one starts while any time is left. A record whose labels need
     much more room than the map has (CAPACITY-STOP) raises at once: the report
     lists every failing record, has no rows, and no row is searched. With a
     requested figure size, ``larger_figure`` gives the size those records need
@@ -816,9 +815,7 @@ def check_circular_label_fit(
             )
         )
     drawn = outcome == "warn"
-    search = CircularLabelFitSearch(
-        failing, verify, offer_notice_rows=not drawn, assembly_seconds=assembly_seconds
-    )
+    search = CircularLabelFitSearch(failing, verify, offer_notice_rows=not drawn)
     search_seconds: float | None = (
         warn_search_seconds if drawn else None if search.outer_only else SWITCH_SEARCH_SECONDS
     )
