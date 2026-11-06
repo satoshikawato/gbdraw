@@ -10,8 +10,6 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import bind_record_transforms, spans_may_cross_origin
 from gbdraw.svg.ids import instance_svg_id
 
 from .models import (
@@ -19,7 +17,7 @@ from .models import (
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
 )
-from .resolve import annotation_midpoint, merge_annotation_segments, segments_cross_origin
+from .resolve import annotation_midpoint, merge_annotation_segments
 
 
 AUTO_FEATURE_UNDERLAY_KIND = "gbdraw:auto-feature-underlay"
@@ -59,7 +57,6 @@ def merge_feature_underlays(
     *,
     mode: str,
     record_indices: Sequence[int] | None = None,
-    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[ResolvedAnnotationBundle, str | None]:
     """Append private resolved highlights without mutating the public bundle."""
 
@@ -76,7 +73,6 @@ def merge_feature_underlays(
     occupied_set_ids = set(bundle.set_ids)
     occupied_set_ids.update(item.set_id for item in bundle.annotations)
     set_id = _collision_safe_id(AUTO_FEATURE_UNDERLAY_SET_ID, occupied_set_ids)
-    transforms = bind_record_transforms(records, record_transforms)
     resolved: list[ResolvedRegionAnnotation] = []
     record_count = max(indices, default=-1) + 1
     for local_index, (record, features) in enumerate(
@@ -123,9 +119,6 @@ def merge_feature_underlays(
                     display_parts=(tuple(part.fragment for part in feature.display_parts if part.kind == "block")
                                    if feature.display_parts is not None else None),
                     midpoint_bp=annotation_midpoint(segments, record_length),
-                    crosses_origin=segments_cross_origin(
-                        segments, record_length, is_circular=spans_may_cross_origin(record, transforms[local_index])
-                    ),
                     span_bp=sum(end - start for start, end in segments),
                     label="",
                     mark="highlight",

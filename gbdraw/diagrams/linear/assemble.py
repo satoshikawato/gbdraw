@@ -431,7 +431,6 @@ def _add_linear_feature_underlays(
         [result.underlay_features for result in feature_layers],
         records,
         mode="linear",
-        record_transforms=record_transforms,
     )
     if set_id is None:
         return slots, bundle, layouts, auto_slot_ids, 0
