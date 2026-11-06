@@ -44,6 +44,10 @@ export const LEGEND_GROUP_SELECTOR = '[data-gbdraw-composition-role="legend"]';
 export const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 export const FEATURE_LABEL_SELECTOR = `text[${LABEL_FEATURE_ID_ATTRIBUTE}]`;
 export const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"]';
+// A Legend gradient row that names its scale's ends carries them (an annotation gradient, in its set's own colors;
+// gbdraw/legend/metrics.py `GRADIENT_SCALE_NAME_ATTRIBUTES`, both or neither); an identity row, whose ends are its
+// percentages and whose colors are the palette's, has none.
+export const GRADIENT_SCALE_NAME_ATTRIBUTES = Object.freeze({ min: 'data-legend-min-label', max: 'data-legend-max-label' });
 
 // The Linear scale (bar or ruler style) and the plot title are one group each.
 export const LENGTH_BAR_ID = 'length_bar';

@@ -24,6 +24,7 @@ const {
   BATCH_0004_OFF, renameLegendRow, resetSettings, displayWhileSaveHeld, saveWhileDisplaying, loadFeatureEdits
 } = require('./helpers/live-generate-parity-steps.cjs');
 const { WORK_ALLOWLIST } = require('./helpers/live-work-allowlist.mjs');
+const { drawnAnnotationMarks, fasta, genbankBases, reverseComplement, searchByAction, span } = require('./helpers/sequence-search.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -1714,6 +1715,29 @@ test('a color edit of a feature cut over Wrap Rows shows what Generate draws (li
   await popupEdit(page, 'lambdap14', { fill: '#d62728' });
   await expectLiveEqualsGenerate(page, { label: 'color of a feature cut over rows' });
 });
+
+// PD-OI-116: a sequence search's hits are drawn right after the search by the automatic rerender. The live Result
+// equals a Generate of the same draft, with the strands separated (each hit on its strand's lane) and not (the whole
+// feature track), and so does every drawn hit mark: its slot, geometry and paint.
+for (const mode of ['circular', 'linear']) {
+  test(`a sequence search draws its hits as Generate draws them, strands separated and not (${mode}, one Result)`, async ({ page }) => {
+    test.setTimeout(600_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    const bases = genbankBases(SINGLE_FIXTURE).FORCEDLBL;
+    const queries = fasta([{ name: 'plus', bases: span(bases, 301, 600) }, { name: 'minus', bases: reverseComplement(span(bases, 2101, 2400)) }]);
+    for (const [round, separate] of [[1, true], [2, false]]) {
+      if (await page.evaluate(() => window.__GBDRAW_APP__.form.separate_strands) !== separate) {
+        await page.evaluate((value) => { window.__GBDRAW_APP__.form.separate_strands = value; }, separate);
+        await generate(page);
+      }
+      await searchByAction(page, queries);
+      const live = await drawnAnnotationMarks(page);
+      expect(Object.keys(live).filter((key) => key.startsWith(`Search ${round} / `)), `Search ${round} draws both hits`).toHaveLength(2);
+      await expectLiveEqualsGenerate(page, { label: `sequence search, strands ${separate ? 'separated' : 'together'}` });
+      expect(await drawnAnnotationMarks(page), 'each hit mark as Generate draws it').toEqual(live);
+    }
+  });
+}
 
 // A Session 30 (gbdraw 0.13.0) has no request: the Web shows its saved Result,
 // described by the track settings Load recorded. A palette change repaints its

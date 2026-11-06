@@ -325,3 +325,31 @@ test('Use as search query adds a span as a query once; a removed query stays rem
   panel.panel.task = 'blastn';
   assert.equal(panel.programText.value, 'blastn');
 });
+
+// OV-2579: a click on Search blurs the query box, whose change event starts the read of the pasted text before the
+// click lands. While that read runs, Search stays on (the search waits for the read), so the click searches.
+test('Search stays on while a pasted text is read, so a click right after the paste searches', async () => {
+  const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
+  /** @type {() => void} */
+  let finish = () => {};
+  const read = new Promise((resolve) => { finish = resolve; });
+  const panel = createSequenceSearch({
+    state: { activeDrawing: () => ({ id: 'circular', mode: 'circular', annotationSets: [] }) },
+    readAxisRecords: () => [{ recordKey: 'record-1' }],
+    readRecordSpans: async () => { throw new Error('no search here'); },
+    runSearchLosat: async () => ({ status: 'canceled' }),
+    runHelper: async () => {
+      await read;
+      return { result: { queries: [{ name: 'q', length: 4, fasta: '>q\nACGT\n' }] } };
+    },
+    helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
+    addSetStep: () => {},
+    addSet: () => {}
+  });
+  const reading = panel.readQueries('>q\nACGT\n');
+  assert.equal(panel.searchDisabledReason.value, '', 'on while the text is read');
+  finish();
+  await reading;
+  assert.equal(panel.searchDisabledReason.value, '');
+  assert.deepEqual(panel.panel.queries.map(({ name }) => name), ['q']);
+});

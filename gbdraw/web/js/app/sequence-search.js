@@ -176,8 +176,8 @@ export const createSequenceSearch = ({
     // Only a Result names the drawn bases (its record axis, as for Select region); the axis is reactive, the committed
     // Session that every Result comes from is not, so the axis alone decides.
     if (readAxisRecords().length === 0) return t('Generate to search');
-    // A text not read yet is read when Search runs.
-    const unread = panel.queryText !== readFor;
+    // A text not read yet, or whose read still runs, is read when Search runs: Search waits for it (OV-2579).
+    const unread = panel.queryText !== readFor || panel.reading;
     if (panel.queryError && !unread) return t('Correct the query to search');
     if (panel.queries.length === 0 && (!unread || panel.queryText.trim() === '')) return t('Paste or choose a query FASTA');
     return '';

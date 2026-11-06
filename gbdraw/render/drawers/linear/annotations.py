@@ -361,16 +361,19 @@ def linear_annotation_labels(
     bar_length_px: float,
     side: str,
     covers_slots: bool,
-    height_px: float,
+    frame: AnnotationSlotFrame,
     font_family: str,
     params: AnnotationTrackParams,
-    row_frames: Sequence[AnnotationRowFrame] = (),
 ) -> tuple[LinearAnnotationLabel, ...]:
-    """The labels of one record's annotation track at their ``label_position``.
+    """The labels of one record's annotation track at their ``label_position``, in the slot's ``frame``, the one
+    its marks are drawn in (``linear_annotation_track_content``).
 
-    On a wrapped record (``row_frames``) a label stands over its marks on the row of its longest one, its y
+    On a wrapped record (``frame.row_frames``) a label stands over its marks on the row of its longest one, its y
     moved from that row's frame into the slot's first-row frame.
     """
+
+    height_px = frame.height_px
+    row_frames = frame.row_frames
 
     scale = float(bar_length_px) / max(1, int(record_length))
     placements, _lane = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)

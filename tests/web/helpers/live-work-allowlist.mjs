@@ -10,6 +10,7 @@ import { evaluateWithRetainedPromise } from './app-lifecycle.cjs';
 import { BATCH_FIXTURE } from './audit-browser.cjs';
 import { settleLive, showResult } from './live-generate-parity.cjs';
 import { download, switchMode } from './mode-transition.cjs';
+import { fasta, genbankBases, searchByAction, span } from './sequence-search.cjs';
 import {
   addColorRule, addVisibilityRule, BATCH_0004_OFF, deleteLegendRow, displayWhileSaveHeld, generate, history,
   legendRowColor, legendRowStrokeColor, loadFeatureEdits, popupEdit, renameLegendRow, renameRow, resetSettings,
@@ -370,5 +371,20 @@ export const WORK_ALLOWLIST = [
       await top.press('Tab');
       await settleLive(page);
     }
+  },
+  // Sequence search (PD-OI-116): Python reads the query text and the bases of the shown Result's records, LOSAT
+  // searches them (in its own Worker, no diagram request), Python builds the set of hits, and the set's History step
+  // asks for the automatic rerender, which draws the hits. Its Undo restores the editor's Legend rows and their fills
+  // (one compile, as the Undo of a Legend edit) and asks for the rerender that removes the hits.
+  {
+    kind: 'sequence search', stages: [], compiles: 0,
+    requests: ['readSearchQueries', 'readRecordSpanSequences', 'searchHitAnnotationSet', 'render'],
+    // A query from each record of the batch: the shown Result draws one of them.
+    run: (page) => searchByAction(page, fasta(Object.entries(genbankBases(BATCH_FIXTURE))
+      .map(([name, bases]) => ({ name, bases: span(bases, 1201, 1500) }))))
+  },
+  {
+    kind: 'History step (Undo of a sequence search)', stages: ['fills', 'legendFills'], compiles: 1, requests: ['render'],
+    run: (page) => history(page, 'undo')
   }
 ];

@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: **Sequence search** in the Web app searches the records of the shown
+  drawing for one or more query sequences with LOSAT blastn and draws the hits
+  at once, without Generate, as a new annotation set ("Search 1", ...) in front
+  of the feature track, on the lane of each hit's strand; Undo removes them.
+  Hits are colored one color per query or by a gradient along the query, with
+  a "Query position" Legend bar. A table lists the hits, and a row or a query
+  chip outlines them on the preview. A hit across the origin of a circular
+  record is one hit. **Use as search query** in the Region popup adds a
+  selected span as a query. Annotation sets gain a gradient style, a hit
+  strand, and an overlay marker in the Session (version 51); protein queries
+  are not searched yet.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest

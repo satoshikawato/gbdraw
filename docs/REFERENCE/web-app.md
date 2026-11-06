@@ -1776,6 +1776,61 @@ The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request
 compatibility](session-and-request-compatibility.md).
 
+### Sequence search
+
+**Sequence search** (after **Region Annotations**, binoculars icon) searches
+the records that the shown drawing draws, as last generated, for query
+sequences, and draws where they hit. Before the first Generate, **Search** is
+off with the reason "Generate to search".
+
+- **Query FASTA** takes pasted FASTA or **Choose file**, one or more
+  sequences, each with its own ID. Each query is listed with its name, length,
+  and hit color, which can be changed, and can be removed. A text that is not a
+  nucleotide sequence turns **Search** off, with the reason under the box.
+  Protein queries are refused until tblastn runs in every LOSAT execution mode
+  of the app.
+- A nucleotide query runs LOSAT blastn. **Task** offers megablast (the
+  default), blastn, and dc-megablast; dc-megablast needs threaded LOSAT, as in
+  Pairwise Comparisons. **Bitscore**, **E-value**, **Minimum Identity**, and
+  **Minimum Length** start from the Pairwise Comparisons defaults of the shown
+  mode and mean what they mean there
+  ([Filters and direction](comparison-programs-thresholds-and-results.md#filters-and-direction));
+  they are the panel's own values and do not change Pairwise Comparisons.
+- **Hit color**: **One color per query** (the default), with one Legend row per
+  query, or **Gradient by query position**: each hit is one row drawn from pale
+  at the query's start to dark at its end, following the hit's strand, and the
+  Legend has one row "Query position" with a bar from "start" to "end".
+- While LOSAT runs, the full-window overlay shows its progress and **Cancel**.
+  A search that fails or is cancelled adds nothing and keeps the drawing and
+  the last Result.
+
+Each search adds one annotation set, "Search 1", "Search 2", and so on, to
+**Region Annotations**, and draws it at once, without Generate, as one
+**Undo** step. The hits cover the feature track: with separated strands a hit
+covers the first lane of its strand, otherwise (or when the record draws no
+lane for its strand) the whole track. A custom track stack keeps its slots; a
+slot that names the set takes its place. Each row keeps the query, strand,
+program, identity, alignment length, E-value, and bit score in the Session; an
+annotation TSV export keeps its columns and writes a gradient row in its end
+color. Edits of the set keep the timing of **Region Annotations**: colors,
+gradient colors included, apply at once; other edits and deleting the set
+apply on Generate. On a circular record drawn whole, a hit across the origin
+is one hit (`16,270–300`), drawn across the origin in Circular and at both ends
+of the record in Linear.
+
+A search with no hit that passes the thresholds adds no set and says
+"No hits for <query> (N bp)" and how many alignments the thresholds removed.
+After a search the queries and settings fold to one line, and a table lists
+the hits of the latest search while its set exists. A click on a row, or a
+chip (**All**, then each query with its hit count), outlines those hits on the
+preview; the outline is not drawn in the Result, not exported, not saved, and
+not an **Undo** step, and the figure keeps every hit. **Save Raw LOSAT TSV**
+saves the rows as LOSAT wrote them; a row of the origin window names its
+subject `<record>:<start>-<end>` with start after end. In the Region popup of
+**Select region**, **Use as search query** adds the span's bases on the source
+strand as a query named `<record>:<start>-<end>` and opens this section. The
+queries and settings are not saved in the Session.
+
 ### Default colors and palettes
 
 The selected palette supplies every default color you have not changed. A

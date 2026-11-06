@@ -9,7 +9,7 @@ import {
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import {
-  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
+  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, GRADIENT_SCALE_NAME_ATTRIBUTES, findTrackGroups
 } from '../services/drawn-groups.js';
 import { skewTrackColor } from '../services/track-legend-rows.js';
 
@@ -91,7 +91,10 @@ export const createSvgStyles = ({
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
     pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
-      const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
+      const entry = gradient.closest('g[data-legend-key]');
+      // An annotation gradient (a sequence search's Query position bar) keeps its set's colors (OV-2621).
+      if (entry?.hasAttribute(GRADIENT_SCALE_NAME_ATTRIBUTES.min)) return;
+      const legendKey = entry?.getAttribute('data-legend-key') || '';
       const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
       const minColor = colors[minKey];
       const maxColor = colors[maxKey];

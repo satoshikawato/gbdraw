@@ -11,6 +11,7 @@ import {
 } from '../../services/legend-layout.js';
 import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
+import { GRADIENT_SCALE_NAME_ATTRIBUTES } from '../../services/drawn-groups.js';
 
 /**
  * The Legend layout inputs Python records in the composition metadata
@@ -100,8 +101,8 @@ const readGradientRows = (group) => {
     }
     const bar = gradientBar(entry);
     // A row that names its scale's ends (an annotation gradient) carries them; Python writes both or neither.
-    const minName = entry.getAttribute('data-legend-min-label');
-    const maxName = entry.getAttribute('data-legend-max-label');
+    const minName = entry.getAttribute(GRADIENT_SCALE_NAME_ATTRIBUTES.min);
+    const maxName = entry.getAttribute(GRADIENT_SCALE_NAME_ATTRIBUTES.max);
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
       name: drawnLegendRowName(entry),

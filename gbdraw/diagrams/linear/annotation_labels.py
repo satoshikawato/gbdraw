@@ -201,23 +201,18 @@ def linear_feature_glyph_boxes(
     return boxes
 
 
-def linear_annotation_row_frames(plan: LinearRecordVerticalPlan, slot_id: str) -> tuple[AnnotationRowFrame, ...]:
-    """An annotation slot on each row of a wrapped record (nothing otherwise)."""
-
-    return tuple(
-        AnnotationRowFrame(shift, float(row.plan.slot_by_id(slot_id).height))
-        for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
-    )
-
-
 def linear_annotation_slot_frame(plan: LinearRecordVerticalPlan, slot_id: str) -> AnnotationSlotFrame:
-    """An annotation slot as its marks are drawn, slot-local: its height, its frame on each row of a wrapped record,
-    and the strand lanes it covers (``LinearResolvedSlot.strand_bands``, moved from record coordinates)."""
+    """An annotation slot as its marks and labels are drawn, slot-local: its height, its frame on each row of a
+    wrapped record (none otherwise), and the strand lanes it covers (``LinearResolvedSlot.strand_bands``, moved from
+    record coordinates)."""
 
     slot = plan.slot_by_id(slot_id)
     return AnnotationSlotFrame(
         height_px=float(slot.height),
-        row_frames=linear_annotation_row_frames(plan, slot_id),
+        row_frames=tuple(
+            AnnotationRowFrame(shift, float(row.plan.slot_by_id(slot_id).height))
+            for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
+        ),
         strand_bands={strand: band.translate(-float(slot.origin_y)) for strand, band in slot.strand_bands.items()},
     )
 
@@ -574,10 +569,9 @@ def place_linear_annotation_labels(
             bar_length_px=sequence_width,
             side=slot.side,
             covers_slots=slot.spans_slots,
-            height_px=float(slot.height),
+            frame=linear_annotation_slot_frame(plan, slot.id),
             font_family=font_family,
             params=params,
-            row_frames=linear_annotation_row_frames(plan, slot.id),
         )
         slot_labels: list[LinearAnnotationLabel] = []
         origin_y = float(slot.origin_y)
@@ -650,7 +644,6 @@ __all__ = [
     "ObstacleOwner",
     "PlacedAnnotationLabels",
     "linear_annotation_label_inks",
-    "linear_annotation_row_frames",
     "linear_annotation_slot_frame",
     "linear_feature_glyph_boxes",
     "linear_feature_label_obstacles",

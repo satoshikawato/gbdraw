@@ -26,7 +26,7 @@ export const WALK_KINDS = Object.freeze([
   'fill', 'stroke', 'featureVisibility', 'labelText', 'labelVisibility',
   'visibilityRuleAdd', 'visibilityRuleEdit', 'visibilityRuleRemove', 'colorRuleAdd', 'colorRuleEdit', 'colorRuleRemove',
   'reflow', 'legendRename', 'legendColor', 'legendSort', 'legendSortDefault', 'legendDelete', 'legendRestore', 'legendAdd',
-  'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch'
+  'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch', 'sequenceSearch'
 ]);
 
 // The kinds that change every drawing by design (PD-OI-090 Reset, Save and
