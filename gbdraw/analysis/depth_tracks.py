@@ -288,7 +288,8 @@ def _tracks_from_record_major_values(
                 if source_path not in loaded_files:
                     loaded_files[source_path] = _read_depth_series(source_path, track_index)
                 table = loaded_files[source_path]
-            elif isinstance(source_value, DataFrame):
+            elif isinstance(source_value, (DataFrame, DepthCoverage)):
+                # A coverage is the file of ``depth_file``, read before this call.
                 table = source_value
             else:
                 raise ValidationError(f"Depth track {track_index + 1} must contain pandas DataFrame values.")
@@ -542,15 +543,15 @@ def freeze_depth_tracks(
     return tuple(tuple(row) for row in record_tracks)
 
 
-def assembly_depth_tracks(
-    resolved: ResolvedDepthTracks | None,
-    normalize: Callable[[], list[list[DepthTrackSpec]] | None],
-) -> list[list[DepthTrackSpec]] | None:
-    """The depth tracks an assembly draws: the builder's resolved ones, else ``normalize()``."""
+def thaw_depth_tracks(resolved: ResolvedDepthTracks | None) -> list[list[DepthTrackSpec]] | None:
+    """The builder's resolved specs as an assembly reads them; None when it resolved none.
 
-    if resolved is None:
-        return normalize()
-    return [list(row) for row in resolved]
+    An assembly reads ``thaw_depth_tracks(inputs._resolved_depth_tracks) or
+    normalize_depth_tracks(...)``: a resolved value holds a row per record, so
+    it is never empty.
+    """
+
+    return None if resolved is None else [list(row) for row in resolved]
 
 
 def index_depth_track_row(
@@ -844,7 +845,6 @@ __all__ = [
     "DepthTrackSpec",
     "DepthTrackStyle",
     "ResolvedDepthTracks",
-    "assembly_depth_tracks",
     "build_depth_track_dataframes",
     "clone_depth_config",
     "depth_track_config",
@@ -857,4 +857,5 @@ __all__ = [
     "normalize_depth_tracks",
     "representative_depth_tracks",
     "sync_depth_track_legend_entries",
+    "thaw_depth_tracks",
 ]
