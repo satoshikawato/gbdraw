@@ -58,6 +58,7 @@ await copyModule('services/preview-affordances.js', 'services/preview-affordance
 await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/drawn-groups.js', 'services/drawn-groups.js');
+await copyModule('services/drawn-attributes.generated.js', 'services/drawn-attributes.generated.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');

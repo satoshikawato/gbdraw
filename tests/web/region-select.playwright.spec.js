@@ -5,7 +5,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
@@ -210,9 +210,9 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
     await expectHeading(page, 'NC_012920.1', '4,001-6,001 (2,001 bp)');
     await expectPopupClear(page);
     await expect(page.locator('[data-region-feature-count]')).toHaveText(/^\d+ features?$/);
-    // The actions, one button each, in the approved order.
+    // The actions, one button each, in the approved order (PD-OI-115).
     expect(await popup.locator('button').evaluateAll((buttons) => buttons.map((button) => button.textContent.trim())))
-      .toEqual(['Copy FASTA', expect.stringMatching(/^Select \d+ features?$/), 'Add to annotation set', 'New drawing from region']);
+      .toEqual(['Copy FASTA', expect.stringMatching(/^Select \d+ features?$/), 'Add to annotation set', 'New drawing from region', 'Use as search query']);
     await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
     expect(record).toBe(16_569);
     // The selection is transient: the drag and the popup add no History step (Q-A4).
@@ -638,6 +638,38 @@ test('Linear: Add to annotation set whose record read fails adds nothing, takes 
     await expect(popup.locator('[data-region-add-annotation]')).toBeEnabled();
     expect(await regionRows(page)).toEqual([]);
     expect(await undoLabels(page)).toEqual(before);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-2632, D-58: the lambda card and an HmmtDNA card; after Generate the HmmtDNA card is deleted, so one record is
+// left in the draft. A Region added on the HmmtDNA record of the Result is held as "target record unavailable", as a
+// search hit is (D-57): Generate refuses it instead of drawing it on lambda.
+test('Linear: Add to annotation set on a record whose card was deleted after Generate is refused at Generate, not moved', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.linear);
+  try {
+    await page.evaluate(async (text) => {
+      const app = window.__GBDRAW_APP__;
+      app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(1, 'gb', new File([text], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, readFileSync(HMMT, 'utf8'));
+    await generate(page);
+    await page.evaluate(() => { const app = window.__GBDRAW_APP__; app.requestLinearSourceRemoval(app.linearSourceGroups[1]); });
+    await page.locator('[data-linear-source-removal-dialog]').getByRole('button', { name: 'Remove file', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(1);
+    await turnOn(page);
+    await dragAlong(page, 1, [1_000.5, 2_000.5, 3_000.5]);
+    const popup = regionPopup(page);
+    await expect(popup).toBeVisible();
+    await popup.locator('[data-region-add-annotation]').click();
+    await expect.poll(() => regionRows(page)).toHaveLength(1);
+    const rejected = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+    expect(rejected.status).toBe('error');
+    expect(rejected.error).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Choose an available target record.');
   } finally {
     await page.context().close();
   }

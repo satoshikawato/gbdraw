@@ -5,12 +5,14 @@
  * @import { AnnotationItem, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../services/annotation-state.js'
  * @import { AnnotationRow, AnnotationSetRow, NumberInputValue } from '../services/drawing/annotation-sets.js'
  * @import { AnnotationSetsDrawing } from './annotations/record-selector.js'
+ * @import { ResultRecordBinding } from '../services/sequence-search.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
 import { nextCopyId } from '../services/track-slot-validation.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
+  boundAnnotation,
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
@@ -195,11 +197,11 @@ export const createAnnotationEditor = ({
   /**
    * Select region's Add to annotation set: one coordinate-span row labelled "Region N" (the next number no row of the
    * set uses) in the default style, in the drawing's first annotation set, which it adds when there is none. The row
-   * is bound to its record by the record's catalog key (`bindingKey`, the key the record select writes); a key the
-   * catalog does not hold leaves the row unbound, as a new coordinate row is.
-   * @param {{ bindingKey: string, start: number, end: number }} region Source coordinates.
+   * is bound to its record of the Result as a search hit is (`record`, `resultRecordBinding`): a record whose card was
+   * deleted after Generate leaves its target unavailable until the row is deleted or rebound (OV-2632, D-58).
+   * @param {{ record: ResultRecordBinding, start: number, end: number }} region Source coordinates.
    */
-  const addRegionAnnotation = ({ bindingKey, start, end }) => {
+  const addRegionAnnotation = ({ record, start, end }) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -209,10 +211,7 @@ export const createAnnotationEditor = ({
     let number = 1;
     while (used.has(number)) number += 1;
     const item = { id: nextAnnotationId(set.annotations, 'region'), target: coordinateTarget({ start, end }), label: `Region ${number}`, mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
-    const [added] = addAnnotations(drawing.slices.annotationSets, set, [item]);
-    if (!added) return null;
-    recordSelector.setValue(drawing.slices.annotationSets, added, bindingKey);
-    return added;
+    return addAnnotations(drawing.slices.annotationSets, set, [boundAnnotation(item, record)])[0] ?? null;
   };
   /** @param {AnnotationSetRow | null | undefined} set */
   const addSelectedFeatures = (set) => {

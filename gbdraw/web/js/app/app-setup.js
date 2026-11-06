@@ -290,6 +290,7 @@ import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
+import { resultRecordBinding } from '../services/sequence-search.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -5319,12 +5320,12 @@ export const createAppSetup = () => {
     closeRegionPopup,
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
-    // Binds as the record select does; the popup is teleported out of the app root (no History adapter): its own step.
+    // Binds as a search hit does; the popup is teleported out of the app root (no History adapter): its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
       await readRecordCatalog(drawing);
       if (drawing !== state.activeDrawing()) return null;
-      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ bindingKey: shownResultRecordBindings().bindingKeyOf(recordKey), start, end }));
+      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ record: resultRecordBinding(shownResultRecordBindings(), recordKey), start, end }));
     },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.

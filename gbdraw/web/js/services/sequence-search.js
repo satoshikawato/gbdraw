@@ -52,6 +52,7 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
  * @property {(recordKey: string) => AnnotationRecordSelector | null} selectorOf
  * @property {SearchRecordSelector} selectorOfBinding
  */
+/** The binding key and the selector a row binds a Result record by (`resultRecordBinding`). @typedef {{ key: string, backendSelector: AnnotationRecordSelector }} ResultRecordBinding */
 
 /** @typedef {'query' | 'gradient'} SearchColorMode */
 /** @typedef {{ evalue: number, bitscore: number, identity: number, alignmentLength: number }} SearchThresholds */
@@ -189,6 +190,18 @@ export const resultRecordSelector = (bindings, recordKey) => {
   if (!selector) throw invalid('readRecordSpanSequences');
   return selector;
 };
+
+/**
+ * How a row binds the Result record `recordKey`, as Add to annotation set and a search hit bind one: by the binding key
+ * `bindingKeyOf` gives it (one no record has when no record settings owner holds it, so its target is unavailable;
+ * OV-2631, OV-2632) and by its selector in the committed request (`resultRecordSelector`).
+ * @param {ResultRecordBindings} bindings
+ * @param {string} recordKey
+ * @returns {ResultRecordBinding}
+ */
+export const resultRecordBinding = (bindings, recordKey) => ({
+  key: bindings.bindingKeyOf(recordKey), backendSelector: resultRecordSelector(bindings, recordKey)
+});
 
 /**
  * The searched sequences of the spans Python read: LOSAT names each by its FASTA header, and an annotation names its

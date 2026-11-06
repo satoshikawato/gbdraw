@@ -17,7 +17,7 @@ import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
 import { boundAnnotation } from './annotations/record-selector.js';
 import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
-  nextSearchSetId, readSequenceSearchReply, resultRecordSelector, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
+  nextSearchSetId, readSequenceSearchReply, resultRecordBinding, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
 } from '../services/sequence-search.js';
 import { createSearchQueries } from './sequence-search/queries.js';
 import { createSearchHitTable } from './sequence-search/hit-table.js';
@@ -70,8 +70,7 @@ export const SEARCH_TASKS = Object.freeze(['megablast', 'blastn', 'dc-megablast'
 const boundSearchSet = (set, hits, bindings) => {
   const recordKeys = new Map(hits.map((hit) => [hit.annotationId, hit.recordKey]));
   return { ...set, annotations: set.annotations.map((row) => {
-    const recordKey = recordKeys.get(row.id) ?? '';
-    return boundAnnotation(row, { key: bindings.bindingKeyOf(recordKey), backendSelector: resultRecordSelector(bindings, recordKey) });
+    return boundAnnotation(row, resultRecordBinding(bindings, recordKeys.get(row.id) ?? ''));
   }) };
 };
 
