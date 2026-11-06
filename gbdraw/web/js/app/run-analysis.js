@@ -65,6 +65,7 @@ import {
   liveSettingInputsOf,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
+  readCanonicalResourceFileBytes,
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot
@@ -5134,10 +5135,9 @@ export const createRunAnalysis = ({
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
-          readResourceRecordCount: (/** @type {string} */ resourceId, /** @type {'genbank' | 'fasta'} */ kind) => (
-            readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
-          ),
-          readResourceText: (/** @type {string} */ resourceId) => readCanonicalResourceText(canonical.resources, resourceId)
+          readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
+          readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
+          readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id)
         }));
         throwIfGenerationCanceled();
       }

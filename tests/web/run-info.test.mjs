@@ -25,7 +25,7 @@ const {
   shownRunInfoNoteParts,
   summarizeLosatRuntimes
 } = await import(pathToFileURL(modulePath));
-const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+const { adoptCurrentSessionResources, createSessionResourceFileView, fileBackedDescriptor } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
 );
 const { readFileText } = await import(
@@ -34,7 +34,7 @@ const { readFileText } = await import(
 const { setResourcePayloadOwner } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'resource-payload-owner.js'))
 );
-const { readCanonicalResourceRecordCount } = await import(
+const { readCanonicalResourceFileBytes, readCanonicalResourceRecordCount } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
 );
 const { createDiagramResourceTransport } = await import(
@@ -617,6 +617,23 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
   );
   assert.equal(blast?.name, 'alpha-2.gbk');
   assert.equal(comparisonsTable?.name, 'comparisons.tsv');
+  // An uploaded BLAST table Generate described by its File holds no text (OV-2612):
+  // the recipe reads its bytes through the committed resources' reader.
+  const blastText = Buffer.from(collision.resources['comparison-nucleotide-1'].data, 'base64').toString();
+  const { encoding: _encoding, data: _data, ...blastFields } = collision.resources['comparison-nucleotide-1'];
+  // The reader gives the File's cached bytes, which Generate then transfers to the Worker.
+  const cachedBlastBytes = new TextEncoder().encode(blastText);
+  const fileBackedResources = { ...collision.resources,
+    'comparison-nucleotide-1': fileBackedDescriptor(blastFields, async () => cachedBlastBytes) };
+  const fileBacked = await buildSourceRecipe({ ...collision, resources: fileBackedResources,
+    readResourceFileBytes: (id) => readCanonicalResourceFileBytes(fileBackedResources, id) });
+  structuredClone(cachedBlastBytes.buffer, { transfer: [cachedBlastBytes.buffer] });
+  assert.equal(fileBacked.available, true, fileBacked.unavailableReason);
+  const fileBackedBlast = fileBacked.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.comparison_blasts[0]');
+  assert.equal(new TextDecoder().decode(fileBackedBlast.data), blastText);
+  assert.equal(Object.hasOwn(fileBackedBlast, 'resourceId'), false);
+  assert.equal((await buildSourceRecipe({ ...collision, resources: fileBackedResources })).available, false,
+    'without a reader of its bytes the recipe is unavailable');
   const [header, row] = comparisonsTable.data.trim().split('\n').map((line) => line.split('\t'));
   assert.equal(row[header.indexOf('blast')], 'alpha-2.gbk');
   assert.doesNotMatch(comparisonsTable.data, /^alpha\.gbk\t/m);

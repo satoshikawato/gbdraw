@@ -98,6 +98,22 @@ test('A second Generate describes a view of a file-backed resource under its sho
   assert.equal(Buffer.from(prepared.stagedResources[0].bytes).toString('utf8'), '>s\nACGT\n');
 });
 
+test('A combined Session view is the source of the file-backed descriptor Generate made of it', async () => {
+  // A composite GenBank card (two Session resources read as one file): after Generate, its
+  // features are the displayed Result's only while the view matches the committed descriptor.
+  const encoded = (text) => ({ kind: 'genbank', name: 'part.gb', type: 'text/plain', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: Buffer.from(text).toString('base64') });
+  const table = backing.adoptCurrentSessionResources({ a: encoded('LOCUS a\n//\n'), b: encoded('LOCUS b\n//\n') });
+  const view = backing.createCombinedSessionResourceFileView(table, [
+    { resourceId: 'a', name: 'a.gb', type: 'text/plain', lastModified: 0 },
+    { resourceId: 'b', name: 'b.gb', type: 'text/plain', lastModified: 0 }
+  ], { name: 'both.gb', type: 'text/plain', lastModified: 0 });
+  const { descriptor } = await generateDescriptor(view);
+  assert.equal(Object.hasOwn(descriptor, 'data'), false);
+  assert.equal(backing.matchesSessionResourceDescriptor(view, descriptor), true);
+  assert.equal(backing.matchesSessionResourceDescriptor(view, { ...encoded('LOCUS c\n//\n') }), false);
+});
+
 test('Save encodes a File Generate described, once, under the committed ID', async () => {
   const text = '>x\nACGTTGCA\n';
   const file = new File([text], 'g.fa', { type: '' });

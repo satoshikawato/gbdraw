@@ -210,6 +210,7 @@ import {
   bytesToBase64,
   bytesToText,
   getSessionResourceSource,
+  readFileBytes,
   readFileText,
   textToBytes
 } from './file-content-cache.js';
@@ -5546,7 +5547,25 @@ const resourceFileOwner = (descriptor) => {
  */
 export const readCanonicalResourceText = async (resources, resourceId) => {
   const fileOwner = resourceFileOwner(resources?.[resourceId]);
-  return fileOwner ? readFileText(fileOwner) : decodeCanonicalResourceText(resources, resourceId);
+  if (fileOwner) return readFileText(fileOwner);
+  const fileBytes = await readCanonicalResourceFileBytes(resources, resourceId);
+  return fileBytes ? bytesToText(fileBytes) : decodeCanonicalResourceText(resources, resourceId);
+};
+
+/**
+ * The bytes of a committed Session resource that a File holds (its payload
+ * owner, or the reader of a file-backed descriptor, OV-2612); null when its
+ * descriptor holds them as text.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<Uint8Array | null>}
+ */
+export const readCanonicalResourceFileBytes = async (resources, resourceId) => {
+  const descriptor = resources?.[resourceId];
+  const fileOwner = resourceFileOwner(descriptor);
+  if (fileOwner) return readFileBytes(/** @type {FileLike} */ (fileOwner));
+  const readFile = fileBackedReaderOf(descriptor);
+  return readFile ? readFile() : null;
 };
 
 /**

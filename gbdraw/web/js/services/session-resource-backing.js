@@ -725,6 +725,8 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   if (matches(backing.descriptor)) return true;
   if (!backing.sourceBackings) return false;
   if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;
+  // The descriptor Generate made of this combined view (OV-2612) reads the view itself.
+  if (fileBackedReaderOf(descriptor) && fileBackedReaderOf(descriptor) === viewReaders.get(/** @type {FileLike} */ (file))) return true;
   if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
 
   /** @param {{ resourceId: string, name: string, descriptor: SessionResourceDescriptor }} entry */
@@ -785,6 +787,25 @@ export const readSessionResourceBytes = (file) => {
   if (typeof backing.readBytes === 'function') return backing.readBytes();
   // Every combined view defines `readBytes`, so this is a leaf backing.
   return materializeBytes(/** @type {LeafBacking} */ (backing));
+};
+
+/** @type {WeakMap<FileLike, FileBackedReader>} */
+const viewReaders = new WeakMap();
+/**
+ * The one reader of a clean Session resource view's bytes, or null for any
+ * other value. A file-backed descriptor Generate made of the view keeps it
+ * (`fileBackedDescriptor`), so the view knows that descriptor by identity
+ * (`matchesSessionResourceDescriptor`), with no read.
+ * @param {unknown} file
+ * @returns {FileBackedReader | null}
+ */
+export const sessionResourceViewReader = (file) => {
+  const view = /** @type {FileLike} */ (file);
+  const backing = fileViewBackings.get(view);
+  if (!backing || backing.dirty) return null;
+  let reader = viewReaders.get(view);
+  if (!reader) viewReaders.set(view, reader = () => /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(view)));
+  return reader;
 };
 
 /**

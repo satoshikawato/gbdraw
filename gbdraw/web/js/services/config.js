@@ -132,6 +132,7 @@ import {
   createSessionResourceFileView,
   fileBackedDescriptor,
   renamedResourceDescriptor,
+  sessionResourceViewReader,
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
@@ -3547,7 +3548,7 @@ const serializeFile = async (file) => {
     type: String(view?.type || ''),
     size: bytes.byteLength,
     lastModified: Number(view?.lastModified ?? Date.now())
-  }, () => readFileBytes(file));
+  }, sessionResourceViewReader(file) ?? (() => readFileBytes(file)));
   return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
