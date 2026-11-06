@@ -661,6 +661,7 @@ def _drawing_output_request(
     formats: str | tuple[str, ...] | None,
     overwrite: bool | None,
     embed_fonts: bool | None = None,
+    dpi: float | None = None,
 ) -> DiagramRequest:
     """Apply the output overrides; several drawings get ``<base>_<id>``."""
 
@@ -685,6 +686,7 @@ def _drawing_output_request(
         formats=formats,
         overwrite=overwrite,
         embed_fonts=embed_fonts,
+        dpi=dpi,
     )
 
 
@@ -696,6 +698,7 @@ def _plan_session_drawings(
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
     embed_fonts: bool | None = None,
+    dpi: float | None = None,
 ) -> tuple[_SessionDrawingRender, ...]:
     """Select drawings, decode their requests and name their outputs.
 
@@ -753,6 +756,7 @@ def _plan_session_drawings(
                 formats=formats,
                 overwrite=overwrite,
                 embed_fonts=embed_fonts,
+                dpi=dpi,
             ),
         )
         for drawing in selected
@@ -2011,6 +2015,7 @@ def with_request_output(
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
     embed_fonts: bool | None = None,
+    dpi: float | None = None,
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
@@ -2029,6 +2034,7 @@ def with_request_output(
             formats=formats if formats is not None else current.formats,
             overwrite=current.overwrite if overwrite is None else overwrite,
             embed_fonts=current.embed_fonts if embed_fonts is None else embed_fonts,
+            dpi=current.dpi if dpi is None else dpi,
         )
 
     if isinstance(request, CircularBatchRequest):

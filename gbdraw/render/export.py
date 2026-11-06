@@ -5,17 +5,22 @@ from __future__ import annotations
 
 import functools
 import importlib
+import math
 import os
 import re
+import struct
 import sys
 import logging
 import warnings
 import xml.etree.ElementTree as ET
+import zlib
+from pathlib import Path
 from types import ModuleType
 from typing import Any, List, Sequence
 
 from svgwrite import Drawing
 
+from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.render.document import write_svg_document, write_text
@@ -268,12 +273,41 @@ def prepare_svg_for_cairosvg(svg_bytes: bytes) -> bytes:
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_METRES_PER_INCH = 0.0254
+
+
+def png_with_resolution(png: bytes, dpi: float) -> bytes:
+    """``png`` with a pHYs chunk of ``dpi`` pixels per inch, in pixels per metre.
+
+    An existing pHYs chunk is replaced; otherwise the chunk goes before the
+    first IDAT. The Web writes the same chunk in ``setDpiInPng``
+    (``gbdraw/web/js/utils/png.js``), which rounds half up like this does.
+    """
+
+    if png[:8] != _PNG_SIGNATURE:
+        raise ValueError("Not a PNG.")
+    per_metre = math.floor(dpi / _METRES_PER_INCH + 0.5)
+    data = struct.pack(">IIB", per_metre, per_metre, 1)
+    chunk = struct.pack(">I", len(data)) + b"pHYs" + data + struct.pack(">I", zlib.crc32(b"pHYs" + data))
+    offset = 8
+    while offset + 8 <= len(png):
+        length, kind = struct.unpack(">I4s", png[offset : offset + 8])
+        if kind == b"pHYs":
+            return png[:offset] + chunk + png[offset + 12 + length :]
+        if kind == b"IDAT":
+            return png[:offset] + chunk + png[offset:]
+        offset += 12 + length
+    raise ValueError("The PNG has no IDAT chunk.")
+
+
 def convert_svg_with_cairosvg(
     svg_source: bytes | str,
     fmt: str,
     *,
     write_to: Any = None,
     cairosvg_module: ModuleType | None = None,
+    dpi: float | None = None,
     **options: Any,
 ) -> Any:
     """Convert SVG to PNG, PDF, PS, or EPS with CairoSVG.
@@ -283,7 +317,9 @@ def convert_svg_with_cairosvg(
     (:func:`gbdraw.render.font_embedding.fonts_for_cairosvg`) and
     :func:`prepare_svg_for_cairosvg`. ``options`` are passed
     to CairoSVG (for example ``url``, ``output_width``, ``background_color``).
-    Returns the converted bytes when ``write_to`` is not given.
+    A PNG draws ``dpi / 96`` pixels per SVG pixel (``dpi`` of ``None``: one)
+    and states ``dpi`` (``None``: 96) in its pHYs chunk; other formats ignore
+    ``dpi``. Returns the converted bytes when ``write_to`` is not given.
     """
     converter_name = _CAIROSVG_CONVERTERS.get(str(fmt).lower())
     if converter_name is None:
@@ -292,9 +328,23 @@ def convert_svg_with_cairosvg(
     source = svg_source.encode("utf-8") if isinstance(svg_source, str) else bytes(svg_source)
     kwargs = dict(options)
     kwargs["bytestring"] = prepare_svg_for_cairosvg(fonts_for_cairosvg(source, str(fmt).lower()))
-    if write_to is not None:
-        kwargs["write_to"] = write_to
-    return getattr(module, converter_name)(**kwargs)
+    if str(fmt).lower() != "png":
+        if write_to is not None:
+            kwargs["write_to"] = write_to
+        return getattr(module, converter_name)(**kwargs)
+    if dpi is not None:
+        kwargs["scale"] = dpi / CSS_PX_PER_INCH
+    png = png_with_resolution(
+        bytes(getattr(module, converter_name)(**kwargs)),
+        CSS_PX_PER_INCH if dpi is None else dpi,
+    )
+    if write_to is None:
+        return png
+    if isinstance(write_to, (str, os.PathLike)):
+        Path(write_to).write_bytes(png)
+    else:
+        write_to.write(png)
+    return None
 
 
 def parse_formats(out_formats: str) -> list[str]:
@@ -393,6 +443,7 @@ __all__ = [
     "get_cairosvg",
     "has_cairosvg",
     "parse_formats",
+    "png_with_resolution",
     "prepare_svg_for_cairosvg",
     "require_cairosvg",
     "save_figure",

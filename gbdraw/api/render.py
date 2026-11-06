@@ -11,7 +11,6 @@ from typing import Sequence
 
 from svgwrite import Drawing
 
-from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
 from gbdraw.render.document import write_svg_document, write_text
@@ -73,14 +72,6 @@ def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir:
     return base_prefix
 
 
-def _png_options(fmt: str, dpi: float | None) -> dict[str, float]:
-    """CairoSVG options of one format: a PNG with a ``dpi`` draws ``dpi / 96`` pixels per SVG pixel."""
-
-    if dpi is None or fmt != "png":
-        return {}
-    return {"scale": dpi / CSS_PX_PER_INCH}
-
-
 def _cairosvg_module(formats: Sequence[str]) -> ModuleType | None:
     """The CairoSVG module for ``formats``, checked before anything is written."""
     if not formats:
@@ -118,7 +109,8 @@ def save_figure_to(
     the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
     PS draw a font whose license forbids embedding it in the nearest
     Liberation font (``gbdraw.render.font_embedding``).
-    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel (``None``: one);
+    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel (``None``: one) and
+    is the resolution in its pHYs chunk (``None``: 96);
     a figure drawn to a requested size states it in the SVG and PDF.
     """
 
@@ -190,7 +182,7 @@ def save_figure_to(
                             fmt,
                             write_to=output_file,
                             cairosvg_module=cairosvg_module,
-                            **_png_options(fmt, dpi),
+                            dpi=dpi,
                         )
                 except Exception as exc:
                     raise ExportError(f"Failed to generate {fmt.upper()}: {exc}") from exc
@@ -212,7 +204,8 @@ def render_to_bytes(
     """Render a canvas to bytes (SVG always; PNG/PDF/PS/EPS require CairoSVG).
 
     ``embed_fonts`` and ``dpi`` as in :func:`save_figure_to`: SVG and
-    interactive SVG carry the custom fonts they use, and a PNG scales by ``dpi``.
+    interactive SVG carry the custom fonts they use, and a PNG scales by ``dpi``
+    and states it in its pHYs chunk.
     """
 
     dpi = checked_png_dpi(dpi)
@@ -235,7 +228,7 @@ def render_to_bytes(
             svg_string,
             fmt_norm,
             cairosvg_module=cairosvg_module,
-            **_png_options(fmt_norm, dpi),
+            dpi=dpi,
         )
     except GbdrawError:
         raise

@@ -105,11 +105,14 @@ physical size (0.75 pt per px), its PNG has `dpi / 96` pixels per px with the
 DPI in the file, and Interactive SVG still opens to fit the browser window. A
 Result drawn at Auto exports as before.
 
-`--dpi` on the command line and `dpi` on `save_figure_to()`,
-`render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
-`RenderOutputRequest` scale a PNG to `dpi / 96` pixels per SVG pixel (default
-96: one pixel per SVG pixel). Other formats ignore it, and the command line
-warns when `--dpi` is given without PNG output. A command-line or Python PNG carries no DPI metadata.
+`--dpi` on the command line (also with `--session` and on `gbdraw render`)
+and `dpi` on `save_figure_to()`, `render_to_bytes()`, `Diagram.to_bytes()`,
+`Diagram.save()`, and `RenderOutputRequest` scale a PNG to `dpi / 96` pixels
+per SVG pixel (default 96: one pixel per SVG pixel). Other formats ignore it,
+and the command line warns when `--dpi` is given without PNG output. A Session
+does not store a DPI, so `--session` takes it from `--dpi` alone. Every PNG that the command line or Python writes carries a pHYs chunk with
+that DPI (the default, 96, when none is given) in pixels per metre, as the web
+app's PNG does.
 
 ## PNG and PDF size limits
 

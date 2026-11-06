@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
-from gbdraw.cli_utils.common import add_font_file_args, register_font_files
+from gbdraw.cli_utils.common import add_dpi_arg, add_font_file_args, png_dpi, register_font_files
 from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
@@ -99,6 +99,7 @@ class SessionCliRequest:
     list_drawings: bool = False
     font_files: tuple[str, ...] = ()
     embed_fonts: bool = True
+    dpi: int | None = None
 
 
 def read_stored_font_size_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -196,6 +197,7 @@ def parse_session_pre_args(
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save_session", action="store_true")
     parser.add_argument("--session_output")
+    add_dpi_arg(parser)
     add_font_file_args(parser)
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
@@ -217,6 +219,7 @@ def parse_session_pre_args(
         drawings=tuple(namespace.drawing or ()),
         font_files=tuple(namespace.font_file),
         embed_fonts=bool(namespace.embed_fonts),
+        dpi=namespace.dpi,
     )
 
 
@@ -294,6 +297,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
             "PATH; use a .gz suffix for gzip compression."
         ),
     )
+    add_dpi_arg(parser)
     add_font_file_args(parser)
     namespace = parser.parse_args(list(cmd_args))
     return SessionCliRequest(
@@ -307,6 +311,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
         list_drawings=bool(namespace.list_drawings),
         font_files=tuple(namespace.font_file),
         embed_fonts=bool(namespace.embed_fonts),
+        dpi=namespace.dpi,
     )
 
 
@@ -601,19 +606,17 @@ def render_canonical_session_if_present(
     overwrite: bool = False,
     drawing: str | None = None,
     embed_fonts: bool = True,
-    font_files: Sequence[str] = (),
+    dpi: int | None = None,
 ) -> bool:
     """Render one drawing of ``mode`` from a canonical Session.
 
     ``drawing`` names it by ID or name; without it the Session must have one
     drawing of ``mode``. Sessions 27-30 return ``False`` for legacy replay.
-    Each of ``font_files`` is registered first (both routes), so a Session
-    that names its family draws with it instead of a substitute.
+    The caller registers the font files first (``register_font_files``), so a
+    Session that names its family draws with it instead of a substitute.
     """
 
     from gbdraw.session import load_session_document
-
-    register_font_files(font_files)
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     document = load_session_document(session)
@@ -630,6 +633,7 @@ def render_canonical_session_if_present(
         session_output=session_output,
         overwrite=overwrite,
         embed_fonts=embed_fonts,
+        dpi=dpi,
     )
     return True
 
@@ -770,12 +774,14 @@ def render_session_drawings_cli(
     session_output: str | None,
     overwrite: bool = False,
     embed_fonts: bool = True,
+    dpi: int | None = None,
 ) -> None:
     """Render drawings of a canonical Session and optionally save it again.
 
     ``drawings`` selects drawings by ID or name; ``None`` renders every drawing
     with a committed render. ``-o`` splits into the output directory and
-    prefix; several drawings get ``<prefix>_<ID>``. With a re-save, the
+    prefix; several drawings get ``<prefix>_<ID>``. ``dpi`` sets the PNG
+    resolution of every drawing (a Session stores none). With a re-save, the
     document, validated when it was loaded, is brought to the current version
     before any render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without
@@ -826,6 +832,15 @@ def render_session_drawings_cli(
                 formats=format_override,
                 overwrite=overwrite,
                 embed_fonts=embed_fonts,
+                dpi=dpi,
+            )
+            png_dpi(
+                dpi,
+                tuple(
+                    path.suffix.lstrip(".")
+                    for plan in plans
+                    for path in diagram_request_output_paths(plan.request)
+                ),
             )
             sidecar: tuple[Path, str] | None = None
             if save:
@@ -939,6 +954,7 @@ def render_main(cmd_args: Sequence[str]) -> None:
         session_output=request.session_output,
         overwrite=request.overwrite,
         embed_fonts=request.embed_fonts,
+        dpi=request.dpi,
     )
 
 
