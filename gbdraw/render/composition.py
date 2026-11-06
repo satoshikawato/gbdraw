@@ -1,28 +1,41 @@
-"""Apply pure composition plans to internal SVG drawing targets."""
+"""Place a drawing's legend and title, plan its composition and apply the plan to its SVG targets.
+
+Both modes and the multi-record Circular canvas compose through ``place_legend``,
+``place_title`` and ``compose_drawing``; ``apply_composition_plan`` binds a plan
+to the drawing's existing groups.
+"""
 
 from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TypedDict
 
 from svgwrite.container import Group
 from svgwrite.drawing import Drawing
 
+from gbdraw.configurators.legend import LegendMeasurement
 from gbdraw.layout.composition import (
+    CompositionInputs,
     CompositionItem,
     CompositionPlacement,
     CompositionPlan,
+    CompositionRequest,
+    CompositionSpacing,
     LegendPlacement,
     OVERLAY_CANDIDATE_SCORE_ORDER,
     OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER,
     OVERLAY_CANVAS_GROWTH_SCORE_ORDER,
     OVERLAY_QUADRANT_BOUNDARY_RATIO,
     TitlePlacement,
+    plan_composition,
 )
 from gbdraw.layout.spatial import Aabb
-from gbdraw.render.group_content import GroupContent
+from gbdraw.legend.table import LegendTable, draws_legend
+from gbdraw.render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
+from gbdraw.render_stages import render_stage
 
 COMPOSITION_SCHEMA_VERSION = 1
 COMPOSITION_SCHEMA_ATTRIBUTE = "data-gbdraw-composition-schema"
@@ -538,6 +551,113 @@ def applied_composition_plan(drawing: Drawing) -> CompositionPlan:
     plan = getattr(drawing, _APPLIED_PLAN_ATTR, None)
     if not isinstance(plan, CompositionPlan):
         raise ValueError("the drawing has no applied composition plan")
+    return plan
+
+
+@dataclass(frozen=True, slots=True)
+class PlacedLegend:
+    """The legend group on a drawing and the measurement it was drawn from."""
+
+    target: Group
+    measurement: LegendMeasurement
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionPrimary:
+    """What the composition moves as one primary item.
+
+    ``bounds`` and ``overlay_obstacles`` are in the frame of ``targets``;
+    ``length_bar_bounds`` are the painted bounds of a Linear scale bar among
+    the targets (``None`` without one).
+    """
+
+    bounds: Aabb
+    targets: tuple[Group, ...]
+    overlay_obstacles: tuple[Aabb, ...] = ()
+    length_bar_bounds: Aabb | None = None
+
+
+def place_legend(
+    drawing: Drawing,
+    content: Callable[[LegendMeasurement, LegendTable], GroupContent],
+    placement: LegendPlacement,
+    measurement: LegendMeasurement,
+    table: LegendTable,
+) -> PlacedLegend | None:
+    """Draw the legend with the mode's ``content`` (render stage ``legend_content``) and add it to ``drawing``.
+
+    Nothing is drawn when the placement is ``none`` or the table has no row. A
+    Legend whose rows are all hidden is drawn too; its empty bounds take no room.
+    """
+
+    if placement is LegendPlacement.NONE or not draws_legend(table):
+        return None
+    target = place_content(
+        drawing,
+        render_stage("legend_content", content, measurement, table),
+        GroupKey(CANVAS_SCOPE, GroupKind.LEGEND),
+    )
+    drawing.add(target)
+    return PlacedLegend(target=target, measurement=measurement)
+
+
+def place_title(drawing: Drawing, composition: CompositionInputs) -> Group | None:
+    """Add the plot title group to ``drawing`` when ``composition`` has a title content."""
+
+    if composition.title_content is None:
+        return None
+    target = place_content(drawing, composition.title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
+    drawing.add(target)
+    return target
+
+
+def compose_drawing(
+    drawing: Drawing,
+    composition: CompositionInputs,
+    primary: CompositionPrimary,
+    legend_placement: LegendPlacement,
+    legend: PlacedLegend | None,
+    title_target: Group | None,
+) -> CompositionPlan:
+    """Plan where the primary item, the legend and the title go (render stage ``composition_plan``), move them
+    there, and return the plan.
+
+    The title is the one ``place_title`` placed from ``composition``; the
+    canvas takes the requested size and the canvas padding of ``composition``.
+    """
+
+    title_content = composition.title_content
+    plan = render_stage(
+        "composition_plan",
+        plan_composition,
+        CompositionRequest(
+            primary=CompositionItem("primary", primary.bounds),
+            legend=CompositionItem("legend", legend.measurement.local_bounds) if legend is not None else None,
+            title=(
+                CompositionItem("title", title_content.local_bounds)
+                if title_target is not None and title_content is not None and title_content.local_bounds is not None
+                else None
+            ),
+            legend_placement=legend_placement,
+            title_placement=composition.title_placement,
+            overlay_obstacles=primary.overlay_obstacles,
+            spacing=CompositionSpacing(canvas_padding_px=composition.canvas_padding),
+            requested_width_px=composition.requested_size.width_px,
+            requested_height_px=composition.requested_size.height_px,
+        ),
+    )
+    apply_composition_plan(
+        drawing,
+        plan,
+        primary_targets=primary.targets,
+        legend_target=legend.target if legend is not None else None,
+        legend_side=legend_placement,
+        legend_reflow_metrics=legend.measurement.reflow_metrics if legend is not None else None,
+        legend_local_bounds=legend.measurement.local_bounds if legend is not None else None,
+        title_target=title_target,
+        title_side=composition.title_placement,
+        length_bar_local_bounds=primary.length_bar_bounds,
+    )
     return plan
 
 

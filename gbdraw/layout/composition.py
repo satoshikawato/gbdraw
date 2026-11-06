@@ -186,13 +186,23 @@ class CompositionInputs:
     The API builds it once from the request: the plot title content (``None``
     when no title is drawn) and its placement (``TitlePlacement.NONE`` without
     a title), the requested figure size, and the canvas padding. The assembler
-    places the title and turns these into its ``CompositionRequest``.
+    places the title and turns these into its ``CompositionRequest``. A title
+    content has its local bounds and a placement other than ``NONE``; without
+    one the placement is ``NONE``.
     """
 
     title_content: GroupContent | None
     title_placement: TitlePlacement
     requested_size: RequestedFigureSize
     canvas_padding: CanvasPaddingSides
+
+    def __post_init__(self) -> None:
+        if self.title_content is not None and self.title_content.local_bounds is None:
+            raise ValueError("a title content needs its local bounds")
+        if self.title_content is None and self.title_placement is not TitlePlacement.NONE:
+            raise ValueError("title placement requires a title content")
+        if self.title_content is not None and self.title_placement is TitlePlacement.NONE:
+            raise ValueError("title content requires a non-none title placement")
 
 
 @dataclass(frozen=True, slots=True)

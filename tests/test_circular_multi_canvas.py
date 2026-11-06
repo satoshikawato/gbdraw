@@ -356,7 +356,7 @@ def _with_mock_circular_result(
         content_bounds=resolved_bounds,
         overlay_obstacles=(),
         primary_targets=(),
-        legend_target=None,
+        legend=None,
         title_target=None,
         track_slot_geometry={},
         composition_plan=composition_plan,

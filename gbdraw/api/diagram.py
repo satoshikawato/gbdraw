@@ -132,7 +132,7 @@ from gbdraw.configurators import (
     LegendDrawingConfigurator,
 )
 from gbdraw.configurators.bundle import DiagramConfigurators
-from gbdraw.configurators.legend import measure_legend
+from gbdraw.configurators.legend import LegendMeasurement, measure_legend
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.figure_length import RequestedFigureSize
 from gbdraw.core.fonts import resolve_font_family
@@ -204,12 +204,8 @@ from gbdraw.labels.linear import (
 from gbdraw.layout.composition import (
     NO_CANVAS_PADDING_SIDES,
     CompositionInputs,
-    CompositionItem,
-    CompositionRequest,
-    CompositionSpacing,
     LegendPlacement,
     TitlePlacement,
-    plan_composition,
 )
 from gbdraw.layout.figure_size import (
     FigurePrimaryItem,
@@ -255,12 +251,14 @@ from gbdraw.render.document import bind_export_size, drawing_size
 from gbdraw.render.export_limits import bind_export_wrap
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
-    apply_composition_plan,
+    CompositionPrimary,
     applied_composition_plan,
+    compose_drawing,
     painted_title_content,
+    place_legend,
+    place_title,
 )
 from gbdraw.render.group_content import (
-    CANVAS_SCOPE,
     ContentGroup,
     GroupContent,
     GroupKey,
@@ -3376,9 +3374,7 @@ def assemble_circular_diagram_from_records(
     )
 
     legend_table = LegendTable()
-    legend_target: Group | None = None
-    legend_content: GroupContent | None = None
-    legend_bounds: Aabb | None = None
+    legend_measurement: LegendMeasurement | None = None
     plot_title_content: GroupContent | None = None
 
     if show_plot_title:
@@ -3483,10 +3479,6 @@ def assemble_circular_diagram_from_records(
                 placement=legend_canvas_config.legend_position,
                 wrap_width=grid_layout.bounds.width,
             )
-            legend_bounds = legend_measurement.local_bounds
-            legend_content = render_stage(
-                "legend_content", circular_legend_content, legend_measurement, legend_table
-            )
 
     legend_row_facts = LegendRowFacts(records=records, sources=legend_sources, legend_table=legend_table)
 
@@ -3569,64 +3561,22 @@ def assemble_circular_diagram_from_records(
             for obstacle in result.overlay_obstacles
         )
 
-    plot_title_group: Group | None = None
-    plot_title_bounds: Aabb | None = None
-    if plot_title_content is not None:
-        plot_title_group = place_content(
-            merged_canvas, plot_title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE)
-        )
-        plot_title_bounds = plot_title_content.local_bounds
-        merged_canvas.add(plot_title_group)
-    if legend_content is not None:
-        legend_target = place_content(
-            merged_canvas, legend_content, GroupKey(CANVAS_SCOPE, GroupKind.LEGEND)
-        )
-        merged_canvas.add(legend_target)
-
+    # The grid is the outermost composition; its records keep their own canvas.
+    composition = _composition_inputs(cfg, plot_title_content, normalized_plot_title_position)
+    title_target = place_title(merged_canvas, composition)
     legend_placement = LegendPlacement(str(legend_effective))
-    title_placement = (
-        TitlePlacement(normalized_plot_title_position)
-        if plot_title_group is not None
-        else TitlePlacement.NONE
+    legend = (
+        place_legend(merged_canvas, circular_legend_content, legend_placement, legend_measurement, legend_table)
+        if legend_measurement is not None
+        else None
     )
-    composition_plan = render_stage(
-        "composition_plan",
-        plan_composition,
-        CompositionRequest(
-            primary=CompositionItem("primary", grid_layout.bounds),
-            legend=(
-                CompositionItem("legend", legend_bounds)
-                if legend_target is not None and legend_bounds is not None
-                else None
-            ),
-            title=(
-                CompositionItem("title", plot_title_bounds)
-                if plot_title_group is not None and plot_title_bounds is not None
-                else None
-            ),
-            legend_placement=legend_placement,
-            title_placement=title_placement,
-            overlay_obstacles=tuple(grid_overlay_obstacles),
-            # The grid is the outermost composition; its records keep their own canvas.
-            spacing=CompositionSpacing(canvas_padding_px=cfg.canvas.padding),
-            requested_width_px=cfg.canvas.figure_size.width_px,
-            requested_height_px=cfg.canvas.figure_size.height_px,
-        ),
-    )
-    apply_composition_plan(
+    compose_drawing(
         merged_canvas,
-        composition_plan,
-        primary_targets=record_targets,
-        legend_target=legend_target,
-        legend_side=legend_placement,
-        legend_reflow_metrics=(
-            legend_measurement.reflow_metrics
-            if legend_target is not None
-            else None
-        ),
-        legend_local_bounds=legend_bounds if legend_target is not None else None,
-        title_target=plot_title_group,
-        title_side=title_placement,
+        composition,
+        CompositionPrimary(grid_layout.bounds, tuple(record_targets), tuple(grid_overlay_obstacles)),
+        legend_placement,
+        legend,
+        title_target,
     )
 
     _attach_circular_label_layouts(

@@ -52,14 +52,12 @@ from ...configurators import (
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
-    LegendMeasurement,
 )
 from ...configurators.bundle import DiagramConfigurators
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
-    CANVAS_SCOPE,
     GroupContent,
     GroupKey,
     GroupKind,
@@ -92,7 +90,6 @@ from ...legend.table import (
     LegendTable,
     PairwiseIdentityLegend,
     apply_legend_row_edits,
-    draws_legend,
     pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -111,11 +108,7 @@ from ...layout.linear import (
 )
 from ...layout.composition import (
     CompositionInputs,
-    CompositionItem,
-    CompositionRequest,
-    CompositionSpacing,
     LegendPlacement,
-    plan_composition,
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...layout.linear import union_vertical_bands
@@ -207,7 +200,7 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.composition import apply_composition_plan
+from ...render.composition import CompositionPrimary, compose_drawing, place_legend, place_title
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
@@ -4057,76 +4050,23 @@ def _compose_linear_canvas(
     """Draw the legend (stage ``legend_content``) and the title, plan where they and the records go (stage
     ``composition_plan``) and move them there."""
 
-    legend_table = legend.table
-    legend_measurement: LegendMeasurement | None = None
-    legend_target: Group | None = None
-    if canvas_config.legend_position != "none":
-        legend_measurement = measure_legend(
-            configurators.legend,
-            legend_table,
-            placement=canvas_config.legend_position,
-            wrap_width=primary.source_bounds.width,
-        )
-        # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
-        if draws_legend(legend_table):
-            legend_target = place_content(
-                canvas,
-                render_stage(
-                    "legend_content", linear_legend_content, legend_measurement, legend_table
-                ),
-                GroupKey(CANVAS_SCOPE, GroupKind.LEGEND),
-            )
-            canvas.add(legend_target)
-
-    title_content = composition.title_content
-    title_target = (
-        place_content(canvas, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
-        if title_content is not None
-        else None
-    )
-    if title_target is not None:
-        canvas.add(title_target)
-
     legend_placement = LegendPlacement(str(canvas_config.legend_position))
-    title_placement = composition.title_placement
-    legend_drawn = legend_measurement if legend_target is not None else None
-    composition_plan = render_stage(
-        "composition_plan",
-        plan_composition,
-        CompositionRequest(
-            primary=CompositionItem("primary", primary.source_bounds),
-            legend=(
-                CompositionItem("legend", legend_drawn.local_bounds)
-                if legend_drawn is not None
-                else None
-            ),
-            title=(
-                CompositionItem("title", title_content.local_bounds)
-                if title_target is not None
-                and title_content is not None
-                and title_content.local_bounds is not None
-                else None
-            ),
-            legend_placement=legend_placement,
-            title_placement=title_placement,
-            spacing=CompositionSpacing(canvas_padding_px=composition.canvas_padding),
-            requested_width_px=composition.requested_size.width_px,
-            requested_height_px=composition.requested_size.height_px,
-        ),
+    legend_measurement = measure_legend(
+        configurators.legend,
+        legend.table,
+        placement=canvas_config.legend_position,
+        wrap_width=primary.source_bounds.width,
     )
-    apply_composition_plan(
+    placed_legend = place_legend(canvas, linear_legend_content, legend_placement, legend_measurement, legend.table)
+    title_target = place_title(canvas, composition)
+    return compose_drawing(
         canvas,
-        composition_plan,
-        primary_targets=primary.targets,
-        legend_target=legend_target,
-        legend_side=legend_placement,
-        legend_reflow_metrics=legend_drawn.reflow_metrics if legend_drawn is not None else None,
-        legend_local_bounds=legend_drawn.local_bounds if legend_drawn is not None else None,
-        title_target=title_target,
-        title_side=title_placement,
-        length_bar_local_bounds=primary.length_bar_bounds,
+        composition,
+        CompositionPrimary(primary.source_bounds, primary.targets, length_bar_bounds=primary.length_bar_bounds),
+        legend_placement,
+        placed_legend,
+        title_target,
     )
-    return composition_plan
 
 
 def _attach_linear_facts(

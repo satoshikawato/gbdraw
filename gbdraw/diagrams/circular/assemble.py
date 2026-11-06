@@ -101,9 +101,7 @@ from ...layout.composition import (
     CompositionPlan,
     CompositionRequest,
     DEFAULT_COMPOSITION_SPACING,
-    CompositionSpacing,
     LegendPlacement,
-    TitlePlacement,
     plan_composition,
 )
 from ...layout.spatial import Aabb, bounding_aabb, union_aabbs
@@ -118,7 +116,7 @@ from ...legend.sources import (
     feature_legend_presence,
     legend_slot_sources,
 )
-from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, draws_legend, prepare_legend_table
+from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -152,9 +150,16 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_track_content,
     circular_annotation_track_ink,
 )
-from ...render.group_content import CANVAS_SCOPE, GroupKey, GroupKind, place_content
+from ...render.group_content import GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
-from ...render.composition import apply_composition_plan
+from ...render.composition import (
+    CompositionPrimary,
+    PlacedLegend,
+    compose_drawing,
+    place_legend,
+    place_title,
+)
+from ...render.groups.circular.legend import circular_legend_content
 from ...svg.ids import track_slot_svg_id
 from .positioning import center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
@@ -167,7 +172,6 @@ from .builders import (
     add_gc_content_group_on_canvas,
     add_gc_skew_group_on_canvas,
     add_labels_group_on_canvas,
-    add_legend_group_on_canvas,
     add_record_definition_group_on_canvas,
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
@@ -217,7 +221,7 @@ class _CircularPlotAssembly:
     source_content_bounds: Aabb
     source_overlay_obstacles: tuple[Aabb, ...]
     primary_targets: tuple[Group, ...]
-    legend_target: Group | None
+    legend: PlacedLegend | None
     track_slot_geometry: Mapping[str, Any]
     label_layout: CircularLabelLayout | None
 
@@ -233,7 +237,7 @@ class CircularAssemblyResult:
     content_bounds: Aabb
     overlay_obstacles: tuple[Aabb, ...]
     primary_targets: tuple[Group, ...]
-    legend_target: Group | None
+    legend: PlacedLegend | None
     title_target: Group | None
     track_slot_geometry: Mapping[str, Any]
     composition_plan: CompositionPlan
@@ -3367,19 +3371,7 @@ def add_record_on_circular_canvas(
         if isinstance(element, Group)
     )
 
-    legend_target: Group | None = None
-    # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
-    if canvas_config.legend_position != "none" and draws_legend(legend_table):
-        legend_target_start = len(getattr(canvas, "elements", []))
-        canvas = add_legend_group_on_canvas(canvas, legend_measurement, legend_table)
-        legend_target = next(
-            (
-                element
-                for element in getattr(canvas, "elements", [])[legend_target_start:]
-                if isinstance(element, Group)
-            ),
-            None,
-        )
+    legend = place_legend(canvas, circular_legend_content, legend_placement, legend_measurement, legend_table)
     track_slot_geometry = getattr(canvas, "_gbdraw_track_slot_geometry", {})
     if feature_slot is not None:
         targets = FeaturePlacementSlot("circular", feature_lane_direction, profile.strandedness).supported_targets()
@@ -3394,7 +3386,7 @@ def add_record_on_circular_canvas(
         source_content_bounds=source_content_bounds,
         source_overlay_obstacles=overlay_obstacles,
         primary_targets=primary_targets,
-        legend_target=legend_target,
+        legend=legend,
         track_slot_geometry=track_slot_geometry,
         label_layout=label_layout,
     )
@@ -3406,63 +3398,14 @@ def _compose_circular_plot(
 ) -> CircularAssemblyResult:
     """Compose one fully measured Circular plot exactly once, in the requested canvas size when one is set, with
     the canvas padding outside its edge padding."""
-    title_content = composition.title_content
-    resolved_title_placement = composition.title_placement
-    title_bounds = title_content.local_bounds if title_content is not None else None
-    if title_content is not None and title_bounds is None:
-        raise ValueError("a title content needs its local bounds")
-    if title_content is None and resolved_title_placement is not TitlePlacement.NONE:
-        raise ValueError("title placement requires a title content")
-    if title_content is not None and resolved_title_placement is TitlePlacement.NONE:
-        raise ValueError("title content requires a non-none title placement")
-    title_target: Group | None = None
-    if title_content is not None:
-        title_target = place_content(
-            plot.drawing, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE)
-        )
-        plot.drawing.add(title_target)
-
-    legend_placement = LegendPlacement(str(plot.canvas_config.legend_position))
-    legend_item = (
-        CompositionItem("legend", plot.legend_measurement.local_bounds)
-        if plot.legend_target is not None
-        else None
-    )
-    title_item = (
-        CompositionItem("title", title_bounds)
-        if title_target is not None and title_bounds is not None
-        else None
-    )
-    plan = render_stage(
-        "composition_plan",
-        plan_composition,
-        CompositionRequest(
-            primary=CompositionItem("primary", plot.source_content_bounds),
-            legend=legend_item,
-            title=title_item,
-            legend_placement=legend_placement,
-            title_placement=resolved_title_placement,
-            overlay_obstacles=plot.source_overlay_obstacles,
-            spacing=CompositionSpacing(canvas_padding_px=composition.canvas_padding),
-            requested_width_px=composition.requested_size.width_px,
-            requested_height_px=composition.requested_size.height_px,
-        ),
-    )
-
-    apply_composition_plan(
+    title_target = place_title(plot.drawing, composition)
+    plan = compose_drawing(
         plot.drawing,
-        plan,
-        primary_targets=plot.primary_targets,
-        legend_target=plot.legend_target,
-        legend_side=legend_placement,
-        legend_reflow_metrics=(
-            plot.legend_measurement.reflow_metrics
-            if plot.legend_target is not None
-            else None
-        ),
-        legend_local_bounds=plot.legend_measurement.local_bounds if plot.legend_target is not None else None,
-        title_target=title_target,
-        title_side=resolved_title_placement,
+        composition,
+        CompositionPrimary(plot.source_content_bounds, plot.primary_targets, plot.source_overlay_obstacles),
+        LegendPlacement(str(plot.canvas_config.legend_position)),
+        plot.legend,
+        title_target,
     )
 
     primary_placement = plan.placement_for("primary")
@@ -3489,7 +3432,7 @@ def _compose_circular_plot(
         content_bounds=plan.primary_bounds,
         overlay_obstacles=final_obstacles,
         primary_targets=plot.primary_targets,
-        legend_target=plot.legend_target,
+        legend=plot.legend,
         title_target=title_target,
         track_slot_geometry=plot.track_slot_geometry,
         composition_plan=plan,
