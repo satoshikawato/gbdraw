@@ -300,15 +300,17 @@ test('Use as search query adds a span as a query once; a removed query stays rem
     state: { activeDrawing: () => ({ id: 'circular', mode: 'circular', annotationSets: [] }) },
     readAxisRecords: () => [],
     readRecordSpans: async () => { throw new Error('no search here'); },
-    runSearchLosat: async () => ({ status: 'canceled' }),
+    runLosatJobs: async () => ({ status: 'canceled' }),
     runHelper: async (_operation, { files }) => {
       const text = new TextDecoder().decode(files[0].bytes);
       reads.push(text);
       return { result: { queries: readFasta(text) } };
     },
     helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
-    addSetStep: () => {},
-    addSet: () => {}
+    addSearchSet: () => {},
+    shownRoot: () => null,
+    closeRegionPopup: () => {},
+    revealSection: async () => {}
   });
   await panel.readQueries('>q1\nACGT\n');
   panel.setFolded(true);
@@ -337,14 +339,16 @@ test('Search stays on while a pasted text is read, so a click right after the pa
     state: { activeDrawing: () => ({ id: 'circular', mode: 'circular', annotationSets: [] }) },
     readAxisRecords: () => [{ recordKey: 'record-1' }],
     readRecordSpans: async () => { throw new Error('no search here'); },
-    runSearchLosat: async () => ({ status: 'canceled' }),
+    runLosatJobs: async () => ({ status: 'canceled' }),
     runHelper: async () => {
       await read;
       return { result: { queries: [{ name: 'q', length: 4, fasta: '>q\nACGT\n' }] } };
     },
     helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
-    addSetStep: () => {},
-    addSet: () => {}
+    addSearchSet: () => {},
+    shownRoot: () => null,
+    closeRegionPopup: () => {},
+    revealSection: async () => {}
   });
   const reading = panel.readQueries('>q\nACGT\n');
   assert.equal(panel.searchDisabledReason.value, '', 'on while the text is read');

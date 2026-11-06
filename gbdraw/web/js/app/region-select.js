@@ -35,6 +35,17 @@ const BAND_SLACK_PX = 6;
  */
 
 /**
+ * A screen point in a record frame's coordinates, and the frame's screen scale.
+ * @param {SVGGraphicsElement} frame @param {number} clientX @param {number} clientY
+ */
+const framePoint = (frame, clientX, clientY) => {
+  const matrix = frame.getScreenCTM();
+  if (!matrix) return null;
+  const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+  return { point: { x: point.x, y: point.y }, scale: Math.hypot(matrix.a, matrix.b) || 1 };
+};
+
+/**
  * @typedef {'copy' | 'add' | 'query'} RegionAction An action of the Region popup that waits on Python.
  * @typedef {object} RegionSelectPorts
  * @property {() => RegionAxisRecord[]} readAxisRecords The records of the shown Result whose axis Python wrote.
@@ -152,14 +163,6 @@ export const createRegionSelect = ({
    */
   let pending = null;
   const drag = reactive({ active: false, recordIndex: -1, span: /** @type {DisplaySpan} */ ({ start: 0, length: 0 }), x: 0, y: 0 });
-
-  /** @param {SVGGraphicsElement} frame @param {number} clientX @param {number} clientY */
-  const framePoint = (frame, clientX, clientY) => {
-    const matrix = frame.getScreenCTM();
-    if (!matrix) return null;
-    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
-    return { point: { x: point.x, y: point.y }, scale: Math.hypot(matrix.a, matrix.b) || 1 };
-  };
 
   /**
    * The record whose feature tracks are under a screen point.

@@ -52,6 +52,31 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
 );
 
 /**
+ * Paints the identity gradients of a pairwise Legend in the palette's colors.
+ * @param {Element} pairwiseLegend
+ * @param {Record<string, string>} colors
+ */
+const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
+  let updated = false;
+  pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
+    const entry = gradient.closest('g[data-legend-key]');
+    // An annotation gradient (a sequence search's Query position bar) keeps its set's colors (OV-2621).
+    if (entry?.hasAttribute(GRADIENT_SCALE_NAME_ATTRIBUTES.min)) return;
+    const legendKey = entry?.getAttribute('data-legend-key') || '';
+    const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
+    const minColor = colors[minKey];
+    const maxColor = colors[maxKey];
+    if (!minColor || !maxColor) return;
+    const stops = gradient.querySelectorAll('stop');
+    if (stops.length >= 2) {
+      updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor) || updated;
+      updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor) || updated;
+    }
+  });
+  return updated;
+};
+
+/**
  * @typedef {object} SvgStylesOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
@@ -83,30 +108,6 @@ export const createSvgStyles = ({
     pairwiseMatchFactors,
     svgContainer
   } = state;
-
-  /**
-   * @param {Element} pairwiseLegend
-   * @param {Record<string, string>} colors
-   */
-  const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
-    let updated = false;
-    pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
-      const entry = gradient.closest('g[data-legend-key]');
-      // An annotation gradient (a sequence search's Query position bar) keeps its set's colors (OV-2621).
-      if (entry?.hasAttribute(GRADIENT_SCALE_NAME_ATTRIBUTES.min)) return;
-      const legendKey = entry?.getAttribute('data-legend-key') || '';
-      const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
-      const minColor = colors[minKey];
-      const maxColor = colors[maxKey];
-      if (!minColor || !maxColor) return;
-      const stops = gradient.querySelectorAll('stop');
-      if (stops.length >= 2) {
-        updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor) || updated;
-        updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor) || updated;
-      }
-    });
-    return updated;
-  };
 
   // The palette styles the tracks of the displayed Result. A content track
   // takes the palette's gc_content: no slot gives it a color. A skew track takes

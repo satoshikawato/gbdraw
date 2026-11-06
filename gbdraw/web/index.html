@@ -4068,8 +4068,8 @@
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
                                         <div data-setting="annotation-style" class="flex items-center gap-0.5">
                                         <template v-if="(item.style || set.defaultStyle).gradient">
-                                        <input type="color" data-annotation-gradient="start" :value="(item.style || set.defaultStyle).gradient.startColor" @input="setAnnotationGradientColor(set, item, 'startColor', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Gradient start color')" :aria-label="t('Annotation gradient start color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
-                                        <input type="color" data-annotation-gradient="end" :value="(item.style || set.defaultStyle).gradient.endColor" @input="setAnnotationGradientColor(set, item, 'endColor', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Gradient end color')" :aria-label="t('Annotation gradient end color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
+                                        <input type="color" data-annotation-gradient="start" :value="(item.style || set.defaultStyle).gradient.startColor" @input="setAnnotationStyle(set, item, 'gradient', { ...(item.style || set.defaultStyle).gradient, startColor: $event.target.value })" class="form-input h-6 w-6 p-0" :title="t('Gradient start color')" :aria-label="t('Annotation gradient start color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
+                                        <input type="color" data-annotation-gradient="end" :value="(item.style || set.defaultStyle).gradient.endColor" @input="setAnnotationStyle(set, item, 'gradient', { ...(item.style || set.defaultStyle).gradient, endColor: $event.target.value })" class="form-input h-6 w-6 p-0" :title="t('Gradient end color')" :aria-label="t('Annotation gradient end color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <input v-else type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
                                         <setting-note :id="`annotation-fill-timing-${setIndex}-${itemIndex}`" setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note>
@@ -4211,11 +4211,11 @@
                                     <table class="w-full text-[10px] tabular-nums" :aria-label="t('Hits of {set}', { set: sequenceSearch.shownOutcome.setId })">
                                         <thead><tr class="text-left align-bottom text-[9px] leading-tight text-slate-500">
                                             <th scope="col" class="font-medium pr-0.5">{{ t('Query') }} · {{ t('record') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5">{{ t('Start-end') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap">{{ t('Start-end') }}</th>
                                             <th scope="col" class="font-medium pr-0.5" :aria-label="t('Strand')" :title="t('Strand')">{{ t('Str.') }}</th>
                                             <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Identity')" :title="t('Identity')">{{ t('Ident. %') }}</th>
                                             <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Length')" :title="t('Length')">{{ t('Len.') }}</th>
-                                            <th scope="col" class="font-medium pr-0.5 text-right">{{ t('E-value') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap text-right">{{ t('E-value') }}</th>
                                             <th scope="col" class="font-medium text-right" :aria-label="t('Bit score')" :title="t('Bit score')">{{ t('Bits') }}</th>
                                         </tr></thead>
                                         <tbody>
@@ -7003,8 +7003,8 @@
                         <path v-if="regionOverlayMatrix" :ref="regionSelect.bindBand" data-region-select-band :transform="regionOverlayMatrix" :d="regionOverlay.path" class="region-select-band"></path>
                     </svg>
                     <!-- The outline of the search hits a row or a chip of the hit table names, over the Result (never in it). -->
-                    <svg v-if="sequenceSearch.outline" :ref="searchHitOutline.bindOverlay" data-search-hit-outline class="absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
-                        <path v-for="(shape, index) in searchHitOutline.shapes.value" :key="index" :transform="shape.transform" :d="shape.d" class="search-hit-outline"></path>
+                    <svg v-if="sequenceSearch.outline" :ref="sequenceSearch.hitOutline.bindOverlay" data-search-hit-outline class="absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
+                        <path v-for="(shape, index) in sequenceSearch.hitOutline.shapes" :key="index" :transform="shape.transform" :d="shape.d" class="search-hit-outline"></path>
                     </svg>
 
                     <Teleport to="body">

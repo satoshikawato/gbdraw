@@ -14,6 +14,40 @@ export const getLosatHardwareThreads = () =>
   positiveInteger(globalThis.navigator?.hardwareConcurrency) || 4;
 
 /**
+ * How LOSAT runs: one app-level setting (`state.losatExecution`, Session `ui.losatExecution`) for both drawings, as
+ * saved: 'auto', 'serial' or 'threaded' for the mode, 'safe', 'available' or a count for the total thread budget, and
+ * 'auto' (or blank) or a count for the threads per job and the pair workers.
+ * @typedef {{ executionMode?: unknown, totalThreadBudget?: unknown, threadsPerJob?: unknown, parallelWorkers?: unknown }} LosatExecutionSettings
+ */
+
+/** @param {unknown} value @param {string} fallback The saved word of a setting, in lower case. */
+const settingWord = (value, fallback) => String(value || fallback).trim().toLowerCase();
+
+// What a run asks LOSAT for, read from the saved settings: the count or mode the user chose, or undefined where the
+// runner plans it (`resolveLosatThreadPlan`).
+/** @param {LosatExecutionSettings} execution */
+export const requestedLosatParallelWorkers = (execution) => positiveInteger(settingWord(execution.parallelWorkers, 'auto')) ?? undefined;
+
+/** @param {LosatExecutionSettings} execution */
+export const requestedLosatExecutionMode = (execution) => {
+  const mode = settingWord(execution.executionMode, 'auto');
+  return ['auto', 'serial', 'threaded'].includes(mode) ? mode : 'auto';
+};
+
+/** blastp runs the threads per job the user chose; another program runs one. @param {LosatExecutionSettings} execution @param {unknown} program */
+export const requestedLosatThreadsPerJob = (execution, program) => (
+  program === 'blastp' ? positiveInteger(settingWord(execution.threadsPerJob, 'auto')) ?? undefined : 1
+);
+
+/** 'available' is every hardware thread and a count is at most that; 'safe' is the runner's plan. @param {LosatExecutionSettings} execution */
+export const requestedLosatTotalThreadBudget = (execution) => {
+  const budget = settingWord(execution.totalThreadBudget, 'safe');
+  if (budget === 'available') return getLosatHardwareThreads();
+  const count = positiveInteger(budget);
+  return count === null ? undefined : Math.min(count, getLosatHardwareThreads());
+};
+
+/**
  * The requested settings. The three request values are the saved Settings
  * values: 'safe' or 'available' or a count for the total budget, and a count or
  * blank (Auto) for the other two.

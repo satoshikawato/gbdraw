@@ -13,6 +13,7 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 /** @import { RegionAxisRecord } from './region-axis.js' */
 /** @import { RecordSpanInput, RecordSpanRead, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
+/** @import { LosatJob } from './losat.js' */
 
 /**
  * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length in bases, and the FASTA text LOSAT reads.
@@ -229,3 +230,17 @@ export const searchSetIdsOfStep = (changes, searched) => (Array.isArray(changes)
     const before = setsById(change.before);
     return [...setsById(change.after)].filter(([id, json]) => !before.has(id) && searched.get(id) === json).map(([id]) => id);
   });
+
+/**
+ * The LOSAT run of one search, its job plan as data (R5): one blastn job of the queries against the searched sequences,
+ * with the task the panel chose. Its rows are the search's raw output (Save Raw LOSAT TSV).
+ * @param {{ queryFasta: string, subjectFasta: string, task: string }} search
+ * @returns {{ jobs: LosatJob[], sequences: Map<string, string> }}
+ */
+export const searchLosatPlan = ({ queryFasta, subjectFasta, task }) => ({
+  jobs: [{
+    pairIndex: 0, cacheKey: 'sequence-search', program: 'blastn', querySequenceKey: 'search-query',
+    subjectSequenceKey: 'search-subject', extraArgs: ['--task', task]
+  }],
+  sequences: new Map([['search-query', queryFasta], ['search-subject', subjectFasta]])
+});

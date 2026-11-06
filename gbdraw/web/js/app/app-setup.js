@@ -291,7 +291,6 @@ import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
-import { createSearchHitOutline } from './search-hit-outline.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -447,6 +446,38 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
     return COMPOSITION_ROOT_ATTRIBUTE.test(rootTag) ? !storedLegendSideIsOfMode(rootTag, mode) : composes;
   }
 });
+
+// The shown Result as the region tools (Select region, New drawing from region) and Sequence search read it.
+/** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
+const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? null;
+/** The records of every Result of the shown drawing whose axis Python wrote (the subjects of Sequence search). */
+const shownResultsAxisRecords = () => Array.from({ length: state.results.value.length },
+  (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat();
+const closeRegionPopup = () => {
+  if (state.clickedPairwiseMatch.value?.previewItem?.kind === 'region') state.clickedPairwiseMatch.value = null;
+};
+// The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
+// Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
+/** @param {readonly RecordSpanRead[]} spans */
+const readShownRecordSpans = (spans) => requestRecordSpanSequences(
+  getCommittedCanonicalSession(), spans,
+  (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+    resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+);
+// The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
+/** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
+const shownResultFeatures = (recordKey) => {
+  const catalog = toRaw(state.featureCatalog.value);
+  const rows = catalog ? catalogNameIndex(catalog).rowsByRecord.get(recordKey) : undefined;
+  if (!rows) return null;
+  const seen = new Set();
+  return rows.flatMap((row) => {
+    const featureId = String(row.biologicalFeatureId ?? '');
+    if (!featureId || seen.has(featureId)) return [];
+    seen.add(featureId);
+    return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
+  });
+};
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
 const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
@@ -2191,7 +2222,7 @@ export const createAppSetup = () => {
     };
   };
   const {
-    runSequenceSearchLosat,
+    runLosatJobsInOverlay,
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
@@ -5237,20 +5268,6 @@ export const createAppSetup = () => {
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });
   };
-  // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
-  /** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
-  const shownResultFeatures = (recordKey) => {
-    const catalog = toRaw(state.featureCatalog.value);
-    const rows = catalog ? catalogNameIndex(catalog).rowsByRecord.get(recordKey) : undefined;
-    if (!rows) return null;
-    const seen = new Set();
-    return rows.flatMap((row) => {
-      const featureId = String(row.biologicalFeatureId ?? '');
-      if (!featureId || seen.has(featureId)) return [];
-      seen.add(featureId);
-      return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
-    });
-  };
   const regionDrawings = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
     projectShownRequest,
@@ -5261,40 +5278,21 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
-  // The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
-  // Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
-  /** @param {readonly RecordSpanRead[]} spans */
-  const readShownRecordSpans = (spans) => requestRecordSpanSequences(
-    getCommittedCanonicalSession(), spans,
-    (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
-      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
-  );
   // Sequence search (PD-OI-117): the subject is the records of the shown drawing's Results, read by Python from the
   // committed request; the set a search adds is one History step of that drawing.
   const sequenceSearch = createSequenceSearch({
     state,
-    readAxisRecords: () => Array.from({ length: results.value.length },
-      (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat(),
+    readAxisRecords: shownResultsAxisRecords,
     readRecordSpans: readShownRecordSpans,
-    runSearchLosat: runSequenceSearchLosat,
-    runHelper: (operation, payload) => runDiagramHelperOperation(operation, payload),
-    helperOperations: {
-      readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES,
-      buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET
-    },
-    addSetStep: (label, write) => history.runUndoable(label, write),
-    addSet: (drawingId, set) => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)
-  });
-  /** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
-  const shownResultRoot = () => svgContainer.value?.querySelector('svg') ?? null;
-  // The outline of the hits a row click or a chip of the hit table names, over the shown Result.
-  const searchHitOutline = createSearchHitOutline({
+    runLosatJobs: runLosatJobsInOverlay,
+    runHelper: runDiagramHelperOperation,
+    helperOperations: { readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES, buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET },
+    addSearchSet: (drawingId, set) => history.runUndoable(msg('Sequence search'),
+      () => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)),
     shownRoot: shownResultRoot,
-    target: sequenceSearch.outlineTarget
+    closeRegionPopup,
+    revealSection: () => settingsPaneActions.revealSettingsSection('sequence-search')
   });
-  const closeRegionPopup = () => {
-    if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
-  };
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).
   const regionSelect = createRegionSelect({
@@ -5329,15 +5327,7 @@ export const createAppSetup = () => {
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.
     readRegionFasta: async ({ recordKey, start, end }) => (await readShownRecordSpans([{ recordKey, start, end }])).fasta,
-    // Use as search query: Python reads the span on the source strand, named by its header `<record>:<start>-<end>`;
-    // the panel adds it as a query, and its section opens.
-    useAsSearchQuery: async ({ recordKey, start, end }) => {
-      const read = await readShownRecordSpans([{ recordKey, start, end }]);
-      await sequenceSearch.addQuery({ name: read.spans[0].header, fasta: read.fasta });
-      // The popup closes first, so the focus the section takes stays there.
-      closeRegionPopup();
-      await settingsPaneActions.revealSettingsSection('sequence-search');
-    },
+    useAsSearchQuery: sequenceSearch.useSpanAsQuery,
     // While the tool is on, a touch that misses the tracks pans as a mouse drag does.
     panStart: startPan,
     panMove: doPan,
@@ -5351,7 +5341,6 @@ export const createAppSetup = () => {
   });
   return {
     sequenceSearch,
-    searchHitOutline,
     hostedBuild: readHostedBuild(document),
     fontSettings,
     defaultColorGroups,
@@ -5500,7 +5489,6 @@ export const createAppSetup = () => {
     importAnnotationTableFile: undoableAction(msg('Import annotations'), annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
-    setAnnotationGradientColor: annotationEditor.setAnnotationGradientColor,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
     downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
     annotationFeatureCaption: annotationEditor.featureTargetCaption,
