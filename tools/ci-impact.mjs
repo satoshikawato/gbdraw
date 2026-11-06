@@ -28,7 +28,8 @@ import {
   pullRequestEvidenceJobsFor,
   requiresFullCoverage,
   validateGateResults,
-  validateImpactPlan
+  validateImpactPlan,
+  withPythonVersions
 } from './ci-impact-policy.mjs';
 
 const SUPPORTED_PROFILES = new Set(['pr', 'dev', 'gallery', 'release']);
@@ -141,7 +142,9 @@ export const readPlanConfiguration = (env, cwd = process.cwd()) => {
     changeBaseSha: objectIdEnvironment(env, 'CI_IMPACT_CHANGE_BASE_SHA'),
     changeHeadSha: objectIdEnvironment(env, 'CI_IMPACT_CHANGE_HEAD_SHA'),
     workflowSha: objectIdEnvironment(env, 'CI_IMPACT_WORKFLOW_SHA'),
-    architectureChange: booleanEnvironment(env, 'CI_IMPACT_ARCHITECTURE_CHANGE')
+    architectureChange: booleanEnvironment(env, 'CI_IMPACT_ARCHITECTURE_CHANGE'),
+    // The label `all-python-versions`; only a pull request plan reads it.
+    allPythonVersions: profile === 'pr' && booleanEnvironment(env, 'CI_IMPACT_ALL_PYTHON_VERSIONS')
   });
 };
 
@@ -520,9 +523,10 @@ export const buildImpactPlan = async ({
   }
 
   const gitChanges = readGitChanges({ configuration, runGitImpl });
-  const classification = !gitChanges.valid
+  const changed = !gitChanges.valid
     ? fullClassification(gitChanges.reason)
     : gitChanges.identicalTree ? IDENTICAL_TREE_CLASSIFICATION : classifyChanges(gitChanges.changes);
+  const classification = configuration.allPythonVersions ? withPythonVersions(changed) : changed;
 
   if (configuration.architectureChange) {
     return Object.freeze({

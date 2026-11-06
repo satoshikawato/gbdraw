@@ -9,7 +9,7 @@ classification rules.
 
 | Tier | Trigger | Required coverage |
 | --- | --- | --- |
-| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, other jobs on 3.11 |
+| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, and on 3.10–3.14 for [version-dependent changes](#python-version-coverage); other jobs on 3.11 |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
@@ -37,8 +37,8 @@ coverage of `gbdraw/` (without `gbdraw/web/`) to the run summary, and uploads
 30 days. `patch = ["subprocess"]` counts the CLI that tests start as
 subprocesses. Its test step fails when the total falls below `fail_under` in
 `[tool.coverage.report]` of `pyproject.toml`. The floor is set from dev-tier
-results and only raised; lowering it needs the Owner. Pull requests do not
-measure coverage.
+results and only raised; lowering it needs the Owner. A pull request measures
+it only when its plan runs `core` ([Python-version coverage](#python-version-coverage)).
 
 ### Python-version coverage
 
@@ -55,6 +55,30 @@ catches a newer-only interpreter option or API (such as `python -P`) before it
 reaches `dev`; mypy already checks for 3.10 but cannot see interpreter options.
 Python 3.11 still runs on pull requests in the recipe, Gallery, Web contract,
 and Playwright jobs, and the `dev` Core matrix covers 3.10 to 3.14.
+
+A pull request whose plan has the `python-versions` capability also runs that
+`dev` job, `core`: Python 3.10 to 3.14, with line coverage on 3.14. A changed
+path adds the capability when `PYTHON_VERSION_PATHS` in
+`tools/ci-impact-policy.mjs` lists it: `pyproject.toml`, and each package module
+that imports a standard-library module whose output or availability differs
+between these versions (`gzip`, `zlib`, `bz2`, `lzma`, `tarfile`, `zipfile`,
+`tomllib` or `tomli`, `locale`) or that reads `sys.version_info`.
+`tests/ci/ci-impact-policy.test.mjs` fails when a package module imports one of
+those and is not listed. The label `all-python-versions` adds the capability to
+any pull request; use it for a change that the list cannot see, such as one to
+the Core job or its Python setup. The path keeps its own capability, so `Core
+PR` and the other jobs still run.
+
+Before this rule, a failure on one version reached `dev` first: a gzip header
+test added by #1625 expected the header byte that Python 3.10 and 3.13+ write,
+and `dev` Core failed on 3.11 and 3.12 for 4.9 hours on 2026-11-05. Replayed
+over the last 20 merged pull requests that changed `gbdraw/` or
+`pyproject.toml` (#1617 to #1650), the rule selects 7 of them, including
+#1625, in 7 runs. At the median `dev` Core times of 12 green runs (3.10 17.5,
+3.11 14.8, 3.12 18.2, 3.13 13.7, 3.14 12.6 minutes), each such run uses about
+77 more runner-minutes, 537 over the 20. The Core jobs end before the slowest
+functional shard, so the run takes longer only when the extra jobs wait for a
+runner.
 
 All non-browser slow tests move to S11, except the three package-build integration
 checks in `test_web_packaging.py`, which also run in the dev Browser job. Offline
@@ -84,6 +108,7 @@ registry unions their contributions, then emits unique jobs in registry order.
 | `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke, functional Playwright |
 | `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke, functional Playwright |
 | `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier, functional Playwright |
+| `python-versions` | `pyproject.toml` and the version-dependent package modules, beside their own capability; any path with the `all-python-versions` label | `core` ([Python-version coverage](#python-version-coverage)) |
 | `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
 | `ci-only` | Workflows, planner/tests, and Playwright configuration | Full PR tier |
 | `full` | Unknown or invalid paths | Full PR tier, functional Playwright |
@@ -96,7 +121,8 @@ documentation, including working templates and acceptance reports.
 
 The full PR tier job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
 `gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`. `playwright-functional`
-is the eighth PR job. The `web-runtime`, `session-persistence`, `gallery`,
+is the eighth PR job. `core` joins a pull request only through the
+`python-versions` capability. The `web-runtime`, `session-persistence`, `gallery`,
 `losat-integration`, `tests-only`, and `full` capabilities add it under both the
 selective and the full decision, so an evidence fallback or the
 `architecture-change` label keeps it whenever one of those capabilities is
@@ -307,9 +333,10 @@ that run's evidence for the jobs both tiers run with the same command:
 | `gallery` | Same pytest step; the pull request job may add the Gallery parity steps |
 | `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
 
-The other dev jobs always run: `core` (three Python versions; pull requests
-run `core-pr` on 3.10), `browser`, `playwright-performance` (a pull request
-that runs functional Playwright also runs it, but `dev` keeps its own run),
+The other dev jobs always run: `core` (Python 3.10 to 3.14; pull requests
+run `core-pr` on 3.10, and `core` only for version-dependent changes),
+`browser`, `playwright-performance` (a pull request that runs functional
+Playwright also runs it, but `dev` keeps its own run),
 `losat-cache-browser-acceptance`, and `web-change-budget` (it checks the
 `dev` push range in its integrated mode, not the pull request range). A job
 is inherited only when the pull request capabilities of the change select it,
@@ -659,6 +686,23 @@ versions of the paths it modifies; Git fetches any other delta base it needs by
 itself. The step gives up after 3 minutes, because every job waits for the CI
 impact plan job. A Gallery regeneration that rewrites every Session shows as
 tens of MB; most pull requests add well under 1 MB.
+
+### Job times against their limits
+
+`PR / gate` and `Dev staging / gate` report the jobs of their own run attempt
+that used 80% or more of their `timeout-minutes`. They report before they
+validate the results, so a job that ran out of time is reported too.
+`tools/ci-impact-job-times.mjs` reads each finished job's start and end through
+the Actions REST API (`actions: read`) and its limit from the run's own
+`test.yml`; a job without `timeout-minutes` has GitHub's 360 minutes.
+`PR / gate` checks out that one file of the tested merge commit and reads it as
+data. Each such job gets a warning annotation and a line in the step summary;
+when there is none, the summary names the job with the highest share. The
+report never fails a gate, and a failed read is a warning. A job near its limit
+is the time to shorten or split it, or to raise its limit with measurements,
+before it fails. Over the 12 green `dev` runs before the report, Core 3.12 took
+up to 19.4 of its 25 minutes (77%); run 42146106065 had Web change budget at
+7.7 of its 10 minutes (77%).
 
 ## Verification and rollback
 

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   GALLERY_PARITY_SPEC,
   IMPACT_PLAN_SCHEMA_VERSION,
+  PYTHON_VERSION_PATHS,
   VIBRIO_FULL_GENERATION_SPEC,
   carryForwardVerdicts,
   classifyChanges,
@@ -12,8 +16,11 @@ import {
   leafJobsFor,
   leafTestKind,
   requiredJobsFor,
-  validateImpactPlan
+  validateImpactPlan,
+  withPythonVersions
 } from '../../tools/ci-impact-policy.mjs';
+
+const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const SHA = Object.freeze({
   base: 'a'.repeat(40),
@@ -128,10 +135,79 @@ test('mixed changes preserve the capability union', () => {
 
   const full = classifyChanges([
     { status: 'M', paths: ['docs/FAQ.md'] },
-    { status: 'M', paths: ['gbdraw/cli.py'] }
+    { status: 'M', paths: ['gbdraw/circular.py'] }
   ]);
   assert.equal(full.impact, 'python-core');
   assert.deepEqual(full.capabilities, ['documentation', 'python-core']);
+});
+
+test('a version-dependent path or the label runs the dev-tier Core matrix on the pull request', () => {
+  const plan = (classification, overrides = {}) => createImpactPlan({
+    profile: 'pr',
+    impact: classification.impact,
+    capabilities: classification.capabilities,
+    decision: 'selective',
+    basis: 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
+    changeBaseSha: SHA.base,
+    changeHeadSha: SHA.head,
+    workflowSha: SHA.workflow,
+    changedPathCount: 1,
+    inheritedEvidence: evidence(),
+    ...overrides
+  });
+  for (const path of PYTHON_VERSION_PATHS) {
+    const classification = classifyChanges([{ status: 'M', paths: [path] }]);
+    assert.ok(classification.capabilities.includes('python-versions'), path);
+    // The path keeps its own capability; python-versions only adds jobs.
+    assert.equal(classification.impact, classifyPath(path).impact, path);
+  }
+  const gzip = classifyChanges([{ status: 'M', paths: ['gbdraw/io/rsyncable_gzip.py'] }]);
+  assert.deepEqual(gzip.capabilities, ['python-versions', 'python-core']);
+  assert.deepEqual(plan(gzip).requiredJobs,
+    ['web-change-budget', 'core-pr', 'core', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']);
+  const dependencies = classifyChanges([{ status: 'M', paths: ['pyproject.toml'] }]);
+  assert.ok(plan(dependencies, { decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null })
+    .requiredJobs.includes('core'));
+
+  const other = classifyChanges([{ status: 'M', paths: ['gbdraw/circular.py'] }]);
+  assert.equal(plan(other).requiredJobs.includes('core'), false);
+  // Full PR routes keep Core PR alone; tests-only and unknown paths do not add the matrix.
+  for (const impact of ['tests-only', 'full', 'ci-only', 'packaging']) {
+    assert.equal(requiredJobsFor({ profile: 'pr', impact, decision: 'full' }).includes('core'), false, impact);
+  }
+
+  const labelled = withPythonVersions(classifyChanges([{ status: 'M', paths: ['docs/FAQ.md'] }]));
+  assert.deepEqual(labelled.capabilities, ['documentation', 'python-versions']);
+  assert.equal(labelled.impact, 'python-versions');
+  assert.deepEqual(plan(labelled).requiredJobs, ['core', 'recipes-standard']);
+  assert.deepEqual(withPythonVersions(gzip).capabilities, gzip.capabilities);
+
+  // dev already runs the matrix on every runtime push.
+  assert.deepEqual(requiredJobsFor({ profile: 'dev', impact: 'python-core', capabilities: gzip.capabilities, decision: 'full' }),
+    knownJobsFor('dev'));
+});
+
+test('every package module that imports a version-dependent standard-library module is a version-dependent path', () => {
+  const MODULES = ['gzip', 'zlib', 'bz2', 'lzma', 'tarfile', 'zipfile', 'tomllib', 'tomli', 'locale'];
+  const IMPORT = /^[ \t]*(?:import[ \t]+([\w., \t]+)|from[ \t]+([\w.]+)[ \t]+import\b)/gm;
+  const modulesOf = (source) => [...source.matchAll(IMPORT)]
+    .flatMap(([, imported, from]) => (imported ?? from).split(',').map((name) => name.trim().split(/[.\s]/)[0]));
+  const walk = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(directory, entry.name);
+    return entry.isDirectory() ? walk(path) : entry.name.endsWith('.py') ? [path] : [];
+  });
+  const expected = walk(resolve(REPOSITORY_ROOT, 'gbdraw'))
+    .filter((path) => {
+      const source = readFileSync(path, 'utf8');
+      return modulesOf(source).some((name) => MODULES.includes(name)) || source.includes('sys.version_info');
+    })
+    .map((path) => relative(REPOSITORY_ROOT, path).split('\\').join('/'))
+    .sort();
+  assert.ok(expected.includes('gbdraw/io/rsyncable_gzip.py'), 'the reader finds the gzip writer');
+  const missing = expected.filter((path) => !PYTHON_VERSION_PATHS.includes(path));
+  assert.deepEqual(missing, [], 'add these modules to PYTHON_VERSION_PATHS in tools/ci-impact-policy.mjs');
+  // Every listed module still exists and still imports such a module.
+  assert.deepEqual(PYTHON_VERSION_PATHS.filter((path) => path !== 'pyproject.toml').sort(), expected);
 });
 
 test('rename, copy, and delete classify every relevant path', () => {
@@ -202,6 +278,7 @@ test('profile job registries are exact and centralized', () => {
   assert.deepEqual(knownJobsFor('pr'), [
     'web-change-budget',
     'core-pr',
+    'core',
     'recipes-standard',
     'gallery',
     'lint',
@@ -316,10 +393,11 @@ test('documentation-only edits, copies, renames, and deletes use only documentat
 test('control-plane, dependency, unknown and test-only changes cannot select partial coverage', () => {
   for (const impact of ['ci-only', 'packaging', 'full', 'tests-only']) {
     assert.throws(() => requiredJobsFor({ profile: 'pr', impact, decision: 'selective' }), /full coverage/);
-    const fullTier = knownJobsFor('pr').filter((job) => !job.startsWith('playwright-'));
+    const fullPrJobs = knownJobsFor('pr').filter((job) => job !== 'core');
+    const fullTier = fullPrJobs.filter((job) => !job.startsWith('playwright-'));
     assert.deepEqual(
       requiredJobsFor({ profile: 'pr', impact, decision: 'full' }),
-      ['full', 'tests-only'].includes(impact) ? knownJobsFor('pr') : fullTier,
+      ['full', 'tests-only'].includes(impact) ? fullPrJobs : fullTier,
       impact
     );
   }

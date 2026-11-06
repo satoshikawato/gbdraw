@@ -1564,6 +1564,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'ci-impact',
     'web-change-budget',
     'core-pr',
+    'core',
     'recipes-standard',
     'gallery',
     'lint',
@@ -1581,7 +1582,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*path: \.ci-trusted-base[\s\S]*persist-credentials: false/
   );
   // Node comes from the base branch tip: github.sha is the PR merge commit and base.sha can predate .node-version.
-  assert.equal([...gate.matchAll(/uses: actions\/checkout@/g)].length, 2);
+  // The third reads this run's workflow file for the job-time report (tests/ci/ci-impact-job-times.test.mjs).
+  assert.equal([...gate.matchAll(/uses: actions\/checkout@/g)].length, 3);
   assert.match(
     gate,
     /ref: refs\/heads\/\$\{\{ github\.base_ref \}\}\n {10}path: \.ci-node-version\n {10}sparse-checkout: \.node-version\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n[\s\S]*node-version-file: \.ci-node-version\/\.node-version\n[\s\S]*Validate required PR evidence/
@@ -1625,7 +1627,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   }
   // The trusted plan selects functional Playwright and the performance smoke on pull requests;
   // both jobs are shared with dev.
-  for (const jobId of ['playwright-functional', 'playwright-performance']) {
+  // The plan selects these on a pull request through a capability (core: python-versions).
+  for (const jobId of ['core', 'playwright-functional', 'playwright-performance']) {
     assert.match(
       workflowJob(jobId),
       /\(\(github\.event_name == 'pull_request' && github\.base_ref == 'dev'\) \|\|/,
@@ -1633,7 +1636,6 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     );
   }
   for (const jobId of [
-    'core',
     'browser',
     'acceptance-supported-main',
     'slow-main',
