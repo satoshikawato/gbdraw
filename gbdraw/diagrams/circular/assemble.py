@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Collection, Mapping, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Literal, Mapping, Sequence, TypeAlias, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -80,7 +80,12 @@ from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, L
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_transform import bind_record_transforms
-from ...render.track_slot_metadata import RecordAxisInput, circular_axis_geometry
+from ...render.track_slot_metadata import (
+    RecordAxisInput,
+    attach_feature_placement_targets,
+    attach_track_slot_geometry,
+    circular_axis_geometry,
+)
 from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLaneDirection,
@@ -427,6 +432,26 @@ def _lane_direction_for_feature_slot(
     )
 
 
+class CircularTrackSlotGeometry(TypedDict):
+    """The Circular track-slot geometry of a drawing (schema 1): one entry per drawn record."""
+
+    schema: Literal[1]
+    mode: Literal["circular"]
+    source: Literal["resolved"]
+    records: list[dict[str, object]]
+
+
+def circular_track_slot_geometry(records: list[dict[str, object]]) -> CircularTrackSlotGeometry:
+    """The Circular track-slot geometry of a drawing with these record entries."""
+
+    return {
+        "schema": 1,
+        "mode": "circular",
+        "source": "resolved",
+        "records": records,
+    }
+
+
 def _serialize_circular_track_slot_geometry(
     *,
     drawn: RecordAxisInput,
@@ -434,7 +459,7 @@ def _serialize_circular_track_slot_geometry(
     layout_slots: Sequence[CircularTrackSlot],
     base_radius_px: float,
     record_index: int = 0,
-) -> dict[str, Any]:
+) -> CircularTrackSlotGeometry:
     source_by_index = {
         int(getattr(slot, "slot_index", index)): slot
         for index, slot in enumerate(layout_slots)
@@ -468,11 +493,8 @@ def _serialize_circular_track_slot_geometry(
             }
         )
     record_id = str(getattr(drawn.record, "id", "") or "")
-    return {
-        "schema": 1,
-        "mode": "circular",
-        "source": "resolved",
-        "records": [
+    return circular_track_slot_geometry(
+        [
             {
                 "recordIndex": int(record_index),
                 "recordId": record_id,
@@ -490,8 +512,8 @@ def _serialize_circular_track_slot_geometry(
                 ),
                 "slots": slots_payload,
             }
-        ],
-    }
+        ]
+    )
 
 
 def _legend_bbox(legend_bounds: Aabb) -> tuple[float, float, float, float]:
@@ -3114,16 +3136,13 @@ def add_record_on_circular_canvas(
         precalculated_labels = [label.copy() for label in placement.labels]
 
     resolved_track_slots = list(radial_layout.slots)
-    setattr(
-        canvas,
-        "_gbdraw_track_slot_geometry",
-        _serialize_circular_track_slot_geometry(
-            drawn=RecordAxisInput(record.gb_record, record_key, bind_record_transforms((record.gb_record,), None if presentation.record_transform is None else (presentation.record_transform,))[0]),
-            radial_layout=radial_layout,
-            layout_slots=layout_slots,
-            base_radius_px=float(canvas_config.radius),
-        ),
+    track_slot_geometry = _serialize_circular_track_slot_geometry(
+        drawn=RecordAxisInput(record.gb_record, record_key, bind_record_transforms((record.gb_record,), None if presentation.record_transform is None else (presentation.record_transform,))[0]),
+        radial_layout=radial_layout,
+        layout_slots=layout_slots,
+        base_radius_px=float(canvas_config.radius),
     )
+    attach_track_slot_geometry(canvas, track_slot_geometry)
     gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
         gc_config=configurators.gc,
         depth_config=configurators.depth if show_depth_track else None,
@@ -3372,11 +3391,10 @@ def add_record_on_circular_canvas(
     )
 
     legend = place_legend(canvas, circular_legend_content, legend_placement, legend_measurement, legend_table)
-    track_slot_geometry = getattr(canvas, "_gbdraw_track_slot_geometry", {})
-    if feature_slot is not None:
-        targets = FeaturePlacementSlot("circular", feature_lane_direction, profile.strandedness).supported_targets()
-        for record_geometry in track_slot_geometry.get("records", []):
-            record_geometry["featurePlacementTargets"] = targets
+    attach_feature_placement_targets(
+        track_slot_geometry["records"],
+        FeaturePlacementSlot("circular", feature_lane_direction, profile.strandedness) if feature_slot is not None else None,
+    )
 
     return _CircularPlotAssembly(
         drawing=canvas,

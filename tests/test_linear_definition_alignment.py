@@ -27,6 +27,7 @@ from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
 from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 from gbdraw.api.assembly_inputs import LinearAssemblyInputs
+from gbdraw.render.composition import applied_composition_plan
 
 
 def _record(record_id: str = "record_a") -> SeqRecord:
@@ -963,4 +964,4 @@ def test_linear_figure_bound_is_the_drawn_scalar_axis_tick_labels() -> None:
     _definition_right, axis_label_left = _drawn_text_edges(drawing.tostring(), cfg, composed=False)
 
     assert axis_label_left
-    assert getattr(drawing, "_gbdraw_linear_source_content_bounds").min_x == pytest.approx(min(axis_label_left))
+    assert applied_composition_plan(drawing).primary_local_bounds.min_x == pytest.approx(min(axis_label_left))

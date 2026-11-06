@@ -142,6 +142,7 @@ from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
     circular_legend_table,
+    circular_track_slot_geometry,
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.parts import (
@@ -275,6 +276,7 @@ from gbdraw.render.groups.circular.definition import (
 )
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render.groups.linear.plot_title import plot_title_content as linear_plot_title_content
+from gbdraw.render.track_slot_metadata import attach_track_slot_geometry
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -3583,16 +3585,7 @@ def assemble_circular_diagram_from_records(
         merged_canvas, [result.label_layout for result in record_results]
     )
     if track_slot_geometry_records:
-        setattr(
-            merged_canvas,
-            "_gbdraw_track_slot_geometry",
-            {
-                "schema": 1,
-                "mode": "circular",
-                "source": "resolved",
-                "records": track_slot_geometry_records,
-            },
-        )
+        attach_track_slot_geometry(merged_canvas, circular_track_slot_geometry(track_slot_geometry_records))
 
     return merged_canvas
 

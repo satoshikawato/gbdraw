@@ -12,11 +12,13 @@ Layout edit move of the record keeps them right.
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import spans_may_cross_origin
 from gbdraw.svg.circular_arcs import position_angle
@@ -186,6 +188,29 @@ def linear_axis_geometry(
     return {"kind": "linear", "rows": payload, "source": source}
 
 
+# The attribute a drawing carries its resolved track-slot geometry in.
+TRACK_SLOT_GEOMETRY_ATTR = "_gbdraw_track_slot_geometry"
+
+
+def attach_track_slot_geometry(canvas: object, geometry: Mapping[str, object]) -> None:
+    """Record a drawing's resolved track-slot geometry on it, where ``collect_track_slot_geometry_records`` reads it."""
+
+    setattr(canvas, TRACK_SLOT_GEOMETRY_ATTR, geometry)
+
+
+def attach_feature_placement_targets(
+    records: Sequence[MutableMapping[str, object]],
+    slot: FeaturePlacementSlot | None,
+) -> None:
+    """Give each record's geometry the placement targets its feature slot supports (no slot: none written)."""
+
+    if slot is None:
+        return
+    targets = slot.supported_targets()
+    for record_geometry in records:
+        record_geometry["featurePlacementTargets"] = targets
+
+
 def collect_track_slot_geometry_records(
     canvas: Any,
     *,
@@ -194,7 +219,7 @@ def collect_track_slot_geometry_records(
 ) -> list[dict[str, Any]]:
     """Copy track-slot geometry from a canvas and add result identity."""
 
-    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+    geometry = getattr(canvas, TRACK_SLOT_GEOMETRY_ATTR, None)
     if not isinstance(geometry, Mapping):
         return []
     records = geometry.get("records")
