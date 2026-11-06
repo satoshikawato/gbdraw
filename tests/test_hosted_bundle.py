@@ -100,13 +100,19 @@ def test_immutable_vendor_files_match_their_manifest() -> None:
     cloudflare.verify_immutable_assets(WEB_ROOT)
 
 
+def test_every_vendored_folder_is_an_immutable_prefix() -> None:
+    cloudflare = _load_cloudflare_module()
+    prefixes, _ = cloudflare._read_immutable_assets_manifest()
+    vendored = sorted(f"vendor/{path.name}{'/' if path.is_dir() else ''}" for path in (WEB_ROOT / "vendor").iterdir())
+    assert vendored == sorted(prefixes)
+
+
 def test_immutable_vendor_file_changed_in_place_fails(tmp_path: Path) -> None:
     cloudflare = _load_cloudflare_module()
     root = tmp_path / "web"
-    shutil.copytree(WEB_ROOT / "vendor" / "fonts", root / "vendor" / "fonts")
-    shutil.copytree(WEB_ROOT / "vendor" / "phosphor-icons", root / "vendor" / "phosphor-icons")
-    shutil.copytree(WEB_ROOT / "vendor" / "pyodide", root / "vendor" / "pyodide")
-    shutil.copytree(WEB_ROOT / "vendor" / "pyodide-wheels", root / "vendor" / "pyodide-wheels")
+    prefixes, _ = cloudflare._read_immutable_assets_manifest()
+    for prefix in prefixes:
+        shutil.copytree(WEB_ROOT / prefix, root / prefix)
     cloudflare.verify_immutable_assets(root)
 
     changed = root / "vendor" / "pyodide-wheels" / "six-1.17.0-py2.py3-none-any.whl"

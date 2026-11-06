@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
+  browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
+  like the other vendored files, so the hosted site also caches them for a year.
+  `python tools/verify_gui_offline.py vendor-assets` checks every download
+  against the SHA-256 recorded in `gbdraw/_web_assets.py` and stops before
+  writing a file; it no longer extracts package files gbdraw does not ship.
+  `tools/vendored-web-assets/package.json` lists the vendored npm packages so
+  that Dependabot reports their advisories. The vendored files do not change.
 - Changed: a Circular figure with a requested size whose map is too small for
   its labels usually stops sooner. A radius whose labels were not placed for
   lack of room no longer steers the fit; it steps by the radii with labels and

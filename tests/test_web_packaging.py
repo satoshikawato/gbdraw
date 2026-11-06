@@ -452,6 +452,62 @@ def test_web_asset_notices_name_only_files_the_package_ships() -> None:
     assert banner is not None and banner.group(1) == tailwind_notice.version
 
 
+def test_npm_advisory_manifest_lists_each_vendored_npm_package_at_its_version() -> None:
+    from gbdraw._web_assets import NPM_ADVISORY_MANIFEST, npm_advisory_manifest_text
+
+    written = (REPO_ROOT / NPM_ADVISORY_MANIFEST).read_text(encoding="utf-8")
+    assert written == npm_advisory_manifest_text(), (
+        f"{NPM_ADVISORY_MANIFEST} differs from gbdraw/_web_assets.py: "
+        "run `python tools/verify_gui_offline.py vendor-assets`."
+    )
+    assert json.loads(written)["dependencies"]["dompurify"] == "3.2.7"
+
+
+def test_npm_package_reads_the_name_and_version_of_an_npm_download() -> None:
+    from gbdraw._web_assets import npm_package
+
+    assert npm_package("https://registry.npmjs.org/@scope/pkg/-/pkg-1.2.3.tgz") == ("@scope/pkg", "1.2.3")
+    assert npm_package("https://unpkg.com/vue@3.5.25/dist/vue.global.prod.js") == ("vue", "3.5.25")
+    assert npm_package("https://github.com/pyodide/pyodide/releases/download/0.29.0/x.tar.bz2") is None
+    with pytest.raises(ValueError, match="names no npm package version"):
+        npm_package("https://registry.npmjs.org/pkg/latest")
+
+
+def test_vendor_assets_writes_nothing_when_a_download_has_another_sha256(monkeypatch, tmp_path: Path) -> None:
+    from gbdraw._web_assets import ASSET_DOWNLOADS
+
+    verify_offline = _load_verify_module()
+    recorded = {key: download.url for key, download in ASSET_DOWNLOADS.items()}
+    served: list[str] = []
+
+    def urlopen(request, timeout):
+        served.append(request.full_url)
+        # Every download serves bytes other than the recorded ones.
+        return io.BytesIO(b"not the recorded bytes")
+
+    monkeypatch.setattr(verify_offline.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(verify_offline, "WEB_ROOT", tmp_path / "web")
+    monkeypatch.setattr(verify_offline, "VENDOR_ROOT", tmp_path / "web" / "vendor")
+    with pytest.raises(RuntimeError, match="not the .* that gbdraw/_web_assets.py records; nothing was vendored"):
+        verify_offline.vendor_assets()
+    assert served == [recorded["vue"]]
+    assert not (tmp_path / "web").exists()
+
+
+def test_vendor_assets_download_keeps_bytes_whose_sha256_is_recorded(monkeypatch, tmp_path: Path) -> None:
+    from gbdraw._web_assets import ASSET_DOWNLOADS, VendoredDownload
+
+    verify_offline = _load_verify_module()
+    payload = b"vendored bytes"
+    monkeypatch.setitem(
+        ASSET_DOWNLOADS,
+        "example",
+        VendoredDownload("https://example.invalid/a.tgz", hashlib.sha256(payload).hexdigest()),
+    )
+    monkeypatch.setattr(verify_offline.urllib.request, "urlopen", lambda request, timeout: io.BytesIO(payload))
+    assert verify_offline._download("example", tmp_path).read_bytes() == payload
+
+
 @pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
     index_html = read_english_index(WEB_ROOT / "index.html")

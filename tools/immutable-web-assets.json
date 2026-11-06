@@ -3,7 +3,12 @@
     "vendor/pyodide/",
     "vendor/pyodide-wheels/",
     "vendor/fonts/",
-    "vendor/phosphor-icons/"
+    "vendor/phosphor-icons/",
+    "vendor/vue/",
+    "vendor/dompurify/",
+    "vendor/jspdf/",
+    "vendor/svg2pdf.js/",
+    "vendor/browser_wasi_shim/"
   ],
   "files": {
     "vendor/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl": "d98e6100df5e4145c1b11d559a8620e92b98d994cc1b52381a8815cebf3e7128",
@@ -52,6 +57,18 @@
     "vendor/phosphor-icons/regular/Phosphor.ttf": "06b91e022b7ee899a63efced879392a74f0bacbda54e4467e9f663220d173a10",
     "vendor/phosphor-icons/regular/Phosphor.woff": "396c5eae7f2dfb4d1f5432edd87109eda2f92a451b2167e43a26165b82770f75",
     "vendor/phosphor-icons/regular/Phosphor.woff2": "c2ea45ea05ff5c7df1936770c104725f2a68f43fd343f35f3da23a30b27de32a",
-    "vendor/phosphor-icons/regular/style.css": "873761b8711147dc516b6102936e9ad005f3a3015349efcde1a496f0326f1051"
+    "vendor/phosphor-icons/regular/style.css": "873761b8711147dc516b6102936e9ad005f3a3015349efcde1a496f0326f1051",
+    "vendor/vue/vue.global.prod.js": "78133fb37d7da6ab9fb0ede6c8ed446f38773595d1faf52a3c1b77d539b06b61",
+    "vendor/dompurify/purify.min.js": "40cff492b54353a55cdf9ffb369786539ffb7d54d25f97dd4a1e8975b309c35d",
+    "vendor/jspdf/jspdf.umd.min.js": "509a1b5b1f3402b81e28510e46145618373a9cba61c94c119d5e9242a86261e1",
+    "vendor/svg2pdf.js/svg2pdf.umd.min.js": "7c91b939405364524ccda0eafac0b42b456594504acfa7de0eac83d1b6347723",
+    "vendor/browser_wasi_shim/dist/debug.js": "a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328",
+    "vendor/browser_wasi_shim/dist/fd.js": "9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c",
+    "vendor/browser_wasi_shim/dist/fs_mem.js": "85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324",
+    "vendor/browser_wasi_shim/dist/fs_opfs.js": "4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869",
+    "vendor/browser_wasi_shim/dist/index.js": "7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605",
+    "vendor/browser_wasi_shim/dist/strace.js": "ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be",
+    "vendor/browser_wasi_shim/dist/wasi.js": "168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa",
+    "vendor/browser_wasi_shim/dist/wasi_defs.js": "0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194"
   }
 }

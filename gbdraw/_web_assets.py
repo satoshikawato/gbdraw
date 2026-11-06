@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,19 +17,117 @@ PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
 # still contains the template compiler that the in-DOM templates need.
 VUE_RUNTIME_FILE = Path("vendor") / "vue" / "vue.global.prod.js"
 
-ASSET_URLS = {
-    "vue": f"https://unpkg.com/vue@3.5.25/dist/{VUE_RUNTIME_FILE.name}",
-    "pyodide_core": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
-    "micropip": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
-    "tzdata": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
-    "browser_wasi_shim": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
-    "jspdf": "https://registry.npmjs.org/jspdf/-/jspdf-3.0.3.tgz",
-    "svg2pdf": "https://registry.npmjs.org/svg2pdf.js/-/svg2pdf.js-2.6.0.tgz",
-    "dompurify": "https://registry.npmjs.org/dompurify/-/dompurify-3.2.7.tgz",
-    "phosphor": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz",
-    "inter": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz",
-    "noto_sans_jp": "https://registry.npmjs.org/@fontsource/noto-sans-jp/-/noto-sans-jp-5.2.9.tgz",
+
+@dataclass(frozen=True)
+class VendoredDownload:
+    """A file that `tools/verify_gui_offline.py vendor-assets` downloads, and the SHA-256 its bytes must have."""
+
+    url: str
+    sha256: str
+
+
+# Each SHA-256 is that of the download whose files are the vendored ones; an npm
+# tarball's bytes also match the integrity value the npm registry publishes.
+ASSET_DOWNLOADS = {
+    "vue": VendoredDownload(
+        f"https://unpkg.com/vue@3.5.25/dist/{VUE_RUNTIME_FILE.name}",
+        "78133fb37d7da6ab9fb0ede6c8ed446f38773595d1faf52a3c1b77d539b06b61",
+    ),
+    "pyodide_core": VendoredDownload(
+        "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
+        "fe85edd0d5c9828598da14c98d2f79cea45aac5a9e6448ca65dcc2d58d4ed033",
+    ),
+    "micropip": VendoredDownload(
+        "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+        "d98e6100df5e4145c1b11d559a8620e92b98d994cc1b52381a8815cebf3e7128",
+    ),
+    "tzdata": VendoredDownload(
+        "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
+        "efe840e3b9cc04707b6fbca5c145910e50916f801a61a8db6730ba4c92abba86",
+    ),
+    "browser_wasi_shim": VendoredDownload(
+        "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
+        "9c0281520d0e99f027ec7c1c79b4036c0f8168ed9bf98aba19db4737a1333782",
+    ),
+    "jspdf": VendoredDownload(
+        "https://registry.npmjs.org/jspdf/-/jspdf-3.0.3.tgz",
+        "e3615356fb5d2408e05215a848dec3924f67fb83f0a44956bdbe55c5398f36f3",
+    ),
+    "svg2pdf": VendoredDownload(
+        "https://registry.npmjs.org/svg2pdf.js/-/svg2pdf.js-2.6.0.tgz",
+        "c242ebf7a9b8cbc64a7cc4cd6058026485f11ba95e55c3a5b57fc23a3acf0edd",
+    ),
+    "dompurify": VendoredDownload(
+        "https://registry.npmjs.org/dompurify/-/dompurify-3.2.7.tgz",
+        "e6e0410255ad080c4efc43d797348f372b0c2d94218321c8ed0b83ba57f42e43",
+    ),
+    "phosphor": VendoredDownload(
+        "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz",
+        "40e3096099ca818c047979cece6a3764944d5200c67b64092f7bcd8bcd1d2b08",
+    ),
+    "inter": VendoredDownload(
+        "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz",
+        "7004eee208371e46125e999c67b094ba47f3606b1983331c6f8e77b39a2f825c",
+    ),
+    "noto_sans_jp": VendoredDownload(
+        "https://registry.npmjs.org/@fontsource/noto-sans-jp/-/noto-sans-jp-5.2.9.tgz",
+        "e4d4ba8825aebe6293e19400a07d45b8f111ff31532c8dfbdd77b986c0123652",
+    ),
 }
+
+# The files vendor-assets takes from a package folder; the package holds others.
+BROWSER_WASI_SHIM_FILES = (
+    "debug.js",
+    "fd.js",
+    "fs_mem.js",
+    "fs_opfs.js",
+    "index.js",
+    "strace.js",
+    "wasi.js",
+    "wasi_defs.js",
+)
+PHOSPHOR_REGULAR_FILES = ("style.css", "Phosphor.svg", "Phosphor.ttf", "Phosphor.woff", "Phosphor.woff2")
+
+_NPM_DOWNLOAD_URLS = (
+    re.compile(r"https://registry\.npmjs\.org/(?P<name>(?:@[^/]+/)?[^/]+)/-/[^/]+-(?P<version>[0-9][^/]*)\.tgz"),
+    re.compile(r"https://unpkg\.com/(?P<name>(?:@[^/]+/)?[^@/]+)@(?P<version>[0-9][^/]*)/.+"),
+)
+_NPM_HOSTS = ("https://registry.npmjs.org/", "https://unpkg.com/")
+
+
+def npm_package(url: str) -> tuple[str, str] | None:
+    """The npm package name and version a download URL names; None for a download from elsewhere."""
+
+    for pattern in _NPM_DOWNLOAD_URLS:
+        match = pattern.fullmatch(url)
+        if match:
+            return match["name"], match["version"]
+    if url.startswith(_NPM_HOSTS):
+        raise ValueError(f"{url} names no npm package version")
+    return None
+
+
+# No tool installs this manifest. GitHub's dependency graph reads it, so
+# Dependabot reports an advisory for a vendored npm package.
+NPM_ADVISORY_MANIFEST = Path("tools") / "vendored-web-assets" / "package.json"
+
+
+def npm_advisory_manifest_text() -> str:
+    """The text of NPM_ADVISORY_MANIFEST: each vendored npm package at the version vendored."""
+
+    packages = sorted(
+        package for package in (npm_package(download.url) for download in ASSET_DOWNLOADS.values()) if package
+    )
+    manifest = {
+        "name": "gbdraw-vendored-web-assets",
+        "private": True,
+        "description": (
+            "The npm packages vendored under gbdraw/web/vendor/, for advisories only; nothing installs them. "
+            "Written by `python tools/verify_gui_offline.py vendor-assets` from gbdraw/_web_assets.py."
+        ),
+        "dependencies": dict(packages),
+    }
+    return json.dumps(manifest, indent=2) + "\n"
 
 # The files of PYODIDE_RUNTIME_DIR that Pyodide's loader downloads at start,
 # in that order (config.js PYODIDE_RUNTIME_FILES, the page's prefetch).
@@ -123,7 +223,7 @@ WEB_ASSET_NOTICES = (
         display_name="Vue.js",
         version="3.5.25",
         license_expression="MIT",
-        source_url=ASSET_URLS["vue"],
+        source_url=ASSET_DOWNLOADS["vue"].url,
         bundled_path=VUE_RUNTIME_FILE.as_posix(),
         notice="Copyright (c) 2018-present Yuxi (Evan) You and Vue contributors.",
         license_text_anchors=("license-mit",),
@@ -144,7 +244,7 @@ WEB_ASSET_NOTICES = (
         display_name="Pyodide core runtime",
         version="0.29.0",
         license_expression="MPL-2.0",
-        source_url=ASSET_URLS["pyodide_core"],
+        source_url=ASSET_DOWNLOADS["pyodide_core"].url,
         bundled_path="vendor/pyodide/v0.29.0/full/",
         notice="The local Pyodide package.json declares MPL-2.0.",
         license_text_anchors=("license-mpl-2.0",),
@@ -153,7 +253,7 @@ WEB_ASSET_NOTICES = (
         display_name="browser_wasi_shim",
         version="0.4.2",
         license_expression="MIT OR Apache-2.0",
-        source_url=ASSET_URLS["browser_wasi_shim"],
+        source_url=ASSET_DOWNLOADS["browser_wasi_shim"].url,
         bundled_path="vendor/browser_wasi_shim/dist/",
         notice="The package metadata identifies the author as bjorn3.",
         license_text_anchors=("license-mit", "license-apache-2.0"),
@@ -162,7 +262,7 @@ WEB_ASSET_NOTICES = (
         display_name="jsPDF",
         version="3.0.3",
         license_expression="MIT",
-        source_url=ASSET_URLS["jspdf"],
+        source_url=ASSET_DOWNLOADS["jspdf"].url,
         bundled_path="vendor/jspdf/jspdf.umd.min.js",
         notice="Copyright (c) 2010-2025 James Hall and contributors.",
         license_text_anchors=("license-mit",),
@@ -171,7 +271,7 @@ WEB_ASSET_NOTICES = (
         display_name="svg2pdf.js",
         version="2.6.0",
         license_expression="MIT",
-        source_url=ASSET_URLS["svg2pdf"],
+        source_url=ASSET_DOWNLOADS["svg2pdf"].url,
         bundled_path="vendor/svg2pdf.js/svg2pdf.umd.min.js",
         notice="Authored by the yFiles for HTML Support Team at yWorks.",
         license_text_anchors=("license-mit",),
@@ -180,7 +280,7 @@ WEB_ASSET_NOTICES = (
         display_name="DOMPurify",
         version="3.2.7",
         license_expression="MPL-2.0 OR Apache-2.0",
-        source_url=ASSET_URLS["dompurify"],
+        source_url=ASSET_DOWNLOADS["dompurify"].url,
         bundled_path="vendor/dompurify/purify.min.js",
         notice="The distributed header identifies Cure53 and other contributors.",
         license_text_anchors=("license-mpl-2.0", "license-apache-2.0"),
@@ -189,7 +289,7 @@ WEB_ASSET_NOTICES = (
         display_name="Phosphor Icons Web",
         version="2.1.2",
         license_expression="MIT",
-        source_url=ASSET_URLS["phosphor"],
+        source_url=ASSET_DOWNLOADS["phosphor"].url,
         bundled_path="vendor/phosphor-icons/regular/",
         notice="Package author: rektdeckard.",
         license_text_anchors=("license-mit",),
@@ -198,7 +298,7 @@ WEB_ASSET_NOTICES = (
         display_name="Inter font package",
         version="Fontsource package 5.2.8",
         license_expression="OFL-1.1",
-        source_url=ASSET_URLS["inter"],
+        source_url=ASSET_DOWNLOADS["inter"].url,
         bundled_path="vendor/fonts/inter/",
         notice="Font package metadata identifies Google Inc. as the author.",
         license_text_anchors=("license-ofl-1.1",),
@@ -207,7 +307,7 @@ WEB_ASSET_NOTICES = (
         display_name="Noto Sans JP font package",
         version="Fontsource package 5.2.9",
         license_expression="OFL-1.1",
-        source_url=ASSET_URLS["noto_sans_jp"],
+        source_url=ASSET_DOWNLOADS["noto_sans_jp"].url,
         bundled_path="vendor/fonts/noto-sans-jp/",
         notice="Font package metadata identifies Google Inc. as the author.",
         license_text_anchors=("license-ofl-1.1",),
