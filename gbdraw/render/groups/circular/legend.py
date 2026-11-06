@@ -12,6 +12,7 @@ from ....legend.circular_layout import (
     CircularRingLegendLayout,
 )
 from ....legend.table import as_legend_table, LegendTable, write_legend_row_names
+from ....legend.metrics import write_gradient_scale_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
@@ -153,6 +154,7 @@ class LegendGroup:
             )
             entry_group = Group()
             drawn_name = self._name_entry(entry_group.attribs, key)
+            write_gradient_scale_names(entry_group.attribs, properties)
             gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
             gradient.add_stop_color(offset="0%", color=properties["min_color"])
             gradient.add_stop_color(offset="100%", color=properties["max_color"])

@@ -8,12 +8,8 @@ results for:
 - the Legend of every Gallery Session Result, and edited copies of it (rows
   renamed, deleted, added, reordered; Circular Legends moved to each side);
 - synthetic Legends for the branches the Gallery does not reach (conservation
-  gradients, wrapping, an empty table).
-
-Circular gradient rows are frozen: Python draws the similarity-ring block
-instead, but a Result saved before it still holds them and the Web port lays
-them out. Those cases keep the expected values stored when Python last drew
-them; the generator carries them through unchanged.
+  gradients, annotation gradients with their own scale texts, the Circular
+  side block of rings and gradient rows, wrapping, an empty table).
 
 ``tests/test_legend_layout_vectors.py`` recomputes the expected values with
 Python and ``tests/web/legend-layout-vectors.test.mjs`` with the JavaScript
@@ -324,6 +320,45 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
                 "composition": {**padded, "requestedCanvas": requested} if requested else padded,
             })
     cases.extend(_ring_cases(options, composition, solid))
+    cases.extend(_annotation_gradient_cases(options, composition, solid, conservation, compact))
+    return cases
+
+
+def _annotation_gradient_cases(
+    options: dict[str, Any],
+    composition: dict[str, Any],
+    solid: list[dict[str, Any]],
+    conservation: list[dict[str, Any]],
+    compact: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Annotation gradient rows (a sequence search's "Query position", scale texts ``start`` and ``end``): alone,
+    beside identity rows (one scale line per group of rows that share scale texts, in order of first appearance),
+    and, in Circular, below the similarity-ring block."""
+
+    query = {"key": "Query position", "type": "gradient", "stroke": "none", "strokeWidth": 0.0,
+             "minLabel": "start", "maxLabel": "end"}
+    ring = {"key": "AF332093 (China)", "type": "ring", "stroke": "none", "strokeWidth": 0.0, "minValue": 90,
+            "swatch": False}
+    cases = []
+    for mode in ("circular", "linear"):
+        for side in ("left", "top"):
+            variants = [
+                ("one annotation gradient", solid + [query]),
+                ("an identity gradient and an annotation gradient", solid + conservation + [query]),
+                ("an annotation gradient between two identity gradients", [compact[0], query, compact[1]]),
+            ]
+            if mode == "circular":
+                variants += [
+                    ("rings and an annotation gradient", solid + [ring, query]),
+                    ("rings and two gradients of two scales", [ring, query, conservation[0]]),
+                ]
+            cases.extend(
+                {
+                    "name": f"synthetic {mode}", "mode": mode, "edit": f"{label}, {side}", "rows": rows,
+                    "options": {**options, "side": side, "wrapWidth": 900.0}, "composition": composition,
+                }
+                for label, rows in variants
+            )
     return cases
 
 
@@ -393,6 +428,8 @@ def _table(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "min_value": minimum, "max_value": identity_color_domain(minimum, None).maximum,
                 "min_color": "#000000", "max_color": "#ffffff",
             })
+        if "minLabel" in row:
+            properties.update({"min_label": row["minLabel"], "max_label": row["maxLabel"]})
         if row["type"] == "ring":
             properties.update({"track_index": index + 1, "fill": "#000000" if row["swatch"] else None})
         table[row["key"]] = properties
@@ -411,6 +448,14 @@ def _entries(entries) -> list[dict[str, Any]]:
     return [
         {"key": entry.key, "rectX": entry.rect_x, "rectY": entry.rect_y, "textX": entry.text_x, "textY": entry.text_y}
         for entry in entries
+    ]
+
+
+def _scales(scales) -> list[dict[str, Any]]:
+    return [
+        {"minLabelText": scale.min_label_text, "maxLabelText": scale.max_label_text, "minLabelX": scale.min_label_x,
+         "maxLabelX": scale.max_label_x, "scaleLabelY": scale.scale_label_y}
+        for scale in scales
     ]
 
 
@@ -436,8 +481,9 @@ def _linear_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
                     for entry in gradient.entries
                 ],
                 "width": gradient.width, "height": gradient.height, "barWidth": gradient.bar_width,
-                "minLabelText": gradient.min_label_text, "minLabelX": gradient.min_label_x,
-                "maxLabelX": gradient.max_label_x, "scaleLabelY": gradient.scale_label_y,
+                "minLabelText": gradient.min_label_text, "maxLabelText": gradient.max_label_text,
+                "minLabelX": gradient.min_label_x, "maxLabelX": gradient.max_label_x,
+                "scaleLabelY": gradient.scale_label_y, "moreScales": _scales(gradient.more_scales),
             },
             "featureX": value.feature_x, "featureY": value.feature_y,
             "gradientX": value.gradient_x, "gradientY": value.gradient_y,
@@ -459,6 +505,7 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
         color_rect_size=options["colorRectSize"],
     )
     gradient = layout.gradient
+    rows = layout.gradient_rows
     bounds = _circular_legend_local_bounds(layout, color_rect_size=options["colorRectSize"])
     return {
         "horizontal": layout.horizontal, "width": layout.width, "height": layout.height,
@@ -476,8 +523,19 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
             "minLabelText": gradient.min_label_text, "minLabelX": gradient.min_label_x,
             "maxLabelX": gradient.max_label_x, "scaleLabelY": gradient.scale_label_y,
         },
-        # Only a frozen case (a saved Result's gradient rows) has a gradient block.
-        "gradient": None,
+        "gradient": None if rows is None else {
+            "compact": rows.compact, "width": rows.width, "height": rows.height, "barWidth": rows.bar_width,
+            "barX": rows.bar_x, "minLabelText": rows.min_label_text, "maxLabelText": rows.max_label_text,
+            "minLabelX": rows.min_label_x, "maxLabelX": rows.max_label_x, "scaleLabelY": rows.scale_label_y,
+            "moreScales": _scales(rows.more_scales),
+            "compactEntries": [
+                {"key": e.key, "labelX": e.label_x, "labelY": e.label_y, "barY": e.bar_y} for e in rows.compact_entries
+            ],
+            "singleEntries": [
+                {"key": e.key, "titleX": e.title_x, "titleY": e.title_y, "barX": e.bar_x, "barY": e.bar_y}
+                for e in rows.single_entries
+            ],
+        },
         "gradientX": layout.gradient_x, "gradientY": layout.gradient_y,
     }, bounds
 
@@ -516,31 +574,13 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
     }
 
 
-def _is_frozen(case: dict[str, Any]) -> bool:
-    return case["mode"] == "circular" and any(row["type"] == "gradient" for row in case["rows"])
-
-
-# The frozen gradient cases pin the JS layout of saved Results; their `expected` values are copied, not recomputed (edits to them are not verified on the Python side).
-def _frozen_cases() -> dict[tuple[str, str], dict[str, Any]]:
-    stored = json.loads(TARGET.read_text(encoding="utf-8")) if TARGET.is_file() else {"layout": []}
-    return {(case["name"], case["edit"]): case for case in stored["layout"] if _is_frozen(case)}
-
-
 def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
     measurement = []
     for case in inputs["measurement"]:
         width, height = drawn_text_box(case["text"], case["fontFamily"], case["fontSize"])
         measurement.append({**case, "expected": {"width": width, "height": height}})
-    frozen = _frozen_cases()
     layout = []
     for case in inputs["layout"]:
-        if _is_frozen(case):
-            stored = frozen.get((case["name"], case["edit"]))
-            if stored is None or {key: value for key, value in stored.items() if key != "expected"} != case:
-                raise SystemExit(f"{case['name']} / {case['edit']}: a Circular gradient case is frozen; "
-                                 "its inputs must equal the stored case")
-            layout.append(stored)
-            continue
         build = _linear_expected if case["mode"] == "linear" else _circular_expected
         result, bounds = build(case)
         result["localBounds"] = _box(bounds)

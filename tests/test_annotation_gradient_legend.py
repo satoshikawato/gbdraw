@@ -9,9 +9,7 @@ one scale line; rows with other texts get a scale line of their own below.
 
 from __future__ import annotations
 
-import json
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
@@ -25,14 +23,13 @@ from gbdraw.annotations.models import (
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
 )
-from gbdraw.comparisons.identity_scale import identity_color_domain
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import LegendDrawingConfigurator, LegendMeasurement
 from gbdraw.configurators.legend import _circular_legend_local_bounds, measure_legend
+from gbdraw.core.text import drawn_text_box
 from gbdraw.layout.spatial import Aabb, union_aabbs
-from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.metrics import gradient_scale_texts
 from gbdraw.legend.sources import LegendSlotSource
 from gbdraw.legend.table import LegendTable
@@ -40,7 +37,6 @@ from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGr
 from gbdraw.render.groups.linear.legend import LegendGroup as LinearLegendGroup
 
 SVG = "{http://www.w3.org/2000/svg}"
-VECTORS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "legend_layout_vectors.json"
 
 PAIRWISE_ROW = {
     "type": "gradient",
@@ -191,6 +187,11 @@ def test_circular_annotation_gradient_row_is_laid_out_and_drawn() -> None:
     assert _texts(block) == ["Query position", "start", "end"]
     bars = [path for path in block.iter(f"{SVG}path") if (path.get("fill") or "").startswith("url(#")]
     assert len(bars) == 1
+    # The drawn row names its scale's ends for the Web's Legend layout; one row has no trailing gap (D-44).
+    entry_group = next(group for group in block.iter(f"{SVG}g") if group.get("data-legend-key") is not None)
+    assert (entry_group.get("data-legend-min-label"), entry_group.get("data-legend-max-label")) == ("start", "end")
+    label_height = drawn_text_box("100%", measurement.font_family, measurement.font_size)[1]
+    assert rows.height == (rows.scale_label_y - rows.single_entries[0].title_y) + label_height
     # The bar lies inside the measured bounds.
     gx, gy = layout.gradient_x, layout.gradient_y
     entry = rows.single_entries[0]
@@ -248,70 +249,3 @@ def test_circular_gradient_rows_of_two_scales_draw_two_scale_lines() -> None:
     root = _svg(CircularLegendGroup(measurement, LegendTable(table)).get_group())
     block = _child(root, "conservation_identity_legend")
     assert _texts(block) == ["Pairwise match identity", "Query position", "70%", "100%", "start", "end"]
-
-
-def _vector_table(rows: list[dict]) -> dict[str, dict[str, object]]:
-    """``tools/generate_legend_layout_vectors.py``'s table of a case's rows."""
-
-    table: dict[str, dict[str, object]] = {}
-    for index, row in enumerate(rows):
-        properties: dict[str, object] = {
-            "type": row["type"], "fill": "#000000", "stroke": row["stroke"], "width": row["strokeWidth"],
-        }
-        if row["type"] in {"gradient", "ring"}:
-            minimum = row.get("minValue", 0)
-            properties.update({
-                "min_value": minimum, "max_value": identity_color_domain(minimum, None).maximum,
-                "min_color": "#000000", "max_color": "#ffffff",
-            })
-        if row["type"] == "ring":
-            properties.update({"track_index": index + 1, "fill": "#000000" if row["swatch"] else None})
-        table[row["key"]] = properties
-    return table
-
-
-def _frozen_circular_gradient_cases() -> list[dict]:
-    cases = json.loads(VECTORS.read_text(encoding="utf-8"))["layout"]
-    return [
-        case for case in cases
-        if case["mode"] == "circular" and any(row["type"] == "gradient" for row in case["rows"])
-    ]
-
-
-@pytest.mark.parametrize("case", _frozen_circular_gradient_cases(), ids=lambda case: f"{case['name']}/{case['edit']}")
-def test_restored_circular_gradient_rows_equal_the_frozen_web_vectors(case: dict) -> None:
-    options = case["options"]
-    layout = build_circular_legend_layout(
-        _vector_table(case["rows"]), legend_position=options["side"], canvas_width=options["wrapWidth"],
-        font_family=options["fontFamily"], font_size=options["fontSize"], color_rect_size=options["colorRectSize"],
-    )
-    expected = case["expected"]
-    rows = layout.gradient_rows
-    assert rows is not None and expected["gradient"] is not None
-    assert {
-        "horizontal": layout.horizontal, "width": layout.width, "height": layout.height,
-        "featureWidth": layout.feature_width, "featureHeight": layout.feature_height,
-        "pairwiseLegendWidth": layout.pairwise_legend_width, "lineMargin": layout.line_margin,
-        "xMargin": layout.x_margin, "numLines": layout.num_lines, "numColumns": layout.num_columns,
-        "numItemsPerLine": layout.num_items_per_line,
-        "entries": [
-            {"key": e.key, "rectX": e.rect_x, "rectY": e.rect_y, "textX": e.text_x, "textY": e.text_y}
-            for e in layout.solid_entries
-        ],
-        "rings": None,
-        "gradient": {
-            "compact": rows.compact, "width": rows.width, "height": rows.height, "barWidth": rows.bar_width,
-            "barX": rows.bar_x, "minLabelText": rows.min_label_text, "minLabelX": rows.min_label_x,
-            "maxLabelX": rows.max_label_x, "scaleLabelY": rows.scale_label_y,
-            "compactEntries": [
-                {"key": e.key, "labelX": e.label_x, "labelY": e.label_y, "barY": e.bar_y} for e in rows.compact_entries
-            ],
-            "singleEntries": [
-                {"key": e.key, "titleX": e.title_x, "titleY": e.title_y, "barX": e.bar_x, "barY": e.bar_y}
-                for e in rows.single_entries
-            ],
-        },
-        "gradientX": layout.gradient_x, "gradientY": layout.gradient_y,
-    } == {key: value for key, value in expected.items() if key not in {"localBounds", "composition"}}
-    bounds = _circular_legend_local_bounds(layout, color_rect_size=options["colorRectSize"])
-    assert [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y] == expected["localBounds"]

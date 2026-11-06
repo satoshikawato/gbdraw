@@ -11,7 +11,7 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.metrics import GradientScaleLayout
+from ....legend.metrics import GradientScaleLayout, write_gradient_scale_names
 from ....legend.table import as_legend_table, LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
@@ -193,6 +193,7 @@ class LegendGroup:
             )
             entry_group = Group()
             drawn_name = self._name_entry(entry_group.attribs, entry.key)
+            write_gradient_scale_names(entry_group.attribs, properties)
 
             gradient = LinearGradient(
                 start=(0, 0),

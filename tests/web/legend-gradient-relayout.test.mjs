@@ -169,7 +169,7 @@ test('OV-1741: a Circular compact gradient block laid out again takes Python\'s 
 
 // PD-OI-110: the similarity-ring block, as Python writes it (render/groups/circular/legend.py), laid out again
 // from wrong positions, takes the positions Python's layout gives (tests/fixtures/legend_layout_vectors.json).
-const ringBlockSvg = (options, rows, minLabel) => {
+const ringBlockSvg = (options, rows, minLabel, tail = '') => {
   const svg = circularGradientSvg(options, [], minLabel);
   const text = (content, anchor = 'start') => `<text font-family="${options.fontFamily}" font-size="${options.fontSize}" `
     + `text-anchor="${anchor}" transform="translate(3,4)">${content}</text>`;
@@ -185,7 +185,7 @@ const ringBlockSvg = (options, rows, minLabel) => {
   const content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="legend"><path d="M 0,0 z" fill="none" stroke="none" stroke-width="0" />'
     + `${solids ? `<g id="feature_legend">${solids}</g>` : ''}`
     + '<g id="conservation_identity_legend" data-gbdraw-role="comparison-legend" data-gbdraw-orientation="circular">'
-    + `${text('outer')}${rings}${text('inner')}${band}</g></g></svg>`;
+    + `${text('outer')}${rings}${text('inner')}${band}${tail}</g></g></svg>`;
   const ringSvg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   ringSvg.setAttribute(COMPOSITION, svg.getAttribute(COMPOSITION));
   ringSvg.setAttribute(SCHEMA, svg.getAttribute(SCHEMA) || '');
@@ -220,6 +220,44 @@ for (const edit of ['solid rows and rings of several colors, left', 'solid rows 
     assert.deepEqual(translateOf(maxLabel), [rings.maxLabelX, rings.scaleLabelY]);
   });
 }
+
+// The Circular side block as Python writes it now: the ring block, then the gradient rows (an annotation
+// gradient names its scale's ends on its entry), then one scale line per group of rows that share scale texts.
+test('the gradient rows below a ring block, of two scales, take Python\'s positions', async () => {
+  const source = vector('synthetic circular', 'rings and two gradients of two scales, left');
+  const rows = source.rows.map((row) => ({ ...row, name: row.key }));
+  const { rings, gradient } = source.expected;
+  assert.ok(rings && gradient && gradient.moreScales.length === 1);
+  const text = (content, anchor = 'start') => `<text font-family="${source.options.fontFamily}" `
+    + `font-size="${source.options.fontSize}" text-anchor="${anchor}" transform="translate(3,4)">${content}</text>`;
+  const entries = rows.filter((row) => row.type === 'gradient').map((row, index) => `<g data-legend-key="${row.key}"`
+    + `${row.minLabel ? ` data-legend-min-label="${row.minLabel}" data-legend-max-label="${row.maxLabel}"` : ''}>`
+    + `<linearGradient id="r${index}"><stop offset="0%" stop-color="#fff" /></linearGradient>${text(row.name)}`
+    + `<path d="M 0,0 z" fill="url(#r${index})" stroke="none" stroke-width="0" transform="translate(3,4)" /></g>`).join('');
+  const scales = [gradient, ...gradient.moreScales].map((scale) => text(scale.minLabelText) + text(scale.maxLabelText, 'end'));
+  const svg = ringBlockSvg(source.options, rows, rings.minLabelText, entries + scales.join(''));
+  const actions = layOut();
+  await actions.prepareLegendLayout();
+  assert.ok(actions.layOutLegend(svg));
+  const block = svg.querySelector('#conservation_identity_legend');
+  assert.deepEqual(translateOf(block), [source.expected.gradientX, source.expected.gradientY]);
+  const byKey = new Map(block.children.filter((child) => child.localName === 'g' && child.hasAttribute('data-legend-key'))
+    .map((entry) => [entry.getAttribute('data-legend-key'), entry]));
+  gradient.compactEntries.forEach((expected) => {
+    const entry = byKey.get(expected.key);
+    assert.deepEqual(translateOf(entry.querySelector('text')), [expected.labelX, expected.labelY], `${expected.key} label`);
+    assert.deepEqual(translateOf(entry.querySelector('path')), [gradient.barX, expected.barY], `${expected.key} bar`);
+  });
+  const labels = block.children.filter((child) => child.localName === 'text').slice(-4);
+  [gradient, ...gradient.moreScales].forEach((scale, index) => {
+    assert.equal(labels[2 * index].textContent, scale.minLabelText);
+    assert.deepEqual(translateOf(labels[2 * index]), [scale.minLabelX, scale.scaleLabelY]);
+    assert.deepEqual(translateOf(labels[(2 * index) + 1]), [scale.maxLabelX, scale.scaleLabelY]);
+  });
+  const [outer, inner] = block.children.filter((child) => child.localName === 'text');
+  assert.deepEqual(translateOf(outer), [0, rings.outerCaptionY]);
+  assert.deepEqual(translateOf(inner), [0, rings.innerCaptionY]);
+});
 
 // The fake DOM's textContent, which the cases above read and write, keeps
 // mixed content in document order.

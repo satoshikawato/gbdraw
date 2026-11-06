@@ -21,7 +21,6 @@ from .table import DrawnLegendName, LegendRowKey, as_legend_table
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
-SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35
 # The similarity-ring block (PD-OI-110): its captions, and the label of its identity band.
 RING_OUTER_CAPTION = "outer"
 RING_INNER_CAPTION = "inner"
@@ -345,7 +344,7 @@ def _build_gradient_layout(
     title_width, title_height = drawn_text_box(entry.text, font_family, font_size)
     bar_y = float(title_height) + (color_rect_size / 2)
     scale_label_y = bar_y + (color_rect_size / 2) + 2
-    height = scale_label_y + float(label_height) + (row_height * SINGLE_GRADIENT_TRAILING_GAP_RATIO)
+    height = scale_label_y + float(label_height)
     width, bar_x = single_gradient_block_x(bar_width, float(title_width))
     min_label_text, max_label_text = gradient_scale_texts(entry.properties)
     return CircularGradientLegendLayout(

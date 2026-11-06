@@ -99,13 +99,17 @@ const readGradientRows = (group) => {
       });
     }
     const bar = gradientBar(entry);
+    // A row that names its scale's ends (an annotation gradient) carries them; Python writes both or neither.
+    const minName = entry.getAttribute('data-legend-min-label');
+    const maxName = entry.getAttribute('data-legend-max-label');
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
       name: drawnLegendRowName(entry),
       type: 'gradient',
       stroke: bar?.getAttribute('stroke') || 'none',
       strokeWidth: Number(bar?.getAttribute('stroke-width') || 0),
-      minValue
+      minValue,
+      ...(minName !== null && maxName !== null ? { minLabel: minName, maxLabel: maxName } : {})
     });
   });
 };
@@ -142,18 +146,18 @@ const placeEntries = (entries, layouts) => {
  * @property {boolean} compact Several gradients: one label column, one scale below the bars.
  * @property {Array<{ key: string, titleX: number, titleY: number, barX: number, barY: number }>} entries
  *   Each entry's title (a compact block's label) and bar.
- * @property {number} minLabelX
- * @property {number} maxLabelX
- * @property {number} scaleLabelY
+ * @property {Array<{ minLabelX: number, maxLabelX: number, scaleLabelY: number }>} scales Every scale line, the
+ *   first group's first (one per group of rows that share scale texts).
  */
+
+/** @param {LinearGradientLayout | CircularGradientLayout} gradient */
+const scaleLines = (gradient) => [gradient, ...gradient.moreScales];
 
 /** @param {LinearGradientLayout} gradient @returns {GradientPlacement} */
 const linearGradientPlacement = (gradient) => ({
   compact: gradient.compact,
   entries: gradient.entries,
-  minLabelX: gradient.minLabelX,
-  maxLabelX: gradient.maxLabelX,
-  scaleLabelY: gradient.scaleLabelY
+  scales: scaleLines(gradient)
 });
 
 /**
@@ -168,32 +172,41 @@ const circularGradientPlacement = (gradient) => ({
       key: entry.key, titleX: entry.labelX, titleY: entry.labelY, barX: gradient.barX, barY: entry.barY
     }))
     : gradient.singleEntries,
-  minLabelX: gradient.minLabelX,
-  maxLabelX: gradient.maxLabelX,
-  scaleLabelY: gradient.scaleLabelY
+  scales: scaleLines(gradient)
 });
+
+/** @param {Element | null | undefined} parent */
+const textChildren = (parent) => Array.from(parent?.children || []).filter((child) => child.localName === 'text');
 
 /**
  * Write a gradient block's parts (OV-1741): each entry's title and bar, and
- * the scale labels, which Python writes after a compact block's entries, or
- * after the title and bar of a single entry, minimum first, then 100%.
+ * the scale labels, minimum first, then maximum, per scale line. A single
+ * Linear entry, and a single Circular entry of a Result drawn before the ring
+ * block, hold their scale labels after their title; otherwise Python writes the
+ * scale lines last in the block (after a ring block's parts in a Circular side
+ * block).
  * @param {Element} group
  * @param {GradientPlacement} placement
  */
 const placeGradient = (group, placement) => {
   const entries = entryGroupsOf(group);
   const byKey = new Map(placement.entries.map((layout) => [layout.key, layout]));
+  /** @type {Element[]} */
+  let ownScale = [];
   entries.forEach((entry) => {
     const layout = byKey.get(pythonLegendKey(entry));
     if (!layout) return;
-    setTranslate(Array.from(entry.children).find((child) => child.localName === 'text') || null, layout.titleX, layout.titleY);
+    const [title, ...scale] = textChildren(entry);
+    setTranslate(title || null, layout.titleX, layout.titleY);
     setTranslate(gradientBar(entry), layout.barX, layout.barY);
+    if (!placement.compact) ownScale = scale;
   });
-  const scaleParent = placement.compact ? group : entries[0];
-  const texts = Array.from(scaleParent?.children || []).filter((child) => child.localName === 'text');
-  const [minLabel, maxLabel] = placement.compact ? texts : texts.slice(1);
-  setTranslate(minLabel || null, placement.minLabelX, placement.scaleLabelY);
-  setTranslate(maxLabel || null, placement.maxLabelX, placement.scaleLabelY);
+  const count = 2 * placement.scales.length;
+  const labels = ownScale.length > 0 ? ownScale : textChildren(group).slice(-count);
+  placement.scales.forEach((scale, index) => {
+    setTranslate(labels[2 * index] || null, scale.minLabelX, scale.scaleLabelY);
+    setTranslate(labels[(2 * index) + 1] || null, scale.maxLabelX, scale.scaleLabelY);
+  });
 };
 
 /**
@@ -346,9 +359,10 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
       .find((child) => child.localName === 'path' && child.getAttribute('fill') === 'none');
     outline?.setAttribute('d', `M 0,${-0.5 * rect} L ${layout.width},${-0.5 * rect} `
       + `L ${layout.width},${layout.height - 0.5 * rect} L 0,${layout.height - 0.5 * rect} z`);
+    // One side block: the ring block, then the gradient rows below it.
     if (gradientGroup && (layout.rings || layout.gradient)) setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
     if (gradientGroup && layout.rings) placeRings(gradientGroup, layout.rings);
-    else if (gradientGroup && layout.gradient) placeGradient(gradientGroup, circularGradientPlacement(layout.gradient));
+    if (gradientGroup && layout.gradient) placeGradient(gradientGroup, circularGradientPlacement(layout.gradient));
     return circularLegendLocalBounds(layout, rect);
   };
 

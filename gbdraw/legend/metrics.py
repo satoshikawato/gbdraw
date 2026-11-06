@@ -83,6 +83,20 @@ def gradient_scale_texts(properties: Mapping[str, object]) -> tuple[str, str]:
     )
 
 
+# The attributes of a drawn gradient row that names its scale's ends, which the Web's Legend layout reads.
+GRADIENT_SCALE_NAME_ATTRIBUTES = ("data-legend-min-label", "data-legend-max-label")
+
+
+def write_gradient_scale_names(attributes: dict[str, object], properties: Mapping[str, object]) -> None:
+    """Write a gradient row's named scale ends (``min_label``, ``max_label``) on its drawn entry; an identity row,
+    whose ends are its percentages, gets none."""
+
+    for attribute, name in zip(GRADIENT_SCALE_NAME_ATTRIBUTES, ("min_label", "max_label"), strict=True):
+        value = properties.get(name)
+        if isinstance(value, str):
+            attributes[attribute] = value
+
+
 @dataclass(frozen=True, slots=True)
 class GradientScaleLayout:
     """One scale line below gradient bars: its start and end texts, under the bars' two ends."""
@@ -136,6 +150,7 @@ def stack_compact_gradient_rows(
 
 __all__ = [
     "CompactGradientRows",
+    "GRADIENT_SCALE_NAME_ATTRIBUTES",
     "GradientScaleLayout",
     "LEGEND_SWATCH_SIZE_PATH",
     "gradient_label_text",
@@ -145,4 +160,5 @@ __all__ = [
     "legend_text_x_offset",
     "single_gradient_block_x",
     "stack_compact_gradient_rows",
+    "write_gradient_scale_names",
 ]

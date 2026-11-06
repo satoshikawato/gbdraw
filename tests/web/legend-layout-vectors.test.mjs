@@ -61,9 +61,11 @@ const linearResult = (layout) => {
       height: value.gradient.height,
       barWidth: value.gradient.barWidth,
       minLabelText: value.gradient.minLabelText,
+      maxLabelText: value.gradient.maxLabelText,
       minLabelX: value.gradient.minLabelX,
       maxLabelX: value.gradient.maxLabelX,
-      scaleLabelY: value.gradient.scaleLabelY
+      scaleLabelY: value.gradient.scaleLabelY,
+      moreScales: value.gradient.moreScales
     },
     featureX: value.featureX,
     featureY: value.featureY,
@@ -99,9 +101,11 @@ const circularResult = (layout) => ({
     barWidth: layout.gradient.barWidth,
     barX: layout.gradient.barX,
     minLabelText: layout.gradient.minLabelText,
+    maxLabelText: layout.gradient.maxLabelText,
     minLabelX: layout.gradient.minLabelX,
     maxLabelX: layout.gradient.maxLabelX,
     scaleLabelY: layout.gradient.scaleLabelY,
+    moreScales: layout.gradient.moreScales,
     compactEntries: layout.gradient.compactEntries.map(({ key, labelX, labelY, barY }) => ({ key, labelX, labelY, barY })),
     singleEntries: layout.gradient.singleEntries.map(({ key, titleX, titleY, barX, barY }) => ({ key, titleX, titleY, barX, barY }))
   },
@@ -154,6 +158,9 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
   assert.ok(branches.some((expected) => expected.gradient?.compact === false), 'a single Circular gradient');
   assert.ok(branches.some((expected) => expected.gradient?.compact === true), 'a compact Circular gradient');
   assert.ok(branches.some((expected) => expected.horizontal?.gradient?.compact === true), 'a compact Linear gradient');
+  assert.ok(branches.some((expected) => expected.gradient?.moreScales?.length > 0), 'Circular gradient rows of two scales');
+  assert.ok(branches.some((expected) => expected.horizontal?.gradient?.moreScales?.length > 0), 'Linear gradient rows of two scales');
+  assert.ok(branches.some((expected) => expected.rings && expected.gradient), 'Circular rings and gradient rows in one side block');
   assert.ok(branches.some((expected) => expected.composition.overlayResolution === 'canvas_growth'), 'an overlay that grows the canvas');
   const sized = vectors.layout.filter((vector) => vector.composition.requestedCanvas);
   assert.ok(sized.some((vector) => vector.expected.composition.canvas[2] === vector.composition.requestedCanvas.widthPx), 'a requested canvas width');
