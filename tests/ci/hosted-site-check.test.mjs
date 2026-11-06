@@ -80,12 +80,14 @@ test('the summary names the commit, Version ID, served state, startup, and any f
   assert.doesNotMatch(failed, /Version ID/);
 });
 
-test('the hosted job runs on main pushes and on a dispatch that names site_sha, without gbdraw', () => {
+test('the hosted job runs on main pushes, daily, and on a dispatch that names site_sha, without gbdraw', () => {
   const hosted = job('hosted-site');
   const gallery = job('gallery-publication-browser');
   assert.match(workflow, /\n  workflow_dispatch:\n    inputs:\n      site_sha:\n/);
-  assert.match(hosted, /\n    if: github\.event_name == 'push' \|\| inputs\.site_sha != ''\n/);
-  assert.match(gallery, /\n    if: github\.event_name == 'push' \|\| inputs\.site_sha == ''\n/);
+  assert.match(workflow, /\n  schedule:\n    - cron: "17 21 \* \* \*"\n/);
+  assert.match(hosted, /\n    if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| inputs\.site_sha != ''\n/);
+  // The schedule has no inputs, so the Gallery job must name the dispatch event.
+  assert.match(gallery, /\n    if: github\.event_name == 'push' \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.site_sha == ''\)\n/);
   assert.match(hosted, /\n    permissions:\n      contents: read\n      checks: read\n/);
   assert.match(hosted, /SITE_SHA: \$\{\{ inputs\.site_sha \|\| github\.sha \}\}/);
   assert.match(hosted, /node tools\/check-hosted-site\.mjs --sha "\$SITE_SHA" --url https:\/\/gbdraw\.genome-kawato\.workers\.dev\//);
