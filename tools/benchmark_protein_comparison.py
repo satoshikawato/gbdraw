@@ -10,8 +10,9 @@ compare-sources times a baseline and a current tree for a base/head decision:
 each of the three samples per tree comes from its own fresh process, and the
 trees take turns (baseline, current, baseline, ...). Samples from one process
 share its state, so more of them do not reduce the spread between processes.
-Its reports save PROCESS_POLICY (noise limit 10%); compare judges every report
-by the policy saved in it.
+Its reports save PROCESS_POLICY (noise limit 10%; stages under 2 ms on both
+sides are not judged on time); compare judges every report by the policy
+saved in it.
 """
 from __future__ import annotations
 
@@ -52,7 +53,9 @@ POLICY = {"warmups": 1, "samples": 3, "regressionPct": 10.0,
           "semanticGate": "exact ordered stage digest, including types and errors"}
 # compare-sources: samples from separate processes carry the spread between processes, so a stage
 # is inconclusive only when that spread exceeds 10%, the regression threshold (Owner 2026-11-05).
-PROCESS_POLICY = {**POLICY, "maxNoisePct": 10.0}
+# A stage whose base and current medians are both under 2 ms is not judged on time: a few
+# hundredths of a millisecond between processes exceed 10% there, while the semantic check stays.
+PROCESS_POLICY = {**POLICY, "maxNoisePct": 10.0, "minJudgedMs": 2.0}
 GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
              "vibrio-harveyi-group-collinear")
 CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edges",
@@ -1027,7 +1030,10 @@ def compare_reports(base, current, *, semantic_only=False):
                 delta = 100 * (c["median"] / b["median"] - 1)
                 row["timeDeltaPct"] = delta
                 if equal:
-                    if min(len(b["samples"]), len(c["samples"])) < policy["samples"] or max(b["noisePct"], c["noisePct"]) > policy["maxNoisePct"]:
+                    # Reports saved before the floor, and one-process reports, judge every stage.
+                    if max(b["median"], c["median"]) < policy.get("minJudgedMs", 0.0):
+                        decision = "pass_below_floor"
+                    elif min(len(b["samples"]), len(c["samples"])) < policy["samples"] or max(b["noisePct"], c["noisePct"]) > policy["maxNoisePct"]:
                         decision = "inconclusive"
                     elif delta > policy["regressionPct"]:
                         decision = "regression"
