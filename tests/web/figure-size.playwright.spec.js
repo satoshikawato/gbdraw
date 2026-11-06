@@ -114,6 +114,21 @@ test('a Circular 180 x 180 mm figure: Undo, size line, SVG export units, Legend 
   expect(await sizeState(page)).toMatchObject({ width: '180mm', height: '180mm', amount: '180', unit: 'mm' });
 });
 
+// PD-OI-114: an empty side starts at px and Reset Settings returns to Auto. A unit picked without an amount writes
+// nothing, so the form holds Auto before and after the Reset, and the field still shows px afterwards.
+test('Reset Settings returns an Auto side whose unit was picked without an amount to px', async ({ page }) => {
+  await openFresh(page);
+  await openLayout(page);
+  await page.locator('#figure-width-unit').selectOption('mm');
+  await page.locator('#figure-height-unit').selectOption('in');
+  await settle(page);
+  expect(await sizeState(page)).toMatchObject({ width: null, height: null, amount: '', unit: 'mm' });
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+  await settle(page);
+  expect(await sizeState(page)).toMatchObject({ width: null, height: null, amount: '', unit: 'px' });
+  await expect(page.locator('#figure-height-unit')).toHaveValue('px');
+});
+
 test('a Linear 85 mm width with a wide side Legend is refused, naming the parts, and the previous figure is kept', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

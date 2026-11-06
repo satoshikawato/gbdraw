@@ -4,8 +4,7 @@
 // typed and the unit, services/figure-size-form.js); the control's History adapter records it as one step, and it
 // applies on Generate (the Layout card's note). The unit of each side is view state.
 /** @import { DrawingState } from '../state.js' */
-/** @import { DrawingId } from '../services/drawing-view.js' */
-/** @import { FigureGrowthCause, FigureLengthUnit, FigureSide } from '../services/figure-size-form.js' */
+/** @import { FigureGrowthCause, FigureLengthFormValue, FigureLengthUnit, FigureSide } from '../services/figure-size-form.js' */
 import {
   DEFAULT_FIGURE_LENGTH_UNIT, FIGURE_LENGTH_UNITS, FIGURE_SIZE_FIELDS, figureLengthAmountText, figureLengthInputValue,
   figureLengthUnitOf
@@ -63,18 +62,18 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
     width: ref(/** @type {FigureLengthUnit} */ (DEFAULT_FIGURE_LENGTH_UNIT)),
     height: ref(/** @type {FigureLengthUnit} */ (DEFAULT_FIGURE_LENGTH_UNIT))
   };
-  // The value the field wrote last on each side, and the drawing it wrote it in. Any other value (a drawing switch,
-  // Reset Settings, Load, Undo) shows in its own unit, and Auto in px; a side the field cleared keeps its unit.
-  /** @type {Record<FigureSide, { drawingId: DrawingId, value: unknown } | null>} */
+  // The value the field just wrote on each side, until the watch below reads it back once. Any other change of a
+  // side (a drawing switch, Reset Settings, Load, Undo) shows in its own unit, and Auto in px; so an Auto side whose
+  // unit the user picked without an amount returns to px when Reset Settings writes Auto again, while a side the
+  // field cleared keeps its unit.
+  /** @type {Record<FigureSide, { value: FigureLengthFormValue } | null>} */
   const written = { width: null, height: null };
   for (const side of /** @type {const} */ (['width', 'height'])) {
     watch(() => [state.activeDrawing().id, form()[FIGURE_SIZE_FIELDS[side]]], () => {
-      const drawing = state.activeDrawing();
-      const value = drawing.form[FIGURE_SIZE_FIELDS[side]];
+      const value = form()[FIGURE_SIZE_FIELDS[side]];
       const own = written[side];
-      if (own !== null && own.drawingId === drawing.id && own.value === value) return;
       written[side] = null;
-      units[side].value = figureLengthUnitOf(value);
+      if (own === null || own.value !== value) units[side].value = figureLengthUnitOf(value);
     });
   }
   const figureWidthAmount = computed(() => figureLengthAmountText(form().figure_width));
@@ -102,11 +101,13 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
     // A unit change keeps the amount shown (180 mm becomes 180 in); with no amount it writes nothing, and the Auto
     // side keeps the unit chosen.
     const amount = part === 'amount' ? control.value : amounts[side].value;
-    const drawing = state.activeDrawing();
-    const value = figureLengthInputValue(amount, units[side].value);
-    written[side] = { drawingId: drawing.id, value };
     if (part === 'unit' && amount === '') return;
-    drawing.form[FIGURE_SIZE_FIELDS[side]] = value;
+    const value = figureLengthInputValue(amount, units[side].value);
+    const field = FIGURE_SIZE_FIELDS[side];
+    // A write that changes nothing triggers no watch to read it back.
+    if (form()[field] === value) return;
+    written[side] = { value };
+    form()[field] = value;
   };
   return {
     figureLengthUnits: FIGURE_LENGTH_UNITS,
