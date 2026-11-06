@@ -320,6 +320,10 @@ gbdraw linear \
 
 ### Selected comparisons across multi-record rows
 
+This template uses the example tables of a source checkout. Run
+`python tools/test_data.py fetch` there first: the comparison results they
+list are large inputs kept outside git.
+
 ```bash
 gbdraw linear \
   --records_table examples/linear_multi_records.tsv \

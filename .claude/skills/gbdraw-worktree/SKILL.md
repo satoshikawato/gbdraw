@@ -34,6 +34,9 @@ export TMPDIR="$TASK_DIR/tmp"; mkdir -p "$TMPDIR"
   at a worktree breaks once the worktree is removed.
 - `python -m pytest` run from the worktree root imports the worktree's
   `gbdraw`. For other Python entry points, set `PYTHONPATH="$PWD"`.
+- A new worktree lacks the large test inputs (2 MiB or more) that git does
+  not hold. pytest places them; before another tool or a Playwright run, run
+  `python tools/test_data.py fetch` once (hard links from the shared cache).
 - Tests that call the `gbdraw` command need the worktree's CLI first on `PATH`:
   a shim script named `gbdraw` that runs
   `PYTHONPATH="$GBDRAW_SRC" python -c 'from gbdraw.cli import main; main()' "$@"`,

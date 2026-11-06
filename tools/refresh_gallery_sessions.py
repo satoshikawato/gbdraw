@@ -59,6 +59,7 @@ from gbdraw.tracks.circular import (  # noqa: E402
     parse_circular_track_slots,
 )
 from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
+from tools import test_data  # noqa: E402
 
 if TYPE_CHECKING:
     from tools.prepare_interactive_gallery_assets import GallerySessionExample
@@ -1710,6 +1711,9 @@ def refresh_gallery_sessions(
             raise FileNotFoundError(
                 f"Missing gallery session: {session_path.relative_to(REPO_ROOT)}"
             )
+    if any(_declared_session_example(path) for path in session_paths):
+        # Declared commands read large inputs that live in the test-data Release.
+        test_data.fetch(require=True)
 
     # Render every requested session successfully before replacing any tracked session.
     # A failed promotion therefore cannot leave a half-refreshed gallery behind.
