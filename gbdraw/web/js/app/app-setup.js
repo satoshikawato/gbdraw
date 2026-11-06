@@ -137,7 +137,6 @@ import {
   linearFileCardRecord,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
-  linearSourceDepthStatus,
   moveLinearSourceGroup,
   planLinearSourceRemoval,
   setLinearSourceFolded,
@@ -170,7 +169,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
+import { appliedFeatureColors, COMPARISON_COLOR_KEYS, normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { COLLINEAR_COLOR_MODE_TEXT, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -185,6 +184,13 @@ import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { createResultPopups } from './result-popups.js';
+import {
+  activeDepthTrackCount, circularDepthRepresentatives, circularDepthRows, circularDepthSources, createDepthFiles,
+  createDepthSeriesEdits, createDepthTrackPanels, depthTrackCountLabel, ensureDepthTrackConfigCount, getLinearDepthFile,
+  hasLinearDepthFiles, linearDepthLogicalWidth, linearDepthRows, linearDepthSources, normalizeDepthSlotTrackIndex,
+  refreshDepthTrackLabelsAfterRemoval, syncDepthTrackSlotLabelsForTrack
+} from './depth-tracks.js';
+import { createLinearRecordLabels, definitionLineStyleRows } from './linear-record-labels.js';
 import {
   createCircularConservationComparisonFiles, createCircularConservationSeriesPanel, createCircularConservationSources
 } from './circular-conservation.js';
@@ -259,18 +265,12 @@ import {
   resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import {
-  linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from '../services/linear-record-layout.js';
-import {
-  describeLinearLabelVisibility,
-  requireLinearLabelVisibilityMode,
-  resolveLinearLabelVisibility
-} from '../services/linear-label-visibility.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -323,30 +323,15 @@ import {
 } from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
-  clearDepthTrackSourceAt,
   compactDepthFileSlots,
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
-  depthTrackCoverageCount,
-  depthTrackMatrixWidth,
-  ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
-  depthTrackConfigForEdit,
-  depthTrackEditDefaults,
-  depthSeriesDefaultColor,
   isDefaultManagedDepthSlot,
-  isRecordMajorDepthFileMatrix,
-  normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
-  normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
-  defaultDepthSeriesLabel,
-  getDepthTrackFileBaseName,
-  isDepthSeriesAutoLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
-  depthSeriesRemovalLoss,
-  syncDepthSlotLabels,
-  uploadedDepthFileCount
+  depthSeriesRemovalLoss
 } from '../services/depth-track-state.js';
 /** @import { HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
@@ -355,7 +340,7 @@ import {
 /** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
 /** @import { OrthogroupGroup } from './orthogroups.js' */
-/** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
+/** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
@@ -2493,26 +2478,12 @@ export const createAppSetup = () => {
       return reading.kind === 'rows' ? reading.drawnAxisLength : null;
     }
   });
-  /** @param {DepthFileSlots | DepthFileSlots[]} value */
-  const depthFileCount = (value) => (
-    isRecordMajorDepthFileMatrix(value)
-      ? representativeDepthFiles(value).filter(Boolean).length
-      : uploadedDepthFileCount(value)
-  );
-  /** @param {DepthFileSlots | DepthFileSlots[]} value */
-  const depthTrackCountLabel = (value) => {
-    const count = depthFileCount(value);
-    return tn(count, '{count} TSV', '{count} TSVs');
-  };
-  /** @param {DrawingState} drawing */
-  const circularDrawingHasDepthFiles = (drawing) => depthFileCount(drawing.files.c_depth) > 0;
-  const hasCircularDepthFiles = computed(() => circularDrawingHasDepthFiles(state.activeDrawing()));
-  /** @param {DrawingState} drawing */
-  const linearDrawingHasDepthFiles = (drawing) => drawing.linearSeqs.some((seq) => depthFileCount(seq.depth) > 0);
-  const canShowDepthTrack = computed(() => {
-    const drawing = state.activeDrawing();
-    return drawing.mode === 'linear' ? linearDrawingHasDepthFiles(drawing) : circularDrawingHasDepthFiles(drawing);
-  });
+  const {
+    hasCircularDepthFiles, canShowDepthTrack, circularDepthTrackRows, linearDepthTrackRows, linearSourceDepthRows,
+    linearSourceDepthSummary, depthTrackRows, linearDepthTrackCoverageLabel, linearDepthTrackIndexOptions,
+    getDepthTrackLabel, depthSeriesDefaultName, depthSeriesName, getDepthTrackColor, getDepthTrackLegendLabelForSlot,
+    getCircularDepthFile
+  } = createDepthTrackPanels({ state, shownDrawingOfMode });
   const enabledOptionClass = 'text-slate-700 cursor-pointer';
   const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
   const depthToggleOptionClass = computed(() => (
@@ -2520,70 +2491,6 @@ export const createAppSetup = () => {
       ? enabledOptionClass
       : disabledOptionClass
   ));
-  /** @param {LinearSeq | null | undefined} seq */
-  const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
-  /** @param {DrawingState} drawing */
-  const circularDepthRecordCount = (drawing) => {
-    const discoveredCount = drawing.circularRecordList.value.length;
-    if (discoveredCount > 0) return discoveredCount;
-    const depth = drawing.files.c_depth;
-    return isRecordMajorDepthFileMatrix(depth) && Array.isArray(depth)
-      ? Math.max(1, depth.length)
-      : 1;
-  };
-  /** @param {DrawingState} drawing */
-  const circularDepthRows = (drawing) => normalizeRecordMajorDepthFileRows(
-    drawing.files.c_depth,
-    circularDepthRecordCount(drawing)
-  );
-  /** @param {DrawingState} drawing */
-  const circularDepthRepresentatives = (drawing) => representativeDepthFiles(circularDepthRows(drawing));
-  /** @param {DepthFileSlots | DepthFileSlots[]} slots @param {number} [uiCount] */
-  const sourceDepthTrackCount = (slots, uiCount = 1) => Math.max(
-    1,
-    Number(uiCount) || 1,
-    representativeDepthFiles(slots).length
-  );
-  // A Circular drawing's Depth panel count: its stored series (`adv.depth_tracks`,
-  // which Add Depth track and a Load grow) or its Depth files, whichever is more.
-  // Each drawing has its own, and Undo and Reset restore it with the series (OV-2200).
-  /** @param {DrawingState} drawing */
-  const circularDepthTrackCount = (drawing) => sourceDepthTrackCount(drawing.files.c_depth, drawing.adv.depth_tracks.length);
-  // The Depth panels read the drawing's series and never write them (OV-109):
-  // the Depth transitions and the Session reconcile grow, trim and label the
-  // list, and a series it does not hold yet shows its defaults.
-  /** @param {DrawingState} drawing @param {number} count */
-  const rowsForDepthTrackCount = (drawing, count) => {
-    const normalizedCount = Math.max(1, Number(count) || 1);
-    return Array.from({ length: normalizedCount }, (_, index) => ({
-      index,
-      key: `depth-track-${index}`,
-      config: drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
-    }));
-  };
-  // A Linear drawing's Depth files, row by row (each record row holds its own).
-  /** @param {DrawingState} drawing */
-  const linearDepthRows = (drawing) => drawing.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
-  // The Depth file rows a removal reads, by identity: a Depth change writes new ones.
-  /** @param {DrawingState} drawing */
-  const circularDepthSources = (drawing) => [drawing.files.c_depth];
-  /** @param {DrawingState} drawing */
-  const linearDepthSources = (drawing) => drawing.linearSeqs.map((seq) => seq.depth);
-  /** @param {DrawingState} drawing */
-  const linearDepthLogicalWidth = (drawing) => depthTrackMatrixWidth(linearDepthRows(drawing));
-  /** @param {DrawingState} drawing */
-  const linearDepthTrackUiCount = (drawing) => Math.max(1, linearDepthLogicalWidth(drawing));
-  /** @param {DrawingState} drawing @param {number} width */
-  const padLinearDepthRows = (drawing, width) => {
-    const targetWidth = Math.max(0, Number(width) || 0);
-    drawing.linearSeqs.forEach((seq) => {
-      seq.depth = padDepthFileSlots(seq.depth, targetWidth);
-    });
-  };
-  /** @param {DrawingState} drawing @param {RawDepthTrackConfig | null | undefined} entry @param {number} index */
-  const normalizeDepthTrackConfig = (drawing, entry, index) => (
-    normalizeDepthTrackConfigEntry(entry, index, depthTrackEditDefaults(drawing.adv))
-  );
   /** @param {unknown} value */
   const optionalNumberInputValue = (value) => value ?? '';
   /** @param {Record<string, unknown> | null | undefined} target @param {string} key @param {unknown} value @param {boolean} [numeric] */
@@ -2593,45 +2500,6 @@ export const createAppSetup = () => {
     if (!target || typeof target !== 'object') return;
     const text = String(value ?? '').trim();
     target[key] = text === '' ? null : numeric ? Number(text) : text;
-  };
-  /** @param {DrawingState} drawing */
-  const activeDepthTrackCount = (drawing) => {
-    if (drawing.mode === 'linear') {
-      return linearDepthTrackUiCount(drawing);
-    }
-    return circularDepthTrackCount(drawing);
-  };
-  /** @param {DrawingState} drawing */
-  const ensureDepthTrackConfigCount = (drawing, count = activeDepthTrackCount(drawing)) => {
-    const targetCount = Math.max(1, Number(count) || 1);
-    const normalized = ensureDepthTrackConfigCountEntries(
-      drawing.adv.depth_tracks,
-      targetCount,
-      depthTrackEditDefaults(drawing.adv)
-    );
-    drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
-  };
-  const circularDepthTrackRows = computed(() => {
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return [];
-    return rowsForDepthTrackCount(drawing, circularDepthTrackCount(drawing));
-  });
-  const linearDepthTrackRows = () => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return [];
-    return rowsForDepthTrackCount(drawing, linearDepthTrackUiCount(drawing));
-  };
-  /** @param {LinearSourceGroup} source */
-  const linearSourceDepthRows = (source) => linearDepthTrackRows().map((track) => ({
-    ...track,
-    status: linearSourceDepthStatus(source, track.index)
-  }));
-  /** @param {LinearSourceGroup} source */
-  const linearSourceDepthSummary = (source) => {
-    const tracks = linearSourceDepthRows(source);
-    const attachedCount = tracks.filter((track) => track.status.selectedCount > 0).length;
-    if (attachedCount === 0) return t('No depth track attached');
-    return tn(attachedCount, '{count} depth track attached', '{count} depth tracks attached');
   };
   // The problems a File card marks, for the open card and its folded line:
   // a file whose inspection failed, and a record that TLOSATX cannot search
@@ -2647,85 +2515,15 @@ export const createAppSetup = () => {
   };
   /** @param {LinearSourceGroup} source */
   const linearSourceGencodeRequired = (source) => source.records.some(({ sequence }) => linearRecordGencodeRequired(sequence));
-  const depthTrackRows = computed(() => {
-    const drawing = state.activeDrawing();
-    return rowsForDepthTrackCount(drawing, activeDepthTrackCount(drawing));
+  const {
+    linearLabelHasSharedRow, linearLabelVisibilitySummary, linearLabelAutoFields, linearLabelAutoDisclosure,
+    focusLinearLabelVisibility, getDefinitionLineStyleSize, setDefinitionLineStyleSize, getDefinitionLineStyleWeight,
+    setDefinitionLineStyleWeight, getDefinitionLineStyleFill, setDefinitionLineStyleColor, getDefinitionLineStyleColorMode,
+    getDefinitionLineStyleSwatchValue, isDefinitionLineStyleMuted
+  } = createLinearRecordLabels({
+    state, mode, sessionOperationAvailability, getCommittedLinearDefinitionVisibility,
+    revealSetting: settingsPaneActions.revealSetting, optionalNumberInputValue, setOptionalNumberInputValue
   });
-  /** @param {DrawingState} drawing @param {number} trackIndex */
-  const linearDepthTrackCoverageLabelOf = (drawing, trackIndex) => {
-    const covered = depthTrackCoverageCount(linearDepthRows(drawing), trackIndex);
-    const total = drawing.linearSeqs.length;
-    return tn(total, '{covered}/{count} record', '{covered}/{count} records', { covered });
-  };
-  // The shown Linear drawing's Depth series, for its panel.
-  /** @param {number} trackIndex */
-  const linearDepthTrackCoverageLabel = (trackIndex) => {
-    const drawing = shownDrawingOfMode('linear');
-    return drawing ? linearDepthTrackCoverageLabelOf(drawing, trackIndex) : '';
-  };
-  const linearDepthTrackIndexOptions = () => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return [];
-    const rows = linearDepthRows(drawing);
-    const active = new Set(activeDepthTrackIndices(rows));
-    return Array.from({ length: linearDepthLogicalWidth(drawing) }, (_, trackIndex) => ({
-      trackIndex,
-      label: depthSeriesName(trackIndex),
-      coverage: linearDepthTrackCoverageLabelOf(drawing, trackIndex),
-      disabled: !active.has(trackIndex)
-    }));
-  };
-  const definitionLineStyleRows = Object.freeze([
-    { key: 'name', get label() { return t('Name / Species'); } },
-    { key: 'subtitle', get label() { return t('Subtitle'); } },
-    { key: 'replicon', get label() { return t('Replicon'); }, visibilityKey: 'linear_show_replicon', visibilityType: 'boolean' },
-    { key: 'accession', get label() { return t('Accession'); }, visibilityKey: 'linear_accession_visibility', visibilityType: 'mode' },
-    { key: 'length', get label() { return t('Length / Coordinates'); }, visibilityKey: 'linear_length_visibility', visibilityType: 'mode' }
-  ]);
-  const linearLabelHasSharedRow = computed(() => {
-    const drawing = state.activeDrawing();
-    return linearRecordLayoutHasSharedRow(
-      drawing.drawnLinearSeqs.value,
-      drawing.linearRecordRows,
-      { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
-    );
-  });
-  /** @param {unknown} mode */
-  const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
-    hasSharedRow: linearLabelHasSharedRow.value
-  });
-  const linearLabelAutoFields = computed(() => {
-    const drawing = state.activeDrawing();
-    return definitionLineStyleRows.filter((row) => (
-      row.visibilityType === 'mode'
-      && requireLinearLabelVisibilityMode(drawing.adv[row.visibilityKey]) === 'auto'
-    ));
-  });
-  const linearLabelAutoDisclosure = computed(() => {
-    if (!linearLabelAutoFields.value.length) return '';
-    const fields = listText(linearLabelAutoFields.value.map((/** @type {{ label: string }} */ row) => row.label));
-    const shown = resolveLinearLabelVisibility('auto', {
-      hasSharedRow: linearLabelHasSharedRow.value
-    });
-    // The shown Result already has Auto's outcome: say what it shows.
-    const applied = getCommittedLinearDefinitionVisibility();
-    const effect = linearLabelAutoFields.value
-      .every((/** @type {{ visibilityKey: string }} */ row) => applied[row.visibilityKey] === shown)
-      ? (shown ? t('Auto shows these fields throughout the diagram') : t('Auto hides these fields throughout the diagram'))
-      : (shown
-        ? t('Auto will show these fields throughout the diagram on the next successful Generate')
-        : t('Auto will hide these fields throughout the diagram on the next successful Generate'));
-    return shown
-      ? t('{fields}: {effect} because no rendered row contains multiple records.', { fields, effect })
-      : joinSentences(t('{fields}: {effect} because at least one rendered row contains multiple records.', { fields, effect }),
-        t('Choose Show in Record Labels to keep a field visible.'));
-  });
-  /** @param {string} key */
-  const focusLinearLabelVisibility = async (key) => {
-    if (mode.value !== 'linear') return;
-    const select = document.getElementById(`linear-label-visibility-${key}`);
-    if (select) await settingsPaneActions.revealSetting(select);
-  };
   /** @param {unknown} position */
   const legendPositionLabel = (position) => ({
     right: t('Right'),
@@ -2738,352 +2536,21 @@ export const createAppSetup = () => {
     lower_right: t('Lower Right'),
     none: t('None')
   })[String(position || '').trim().toLowerCase()] || t('None');
-  /** @param {DrawingState} drawing @param {string} kind */
-  const ensureDefinitionLineStyle = (drawing, kind) => {
-    const key = String(kind || '');
-    if (
-      !drawing.adv.linear_definition_line_styles ||
-      typeof drawing.adv.linear_definition_line_styles !== 'object' ||
-      Array.isArray(drawing.adv.linear_definition_line_styles)
-    ) {
-      drawing.adv.linear_definition_line_styles = {};
-    }
-    const existing = drawing.adv.linear_definition_line_styles[key];
-    if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
-      drawing.adv.linear_definition_line_styles[key] = {
-        font_size: null,
-        font_weight: null,
-        fill: null
-      };
-    }
-    return drawing.adv.linear_definition_line_styles[key];
-  };
-  /** @param {string} kind */
-  const getDefinitionLineStyleSize = (kind) => {
-    const drawing = state.activeDrawing();
-    return optionalNumberInputValue(
-      ensureDefinitionLineStyle(drawing, kind).font_size
-    );
-  };
-  /** @param {string} kind @param {unknown} value */
-  const setDefinitionLineStyleSize = (kind, value) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    setOptionalNumberInputValue(ensureDefinitionLineStyle(drawing, kind), 'font_size', value);
-  };
-  /** @param {string} kind */
-  const getDefinitionLineStyleWeight = (kind) => {
-    const drawing = state.activeDrawing();
-    return ensureDefinitionLineStyle(drawing, kind).font_weight ?? '';
-  };
-  /** @param {string} kind @param {unknown} value */
-  const setDefinitionLineStyleWeight = (kind, value) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    const normalized = String(value || '').trim().toLowerCase();
-    ensureDefinitionLineStyle(drawing, kind).font_weight = normalized === 'bold' ? 'bold' : null;
-  };
-  /** @param {string} kind */
-  const getDefinitionLineStyleFill = (kind) => {
-    const drawing = state.activeDrawing();
-    return ensureDefinitionLineStyle(drawing, kind).fill ?? '';
-  };
-  /** @param {string} kind @param {unknown} value */
-  const setDefinitionLineStyleColor = (kind, value) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    const normalized = String(value || '').trim();
-    ensureDefinitionLineStyle(drawing, kind).fill = normalized || null;
-  };
-  /** @param {string} kind */
-  const getDefinitionLineStyleColorMode = (kind) => (
-    colorValueMode(getDefinitionLineStyleFill(kind))
-  );
-  /** @param {string} kind */
-  const getDefinitionLineStyleSwatchValue = (kind) => {
-    return toNativeColorInputValue(getDefinitionLineStyleFill(kind));
-  };
-  /** @param {{ visibilityKey?: string, visibilityType?: string }} row */
-  const isDefinitionLineStyleMuted = (row) => {
-    const drawing = state.activeDrawing();
-    const key = row?.visibilityKey;
-    if (!key) return false;
-    if (row.visibilityType === 'mode') {
-      return !resolveLinearLabelVisibility(drawing.adv[key], {
-        hasSharedRow: linearLabelHasSharedRow.value
-      });
-    }
-    return drawing.adv[key] === false;
-  };
-  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot */
-  const normalizeDepthSlotTrackIndex = (slot) => {
-    const rawTrackIndex = Number(slot?.params?.track_index);
-    return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
-  };
-  // A series' settings for an edit of the shown drawing, or null when the index
-  // names no series of its mode: the edit is dropped and `depth_tracks` does not
-  // grow (TK-03).
-  /** @param {DrawingState} drawing @param {number} index */
-  const depthTrackConfigForIndex = (drawing, index) => {
-    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-    return depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, index, activeDepthTrackCount(drawing), depthTrackEditDefaults(drawing.adv)
-    );
-  };
-  // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
-  /** @param {DrawingState} drawing @param {number} index */
-  const readDepthTrackConfig = (drawing, index) => (
-    drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
-  );
-  /** @param {number} index */
-  const getDepthTrackLabel = (index) => {
-    const config = readDepthTrackConfig(state.activeDrawing(), Math.max(0, Number(index) || 0));
-    return String(config?.label ?? '');
-  };
-  // The name the figure draws for Depth series `index` of the shown drawing
-  // without a label, among the series the request draws (OV-1508). Figure
-  // text: English in every UI language.
-  /** @param {number} index */
-  const depthSeriesDefaultName = (index) => defaultDepthSeriesLabel(index, activeDepthTrackCount(state.activeDrawing()));
-  // The name of Depth series `index`: its label, else the default name.
-  /** @param {number} index */
-  const depthSeriesName = (index) => getDepthTrackLabel(index) || depthSeriesDefaultName(index);
-  /** @param {number} index */
-  const getDepthTrackColor = (index) => {
-    const idx = Math.max(0, Number(index) || 0);
-    const config = readDepthTrackConfig(state.activeDrawing(), idx);
-    return String(config?.color || depthSeriesDefaultColor(idx, state.activeDrawing().adv));
-  };
-  /** @param {number} index @param {unknown} value */
-  const setDepthTrackColor = (index, value) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    const idx = Math.max(0, Number(index) || 0);
-    const color = String(value ?? '').trim();
-    const config = depthTrackConfigForIndex(drawing, idx);
-    if (!config) return;
-    config.color = color || depthSeriesDefaultColor(idx, drawing.adv);
-  };
-  /** @param {DrawingState} drawing */
-  const depthTrackSlotCollections = (drawing) => [
-    Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [],
-    Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : []
-  ];
-  /** @param {DrawingState} drawing @param {number} index */
-  const syncDepthTrackSlotLabelsForTrack = (drawing, index) => {
-    depthTrackSlotCollections(drawing).forEach((slots) => {
-      syncDepthSlotLabels(/** @type {SyncDepthSlotLabelsOptions} */ ({
-        slots,
-        depthTracks: drawing.adv.depth_tracks,
-        activeCount: drawing.adv.depth_tracks.length
-      }));
-    });
-    void index;
-  };
-  /** @param {number} index @param {unknown} value */
-  const setDepthTrackLabel = (index, value) => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    const idx = Math.max(0, Number(index) || 0);
-    const config = depthTrackConfigForIndex(drawing, idx);
-    if (!config) return;
-    retireLegendStylesOfUnnamedCaptions(drawing, () => {
-      config.label = String(value ?? '');
-      syncDepthTrackSlotLabelsForTrack(drawing, idx);
-    });
-  };
-  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot */
-  const getDepthTrackLegendLabelForSlot = (slot) => (
-    getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
-  );
-  /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot @param {unknown} value */
-  const setDepthTrackLegendLabelForSlot = (slot, value) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    if (!slot) return;
-    const idx = normalizeDepthSlotTrackIndex(slot);
-    const drawing = state.activeDrawing();
-    // A slot whose index names no series has no series label to edit (TK-03).
-    if (!depthTrackConfigForIndex(drawing, idx)) return;
-    retireLegendStylesOfUnnamedCaptions(drawing, () => {
-      slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-      const label = String(value ?? '');
-      if (label.trim()) {
-        slot.params.legend_label = label;
-      } else {
-        delete slot.params.legend_label;
-      }
-      setDepthTrackLabel(idx, label);
-    });
-  };
-  /** @param {LinearTrackSlot | null | undefined} slot */
-  const syncDepthTrackSlotLabel = (slot) => {
-    const drawing = state.activeDrawing();
-    if (!slot || slot.renderer !== 'depth') return;
-    const trackIndex = normalizeDepthSlotTrackIndex(slot);
-    const hasSource = mode.value === 'linear'
-      ? activeDepthTrackIndices(linearDepthRows(drawing)).includes(trackIndex)
-      : Boolean(circularDepthRepresentatives(drawing)[trackIndex]);
-    if (hasSource) delete slot.depth_binding_error;
-    syncDepthTrackSlotLabelsForTrack(drawing, trackIndex);
-  };
-  // A series label is auto while it is a default name or the name of a file the
-  // series had in its drawing; the drawing's files decide it (OV-2202).
-  /** @param {DrawingState} drawing @param {DepthFileSlots} previousFiles @param {DepthFileSlots} nextFiles @param {number} removedIndex */
-  const refreshDepthTrackLabelsAfterRemoval = (drawing, previousFiles, nextFiles, removedIndex) => {
-    depthFileSlotsFromValue(nextFiles).forEach((file, newIndex) => {
-      const oldIndex = newIndex >= removedIndex ? newIndex + 1 : newIndex;
-      const config = drawing.adv.depth_tracks[newIndex];
-      if (!config) return;
-      const oldFile = depthFileSlotsFromValue(previousFiles)[oldIndex] || null;
-      const currentLabel = String(config.label ?? '').trim();
-      if (isDepthSeriesAutoLabel(currentLabel, oldIndex, [oldFile])) {
-        // A file names its series; a series without one keeps no label (OV-1508).
-        config.label = getDepthTrackFileBaseName(file);
-      }
-    });
-  };
-  /**
-   * @param {DrawingState} drawing
-   * @param {number} index
-   * @param {InputFileRef | null} file
-   * @param {readonly (InputFileRef | null)[]} previousFiles The series' files in the drawing before the change
-   */
-  const updateDepthTrackLabelFromFile = (drawing, index, file, previousFiles) => {
-    if (!file) return;
-    const config = drawing.adv.depth_tracks[index];
-    if (!config) return;
-    if (isDepthSeriesAutoLabel(String(config.label ?? '').trim(), index, previousFiles)) {
-      config.label = getDepthTrackFileBaseName(file);
-      syncDepthTrackSlotLabelsForTrack(drawing, index);
-    }
-  };
-  /** @param {number} index */
-  const getCircularDepthFile = (index) => circularDepthRepresentatives(state.activeDrawing())[Number(index)] || null;
-  /**
-   * A Circular drawing's Depth file at series `index`: the shown drawing's
-   * control and the replacement for every drawing write through it.
-   * @param {DrawingState} drawing @param {number} index @param {InputFileCandidate | InputFileRef} file
-   */
-  const replaceCircularDepthFile = (drawing, index, file) => {
-    const idx = Math.max(0, Number(index) || 0);
-    const ref = state.inputFiles.registerFile(file);
-    const rows = circularDepthRows(drawing);
-    const previousFiles = rows.map((row) => row[idx] || null);
-    const nextDepth = rows.map((row) => {
-      const next = [...row];
-      next[idx] = ref;
-      return compactDepthFileSlots(next);
-    });
-    /** @param {() => void} [turnOffReaching] */
-    const apply = (turnOffReaching) => {
-      ensureDepthTrackConfigCount(drawing, idx + 1);
-      // A new file can rename an auto-labeled series, so the label follows in the same retirement.
-      retireLegendStylesOfUnnamedCaptions(drawing, () => {
-        circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {
-          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', nextDepth);
-          turnOffReaching?.();
-        }, { setsFile: ref !== null, series: 'same' });
-        if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
-      });
-    };
-    const asked = ref ? null : askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
-      kind: 'depth-file',
-      loss: circularTrackSlotEditor.circularDepthSourceLoss(drawing, nextDepth),
-      sources: () => circularDepthSources(drawing),
-      label: msg('Change uploaded file'),
-      apply
-    });
-    return asked ?? apply();
-  };
-  /** @param {number} index @param {FileLike | null} file */
-  const setCircularDepthFile = (index, file) => shownAction('circular', (drawing) => replaceCircularDepthFile(drawing, index, file));
-  /** @param {LinearSeq | null | undefined} seq @param {number} index */
-  const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /**
-   * The Depth file at series `index` of Linear record rows: the shown drawing's
-   * controls and the replacement for every drawing write through it. A removal
-   * asks first when it leaves track rows that Generate refuses (`askTrackSourceRemoval`).
-   * @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index
-   * @param {InputFileCandidate | InputFileRef | null} file
-   * @param {string} [label] The History step of the removal, when it asks.
-   * @param {(apply: () => unknown) => unknown} [run] Runs the removal when nothing asks.
-   */
-  const setLinearDepthFiles = (drawing, sequences, index, file, label = msg('Change uploaded file'), run = (apply) => apply()) => {
-    const targets = Array.from(sequences || []).filter(Boolean);
-    if (!targets.length) return;
-    const idx = Math.max(0, Number(index) || 0);
-    const ref = state.inputFiles.registerFile(file);
-    const logicalWidth = Math.max(linearDepthLogicalWidth(drawing), idx + 1);
-    const previousFiles = linearDepthRows(drawing).map((row) => row[idx] || null);
-    /** @param {() => void} [turnOffReaching] */
-    const apply = (turnOffReaching) => {
-      padLinearDepthRows(drawing, logicalWidth);
-      ensureDepthTrackConfigCount(drawing, logicalWidth);
-      retireLegendStylesOfUnnamedCaptions(drawing, () => {
-        linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
-          targets.forEach((seq) => {
-            const slots = depthFileSlotsFromValue(seq.depth);
-            if (ref) {
-              slots[idx] = ref;
-              seq.depth = slots;
-            } else {
-              seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-            }
-          });
-          turnOffReaching?.();
-        }, { setsFile: ref !== null, series: 'same' });
-        if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
-      });
-    };
-    if (ref) return apply();
-    const cleared = new Set(targets.map((seq) => seq.uid));
-    const asked = askTrackSourceRemoval(askingStackPorts('linear_track_slots'), {
-      kind: 'depth-file',
-      loss: linearTrackSlotEditor.linearDepthSourceLoss(drawing, drawing.linearSeqs.map((seq) => (
-        cleared.has(seq.uid) ? clearDepthTrackSourceAt(seq.depth, idx, logicalWidth) : depthFileSlotsFromValue(seq.depth)
-      ))),
-      sources: () => linearDepthSources(drawing),
-      label,
-      apply
-    });
-    return asked ?? run(apply);
-  };
-  /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
-  const setLinearDepthFile = (seq, index, file) => shownAction('linear', (drawing) => {
-    return setLinearDepthFiles(drawing, [seq], index, file);
+  const {
+    setDepthTrackColor, setDepthTrackLabel, setDepthTrackLegendLabelForSlot, syncDepthTrackSlotLabel
+  } = createDepthSeriesEdits({
+    state, mode, sessionOperationAvailability, retireLegendStylesOfUnnamedCaptions
   });
-  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file @param {string} [label] @param {(apply: () => unknown) => unknown} [run] */
-  const setLinearSourceDepthFile = (source, index, file, label, run) => shownAction('linear', (drawing) => setLinearDepthFiles(
-    drawing,
-    (source?.records || []).map(({ sequence }) => sequence),
-    index,
-    file,
-    label,
-    run
-  ));
-  /** @param {LinearSourceGroup} source @param {number} index */
-  const clearLinearSourceDepthFile = (source, index) => setLinearSourceDepthFile(
-    source,
-    index,
-    null,
-    msg('Clear File Depth TSV'),
-    (apply) => history.runUndoable(msg('Clear File Depth TSV'), apply)
-  );
-  const addCircularDepthTrack = () => shownAction('circular', (drawing) => {
-    ensureDepthTrackConfigCount(drawing, circularDepthTrackCount(drawing) + 1);
-    retireLegendStylesOfUnnamedCaptions(drawing, () => circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {}, { setsFile: false, series: 'added' }));
-  });
-  const addLinearDepthTrack = () => shownAction('linear', (drawing) => {
-    const nextCount = linearDepthTrackUiCount(drawing) + 1;
-    padLinearDepthRows(drawing, nextCount);
-    ensureDepthTrackConfigCount(drawing, nextCount);
-    retireLegendStylesOfUnnamedCaptions(drawing, () => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {}, { setsFile: false, series: 'added' }));
+  const {
+    replaceCircularDepthFile, setCircularDepthFile, setLinearDepthFiles, setLinearDepthFile, setLinearSourceDepthFile,
+    clearLinearSourceDepthFile, addCircularDepthTrack, addLinearDepthTrack
+  } = createDepthFiles({
+    state, shownAction, retireLegendStylesOfUnnamedCaptions, askingStackPorts,
+    changeCircularDepthSources: circularTrackSlotEditor.changeCircularDepthSources,
+    circularDepthSourceLoss: circularTrackSlotEditor.circularDepthSourceLoss,
+    changeLinearDepthSources: linearTrackSlotEditor.changeLinearDepthSources,
+    linearDepthSourceLoss: linearTrackSlotEditor.linearDepthSourceLoss,
+    runUndoable: history.runUndoable
   });
   // The Depth file rows, and the series that stay, after the removal of a
   // series: the removal writes them and its question reads them.
@@ -3204,12 +2671,6 @@ export const createAppSetup = () => {
       apply: (turnOffReaching) => removeLinearDepthTrack(drawing, index, turnOffReaching)
     }) ?? removeLinearDepthTrack(drawing, index);
   });
-  // Each drawing holds a series for each of its own mode's Depth sources. A
-  // new drawing holds its mode default's one series (`createDefaultAdv`,
-  // OV-1901); a drawing's Reset, which keeps the Depth files, fits the reset
-  // series to them (`resetDrawing`). Each Depth control fits its drawing
-  // itself; Load and History restore install the saved or captured series
-  // (OV-1164).
   const {
     clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
     askRingSourceRemoval, reconcileCircularConservation, setCircularConservationEnabled, refreshCircularConservationSlots

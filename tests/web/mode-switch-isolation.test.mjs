@@ -39,6 +39,7 @@ const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.
 const sliceWriterCalls = (source) => sliceHandleCalls(source, Object.keys(DRAWING_SLICES))
   .filter(({ callee }) => !SLICE_READERS.includes(callee)).map(({ callee }) => callee);
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+const DEPTH_TRACKS = readFileSync(new URL('../../gbdraw/web/js/app/depth-tracks.js', import.meta.url), 'utf8');
 const WATCHERS = readFileSync(new URL('../../gbdraw/web/js/app/watchers.js', import.meta.url), 'utf8');
 
 // Any port of the watcher owner: a function that does nothing.
@@ -151,15 +152,15 @@ test('the mode switch closes the label dialogs through the label owner\'s ports'
   assert.deepEqual({ ...state.hiddenLabelTextDialog }, dialog, 'the watcher owner does not write the dialog');
 });
 
-// The body of a `const <name> = (...) => { ... };` in app-setup.js.
-const functionBody = (name) => {
-  const start = APP_SETUP.indexOf(`const ${name} = `);
+// The body of a `const <name> = (...) => { ... };` in app-setup.js, or in `source`.
+const functionBody = (name, source = APP_SETUP) => {
+  const start = source.indexOf(`const ${name} = `);
   assert.ok(start >= 0, `${name} exists`);
-  const open = APP_SETUP.indexOf('{', APP_SETUP.indexOf('=>', start));
+  const open = source.indexOf('{', source.indexOf('=>', start));
   let depth = 0;
-  for (let index = open; index < APP_SETUP.length; index += 1) {
-    if (APP_SETUP[index] === '{') depth += 1;
-    if (APP_SETUP[index] === '}' && --depth === 0) return APP_SETUP.slice(open, index + 1);
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}' && --depth === 0) return source.slice(open, index + 1);
   }
   throw new Error(`${name} has no end`);
 };
@@ -227,7 +228,7 @@ test('no watcher of an app module writes a drawing (A2: settings watchers)', () 
 test('the Depth panels read the drawing series and never write them (OV-109)', () => {
   for (const name of ['rowsForDepthTrackCount', 'circularDepthTrackRows', 'linearDepthTrackRows', 'depthTrackRows',
     'readDepthTrackConfig', 'getDepthTrackLabel', 'getDepthTrackColor']) {
-    const body = functionBody(name);
+    const body = functionBody(name, DEPTH_TRACKS);
     assert.doesNotMatch(body, /ensureDepthTrack|depth_tracks\s*=(?!=)|depth_tracks\.(splice|push)\(/, `${name} writes the series`);
   }
 });

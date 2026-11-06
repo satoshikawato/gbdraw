@@ -214,7 +214,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
 
 def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
     index = read_english_index(WEB_INDEX)
-    app_setup = (WEB_INDEX.parent / "js" / "app" / "app-setup.js").read_text(
+    depth_tracks = (WEB_INDEX.parent / "js" / "app" / "depth-tracks.js").read_text(
         encoding="utf-8"
     )
 
@@ -233,7 +233,7 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
     assert 'class="linear-secondary-summary"' in index
     assert 'label="GenBank / DDBJ File"' in index
     assert '{{ linearSourceDepthSummary(source) }}' in index
-    assert "if (attachedCount === 0) return t('No depth track attached');" in app_setup
+    assert "if (attachedCount === 0) return t('No depth track attached');" in depth_tracks
     assert 'Attached to all records' in index
     assert 'Requires at least 2 loaded sequences to compare' in index
     assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' not in index
