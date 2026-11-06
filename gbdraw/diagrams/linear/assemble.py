@@ -11,7 +11,12 @@ from __future__ import annotations
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
 from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
-from ...render.track_slot_metadata import RecordAxisInput, linear_axis_geometry
+from ...render.track_slot_metadata import (
+    RecordAxisInput,
+    attach_feature_placement_targets,
+    attach_track_slot_geometry,
+    linear_axis_geometry,
+)
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -52,14 +57,12 @@ from ...configurators import (
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
-    LegendMeasurement,
 )
 from ...configurators.bundle import DiagramConfigurators
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
-    CANVAS_SCOPE,
     GroupContent,
     GroupKey,
     GroupKind,
@@ -92,7 +95,6 @@ from ...legend.table import (
     LegendTable,
     PairwiseIdentityLegend,
     apply_legend_row_edits,
-    draws_legend,
     pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -111,11 +113,7 @@ from ...layout.linear import (
 )
 from ...layout.composition import (
     CompositionInputs,
-    CompositionItem,
-    CompositionRequest,
-    CompositionSpacing,
     LegendPlacement,
-    plan_composition,
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...layout.linear import union_vertical_bands
@@ -207,7 +205,7 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.composition import apply_composition_plan
+from ...render.composition import CompositionPrimary, compose_drawing, place_legend, place_title
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
@@ -2432,7 +2430,7 @@ class _LinearTrackPlan:
 
     user_slot_mode: bool
     label_font_size: float
-    resolved_feature_slot: NormalizedLinearTrackSlot | None
+    feature_placement_slot: FeaturePlacementSlot | None
     record_feature_layers: list[FeatureBuildResult]
     record_feature_dicts: list[FeatureDict]
     feature_dom_index: LinearFeatureDomIndex
@@ -2467,16 +2465,17 @@ def _linear_track_plan(
         (slot for slot in slot_plan.normalized_linear_track_slots if slot.renderer == "features"),
         None,
     )
+    feature_placement_slot = (
+        _linear_feature_placement_slot(resolved_feature_slot.side, profile.strandedness)
+        if resolved_feature_slot is not None
+        else None
+    )
     record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
         profile,
         record_transforms=record_transforms,
-        placement_slot=(
-            _linear_feature_placement_slot(resolved_feature_slot.side, profile.strandedness)
-            if resolved_feature_slot is not None
-            else None
-        ),
+        placement_slot=feature_placement_slot,
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
@@ -2550,7 +2549,7 @@ def _linear_track_plan(
     return _LinearTrackPlan(
         user_slot_mode=track_inputs.linear_track_slots is not None,
         label_font_size=label_font_size,
-        resolved_feature_slot=resolved_feature_slot,
+        feature_placement_slot=feature_placement_slot,
         record_feature_layers=record_feature_layers,
         record_feature_dicts=record_feature_dicts,
         feature_dom_index=feature_dom_index,
@@ -4057,76 +4056,23 @@ def _compose_linear_canvas(
     """Draw the legend (stage ``legend_content``) and the title, plan where they and the records go (stage
     ``composition_plan``) and move them there."""
 
-    legend_table = legend.table
-    legend_measurement: LegendMeasurement | None = None
-    legend_target: Group | None = None
-    if canvas_config.legend_position != "none":
-        legend_measurement = measure_legend(
-            configurators.legend,
-            legend_table,
-            placement=canvas_config.legend_position,
-            wrap_width=primary.source_bounds.width,
-        )
-        # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
-        if draws_legend(legend_table):
-            legend_target = place_content(
-                canvas,
-                render_stage(
-                    "legend_content", linear_legend_content, legend_measurement, legend_table
-                ),
-                GroupKey(CANVAS_SCOPE, GroupKind.LEGEND),
-            )
-            canvas.add(legend_target)
-
-    title_content = composition.title_content
-    title_target = (
-        place_content(canvas, title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE))
-        if title_content is not None
-        else None
-    )
-    if title_target is not None:
-        canvas.add(title_target)
-
     legend_placement = LegendPlacement(str(canvas_config.legend_position))
-    title_placement = composition.title_placement
-    legend_drawn = legend_measurement if legend_target is not None else None
-    composition_plan = render_stage(
-        "composition_plan",
-        plan_composition,
-        CompositionRequest(
-            primary=CompositionItem("primary", primary.source_bounds),
-            legend=(
-                CompositionItem("legend", legend_drawn.local_bounds)
-                if legend_drawn is not None
-                else None
-            ),
-            title=(
-                CompositionItem("title", title_content.local_bounds)
-                if title_target is not None
-                and title_content is not None
-                and title_content.local_bounds is not None
-                else None
-            ),
-            legend_placement=legend_placement,
-            title_placement=title_placement,
-            spacing=CompositionSpacing(canvas_padding_px=composition.canvas_padding),
-            requested_width_px=composition.requested_size.width_px,
-            requested_height_px=composition.requested_size.height_px,
-        ),
+    legend_measurement = measure_legend(
+        configurators.legend,
+        legend.table,
+        placement=canvas_config.legend_position,
+        wrap_width=primary.source_bounds.width,
     )
-    apply_composition_plan(
+    placed_legend = place_legend(canvas, linear_legend_content, legend_placement, legend_measurement, legend.table)
+    title_target = place_title(canvas, composition)
+    return compose_drawing(
         canvas,
-        composition_plan,
-        primary_targets=primary.targets,
-        legend_target=legend_target,
-        legend_side=legend_placement,
-        legend_reflow_metrics=legend_drawn.reflow_metrics if legend_drawn is not None else None,
-        legend_local_bounds=legend_drawn.local_bounds if legend_drawn is not None else None,
-        title_target=title_target,
-        title_side=title_placement,
-        length_bar_local_bounds=primary.length_bar_bounds,
+        composition,
+        CompositionPrimary(primary.source_bounds, primary.targets, length_bar_bounds=primary.length_bar_bounds),
+        legend_placement,
+        placed_legend,
+        title_target,
     )
-    return composition_plan
 
 
 def _attach_linear_facts(
@@ -4145,34 +4091,25 @@ def _attach_linear_facts(
     if primary_placement is None:  # pragma: no cover - primary is required
         raise RuntimeError("linear composition has no primary placement")
     placements = plan.placements
-    resolved_feature_slot = plan.tracks.resolved_feature_slot
-    setattr(
-        canvas,
-        "_gbdraw_track_slot_geometry",
-        _serialize_linear_track_slot_geometry(
-            record_axes=RecordAxisInput.of_records(
-                record_inputs.records, plan.frame.record_keys,
-                bind_record_transforms(record_inputs.records, record_inputs.record_transforms),
-            ),
-            layout=plan.tracks.linear_track_layout,
-            record_plans=plan.vertical.record_vertical_plans,
-            record_offsets=[
-                float(placements.record_placements[index].axis_y) + primary_placement.dy
-                for index in range(len(record_inputs.records))
-            ],
-            record_placements=placements.record_placements,
-            composition_offset_x=primary_placement.dx,
-            horizontal_offset_x=float(canvas_config.horizontal_offset),
-            record_collision_bands=plan.stacking.record_collision_bands,
-            boundary_gap_resolutions=plan.stacking.boundary_gap_resolutions,
+    track_slot_geometry = _serialize_linear_track_slot_geometry(
+        record_axes=RecordAxisInput.of_records(
+            record_inputs.records, plan.frame.record_keys,
+            bind_record_transforms(record_inputs.records, record_inputs.record_transforms),
         ),
+        layout=plan.tracks.linear_track_layout,
+        record_plans=plan.vertical.record_vertical_plans,
+        record_offsets=[
+            float(placements.record_placements[index].axis_y) + primary_placement.dy
+            for index in range(len(record_inputs.records))
+        ],
+        record_placements=placements.record_placements,
+        composition_offset_x=primary_placement.dx,
+        horizontal_offset_x=float(canvas_config.horizontal_offset),
+        record_collision_bands=plan.stacking.record_collision_bands,
+        boundary_gap_resolutions=plan.stacking.boundary_gap_resolutions,
     )
-    if resolved_feature_slot is not None:
-        targets = _linear_feature_placement_slot(
-            resolved_feature_slot.side, canvas_config.profile.strandedness
-        ).supported_targets()
-        for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
-            record_geometry["featurePlacementTargets"] = targets
+    attach_feature_placement_targets(track_slot_geometry["records"], plan.tracks.feature_placement_slot)
+    attach_track_slot_geometry(canvas, track_slot_geometry)
     attach_legend_row_facts(
         canvas,
         LegendRowFacts(
@@ -4190,8 +4127,6 @@ def _attach_linear_facts(
     setattr(canvas, "_gbdraw_record_translations", tuple(
         (str(key), x, y) for key, (x, y) in zip(plan.frame.record_keys, plan.horizontal.final_translations, strict=True)
     ))
-    setattr(canvas, "_gbdraw_linear_source_content_bounds", primary.source_bounds)
-    setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", plan.comparisons.rows.record_id_warnings)
     setattr(canvas, "_gbdraw_comparison_tallies", plan.comparisons.rows.tallies)
     setattr(canvas, LINEAR_LABEL_FIT_ATTR, label_fit)

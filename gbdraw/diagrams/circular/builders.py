@@ -18,13 +18,11 @@ from ...analysis.conservation import ConservationTrack
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularRecordRenderContext
-from ...legend.table import LegendTable
 from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
-    LegendMeasurement,
 )
 from ...render.groups.circular import (
     AxisGroup,
@@ -39,18 +37,15 @@ from ...render.groups.circular import (
     TickGroup,
 )
 from ...render.group_content import (
-    CANVAS_SCOPE,
     BuildsGroup,
     GroupContent,
     GroupKey,
-    GroupKind,
     build_group_content,
     place_content,
 )
 from ...render_stages import render_stage
 from ...svg.ids import stable_svg_id
 from ...render.groups.circular.definition import DefinitionNameLines, definition_record_facts
-from ...render.groups.circular.legend import circular_legend_content
 from .positioning import (
     center_group_on_canvas,
     place_definition_group_on_canvas,
@@ -514,27 +509,6 @@ def add_labels_group_on_canvas(
     return canvas
 
 
-def add_legend_group_on_canvas(
-    canvas: Drawing,
-    legend_measurement: LegendMeasurement,
-    legend_table: LegendTable,
-) -> Drawing:
-    """
-    Adds the legend group to the canvas.
-
-    Parameters:
-    canvas (Drawing): The SVG drawing canvas.
-    legend_measurement: Immutable measurement for the legend.
-    legend_table: The legend table data.
-
-    Returns:
-    Drawing: The updated SVG drawing with the legend group added.
-    """
-    content = render_stage("legend_content", circular_legend_content, legend_measurement, legend_table)
-    canvas.add(place_content(canvas, content, GroupKey(CANVAS_SCOPE, GroupKind.LEGEND)))
-    return canvas
-
-
 __all__ = [
     "add_depth_group_on_canvas",
     "add_gc_skew_group_on_canvas",
@@ -544,5 +518,4 @@ __all__ = [
     "add_axis_group_on_canvas",
     "add_tick_group_on_canvas",
     "add_labels_group_on_canvas",
-    "add_legend_group_on_canvas",
 ]

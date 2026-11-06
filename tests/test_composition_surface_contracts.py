@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 import pytest
 
 import gbdraw.render.export as export_module
+import gbdraw.render.composition as render_composition
 from gbdraw.api import (
     CircularDiagramOptions,
     CircularDiagramRequest,
@@ -431,7 +432,7 @@ def test_legend_reflow_carries_the_exact_python_layout_inputs(
 
     for module in (circular_assemble, linear_assemble, api_diagram):
         monkeypatch.setattr(module, "measure_legend", spy_measure_legend)
-        monkeypatch.setattr(module, "plan_composition", spy_plan_composition)
+    monkeypatch.setattr(render_composition, "plan_composition", spy_plan_composition)
 
     request = _request(mode, legend=legend, title_position="bottom")
     if record_count > 1:

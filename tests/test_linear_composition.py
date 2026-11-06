@@ -20,6 +20,7 @@ from gbdraw.layout.composition import LegendPlacement, TitlePlacement
 from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.render.groups.linear.plot_title import plot_title_content
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+from gbdraw.render.composition import applied_composition_plan
 
 
 _TRANSLATE_RE = re.compile(
@@ -105,7 +106,7 @@ def test_linear_composition_uses_exact_dock_gap_and_orthogonal_center(
     side: LegendPlacement,
 ) -> None:
     drawing = _assemble(legend=side.value)
-    plan = drawing._gbdraw_linear_composition_plan
+    plan = applied_composition_plan(drawing)
     primary = plan.primary_bounds
     legend = plan.placement_for("legend")
 
@@ -176,7 +177,7 @@ def test_linear_title_uses_shared_gap_or_center_overlay(
     side: TitlePlacement,
 ) -> None:
     drawing = _assemble(title="Linear composition", title_position=side.value)
-    plan = drawing._gbdraw_linear_composition_plan
+    plan = applied_composition_plan(drawing)
     primary = plan.primary_bounds
     title = plan.placement_for("title")
 
@@ -197,7 +198,7 @@ def test_a_linear_title_that_paints_nothing_draws_no_title(title: str) -> None:
     as Circular does since OV-1837, instead of failing the composition."""
     drawing = _assemble(title=title, title_position="top")
     root = ET.fromstring(drawing.tostring())
-    assert drawing._gbdraw_linear_composition_plan.placement_for("title") is None
+    assert applied_composition_plan(drawing).placement_for("title") is None
     assert not [
         element
         for element in root.iter()
@@ -215,7 +216,7 @@ def test_linear_same_side_legend_is_nearest_plot_and_title_is_outward(
         title="Linear composition",
         title_position=side,
     )
-    plan = drawing._gbdraw_linear_composition_plan
+    plan = applied_composition_plan(drawing)
     primary = plan.primary_bounds
     legend = plan.placement_for("legend")
     title = plan.placement_for("title")
@@ -251,7 +252,7 @@ def test_linear_legend_side_does_not_change_record_local_geometry() -> None:
         assert len(translations) >= 2
         snapshots.append(
             (
-                drawing._gbdraw_linear_source_content_bounds,
+                applied_composition_plan(drawing).primary_local_bounds,
                 translations[1:],
                 paths,
             )
@@ -276,16 +277,12 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
             multi_record_positions=("#1@1", "#2@2"),
         ),
     )
-    plan = drawing._gbdraw_linear_composition_plan
+    plan = applied_composition_plan(drawing)
     primary = plan.placement_for("primary")
     root = ET.fromstring(drawing.tostring())
     geometry = drawing._gbdraw_track_slot_geometry["records"]
 
     assert primary is not None
-    assert plan.primary_bounds == drawing._gbdraw_linear_source_content_bounds.translated(
-        primary.dx,
-        primary.dy,
-    )
     for record_payload in geometry:
         record_group = _record_group(root, record_payload["recordId"])
         translations = _translations(record_group)

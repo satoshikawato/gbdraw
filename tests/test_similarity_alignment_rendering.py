@@ -59,6 +59,7 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.render.composition import applied_composition_plan
 
 
 def _record(
@@ -485,7 +486,7 @@ def test_final_placements_align_anchors_and_bounds_do_not_clip(
         + centers[index] * item["sequenceWidthPx"] / len(prepared.records[index])
         for index, item in enumerate(geometry)
     ]
-    composition = prepared.drawing._gbdraw_linear_composition_plan
+    composition = applied_composition_plan(prepared.drawing)
     primary = composition.placement_for("primary").final_bounds
 
     assert world_centers[0] == pytest.approx(world_centers[1])
@@ -671,15 +672,15 @@ def test_final_translation_is_shared_by_every_record_geometry_consumer() -> None
 
     for drawing, target in zip((base, aligned), targets, strict=True):
         record_geometry = drawing._gbdraw_track_slot_geometry["records"][1]
-        primary = drawing._gbdraw_linear_composition_plan.placement_for("primary")
+        primary = applied_composition_plan(drawing).placement_for("primary")
         assert primary is not None
         assert record_geometry["axisYpx"] - primary.dy == pytest.approx(
             target[0][1]
         )
     base_axis = base._gbdraw_track_slot_geometry["records"][1]["axisXpx"]
     aligned_axis = aligned._gbdraw_track_slot_geometry["records"][1]["axisXpx"]
-    base_primary = base._gbdraw_linear_composition_plan.placement_for("primary")
-    aligned_primary = aligned._gbdraw_linear_composition_plan.placement_for("primary")
+    base_primary = applied_composition_plan(base).placement_for("primary")
+    aligned_primary = applied_composition_plan(aligned).placement_for("primary")
     assert base_primary is not None and aligned_primary is not None
     assert (aligned_axis - aligned_primary.dx) - (
         base_axis - base_primary.dx

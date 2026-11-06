@@ -7,6 +7,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 
 from gbdraw.diagrams.circular.assemble import (
+    circular_track_slot_geometry,
     _CircularPlotAssembly,
     _compose_circular_plot,
 )
@@ -18,6 +19,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
 )
 from gbdraw.layout.spatial import Aabb, union_aabbs
+from gbdraw.render.composition import PlacedLegend
 from gbdraw.render.group_content import ContentGroup, GroupContent
 
 
@@ -56,6 +58,17 @@ def _plot(
         legend_target = Group(id="legend-target")
         drawing.add(legend_target)
 
+    legend_measurement = SimpleNamespace(
+        local_bounds=legend_bounds or Aabb(0.0, 0.0, 0.0, 0.0),
+        reflow_metrics={
+            "colorRectSize": 24.0,
+            "fontFile": "LiberationSans-Regular",
+            "fontSize": 16.0,
+            "lineHeight": 24.0 * (24.0 / 14.0),
+            "textXOffset": 24.0 * (22.0 / 14.0),
+            "wrapWidth": 400.0,
+        },
+    )
     canvas_config = SimpleNamespace(
         legend_position=legend_placement.value,
         total_width=1000.0,
@@ -69,23 +82,14 @@ def _plot(
         _CircularPlotAssembly(
             drawing=drawing,
             canvas_config=canvas_config,
-            legend_measurement=SimpleNamespace(
-                local_bounds=legend_bounds or Aabb(0.0, 0.0, 0.0, 0.0),
-                reflow_metrics={
-                    "colorRectSize": 24.0,
-                    "fontFile": "LiberationSans-Regular",
-                    "fontSize": 16.0,
-                    "lineHeight": 24.0 * (24.0 / 14.0),
-                    "textXOffset": 24.0 * (22.0 / 14.0),
-                    "wrapWidth": 400.0,
-                },
-            ),
+            legend_measurement=legend_measurement,
             legend_table={},
             source_content_bounds=Aabb(100.0, 200.0, 500.0, 600.0),
             source_overlay_obstacles=(),
             primary_targets=(primary_target,),
-            legend_target=legend_target,
-            track_slot_geometry={"slots": ()},
+            legend_placement=legend_placement,
+            legend=PlacedLegend(legend_target, legend_measurement) if legend_target is not None else None,
+            track_slot_geometry=circular_track_slot_geometry([]),
             label_layout=None,
         ),
         primary_target,
@@ -165,7 +169,7 @@ def test_circular_composition_omits_empty_legend_and_places_title_once() -> None
     assert isinstance(title_target, ContentGroup)
     assert title_target.content is title_content
 
-    assert result.legend_target is None
+    assert result.legend is None
     assert result.composition_plan.placement_for("legend") is None
     title_placement = result.composition_plan.placement_for("title")
     assert title_placement is not None

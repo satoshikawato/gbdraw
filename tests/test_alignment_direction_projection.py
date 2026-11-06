@@ -23,6 +23,7 @@ from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
+from gbdraw.render.composition import applied_composition_plan
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -158,13 +159,13 @@ def test_compound_crop_center_reference_fixed_all_y_and_idempotence(fixture):
     # projection; composition fitting is explicitly outside the logical frame.
     old_ref_x = (
         before_drawing._gbdraw_track_slot_geometry['records'][0]['axisXpx']
-        - before_drawing._gbdraw_linear_composition_plan.placement_for('primary').dx
+        - applied_composition_plan(before_drawing).placement_for('primary').dx
         + before_centers[0] * before_geometry[0].px_per_bp
     )
     assert result['reference']['beforeX'] == pytest.approx(old_ref_x)
     rendered_ref_x = (
         after_drawing._gbdraw_track_slot_geometry['records'][0]['axisXpx']
-        - after_drawing._gbdraw_linear_composition_plan.placement_for('primary').dx
+        - applied_composition_plan(after_drawing).placement_for('primary').dx
         + after_centers[0] * after_geometry[0].px_per_bp
     )
     assert rendered_ref_x == pytest.approx(old_ref_x)
