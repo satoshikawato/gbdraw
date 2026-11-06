@@ -795,6 +795,26 @@
           "kind": "count"
         }
       ]
+    },
+    {
+      "id": "COVERAGE-FLOOR",
+      "heading": "Line coverage",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_coverage_floor.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_coverage_floor.py",
+          "symbol": "MAX_UNCOVERED_PERCENT",
+          "kind": "py-count"
+        }
+      ]
     }
   ]
 }
