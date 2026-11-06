@@ -399,21 +399,32 @@ def _select_record_depths(record: SeqRecord, coverage: DepthCoverage) -> DepthAr
     )
 
 
-def _record_coverage(record: SeqRecord, depths: DepthArray, record_len: int) -> NDArray[np.float64]:
-    """The depth at each local base of the record, through its coordinate map.
+def _record_prefix_sums(record: SeqRecord, depths: DepthArray, record_len: int) -> NDArray[np.float64]:
+    """Running sums of the depth at each local base of the record, after a leading 0.
 
     The record shows source positions ``start .. start + record_len - 1``,
-    read backwards for a reverse complement.
+    read backwards for a reverse complement. The sums are those of the
+    record's per-base float64 depths, without holding that array: bases
+    outside the parsed positions add 0.
     """
 
     source_start = _record_source_start(record)
     _coord_base, coord_step = _read_coord_map(record)
-    coverage = np.zeros(record_len, dtype=np.float64)
+    prefix = np.zeros(record_len + 1, dtype=np.float64)
     first = max(source_start, 1)
     last = min(source_start + record_len - 1, int(depths.size))
-    if first <= last:
-        coverage[first - source_start : last - source_start + 1] = depths[first - 1 : last]
-    return coverage if coord_step > 0 else coverage[::-1]
+    if first > last:
+        return prefix
+    shown = depths[first - 1 : last]
+    if coord_step > 0:
+        low = first - source_start
+    else:
+        shown = shown[::-1]
+        low = source_start + record_len - 1 - last
+    high = low + int(shown.size)
+    np.cumsum(shown, dtype=np.float64, out=prefix[low + 1 : high + 1])
+    prefix[high + 1 :] = prefix[high]
+    return prefix
 
 
 def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> None:
@@ -455,8 +466,7 @@ def depth_df(
     if record_len <= 0:
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
-    coverage = _record_coverage(record, _select_record_depths(record, coverage_source), record_len)
-    prefix = np.concatenate(([0.0], np.cumsum(coverage)))
+    prefix = _record_prefix_sums(record, _select_record_depths(record, coverage_source), record_len)
     starts = np.arange(0, record_len, int(step), dtype=np.int64)
     ends = np.minimum(starts + int(window), record_len)
     bin_lengths = np.maximum(ends - starts, 1)

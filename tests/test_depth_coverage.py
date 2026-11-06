@@ -191,11 +191,8 @@ def test_binned_depth_equals_the_row_table_algorithm(seed: int, tmp_path: Path, 
         binning = _binning(rng)
         args = (binning["window"], binning["step"])
         kwargs = {key: binning[key] for key in ("normalize", "min_depth", "max_depth")}
-        table = _reference_parse(path)
-
-        expected = _outcome(lambda: _reference_depth_df(record, table, *args, **kwargs))
-        parsed = parse_depth_tsv(str(path))
-        _assert_same(_outcome(lambda: depth_df(record, parsed, *args, **kwargs)), expected)
+        expected = _outcome(lambda: _reference_depth_df(record, _reference_parse(path), *args, **kwargs))
+        _assert_same(_outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), *args, **kwargs)), expected)
         _assert_same(_outcome(lambda: depth_df(record, read_depth_tsv(str(path)), *args, **kwargs)), expected)
 
 
