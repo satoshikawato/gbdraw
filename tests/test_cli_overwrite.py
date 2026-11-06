@@ -928,6 +928,12 @@ def test_saved_cli_invocation_does_not_persist_overwrite_permission() -> None:
     ) == ["--gbk", "input.gb"]
 
 
+def test_saved_cli_invocation_does_not_persist_the_png_dpi() -> None:
+    assert strip_session_output_args(
+        ["--gbk", "input.gb", "--dpi", "150", "-f", "png", "--dpi=150", "--save_session"]
+    ) == ["--gbk", "input.gb", "-f", "png"]
+
+
 def test_web_render_isolates_ephemeral_outputs_without_overwrite_permission() -> None:
     worker_path = (
         Path(__file__).resolve().parents[1]

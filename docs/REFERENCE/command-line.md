@@ -374,7 +374,7 @@ selection are unsupported.
 `--save_session` writes `<output>.gbdraw-session.json`;
 `--session_output PATH` selects a `.json` or `.json.gz` path and implies save.
 With `--session`, only output and format overrides, session-output options,
-`--font_file`, `--no_font_embedding`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
+`--font_file`, `--no_font_embedding`, `--dpi`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings.
 
 A Session holds one or more drawings, one per diagram. Session 51 lists them in

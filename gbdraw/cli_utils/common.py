@@ -193,6 +193,19 @@ def _add_format_arg(parser: argparse.ArgumentParser) -> None:
         default="svg")
 
 
+def add_dpi_arg(parser: argparse.ArgumentParser) -> None:
+    """``--dpi``, the one definition for the diagram commands, ``gbdraw render`` and the ``--session`` replays."""
+
+    parser.add_argument(
+        '--dpi',
+        help=(
+            'PNG resolution in pixels per inch (positive integer; default: 96, one pixel per SVG pixel). '
+            'PNG only. The PNG also states it in its pHYs chunk.'
+        ),
+        type=parse_positive_int,
+    )
+
+
 def _add_figure_size_args(parser: argparse.ArgumentParser) -> None:
     """``--figure_width``, ``--figure_height`` and ``--dpi``, the same for both diagram commands."""
 
@@ -207,11 +220,7 @@ def _add_figure_size_args(parser: argparse.ArgumentParser) -> None:
             type=argparse_figure_length,
             metavar='LENGTH|auto',
         )
-    parser.add_argument(
-        '--dpi',
-        help='PNG resolution in pixels per inch (positive integer; default: 96, one pixel per SVG pixel). PNG only.',
-        type=parse_positive_int,
-    )
+    add_dpi_arg(parser)
     parser.add_argument(
         '--canvas_padding',
         help=(
@@ -340,12 +349,12 @@ def legend_row_overrides(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def png_dpi(args: argparse.Namespace, formats: Sequence[str]) -> int | None:
-    """``--dpi``, with a warning when no PNG is written."""
+def png_dpi(dpi: int | None, formats: Sequence[str]) -> int | None:
+    """``--dpi``, with a warning when none of ``formats`` is a PNG."""
 
-    if args.dpi is not None and "png" not in formats:
+    if dpi is not None and "png" not in formats:
         logger.warning("WARNING: --dpi applies to PNG output only; no PNG is written (-f).")
-    return args.dpi
+    return dpi
 
 
 def _add_overwrite_arg(parser: argparse.ArgumentParser) -> None:

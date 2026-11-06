@@ -51,6 +51,7 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
+from tests.utils.png_chunks import png_phys, png_size
 from tests.utils.session_drawing_view import drawing_view, session_view
 from tests.utils.two_mode_session import two_mode_session
 
@@ -267,7 +268,9 @@ def test_a_session_without_a_committed_render_cannot_render(tmp_path: Path) -> N
     assert _svgs(tmp_path) == []
 
 
-def test_render_replays_a_session_27_30_with_its_mode(tmp_path: Path) -> None:
+def _legacy_session_27_30(tmp_path: Path, *extra_args: str) -> Path:
+    """A Session 30 of one Linear drawing, drawn from its CLI arguments (``extra_args`` are stored too)."""
+
     source_path = tmp_path / "legacy.gb"
     SeqIO.write(
         SeqRecord(Seq("ATGCGCAT"), id="legacy", annotations={"molecule_type": "DNA"}),
@@ -287,7 +290,7 @@ def test_render_replays_a_session_27_30_with_its_mode(tmp_path: Path) -> None:
         }}]},
         "cliInvocation": {
             "schema": 1, "mode": "linear",
-            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew"],
+            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew", *extra_args],
             "renderFormats": ["svg"],
             "fileBindings": [{"argIndex": 1, "slot": "files.linearSeqs[0].gb", "name": source_path.name}],
             "generatedBy": "gbdraw",
@@ -295,6 +298,11 @@ def test_render_replays_a_session_27_30_with_its_mode(tmp_path: Path) -> None:
     }
     path = tmp_path / "legacy.gbdraw-session.json"
     path.write_text(json.dumps(session), encoding="utf-8")
+    return path
+
+
+def test_render_replays_a_session_27_30_with_its_mode(tmp_path: Path) -> None:
+    path = _legacy_session_27_30(tmp_path)
 
     with pytest.raises(ValidationError, match="no drawing 'circular'"):
         render_main(["--session", str(path), "--drawing", "circular"])
@@ -1164,3 +1172,86 @@ def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_draw
         resaved = load_session_document(output)
         assert resaved.version == CURRENT_SESSION_VERSION
         assert _losat_entries(resaved) == expected, name
+
+
+def _png_at_dpi(
+    run: Any, tmp_path: Path, dpi: int = 300
+) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int, int] | None]:
+    """The PNG a Session command writes at 96 dpi and with ``--dpi``: both sizes and the second one's pHYs."""
+
+    run("-o", str(tmp_path / "plain"), "-f", "png")
+    run("-o", str(tmp_path / "dense"), "-f", "png", "--dpi", str(dpi))
+    plain = (tmp_path / "plain.png").read_bytes()
+    dense = (tmp_path / "dense.png").read_bytes()
+    assert png_phys(plain) == (3780, 3780, 1)
+    return png_size(plain), png_size(dense), png_phys(dense)
+
+
+@pytest.mark.parametrize(
+    ("mode", "arguments"),
+    [
+        ("render", ("--drawing", "circular")),
+        ("circular", ("--drawing", "circular")),
+        ("linear", ("--drawing", "linear")),
+    ],
+)
+def test_a_session_command_draws_its_png_at_the_dpi_it_is_given(
+    two_drawings: Path, tmp_path: Path, mode: str, arguments: tuple[str, ...]
+) -> None:
+    pytest.importorskip("cairosvg")
+    entry = {"render": render_main, "circular": circular_main, "linear": linear_main}[mode]
+
+    def run(*options: str) -> None:
+        entry(["--session", str(two_drawings), *arguments, *options])
+
+    plain, dense, phys = _png_at_dpi(run, tmp_path)
+    assert dense[0] == pytest.approx(plain[0] * 300 / 96, abs=4)
+    assert dense[1] == pytest.approx(plain[1] * 300 / 96, abs=4)
+    assert phys == (11811, 11811, 1)
+
+
+def test_a_session_27_30_replay_draws_its_png_at_the_dpi_it_is_given(tmp_path: Path) -> None:
+    pytest.importorskip("cairosvg")
+    path = _legacy_session_27_30(tmp_path)
+
+    def run(*options: str) -> None:
+        render_main(["--session", str(path), *options])
+
+    # The 8 bp figure is 25,000 px wide: 300 dpi is over the PNG limit.
+    plain, dense, phys = _png_at_dpi(run, tmp_path, dpi=120)
+    assert dense[0] == pytest.approx(plain[0] * 120 / 96, abs=2)
+    assert phys == (4724, 4724, 1)
+
+
+def test_a_session_dpi_without_a_png_is_noted_and_a_bad_one_refused(
+    two_drawings: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    render_main(["--session", str(two_drawings), "--drawing", "circular", "-o", str(tmp_path / "a"), "-f", "svg", "--dpi", "300"])
+    assert "--dpi applies to PNG output only" in caplog.text
+    with pytest.raises(SystemExit) as caught:
+        render_main(["--session", str(two_drawings), "-o", str(tmp_path / "b"), "--dpi", "0"])
+    assert caught.value.code == 2
+    with pytest.raises(SystemExit) as caught:
+        circular_main(["--session", str(two_drawings), "-o", str(tmp_path / "c"), "--dpi", "0"])
+    assert caught.value.code == 2
+    assert capsys.readouterr().err.count("must be a positive") == 2
+    assert _svgs(tmp_path) == ["a.svg"]
+
+
+def test_a_cli_session_records_no_dpi_and_a_replay_ignores_a_stored_one(tmp_path: Path) -> None:
+    """The DPI is the caller's export choice, like ``--font_file``: the Session holds none."""
+
+    pytest.importorskip("cairosvg")
+    saved = tmp_path / "saved.gbdraw-session.json"
+    circular_main(
+        ["--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"), "-o", str(tmp_path / "fresh"),
+         "-f", "png", "--dpi", "150", "--save_session", "--session_output", str(saved)]
+    )
+    assert png_phys((tmp_path / "fresh.png").read_bytes()) == (5906, 5906, 1)
+    document = saved.read_text(encoding="utf-8")
+    assert '"-f","png"' in document.replace(" ", "")  # the arguments are recorded; --dpi is not
+    assert "--dpi" not in document
+    # A Session 27-30 whose stored arguments hold --dpi (no released one does) still draws at 96 dpi.
+    legacy = _legacy_session_27_30(tmp_path, "--dpi", "200")
+    render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "png"])
+    assert png_phys((tmp_path / "legacy.png").read_bytes()) == (3780, 3780, 1)

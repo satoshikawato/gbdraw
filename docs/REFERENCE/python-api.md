@@ -201,7 +201,7 @@ New requests use these dotted paths. Retired flat label names and
 | `to_bytes(format="svg")` | SVG, interactive SVG, PNG, PDF, EPS, or PS bytes |
 | `save(path, *, format=None, overwrite=False, embed_fonts=True, dpi=None)` | writes exactly one file and returns its `Path` |
 
-`dpi` on `to_bytes()` and `save()` scales a PNG to `dpi / 96` pixels per SVG pixel (default: one).
+`dpi` on `to_bytes()` and `save()` scales a PNG to `dpi / 96` pixels per SVG pixel (default: one) and is the DPI in its pHYs chunk (default: 96).
 
 For static SVG, `to_svg()` equals
 `to_bytes("svg").decode("utf-8")`. `save(..., format="svg")` writes that same

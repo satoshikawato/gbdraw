@@ -103,6 +103,7 @@ from .cli_utils.common import (
     legend_row_overrides,
     handle_output_formats,
     png_dpi,
+    register_font_files,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -839,6 +840,7 @@ def replay_legacy_session(
             args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
+        args.dpi = session_request.dpi
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._allow_legacy_track_transport = True
@@ -879,6 +881,8 @@ def circular_main(cmd_args) -> None:
     """
     session_request = parse_session_pre_args(cmd_args, mode="circular")
     if session_request is not None:
+        # Before the Session is read, so its font names resolve to these files.
+        register_font_files(session_request.font_files)
         document = load_session_document(session_request.session_path)
         if not render_canonical_session_if_present(
             document,
@@ -890,7 +894,7 @@ def circular_main(cmd_args) -> None:
             save_session=session_request.save_session,
             session_output=session_request.session_output,
             embed_fonts=session_request.embed_fonts,
-            font_files=session_request.font_files,
+            dpi=session_request.dpi,
         ):
             if session_request.drawings:
                 document.drawing(session_request.drawings[0], mode="circular")
@@ -1310,7 +1314,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
-    dpi = png_dpi(args, out_formats)
+    dpi = png_dpi(args.dpi, out_formats)
     shortcut_geometry_requested = any(
         value is not None
         for value in (

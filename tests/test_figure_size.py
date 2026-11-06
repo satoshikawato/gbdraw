@@ -25,6 +25,7 @@ from gbdraw.layout.figure_size import MeasuredBase, fit_base_length
 from gbdraw.layout.composition import CompositionItem, CompositionRequest, LegendPlacement, plan_composition
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.composition import applied_composition_plan
+from tests.utils.png_chunks import PNG_SIGNATURE, png_chunks, png_phys
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 MM_180_PX = 180 * 96 / 25.4
@@ -939,6 +940,54 @@ def test_png_dpi_scales_the_pixels() -> None:
         round(view_box[2] * 300 / 96),
         round(view_box[3] * 300 / 96),
     )
+
+
+def test_a_png_carries_the_resolution_it_was_drawn_at() -> None:
+    """pHYs: pixels per metre of the requested DPI; 96 (one pixel per CSS pixel) without one."""
+
+    pytest.importorskip("cairosvg")
+    diagram = gbdraw.draw_linear(_mito())
+    assert png_phys(diagram.to_bytes("png")) == (3780, 3780, 1)
+    assert png_phys(diagram.to_bytes("png", dpi=300)) == (11811, 11811, 1)
+    assert png_phys(diagram.to_bytes("png", dpi=72.5)) == (2854, 2854, 1)
+
+
+def test_every_python_png_writer_carries_the_resolution(tmp_path) -> None:
+    pytest.importorskip("cairosvg")
+    from gbdraw.api import render_to_bytes, save_figure_to
+
+    canvas = gbdraw.draw_linear(_mito())._drawing
+    assert png_phys(render_to_bytes(canvas, "png", dpi=192)) == (7559, 7559, 1)
+    paths = save_figure_to(canvas, ["png"], output_dir=str(tmp_path), output_prefix="saved", dpi=300)
+    assert png_phys((tmp_path / "saved.png").read_bytes()) == (11811, 11811, 1)
+    assert [Path(path).name for path in paths] == ["saved.svg", "saved.png"]
+    save_figure_to(canvas, ["png"], output_dir=str(tmp_path), output_prefix="plain")
+    assert png_phys((tmp_path / "plain.png").read_bytes()) == (3780, 3780, 1)
+    gbdraw.draw_linear(_mito()).save(tmp_path / "diagram.png", dpi=96)
+    assert png_phys((tmp_path / "diagram.png").read_bytes()) == (3780, 3780, 1)
+
+
+def _bare_png(*chunks: tuple[bytes, bytes]) -> bytes:
+    body = b"".join(
+        struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+        for kind, data in chunks
+    )
+    return PNG_SIGNATURE + body
+
+
+def test_png_resolution_replaces_a_pHYs_chunk_and_inserts_one_before_the_first_idat() -> None:
+    from gbdraw.render.export import png_with_resolution
+
+    header = (b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+    idat = (b"IDAT", zlib.compress(b"\x00" * 14))
+    end = (b"IEND", b"")
+    inserted = png_with_resolution(_bare_png(header, idat, idat, end), 300)
+    assert [kind for kind, _data in png_chunks(inserted)] == [b"IHDR", b"pHYs", b"IDAT", b"IDAT", b"IEND"]
+    assert png_phys(inserted) == (11811, 11811, 1)
+    old = (b"pHYs", struct.pack(">IIB", 1, 2, 0))
+    replaced = png_with_resolution(_bare_png(header, old, idat, end), 96)
+    assert [kind for kind, _data in png_chunks(replaced)] == [b"IHDR", b"pHYs", b"IDAT", b"IEND"]
+    assert png_phys(replaced) == (3780, 3780, 1)
 
 
 def test_pdf_page_has_the_requested_width() -> None:
