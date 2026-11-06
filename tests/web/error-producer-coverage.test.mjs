@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import test from 'node:test';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
-import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
+import { compareCountBaseline, probeModule, reportLowerable } from './helpers/count-baseline.mjs';
 
 const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
 const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
@@ -101,10 +101,8 @@ const NATIVE_VALIDATION_BASELINE = { exactMessages: 75, patterns: 16 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async (t) => {
   const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');
-  // The module has no imports, so a copy can expose its private table size.
-  const probe = await import(`data:text/javascript,${encodeURIComponent(
-    `${source}\nexport const nativeValidationSize = NATIVE_VALIDATIONS.size;`
-  )}`);
+  // A copy of the module exposes its private table size.
+  const probe = await probeModule(new URL('utils/error-normalization.js', WEB_ROOT), 'export const nativeValidationSize = NATIVE_VALIDATIONS.size;');
   const body = source.slice(source.indexOf('const nativeValidation = '), source.indexOf('// The native track validator'));
   const actual = {
     exactMessages: probe.nativeValidationSize,

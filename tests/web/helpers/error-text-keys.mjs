@@ -1,10 +1,10 @@
 // The catalog keys of the user-facing error text (D-17). The wording owner,
 // gbdraw/web/js/utils/error-normalization.js, keeps its English in tables that
 // other tests read as text (`CODE: '…'`), so its values carry no msg()
-// marker. It has no imports, so a copy loaded as a data URL can return the
-// values of its private tables; every text of an error text part comes from
-// one of them (tests/web/error-text.test.mjs checks that).
-import { readFileSync } from 'node:fs';
+// marker. A copy loaded as a data URL can return the values of its private
+// tables; every text of an error text part comes from one of them
+// (tests/web/error-text.test.mjs checks that).
+import { probeModule } from './count-baseline.mjs';
 
 const SOURCE = new URL('../../../gbdraw/web/js/utils/error-normalization.js', import.meta.url);
 
@@ -27,7 +27,7 @@ export const errorVocabulary = {
   operations: Object.keys(OPERATION_TITLES), recoveries: Object.keys(RECOVERY_GUIDANCE)
 };`;
 
-const probe = () => import(`data:text/javascript,${encodeURIComponent(`${readFileSync(SOURCE, 'utf8')}\n${PROBE}`)}`);
+const probe = () => probeModule(SOURCE, PROBE);
 
 /**
  * The keys of each table of the wording owner.
