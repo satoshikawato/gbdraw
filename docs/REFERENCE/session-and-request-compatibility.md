@@ -54,7 +54,8 @@ along the region in place of its fill; Sequence search writes it for the gradien
 without one is written as before, without the key, and reads as no gradient.
 A set that Sequence search wrote has `keepHighlightOverlay: true`: its highlights are drawn in front of the
 feature track, covering the features, also with a custom track stack that names no slot for the set. Other sets are written as before,
-without the key.
+without the key. Each row Sequence search wrote has a `strand` (`"+"` or `"-"`, on the record's source): when the
+feature track separates the strands, the hit covers that strand's lane. Other rows are written as before, without it.
 gbdraw 0.14.5 reads Sessions up to 50 and so never meets these keys.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular

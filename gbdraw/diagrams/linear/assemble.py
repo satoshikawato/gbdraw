@@ -938,6 +938,7 @@ def _linear_slot_footprints_for_record(
                 data_available=bool(feature_dict or labels),
                 # Nominal lanes under underlay features are a body without lane features.
                 body_band=lanes if lanes.height > 0.0 else None,
+                strand_bands=feature_geometry.strand_lane_bands(),
             )
             continue
 
@@ -3707,6 +3708,9 @@ def _draw_linear_annotation_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
             str(slot_id) if slot.group_id is not None else None
         ),
         row_frames=linear_annotation_row_frames(drawing.vertical_plan, slot_id),
+        strand_bands={
+            strand: band.translate(-float(slot.resolved.origin_y)) for strand, band in slot.resolved.strand_bands.items()
+        },
     )
     annotation_group = place_content(
         canvas,

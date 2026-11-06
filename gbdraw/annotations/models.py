@@ -321,6 +321,9 @@ class RegionAnnotation:
     style: RegionAnnotationStyle | None = None
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
+    # The strand the region lies on, on the record's source (a sequence search's hit, PD-OI-116): on a feature
+    # track that separates the strands its highlight covers that strand's lane. None: no strand.
+    strand: Literal["+", "-"] | None = None
 
     def __post_init__(self) -> None:
         annotation_id = str(self.id).strip()
@@ -340,6 +343,10 @@ class RegionAnnotation:
             object.__setattr__(self, "lane", int(self.lane))
         if self.style is not None and not isinstance(self.style, RegionAnnotationStyle):
             raise ValidationError("Annotation style must be RegionAnnotationStyle or None.")
+        if self.strand not in {None, "+", "-"}:
+            raise ValidationError(
+                "Annotation strand must be '+', '-', or None.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"}
+            )
         metadata = {str(key): str(value) for key, value in dict(self.metadata or {}).items()}
         object.__setattr__(self, "id", annotation_id)
         object.__setattr__(self, "label", str(self.label or ""))
@@ -542,6 +549,17 @@ class ResolvedRegionAnnotation:
 
     # How the record's local axis runs on its source: -1 on a reverse-complemented record.
     source_step: Literal[-1, 1] = 1
+    # ``RegionAnnotation.strand``, on the record's source.
+    strand: Literal["+", "-"] | None = None
+
+    @property
+    def display_strand(self) -> Literal["+", "-"] | None:
+        """The strand the region lies on as the record is drawn: a reverse-complemented record draws its
+        source's plus strand as its minus strand, as it does its features."""
+
+        if self.strand is None or self.source_step == 1:
+            return self.strand
+        return "-" if self.strand == "+" else "+"
 
     def __post_init__(self) -> None:
         if self.crosses_origin and (len(self.segments) < 2 or not any(start == 0 for start, _end in self.segments)):

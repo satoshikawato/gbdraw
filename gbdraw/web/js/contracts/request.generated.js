@@ -203,6 +203,7 @@
  * @property {CanonicalRegionAnnotationStyle | null} style
  * @property {string | null} legendLabel
  * @property {Record<string, string>} metadata
+ * @property {'+' | '-' | null} [strand]
  */
 /**
  * @typedef {object} CanonicalAnnotationSet

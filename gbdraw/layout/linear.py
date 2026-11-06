@@ -468,6 +468,19 @@ class LinearFeatureLaneGeometry:
                 f"strand_pool={strand_pool!r}, track_id={resolved_track_id}"
             ) from None
 
+    def strand_lane_bands(self) -> Mapping[Literal["+", "-"], VerticalBand]:
+        """Where each strand's features lie when the lanes separate the strands: the band of the strand's first
+        lane (track 0 of the plus strand, -1 of the minus strand), stroke included. A strand without features there
+        has none; lanes that share the strands have neither."""
+
+        bands: dict[Literal["+", "-"], VerticalBand] = {}
+        lanes: tuple[tuple[Literal["+", "-"], tuple[str, int]], ...] = (("+", ("positive", 0)), ("-", ("negative", -1)))
+        for strand, identity in lanes:
+            lane = self._lanes_by_identity.get(identity)
+            if lane is not None:
+                bands[strand] = lane.band
+        return bands
+
 
 def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -> list[float]:
     """Legacy factor calculation used for backward-compatible 'middle' layout."""

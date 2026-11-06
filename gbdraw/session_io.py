@@ -4163,6 +4163,7 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
                     "style": None if item.get("style") is None else _draft_annotation_style(item.get("style")),
                     "legendLabel": None if item.get("legendLabel") is None else _js_string(item.get("legendLabel")),
                     "metadata": _json_clone(metadata) if isinstance(metadata, Mapping) else {},
+                    **({"strand": item["strand"]} if item.get("strand") in {"+", "-"} else {}),
                 }
             )
         result.append(

@@ -104,7 +104,7 @@ const searchSet = (id) => createAnnotationSet({
   id,
   defaultStyle: { fill: '#c8607e', stroke: '#c8607e', fillOpacity: 0.85 },
   annotations: [{
-    id: 'q1#1', label: '', mark: 'highlight', lane: null, legendLabel: 'q1', style: null,
+    id: 'q1#1', label: '', mark: 'highlight', lane: null, legendLabel: 'q1', style: null, strand: '-',
     target: { kind: 'coordinateSpan', record: { kind: 'recordId', value: 'LIVE1' }, start: 5, end: 20, coordinateSpace: 'source' },
     metadata: { query: 'q1', program: 'blastn', identity: 100, alignment_length: 16, evalue: 1e-5, bitscore: 30 }
   }]
@@ -128,6 +128,8 @@ for (const mode of ['circular', 'linear']) {
       drawing.annotationSets.splice(drawing.annotationSets.findIndex((set) => set.id === 'by-hand'), 1);
       const draft = generate(mode);
       assert.deepEqual(live.renderRequest.diagramOptions.annotations, draft.renderRequest.diagramOptions.annotations);
+      // Each hit keeps the strand Python wrote, which places it on its strand's lane (D-49, D-50).
+      assert.equal(live.renderRequest.diagramOptions.annotations.sets[0].annotations[0].strand, '-');
       // Its Undo removes it at once: the request draws no annotation set again.
       drawing.annotationSets.pop();
       const undone = applied(live, projectSearch(live, mode, ['Search 1']));
@@ -201,6 +203,44 @@ for (const [mode, label, explicit] of STACKS) {
       assert.deepEqual(live.renderRequest, draft.renderRequest);
       assert.deepEqual(draft.renderRequest.diagramOptions.tracks, tracks);
       assert.equal(draft.renderRequest.diagramOptions.annotations.sets[0].keepHighlightOverlay, true);
+    } finally {
+      drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
+      undoAll();
+    }
+  });
+}
+
+// Receipt web.sequence-search: a search's set keeps Region Annotations' timing, where colours apply at once; its
+// rows' Legend labels (one row per query, or "Query position") do not hold them back for Generate, as they do for
+// another set's row (O-8). Every edit of a search row's colours, the gradient's two colours included, draws live as
+// Generate sends it.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: the colours of a search's rows apply at once though they have a Legend row`, () => {
+    const drawing = modeDrawing(state, mode);
+    const before = [...drawing.annotationSets];
+    try {
+      const gradient = { startColor: '#f6c9d8', endColor: '#5b1a4a', direction: 'reverse', queryStart: 0.25, queryEnd: 0.5 };
+      const searched = createAnnotationSet({ ...searchSet('Search 1'), keepHighlightOverlay: true });
+      const labelled = createAnnotationSet({ ...searchSet('by-hand'), annotations: searchSet('by-hand').annotations.map((item) => ({ ...item, strand: undefined })) });
+      searched.annotations[0].style = createAnnotationSet({ defaultStyle: { fill: '#5b1a4a', stroke: '#5b1a4a', gradient } }).defaultStyle;
+      drawing.annotationSets.push(searched, labelled);
+      const committed = generate(mode);
+      const items = { search: drawing.annotationSets.at(-2).annotations[0], other: drawing.annotationSets.at(-1).annotations[0] };
+      const style = (item, fill, gradientColors) => ({ ...(item.style ?? createAnnotationSet({}).defaultStyle), fill, stroke: fill,
+        ...(gradientColors ? { gradient: { ...gradient, ...gradientColors } } : {}) });
+      const note = (setId, itemId) => request.liveSettingNoteApplies(
+        committed.renderRequest, ANNOTATIONS, drawing, inputs, committed.resources, { setId, itemId });
+      assert.equal(note('Search 1', 'q1#1'), true);
+      assert.equal(note('by-hand', 'q1#1'), false, 'a Legend-labelled row of another set waits (O-8)');
+      set(items.search, 'style', style(items.search, '#123456', { startColor: '#ffffff', endColor: '#000000' }));
+      set(items.other, 'style', style(items.other, '#654321'));
+      const live = applied(committed, project(committed, mode, [ANNOTATIONS]));
+      const [liveSearch, liveOther] = live.renderRequest.diagramOptions.annotations.sets;
+      const draftSets = generate(mode).renderRequest.diagramOptions.annotations.sets;
+      assert.deepEqual(liveSearch, draftSets[0]);
+      assert.equal(liveSearch.annotations[0].style.gradient.startColor, '#ffffff');
+      assert.equal(liveSearch.annotations[0].style.gradient.endColor, '#000000');
+      assert.deepEqual(liveOther, committed.renderRequest.diagramOptions.annotations.sets[1], 'the other set waits');
     } finally {
       drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
       undoAll();

@@ -3453,6 +3453,8 @@ def encode_annotation_set(annotation_set: AnnotationSet) -> dict[str, Any]:
                 "style": _encode_annotation_style(annotation.style) if annotation.style else None,
                 "legendLabel": annotation.legend_label,
                 "metadata": dict(annotation.metadata),
+                # Written only when set, so a row without one encodes as before.
+                **({"strand": annotation.strand} if annotation.strand is not None else {}),
             }
         )
     return {
@@ -3503,10 +3505,10 @@ def _decode_annotations(
         annotations: list[RegionAnnotation] = []
         for item_index, raw_item in enumerate(raw_items):
             item_path = f"{set_path}.annotations[{item_index}]"
-            item = _object(
-                raw_item,
-                path=item_path,
-                required={"id", "target", "label", "mark", "lane", "style", "legendLabel", "metadata"},
+            item = _object(raw_item, path=item_path)
+            _require_exact_fields(
+                item, path=item_path, required={"id", "target", "label", "mark", "lane", "style", "legendLabel", "metadata"},
+                optional={"strand"},
             )
             target_payload = _object(item["target"], path=f"{item_path}.target", required={"kind"}, exact=False)
             kind = target_payload["kind"]
@@ -3565,6 +3567,7 @@ def _decode_annotations(
                     lane=item["lane"],
                     style=(_decode_annotation_style(item["style"], path=f"{item_path}.style") if item["style"] is not None else None),
                     legend_label=_optional_string(item["legendLabel"], f"{item_path}.legendLabel"), metadata=metadata,
+                    strand=item.get("strand"),
                 )
             )
         sets.append(
@@ -5857,7 +5860,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # FeatureSpan.__post_init__: at least one selector.
     data(FeatureSpan, kind="featureSpan", replace={"selectors": bound(FeatureSpan, "selectors", minItems=1)})
     data(FeatureIdentitySpan, kind="featureIdentity")
-    data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
+    data(RegionAnnotation, replace={"lane": nullable(NUMBER)}, optional=frozenset({"strand"}))
     data(AnnotationSet, optional=frozenset({"keep_highlight_overlay"}))
     data(AnnotationOptions, files=frozenset({"table_file"}))
     scalar = data(ScalarSpec)

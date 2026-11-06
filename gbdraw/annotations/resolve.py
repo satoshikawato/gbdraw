@@ -401,6 +401,7 @@ def resolve_annotation_set(
                 metadata=annotation.metadata,
                 crosses_origin=segments_cross_origin(segments, len(record.seq), is_circular=is_circular),
                 source_step=-1 if _read_coord_map(record)[1] < 0 else 1,
+                strand=annotation.strand,
             )
         )
     return ResolvedAnnotationBundle(

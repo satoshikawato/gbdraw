@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import NamedTuple, TypeAlias
+from typing import Literal, NamedTuple, TypeAlias
 
 from svgwrite.base import BaseElement
 
@@ -176,6 +176,47 @@ def _lane_radii(
         return lane_outer - lane_width, lane_outer
     lane_inner = inner_radius_px + params.padding_px + lane * lane_width
     return lane_inner, lane_inner + lane_width
+
+
+StrandBands: TypeAlias = Mapping[Literal["+", "-"], RadialBand]
+
+
+def _strand_lanes(
+    track: ResolvedAnnotationTrack, *, record_index: int, strand_bands_px: StrandBands, params: AnnotationTrackParams
+) -> dict[Literal["+", "-"], tuple[RadialBand, float]]:
+    """Each strand lane of the feature track a slot covers (``CircularResolvedSlot.strand_bands_px``), with the width
+    of one of the record's lanes in it."""
+
+    return {
+        strand: (band, _record_lanes(
+            track, record_index=record_index, inner_radius_px=band.inner_px, outer_radius_px=band.outer_px, params=params
+        )[1])
+        for strand, band in strand_bands_px.items()
+    }
+
+
+def _mark_lane(
+    placement: PlacedRegionAnnotation,
+    lane_width: float,
+    strand_lanes: Mapping[Literal["+", "-"], tuple[RadialBand, float]],
+    *,
+    side: str,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    params: AnnotationTrackParams,
+) -> tuple[float, float, float]:
+    """The inner and outer radius of a placement's lane and the lane's width: in its strand's lane when the slot
+    covers a feature track that separates the strands, else in the slot's band."""
+
+    strand = placement.annotation.display_strand
+    if strand is not None and strand in strand_lanes:
+        band, lane_width = strand_lanes[strand]
+        inner_radius_px, outer_radius_px = band.inner_px, band.outer_px
+    lane_inner, lane_outer = _lane_radii(
+        placement.lane, lane_width, side=side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
+        params=params,
+    )
+    return lane_inner, lane_outer, lane_width
 
 
 def _label_rotation(orientation: str, angle: float) -> float:
@@ -741,24 +782,26 @@ def circular_annotation_track_ink(
     side: str,
     params: AnnotationTrackParams,
     labels: Sequence[CircularAnnotationLabel] = (),
+    strand_bands_px: StrandBands | None = None,
 ) -> tuple[CircularInk, ...]:
     """What ``circular_annotation_track_content`` paints with the same arguments: each band or highlight (its
     area when filled, else its outline), each line with its end caps, and the labels' letters."""
 
     if record_length <= 0:
         return ()
-    placements, lane_width = _record_lanes(
+    placements, slot_lane_width = _record_lanes(
         track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
     )
+    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=strand_bands_px or {}, params=params)
     labels_by_id = {label.annotation_id: label for label in labels}
     inks: list[CircularInk] = []
     for placement in placements:
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer = _lane_radii(
-            placement.lane, lane_width, side=side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
-            params=params,
+        lane_inner, lane_outer, lane_width = _mark_lane(
+            placement, slot_lane_width, strand_lanes, side=side, inner_radius_px=inner_radius_px,
+            outer_radius_px=outer_radius_px, params=params,
         )
         radius = 0.5 * (lane_inner + lane_outer)
         pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
@@ -820,11 +863,14 @@ def circular_annotation_track_content(
     labels: Sequence[CircularAnnotationLabel] = (),
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
+    strand_bands_px: StrandBands | None = None,
 ) -> GroupContent:
     """Build an annotation track around the circle centre (render stage ``annotation_content``).
 
     ``labels`` are the track's labels (``circular_annotation_labels``), drawn
-    with their annotations. The hatch patterns the marks use, in order of first
+    with their annotations. A region with a strand is drawn in its strand's
+    lane of ``strand_bands_px`` (a slot that covers a feature track that
+    separates the strands), any other in the slot's band. The hatch patterns the marks use, in order of first
     use, and the clip path of a clipped track are the content's definitions.
     """
 
@@ -834,22 +880,19 @@ def circular_annotation_track_content(
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
-    placements, lane_width = _record_lanes(
+    placements, slot_lane_width = _record_lanes(
         track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
     )
+    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=strand_bands_px or {}, params=params)
     labels_by_id = {label.annotation_id: label for label in labels}
 
     for placement in placements:
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer = _lane_radii(
-            placement.lane,
-            lane_width,
-            side=side,
-            inner_radius_px=inner_radius_px,
-            outer_radius_px=outer_radius_px,
-            params=params,
+        lane_inner, lane_outer, lane_width = _mark_lane(
+            placement, slot_lane_width, strand_lanes, side=side, inner_radius_px=inner_radius_px,
+            outer_radius_px=outer_radius_px, params=params,
         )
         radius = 0.5 * (lane_inner + lane_outer)
         item_group = Group(

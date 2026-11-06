@@ -433,3 +433,214 @@ def test_a_custom_stack_draws_a_search_set_behind_its_features(mode: str) -> Non
     assert 'data-gbdraw-annotation-id="q#1"' in _custom_stack_svg(mode, keep=True)
     # Another set keeps following the stack: no slot names it, so it is not drawn.
     assert 'data-gbdraw-annotation-id="q#1"' not in _custom_stack_svg(mode, keep=False)
+
+
+# Receipt web.sequence-search (D-49, D-50): each hit sits on its strand. With separated strands a plus-strand hit
+# covers the plus-strand lane and a minus-strand hit the minus-strand lane; otherwise, and for a row without a
+# strand, a hit covers the whole feature track.
+def test_each_hit_row_carries_its_strand() -> None:
+    result = _search()
+    assert result.annotation_set is not None
+    assert [row.strand for row in result.annotation_set.annotations] == ["+", "-", "+"]
+    assert [hit.strand for hit in result.hits] == ["+", "-", "+"]
+
+
+def test_a_row_strand_is_typed_and_round_trips_through_the_request(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="strand") as error:
+        RegionAnnotation("h", CoordinateSpan(None, 1, 10), mark="highlight", strand="x")  # type: ignore[arg-type]
+    assert error.value.diagnostic == {"code": "INPUT_INVALID", "reason": "FIELDS"}
+    record = SeqRecord(Seq("ACGT" * 500), id="rec1", annotations={"molecule_type": "DNA"})
+    rows = (
+        RegionAnnotation("p", CoordinateSpan(None, 10, 50), mark="highlight", strand="+"),
+        RegionAnnotation("m", CoordinateSpan(None, 60, 90), mark="highlight", strand="-"),
+        RegionAnnotation("n", CoordinateSpan(None, 100, 150), mark="band"),
+    )
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=LinearDiagramOptions(annotations=AnnotationOptions(sets=(AnnotationSet("s", rows),))),
+    )
+    encoded = encode_canonical_request(request)
+    items = encoded.payload["diagramOptions"]["annotations"]["sets"][0]["annotations"]
+    # Written only when set, so a row without one is written as before.
+    assert [item.get("strand") for item in items] == ["+", "-", None] and "strand" not in items[2]
+    resource_paths = {}
+    for resource in encoded.resources:
+        target = tmp_path / resource.name
+        target.write_bytes(resource.content or b"")
+        resource_paths[resource.resource_id] = target
+    decoded = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert [row.strand for row in decoded.options.annotations.sets[0].annotations] == ["+", "-", None]
+    bad = json.loads(json.dumps(encoded.payload))
+    bad["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["strand"] = "plus"
+    with pytest.raises(Exception, match="strand"):
+        decode_canonical_request(bad, resource_paths=resource_paths, output_directory=tmp_path / "out")
+
+
+@pytest.mark.parametrize(("strand", "source_step", "shown"), [("+", 1, "+"), ("-", 1, "-"), ("+", -1, "-"), ("-", -1, "+"), (None, -1, None)])
+def test_a_row_strand_is_shown_on_the_record_as_drawn(strand: str | None, source_step: int, shown: str | None) -> None:
+    # A reverse-complemented record draws its source's plus strand as its minus strand, as its features.
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=((100, 200),), midpoint_bp=150.0, span_bp=100, label="",
+        mark="highlight", lane=None, style=RegionAnnotationStyle(), source_step=source_step,  # type: ignore[arg-type]
+        strand=strand,  # type: ignore[arg-type]
+    )
+    assert annotation.display_strand == shown
+
+
+_PLUS_CDS, _MINUS_CDS = (300, 1500), (5000, 6200)
+
+
+def _strand_record(plus: tuple[int, int] = _PLUS_CDS, minus: tuple[int, int] = _MINUS_CDS) -> SeqRecord:
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="rec1", annotations={"molecule_type": "DNA", "topology": "circular"})
+    record.features = [
+        SeqFeature(FeatureLocation(*plus, strand=1), type="CDS"),
+        SeqFeature(FeatureLocation(*minus, strand=-1), type="CDS"),
+    ]
+    return record
+
+
+def _strand_hits(plus: tuple[int, int] = _PLUS_CDS, minus: tuple[int, int] = _MINUS_CDS) -> AnnotationOptions:
+    style = RegionAnnotationStyle(fill="#c8607e", stroke="#c8607e", stroke_width=0.001)
+    rows = (
+        RegionAnnotation("p", CoordinateSpan(None, plus[0] + 101, plus[1] - 100), mark="highlight",
+                         style=style, strand="+"),
+        RegionAnnotation("m", CoordinateSpan(None, minus[0] + 101, minus[1] - 100), mark="highlight",
+                         style=style, strand="-"),
+        RegionAnnotation("n", CoordinateSpan(None, 8000, 9000), mark="highlight", style=style),
+    )
+    return AnnotationOptions(sets=(AnnotationSet("Search 1", rows, keep_highlight_overlay=True),))
+
+
+def _arc_radii(element) -> tuple[float, float]:
+    radii = [float(value) for value in re.findall(r"A ?([0-9.]+),", element.attrib.get("d", ""))]
+    return min(radii), max(radii)
+
+
+def _circular_strand_drawing(track_type: str, stranded: bool, custom: bool):
+    from xml.etree import ElementTree
+
+    from gbdraw.api.options import CircularRequestTrackOptions
+
+    tracks = (
+        CircularRequestTrackOptions(circular_track_slots=("features:features", "ticks:ticks"))
+        if custom else None
+    )
+    drawing = build_circular_diagram(_strand_record(), options=CircularDiagramOptions(
+        annotations=_strand_hits(),
+        config_overrides={"canvas.strandedness": stranded, "canvas.circular.track_type": track_type},
+        **({"tracks": tracks} if tracks is not None else {}),
+    ))
+    root = ElementTree.fromstring(drawing.tostring())
+    features = [element for element in root.iter() if "data-gbdraw-feature-id" in element.attrib]
+    hits = {
+        element.attrib["data-gbdraw-annotation-id"]: next(path for path in element.iter() if path.tag.endswith("path"))
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-id") in {"p", "m", "n"}
+    }
+    return [_arc_radii(element) for element in features], {key: _arc_radii(path) for key, path in hits.items()}
+
+
+@pytest.mark.parametrize("custom", [False, True], ids=["automatic", "custom"])
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize("stranded", [True, False], ids=["separated", "shared"])
+def test_a_circular_hit_covers_its_strands_lane(track_type: str, stranded: bool, custom: bool) -> None:
+    lanes, hits = _circular_strand_drawing(track_type, stranded, custom)
+    assert set(hits) == {"p", "m", "n"}
+    whole = (min(lane[0] for lane in lanes), max(lane[1] for lane in lanes))
+    assert hits["n"] == pytest.approx(whole, abs=0.01)
+    if not stranded:
+        assert hits["p"] == pytest.approx(whole, abs=0.01) and hits["m"] == pytest.approx(whole, abs=0.01)
+        return
+    plus, minus = lanes
+    assert plus != pytest.approx(minus, abs=0.5)
+    assert hits["p"] == pytest.approx(plus, abs=0.01)
+    assert hits["m"] == pytest.approx(minus, abs=0.01)
+
+
+def _absolute_y_ranges(root, elements) -> list[tuple[float, float]]:
+    parents = {child: parent for parent in root.iter() for child in parent}
+
+    def offset(element) -> float:
+        total = 0.0
+        while element is not None:
+            total += sum(
+                float(value)
+                for value in re.findall(r"translate\([^,)]+,\s*([^)]+)\)", element.attrib.get("transform", ""))
+            )
+            element = parents.get(element)
+        return total
+
+    ranges = []
+    for element in elements:
+        if element.tag.endswith("rect"):
+            top = float(element.attrib["y"])
+            values = [top, top + float(element.attrib["height"])]
+        else:
+            values = [float(y) for _x, y in re.findall(r"(-?[0-9.]+)[ ,](-?[0-9.]+)", element.attrib.get("d", ""))]
+        shift = offset(element)
+        ranges.append((min(values) + shift, max(values) + shift))
+    return ranges
+
+
+def _linear_strand_drawing(track_layout: str, stranded: bool, custom: bool, **wrapped: object):
+    from xml.etree import ElementTree
+
+    from gbdraw.api.options import LinearRequestTrackOptions
+
+    tracks = LinearRequestTrackOptions(linear_track_slots=("features:features",)) if custom else None
+    spans = {key: wrapped.pop(key) for key in ("plus", "minus") if key in wrapped}
+    drawing = build_linear_diagram([_strand_record(**spans)], options=LinearDiagramOptions(  # type: ignore[arg-type]
+        annotations=_strand_hits(**spans),  # type: ignore[arg-type]
+        config_overrides={"canvas.strandedness": stranded, "canvas.linear.track_layout": track_layout, **wrapped},
+        **({"tracks": tracks} if tracks is not None else {}),
+    ))
+    root = ElementTree.fromstring(drawing.tostring())
+    features = [
+        element for element in root.iter()
+        if "data-gbdraw-feature-id" in element.attrib and element.tag.endswith("path")
+    ]
+    hits = {
+        element.attrib["data-gbdraw-annotation-id"]: next(rect for rect in element.iter() if rect.tag.endswith("rect"))
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-id") in {"p", "m", "n"}
+    }
+    names = list(hits)
+    return _absolute_y_ranges(root, features), dict(zip(names, _absolute_y_ranges(root, [hits[key] for key in names])))
+
+
+def _inside(inner: tuple[float, float], outer: tuple[float, float]) -> bool:
+    return outer[0] - 1e-6 <= inner[0] and inner[1] <= outer[1] + 1e-6
+
+
+def _apart(first: tuple[float, float], second: tuple[float, float]) -> bool:
+    return first[1] <= second[0] + 1e-6 or second[1] <= first[0] + 1e-6
+
+
+@pytest.mark.parametrize("custom", [False, True], ids=["automatic", "custom"])
+@pytest.mark.parametrize("track_layout", ["middle", "above", "below"])
+@pytest.mark.parametrize("stranded", [True, False], ids=["separated", "shared"])
+def test_a_linear_hit_covers_its_strands_lane(track_layout: str, stranded: bool, custom: bool) -> None:
+    lanes, hits = _linear_strand_drawing(track_layout, stranded, custom)
+    assert set(hits) == {"p", "m", "n"}
+    plus, minus = lanes
+    for lane in lanes:
+        assert _inside(lane, hits["n"])
+    if not stranded:
+        assert hits["p"] == pytest.approx(hits["n"]) and hits["m"] == pytest.approx(hits["n"])
+        return
+    assert _apart(plus, minus)
+    assert _inside(plus, hits["p"]) and _apart(hits["p"], minus)
+    assert _inside(minus, hits["m"]) and _apart(hits["m"], plus)
+
+
+def test_a_wrapped_linear_record_draws_a_hit_on_its_strands_lane_of_its_row() -> None:
+    # Both features and both hits on the second of three rows.
+    lanes, hits = _linear_strand_drawing(
+        "above", True, False, plus=(4300, 5000), minus=(5500, 6200), **{"canvas.linear.wrap_length": 4000}
+    )
+    plus, minus = lanes
+    assert _apart(plus, minus)
+    assert _inside(plus, hits["p"]) and _apart(hits["p"], minus)
+    assert _inside(minus, hits["m"]) and _apart(hits["m"], plus)

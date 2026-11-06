@@ -2886,6 +2886,12 @@ def _resolve_circular_radial_layout(
         # outer edge.
         holder = _span_room_holder(annotation, by_id)
         holder_band = None if holder is None else _span_room_band(holder, _span_extent(annotation), width)
+        # Covering a feature track that separates the strands, a region with a strand covers that strand's lane.
+        strand_bands = (
+            anchor.payload.strand_lane_bands(strands_separated=bool(cfg.canvas.strandedness))
+            if span_band is None and annotation.cover_anchor and isinstance(anchor.payload, CircularFeatureLayout)
+            else {}
+        )
         anchored = replace(
             overlay_resolved,
             anchor_radius_px=anchor_radius,
@@ -2897,6 +2903,7 @@ def _resolve_circular_radial_layout(
             spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
             span_keeps_label_room=holder_band is not None
             and float(holder_band.outer_px) >= float(draw_band.outer_px) - LAYOUT_EPSILON,
+            strand_bands_px=strand_bands,
         )
         resolved_by_index[intent.slot_index] = anchored
         by_id[intent.slot_id] = anchored

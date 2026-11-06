@@ -118,6 +118,15 @@ the stack's feature track. A slot that names the set takes its place; other sets
 writes the key only when it is true, so every other set encodes as before; the reader reads an absent key as false.
 Request schema 9 is unchanged (a new optional field of `CanonicalAnnotationSet`). The same positive fixture holds it.
 
+Session 51 also adds an optional `strand` (`"+"` or `"-"`) to an annotation row (`diagramOptions.annotations.sets[].annotations[]`,
+and the Web draft `config.annotationSets[].annotations[]`; the same receipt, its strand line): the strand on the
+record's source that a Sequence search hit lies on (`gbdraw/annotations/search_hits.py`, the only writer). Where the
+row's highlight covers a feature track that separates the strands (`cover_anchor`), it covers that strand's lane as
+the record is drawn (a reverse-complemented record draws the source's plus strand as its minus strand); a row without
+it covers the whole feature track, as before. The writer writes the key only when it is set, so every other row
+encodes as before; the reader reads an absent key as no strand. Request schema 9 is unchanged (a new optional field of
+`CanonicalRegionAnnotation`). The same positive fixture holds it.
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

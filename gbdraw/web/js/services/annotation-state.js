@@ -31,8 +31,10 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
  * }} AnnotationTarget One shape for `coordinateSpan`, `featureSpan`, and `featureIdentity`; each kind reads its own fields.
  * @typedef {{
  *   id: string, target: AnnotationTarget, label: string, mark: string, lane: number | null,
- *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>
- * }} AnnotationItem
+ *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>,
+ *   strand?: '+' | '-' | null
+ * }} AnnotationItem `strand`: the source strand of a sequence search's hit (PD-OI-116), written only by Python's
+ *   search set builder; Python draws the hit on that strand's lane of a feature track that separates the strands.
  * @typedef {{
  *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null,
  *   keepHighlightOverlay?: boolean
@@ -178,7 +180,9 @@ export const normalizeAnnotationSets = (sets) => {
         lane: item.lane == null || item.lane === '' ? null : Math.max(0, Number(item.lane) || 0),
         style: item.style == null ? null : createDefaultAnnotationStyle(item.style),
         legendLabel: item.legendLabel == null ? null : String(item.legendLabel),
-        metadata: item.metadata && typeof item.metadata === 'object' ? clone(item.metadata) : {}
+        metadata: item.metadata && typeof item.metadata === 'object' ? clone(item.metadata) : {},
+        // Kept as written, and only when set, so every other item is as before.
+        ...(item.strand === '+' || item.strand === '-' ? { strand: item.strand } : {})
       };
     });
     return set;

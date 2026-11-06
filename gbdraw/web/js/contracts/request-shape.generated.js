@@ -519,9 +519,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
         }),
-        metadata: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})})
+        metadata: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
+        strand: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "literal", values: Object.freeze(["+", "-"])}),
+            Object.freeze({kind: "null"})
+          ])
+        })
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["strand"]),
       open: false,
       defaults: Object.freeze({lane: null, legendLabel: null, style: null})
     }),

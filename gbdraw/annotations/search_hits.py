@@ -163,7 +163,8 @@ def search_hit_annotation_set(
     ``table`` holds outfmt 6 rows (``read_comparison_table``); ``queries`` are
     the queries in the panel's order, which gives each query its default
     colour, with their lengths; ``query_colors`` replaces a query's colour. A hit's target is the
-    span ``sstart``..``send`` of the subject it names, in source coordinates;
+    span ``sstart``..``send`` of the subject it names, in source coordinates,
+    and its ``strand`` the strand the query runs forward on there;
     its metadata holds ``SEARCH_HIT_METADATA_KEYS``. With ``color_mode``
     ``gradient`` the scale runs from ``SEARCH_GRADIENT_START_COLOR`` at the
     query's start to ``SEARCH_GRADIENT_END_COLOR`` at its end; each hit draws
@@ -220,7 +221,9 @@ def search_hit_annotation_set(
                 diagnostic={"code": "COMPARISON_INPUT", "column": 8},
             )
         offset = subject.source_start - 1
+        # The hit's strand on the subject, the source strand of its record: the query runs along it forward.
         forward = (sstart <= send) == (qstart <= qend)
+        strand: Literal["+", "-"] = "+" if forward else "-"
         counts[query] = counts.get(query, 0)
         annotation_id = ""
         while not annotation_id or annotation_id in taken:
@@ -260,6 +263,7 @@ def search_hit_annotation_set(
             style=style,
             legend_label=legend_label,
             metadata=metadata,
+            strand=strand,
         ))
         hits.append(SearchHit(
             annotation_id=annotation_id,
@@ -267,7 +271,7 @@ def search_hit_annotation_set(
             record_key=subject.record_key,
             start=start,
             end=end,
-            strand="+" if sstart <= send else "-",
+            strand=strand,
             identity=float(values["identity"]),
             alignment_length=int(values["alignment_length"]),
             evalue=float(values["evalue"]),

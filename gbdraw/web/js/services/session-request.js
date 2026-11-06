@@ -1985,11 +1985,16 @@ const LINEAR_TRACK_SLOTS_REQUEST_PATH = 'diagramOptions.tracks.linearTrackSlots'
 /**
  * Whether the draft Fill and Stroke color of a committed annotation item draw
  * live: not while the item or its set has a Legend label, which draws the
- * colors in a Legend row (O-8). An item the committed request lacks waits
- * (its targets and the omitted record keys stay committed, F-11).
- * @param {{ legendLabel?: string | null }} set @param {{ legendLabel?: string | null }} item
+ * colors in a Legend row, a change the live-settings measurement of
+ * PD-OI-103 did not cover (O-8). A sequence search's set
+ * (`keepHighlightOverlay`) is drawn live whatever its Legend labels: every row
+ * has one, and its colours apply at once (PD-OI-116). The rerender draws its
+ * Legend rows from the same colours, and a Legend color edit stays on its row
+ * as after Generate. An item the committed request lacks waits (its targets
+ * and the omitted record keys stay committed, F-11).
+ * @param {{ legendLabel?: string | null, keepHighlightOverlay?: boolean }} set @param {{ legendLabel?: string | null }} item
  */
-const annotationItemColorsLive = (set, item) => !set.legendLabel && !item.legendLabel;
+const annotationItemColorsLive = (set, item) => set.keepHighlightOverlay === true || (!set.legendLabel && !item.legendLabel);
 /**
  * Whether the draft Height of a committed Linear row draws live: not for a
  * row a Python request states as a spec string, a features row, which

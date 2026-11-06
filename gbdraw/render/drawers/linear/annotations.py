@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import NamedTuple
+from functools import partial
+from typing import Literal, NamedTuple
 
 from svgwrite.base import BaseElement
 
@@ -22,6 +23,7 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
 )
 from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
@@ -208,6 +210,27 @@ def _lane_height(
     lane_count = max((item.lane for item in placements), default=-1) + 1
     usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
     return 14.0 if track.clipped else usable_height / max(1, lane_count)
+
+
+def _mark_lane(
+    track: ResolvedAnnotationTrack,
+    placement: PlacedRegionAnnotation,
+    placements: Sequence[PlacedRegionAnnotation],
+    *,
+    y_offset_px: float,
+    lane_height: float,
+    params: AnnotationTrackParams,
+    strand_bands: Mapping[Literal["+", "-"], VerticalBand],
+) -> tuple[float, float]:
+    """The middle y of a placement's lane and the lane's height: in its strand's lane of ``strand_bands`` (a slot
+    that covers a feature track that separates the strands, slot-local), else in the slot's band."""
+
+    strand = placement.annotation.display_strand
+    band = strand_bands.get(strand) if strand is not None else None
+    if band is not None:
+        y_offset_px = float(y_offset_px) + band.top_y
+        lane_height = _lane_height(track, placements, band.height, params)
+    return float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px), lane_height
 
 
 def _label_rows(
@@ -432,10 +455,13 @@ def linear_annotation_track_content(
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
     row_frames: tuple[AnnotationRowFrame, ...] = (),
+    strand_bands: Mapping[Literal["+", "-"], VerticalBand] | None = None,
 ) -> GroupContent:
     """Build an annotation track in record-local coordinates (render stage ``annotation_content``).
 
     On a wrapped record (``row_frames``) each part of a mark goes into an id-less group of its row in its item.
+    A region with a strand is drawn in its strand's lane of ``strand_bands`` (slot-local: a slot that covers a
+    feature track that separates the strands, the same on every row), any other in the slot's band.
 
     ``labels`` are the track's placed labels (``linear_annotation_labels``,
     moved by the record's label placement), drawn with their annotations.
@@ -449,7 +475,7 @@ def linear_annotation_track_content(
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
-    placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
+    placements, slot_lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
     scale = float(bar_length_px) / max(1, int(record_length))
     labels_by_id = {label.annotation_id: label for label in labels}
 
@@ -457,7 +483,11 @@ def linear_annotation_track_content(
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
+        lane = partial(
+            _mark_lane, track, placement, placements, y_offset_px=y_offset_px, params=params,
+            strand_bands=strand_bands or {},
+        )
+        lane_center, lane_height = lane(lane_height=slot_lane_height)
         item_id = annotation_dom_id(
             record_index=record_index,
             slot_id=track.slot_id,
@@ -491,8 +521,7 @@ def linear_annotation_track_content(
                 if part.row not in row_targets:
                     row_targets[part.row] = part_target
                     item_group.add(part_target)
-                lane_height = _lane_height(track, placements, frame.height_px, params)
-                lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
+                lane_center, lane_height = lane(lane_height=_lane_height(track, placements, frame.height_px, params))
             if annotation.mark in {"band", "highlight"}:
                 height_factor = _band_height_factor(annotation.mark)
                 rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)

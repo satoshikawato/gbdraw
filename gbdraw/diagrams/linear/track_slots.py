@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import Callable, Mapping, Sequence, cast
+from dataclasses import dataclass, field, replace
+from typing import Callable, Literal, Mapping, Sequence, cast
 
 from ...annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 from ...canvas import LinearCanvasConfigurator
@@ -25,6 +25,8 @@ class LinearSlotFootprint:
     data_available: bool = True
     # The band a span covers on this slot; None means its nominal extents if it has data.
     body_band: VerticalBand | None = None
+    # A features slot that separates the strands: each strand's lane (``LinearFeatureLaneGeometry.strand_lane_bands``).
+    strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,9 @@ class LinearResolvedSlot:
     spans_slots: bool = False
     # The footprint's ``body_band`` in record coordinates: where a features slot's lanes lie, without labels.
     body_band: VerticalBand | None = None
+    # The footprint's ``strand_bands`` in record coordinates; on an overlay that covers such a features slot
+    # (``cover_anchor``), the lanes a region with a strand covers.
+    strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class LinearRecordVerticalPlan:
@@ -435,6 +440,7 @@ def _combine_slot_footprint(
         reserve_band=union_vertical_bands(reserve_bands),
         data_available=footprint.data_available,
         body_band=footprint.body_band,
+        strand_bands=footprint.strand_bands,
     )
 
 
@@ -475,6 +481,7 @@ def _resolved_slot(
         z=track.z,
         params=dict(track.params),
         body_band=_translate_optional_band(footprint.body_band, origin_y),
+        strand_bands={strand: band.translate(origin_y) for strand, band in footprint.strand_bands.items()},
     )
 
 
@@ -713,8 +720,9 @@ def resolve_linear_record_vertical_plan(
     overlays_by_anchor: dict[str, list[tuple[float, LinearSlotFootprint]]] = {}
     label_rooms: dict[str, list[VerticalBand]] = {}
     standalone_overlays: list[LinearResolvedSlot] = []
-    # Per anchored overlay: its anchor, its origin from the anchor, and the slots it spans.
-    relative_overlay_origins: dict[str, tuple[str, float, tuple[LinearResolvedTrack, ...]]] = {}
+    # Per anchored overlay: its anchor, its origin from the anchor, the slots it spans, and whether it covers its
+    # anchor alone (``cover_anchor``), so a region with a strand covers that strand's lane of it.
+    relative_overlay_origins: dict[str, tuple[str, float, tuple[LinearResolvedTrack, ...], bool]] = {}
 
     def footprint_of(track: LinearResolvedTrack) -> LinearSlotFootprint:
         return footprint_map.get(track.id, _default_slot_footprint(track))
@@ -758,7 +766,9 @@ def resolve_linear_record_vertical_plan(
             )
             for slot_id, room in rooms:
                 label_rooms.setdefault(slot_id, []).append(room)
-        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, span_tracks)
+        relative_overlay_origins[overlay.id] = (
+            anchor.id, relative_origin, span_tracks, span is not None and annotation.to_slot is None,
+        )
 
     structural_slots: list[LinearResolvedSlot] = []
     seed_band = axis_band
@@ -807,7 +817,7 @@ def resolve_linear_record_vertical_plan(
         relation = relative_overlay_origins.get(overlay.id)
         if relation is None:
             continue
-        anchor_id, relative_origin, span_tracks = relation
+        anchor_id, relative_origin, span_tracks, covers_anchor = relation
         anchor_slot = anchors.get(anchor_id)
         if anchor_slot is None:
             continue
@@ -821,6 +831,8 @@ def resolve_linear_record_vertical_plan(
                     if track.id in anchors
                 ],
             )
+        if covers_anchor:
+            item = replace(item, strand_bands=anchor_slot.strand_bands)
         resolved_overlays.append(item)
         anchors[overlay.id] = item
 

@@ -938,6 +938,7 @@ def _record_track_ink(
                         side=str(slot.side),
                         params=annotation_track_params_from_mapping(slot.params),
                         labels=annotation_labels.get(slot.id, ()),
+                        strand_bands_px=slot.strand_bands_px,
                     )
                 )
         elif renderer == "ticks":
@@ -2127,6 +2128,7 @@ def _draw_resolved_circular_slot(
             semantic_slot_id=(
                 str(resolved_slot.id) if use_slot_group_id else None
             ),
+            strand_bands_px=resolved_slot.strand_bands_px,
         )
         group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
         canvas.add(center_group_on_canvas(group, canvas_config))

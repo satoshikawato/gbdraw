@@ -1079,6 +1079,19 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "strand": {
+          "anyOf": [
+            {
+              "enum": [
+                "+",
+                "-"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
