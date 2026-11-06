@@ -5,6 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from gbdraw.exceptions import ValidationError
 from gbdraw.svg.elements import Path, Text, TextPath
 from gbdraw.svg.circular_arcs import circle_arc, position_angle
 from gbdraw.svg.path_data import path_point
@@ -194,6 +195,24 @@ def _tick_label_ratio_table(track_channel: str, track_type: str, strandedness: b
     if track_type == "tuckin":
         return {"small": (1.03, 1.21), "large": (1.03, 1.24)}
     return {"small": (0.98, 1.0), "large": (0.98, 1.0)}
+
+
+def _tick_label_path_length(label_text: str, geometry: CircularTickLabelGeometry, total_len: int) -> float:
+    """The length, in bp, of the arc a tick label's text path spans: one and a half times the label's width.
+
+    A label whose path would wrap its circle more than once is refused as a track that does not fit
+    (``TRACK_LAYOUT``, ``CANNOT_FIT``; OV-2559): the map is too small for its scale labels, and a requested figure
+    size counts such a radius as too small. The assembly adds the row of the tick slot.
+    """
+
+    length = total_len * 1.5 * geometry.bbox_width_px / (2 * math.pi * max(1.0, geometry.path_radius_px))
+    if length > total_len:
+        raise ValidationError(
+            f"Circular tick label '{label_text}' is longer than the circle it is written on. "
+            "Draw the map at a larger radius, or hide the scale.",
+            diagnostic={"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"},
+        )
+    return length
 
 
 def get_circular_tick_label_radius_bounds(
@@ -654,7 +673,7 @@ def generate_circular_tick_labels(
     ):
         angle = 360.0 * (tick / total_len)
         path_radius = geometry.path_radius_px
-        label_as_feature_length = total_len * 1.5 * geometry.bbox_width_px / (2 * math.pi * max(1.0, path_radius))
+        label_as_feature_length = _tick_label_path_length(label_text, geometry, total_len)
         reverse_path = 90 <= angle < 270
         label_start, label_end, start_offset = _tick_label_path_range(
             tick=tick,

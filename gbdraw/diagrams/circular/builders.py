@@ -441,6 +441,38 @@ def add_axis_group_on_canvas(
     return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
 
+def tick_group_content(
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    radius_override: float | None = None,
+    label_side: str = "legacy",
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
+    track_preset: str | None = None,
+    group_id: str | None = None,
+    slot_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
+) -> GroupContent:
+    """The tick group of a tick slot: its ticks and scale labels (a render stage, so a second build is reused)."""
+    return render_stage(
+        "ticks_content",
+        build_group_content,
+        TickGroup,
+        gb_record,
+        canvas_config.geometry(),
+        profile=canvas_config.profile,
+        radius=radius_override,
+        label_side=label_side,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
+        track_preset=track_preset,
+        group_id=group_id,
+        slot_id=slot_id,
+        record_transform=record_transform,
+    )
+
+
 def add_tick_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -457,14 +489,10 @@ def add_tick_group_on_canvas(
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the tick group to the canvas."""
-    content = render_stage(
-        "ticks_content",
-        build_group_content,
-        TickGroup,
+    content = tick_group_content(
         gb_record,
-        canvas_config.geometry(),
-        profile=canvas_config.profile,
-        radius=radius_override,
+        canvas_config,
+        radius_override=radius_override,
         label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
@@ -517,5 +545,6 @@ __all__ = [
     "add_record_group_on_canvas",
     "add_axis_group_on_canvas",
     "add_tick_group_on_canvas",
+    "tick_group_content",
     "add_labels_group_on_canvas",
 ]

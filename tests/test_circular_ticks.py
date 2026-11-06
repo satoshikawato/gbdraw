@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+import gbdraw
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.diagrams.circular.radial_layout import track_layout_reason
+from gbdraw.exceptions import ValidationError
 from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
     generate_circular_tick_labels,
@@ -203,3 +208,49 @@ def test_linear_tick_labels_resolve_their_interval(
         == expected
     )
 from gbdraw.api.config import apply_config_overrides
+
+
+@pytest.mark.parametrize(("radius", "label_side"), [(5.0, "outside"), (20.0, "inside")])
+def test_a_tick_label_longer_than_its_circle_is_a_track_that_does_not_fit(radius, label_side) -> None:
+    """OV-2559: a scale label whose path would wrap its circle more than once (outside labels at radius 5; inside
+    labels at radius 20, whose circle is about 1 px) is refused as a track that does not fit, which a requested
+    figure size reads as a radius too small."""
+
+    with pytest.raises(ValidationError) as caught:
+        generate_circular_tick_labels(
+            radius,
+            16_569,
+            "large",
+            [5_000],
+            "none",
+            "black",
+            14.0,
+            "normal",
+            "Arial",
+            "tuckin",
+            True,
+            label_side=label_side,
+            tick_side="inside",
+            tick_length_px=10.0,
+            tick_width=2.0,
+            tick_interval=5_000,
+            length_threshold=LENGTH_THRESHOLD,
+        )
+    assert track_layout_reason(caught.value) == "CANNOT_FIT"
+    assert "5 kbp" in str(caught.value)
+
+
+def test_a_map_too_small_for_its_tick_labels_is_refused_as_a_track_that_does_not_fit() -> None:
+    """OV-2559: the mitochondrial map with labels on both sides at radius 25 raised a bare ValueError from the arc
+    of a tick label; it is now the track layout refusal, with the row of the tick slot, before labels are placed."""
+
+    records = gbdraw.read_genbank(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_circular(
+            records,
+            options=gbdraw.CircularOptions(
+                config_overrides={"canvas.circular.radius": 25, "labels.circular.scope": "both"}
+            ),
+        )
+    assert track_layout_reason(caught.value) == "CANNOT_FIT"
+    assert caught.value.diagnostic["slotIndex"] >= 0
