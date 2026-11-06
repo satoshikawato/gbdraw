@@ -5,6 +5,7 @@ Circular draws it as one part; Linear draws the two parts at the record's ends a
 
 from __future__ import annotations
 
+import math
 import re
 from xml.etree import ElementTree
 
@@ -23,6 +24,7 @@ from gbdraw.api import (
     RegionAnnotation,
     RegionAnnotationStyle,
 )
+from gbdraw.annotations import ResolvedRegionAnnotation
 
 _SVG = "{http://www.w3.org/2000/svg}"
 _LENGTH = 10_000
@@ -178,3 +180,104 @@ def test_circular_bracket_over_a_whole_record_is_capped_only_at_its_ends() -> No
     # The drawer splits a whole turn in two pieces; the split is no end (OV-2574): both caps stand at the top.
     assert len(caps) == 2
     assert all(re.match(r"M 0,-[\d.]+ L 0,-[\d.]+$", cap) for cap in caps)
+
+
+def _bracket_item(mode: str, record: SeqRecord, target: CoordinateSpan | FeatureSpan, start: int | None = None):
+    annotation = RegionAnnotation(
+        "origin", target, label="Origin", mark="bracket", style=RegionAnnotationStyle(stroke="#225588")
+    )
+    options_type = gbdraw.CircularOptions if mode == "circular" else gbdraw.LinearOptions
+    draw = gbdraw.draw_circular if mode == "circular" else gbdraw.draw_linear
+    diagram = draw(
+        record,
+        options=options_type(annotations=AnnotationOptions(sets=(AnnotationSet("r", (annotation,)),))),
+        record_displays=[RecordDisplayOptions(start_coordinate=start)],
+    )
+    root = ElementTree.fromstring(diagram._drawing.tostring())
+    (item,) = [group for group in root.iter(f"{_SVG}g") if group.get("data-gbdraw-annotation-id") == "origin"]
+    return item
+
+
+def _circular_cap_degrees(item: ElementTree.Element) -> list[float]:
+    """The clockwise angle from 12 o'clock of each straight cap (a path with no arc), in degrees."""
+
+    angles = []
+    for path in item.iter(f"{_SVG}path"):
+        match = re.fullmatch(r"M ([-\d.]+),([-\d.]+) L ([-\d.]+),([-\d.]+)", path.get("d", "").strip())
+        if match:
+            x1, y1, x2, y2 = map(float, match.groups())
+            angles.append(round(math.degrees(math.atan2((x1 + x2) / 2, -(y1 + y2) / 2)) % 360.0, 1))
+    return sorted(angles)
+
+
+@pytest.mark.parametrize("start", (501, 9501))
+def test_circular_display_cut_inside_a_span_across_the_origin_leaves_seams_open(start: int) -> None:
+    item = _bracket_item("circular", _record(), CoordinateSpan(None, 9001, 1000, wraps_origin=True), start)
+    arcs = [path for path in item.iter(f"{_SVG}path") if " A " in f" {path.get('d', '')} "]
+
+    # The display cut (12 o'clock) splits the span in two arcs; the origin joins its parts, so neither is a cap.
+    assert len(arcs) == 2
+    # Caps stand only at the span's own ends, bp 9000 and bp 1000, not at the display cut or the origin.
+    offset = start - 1
+    expected = sorted(round(360.0 * ((bp - offset) % _LENGTH) / _LENGTH, 1) for bp in (9000, 1000))
+    assert _circular_cap_degrees(item) == expected
+
+
+def _two_end_record(topology: str, *, region_applied: bool) -> SeqRecord:
+    record = _record()
+    record.annotations["topology"] = topology
+    if region_applied:
+        record.annotations.update(gbdraw_region_applied=True, gbdraw_source_length=_LENGTH)
+    return record
+
+
+@pytest.mark.parametrize(("topology", "region_applied"), (("linear", False), ("circular", True)))
+def test_segments_at_both_ends_of_a_record_without_an_origin_keep_their_caps(topology: str, region_applied: bool) -> None:
+    target = FeatureSpan(None, ("locus_tag=ORIGIN_CDS",), envelope="segments")
+    item = _bracket_item("circular", _two_end_record(topology, region_applied=region_applied), target)
+
+    # Two separate arcs, each capped at both its ends: no record origin joins them.
+    assert len([path for path in item.iter(f"{_SVG}path") if " A " in f" {path.get('d', '')} "]) == 2
+    assert len(_circular_cap_degrees(item)) == 4
+    linear = _bracket_item("linear", _two_end_record(topology, region_applied=region_applied), target)
+    assert len([line for line in linear.iter(f"{_SVG}line") if line.get("x1") == line.get("x2")]) == 4
+
+
+@pytest.mark.parametrize("mark", ("band", "highlight"))
+def test_circular_fill_over_a_whole_record_has_no_radial_edge_halfway_round(mark: str) -> None:
+    annotation = RegionAnnotation(
+        "origin",
+        CoordinateSpan(None, 1, _LENGTH),
+        label="Origin",
+        mark=mark,
+        style=RegionAnnotationStyle(stroke="#225588", fill="#ffcc00"),
+    )
+    diagram = gbdraw.draw_circular(
+        _record(), options=gbdraw.CircularOptions(annotations=AnnotationOptions(sets=(AnnotationSet("r", (annotation,)),)))
+    )
+    root = ElementTree.fromstring(diagram._drawing.tostring())
+    (item,) = [group for group in root.iter(f"{_SVG}g") if group.get("data-gbdraw-annotation-id") == "origin"]
+    edges = [
+        edge
+        for path in item.iter(f"{_SVG}path")
+        if path.get("stroke") not in {None, "none"}
+        for edge in re.findall(r"M [-\d.]+,[-\d.]+ L [-\d.]+,[-\d.]+", path.get("d", ""))
+    ]
+
+    # The drawer splits a whole turn in two pieces; every radial edge stands at the top, where the turn starts and
+    # ends, none at the split halfway round (OV-2574).
+    assert edges
+    assert all(edge.startswith("M 0,-") and " L 0,-" in edge for edge in edges)
+
+
+def test_resolved_annotation_crossing_the_origin_needs_a_segment_at_zero() -> None:
+    def build(segments: tuple[tuple[int, int], ...]) -> ResolvedRegionAnnotation:
+        return ResolvedRegionAnnotation(
+            id="a", set_id="s", record_index=0, segments=segments, midpoint_bp=0.0, span_bp=1, label="", mark="band",
+            lane=None, style=RegionAnnotationStyle(), crosses_origin=True,
+        )
+
+    assert build(((9000, _LENGTH), (0, 1000))).crosses_origin
+    for segments in (((0, 1000),), ((9000, _LENGTH), (10, 1000))):
+        with pytest.raises(ValueError, match="crosses the origin"):
+            build(segments)

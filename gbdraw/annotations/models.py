@@ -462,6 +462,13 @@ class ResolvedRegionAnnotation:
     # end, into its first, which starts at 0 (``segments_cross_origin``).
     crosses_origin: bool = False
 
+    def __post_init__(self) -> None:
+        if self.crosses_origin and (len(self.segments) < 2 or not any(start == 0 for start, _end in self.segments)):
+            raise ValueError(
+                f"Annotation {self.id!r} crosses the origin, so it needs at least two segments and one that "
+                f"starts at 0; got {self.segments!r}."
+            )
+
     @property
     def geometry_segments(self) -> tuple[tuple[int, int], ...]:
         if self.display_parts is None:

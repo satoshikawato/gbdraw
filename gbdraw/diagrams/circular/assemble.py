@@ -374,6 +374,7 @@ def _add_circular_feature_underlays(
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
+    record_transform: RecordDisplayTransform | None,
 ) -> tuple[
     list[CircularTrackSlot],
     ResolvedAnnotationBundle,
@@ -385,6 +386,7 @@ def _add_circular_feature_underlays(
         [gb_record],
         mode="circular",
         record_indices=[record_index],
+        record_transforms=None if record_transform is None else [record_transform],
     )
     if set_id is None:
         return slots, bundle, layouts
@@ -2933,7 +2935,7 @@ def add_record_on_circular_canvas(
             resolved_annotations,
             annotation_track_layouts,
             canvas_config=canvas_config,
-            record_index=planned.annotation_record_index,
+            record_index=planned.annotation_record_index, record_transform=presentation.record_transform,
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
