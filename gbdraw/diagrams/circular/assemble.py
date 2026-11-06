@@ -81,6 +81,8 @@ from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_transform import bind_record_transforms
 from ...render.track_slot_metadata import (
+    CircularTrackSlotEntry,
+    CircularTrackSlotRecord,
     RecordAxisInput,
     attach_feature_placement_targets,
     attach_track_slot_geometry,
@@ -226,8 +228,9 @@ class _CircularPlotAssembly:
     source_content_bounds: Aabb
     source_overlay_obstacles: tuple[Aabb, ...]
     primary_targets: tuple[Group, ...]
+    legend_placement: LegendPlacement
     legend: PlacedLegend | None
-    track_slot_geometry: Mapping[str, Any]
+    track_slot_geometry: CircularTrackSlotGeometry
     label_layout: CircularLabelLayout | None
 
 
@@ -244,7 +247,7 @@ class CircularAssemblyResult:
     primary_targets: tuple[Group, ...]
     legend: PlacedLegend | None
     title_target: Group | None
-    track_slot_geometry: Mapping[str, Any]
+    track_slot_geometry: CircularTrackSlotGeometry
     composition_plan: CompositionPlan
     # The drawn external labels: their fit by kind and a probe for the fit search (None without them).
     label_layout: CircularLabelLayout | None = None
@@ -438,10 +441,10 @@ class CircularTrackSlotGeometry(TypedDict):
     schema: Literal[1]
     mode: Literal["circular"]
     source: Literal["resolved"]
-    records: list[dict[str, object]]
+    records: list[CircularTrackSlotRecord]
 
 
-def circular_track_slot_geometry(records: list[dict[str, object]]) -> CircularTrackSlotGeometry:
+def circular_track_slot_geometry(records: list[CircularTrackSlotRecord]) -> CircularTrackSlotGeometry:
     """The Circular track-slot geometry of a drawing with these record entries."""
 
     return {
@@ -465,7 +468,7 @@ def _serialize_circular_track_slot_geometry(
         for index, slot in enumerate(layout_slots)
     }
     safe_base_radius = max(FEATURE_BAND_EPSILON, float(base_radius_px))
-    slots_payload: list[dict[str, Any]] = []
+    slots_payload: list[CircularTrackSlotEntry] = []
     for resolved in radial_layout.slots:
         source_slot = source_by_index.get(int(resolved.slot_index))
         width_spec = getattr(source_slot, "width", None)
@@ -3389,7 +3392,6 @@ def add_record_on_circular_canvas(
         for element in getattr(canvas, "elements", [])[primary_target_start:]
         if isinstance(element, Group)
     )
-
     legend = place_legend(canvas, circular_legend_content, legend_placement, legend_measurement, legend_table)
     attach_feature_placement_targets(
         track_slot_geometry["records"],
@@ -3404,6 +3406,7 @@ def add_record_on_circular_canvas(
         source_content_bounds=source_content_bounds,
         source_overlay_obstacles=overlay_obstacles,
         primary_targets=primary_targets,
+        legend_placement=legend_placement,
         legend=legend,
         track_slot_geometry=track_slot_geometry,
         label_layout=label_layout,
@@ -3421,7 +3424,7 @@ def _compose_circular_plot(
         plot.drawing,
         composition,
         CompositionPrimary(plot.source_content_bounds, plot.primary_targets, plot.source_overlay_obstacles),
-        LegendPlacement(str(plot.canvas_config.legend_position)),
+        plot.legend_placement,
         plot.legend,
         title_target,
     )

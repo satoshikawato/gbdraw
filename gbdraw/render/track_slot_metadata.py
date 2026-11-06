@@ -95,6 +95,39 @@ class RadialExtent(TypedDict):
     outerPx: float
 
 
+class CircularTrackSlotEntry(TypedDict):
+    """One resolved track slot of a Circular record: its identity, renderer, side and radial size."""
+
+    slotIndex: int
+    slotId: str
+    renderer: str
+    side: str
+    widthPx: float
+    widthFactor: float | None
+    radiusFactor: float
+    innerGapPx: float
+    outerGapPx: float
+    compressed: bool
+    source: Literal["resolved"]
+
+
+class _CircularTrackSlotRecordFields(TypedDict):
+    recordIndex: int
+    recordId: str
+    recordLabel: str
+    recordKey: str
+    axisRadiusPx: float
+    axis: CircularAxisGeometry
+    slots: list[CircularTrackSlotEntry]
+
+
+class CircularTrackSlotRecord(_CircularTrackSlotRecordFields, total=False):
+    """One drawn Circular record's track-slot geometry. ``featurePlacementTargets`` is present only when the
+    drawing has a feature slot (``attach_feature_placement_targets`` writes it)."""
+
+    featurePlacementTargets: list[dict[str, object]]
+
+
 @dataclass(frozen=True)
 class RecordAxisInput:
     """One drawn record as its axis is built from: the record, its identity in the
@@ -199,7 +232,7 @@ def attach_track_slot_geometry(canvas: object, geometry: Mapping[str, object]) -
 
 
 def attach_feature_placement_targets(
-    records: Sequence[MutableMapping[str, object]],
+    records: Sequence[CircularTrackSlotRecord] | Sequence[MutableMapping[str, object]],
     slot: FeaturePlacementSlot | None,
 ) -> None:
     """Give each record's geometry the placement targets its feature slot supports (no slot: none written)."""

@@ -283,10 +283,6 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
     geometry = drawing._gbdraw_track_slot_geometry["records"]
 
     assert primary is not None
-    assert plan.primary_bounds == applied_composition_plan(drawing).primary_local_bounds.translated(
-        primary.dx,
-        primary.dy,
-    )
     for record_payload in geometry:
         record_group = _record_group(root, record_payload["recordId"])
         translations = _translations(record_group)

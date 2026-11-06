@@ -7,6 +7,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 
 from gbdraw.diagrams.circular.assemble import (
+    circular_track_slot_geometry,
     _CircularPlotAssembly,
     _compose_circular_plot,
 )
@@ -86,8 +87,9 @@ def _plot(
             source_content_bounds=Aabb(100.0, 200.0, 500.0, 600.0),
             source_overlay_obstacles=(),
             primary_targets=(primary_target,),
+            legend_placement=legend_placement,
             legend=PlacedLegend(legend_target, legend_measurement) if legend_target is not None else None,
-            track_slot_geometry={"slots": ()},
+            track_slot_geometry=circular_track_slot_geometry([]),
             label_layout=None,
         ),
         primary_target,

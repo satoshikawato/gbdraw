@@ -17,7 +17,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -276,7 +276,7 @@ from gbdraw.render.groups.circular.definition import (
 )
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render.groups.linear.plot_title import plot_title_content as linear_plot_title_content
-from gbdraw.render.track_slot_metadata import attach_track_slot_geometry
+from gbdraw.render.track_slot_metadata import CircularTrackSlotRecord, attach_track_slot_geometry
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -3268,7 +3268,7 @@ def assemble_circular_diagram_from_records(
 
     record_results: list[CircularAssemblyResult] = []
     record_radii_px: list[float] = []
-    track_slot_geometry_records: list[dict[str, Any]] = []
+    track_slot_geometry_records: list[CircularTrackSlotRecord] = []
     record_id_counts = Counter(str(record.id) for record in records)
     total_record_count = len(records)
     for record_index, (record, record_scale) in enumerate(zip(records, record_scales)):
@@ -3344,14 +3344,10 @@ def assemble_circular_diagram_from_records(
         )
         result = _require_circular_assembly_result(sub_canvas)
         record_results.append(result)
-        sub_geometry = result.track_slot_geometry
-        if isinstance(sub_geometry, Mapping):
-            for record_payload in sub_geometry.get("records", []) or []:
-                if not isinstance(record_payload, Mapping):
-                    continue
-                updated_record = dict(record_payload)
-                updated_record["recordIndex"] = int(record_index)
-                track_slot_geometry_records.append(updated_record)
+        for record_payload in result.track_slot_geometry["records"]:
+            updated_record = record_payload.copy()
+            updated_record["recordIndex"] = int(record_index)
+            track_slot_geometry_records.append(updated_record)
 
     max_record_radius_px = max(
         [float(radius) for radius in record_radii_px if float(radius) > 0.0],

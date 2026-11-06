@@ -27,7 +27,7 @@ from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import LegendMeasurement
 from gbdraw.core.text import drawn_text_box
-from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
+from gbdraw.diagrams.circular.assemble import CircularAssemblyResult, circular_track_slot_geometry
 from gbdraw.diagrams.circular.parts import CircularRecordData
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
@@ -358,7 +358,7 @@ def _with_mock_circular_result(
         primary_targets=(),
         legend=None,
         title_target=None,
-        track_slot_geometry={},
+        track_slot_geometry=circular_track_slot_geometry([]),
         composition_plan=composition_plan,
     )
     setattr(canvas, "_gbdraw_circular_assembly_result", result)

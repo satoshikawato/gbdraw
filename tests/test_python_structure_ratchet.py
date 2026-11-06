@@ -233,7 +233,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/analysis/protein_colinearity.py::extract_cds_proteins": 188,
     "gbdraw/analysis/protein_colinearity.py::extract_protein_identity_manifest": 239,
     "gbdraw/api/diagram.py::assemble_circular_diagram_from_record": 381,
-    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 592,
+    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 588,
     "gbdraw/api/diagram.py::assemble_linear_diagram_from_records": 484,
     "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 168,
     "gbdraw/circular.py::_get_args": 604,
