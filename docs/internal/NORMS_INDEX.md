@@ -248,7 +248,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings) | Project with drawings | ACCEPTED | session.project-drawings | 10 | scenario revision 9 | 47 |
 | [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff) | Per-record draw ON/OFF | ACCEPTED | diagram-generation.record-draw-selection | 1 | — | 2 |
 | [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index) | Settings pane section index | ACCEPTED | web.settings-pane.section-index | 3 | scenario revision 2 | 2 |
-| [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 5 | scenario revision 4 | 1 |
+| [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 5 | scenario revision 4 | 2 |
 | [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line) | Linear File cards fold to one line | ACCEPTED | web.linear.file-card-fold | 1 | — | 0 |
 | [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name) | One naming rule for Legend rows that share a name | ACCEPTED | legend.row-name-multiplicity | 1 | — | 5 |
 | [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load) | Legend position of a diagram mode at Load | ACCEPTED | web.legend.position-of-mode | 3 | scenario revision 2 | 1 |
@@ -593,6 +593,7 @@ are listed under "Cited ids without a record".
   - `tests/web/settings-section-index.playwright.spec.js`
 - [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail)
   - `tests/web/browser-preferences.test.mjs`
+  - `tests/web/settings-pane-rail.playwright.spec.js`
 - [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name)
   - `tests/fixtures/legend_names.json`
   - `tests/test_legend_row_names.py`
