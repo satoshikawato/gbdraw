@@ -422,7 +422,10 @@ def _record_prefix_sums(record: SeqRecord, depths: DepthArray, record_len: int) 
         shown = shown[::-1]
         low = source_start + record_len - 1 - last
     high = low + int(shown.size)
-    np.cumsum(shown, dtype=np.float64, out=prefix[low + 1 : high + 1])
+    # Depths are cast in place and summed in place: no second per-base array.
+    sums = prefix[low + 1 : high + 1]
+    sums[:] = shown
+    np.cumsum(sums, out=sums)
     prefix[high + 1 :] = prefix[high]
     return prefix
 
