@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance: a per-base depth file takes much less memory on the command
+  line, in the Python API and in the Web app. Each reference's depths are held
+  as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a
+  table of rows, the file is read in pieces, and binning no longer copies the
+  rows. A 21 Mbp depth file is held in 20 MiB instead of 340 MiB; `gbdraw
+  circular` with it peaks at 450 MiB instead of 2.6 GiB, and the Web app at
+  1.9 GB instead of 3.8 GB. Drawings do not change.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.
