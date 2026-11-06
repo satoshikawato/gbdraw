@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
-  countWorkflowJobs, isoWeek, latestShardArtifacts, percentile, priorReports, readData, renderReport,
-  summarizeFunctional, summarizeRuns
+  PR_TARGETS, PR_WINDOW, countWorkflowJobs, isoWeek, latestShardArtifacts, percentile, priorReports, readData,
+  renderReport, summarizeFunctional, summarizePullRequests, summarizeRuns
 } from '../../tools/ci-inventory.mjs';
 
 const at = (minute) => new Date(Date.UTC(2026, 9, 14, 0, minute)).toISOString();
@@ -134,7 +134,7 @@ test('a re-run counts each shard once, from its latest attempt, and a missing re
   assert.equal(functional.cases, 1);
   const markdown = renderReport({
     week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)),
-    runs: summarizeRuns({ runs: [], jobsByRun: new Map() }), functional,
+    runs: summarizeRuns({ runs: [], jobsByRun: new Map() }), pullRequests: summarizePullRequests([]), functional,
     functionalRun: { id: 1, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24, previous: null,
     serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'
   });
@@ -150,8 +150,9 @@ test('the report shows week-over-week changes and carries its numbers for next w
     plannedTestMinutes: [8], topSpecs: [{ file: 'tests/web/a.spec.js', cases: 1, minutes: 8 }]
   };
   const runs = summarizeRuns({ runs: [], jobsByRun: new Map() });
+  const pullRequests = summarizePullRequests([]);
   const markdown = renderReport({
-    week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)), runs, functional,
+    week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)), runs, pullRequests, functional,
     functionalRun: { id: 38490146362, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24,
     previous: { week: '2026-W41', cases: 1000, functionalTestMinutes: 20, runnerMinutes: 0, testJobs: 22 },
     serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'
@@ -166,12 +167,67 @@ test('the report shows week-over-week changes and carries its numbers for next w
   });
   assert.equal(readData('no data here'), null);
   const partial = renderReport({
-    week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)), runs, functional,
+    week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)), runs, pullRequests, functional,
     partial: 'runs created from 2026-10-10T00:00Z on are missing (HTTP 403).',
     functionalRun: { id: 1, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24, previous: null,
     serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'
   });
   assert.match(partial, /\*\*Partial report\*\*: runs created from 2026-10-10T00:00Z on are missing \(HTTP 403\)\./);
+});
+
+test('pull request feedback time splits by functional Playwright, takes the median, and warns over target', () => {
+  // A green head run: planning at minute 1, its slowest job ends at `end`, and a skipped job
+  // stamped later than that does not count.
+  const headRun = (end, functional) => [
+    job('Plan', 0, 1, 2),
+    job(functional ? 'Playwright functional (shard 2/8)' : 'Web contracts', 2, 3, end),
+    job('Recipes', 0, 0, 0, { conclusion: 'skipped', started_at: at(end + 30), completed_at: at(end + 30) })
+  ];
+  const summary = summarizePullRequests([
+    headRun(18, false), headRun(26, false), headRun(22, false),
+    headRun(41, true), headRun(31, true), headRun(51, true), headRun(35, true),
+    // A pull request without a green head run, and one whose jobs were all skipped.
+    null, [job('Lint', 0, 0, 0, { conclusion: 'skipped' })]
+  ]);
+  assert.equal(summary.pullRequests, 9);
+  assert.equal(summary.measured, 7);
+  assert.deepEqual(summary.kinds.map(({ kind, runs, median, minutes, over }) => [kind, runs, median, minutes, over]), [
+    ['without functional Playwright', 3, 21, 20, true],
+    // Nearest rank: the second of 30, 34, 40, 50.
+    ['with functional Playwright', 4, 34, 35, false]
+  ]);
+
+  const report = (pullRequests) => renderReport({
+    week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)),
+    runs: summarizeRuns({ runs: [], jobsByRun: new Map() }), pullRequests,
+    functional: summarizeFunctional({
+      reports: [], shardsFile: { minutes: {}, shards: [] }, casesPerFile: new Map(), testDir: 'tests/web'
+    }),
+    functionalRun: { id: 1, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24, previous: null,
+    serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'
+  });
+  const over = report(summary);
+  assert.match(over, /\*\*Pull request feedback over target\*\*: median 21 minutes without functional Playwright \(target 20\)\./);
+  assert.match(over, /last 9 pull requests merged into `dev` \(7 had one\)/);
+  assert.match(over, /\| without functional Playwright \| 3 \| 21 \| 20 \| \*\*yes\*\* \|/);
+  assert.match(over, /\| with functional Playwright \| 4 \| 34 \| 35 \| no \|/);
+
+  // The warning and the printed median are the same rounded number: 20.03 is 20, not above it.
+  const edge = summarizePullRequests([[{
+    name: 'Web contracts', conclusion: 'success', started_at: '2026-10-14T00:00:00Z', completed_at: '2026-10-14T00:20:02Z'
+  }]]);
+  assert.equal(edge.kinds[0].over, false);
+  assert.match(report(edge), /Pull request feedback is within target \(median 20 of 20 minutes without functional Playwright; median - of 35 minutes with functional Playwright\)\./);
+});
+
+test('the targets and window the inventory checks are the ones SELECTIVE_CI.md states', () => {
+  const doc = readFileSync('docs/internal/SELECTIVE_CI.md', 'utf8').replace(/\s+/g, ' ');
+  const [without, withFunctional] = PR_TARGETS;
+  assert.equal(without.functional, false);
+  assert.equal(withFunctional.functional, true);
+  assert.ok(doc.includes(`PR feedback targets ${without.minutes} minutes without functional Playwright`
+    + ` and ${withFunctional.minutes} minutes with it`));
+  assert.ok(doc.includes(`last ${PR_WINDOW} pull requests merged into \`dev\``));
 });
 
 const block = (data) => `<!-- ci-inventory-data ${JSON.stringify(data)} -->`;

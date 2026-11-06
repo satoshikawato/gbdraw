@@ -13,8 +13,13 @@ classification rules.
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
-PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
-with it. Integrated functional validation targets 15–20 minutes where practical.
+PR feedback targets 20 minutes without functional Playwright and 35 minutes
+with it: the median wall time, from the first job's start to the last job's
+end, of the latest green `Tests` run on the head commit of each of the last 20
+pull requests merged into `dev`. The [weekly CI inventory](#weekly-ci-inventory)
+reports both medians next to these targets and warns, without failing, when
+one is above its target. Integrated functional validation targets 15–20
+minutes where practical.
 S11 remains intentionally expensive. The separate
 `Gallery publication` workflow retains common-nine browser parity and its
 three-trial performance projection, with the complete-refresh budget available
@@ -559,11 +564,16 @@ The `CI inventory` workflow (`.github/workflows/ci-inventory.yml`) runs
 `tools/ci-inventory.mjs` every Monday at 00:17 UTC and on manual dispatch. It
 checks out `dev`, needs no session, and never runs on a pull request. GitHub
 runs scheduled workflows from the default branch, so the schedule starts once
-the workflow reaches `main`. Its report covers the last 7 days:
+the workflow reaches `main`. Its report covers the last 7 days, except where an
+item names its own window:
 
 - runner-minutes by workflow and event, and by job name (matrix jobs together);
 - `Tests` wall time (run start to its last job) and queue time (job created to
   job started), p50 and p90, for pull request and `dev` push runs;
+- pull request feedback time over the last 20 pull requests merged into `dev`,
+  whenever they merged: the median (nearest rank) for those whose run had a
+  functional Playwright shard and for the others, next to the targets in
+  [Validation tiers](#validation-tiers);
 - the functional shards of the latest green `dev` push `Tests` run that kept
   every shard report: test-minutes per shard, the slowest shard against the
   mean, the case count, the 15 spec files with the most test-minutes, and the
@@ -594,6 +604,11 @@ in `tests/ci/functional-shards.json`. A session that reads a flagged report:
    node or pytest, and removes cases and jobs whose behaviour is covered
    elsewhere. Removing an acceptance case follows "Smoke inventory and
    regression retention".
+
+A report warns when either pull request feedback median is above its target.
+The warning never fails the workflow. A session that reads it names the jobs
+that set the wall time of the slow runs and asks the Owner whether to plan
+work that shortens them.
 
 ## Trust and aggregate checks
 
