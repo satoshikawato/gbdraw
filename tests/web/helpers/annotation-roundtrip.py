@@ -8,6 +8,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from gbdraw.annotations import CoordinateSpan, read_annotation_table
+# The one camelCase encoding of a style (a gradient is written only when set), shared with the Session.
+from gbdraw.session_request_codec import _encode_annotation_style
 
 
 def camel_fields(value):
@@ -36,7 +38,7 @@ for annotation_set in read_annotation_table(sys.argv[1]):
             "setId": annotation_set.id, "id": item.id, "target": target,
             "mark": item.mark, "label": item.label or "", "lane": item.lane,
             "legendLabel": item.legend_label or annotation_set.legend_label,
-            "style": camel_fields(asdict(item.style or annotation_set.default_style)),
+            "style": _encode_annotation_style(item.style or annotation_set.default_style),
         })
 expected = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 assert rows == expected, json.dumps({"python": rows, "web": expected}, indent=2)

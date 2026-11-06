@@ -365,8 +365,9 @@ for (const mode of ['circular', 'linear']) {
     await openAllDetails(page);
     const enabledControls = () => page.evaluate(({ selectors, names }) => Array
       .from(document.querySelectorAll('.settings-pane :is(input, select, textarea, button)'))
+      // `:disabled` also holds for a control in a disabled fieldset (the Sequence search panel's).
       .filter((control) => control.checkVisibility() && !control.closest('.help-tip')
-        && !control.disabled && control.getAttribute('aria-disabled') !== 'true')
+        && !control.matches(':disabled') && control.getAttribute('aria-disabled') !== 'true')
       .map((control) => ({ control, name: control.getAttribute('aria-label') || control.textContent.trim() }))
       .filter(({ control, name }) => !selectors.some((selector) => control.matches(selector)) && !names.includes(name))
       .map(({ control, name }) => name || control.outerHTML.slice(0, 80)), BUSY_ENABLED_CONTROLS);

@@ -4134,8 +4134,9 @@
                 <div v-settings-section="'sequence-search'" data-setting="sequence-search" class="card">
                     <details>
                         <summary :aria-label="t('Sequence search')"><settings-section-title section="sequence-search"></settings-section-title> <setting-note setting="sequence-search"></setting-note> <help-tip :text="t('Search the records of the shown drawing, as last generated, for query sequences with LOSAT. Each search adds an annotation set of its hits, drawn at once. The queries and settings here are not saved in the Session.')"></help-tip></summary>
-                        <!-- The panel's values are its own and transient: no History step (data-history-ignore) and not in the Session. -->
-                        <div data-history-ignore data-sequence-search class="mt-2 space-y-2 pt-2 border-t border-slate-200">
+                        <!-- The panel's values are its own and transient: no History step (data-history-ignore) and not in the Session.
+                             A pending Session operation disables the whole panel, as every other settings control (GX-01, GX-12). -->
+                        <fieldset data-history-ignore data-sequence-search :disabled="!semanticMutationAvailable" class="min-w-0 mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <button v-if="sequenceSearch.panel.folded" type="button" data-sequence-search-unfold class="btn btn-secondary w-full justify-between text-[10px] px-2" @click="sequenceSearch.setFolded(false)" :aria-expanded="false">
                                 <span class="truncate">{{ tn(sequenceSearch.panel.queries.length, '{count} query', '{count} queries', { count: sequenceSearch.panel.queries.length }) }} · {{ sequenceSearch.programText }} · {{ sequenceSearch.panel.colorMode === 'gradient' ? t('Gradient by query position') : t('One color per query') }}</span>
                                 <i class="ph ph-caret-down" aria-hidden="true"></i>
@@ -4233,7 +4234,7 @@
                                 </div>
                             </div>
                             <button v-if="sequenceSearch.shownOutcome" type="button" class="btn btn-secondary text-xs w-full" @click="sequenceSearch.saveRawTsv()"><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
-                        </div>
+                        </fieldset>
                     </details>
                 </div>
 
