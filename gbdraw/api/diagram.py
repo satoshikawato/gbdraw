@@ -14,7 +14,6 @@ import copy
 import logging
 import math
 import re
-import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
@@ -3694,17 +3693,14 @@ _CIRCULAR_PX_PER_RADIUS = 2.0
 
 @dataclass(frozen=True)
 class _CircularPass:
-    """One Circular assembly: the configuration it drew, the drawing, and the assembly's wall time."""
+    """One Circular assembly: the configuration it drew and the drawing."""
 
     cfg: GbdrawConfig
     drawing: Drawing
-    seconds: float
 
 
 def _circular_pass(assemble: _CircularAssemble, cfg: GbdrawConfig) -> _CircularPass:
-    started = time.monotonic()
-    drawing = assemble(cfg, {})
-    return _CircularPass(cfg, drawing, time.monotonic() - started)
+    return _CircularPass(cfg, assemble(cfg, {}))
 
 
 def _fitted_circular_pass(
@@ -3788,7 +3784,6 @@ def _checked_circular_drawing(
     checked = check_circular_label_fit(
         _circular_label_layouts(drawing),
         verify,
-        assembly_seconds=drawn.seconds,
         warn_search_seconds=warn_search_seconds,
         larger_figure=larger,
     )

@@ -655,8 +655,8 @@ def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_fi
 
 
 # The OV-732 tests pin that rows compute without the input files, not how fast, so their searches have no
-# bound. A bounded search starts a verification only while one more first-pass assembly fits before the bound
-# (CircularLabelFitSearch), and the first assembly of the same figure took 4 s to over 30 s from run to run.
+# bound: a bounded row stops once the next verification, as long as the last, would end after the bound
+# (CircularLabelFitSearch), and the time of the same verifications varies widely from run to run.
 # The bound itself is pinned by test_a_web_row_stops_at_its_bound_and_says_no_value_was_found.
 NO_ROW_BOUND = math.inf
 
@@ -916,6 +916,47 @@ def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     assert bounded.row(str(failed), "combination")["status"] == "found"
     (deadline,) = rows.deadlines
     assert deadline is not None and before + WEB_ROW_SEARCH_SECONDS <= deadline <= time.monotonic() + WEB_ROW_SEARCH_SECONDS
+
+
+def test_a_web_row_of_a_figure_whose_first_assembly_took_the_whole_bound_still_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-2527: the first full assembly does not estimate a verification. A figure that took 30 s to draw (a slow
+    machine, the browser) gets its rows; before, every row stopped at once with "No value found within 30 seconds."
+    """
+
+    import time
+
+    import gbdraw.api.diagram as diagram_module
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_report
+
+    clock = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    real_assemble = diagram_module.assemble_circular_diagram_from_record
+    assemblies: list[float] = []
+
+    def timed_assemble(*args: object, **kwargs: object):
+        # The first assembly takes the whole Web bound; each verification half a second.
+        clock[0] += WEB_ROW_SEARCH_SECONDS if not assemblies else 0.5
+        assemblies.append(clock[0])
+        return real_assemble(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", timed_assemble)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(
+            _crossing_record(), options=_crossing_options(), _label_fit_warn_search_seconds=0.0
+        )
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn and report.rows
+    searches = LabelFitRowSearches()
+    (token,) = searches.retain("circular", [drawing])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        row = searches.row(str(token), report.rows[0].kind)
+
+    assert len(assemblies) > 1
+    assert row["status"] != "not_computed", row["reason"]
 
 
 @pytest.mark.parametrize("digit", ("١", "²", "３"))

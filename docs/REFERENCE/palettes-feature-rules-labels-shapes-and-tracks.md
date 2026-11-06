@@ -395,8 +395,9 @@ a smaller size than the one offered may not fit.
 When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
 rows it did not reach. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
-search share 30 seconds, and a setting is tried only if drawing the figure once
-more ends within that time. Linear feature labels get only the separate
+search share 30 seconds. The first setting is always tried; each later one
+is tried only if drawing the figure once more, as long as the last try took,
+ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
 apart. Linear region labels and Circular region labels that are cut or lie
 on other tracks get no row.
@@ -486,7 +487,9 @@ searches no row of a figure drawn anyway; the dialog computes each row that
 Generate did not reach, one after another, for at most 30 seconds each. A row
 that finds no value in that time shows "No value found within 30 seconds."
 The next time the dialog opens, that row is searched again for up to 30
-seconds, continuing from where it stopped, so it can still find a value.
+seconds, continuing from where it stopped, so it can still find a value. If
+the last setting it tried took 30 seconds or more, it tries no further
+setting and shows the same message at once.
 While a row is being computed, Apply and Cancel first wait for it to finish,
 at most 30 seconds, and the dialog shows "Finishing the choice being
 computed…". Over a drawn figure, Cancel reads **Keep as drawn**. When the
