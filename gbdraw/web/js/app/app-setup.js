@@ -126,7 +126,7 @@ import {
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import { bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource, createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
+import { bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileTree, createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
 import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec, normalizeInputType } from '../services/input-types.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
@@ -178,13 +178,19 @@ import { createPreviewFeatureSearch } from './feature-search/preview-actions.js'
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
-import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
+import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { createResultPopups } from './result-popups.js';
+import {
+  createCircularConservationComparisonFiles, createCircularConservationSeriesPanel, createCircularConservationSources
+} from './circular-conservation.js';
+import {
+  buildDefaultCircularRecordPositions, createCircularRecordOrder, createCircularRecordPresentation
+} from './circular-record-panel.js';
 import {
   createClickedFeatureCopy, createImportedComparisonChoice, createMissingBlastTsvChoice, createResultExport, createRunInfoCopy
 } from './result-actions.js';
@@ -239,7 +245,7 @@ import { getSvgDimensions } from '../services/svg-dimensions.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
-import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
+import { createLinearRecordSelector } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
@@ -285,7 +291,6 @@ import {
   bindingKeyOfRequestRecord,
   circularRecordDrawKey,
   circularRecordRequestKeys,
-  circularRecordsToDraw,
   linearCardHasSettings,
   movesARecordSideways,
   pruneRecordsOff,
@@ -304,21 +309,9 @@ import {
 } from './comparison-ui.js';
 import {
   circularDiscoveryForInput,
-  discoverInputRecords,
-  readComparisonSequence
+  discoverInputRecords
 } from '../services/record-discovery.js';
-import {
-  applyComparisonSequenceRecordLabel,
-  conservationSourceDescriptors,
-  defaultConservationSeriesLabel,
-  moveConservationSeriesEntry,
-  normalizeFileList,
-  orderedConservationSources,
-  orderedOptionalConservationFiles,
-  parseConservationLabelText,
-  reconcileConservationSeries,
-  withoutConservationSeries
-} from '../services/conservation-series.js';
+import { normalizeFileList } from '../services/conservation-series.js';
 import {
   comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd, linearAxisRulerApplies
 } from '../mode-profiles.js';
@@ -362,15 +355,13 @@ import {
 /** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
 /** @import { OrthogroupGroup } from './orthogroups.js' */
-/** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
 /** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { ConservationFile, RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive, isRef } = window.Vue;
@@ -3219,305 +3210,33 @@ export const createAppSetup = () => {
   // series to them (`resetDrawing`). Each Depth control fits its drawing
   // itself; Load and History restore install the saved or captured series
   // (OV-1164).
-  /** @param {DrawingState} drawing */
-  const isCircularConservationUploadSource = (drawing) => (
-    String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
-  );
-  /** @param {DrawingState} drawing */
-  const isDerivedCircularConservationReplay = (drawing) => (
-    !isCircularConservationUploadSource(drawing) &&
-    drawing.files.c_conservation_blasts_source === 'losat-cache' &&
-    normalizeFileList(drawing.files.c_conservation_blasts).length > 0
-  );
-  /** @param {DrawingState} drawing */
-  const getCircularConservationSourceFiles = (drawing) => (
-    isCircularConservationUploadSource(drawing) || isDerivedCircularConservationReplay(drawing)
-      ? normalizeFileList(drawing.files.c_conservation_blasts)
-      : normalizeFileList(drawing.files.c_conservation_fastas)
-  );
-  /** @param {DrawingState} drawing */
-  const syncCircularConservationEnabled = (drawing, sourceFiles = getCircularConservationSourceFiles(drawing)) => {
-    drawing.circularConservation.enabled = normalizeFileList(sourceFiles).length > 0;
-  };
-  /** @param {DrawingState} drawing */
-  const clearDerivedCircularConservationBlasts = (drawing) => {
-    if (drawing.files.c_conservation_blasts_source !== 'losat-cache') return;
-    bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', []);
-    setConservationBlastsSource(drawing.slices.inputs, null);
-  };
-  /** @param {DrawingState} drawing @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles Files, or refs kept */
-  const setCircularConservationSourceFiles = (drawing, nextFiles) => {
-    if (isCircularConservationUploadSource(drawing)) {
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
-      setConservationBlastsSource(drawing.slices.inputs, null);
-    } else {
-      clearDerivedCircularConservationBlasts(drawing);
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
-    }
-    writeLosatCacheInfo([]);
-    reconcileCircularConservation(drawing);
-  };
-  /**
-   * A Circular drawing's similarity-ring BLAST files, the files kept in their
-   * places: the uploaded rings through their source edit, the rows of a LOSAT
-   * cache replay in place, each followed by the rings' reconcile.
-   * @param {DrawingState} drawing @param {readonly (InputFileRef | null)[]} nextFiles
-   */
-  const replaceCircularConservationBlasts = (drawing, nextFiles) => {
-    if (isCircularConservationUploadSource(drawing)) {
-      setCircularConservationSourceFiles(drawing, nextFiles);
-      return;
-    }
-    bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
-    reconcileCircularConservation(drawing);
-  };
-  /**
-   * The shown Circular drawing's uploaded ring files; it asks first when a
-   * managed ring row another row reaches leaves with its file.
-   * @param {FileLike | FileLike[] | null | undefined} nextFiles
-   */
-  const setCircularConservationUploadFiles = (nextFiles) => shownAction('circular', (drawing) => {
-    const sourceFiles = normalizeFileList(nextFiles);
-    /** @param {() => void} [turnOffReaching] */
-    const apply = (turnOffReaching) => {
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', sourceFiles);
-      setConservationBlastsSource(drawing.slices.inputs, null);
-      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', []);
-      writeLosatCacheInfo([]);
-      reconcileCircularConservation(drawing);
-      turnOffReaching?.();
-    };
-    return askRingSourceRemoval(drawing, sourceFiles, seriesOfRingFiles(drawing, sourceFiles), msg('Change uploaded file'), apply) ?? apply();
+  const {
+    clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
+    askRingSourceRemoval, reconcileCircularConservation, setCircularConservationEnabled, refreshCircularConservationSlots
+  } = createCircularConservationSources({
+    state, writeLosatCacheInfo,
+    syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
+    askingStackPorts
   });
-  /**
-   * The series a change of the ring files leaves (`reconcileCircularConservation`).
-   * @param {DrawingState} drawing @param {ConservationFile[]} sourceFiles
-   */
-  const seriesOfRingFiles = (drawing, sourceFiles) => reconcileConservationSeries({
-    sourceFiles,
-    previousSeries: drawing.circularConservation.series,
-    legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
+  const {
+    setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
+    moveCircularConservationSeries, openCircularConservationComparisonFilePicker, changeCircularConservationSource,
+    refreshShownCircularConservationSlots
+  } = createCircularConservationSeriesPanel({
+    state, shownAction, shownDrawingOfMode, writeLosatCacheInfo, circularConservationFastaInput,
+    reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
-  /**
-   * A change of the comparison sources asks when a managed ring row another row
-   * reaches leaves with its source (`askTrackSourceRemoval`).
-   * @param {DrawingState} drawing @param {ConservationFile[]} sourceFiles The ring files it leaves.
-   * @param {readonly RawConservationSeriesEntry[]} series The series it leaves. @param {string} label
-   * @param {(turnOffReaching: () => void) => unknown} apply
-   */
-  const askRingSourceRemoval = (drawing, sourceFiles, series, label, apply) => askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
-    kind: 'comparison',
-    loss: {
-      leaving: circularTrackSlotEditor.circularConservationRowsLeaving(
-        drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series })
-      ),
-      stayingOn: new Set(),
-      emptySeries: () => []
-    },
-    sources: () => [drawing.files.c_conservation_blasts, drawing.files.c_conservation_fastas, ...drawing.circularConservation.series],
-    label,
-    apply
+  const {
+    settleComparisonRecordLabels, addCircularConservationComparisonFile, setCircularConservationCompanionFile,
+    removeCircularConservationSource
+  } = createCircularConservationComparisonFiles({
+    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, clearDerivedCircularConservationBlasts,
+    setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
-  // The comparison rings of a Circular drawing follow their source files: the
-  // series, whether the rings are on, and the managed stack rows. Each
-  // transition that changes the source, its files, or the legacy series names
-  // calls it (R10): the ring controls, a Generate that adopts a LOSAT result,
-  // and Session Load (`afterImport`). A History restore and the Load rollback
-  // install what they captured.
-  /** @param {DrawingState} drawing */
-  const reconcileCircularConservation = (drawing) => {
-    const sourceFiles = getCircularConservationSourceFiles(drawing);
-    if (isDerivedCircularConservationReplay(drawing)) {
-      drawing.circularConservation.enabled = true;
-      refreshCircularConservationSlots(drawing);
-      return;
-    }
-    syncCircularConservationEnabled(drawing, sourceFiles);
-    const legacyLabels = parseConservationLabelText(drawing.circularConservation.labels);
-    const nextSeries = reconcileConservationSeries({
-      sourceFiles,
-      previousSeries: drawing.circularConservation.series,
-      legacyLabels
-    });
-    drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
-    refreshCircularConservationSlots(drawing);
-  };
-  // Generate turns the rings on or off by their source files; the managed stack
-  // rows follow in the same step, also when the run then fails or is canceled.
-  /** @param {DrawingState} drawing @param {boolean} enabled */
-  const setCircularConservationEnabled = (drawing, enabled) => {
-    if (drawing.circularConservation.enabled === enabled) return;
-    drawing.circularConservation.enabled = enabled;
-    refreshCircularConservationSlots(drawing);
-  };
-  // A ring row's name or color, or a record label read for it, shows in its
-  // managed stack row.
-  /** @param {DrawingState} drawing */
-  const refreshCircularConservationSlots = (drawing) => {
-    if (drawing.adv.circular_track_slots_enabled === true) {
-      circularTrackSlotEditor.syncCircularConservationSlots(drawing);
-    }
-  };
-  const circularConservationSeriesRows = computed(() => {
-    const drawing = state.activeDrawing();
-    return (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => ({
-      index,
-      filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
-      sourceLabel: isCircularConservationUploadSource(drawing)
-        ? t('BLAST {n}', { n: Number(index) + 1 })
-        : t('Comparison {n}', { n: Number(index) + 1 }),
-      sourceIndex: Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index,
-      comparisonSequenceFilename: String(
-        drawing.files.c_conservation_sequence_sources[
-          Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
-        ]?.name || ''
-      ),
-      defaultLabel: defaultConservationSeriesLabel(
-        { name: entry?.fileName },
-        Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
-      )
-    }));
-  });
-  /** @param {number} index @param {number} direction */
-  const canMoveCircularConservationSeries = (index, direction) => {
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return false;
-    const idx = Number(index);
-    const target = idx + Math.sign(Number(direction));
-    return (
-      Array.isArray(drawing.circularConservation.series) &&
-      Number.isInteger(idx) &&
-      idx >= 0 &&
-      idx < drawing.circularConservation.series.length &&
-      target >= 0 &&
-      target < drawing.circularConservation.series.length
-    );
-  };
-  /** @param {number} index @param {number} direction */
-  const moveCircularConservationSeries = (index, direction) => shownAction('circular', (drawing) => {
-    if (moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
-      refreshCircularConservationSlots(drawing);
-    }
-  });
-  const openCircularConservationComparisonFilePicker = () => {
-    circularConservationFastaInput.value?.click();
-  };
-  const pendingComparisonRecordLabels = new Set();
-  // Also waits for a read that starts meanwhile (another Add Seq).
-  const settleComparisonRecordLabels = async () => {
-    while (pendingComparisonRecordLabels.size > 0) {
-      await Promise.allSettled([...pendingComparisonRecordLabels]);
-    }
-  };
   // The auxiliary file imports still applying: the watchers add them, Save and
   // Load read them, and Generate waits for them (OV-1193).
   const auxiliaryFileImports = createAuxiliaryFileImports(reactive, state.inputFiles);
-  /** @param {Event & { target: HTMLInputElement }} event */
-  const addCircularConservationComparisonFile = (event) => shownAction('circular', (drawing) => {
-    const target = event?.target || null;
-    const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
-    if (!selectedFile) return;
-    const selectedRef = /** @type {InputFileRef} */ (state.inputFiles.registerFile(selectedFile));
-    // D12: the Python ring reader names a GenBank or DDBJ row after it is added
-    // (a read failure keeps the file-name default; Generate reports it).
-    // Generate waits for these reads before it reads the row labels.
-    const pending = readComparisonSequence({ file: selectedFile })
-      .then(({ recordLabel }) => {
-        const applied = applyComparisonSequenceRecordLabel({
-          series: drawing.circularConservation.series,
-          sourceFiles: getCircularConservationSourceFiles(drawing),
-          file: selectedRef,
-          recordLabel
-        });
-        refreshCircularConservationSlots(drawing);
-        return applied;
-      })
-      .catch(() => false)
-      .finally(() => pendingComparisonRecordLabels.delete(pending));
-    pendingComparisonRecordLabels.add(pending);
-    // B22 (R11): the input is data-history-managed. This one Add Seq step
-    // captures its before now, the row appears at once, and the step commits
-    // after the label read, so Undo and Redo restore the label.
-    const step = history.runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
-    clearDerivedCircularConservationBlasts(drawing);
-    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
-      [...normalizeFileList(drawing.files.c_conservation_fastas), selectedRef]);
-    writeLosatCacheInfo([]);
-    reconcileCircularConservation(drawing);
-    if (target) target.value = '';
-    return step;
-  });
-  /** @param {number} sourceIndex @param {Event & { target: HTMLInputElement }} event */
-  const setCircularConservationCompanionFile = (sourceIndex, event) => shownAction('circular', (drawing) => {
-    const index = Number(sourceIndex);
-    if (!Number.isInteger(index) || index < 0) return;
-    const selectedFile = Array.from(event?.target?.files || []).filter(Boolean)[0] || null;
-    const next = [...drawing.files.c_conservation_sequence_sources];
-    while (next.length <= index) next.push(null);
-    next[index] = state.inputFiles.registerFile(selectedFile);
-    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', next);
-    if (event?.target) event.target.value = '';
-  });
-  /** @param {number} index */
-  const removeCircularConservationSource = (index) => shownAction('circular', (drawing) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.circularConservation.series.length) return;
-    if (isDerivedCircularConservationReplay(drawing)) {
-      const orderedBlasts = orderedConservationSources(
-        drawing.files.c_conservation_blasts,
-        drawing.circularConservation
-      ).map((entry) => entry.file);
-      const orderedFastas = orderedOptionalConservationFiles(
-        drawing.files.c_conservation_fastas,
-        drawing.circularConservation
-      );
-      const orderedSequenceSources = orderedOptionalConservationFiles(
-        drawing.files.c_conservation_sequence_sources,
-        drawing.circularConservation
-      );
-      const kept = withoutConservationSeries({
-        blasts: orderedBlasts,
-        fastas: orderedFastas,
-        sequenceSources: orderedSequenceSources,
-        series: drawing.circularConservation.series
-      }, idx);
-      /** @param {() => void} [turnOffReaching] */
-      const applyKept = (turnOffReaching) => {
-        drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
-        drawing.circularConservation.labels = kept.labels;
-        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', kept.blasts);
-        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', kept.fastas);
-        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources);
-        setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
-        drawing.circularConservation.enabled = kept.enabled;
-        writeLosatCacheInfo([]);
-        refreshCircularConservationSlots(drawing);
-        turnOffReaching?.();
-      };
-      return askRingSourceRemoval(drawing, normalizeFileList(kept.blasts), kept.series, msg('Remove series'), applyKept) ?? applyKept();
-    }
-    const entry = drawing.circularConservation.series[idx];
-    const sourceFiles = getCircularConservationSourceFiles(drawing);
-    const descriptors = conservationSourceDescriptors(sourceFiles);
-    let sourceIndex = descriptors.findIndex((descriptor) => descriptor.sourceKey === String(entry?.sourceKey || ''));
-    if (sourceIndex < 0) {
-      const fileName = String(entry?.fileName || '').trim();
-      sourceIndex = descriptors.findIndex((descriptor) => descriptor.fileName === fileName);
-    }
-    if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
-    if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
-    const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
-    /** @param {() => void} [turnOffReaching] */
-    const apply = (turnOffReaching) => {
-      if (isCircularConservationUploadSource(drawing)) {
-        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources',
-          drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== sourceIndex));
-      }
-      setCircularConservationSourceFiles(drawing, keptFiles);
-      turnOffReaching?.();
-    };
-    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();
-  });
   // E1: the artifacts of the drawings not shown, in the slot store of the
   // History snapshot service; only its named operations change it.
   const { artifactSlots } = historySnapshots;
@@ -6207,102 +5926,13 @@ export const createAppSetup = () => {
     });
   };
 
-  /** @param {unknown} selector */
-  const getCircularRecordOrderLabel = (selector) => {
-    const normalized = String(selector || '').trim();
-    if (!normalized) return '';
-    const records = state.activeDrawing().circularRecordList.value;
-    const matched = records.find((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim() === normalized);
-    if (!matched) return normalized;
-    return `${normalized} (${String(matched.record_id || '').trim() || t('Unknown')})`;
-  };
-
-  const circularRecordDiscoveryState = computed(() => getCircularRecordDiscoveryState(state.activeDrawing()));
-  const circularRecordInspectionEnabled = computed(() => semanticMutationAvailable.value
-    && mode.value === 'circular'
-    && circularRecordDiscoveryState.value.hasInput
-    && circularRecordDiscoveryState.value.status !== 'loading'
-    && !state.semanticFileWatchersSuppressed.value);
-  const inspectCircularSourceRecords = () => sessionOperationAvailability() || (circularRecordInspectionEnabled.value
-    ? refreshCircularRecordOrder()
-    : Promise.resolve({ status: 'unavailable', reason: msg('Source inspection is unavailable.') }));
-  const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
-    circularRecordDiscoveryState.value.records.map(
-      (/** @type {SequenceRecordEntry} */ record) => ({
-        ...record,
-        recordId: record?.record_id ?? record?.recordId,
-        recordLength: record?.record_length ?? record?.recordLength
-      })
-    )
-  );
-
-  const circularDrawnRecordCount = computed(() => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? circularRecordsToDraw(circularRecordPresentationEntries(), drawing.recordsOff).length : 0;
+  const {
+    getCircularRecordOrderLabel, circularRecordDiscoveryState, circularRecordInspectionEnabled, inspectCircularSourceRecords,
+    circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
+    circularSingleRecordPresentationEnabled
+  } = createCircularRecordPresentation({
+    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder
   });
-  const circularRecordPresentationOptions = computed(() => {
-    const drawing = state.activeDrawing();
-    const entries = circularRecordPresentationEntries();
-    const current = String(drawing.form.circular_record_selector || '').trim();
-    const selection = resolveDisambiguatedRecordSelection(entries, current);
-    // Without an inspected catalog the saved selector is unverified, not missing.
-    const inspected = circularRecordDiscoveryState.value.status === 'ready';
-    const drawnCount = circularDrawnRecordCount.value;
-    // OV-379: a source whose records are not read says so, as the Linear select does.
-    const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
-      ? tm(RECORDS_NOT_INSPECTED_LABEL)
-      : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-        ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
-        : t('Automatic (single record)');
-    return [
-      { value: '', label: automaticLabel, synthetic: false },
-      ...(current && selection.status !== 'resolved'
-        ? [{
-            value: current,
-            label: !inspected ? t('{selector} (not inspected)', { selector: current })
-              : selection.status === 'ambiguous' ? t('{selector} (ambiguous)', { selector: current })
-                : t('{selector} (not found)', { selector: current }),
-            synthetic: true
-          }]
-        : []),
-      ...entries.map((record) => ({
-        value: record.value,
-        label: `${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
-        synthetic: false
-      }))
-    ];
-  });
-
-  const circularRecordPresentationError = computed(() => {
-    const drawing = state.activeDrawing();
-    const current = String(drawing.form.circular_record_selector || '').trim();
-    if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
-    const selection = resolveDisambiguatedRecordSelection(
-      circularRecordPresentationEntries(),
-      current
-    );
-    if (selection.status === 'ambiguous') {
-      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
-    }
-    if (selection.status === 'missing') {
-      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: current });
-    }
-    return '';
-  });
-
-  // Why a Circular record's own fields (crop, orientation, title lines) are
-  // unavailable, in the order the sidebar explains it; '' when they are not.
-  const circularOwnRecordBlock = computed(() => {
-    const drawing = state.activeDrawing();
-    if (drawing.form.multi_record_canvas) return 'multi-record-canvas';
-    if (circularRecordDiscoveryState.value.status !== 'ready') return 'not-inspected';
-    const entries = circularRecordPresentationEntries();
-    const selection = resolveDisambiguatedRecordSelection(entries, drawing.form.circular_record_selector);
-    return drawing.adv.circular_grouping_intent !== 'batch'
-      && (selection.status === 'resolved' || (selection.status === 'unspecified' && entries.length === 1))
-      ? '' : 'no-single-record';
-  });
-  const circularSingleRecordPresentationEnabled = computed(() => mode.value === 'circular' && !circularOwnRecordBlock.value);
 
   // The legend-entry and record-definition popups (match popup frame): views
   // of the displayed Result and the settings; their edits are the Legend
@@ -6510,118 +6140,10 @@ export const createAppSetup = () => {
     }
   }, { flush: 'sync' });
 
-  /** @param {DrawingState} drawing */
-  const buildDefaultCircularRecordPositions = (drawing) => buildDefaultMultiRecordPositions(
-    drawing.circularRecordList.value
-      .map((/** @type {{ selector?: unknown }} */ entry) => entry?.selector)
-  );
-
-  /**
-   * @param {DrawingState} drawing
-   * @param {MultiRecordPosition | null | undefined} position
-   */
-  const circularRecordRowOf = (drawing, position) => {
-    const rowValue = Number(position?.row);
-    const maxRow = Math.max(1, Array.isArray(drawing.adv.multi_record_positions) ? drawing.adv.multi_record_positions.length : 1);
-    if (!Number.isInteger(rowValue) || rowValue <= 0) return 1;
-    return Math.min(rowValue, maxRow);
-  };
-  /** @param {MultiRecordPosition | null | undefined} position */
-  const getCircularRecordRow = (position) => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? circularRecordRowOf(drawing, position) : 1;
-  };
-
-  const getCircularRecordRowOptions = () => {
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return [1];
-    const count = Array.isArray(drawing.adv.multi_record_positions) ? drawing.adv.multi_record_positions.length : 0;
-    const maxRow = Math.max(1, count);
-    return Array.from({ length: maxRow }, (_unused, index) => index + 1);
-  };
-
-  /** @param {DrawingState} drawing */
-  const sortCircularRecordPositionsByRow = (drawing) => {
-    if (!Array.isArray(drawing.adv.multi_record_positions) || drawing.adv.multi_record_positions.length <= 1) return;
-    const sorted = drawing.adv.multi_record_positions
-      .map((/** @type {MultiRecordPosition} */ entry, /** @type {number} */ index) => ({ ...entry, __index: index }))
-      .sort((/** @type {MultiRecordPosition & { __index: number }} */ left, /** @type {MultiRecordPosition & { __index: number }} */ right) => {
-        const leftRow = Number(left.row);
-        const rightRow = Number(right.row);
-        if (leftRow !== rightRow) return leftRow - rightRow;
-        return left.__index - right.__index;
-      })
-      .map((/** @type {MultiRecordPosition & { __index: number }} */ { __index, ...entry }) => entry);
-    drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...sorted);
-  };
-
-  /** @param {number} index @param {unknown} rowValue */
-  const setCircularRecordRow = (index, rowValue) => shownAction('circular', (drawing) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.multi_record_positions.length) return;
-    const target = drawing.adv.multi_record_positions[idx];
-    if (!target || typeof target !== 'object' || Array.isArray(target)) return;
-    const maxRow = Math.max(1, drawing.adv.multi_record_positions.length);
-    const parsedRow = Number(rowValue);
-    const normalizedRow = Number.isInteger(parsedRow) && parsedRow > 0 ? Math.min(parsedRow, maxRow) : 1;
-    target.row = normalizedRow;
-    sortCircularRecordPositionsByRow(drawing);
-  });
-
-  /** @param {DrawingState} drawing @param {number} index */
-  const canMoveCircularRecordOrderUpIn = (drawing, index) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx <= 0 || idx >= drawing.adv.multi_record_positions.length) return false;
-    const currentRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx]);
-    const prevRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx - 1]);
-    return currentRow === prevRow;
-  };
-  /** @param {number} index */
-  const canMoveCircularRecordOrderUp = (index) => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? canMoveCircularRecordOrderUpIn(drawing, index) : false;
-  };
-
-  /** @param {DrawingState} drawing @param {number} index */
-  const canMoveCircularRecordOrderDownIn = (drawing, index) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.multi_record_positions.length - 1) return false;
-    const currentRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx]);
-    const nextRow = circularRecordRowOf(drawing, drawing.adv.multi_record_positions[idx + 1]);
-    return currentRow === nextRow;
-  };
-  /** @param {number} index */
-  const canMoveCircularRecordOrderDown = (index) => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? canMoveCircularRecordOrderDownIn(drawing, index) : false;
-  };
-
-  /** @param {number} index */
-  const moveCircularRecordOrderUp = (index) => shownAction('circular', (drawing) => {
-    const idx = Number(index);
-    if (!canMoveCircularRecordOrderUpIn(drawing, idx)) return;
-    const next = [...drawing.adv.multi_record_positions];
-    const temp = next[idx - 1];
-    next[idx - 1] = next[idx];
-    next[idx] = temp;
-    drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...next);
-  });
-
-  /** @param {number} index */
-  const moveCircularRecordOrderDown = (index) => shownAction('circular', (drawing) => {
-    const idx = Number(index);
-    if (!canMoveCircularRecordOrderDownIn(drawing, idx)) return;
-    const next = [...drawing.adv.multi_record_positions];
-    const temp = next[idx + 1];
-    next[idx + 1] = next[idx];
-    next[idx] = temp;
-    drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...next);
-  });
-
-  const resetCircularRecordOrder = () => shownAction('circular', (drawing) => {
-    const defaults = buildDefaultCircularRecordPositions(drawing);
-    drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...defaults);
-  });
+  const {
+    getCircularRecordRow, getCircularRecordRowOptions, setCircularRecordRow, canMoveCircularRecordOrderUp,
+    canMoveCircularRecordOrderDown, moveCircularRecordOrderUp, moveCircularRecordOrderDown, resetCircularRecordOrder
+  } = createCircularRecordOrder({ shownAction, shownDrawingOfMode });
 
   /** @param {DrawingState} drawing @param {readonly Partial<LinearSeq>[]} items */
   const applyLinearSeqMutation = (
@@ -7579,16 +7101,8 @@ export const createAppSetup = () => {
     openCircularConservationComparisonFilePicker,
     addCircularConservationComparisonFile,
     removeCircularConservationSource,
-    // The ring controls' transitions: the source radio, and a ring row's name
-    // or color.
-    changeCircularConservationSource: () => {
-      const drawing = shownDrawingOfMode('circular');
-      if (drawing) reconcileCircularConservation(drawing);
-    },
-    refreshCircularConservationSlots: () => {
-      const drawing = shownDrawingOfMode('circular');
-      if (drawing) refreshCircularConservationSlots(drawing);
-    },
+    changeCircularConservationSource,
+    refreshCircularConservationSlots: refreshShownCircularConservationSlots,
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
