@@ -781,7 +781,8 @@ def render_session_drawings_cli(
     ``drawings`` selects drawings by ID or name; ``None`` renders every drawing
     with a committed render. ``-o`` splits into the output directory and
     prefix; several drawings get ``<prefix>_<ID>``. ``dpi`` sets the PNG
-    resolution of every drawing (a Session stores none). With a re-save, the
+    resolution of every drawing; it comes from ``--dpi`` alone, not from a
+    Web Session's ``ui.downloadDpi``. With a re-save, the
     document, validated when it was loaded, is brought to the current version
     before any render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without
@@ -959,11 +960,11 @@ def render_main(cmd_args: Sequence[str]) -> None:
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
-    """Remove sidecar controls, overwrite permission and the font options
-    from saved CLI arguments.
+    """Remove sidecar controls, overwrite permission, the font options and
+    ``--dpi`` from saved CLI arguments.
 
     A Session stores neither a font file nor its path (D-02); font embedding
-    is the caller's export choice, like ``--overwrite``.
+    and the PNG DPI are the caller's export choices, like ``--overwrite``.
     """
 
     result: list[str] = []
@@ -973,10 +974,10 @@ def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
         if token in {"--save_session", "--overwrite", "--no_font_embedding"}:
             index += 1
             continue
-        if token.startswith(("--session_output=", "--font_file=")):
+        if token.startswith(("--session_output=", "--font_file=", "--dpi=")):
             index += 1
             continue
-        if token in {"--session_output", "--font_file"}:
+        if token in {"--session_output", "--font_file", "--dpi"}:
             index += 2
             continue
         result.append(token)

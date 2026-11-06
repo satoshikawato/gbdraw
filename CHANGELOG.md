@@ -103,11 +103,7 @@ write-up of a release.
   `--legend_rows` table, a hidden row may leave `position` blank (#1427).
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
-  `RenderOutputRequest` scale PNG pixels by `dpi / 96`. `--dpi` also works with
-  `--session` and on `gbdraw render`, where it sets the PNG's DPI
-  (a Session stores none). Every PNG that the command line or Python writes now
-  carries a pHYs chunk with that DPI (96 when none is given), as the web app's
-  PNG does.
+  `RenderOutputRequest` scale PNG pixels by `dpi / 96`.
 - Changed: `--anchor_feature`, the Python `anchor_feature`, and **Align at
   feature** in the Web app rotate a complete circular record so that the feature
   starts at its left end, at the base it was aligned at before, instead of

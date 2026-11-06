@@ -109,9 +109,12 @@ Result drawn at Auto exports as before.
 and `dpi` on `save_figure_to()`, `render_to_bytes()`, `Diagram.to_bytes()`,
 `Diagram.save()`, and `RenderOutputRequest` scale a PNG to `dpi / 96` pixels
 per SVG pixel (default 96: one pixel per SVG pixel). Other formats ignore it,
-and the command line warns when `--dpi` is given without PNG output. A Session
-does not store a DPI, so `--session` takes it from `--dpi` alone. Every PNG that the command line or Python writes carries a pHYs chunk with
-that DPI (the default, 96, when none is given) in pixels per metre, as the web
+and the command line warns when `--dpi` is given without PNG output. The DPI
+is the caller's export choice, like `--font_file`: a Session saved by the
+command line does not record `--dpi`, and `--session` takes the DPI from
+`--dpi` alone (not from the **PNG DPI** a web app Session stores). Every PNG
+that the command line or Python writes carries a pHYs chunk with that DPI (the
+default, 96, when none is given) in pixels per metre, as the web
 app's PNG does.
 
 ## PNG and PDF size limits

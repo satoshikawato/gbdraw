@@ -268,8 +268,8 @@ def test_a_session_without_a_committed_render_cannot_render(tmp_path: Path) -> N
     assert _svgs(tmp_path) == []
 
 
-def _legacy_session_27_30(tmp_path: Path) -> Path:
-    """A Session 30 of one Linear drawing, drawn from its CLI arguments."""
+def _legacy_session_27_30(tmp_path: Path, *extra_args: str) -> Path:
+    """A Session 30 of one Linear drawing, drawn from its CLI arguments (``extra_args`` are stored too)."""
 
     source_path = tmp_path / "legacy.gb"
     SeqIO.write(
@@ -290,7 +290,7 @@ def _legacy_session_27_30(tmp_path: Path) -> Path:
         }}]},
         "cliInvocation": {
             "schema": 1, "mode": "linear",
-            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew"],
+            "args": ["--gbk", source_path.name, "--format", "svg", "--no-gc", "--no-skew", *extra_args],
             "renderFormats": ["svg"],
             "fileBindings": [{"argIndex": 1, "slot": "files.linearSeqs[0].gb", "name": source_path.name}],
             "generatedBy": "gbdraw",
@@ -1224,7 +1224,7 @@ def test_a_session_27_30_replay_draws_its_png_at_the_dpi_it_is_given(tmp_path: P
 
 
 def test_a_session_dpi_without_a_png_is_noted_and_a_bad_one_refused(
-    two_drawings: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    two_drawings: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
     render_main(["--session", str(two_drawings), "--drawing", "circular", "-o", str(tmp_path / "a"), "-f", "svg", "--dpi", "300"])
     assert "--dpi applies to PNG output only" in caplog.text
@@ -1234,4 +1234,24 @@ def test_a_session_dpi_without_a_png_is_noted_and_a_bad_one_refused(
     with pytest.raises(SystemExit) as caught:
         circular_main(["--session", str(two_drawings), "-o", str(tmp_path / "c"), "--dpi", "0"])
     assert caught.value.code == 2
+    assert capsys.readouterr().err.count("must be a positive") == 2
     assert _svgs(tmp_path) == ["a.svg"]
+
+
+def test_a_cli_session_records_no_dpi_and_a_replay_ignores_a_stored_one(tmp_path: Path) -> None:
+    """The DPI is the caller's export choice, like ``--font_file``: the Session holds none."""
+
+    pytest.importorskip("cairosvg")
+    saved = tmp_path / "saved.gbdraw-session.json"
+    circular_main(
+        ["--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"), "-o", str(tmp_path / "fresh"),
+         "-f", "png", "--dpi", "150", "--save_session", "--session_output", str(saved)]
+    )
+    assert png_phys((tmp_path / "fresh.png").read_bytes()) == (5906, 5906, 1)
+    document = saved.read_text(encoding="utf-8")
+    assert '"-f","png"' in document.replace(" ", "")  # the arguments are recorded; --dpi is not
+    assert "--dpi" not in document
+    # A Session 27-30 whose stored arguments hold --dpi (no released one does) still draws at 96 dpi.
+    legacy = _legacy_session_27_30(tmp_path, "--dpi", "200")
+    render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "png"])
+    assert png_phys((tmp_path / "legacy.png").read_bytes()) == (3780, 3780, 1)

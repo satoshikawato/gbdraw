@@ -380,7 +380,8 @@ class RenderOutputRequest:
     interactive_metadata_policy: Literal["auto", "required", "omit"] = "auto"
     resolve_prefix_from_first_record: bool = False
     embed_fonts: bool = True
-    # PNG pixels per inch (dpi / 96 per SVG pixel); None is one per SVG pixel. A Session does not store it.
+    # PNG pixels per inch (dpi / 96 per SVG pixel); None is one per SVG pixel. Like ``overwrite``, it is the
+    # caller's: a CLI Session records no ``--dpi``, and a replay reads it from ``--dpi`` alone.
     dpi: float | None = None
 
     def __post_init__(self) -> None:
