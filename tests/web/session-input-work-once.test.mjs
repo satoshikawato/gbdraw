@@ -1,5 +1,6 @@
 // Save and Load do each piece of input work once (OV-1559, OV-1567): a File
-// Generate already encoded is bound by that text with no read, hash or decode,
+// Generate described is bound by its descriptor with no hash or decode and
+// encoded once per Save (OV-2612),
 // and the Worker check of a slice's unmanaged overrides runs once per distinct
 // request across Load and every Save.
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
@@ -37,6 +38,12 @@ const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
+const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+/** Save's resource table: allocated, then encoded by the Session file writer. */
+const savedSession = async (...args) => {
+  const built = await buildSessionResources(...args);
+  return { ...built, resources: await encodeSessionResources(built.resources) };
+};
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -44,15 +51,15 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-test('Save binds a File Generate already encoded with no read, hash or decode (OV-1559)', async () => {
+test('Save binds a File Generate described with no hash or decode and encodes it once (OV-1559, OV-2612)', async () => {
   const text = `>x\n${'ACGT'.repeat(250_000)}\n`;
   const file = new File([text], 'g.fa', { type: '' });
   let reads = 0;
   const read = file.arrayBuffer.bind(file);
   file.arrayBuffer = async () => { reads += 1; return read(); };
-  // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
+  // Generate: the request describes the File and stages its bytes (the transfer releases the byte cache).
   const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
-  const encoded = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
+  const described = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -61,36 +68,33 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
       diagramOptions: { trackSlots: [], annotations: { sets: [] } }, layout: {}, comparisons: [],
       output: { prefix: 'x', formats: ['svg'], overwrite: false }
     },
-    resources: {
-      src: {
-        kind: 'genbank', name: 'g.fa', type: 'text/plain', size: encoded.size,
-        lastModified: 0, encoding: 'base64', data: encoded.data
-      }
-    },
+    resources: { src: described },
     webFiles: {}
   });
   assert.equal(reads, 1);
+  assert.equal(count('base64EncodeCount'), 0);
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, bindingDrawings(sourceState));
+    const saved = await savedSession(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual({
       reads,
       hashes: count('resourceIdentityHashCount'),
       decodes: count('base64DecodeCount'),
       byteReads: count('resourceByteReadCount'),
       encodes: count('base64EncodeCount')
-    }, { reads: 1, hashes: 0, decodes: 0, byteReads: 0, encodes: 0 }, `Save ${save}`);
+    }, { reads: 2, hashes: 0, decodes: 0, byteReads: 0, encodes: 1 }, `Save ${save}`);
     assert.deepEqual(Object.keys(saved.resources), ['src']);
+    assert.equal(saved.resources.src.data, Buffer.from(text).toString('base64'));
     assert.equal(saved.webFiles.bindings.c_gb.resourceId, 'src');
   }
 
-  // A File the committed request does not name keeps the payload Generate encoded.
+  // A File the committed request does not name is encoded by the Save.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
   const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
   await serializeActiveRenderFiles(otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
-  const saved = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({
+  const saved = await savedSession({ inputFiles: state.inputFiles }, committed, bindingDrawings({
     files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }
   }));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
@@ -99,7 +103,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
     kind: 'web-file', name: `${otherId}-other.tsv`, type: 'application/octet-stream',
     size: 11, lastModified: other.lastModified, encoding: 'base64', data: Buffer.from('other bytes').toString('base64')
   });
-  assert.equal(count('base64EncodeCount'), 0);
+  assert.equal(count('base64EncodeCount'), 2);
 });
 
 test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', async () => {

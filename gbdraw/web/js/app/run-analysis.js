@@ -65,10 +65,12 @@ import {
   liveSettingInputsOf,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
+  readCanonicalResourceFileBytes,
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
+/** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
 import {
@@ -960,8 +962,8 @@ const makeSafeFilename = (name) => {
  * (`sessionDocumentOfViews`), so the CLI loads it as it loads a Save (OV-1806).
  * @param {{
  *   drawing: { id: string, name: string }, startedAtIso: string | null,
- *   renderRequest: { mode: 'circular' | 'linear' }, resources: unknown,
- *   publishedArtifact: { results: unknown, featureCatalog: unknown }
+ *   renderRequest: { mode: 'circular' | 'linear' }, resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ *   publishedArtifact: { results: unknown, featureCatalog: unknown }, encodeResources: EncodeSessionResources
  * }} replay
  */
 const createCanonicalReplayTextBuilder = ({
@@ -969,9 +971,12 @@ const createCanonicalReplayTextBuilder = ({
   startedAtIso,
   renderRequest,
   resources,
-  publishedArtifact
-}) => () => {
+  publishedArtifact,
+  encodeResources
+}) => async () => {
   recordSessionLifecycleEvent('canonical-replay-json-start');
+  // The Session document holds each input's bytes; Generate described them by their File.
+  const writtenResources = await encodeResources(resources);
   const replayText = JSON.stringify(sessionDocumentOfViews([{
     id: drawing.id,
     name: drawing.name,
@@ -979,7 +984,7 @@ const createCanonicalReplayTextBuilder = ({
       format: 'gbdraw-session',
       createdAt: startedAtIso || new Date().toISOString(),
       renderRequest,
-      resources,
+      resources: writtenResources,
       // Export only after successful generation; reuse the published artifact.
       results: publishedArtifact.results,
       editorState: { featureCatalog: publishedArtifact.featureCatalog },
@@ -1329,7 +1334,11 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 
 /**
  * A file of the CLI reproducibility bundle: its content, or the builder that makes it when the bundle is written.
- * @typedef {RecipeGeneratedFile & { retainedBytes?: number }} GeneratedCliFile
+ * A reproducibility file: its builder may read files (the exact replay encodes
+ * the inputs Generate described, `encodeSessionResources`).
+ * @typedef {Omit<RecipeGeneratedFile, 'buildData'> & {
+ *   buildData?: () => string | Uint8Array | Promise<string>, retainedBytes?: number
+ * }} GeneratedCliFile
  */
 
 /**
@@ -1481,12 +1490,24 @@ export const executeCanonicalRenderCandidate = async ({
  */
 
 /**
+ * @typedef {(resources: Readonly<Record<string, RawSessionResourceDescriptor>>) => Promise<Record<string, RawSessionResourceDescriptor>>} EncodeSessionResources
+ */
+/**
+ * The reproducibility files with their content: a builder may read and encode inputs, and may fail.
+ * @param {ReadonlyArray<Partial<Pick<GeneratedCliFile, 'name' | 'data' | 'buildData'>>>} files
+ */
+const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) => ({
+  name: file.name, data: typeof file.buildData === 'function' ? await file.buildData() : file.data
+})));
+/**
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
+ * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
+ *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean, drawing: DrawingState,
  *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
@@ -1556,7 +1577,7 @@ export const createRunAnalysis = ({
   state,
   rulePreparation = null,
   isCurrentFeature,
-  serializeCanonicalFiles,
+  serializeCanonicalFiles, encodeSessionResources,
   adoptCanonicalRenderArtifacts,
   setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
@@ -1932,10 +1953,10 @@ export const createRunAnalysis = ({
       showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
-    const materializedFiles = latestCliHelperFiles.map((file) => ({
-      name: file.name,
-      data: typeof file.buildData === 'function' ? file.buildData() : file.data
-    }));
+    // A refused replay Session (or an input unreadable now) is shown where Save shows its errors.
+    const materializedFiles = await materializeCliHelperFiles(latestCliHelperFiles)
+      .catch((error) => { errorLog.value = formatError(error, 'session-save', 'write'); return null; });
+    if (!materializedFiles) return;
     const archiveNames = new Set();
     materializedFiles.forEach((file) => {
       const name = String(file.name || '');
@@ -5081,7 +5102,7 @@ export const createRunAnalysis = ({
         startedAtIso: manualRunStartedAtIso,
         renderRequest: canonical.renderRequest,
         resources: canonical.resources,
-        publishedArtifact: publishedReplayArtifact
+        publishedArtifact: publishedReplayArtifact, encodeResources: encodeSessionResources
       });
       // Run Info names the files of its exact replay, the canonical Session (`buildRunInfo` keeps only those);
       // the Source recipe carries its own file names (OV-1591).
@@ -5114,10 +5135,9 @@ export const createRunAnalysis = ({
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
-          readResourceRecordCount: (/** @type {string} */ resourceId, /** @type {'genbank' | 'fasta'} */ kind) => (
-            readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
-          ),
-          readResourceText: (/** @type {string} */ resourceId) => readCanonicalResourceText(canonical.resources, resourceId)
+          readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
+          readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
+          readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id)
         }));
         throwIfGenerationCanceled();
       }

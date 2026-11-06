@@ -68,8 +68,10 @@ const snapshot = page => page.evaluate(async () => {
   const { getCommittedCanonicalSession } = await import('./js/services/config.js');
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
-  const identity = async descriptor => ({ size: descriptor.size,
-    sha256: await digest(Uint8Array.from(atob(descriptor.data), char => char.charCodeAt(0))) });
+  // A committed resource's bytes, read by their owner: a Session's text, or the File Generate described.
+  const backing = await import('./js/services/session-resource-backing.js');
+  const identity = async descriptor => ({ size: descriptor.size, sha256: await digest(await backing.readSessionResourceBytes(
+    backing.createSessionResourceFileView(backing.adoptCurrentSessionResources({ resource: descriptor }), 'resource'))) });
   const source = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
   const components = source?.descriptors || (source?.descriptor ? [source] : []);
   const committed = getCommittedCanonicalSession();
@@ -179,8 +181,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
         .toEqual(original.components.map(({ size, sha256 }) => ({ size, sha256 })));
       expect(composite.components.map(({ resourceId, ...metadata }) => metadata))
         .toEqual(original.components.map(({ resourceId, size, sha256, ...metadata }) => metadata));
-      expect(metrics.filter(metric => ['base64EncodeCount', 'base64DecodeCount'].includes(metric.name)))
-        .toEqual([]);
+      // Save decodes nothing; it encodes the one record Generate described by its composite view, once (OV-2612).
+      expect(metrics.filter(metric => metric.name === 'base64DecodeCount')).toEqual([]);
+      expect(metrics.filter(metric => metric.name === 'base64EncodeCount').map(metric => metric.value)).toEqual([1]);
       const genomicSizes = Object.values(session.resources).filter(r => r.kind === 'genbank' || composite.components.some(c => session.resources[c.resourceId] === r)).map(r => r.size);
       expect(genomicSizes.reduce((sum, n) => sum + n, 0))
         .toBe(2 * original.components.reduce((sum, component) => sum + component.size, 0));

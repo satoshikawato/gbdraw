@@ -6,6 +6,7 @@ import {
   readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
 } from './file-content-cache.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
+import { fileBackedReaderOf } from './session-resource-backing.js';
 export { recordSourceOwnedBy, recordSourceResourceIds } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
@@ -19,7 +20,8 @@ import {
 
 /**
  * A canonical render resource as a Session or request holds it: base64 text,
- * or an encoded depth table, with the file's metadata.
+ * or an encoded depth table, with the file's metadata; a request's file-backed
+ * descriptor has no payload (`fileBackedDescriptor`).
  * @typedef {{
  *   size: number, encoding?: unknown, data?: string | DepthFilePayload | null,
  *   name?: unknown, kind?: unknown, type?: unknown, lastModified?: unknown
@@ -61,6 +63,7 @@ const validateResourceDescriptor = (resourceId, descriptor) => {
   if (
     descriptor.encoding !== 'base64'
     && !isEncodedDepthFileEntry(/** @type {DepthResourceView} */ (descriptor))
+    && !fileBackedReaderOf(descriptor)
   ) {
     throw new Error(`Canonical render resource ${resourceId} has an unsupported encoding.`);
   }
@@ -78,6 +81,9 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
     // An owner other than the descriptor is the File the user chose.
     return takeFileBytesForTransfer(/** @type {FileLike} */ (owner));
   }
+  const readFile = fileBackedReaderOf(descriptor);
+  // A file-backed descriptor without its File as owner: a copy, as the File keeps its bytes.
+  if (readFile) return (await readFile()).slice().buffer;
   if (isEncodedDepthFileEntry(/** @type {DepthResourceView} */ (descriptor))) {
     // The depth entry check above holds only for a `data` object.
     const bytes = new TextEncoder().encode(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));

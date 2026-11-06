@@ -1,7 +1,6 @@
 // @ts-check
 import {
-  bytesToBase64,
-  encodedFilePayloadOf,
+  fileDescriptorOf,
   getSessionResourceSource,
   readFileBytes,
   sha256Hex
@@ -9,6 +8,10 @@ import {
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
+  fileBackedDescriptor,
+  fileBackedReaderOf,
+  renamedResourceDescriptor,
+  resourcePayloadKey,
   sessionResourceSource
 } from './session-resource-backing.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
@@ -19,7 +22,6 @@ import {
 } from './canonical-resource-references.js';
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
-/** @import { EncodedFilePayload } from './file-content-cache.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { BoundFileValue, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
@@ -35,13 +37,12 @@ import {
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
- * What the allocator reads of a resource's source: a Session resource
- * (`descriptor`, `readBytes`), a File with the payload it was encoded as
- * (`encoded`, `readBytes`), or bytes read from a file.
+ * What the allocator reads of a resource's source: a Session resource or the
+ * file-backed descriptor Generate made of a File (`descriptor`, `readBytes`),
+ * or bytes read from a file.
  * @typedef {object} ResourceSource
  * @property {string} [resourceId]
  * @property {RawSessionResourceDescriptor} [descriptor]
- * @property {EncodedFilePayload} [encoded]
  * @property {Uint8Array} [bytes]
  * @property {() => Promise<Uint8Array>} [readBytes]
  */
@@ -79,16 +80,39 @@ const bindingForFile = (file, resourceId) => ({
 });
 
 /**
- * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} left
- * @param {{ encoding?: unknown, data?: unknown, size?: unknown }} right
+ * @param {RawSessionResourceDescriptor} left
+ * @param {RawSessionResourceDescriptor} right
  */
 const sameEncodedPayload = (left, right) => (
   left === right || (
     left.encoding === right.encoding
-    && left.data === right.data
+    && resourcePayloadKey(left) === resourcePayloadKey(right)
     && Number(left.size) === Number(right.size)
   )
 );
+
+/**
+ * A committed resource of a Save and the candidate that reads its bytes.
+ * @typedef {{ id: string, descriptor: RawSessionResourceDescriptor, candidate: ResourceCandidate }} CommittedPayload
+ */
+/**
+ * The ID of the first of `earlier` whose bytes equal `entry`'s, or null (D-228).
+ * Two encoded texts compare as text, with no read or hash; when either is
+ * file-backed, the content identities of their bytes compare.
+ * @param {readonly CommittedPayload[]} earlier
+ * @param {CommittedPayload} entry
+ * @param {(candidate: ResourceCandidate) => Promise<string>} identityOf
+ * @returns {Promise<string | null>}
+ */
+const firstEqualPayload = async (earlier, entry, identityOf) => {
+  for (const other of earlier) {
+    const equal = fileBackedReaderOf(other.descriptor) || fileBackedReaderOf(entry.descriptor)
+      ? await identityOf(other.candidate) === await identityOf(entry.candidate)
+      : other.descriptor.encoding === entry.descriptor.encoding && other.descriptor.data === entry.descriptor.data;
+    if (equal) return other.id;
+  }
+  return null;
+};
 
 // A reference is replaced by another string id, so the rewritten value has the shape of `value`.
 /**
@@ -212,6 +236,8 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * the store. A Circular drawing binds its input fields, a Linear drawing its
  * records and comparison plan, whose uploaded comparison files the Session
  * also binds; every drawing binds its own five card files (R16-4).
+ * A File's bytes stay file-backed (`fileBackedDescriptor`): the Session
+ * writer encodes them (`encodeSessionResources` in session-file.js).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
@@ -268,14 +294,14 @@ export const buildSessionDrawingResources = async (state, sets) => {
   /** @param {ResourceSource} source */
   const candidateFor = (source) => {
     // A source has a descriptor, an encoded payload, or bytes.
-    const key = /** @type {WeakKey} */ (source.descriptor || source.encoded || source.bytes);
+    const key = /** @type {WeakKey} */ (source.descriptor || source.bytes);
     if (candidatesByDescriptor.has(key)) {
       return /** @type {ResourceCandidate} */ (candidatesByDescriptor.get(key));
     }
     /** @type {ResourceCandidate} */
     const candidate = {
       ...source,
-      size: source.descriptor?.size ?? source.encoded?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
+      size: source.descriptor?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
       bytesPromise: null,
       identityPromise: null
     };
@@ -312,11 +338,12 @@ export const buildSessionDrawingResources = async (state, sets) => {
       bucket = { encoded: new Map(), identities: new Map(), pending: new Map() };
       candidatesBySize.set(candidate.size, bucket);
     }
-    const descriptor = candidate.descriptor || candidate.encoded;
+    const descriptor = candidate.descriptor;
     if (descriptor) {
       let encoded = bucket.encoded.get(descriptor.encoding);
       if (!encoded) bucket.encoded.set(descriptor.encoding, encoded = new Map());
-      if (!encoded.has(descriptor.data)) encoded.set(descriptor.data, id);
+      const key = resourcePayloadKey(descriptor);
+      if (!encoded.has(key)) encoded.set(key, id);
     }
     bucket.pending.set(id, candidate);
     // `id` is in `resources` or `reserved`.
@@ -326,8 +353,8 @@ export const buildSessionDrawingResources = async (state, sets) => {
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
     if (!bucket) return null;
-    const descriptor = candidate.descriptor || candidate.encoded;
-    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
+    const descriptor = candidate.descriptor;
+    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(resourcePayloadKey(descriptor));
     if (encodedId) return encodedId;
     const identity = await identityFor(candidate);
     if (bucket.identities.has(identity)) return /** @type {string} */ (bucket.identities.get(identity));
@@ -373,25 +400,15 @@ export const buildSessionDrawingResources = async (state, sets) => {
         name = `${id}-${safeResourceLeaf(metadata.name)}`;
       }
       if (descriptor) {
-        resources[id] = safePreferred ? descriptor : { ...descriptor, name };
+        resources[id] = safePreferred ? descriptor : renamedResourceDescriptor(descriptor, String(name));
       } else {
-        // A File Generate already encoded keeps that text; other bytes are encoded here.
-        /** @type {{ data: string, size: number }} */
-        let encoded;
-        if (source.encoded) {
-          encoded = source.encoded;
-        } else {
-          const bytes = await bytesFor(candidate);
-          recordStructuralMetric('base64EncodeCount', 1, { resourceName: metadata.name });
-          recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: metadata.name });
-          encoded = { data: bytesToBase64(bytes), size: bytes.byteLength };
-        }
-        resources[id] = {
-          kind: String(metadata.kind || 'web-file'), name,
+        // Bytes read here are encoded with the other files when the Session is written (`encodeSessionResources`).
+        const bytes = await bytesFor(candidate);
+        resources[id] = fileBackedDescriptor({
+          kind: String(metadata.kind || 'web-file'), name: String(name),
           type: String(metadata.type || 'application/octet-stream'),
-          size: encoded.size, lastModified: Number(metadata.lastModified) || 0,
-          encoding: 'base64', data: encoded.data
-        };
+          size: bytes.byteLength, lastModified: Number(metadata.lastModified) || 0
+        }, async () => bytes);
       }
       register(id, candidate);
       return id;
@@ -405,9 +422,9 @@ export const buildSessionDrawingResources = async (state, sets) => {
     // Only what the committed request and its Web metadata name is kept as
     // is; the bindings and the other mode's request (E1) are allocated below,
     // so a resource that nothing names any more is not written. A resource
-    // whose encoded text, kind and original name equal an earlier one's is
-    // written once (D-220, D-228): its id becomes an alias of the earlier id.
-    // Equal text is equal bytes, found with no read or hash.
+    // whose bytes, kind and original name equal an earlier one's is written
+    // once (D-220, D-228): its id becomes an alias of the earlier id. Bytes are
+    // compared only when kind, name and size match (`firstEqualPayload`).
     const webFiles = committedRequest?.webFiles || {};
     const named = collectCanonicalResourceIds(committedRequest?.renderRequest);
     collectCanonicalResourceIds(webFiles, named);
@@ -416,27 +433,28 @@ export const buildSessionDrawingResources = async (state, sets) => {
         .forEach((/** @type {unknown} */ id) => { if (typeof id === 'string' && id) named.add(id); });
     });
     const hints = webFiles.resourceOriginalNames || {};
-    /** @type {Map<string, Map<unknown, string>>} */
+    /** @type {Map<string, CommittedPayload[]>} */
     const firstIds = new Map();
-    Object.entries(committedResources).forEach(([id, descriptor]) => {
+    for (const [id, descriptor] of Object.entries(committedResources)) {
       // A missing name equals only a missing name.
-      const key = JSON.stringify([descriptor.kind, Object.hasOwn(hints, id) ? hints[id] : null, descriptor.encoding, descriptor.size]);
-      let byData = firstIds.get(key);
-      if (!byData) firstIds.set(key, byData = new Map());
-      const equal = byData.get(descriptor.data);
+      const key = JSON.stringify([descriptor.kind, Object.hasOwn(hints, id) ? hints[id] : null, descriptor.size]);
+      let earlier = firstIds.get(key);
+      if (!earlier) firstIds.set(key, earlier = []);
+      // A view of one resource id is a single backing.
+      const entry = { id, descriptor, candidate: candidateFor(/** @type {ResourceSource} */ (
+        sessionResourceSource(createSessionResourceFileView(committedTable, id))
+      )) };
+      const equal = await firstEqualPayload(earlier, entry, identityFor);
       if (equal) {
         aliases.set(id, named.has(id) ? use(equal) : equal);
-        return;
+        continue;
       }
-      byData.set(descriptor.data, id);
+      earlier.push(entry);
       if (named.has(id)) resources[id] = descriptor;
       else reserved.set(id, descriptor);
       aliases.set(id, id);
-      // A view of one resource id is a single backing.
-      register(id, candidateFor(/** @type {ResourceSource} */ (
-        sessionResourceSource(createSessionResourceFileView(committedTable, id))
-      )));
-    });
+      register(id, entry.candidate);
+    }
   }
   for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
     if (!Object.hasOwn(committedResources, id)) {
@@ -500,10 +518,17 @@ export const buildSessionDrawingResources = async (state, sets) => {
       return { kind: 'composite', components, ...metadata };
     }
     if (source?.descriptor) return bindSource(source, file);
-    // The payload Generate encoded for this File matches the committed resource
-    // by its text, so binding it reads, hashes and decodes nothing.
-    const encoded = encodedFilePayloadOf(file);
-    if (encoded) return bindSource({ encoded, readBytes: () => readFileBytes(file) }, file);
+    // The descriptor Generate made of this File names the committed resource
+    // by its reader, so binding it reads, hashes and decodes nothing.
+    const described = fileDescriptorOf(file);
+    const readFile = fileBackedReaderOf(described);
+    if (described && readFile) {
+      const descriptor = fileBackedDescriptor({
+        kind: 'web-file', name: String(file.name ?? 'file'), type: String(file.type || 'application/octet-stream'),
+        size: Number(described.size), lastModified: Number(file.lastModified) || 0
+      }, readFile);
+      return bindSource({ descriptor, readBytes: readFile }, file);
+    }
     return bindSource({ bytes: await readFileBytes(file) }, file);
   };
 

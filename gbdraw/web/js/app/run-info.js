@@ -36,9 +36,11 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  * @typedef {Map<unknown, FileMetadataInput> | (FileMetadataInput | [unknown, FileMetadataInput] | null)[] | Record<string, FileMetadataInput> | null | undefined} FileMetadataSource
  * @typedef {{ path: string, name: string, kind: 'generated' | 'uploaded', slot: string, resourceId?: string }} RecipeFileMetadata
  * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
- * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array }} RecipeGeneratedFile
+ * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array, resourceId?: string }} RecipeGeneratedFile
  * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
  * @typedef {(resourceId: string) => string | Promise<string>} ResourceTextReader
+ * @typedef {(resourceId: string) => Promise<Uint8Array | null>} ResourceFileBytesReader The bytes a File holds for a
+ *   resource whose descriptor holds none (a File Generate described), else null.
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
@@ -535,11 +537,9 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
       resourceId
     });
     if (generated) {
+      // Bytes a File holds are read when the recipe is complete (`readGeneratedFileBytes`).
       const data = resourceBytes(descriptor);
-      if (!data) {
-        throw recipeUnavailable(msg('generated helper file "{name}" cannot be materialized.'), { name });
-      }
-      generatedFiles.push({ path, name, slot: resolvedSlot, data });
+      generatedFiles.push(data ? { path, name, slot: resolvedSlot, data } : { path, name, slot: resolvedSlot, resourceId });
     }
     pathsByResourceId.set(resourceId, path);
     return path;
@@ -1966,12 +1966,30 @@ export const buildFeatureOverrideTable = async ({
 };
 
 /**
+ * The generated files with the bytes of each resource a File holds, read once
+ * (its descriptor holds no text, OV-2612); a file with no bytes makes the
+ * recipe unavailable.
+ * @param {readonly RecipeGeneratedFile[]} generatedFiles
+ * @param {ResourceFileBytesReader | null} readResourceFileBytes
+ * @returns {Promise<RecipeGeneratedFile[]>}
+ */
+const readGeneratedFileBytes = (generatedFiles, readResourceFileBytes) => Promise.all(generatedFiles.map(async (file) => {
+  if (!file.resourceId) return file;
+  const bytes = readResourceFileBytes ? await readResourceFileBytes(file.resourceId) : null;
+  if (!bytes) throw recipeUnavailable(msg('generated helper file "{name}" cannot be materialized.'), { name: file.name });
+  const { resourceId: _resourceId, ...materialized } = file;
+  // A copy: the File's cached bytes go to the Worker at Generate, which detaches them.
+  return { ...materialized, data: bytes.slice() };
+}));
+
+/**
  * @typedef {Object} SourceRecipeOptions
  * @property {CanonicalRenderRequest} [renderRequest] Committed render request (schema owned by the session request).
  * @property {Record<string, unknown>} [resources]
  * @property {Record<string, unknown>} [webFiles]
  * @property {Map<string, string>} [generatedFileNameHints]
  * @property {ResourceRecordCounter | null} [readResourceRecordCount]
+ * @property {ResourceFileBytesReader | null} [readResourceFileBytes]
  * @property {ResourceTextReader | null} [readResourceText] The text of a resource whose
  *   bytes a File holds; without it, the text of the bytes its descriptor holds.
  */
@@ -1986,6 +2004,7 @@ export const buildSourceRecipe = async ({
   webFiles,
   generatedFileNameHints,
   readResourceRecordCount = null,
+  readResourceFileBytes = null,
   readResourceText = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
@@ -2037,13 +2056,14 @@ export const buildSourceRecipe = async ({
       'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null);
     appendConfigOverrides(args, renderRequest, files);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);
+    const generatedFiles = await readGeneratedFileBytes(files.generatedFiles, readResourceFileBytes);
     return {
       available: true,
       // The `includes` test above admitted only these two.
       mode: /** @type {'circular' | 'linear'} */ (mode),
       args,
       fileMetadata: files.fileMetadata,
-      generatedFiles: files.generatedFiles,
+      generatedFiles,
       semanticCoverage,
       unavailableReason: '',
       unavailableReasonParts: []

@@ -122,7 +122,6 @@ import { savedDrawingsOf } from './session-drawings.js';
 import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
-  bytesToBase64,
   fileDescriptorOf,
   getSessionResourceSource,
   readFileBytes,
@@ -131,6 +130,9 @@ import {
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
+  fileBackedDescriptor,
+  renamedResourceDescriptor,
+  sessionResourceViewReader,
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
@@ -162,8 +164,11 @@ import {
 } from './canonical-comparisons.js';
 import {
   compressSessionData,
+  encodeSessionResources,
   largeSessionDownloadMegabytes
 } from './session-file.js';
+// The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
+export { encodeSessionResources };
 import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources
@@ -3509,7 +3514,7 @@ const sessionViewDescriptor = (file) => {
   // A view: its name is read as an unvalidated value.
   const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
   const descriptor = visibleName && visibleName !== source.descriptor.name
-    ? { ...source.descriptor, name: visibleName }
+    ? renamedResourceDescriptor(source.descriptor, visibleName)
     : source.descriptor;
   setResourcePayloadOwner(descriptor, file);
   return descriptor;
@@ -3536,20 +3541,14 @@ const serializeFile = async (file) => {
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(view?.name || 'file')
   });
-  recordStructuralMetric('base64EncodeCount', 1, {
-    resourceName: String(view?.name || 'file')
-  });
-  recordStructuralMetric('encodedByteCount', bytes.byteLength, {
-    resourceName: String(view?.name || 'file')
-  });
-  const descriptor = {
-    name: view?.name || 'file',
-    type: view?.type || '',
+  // File-backed: the request and the committed Session name the File's bytes;
+  // a Session writer encodes them (`encodeSessionResources`, OV-2612).
+  const descriptor = fileBackedDescriptor({
+    name: String(view?.name || 'file'),
+    type: String(view?.type || ''),
     size: bytes.byteLength,
-    lastModified: view?.lastModified ?? Date.now(),
-    encoding: 'base64',
-    data: bytesToBase64(bytes)
-  };
+    lastModified: Number(view?.lastModified ?? Date.now())
+  }, sessionResourceViewReader(file) ?? (() => readFileBytes(file)));
   return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
@@ -6443,9 +6442,7 @@ const exportSessionDocument = async (
     const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
     parts.push({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs });
   }
-  const built = await buildSessionDrawingResources(
-    state, parts.map(({ saved, committed }) => ({ drawing: saved, committed }))
-  );
+  const built = await buildSessionDrawingResources(state, parts.map(({ saved, committed }) => ({ drawing: saved, committed })));
   for (const [index, { editorState }] of parts.entries()) {
     if (!editorState) continue;
     await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, {
@@ -6464,8 +6461,9 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
-  // The project's original-name hints, from every drawing's request metadata.
+  // The project's original-name hints, from every drawing's request metadata; the Session file holds the inputs' bytes.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
+  const writtenResources = await encodeSessionResources(built.resources, resourceOriginalNames);
   const createdAt = new Date().toISOString();
   const proteinIdentityManifest = toRaw(state.proteinIdentityManifest.value) === adoptedProteinIdentityManifest
     ? toRaw(state.proteinIdentityManifest.value)
@@ -6490,7 +6488,7 @@ const exportSessionDocument = async (
         ...(legacyArtifacts ? { legacyArtifacts } : {}),
         ui: { ...projectUi, ...ui },
         renderRequest: built.written[index].renderRequest,
-        resources: built.resources,
+        resources: writtenResources,
         webFiles: {
           ...built.written[index].webFiles,
           ...(Object.keys(resourceOriginalNames).length ? { resourceOriginalNames } : {})
