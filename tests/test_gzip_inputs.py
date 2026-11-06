@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from gbdraw import cli, read_genbank, session_io
@@ -51,7 +52,10 @@ def test_gzip_tables_read_as_the_plain_ones(tmp_path: Path) -> None:
     blast = EXAMPLES / "MjeNMV.MelaMJNV.tblastx.out"
     assert read_comparison_table(_gzipped(blast, tmp_path / "blast.tsv.gz")).equals(read_comparison_table(str(blast)))
     depth = INPUTS / "MjeNMV.DRR271272.depth.tsv"
-    assert parse_depth_tsv(_gzipped(depth, tmp_path / "depth.tsv.gz")).equals(parse_depth_tsv(str(depth)))
+    gzip_depths = parse_depth_tsv(_gzipped(depth, tmp_path / "depth.tsv.gz")).depths
+    plain_depths = parse_depth_tsv(str(depth)).depths
+    assert list(gzip_depths) == list(plain_depths)
+    assert all(np.array_equal(gzip_depths[name], plain_depths[name]) for name in plain_depths)
 
 
 def test_the_bytes_tell_gzip_from_plain_not_the_name(tmp_path: Path) -> None:

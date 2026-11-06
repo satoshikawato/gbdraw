@@ -24,7 +24,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.conservation import ConservationInput, ConservationTrack
-from gbdraw.analysis.depth_tracks import DepthTrackData, DepthTrackSpec
+from gbdraw.analysis.depth_tracks import DepthTrackData, DepthTrackSpec, ResolvedDepthTracks
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     OrthogroupGraphResult,
@@ -64,7 +64,8 @@ class DiagramAssemblyInputs:
     If ``selected_features_set`` is None, the CLI default feature list is used.
     ``depth_tables`` and ``depth_files`` hold one entry per record of a
     multi-record figure. The ``_resolved_*`` values are inputs a builder read
-    once (OV-720, OV-732).
+    once (OV-720, OV-732); ``_resolved_depth_tracks`` replaces every depth
+    input when set.
     """
 
     cfg: GbdrawConfig
@@ -102,6 +103,7 @@ class DiagramAssemblyInputs:
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = ()
     _resolved_annotations: ResolvedAnnotationBundle | None = None
+    _resolved_depth_tracks: ResolvedDepthTracks | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

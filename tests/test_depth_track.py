@@ -15,7 +15,7 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
-from gbdraw.analysis.depth import clear_depth_tsv_cache, depth_df, read_depth_tsv
+from gbdraw.analysis.depth import DepthCoverage, clear_depth_tsv_cache, depth_df, read_depth_tsv
 from gbdraw.analysis.depth_tracks import (
     DepthTrackSpec,
     build_depth_track_dataframes,
@@ -257,7 +257,7 @@ def test_canonical_depth_tracks_support_mixed_and_sparse_per_record_sources(
         [1],
     ]
     assert normalized[0][0].table is rec1_table
-    assert normalized[1][0].table["reference_name"].tolist() == ["rec2", "rec2"]
+    assert list(normalized[1][0].table.depths) == ["rec2"]
     assert depth_track_count(normalized) == 2
     assert depth_track_heights(normalized) == [14, 22]
 
@@ -467,36 +467,32 @@ def test_read_depth_tsv_headerless_and_headered(tmp_path: Path) -> None:
     }
 
 
-def test_read_depth_tsv_uses_cache_until_file_changes(
-    monkeypatch: pytest.MonkeyPatch,
+def test_renders_read_a_depth_file_once_until_it_changes(
     tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
+    from gbdraw.analysis.depth import read_cached_depth_coverage
+
     clear_depth_tsv_cache()
     request.addfinalizer(clear_depth_tsv_cache)
     depth_file = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
-    real_read_csv = pd.read_csv
-    read_count = 0
 
-    def counting_read_csv(*args, **kwargs):
-        nonlocal read_count
-        read_count += 1
-        return real_read_csv(*args, **kwargs)
+    first = read_cached_depth_coverage(str(depth_file))
+    assert read_cached_depth_coverage(str(depth_file)) is first
+    assert first.depths["rec1"].tolist() == [10, 12]
 
-    monkeypatch.setattr(pd, "read_csv", counting_read_csv)
+    depth_file.write_text("rec1\t1\t11\nrec1\t2\t12\nrec1\t3\t13\n", encoding="utf-8")
+
+    assert read_cached_depth_coverage(str(depth_file)).depths["rec1"].tolist() == [11, 12, 13]
+
+
+def test_read_depth_tsv_returns_a_new_table_on_every_call(tmp_path: Path) -> None:
+    depth_file = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
 
     first = read_depth_tsv(str(depth_file))
     first.loc[0, "depth"] = 999.0
-    second = read_depth_tsv(str(depth_file))
 
-    assert read_count == 1
-    assert second["depth"].tolist() == [10.0, 12.0]
-
-    depth_file.write_text("rec1\t1\t11\nrec1\t2\t12\nrec1\t3\t13\n", encoding="utf-8")
-    refreshed = read_depth_tsv(str(depth_file))
-
-    assert read_count == 2
-    assert refreshed["depth"].tolist() == [11.0, 12.0, 13.0]
+    assert read_depth_tsv(str(depth_file))["depth"].tolist() == [10.0, 12.0]
 
 
 def test_depth_df_matching_fallback_and_mismatch() -> None:
@@ -2133,14 +2129,14 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     read_count = 0
     from gbdraw.analysis import depth_tracks as depth_tracks_module
 
-    real_read_cached_depth_table = depth_tracks_module.read_cached_depth_table
+    real_read_cached_depth_coverage = depth_tracks_module.read_cached_depth_coverage
 
-    def counting_read_cached_depth_table(path: str) -> pd.DataFrame:
+    def counting_read_cached_depth_coverage(path: str) -> DepthCoverage:
         nonlocal read_count
         read_count += 1
-        return real_read_cached_depth_table(path)
+        return real_read_cached_depth_coverage(path)
 
-    monkeypatch.setattr(depth_tracks_module, "read_cached_depth_table", counting_read_cached_depth_table)
+    monkeypatch.setattr(depth_tracks_module, "read_cached_depth_coverage", counting_read_cached_depth_coverage)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
@@ -2739,8 +2735,8 @@ def test_depth_tsv_reads_each_value_as_the_nearest_double(tmp_path: Path) -> Non
     assert [repr(value) for value in read_depth_tsv(str(depth_path))["depth"]] == ["2.41e-73", "6.69e-59"]
 
 
-# Depth part 1 (OV-1226..OV-1228): a parsed file is one categorical table that
-# every record selects from without a copy; any other table is converted as before.
+# Depth part 1 (OV-1226..OV-1228): a parsed file is read once and every record
+# reads its own reference from it; an API table is converted as before.
 
 
 def _two_record_depth_text() -> str:
@@ -2749,59 +2745,41 @@ def _two_record_depth_text() -> str:
     return "\n".join(rows) + "\n"
 
 
-def test_read_depth_tsv_returns_string_names_and_renders_read_categorical_ones(
+def test_read_depth_tsv_returns_string_names_and_renders_read_the_parsed_file(
     tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    """The public reader keeps its ``string`` names, which a user may rename; renders read categorical ones."""
+    """The public reader keeps its ``string`` names, which a user may rename; renders read the parsed file."""
 
-    from gbdraw.analysis.depth import read_cached_depth_table
+    from gbdraw.analysis.depth import read_cached_depth_coverage
 
     depth_path = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec2\t2\t12\n")
     clear_depth_tsv_cache()
     request.addfinalizer(clear_depth_tsv_cache)
 
     table = read_depth_tsv(str(depth_path))
-    internal = read_cached_depth_table(str(depth_path))
+    internal = read_cached_depth_coverage(str(depth_path))
 
     assert table["reference_name"].dtype == pd.StringDtype()
     table.loc[table["reference_name"] == "rec1", "reference_name"] = "NC_000913.3"
     assert table["reference_name"].tolist() == ["NC_000913.3", "rec2"]
-    assert isinstance(internal["reference_name"].dtype, pd.CategoricalDtype)
-    assert all(type(category) is str for category in internal["reference_name"].cat.categories)
-    assert internal.to_dict("list") == {
-        "reference_name": ["rec1", "rec2"],
-        "position": [1, 2],
-        "depth": [10.0, 12.0],
-    }
-
-
-def test_parsed_depth_table_is_canonical_and_passes_through(tmp_path: Path) -> None:
-    from gbdraw.analysis.depth import _normalize_depth_table, parse_depth_tsv
-
-    parsed = parse_depth_tsv(str(_write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")))
-    string_table = parsed.astype({"reference_name": "string"})
-
-    assert _normalize_depth_table(parsed) is parsed
-    converted = _normalize_depth_table(string_table)
-    assert converted is not string_table
-    assert converted["reference_name"].tolist() == ["rec1", "rec1"]
+    assert {name: depths.tolist() for name, depths in internal.depths.items()} == {"rec1": [10], "rec2": [0, 12]}
 
 
 @pytest.mark.parametrize("case", ["crop", "reverse", "forward_control"])
-def test_depth_df_bins_equal_for_categorical_and_string_tables(case: str, tmp_path: Path) -> None:
+def test_depth_df_bins_equal_for_parsed_files_and_api_tables(case: str, tmp_path: Path) -> None:
     from gbdraw.analysis.depth import parse_depth_tsv
 
     region, reverse, _spans, _expected = _RECORD_FRAME_CASES[case]
-    parsed = parse_depth_tsv(str(_write_depth_file(tmp_path / "depth.tsv", _two_record_depth_text())))
-    string_table = parsed.astype({"reference_name": "string"})
+    depth_path = str(_write_depth_file(tmp_path / "depth.tsv", _two_record_depth_text()))
+    string_table = read_depth_tsv(depth_path)
     # A categorical table whose categories hold a name no row uses.
-    unused = parsed.astype(
+    unused = string_table.astype(
         {"reference_name": pd.CategoricalDtype(["absent", "chr", "plasmid"])}
     )
     record = _transformed_frame_record(region, reverse)
 
     expected = depth_df(record, string_table, window=50, step=25)
-    for table in (parsed, unused):
+    for table in (parse_depth_tsv(depth_path), unused):
         pd.testing.assert_frame_equal(depth_df(record, table, window=50, step=25), expected)
 
 

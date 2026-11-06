@@ -163,8 +163,8 @@ def test_retained_bytes_count_the_comparison_frame_and_the_edge_text(tmp_path: P
     assert held == _all_entries_bytes(cache) == cache._retained_total
 
 
-def test_retained_bytes_count_the_parsed_depth_table(tmp_path: Path) -> None:
-    """A categorical Depth table holds codes and a few names, not one string per row."""
+def test_retained_bytes_count_the_parsed_depth_file(tmp_path: Path) -> None:
+    """A parsed Depth file holds one array per reference: its bytes, not the file's."""
 
     from gbdraw.analysis.depth import parse_depth_tsv
     from gbdraw.api.prepared import _retained_bytes
@@ -174,10 +174,9 @@ def test_retained_bytes_count_the_parsed_depth_table(tmp_path: Path) -> None:
         "".join(f"chr{position % 3}\t{position}\t{position % 7}\n" for position in range(1, 5001)),
         encoding="utf-8",
     )
-    table = parse_depth_tsv(str(depth_path))
-    exact = int(table.memory_usage(index=True, deep=True).sum())
+    coverage = parse_depth_tsv(str(depth_path))
 
-    assert abs(_retained_bytes(table, depth_path.stat().st_size) - exact) <= exact // 100
+    assert _retained_bytes(coverage, depth_path.stat().st_size) == coverage.nbytes == 4998 + 4999 + 5000
 
 
 def test_the_running_total_follows_evictions_and_commits(tmp_path: Path) -> None:

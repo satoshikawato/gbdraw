@@ -14,10 +14,23 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sized, cast
+from typing import (
+    Any,
+    Callable,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Protocol,
+    Sized,
+    cast,
+    runtime_checkable,
+)
 
 from Bio.SeqRecord import SeqRecord
-from pandas import CategoricalDtype, DataFrame
+from pandas import DataFrame
 
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
@@ -559,6 +572,14 @@ def _same_stamp(current: Hashable, stored: Hashable) -> bool:
 _STR_OBJECT_BYTES = sys.getsizeof("")
 
 
+@runtime_checkable
+class _HoldsArrays(Protocol):
+    """A decoded value that counts the bytes of its arrays (``DepthCoverage``)."""
+
+    @property
+    def nbytes(self) -> int: ...
+
+
 def _retained_bytes(value: object, source_bytes: int) -> int:
     """Estimate the bytes ``value`` holds without walking its rows.
 
@@ -568,11 +589,7 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
     """
 
     if isinstance(value, DataFrame):
-        # A categorical column (a parsed depth table's names) holds codes and
-        # a few names, which the deep count reads without walking the rows.
-        object_cells = len(value) * sum(
-            1 for dtype in value.dtypes if dtype.kind == "O" and not isinstance(dtype, CategoricalDtype)
-        )
+        object_cells = len(value) * sum(1 for dtype in value.dtypes if dtype.kind == "O")
         if not object_cells:
             return int(value.memory_usage(index=True, deep=True).sum())
         return (
@@ -582,6 +599,9 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
         )
     if isinstance(value, str):
         return len(value)
+    if isinstance(value, _HoldsArrays):
+        # A parsed depth file: its arrays, not the text it was read from.
+        return int(value.nbytes)
     records = _records_from_value(value)
     if isinstance(value, tuple) and records is None:
         # A nucleotide edge holds its text beside its frame.

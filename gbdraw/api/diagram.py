@@ -60,10 +60,11 @@ from gbdraw.analysis.depth_tracks import (
     depth_track_count,
     depth_track_data_count,
     depth_track_indices,
-    depth_track_inputs,
+    freeze_depth_tracks,
     index_depth_track_row,
     normalize_depth_tracks,
     representative_depth_tracks,
+    thaw_depth_tracks,
 )
 from gbdraw.analysis.depth_tracks import (
     depth_track_heights as _depth_track_heights_from_specs,
@@ -2306,7 +2307,7 @@ def assemble_linear_diagram_from_records(
             ),
         ),
     )
-    record_depth_tracks = normalize_depth_tracks(
+    record_depth_tracks = thaw_depth_tracks(inputs._resolved_depth_tracks) or normalize_depth_tracks(
         records,
         depth_tracks=inputs.depth_tracks,
         depth_table=inputs.depth_table,
@@ -2670,7 +2671,7 @@ def assemble_circular_diagram_from_record(
     record_depth_tracks = (
         [list(context.precomputed_depth_track_specs)]
         if context.precomputed_depth_track_specs is not None
-        else normalize_depth_tracks(
+        else thaw_depth_tracks(inputs._resolved_depth_tracks) or normalize_depth_tracks(
             [gb_record],
             depth_tracks=inputs.depth_tracks,
             depth_table=inputs.depth_table,
@@ -3064,7 +3065,7 @@ def assemble_circular_diagram_from_records(
     )
 
     records = list(records)
-    record_depth_tracks = normalize_depth_tracks(
+    record_depth_tracks = thaw_depth_tracks(inputs._resolved_depth_tracks) or normalize_depth_tracks(
         records,
         depth_tracks=inputs.depth_tracks,
         depth_table=inputs.depth_table,
@@ -3826,7 +3827,7 @@ def build_circular_diagram(
     depth_tracks = (
         None
         if _precomputed_depth_track_specs is not None
-        else depth_track_inputs(
+        else freeze_depth_tracks(
             normalize_depth_tracks(
                 [gb_record],
                 depth_tracks=options.depth_tracks,
@@ -3858,7 +3859,7 @@ def build_circular_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 conservation_blast_files=conservation_inputs,
                 conservation_dataframes=options.conservation_dataframes,
                 conservation_reference=options.conservation_reference,
@@ -3951,7 +3952,7 @@ def _build_linear_diagram(
         resolved_inputs=_resolved_feature_inputs,
     )
     annotations = read_annotation_options(options.annotations, mode="linear")
-    depth_tracks = depth_track_inputs(
+    depth_tracks = freeze_depth_tracks(
         normalize_depth_tracks(
             records,
             depth_tracks=options.depth_tracks,
@@ -4004,7 +4005,7 @@ def _build_linear_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 linear_track_slots=tracks.linear_track_slots if tracks else None,
                 linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
                 annotation_options=annotations,
@@ -4247,7 +4248,7 @@ def build_circular_multi_diagram(
         options, load_comparison_colors=False, resolved_inputs=_resolved_feature_inputs
     )
     annotations = read_annotation_options(options.annotations, mode="circular")
-    depth_tracks = depth_track_inputs(
+    depth_tracks = freeze_depth_tracks(
         normalize_depth_tracks(
             records,
             depth_tracks=options.depth_tracks,
@@ -4287,7 +4288,7 @@ def build_circular_multi_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 species=options.species,
                 strain=options.strain,
                 plot_title=options.plot_title,

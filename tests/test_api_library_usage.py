@@ -604,14 +604,14 @@ def _capture_build(
         read.update(kwargs)
         return _DEPTH_SPECS_READ
 
-    def fake_depth_inputs(specs):
+    def fake_freeze_depth(specs):
         assert specs is _DEPTH_SPECS_READ
         return _DEPTH_TRACKS_READ
 
     monkeypatch.setattr(api_diagram_module, _ASSEMBLERS[builder_name], fake_assemble)
     monkeypatch.setattr(api_diagram_module, "_resolve_feature_render_inputs", fake_feature_inputs)
     monkeypatch.setattr(api_diagram_module, "normalize_depth_tracks", fake_normalize_depth)
-    monkeypatch.setattr(api_diagram_module, "depth_track_inputs", fake_depth_inputs)
+    monkeypatch.setattr(api_diagram_module, "freeze_depth_tracks", fake_freeze_depth)
     return assembled, read
 
 
@@ -619,7 +619,7 @@ def _forwarded(assembled: dict[str, object], read: dict[str, object], name: str)
     """What the build received for ``name``: a read option goes to its reader only."""
 
     assert assembled["_resolved_feature_inputs"] is _FEATURE_INPUTS_READ
-    assert assembled["depth_tracks"] is _DEPTH_TRACKS_READ
+    assert assembled["_resolved_depth_tracks"] is _DEPTH_TRACKS_READ
     if name in read:
         assert assembled[name] is _INPUT_DEFAULTS[name]
         return read[name]
