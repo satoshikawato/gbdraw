@@ -59,3 +59,100 @@ def test_empty_resolved_set_has_no_native_automatic_slot_but_preserves_explicit(
         bundle, [], explicit, mode=mode, default_slots=list, slot_factory=factory
     )
     assert slots is explicit and returned is bundle
+
+
+def _search_bundle(*, keep: bool = True) -> ResolvedAnnotationBundle:
+    from gbdraw.annotations.models import AnnotationSet, CoordinateSpan, RegionAnnotation
+    from gbdraw.annotations.resolve import resolve_annotations
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(Seq("ATGC" * 250), id="rec")
+    record.annotations["molecule_type"] = "DNA"
+    other = AnnotationSet(id="other", annotations=(
+        RegionAnnotation(id="o1", target=CoordinateSpan(record=None, start=10, end=50), mark="highlight"),
+    ))
+    search = AnnotationSet(id="search_1", annotations=(
+        RegionAnnotation(id="q#1", target=CoordinateSpan(record=None, start=100, end=200), mark="highlight"),
+    ), keep_highlight_overlay=keep)
+    return resolve_annotations((other, search), [record], mode="circular")
+
+
+def _stack(mode: str, *extra: object) -> list:
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    if mode == "circular":
+        return [CircularTrackSlot(id="ticks", renderer="ticks"), CircularTrackSlot(id="feat", renderer="features", z=2),
+                *extra]
+    return [LinearTrackSlot(id="feat", renderer="features", z=2), *extra]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_explicit_stack_draws_a_kept_set_in_its_highlight_overlay(mode: str) -> None:
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    explicit = _stack(mode)
+    slots, _, auto_ids = prepare_annotation_track_slots(
+        _search_bundle(), [], explicit, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots is not None and slots[: len(explicit)] == explicit
+    # Only the kept set gets a slot, after the stack's own (its axis index stays), in front of its feature track.
+    assert slots[len(explicit):] == [factory(
+        id="annotations_2", renderer="annotations", side="overlay", z=3,
+        params={"set_id": "search_1", "marks": ("highlight",), "anchor_slot": "feat", "layer": "foreground",
+                "cover_anchor": True, "padding_px": 0.0},
+    )]
+    assert "annotations_2" in auto_ids
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_automatic_stack_draws_a_kept_set_in_front_and_others_behind(mode: str) -> None:
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    slots, _, _ = prepare_annotation_track_slots(
+        _search_bundle(), [], None, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots is not None
+    layers = {slot.params["set_id"]: (slot.params["layer"], slot.z, slot.params["anchor_slot"]) for slot in slots}
+    assert layers == {"other": ("underlay", -1, "features"), "search_1": ("foreground", 1, "features")}
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_slot_that_names_the_kept_set_wins(mode: str) -> None:
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    named = factory(
+        id="annotations_2", renderer="annotations", side="outside" if mode == "circular" else "above",
+        params={"set_id": "search_1"},
+    )
+    explicit = _stack(mode, named)
+    slots, _, _ = prepare_annotation_track_slots(
+        _search_bundle(), [], explicit, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots is explicit
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_set_without_the_marker_follows_the_stack(mode: str) -> None:
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    explicit = _stack(mode)
+    slots, _, _ = prepare_annotation_track_slots(
+        _search_bundle(keep=False), [], explicit, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots is explicit
+
+
+def test_the_kept_overlay_takes_an_unused_slot_id() -> None:
+    from gbdraw.tracks import CircularTrackSlot
+
+    taken = CircularTrackSlot(id="annotations_2", renderer="annotations", side="outside", params={"set_id": "other"})
+    slots, _, _ = prepare_annotation_track_slots(
+        _search_bundle(), [], _stack("circular", taken), mode="circular", default_slots=list,
+        slot_factory=CircularTrackSlot,
+    )
+    assert slots is not None and [slot.id for slot in slots][-1] == "annotations_2_2"

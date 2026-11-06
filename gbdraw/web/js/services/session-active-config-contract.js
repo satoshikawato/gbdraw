@@ -24,6 +24,8 @@ import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+/** @import { ObjectShape } from '../utils/contract-shape.js' */
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 // The Feature overlap tolerance of a new drawing, in bp.
@@ -199,10 +201,14 @@ const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'obj
   recordDisplayDrafts: 'array', recordsOff: 'array', featurePlacementOverrides: 'object', rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string', fileImports: 'object',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 /** The fields of a stored rule row (Save refuses another; Load drops it with a row). */
+// A stored annotation set and its rows are the request's (Python's `AnnotationSet` and `RegionAnnotation`, through
+// the generated request shape), so a field Python adds is saved without a second list here (OV-2580).
+/** @param {string} type @returns {string[]} */
+const requestFields = (type) => Object.keys(/** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types[type]).fields);
 export const STORED_ROW_FIELDS = Object.freeze({ rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order', 'importedFrom', 'handOrder'], whitelist: ['feat', 'qual', 'key', 'importedFrom'],
-  annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] });
-const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
+  annotationSets: requestFields('CanonicalAnnotationSet') });
+const ANNOTATION_FIELDS = requestFields('CanonicalRegionAnnotation');
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
 const OBSOLETE_SLOT_PARAM_KEYS = new Set(['side', 'radius', 'width', 'spacing', 'inner_gap_px', 'outer_gap_px', 'strict', 'compress', 'reserve']);

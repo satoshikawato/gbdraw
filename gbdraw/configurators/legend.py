@@ -15,7 +15,9 @@ from gbdraw.config.models import (
     RenderProfile,
 )
 from gbdraw.legend.circular_layout import (
+    CircularCompactGradientEntryLayout,
     CircularLegendLayout,
+    CircularSingleGradientEntryLayout,
     build_circular_legend_layout,
 )
 from gbdraw.legend.linear_layout import (
@@ -123,14 +125,29 @@ def _circular_legend_local_bounds(
             ).expanded(_entry_half_stroke_width(entry.properties))
         )
     gradient = layout.gradient
+    gx, gy = float(layout.gradient_x), float(layout.gradient_y)
     if gradient is not None:
-        gx, gy = float(layout.gradient_x), float(layout.gradient_y)
         if gradient.show_swatches:
             for row in gradient.rows:
                 x, y = gx + row.swatch_x, gy + row.y
                 bounds.append(Aabb(x, y - (0.5 * rect_size), x + rect_size, y + (0.5 * rect_size)))
         band_y = gy + gradient.band_y
         bounds.append(Aabb(gx, band_y - (0.5 * rect_size), gx + gradient.bar_width, band_y + (0.5 * rect_size)))
+    gradient_rows = layout.gradient_rows
+    if gradient_rows is not None:
+        gradient_entries: tuple[CircularCompactGradientEntryLayout | CircularSingleGradientEntryLayout, ...] = (
+            *gradient_rows.compact_entries,
+            *gradient_rows.single_entries,
+        )
+        for gradient_entry in gradient_entries:
+            bounds.append(
+                Aabb(
+                    gx + float(gradient_rows.bar_x),
+                    gy + float(gradient_entry.bar_y) - (0.5 * rect_size),
+                    gx + float(gradient_rows.bar_x) + float(gradient_rows.bar_width),
+                    gy + float(gradient_entry.bar_y) + (0.5 * rect_size),
+                ).expanded(_entry_half_stroke_width(gradient_entry.properties))
+            )
     combined = union_aabbs(bounds)
     if combined is None:  # pragma: no cover - the layout rectangle is always present
         raise RuntimeError("circular legend bounds unexpectedly empty")

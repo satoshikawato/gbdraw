@@ -257,14 +257,17 @@ def search_frame_linear_comparisons(
     return tuple(normalized)
 
 
-def _record_id_index(records: Sequence[object]) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
-    """Index record IDs and names exactly and without a version suffix."""
+TableIdIndex = tuple[dict[str, list[int]], dict[str, list[int]]]
+
+
+def table_id_index(names: Sequence[Sequence[str]]) -> TableIdIndex:
+    """Index each item's names exactly and without a version suffix (PD-OI-074)."""
 
     exact: dict[str, list[int]] = {}
     loose: dict[str, list[int]] = {}
-    for index, record in enumerate(records):
-        for attribute in ("id", "name"):
-            text = str(getattr(record, attribute, "") or "").strip()
+    for index, item_names in enumerate(names):
+        for name in item_names:
+            text = str(name or "").strip()
             if not text or text == "<unknown name>":
                 continue
             for keys, key in ((exact, text), (loose, _VERSION_SUFFIX.sub("", text))):
@@ -273,19 +276,34 @@ def _record_id_index(records: Sequence[object]) -> tuple[dict[str, list[int]], d
     return exact, loose
 
 
+def table_id_matches(value: str, index: TableIdIndex) -> list[int]:
+    """The items a table's sequence ID names: by the exact ID, else by the ID without a version
+    suffix, so that distinct versions stay distinct (PD-OI-074)."""
+
+    exact, loose = index
+    return exact.get(value, []) or loose.get(_VERSION_SUFFIX.sub("", value), [])
+
+
+def _record_id_index(records: Sequence[object]) -> TableIdIndex:
+    """Index record IDs and names exactly and without a version suffix."""
+
+    return table_id_index([
+        [str(getattr(record, attribute, "") or "") for attribute in ("id", "name")] for record in records
+    ])
+
+
 def _resolve_table_id(
     value: str,
     endpoint: int,
-    index: tuple[dict[str, list[int]], dict[str, list[int]]],
+    index: TableIdIndex,
 ) -> tuple[Literal["match", "conflict", "unknown"], int | None]:
     """Match exact IDs before version-tolerant IDs so distinct versions stay distinct."""
 
-    exact, loose = index
-    for named in (exact.get(value, []), loose.get(_VERSION_SUFFIX.sub("", value), [])):
-        if endpoint in named:
-            return "match", endpoint
-        if named:
-            return "conflict", named[0]
+    named = table_id_matches(value, index)
+    if endpoint in named:
+        return "match", endpoint
+    if named:
+        return "conflict", named[0]
     return "unknown", None
 
 
@@ -617,6 +635,9 @@ def validate_linear_comparison_record_ids(
 
 
 __all__ = [
+    "TableIdIndex",
+    "table_id_index",
+    "table_id_matches",
     "COMPARISON_RECORD_ID_UNMATCHED",
     "ComparisonRecordIdWarning",
     "ComparisonTableTally",

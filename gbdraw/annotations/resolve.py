@@ -400,9 +400,14 @@ def resolve_annotation_set(
                 legend_label=annotation.legend_label or annotation_set.legend_label,
                 metadata=annotation.metadata,
                 crosses_origin=segments_cross_origin(segments, len(record.seq), is_circular=is_circular),
+                source_step=-1 if _read_coord_map(record)[1] < 0 else 1,
+                strand=annotation.strand,
             )
         )
-    return ResolvedAnnotationBundle(tuple(resolved), tuple(warnings), (annotation_set.id,))
+    return ResolvedAnnotationBundle(
+        tuple(resolved), tuple(warnings), (annotation_set.id,),
+        (annotation_set.id,) if annotation_set.keep_highlight_overlay else (),
+    )
 
 
 def _materialize_sets(options: AnnotationOptions, *, mode: str) -> tuple[AnnotationSet, ...]:
@@ -459,6 +464,7 @@ def resolve_annotations(
         tuple(annotation for bundle in resolved for annotation in bundle.annotations),
         tuple(warning for bundle in resolved for warning in bundle.warnings),
         tuple(item.id for item in sets),
+        tuple(item.id for item in sets if item.keep_highlight_overlay),
     )
 
 

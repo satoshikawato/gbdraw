@@ -1,0 +1,15 @@
+{
+  "purpose": "Positive fixture of the annotation style gradient in Session 51: two sequence-search annotation sets (one colour per query, and the gradient by query position with a whole-query hit, a forward partial hit and a reverse partial hit) built by gbdraw.annotations.search_hits from real LOSAT 0.1.0 blastn rows",
+  "writer": "gbdraw.session.save_session_document (Python API), run from the feat/sequence-search worktree on PYTHONPATH",
+  "writerCommit": "342679b17 (feat/sequence-search, PR-B step 1, on origin/dev 24269c0d3) plus step 1b; rewritten at step 2b (on d06b70c74) when the search sets gained keepHighlightOverlay, and at step 2c (on 3a272a035) when each hit row gained its strand",
+  "command": "PYTHONPATH=. python make_fixture.py <scratch>/plain.json tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz (script in the task folder region-select-seq-search-20261104/prb/scripts/make_fixture.py; its rows are the mock search's circ_hits1.tsv with the subject named NC_012920.1:1-16569)",
+  "request": "CircularDiagramRequest(records=(RecordInput(source=GenBankInputSource('tests/test_inputs/HmmtDNA.gbk')),), options=CircularDiagramOptions(annotations=AnnotationOptions(sets=(Search 1 by query, Search 2 by gradient)))); queries Hs_COX1_frag (600 bp) and Dr_16S_frag (650 bp); thresholds evalue 1e-2, bitscore 50, identity 70, length 0; created_at 2026-11-06T00:00:00Z",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "values": "drawings[0].renderRequest.diagramOptions.annotations.sets[1].annotations[*].style.gradient {startColor #f6c9d8, endColor #5b1a4a, direction forward, forward, reverse; queryStart/queryEnd absent (whole query), 16/650..171/650, 319/650..365/650}; sets[0] styles have no gradient key; sets[0] and sets[1] keepHighlightOverlay true (written by the search set builder); sets[*].annotations[*].strand +, +, - in each set (the hit's subject strand)",
+  "decompressedSha256": "b380c3d3e411f347adf574fc8020034271d0798581760c807886afb41aba2e91",
+  "compression": "gzip level 9, mtime 0 (Python gzip.compress)",
+  "sessionVersion": 51,
+  "requestSchema": 9
+}

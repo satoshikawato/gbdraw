@@ -202,6 +202,65 @@ class HatchStyle:
 
 
 @dataclass(frozen=True)
+class AnnotationGradient:
+    """A fill that runs along a region from ``start_color`` to ``end_color``.
+
+    The colours are the two ends of a scale in the order of what the region
+    stands for (a search hit: the query's start, then its end).
+    ``query_start`` and ``query_end`` are where the region's two ends lie on
+    that scale, as fractions from 0 (the query's start) to 1 (its end), in
+    that order: a hit over the second half of its query runs from the
+    middle colour to ``end_color``. ``direction`` says which way that order
+    runs on the record's source strand: ``forward`` from the region's lower
+    source coordinate, ``reverse`` from its higher one. A ``band`` or
+    ``highlight`` mark draws it in place of its fill; other marks have no fill.
+    """
+
+    start_color: str
+    end_color: str
+    direction: Literal["forward", "reverse"] = "forward"
+    query_start: float = 0.0
+    query_end: float = 1.0
+
+    def __post_init__(self) -> None:
+        for name in ("start_color", "end_color"):
+            text = str(getattr(self, name) or "").strip()
+            try:
+                color = normalize_hex_color(resolve_color_to_hex(text)) if text else None
+            except (TypeError, ValueError, ValidationError):
+                color = None
+            if color is None:
+                raise ValidationError(
+                    f"Annotation gradient {name} is not a valid color: {text!r}.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "COLOR"},
+                )
+            object.__setattr__(self, name, color)
+        if self.direction not in {"forward", "reverse"}:
+            raise ValidationError(
+                "Annotation gradient direction must be 'forward' or 'reverse'.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
+        for name in ("query_start", "query_end"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+                raise ValidationError(
+                    f"Annotation gradient {name} must be a finite number.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "FINITE"},
+                )
+            if value < 0:
+                raise ValidationError(
+                    f"Annotation gradient {name} must be 0 or more.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE"},
+                )
+            object.__setattr__(self, name, float(value))
+        if not self.query_start <= self.query_end <= 1:
+            raise ValidationError(
+                "Annotation gradient query positions run from query_start to query_end, at most 1.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "ORDER"},
+            )
+
+
+@dataclass(frozen=True)
 class RegionAnnotationStyle:
     stroke: str = "#404040"
     stroke_width: float = 1.5
@@ -216,6 +275,8 @@ class RegionAnnotationStyle:
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
     label_position: Literal["center", "start", "end"] = "center"
     label_offset: float = 4.0
+    # A fill along the region in place of ``fill`` (band and highlight marks).
+    gradient: AnnotationGradient | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "stroke", _color(self.stroke, "annotation stroke"))
@@ -231,6 +292,15 @@ class RegionAnnotationStyle:
         object.__setattr__(self, "fill_opacity", opacity)
         if self.hatch is not None and not isinstance(self.hatch, HatchStyle):
             raise ValidationError("hatch must be HatchStyle or None.")
+        if self.gradient is not None and not isinstance(self.gradient, AnnotationGradient):
+            raise ValidationError(
+                "gradient must be AnnotationGradient or None.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"}
+            )
+        if self.gradient is not None and self.hatch is not None:
+            raise ValidationError(
+                "An annotation style has a hatch or a gradient, not both.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
         object.__setattr__(self, "label_color", _color(self.label_color, "label color"))
         if self.label_font_size is not None:
             object.__setattr__(self, "label_font_size", _finite(self.label_font_size, "label_font_size", positive=True))
@@ -251,6 +321,9 @@ class RegionAnnotation:
     style: RegionAnnotationStyle | None = None
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
+    # The strand the region lies on, on the record's source (a sequence search's hit, PD-OI-117): on a feature
+    # track that separates the strands its highlight covers that strand's lane. None: no strand.
+    strand: Literal["+", "-"] | None = None
 
     def __post_init__(self) -> None:
         annotation_id = str(self.id).strip()
@@ -270,6 +343,10 @@ class RegionAnnotation:
             object.__setattr__(self, "lane", int(self.lane))
         if self.style is not None and not isinstance(self.style, RegionAnnotationStyle):
             raise ValidationError("Annotation style must be RegionAnnotationStyle or None.")
+        if self.strand not in {None, "+", "-"}:
+            raise ValidationError(
+                "Annotation strand must be '+', '-', or None.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"}
+            )
         metadata = {str(key): str(value) for key, value in dict(self.metadata or {}).items()}
         object.__setattr__(self, "id", annotation_id)
         object.__setattr__(self, "label", str(self.label or ""))
@@ -283,6 +360,9 @@ class AnnotationSet:
     annotations: tuple[RegionAnnotation, ...]
     default_style: RegionAnnotationStyle = field(default_factory=RegionAnnotationStyle)
     legend_label: str | None = None
+    # A sequence search's set (PD-OI-117): its highlights keep the automatic overlay, in front of the features, also
+    # in an explicit track stack that names no slot for the set (``prepare_annotation_track_slots``).
+    keep_highlight_overlay: bool = False
 
     def __post_init__(self) -> None:
         set_id = str(self.id).strip()
@@ -297,6 +377,11 @@ class AnnotationSet:
             raise ValidationError(f"Duplicate annotation id {duplicate!r} in set {set_id!r}.")
         if not isinstance(self.default_style, RegionAnnotationStyle):
             raise ValidationError("AnnotationSet default_style must be RegionAnnotationStyle.")
+        if not isinstance(self.keep_highlight_overlay, bool):
+            raise ValidationError(
+                "AnnotationSet keep_highlight_overlay must be a boolean.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
         object.__setattr__(self, "id", set_id)
         object.__setattr__(self, "annotations", annotations)
         object.__setattr__(self, "legend_label", None if self.legend_label is None else str(self.legend_label))
@@ -462,6 +547,20 @@ class ResolvedRegionAnnotation:
     # end, into its first, which starts at 0 (``segments_cross_origin``).
     crosses_origin: bool = False
 
+    # How the record's local axis runs on its source: -1 on a reverse-complemented record.
+    source_step: Literal[-1, 1] = 1
+    # ``RegionAnnotation.strand``, on the record's source.
+    strand: Literal["+", "-"] | None = None
+
+    @property
+    def display_strand(self) -> Literal["+", "-"] | None:
+        """The strand the region lies on as the record is drawn: a reverse-complemented record draws its
+        source's plus strand as its minus strand, as it does its features."""
+
+        if self.strand is None or self.source_step == 1:
+            return self.strand
+        return "-" if self.strand == "+" else "+"
+
     def __post_init__(self) -> None:
         if self.crosses_origin and (len(self.segments) < 2 or not any(start == 0 for start, _end in self.segments)):
             raise ValueError(
@@ -533,6 +632,9 @@ class ResolvedAnnotationBundle:
     annotations: tuple[ResolvedRegionAnnotation, ...]
     warnings: tuple[ResolutionWarning, ...] = ()
     set_ids: tuple[str, ...] = ()
+    # The sets whose highlights keep their automatic overlay in an explicit track stack
+    # (``AnnotationSet.keep_highlight_overlay``).
+    highlight_overlay_set_ids: tuple[str, ...] = ()
 
 
 def effective_annotation_style(
@@ -554,6 +656,7 @@ def annotation_label_font_size(style: RegionAnnotationStyle, feature_label_font_
 
 
 __all__ = [
+    "AnnotationGradient",
     "AnnotationOptions",
     "AnnotationSet",
     "AnnotationTrackParams",

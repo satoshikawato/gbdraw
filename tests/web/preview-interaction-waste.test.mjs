@@ -37,6 +37,7 @@ for (const source of [
   'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
   'services/svg-serialization.js', 'services/preview-affordances.js', 'services/settings-sections.js', 'services/drawn-groups.js',
+  'services/drawn-attributes.generated.js',
   'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js', 'utils/i18n.js',
   // feature-placement.js reads the record keys of a drawing from their owner.
   'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',

@@ -84,6 +84,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
 )
 from gbdraw.annotations import (
+    AnnotationGradient,
     AnnotationSet,
     AnnotationTrackParams,
     CoordinateSpan,
@@ -99,6 +100,13 @@ from gbdraw.annotations import (
     parse_feature_selector,
     read_annotation_table,
     resolve_annotations,
+)
+from gbdraw.annotations.search_hits import (
+    SearchAnnotationResult,
+    SearchHit,
+    SearchQuery,
+    SearchSubject,
+    search_hit_annotation_set,
 )
 from .render import render_to_bytes, save_figure_to
 from .request_render import (
@@ -258,6 +266,7 @@ __all__ = [
     "normalize_orthogroup_membership_mode",
     # options
     "AnnotationOptions",
+    "AnnotationGradient",
     "AnnotationSet",
     "AnnotationTrackParams",
     "CoordinateSpan",
@@ -273,6 +282,11 @@ __all__ = [
     "parse_feature_selector",
     "read_annotation_table",
     "resolve_annotations",
+    "SearchAnnotationResult",
+    "SearchHit",
+    "SearchQuery",
+    "SearchSubject",
+    "search_hit_annotation_set",
     "CircularMultiRecordOptions",
     "CircularDiagramOptions",
     "CircularOutputOptions",

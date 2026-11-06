@@ -266,3 +266,25 @@ const cliWriterConfigVectors = JSON.parse(await readFile(
 for (const { name, session, holdsCliWriterConfig: expected } of cliWriterConfigVectors) {
   assert.equal(holdsCliWriterConfig(session), expected, name);
 }
+
+// OV-2580: a sequence search's set is saved as the Web holds it: the set's
+// `keepHighlightOverlay` marker and each hit row's `strand` are fields of the
+// request's annotation set and row, so Save accepts them; another field still
+// fails Save.
+{
+  const searchSet = {
+    id: 'Search 1', legendLabel: null, keepHighlightOverlay: true,
+    defaultStyle: { fill: '#f6c9d8' },
+    annotations: [{
+      id: 'hit-1', target: { kind: 'span', recordKey: 'record-1', start: 10, end: 20 }, label: '', mark: 'highlight',
+      lane: null, style: null, legendLabel: 'q', metadata: { query: 'q' }, strand: '-'
+    }]
+  };
+  const save = (annotationSets) => validateCurrentWriterActiveConfig({
+    mode: 'circular', storedConfig: { ...storedConfig, annotationSets }
+  });
+  assert.doesNotThrow(() => save([searchSet]));
+  assert.throws(() => save([{ ...searchSet, unknownField: 1 }]), /config\.annotationSets\[0\] field\(s\): unknownField/);
+  assert.throws(() => save([{ ...searchSet, annotations: [{ ...searchSet.annotations[0], unknownField: 1 }] }]),
+    /config\.annotationSets\[0\]\.annotations\[0\] field\(s\): unknownField/);
+}

@@ -943,7 +943,7 @@ test('Add to annotation set binds the Region row to the record of the Result, al
 
   const regionState = { annotationSets: [], selectedFeatures: { value: [] } };
   const actions = createAnnotationEditor({ state: withDrawings(regionState), getRecordCatalog: () => duplicateCatalog });
-  const added = actions.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, 'dup-b'), start: 3, end: 8 });
+  const added = actions.addRegionAnnotation({ record: { key: bindingKeyOfRequestRecord(owners, 'dup-b'), backendSelector: second.backendSelector }, start: 3, end: 8 });
   const [setRow] = withDrawings(regionState).activeDrawing().annotationSets;
   assert.equal(setRow.id, 'annotations', 'a drawing without a set gets one');
   assert.equal(added.label, 'Region 1');
@@ -951,12 +951,61 @@ test('Add to annotation set binds the Region row to the record of the Result, al
   assert.equal(added.metadata[ANNOTATION_RECORD_BINDING_KEY], second.key);
   assert.deepEqual({ start: added.target.start, end: added.target.end, wrapsOrigin: added.target.wrapsOrigin }, { start: 3, end: 8, wrapsOrigin: false });
   // The next row takes the next free number; a span across the origin of a circular record wraps it.
-  const next = actions.addRegionAnnotation({ bindingKey: first.key, start: 9, end: 2 });
+  const next = actions.addRegionAnnotation({ record: first, start: 9, end: 2 });
   assert.equal(next.label, 'Region 2');
   assert.equal(next.target.wrapsOrigin, true);
   assert.equal(next.metadata[ANNOTATION_RECORD_BINDING_KEY], first.key);
-  // A key the catalog does not hold leaves the row unbound, as a new coordinate row is.
-  const unbound = actions.addRegionAnnotation({ bindingKey: 'gone', start: 1, end: 2 });
-  assert.equal(unbound.target.record, null);
-  assert.equal(unbound.metadata[ANNOTATION_RECORD_BINDING_KEY], undefined);
+});
+
+// OV-2632, D-58: Add to annotation set on a record the shown Result draws but no record settings owner of the draft
+// holds (its card was deleted after Generate) binds as a search hit does (D-57): by a key no record has and the
+// record's selector in the Result. With one record left the row is not "Automatic (single record)": its target is
+// unavailable, and Generate refuses it instead of drawing it on the record left.
+test('Add to annotation set on a record whose card was deleted after Generate is held as target record unavailable', async () => {
+  const { resultRecordBindings } = await load('app/annotations/record-selector.js');
+  const { resultRecordBinding } = await load('services/sequence-search.js');
+  const { ANNOTATION_RECORD_BINDING_KEY } = await load('services/annotation-state.js');
+  const left = buildAnnotationRecordCatalog({
+    mode: 'linear',
+    linearSources: [{ sourceKey: 'dup-a', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'dup', recordLength: 10 }] }]
+  });
+  const [kept] = left.records;
+  const owners = [{ key: 'card-a', requestKeys: ['dup-a'], ownsExpansions: true, bindingKeys: [kept.key], displaySource: 'dup-a', displaySelector: null }];
+  const bindings = resultRecordBindings([
+    { recordIndex: 0, recordKey: 'dup-a', recordId: 'dup' }, { recordIndex: 1, recordKey: 'dup-b', recordId: 'dup' }
+  ], owners);
+  const regionState = { annotationSets: [], selectedFeatures: { value: [] } };
+  const actions = createAnnotationEditor({ state: withDrawings(regionState), getRecordCatalog: () => left });
+  const added = actions.addRegionAnnotation({ record: resultRecordBinding(bindings, 'dup-b'), start: 3, end: 8 });
+  const key = added.metadata[ANNOTATION_RECORD_BINDING_KEY];
+  assert.equal(key, bindings.bindingKeyOf('dup-b'));
+  assert.notEqual(key, kept.key, 'a binding key no record has');
+  assert.deepEqual(added.target.record, { kind: 'recordIndex', index: 1 }, 'the record named as the Result names it');
+  assert.deepEqual(annotationRecordOptions(left, added).filter(({ synthetic }) => synthetic).map(({ value, label }) => [value, label]),
+    [[key, '#2 (target record unavailable)']]);
+  // Generate: the draft's rows are reconciled with its catalog, then their targets are checked.
+  const drawing = withDrawings(regionState).activeDrawing();
+  reconcileAnnotationRecordBindings(drawing, left);
+  assert.equal(drawing.annotationSets[0].annotations[0].metadata[ANNOTATION_RECORD_BINDING_KEY], key, 'not bound to the record left');
+  assert.deepEqual(validateAnnotationRecordTargets(drawing.annotationSets, left), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+});
+
+// Receipt web.sequence-search: an annotation TSV export writes a gradient row as a plain row in its end colour,
+// in the PD-OI-040 columns; a sequence search's set keeps its marker in the Web draft.
+test('a gradient row exports as a plain row in its end color, and a search set keeps its marker', () => {
+  const gradient = { startColor: '#f6c9d8', endColor: '#123456', direction: 'forward' };
+  const searched = createAnnotationSet({
+    id: 'Search 1', keepHighlightOverlay: true,
+    annotations: [{ id: 'q#1', target: coordinateTarget({ start: 5, end: 9 }), mark: 'highlight',
+      style: { fill: '#5b1a4a', gradient } }]
+  });
+  assert.equal(searched.keepHighlightOverlay, true);
+  assert.equal(Object.hasOwn(createAnnotationSet({ id: 'plain' }), 'keepHighlightOverlay'), false);
+  const text = encodeAnnotationTable([searched]);
+  const [header, row] = text.trim().split('\n').map((line) => line.split('\t'));
+  assert.equal(header.includes('gradient'), false);
+  assert.equal(row[header.indexOf('fill')], '#123456');
+  const [restored] = parseAnnotationTable(text);
+  assert.equal(restored.annotations[0].style.fill, '#123456');
+  assert.equal(restored.annotations[0].style.gradient, undefined);
 });

@@ -66,7 +66,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/results.js': 1,
   'app/right-drawer.js': 2,
   'app/rule-matching.js': 15,
-  'app/run-analysis.js': 96,
+  'app/run-analysis.js': 93,
   'app/run-info.js': 4,
   'app/similarity-alignment.js': 35,
   'app/svg-styles.js': 6,

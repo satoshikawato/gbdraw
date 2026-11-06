@@ -139,6 +139,14 @@
  * @property {boolean} cross
  */
 /**
+ * @typedef {object} CanonicalAnnotationGradient
+ * @property {CanonicalAnnotationColor} startColor
+ * @property {CanonicalAnnotationColor} endColor
+ * @property {'forward' | 'reverse'} direction
+ * @property {number} [queryStart]
+ * @property {number} [queryEnd]
+ */
+/**
  * @typedef {object} CanonicalRegionAnnotationStyle
  * @property {CanonicalAnnotationColor} stroke
  * @property {number} strokeWidth
@@ -152,6 +160,7 @@
  * @property {'auto' | 'horizontal' | 'tangent' | 'radial' | 'arc'} labelOrientation
  * @property {'center' | 'start' | 'end'} labelPosition
  * @property {number} labelOffset
+ * @property {CanonicalAnnotationGradient | null} [gradient]
  */
 /**
  * @typedef {object} CanonicalFeatureSelector
@@ -194,6 +203,7 @@
  * @property {CanonicalRegionAnnotationStyle | null} style
  * @property {string | null} legendLabel
  * @property {Record<string, string>} metadata
+ * @property {'+' | '-' | null} [strand]
  */
 /**
  * @typedef {object} CanonicalAnnotationSet
@@ -201,6 +211,7 @@
  * @property {CanonicalRegionAnnotation[]} annotations
  * @property {CanonicalRegionAnnotationStyle} defaultStyle
  * @property {string | null} legendLabel
+ * @property {boolean} [keepHighlightOverlay]
  */
 /**
  * @typedef {object} CanonicalAnnotationOptions

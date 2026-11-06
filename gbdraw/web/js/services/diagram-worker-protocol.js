@@ -63,9 +63,11 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   READ_RECORD_SPAN_SEQUENCES: 'readRecordSpanSequences',
+  READ_SEARCH_QUERIES: 'readSearchQueries',
   RESOLVE_FEATURE_ANCHOR: 'resolveFeatureAnchor',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
+  SEARCH_HIT_ANNOTATION_SET: 'searchHitAnnotationSet',
   SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
   UPGRADE_LEGACY_SESSION: 'upgradeLegacySession',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'
@@ -201,16 +203,27 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
+ * The origin window of a circular record (`OriginWindowInput`): its last and first bases, as many as `originWindow`
+ * (a sequence search's longest query) and at most half the record each; Python places it (`origin_window_span`).
+ * @typedef {object} OriginWindowInput
+ * @property {string} recordKey
+ * @property {number} originWindow
+ */
+
+/** A span to read: by its coordinates, or a record's origin window. @typedef {RecordSpanInput | OriginWindowInput} RecordSpanRead */
+
+/**
  * The payload of `readRecordSpanSequences`: the request the shown Result was made from (the committed request),
  * whose resources the page stages, and the spans to read.
  * @typedef {object} RecordSpanSequencesPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
- * @property {readonly RecordSpanInput[]} spans
+ * @property {readonly RecordSpanRead[]} spans
  */
 
 /**
- * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them.
+ * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them (unique in one
+ * read), the length of its record, and whether it was asked as an origin window.
  * @typedef {object} RecordSpanSequence
  * @property {string} recordKey
  * @property {string} recordId
@@ -218,6 +231,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} end
  * @property {number} length
  * @property {boolean} wrapsOrigin
+ * @property {boolean} originWindow
+ * @property {number} recordLength
  * @property {string} header
  * @property {string} sequence
  */

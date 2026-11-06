@@ -84,8 +84,8 @@ const pick = (object, keys) => Object.fromEntries(keys.filter((key) => Object.ha
 
 test('the G1 rows are the live setting rows, and each request path has its projector', () => {
   assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column',
-    'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'comparison-height', 'track-geometry', 'record-names',
-    'track-visibility']);
+    'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'sequence-search', 'comparison-height', 'track-geometry',
+    'record-names', 'track-visibility']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
   for (const id of ['colors', 'feature-visibility', 'legend-editor', 'canvas-padding', 'features-editor', 'feature-appearance']) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);

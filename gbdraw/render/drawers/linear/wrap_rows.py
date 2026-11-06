@@ -9,6 +9,7 @@ from gbdraw.layout.scalar_axis import ScalarRow, ScalarRows
 from gbdraw.svg.elements import ClipPath, Group
 from svgwrite.base import BaseElement
 
+# The Web reads it from ``services/drawn-attributes.generated.js``.
 WRAP_ROW_ATTRIBUTE = "data-gbdraw-wrap-row"
 
 

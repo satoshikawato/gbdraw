@@ -121,10 +121,10 @@ test('the targets of each level are every feasible pair, kind state, and fixture
     for (const group of Object.keys(expected)) assert.deepEqual([...actual[group]].sort(), [...expected[group]].sort(), `${level} ${group}`);
   }
   const promotion = coverageTargets('promotion');
-  // 27 kinds: 27 x 27 ordered pairs less the 4 no fixture runs; 27 kinds x 4
-  // states; (26 + 26 + 25) kinds that the three fixtures run x 4 states.
+  // 28 kinds: 28 x 28 ordered pairs less the 4 no fixture runs; 28 kinds x 4
+  // states; (27 + 27 + 26) kinds that the three fixtures run x 4 states.
   assert.deepEqual(Object.fromEntries(Object.entries(promotion).map(([group, keys]) => [group, keys.size])),
-    { fixtures: 3, sequence: 725, flags: 108, required: 0, adjacent: 725, fixtureFlags: 308 });
+    { fixtures: 3, sequence: 780, flags: 112, required: 0, adjacent: 780, fixtureFlags: 320 });
   // A pair with a barrier is a target in both pair groups: a barrier may be A or B.
   for (const barrier of BARRIER_KINDS) {
     for (const kind of ['fill', barrier]) {

@@ -20,14 +20,15 @@ const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
 // Short name and section title of every rail entry, per mode, in rail order.
 const RAIL = {
   circular: [
-    ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Compare', 'Pairwise Comparisons'],
+    ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Search', 'Sequence search'],
+    ['Compare', 'Pairwise Comparisons'],
     ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'], ['Legend', 'Legend'], ['Colors', 'Colors'],
     ['Features', 'Features'], ['Labels', 'Labels'], ['Axis', 'Axis & Scale'],
     ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ],
   linear: [
     ['Input', 'Input Genomes'], ['Compare', 'Comparison'], ['Advanced', 'Advanced comparison and layout'],
-    ['Regions', 'Region Annotations'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
+    ['Regions', 'Region Annotations'], ['Search', 'Sequence search'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
     ['Legend', 'Legend'], ['Colors', 'Colors'], ['Features', 'Features'], ['Labels', 'Labels'],
     ['Axis', 'Axis & Scale'], ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ]
@@ -206,11 +207,11 @@ for (const mode of ['circular', 'linear']) {
         inside: buttons.every((box) => box.left >= wrap.left && box.right <= wrap.right && box.top >= wrap.top && box.bottom <= wrap.bottom),
         aboutAtBottom: Math.round(wrap.bottom - about.bottom) <= 8, entryHeight: buttons[1].height };
     });
-    // Below the drawing bar a docked Linear rail is about 9 px short of 48 px entries at 1600x1000 (OV-1785 A:
-    // only windows at most 800 px high are compacted), so its entries shrink a little; Circular's keep 48 px.
+    // Below the drawing bar a docked rail is short of 48 px entries at 1600x1000 (OV-1785 A: only windows at most
+    // 800 px high are compacted), so its entries shrink a little: since Search joined the rail (PD-OI-093 rev 5),
+    // about 47 px in Circular (14 entries) and 44 px in Linear (15).
     expect(column).toMatchObject({ width: 60, first: 'Expand settings', inside: true, aboutAtBottom: true });
-    if (mode === 'circular') expect(Math.round(column.entryHeight), 'entry height').toBe(48);
-    else expect(column.entryHeight, 'entry height').toBeGreaterThanOrEqual(47);
+    expect(column.entryHeight, 'entry height').toBeGreaterThanOrEqual(mode === 'circular' ? 46.5 : 44);
     // The hidden control is the same node with its draft.
     expect(await prefix.evaluate((element) => [element.dataset.probe, element.value, element.checkVisibility()]))
       .toEqual(['kept', 'rail-draft', false]);
@@ -705,7 +706,9 @@ test('an open Review alignment stays docked in the Result through every display 
   await expectDocked('1280 stacked again', 'beside', 908);
 });
 
-test('at 1280x720 the rail shows every entry without scrolling, with a section docked and alone', async ({ page }) => {
+// The receipt of PD-OI-093 rev 5 accepts that the Linear rail may scroll at 1280x720 once Font and Search join it:
+// with 15 entries it does, docked and alone (the 1366x650 case below checks a rail that scrolls).
+test('at 1280x720 the Circular rail shows every entry without scrolling and the Linear rail scrolls, with a section docked and alone', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.addInitScript((key) => { localStorage.setItem(key, 'rail'); }, STORAGE_KEY);
@@ -715,7 +718,9 @@ test('at 1280x720 the rail shows every entry without scrolling, with a section d
     for (const closed of [false, true]) {
       if (closed) await closeSection(page).click();
       const fit = await railFit(page);
-      expect(fit, `${mode}, ${closed ? 'rail alone' : 'docked'}`).toMatchObject({ scrolls: false, cut: [], underBar: 0, overlap: 0, cutNames: 0 });
+      expect(fit, `${mode}, ${closed ? 'rail alone' : 'docked'}`).toMatchObject(mode === 'linear'
+        ? { scrolls: true, overlap: 0, cutNames: 0 }
+        : { scrolls: false, cut: [], underBar: 0, overlap: 0, cutNames: 0 });
       expect(fit.smallestName, `${mode}: name size`).toBeGreaterThanOrEqual(9);
       expect(fit.minHeight, `${mode}: entry height`).toBeGreaterThanOrEqual(30);
       if (closed) await entry(page, 'Input Genomes').click();

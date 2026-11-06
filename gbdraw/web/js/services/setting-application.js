@@ -135,6 +135,13 @@ export const SETTING_APPLICATION = Object.freeze([
   { id: 'annotation-style', application: /** @type {const} */ ('live'), requestPaths: {
     'config.annotationSets.*.annotations.*.style': 'diagramOptions.annotations.sets'
   } },
+  // PD-OI-117: the set a Sequence search adds is drawn at once, and its Undo
+  // and Redo apply at once. The projection adds or removes only the sets a
+  // search step added (`searchSetIdsOfStep`, by set id); the other changes of
+  // the annotation sets keep the Region Annotations timing.
+  { id: 'sequence-search', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.annotationSets': 'diagramOptions.annotations.sets'
+  } },
   { id: 'comparison-height', application: /** @type {const} */ ('live'), requestPaths: {
     'config.adv.comparison_height': 'diagramOptions.configOverrides.canvas.linear.comparison_height'
   } },

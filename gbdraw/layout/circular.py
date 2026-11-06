@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, TypeAlias
 
 from ._immutable import freeze_layout_mapping
@@ -93,6 +93,21 @@ class CircularFeatureLayout:
     def lane_for_track_id(self, track_id: int) -> CircularFeatureLane:
         return self.lanes_by_track_id[int(track_id)]
 
+    def strand_lane_bands(self, *, strands_separated: bool) -> Mapping[Literal["+", "-"], RadialBand]:
+        """Where each strand's features lie when the track separates the strands: the band of the strand's first
+        lane (track 0 for the plus strand, -1 for the minus strand), the lanes of ``primary_band_px``. A strand
+        without features there has none; without separated strands, neither has."""
+
+        if not strands_separated:
+            return {}
+        bands: dict[Literal["+", "-"], RadialBand] = {}
+        lanes: tuple[tuple[Literal["+", "-"], int, str], ...] = (("+", 0, "positive"), ("-", -1, "negative"))
+        for strand, track_id, group in lanes:
+            lane = self.lanes_by_track_id.get(track_id)
+            if lane is not None and lane.strand_group == group:
+                bands[strand] = lane.band_px
+        return bands
+
 
 @dataclass(frozen=True)
 class CircularAxisLayout:
@@ -167,9 +182,13 @@ class CircularResolvedSlot:
     # room lies past the slot that holds it (the outermost slot it covers, split feature lanes included, or its
     # anchor when it spans nothing), so only a span whose outer edge is another overlay (a plot overlay) keeps none.
     span_keeps_label_room: bool = False
+    # An overlay that covers a feature track that separates the strands (``cover_anchor``): the band of each
+    # strand's lane (``CircularFeatureLayout.strand_lane_bands``), where a region with that strand is drawn.
+    strand_bands_px: Mapping[Literal["+", "-"], RadialBand] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))
+        object.__setattr__(self, "strand_bands_px", freeze_layout_mapping(self.strand_bands_px))
 
     @property
     def center_radius_px(self) -> float:

@@ -366,6 +366,18 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({color: "#666666"})
     }),
+    CanonicalAnnotationGradient: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        startColor: Object.freeze({kind: "ref", name: "CanonicalAnnotationColor"}),
+        endColor: Object.freeze({kind: "ref", name: "CanonicalAnnotationColor"}),
+        direction: Object.freeze({kind: "literal", values: Object.freeze(["forward", "reverse"])}),
+        queryStart: Object.freeze({kind: "number", minimum: 0, maximum: 1}),
+        queryEnd: Object.freeze({kind: "number", minimum: 0, maximum: 1})
+      }),
+      optional: Object.freeze(["queryEnd", "queryStart"]),
+      open: false
+    }),
     CanonicalRegionAnnotationStyle: Object.freeze({
       kind: "object",
       fields: Object.freeze({
@@ -396,9 +408,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         }),
         labelOrientation: Object.freeze({kind: "literal", values: Object.freeze(["auto", "horizontal", "tangent", "radial", "arc"])}),
         labelPosition: Object.freeze({kind: "literal", values: Object.freeze(["center", "start", "end"])}),
-        labelOffset: Object.freeze({kind: "number"})
+        labelOffset: Object.freeze({kind: "number"}),
+        gradient: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "ref", name: "CanonicalAnnotationGradient"}),
+            Object.freeze({kind: "null"})
+          ])
+        })
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["gradient"]),
       open: false,
       defaults: Object.freeze({fill: null, hatch: null, labelColor: "#202020", labelFontSize: null, stroke: "#404040"})
     }),
@@ -500,9 +519,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
         }),
-        metadata: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})})
+        metadata: Object.freeze({kind: "record", values: Object.freeze({kind: "string"})}),
+        strand: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "literal", values: Object.freeze(["+", "-"])}),
+            Object.freeze({kind: "null"})
+          ])
+        })
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["strand"]),
       open: false,
       defaults: Object.freeze({lane: null, legendLabel: null, style: null})
     }),
@@ -515,9 +541,10 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         legendLabel: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
-        })
+        }),
+        keepHighlightOverlay: Object.freeze({kind: "boolean"})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["keepHighlightOverlay"]),
       open: false,
       defaults: Object.freeze({legendLabel: null})
     }),

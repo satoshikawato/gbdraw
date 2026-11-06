@@ -118,8 +118,10 @@ import {
 } from './track-slot-validation.js';
 /** @import { CustomTrackPlan, CustomTrackPlanInput, OverlayCheckRow } from './track-slot-validation.js' */
 import {
-  annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+  ANNOTATION_RECORD_BINDING_KEY, annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest,
+  normalizeAnnotationSets
 } from './annotation-state.js';
+/** @import { SearchRecordSelector } from './sequence-search.js' */
 import { classifyOptionalPositiveNumber, integerSettingOr, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
@@ -1918,9 +1920,32 @@ export const liveSettingInputsOf = (drawing, fileOf) => ({
  * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
  */
 /**
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide> }} LiveSettingContext
+ * The annotation sets a Sequence search step added (`ids`), which its commit, Undo and Redo draw at once
+ * (`searchSetIdsOfStep` in services/sequence-search.js; the other set changes wait for Generate), and how their rows
+ * name their records in the committed request (`recordSelector`, by binding key).
+ * @typedef {{ readonly ids: readonly string[], readonly recordSelector: SearchRecordSelector }} LiveSearchSets
+ */
+/**
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSets?: LiveSearchSets }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
+/**
+ * A search row as the live draw sends it: its record named among the committed request's records by its binding key
+ * (the key the record select writes), not by the draft's selector, which names a record of the draft's records and is
+ * resolved by Generate (review r2 B1); none when that request draws no record of the key, as a Generate draws no row
+ * of an OFF record. A row with no binding (its record had no settings owner) keeps the selector the search wrote, the
+ * shown Result's.
+ * @template {{ target: { kind: string }, metadata?: Record<string, unknown> | null }} T
+ * @param {T} item
+ * @param {SearchRecordSelector} recordSelector
+ * @returns {T[]}
+ */
+const committedSearchRow = (item, recordSelector) => {
+  const key = String(item.metadata?.[ANNOTATION_RECORD_BINDING_KEY] ?? '').trim();
+  if (!key || item.target.kind === 'featureIdentity') return [item];
+  const record = recordSelector(key);
+  return record ? [{ ...item, target: { ...item.target, record } }] : [];
+};
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
 const configWrites = (path, value) => {
   const overrides = sharedLengthOverrides(path, value);
@@ -1983,11 +2008,16 @@ const LINEAR_TRACK_SLOTS_REQUEST_PATH = 'diagramOptions.tracks.linearTrackSlots'
 /**
  * Whether the draft Fill and Stroke color of a committed annotation item draw
  * live: not while the item or its set has a Legend label, which draws the
- * colors in a Legend row (O-8). An item the committed request lacks waits
- * (its targets and the omitted record keys stay committed, F-11).
- * @param {{ legendLabel?: string | null }} set @param {{ legendLabel?: string | null }} item
+ * colors in a Legend row, a change the live-settings measurement of
+ * PD-OI-103 did not cover (O-8). A sequence search's set
+ * (`keepHighlightOverlay`) is drawn live whatever its Legend labels: every row
+ * has one, and its colours apply at once (PD-OI-117). The rerender draws its
+ * Legend rows from the same colours, and a Legend color edit stays on its row
+ * as after Generate. An item the committed request lacks waits (its targets
+ * and the omitted record keys stay committed, F-11).
+ * @param {{ legendLabel?: string | null, keepHighlightOverlay?: boolean }} set @param {{ legendLabel?: string | null }} item
  */
-const annotationItemColorsLive = (set, item) => !set.legendLabel && !item.legendLabel;
+const annotationItemColorsLive = (set, item) => set.keepHighlightOverlay === true || (!set.legendLabel && !item.legendLabel);
 /**
  * Whether the draft Height of a committed Linear row draws live: not for a
  * row a Python request states as a spec string, a features row, which
@@ -2424,12 +2454,21 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   // The Fill and Stroke color of each committed item whose colors are live
   // (`annotationItemColorsLive`), matched by set and item id. A draft item
   // without its own style follows the committed set's Default, whose change
-  // is not live.
-  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request) => {
-    const committedSets = request.diagramOptions.annotations?.sets;
-    if (!Array.isArray(committedSets)) return [];
+  // is not live. The sets a Sequence search step added (`searchSets`, by set
+  // id) follow the draft at once, as Generate sends them: present, or gone
+  // after its Undo (PD-OI-117); every other set change waits.
+  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request, { searchSets }) => {
     const draftSets = normalizeAnnotationSets(drawing.annotationSets);
-    return [[['diagramOptions', 'annotations', 'sets'], committedSets.map((set) => {
+    const searched = new Set(searchSets ? searchSets.ids : []);
+    const committed = request.diagramOptions.annotations;
+    const committedSets = [...(committed?.sets ?? [])].filter((set) => !searched.has(set.id));
+    const added = searchSets ? annotationOptionsPayload(draftSets.filter((set) => searched.has(set.id))).sets
+      .map((set) => ({ ...set, annotations: set.annotations.flatMap((item) => committedSearchRow(item, searchSets.recordSelector)) })) : [];
+    if (committedSets.length === 0 && added.length === 0) {
+      return committed ? [[['diagramOptions', 'annotations'], undefined]] : [];
+    }
+    if (!committed) return [[['diagramOptions', 'annotations'], { sets: added, table: null, tableFile: null }]];
+    return [[['diagramOptions', 'annotations', 'sets'], [...committedSets.map((set) => {
       const draftSet = draftSets.find((candidate) => candidate.id === set.id);
       if (!draftSet) return set;
       return { ...set, annotations: set.annotations.map((item) => {
@@ -2437,10 +2476,17 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
         if (!draftItem || !annotationItemColorsLive(set, item)) return item;
         const drawn = item.style ?? createDefaultAnnotationStyle(set.defaultStyle);
         const draft = draftItem.style ?? createDefaultAnnotationStyle(set.defaultStyle);
-        return drawn.fill === draft.fill && drawn.stroke === draft.stroke
-          ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke } };
+        // A gradient row's two colours are its colours too (receipt `web.sequence-search`); its direction
+        // and query positions stay as drawn.
+        const gradient = drawn.gradient && draft.gradient
+          ? { ...drawn.gradient, startColor: draft.gradient.startColor, endColor: draft.gradient.endColor }
+          : null;
+        const sameGradient = !gradient || !drawn.gradient
+          || (gradient.startColor === drawn.gradient.startColor && gradient.endColor === drawn.gradient.endColor);
+        return drawn.fill === draft.fill && drawn.stroke === draft.stroke && sameGradient
+          ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke, ...(gradient ? { gradient } : {}) } };
       }) };
-    })]];
+    }), ...added]]];
   },
   // The GT set: one track projection (`trackPlanApplied`), each key its own leaves.
   [GT_REQUEST_PATHS.gc]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.gc],
@@ -2612,17 +2658,17 @@ const valueAtPath = (root, path) => path.reduce(
  * The writes that apply the draft values of `requestPaths` to the committed
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
- *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSets?: LiveSearchSets }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`); `searchSets`: the sets a Sequence search step added.
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides, searchSets }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
   const { resources } = committed;
   // One context per call: the track projection runs once for its five keys.
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles, resources, undoneHides };
+  const context = { inputs, webFiles, resources, undoneHides, searchSets };
   let trackWrites = 0;
   const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
@@ -3229,7 +3275,10 @@ const automaticCircularAnnotationSlots = (drawing) => {
           params: { set_id: setId, marks: laneMarks }
         });
       }
-      if (marks.includes('highlight')) {
+      // A set that keeps its highlight overlay (a sequence search's) gets it from Python's rule for an explicit
+      // stack (`prepare_annotation_track_slots`), as in a custom stack, so a search's live draw and Generate
+      // send the same slots.
+      if (marks.includes('highlight') && set.keepHighlightOverlay !== true) {
         slots.push({
           id: `annotations_${index + 1}${laneMarks.length > 0 ? '_highlight' : ''}`,
           renderer: 'annotations',

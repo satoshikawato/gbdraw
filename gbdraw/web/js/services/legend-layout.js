@@ -22,7 +22,6 @@ const LEGEND_LINE_HEIGHT_RATIO = 24.0 / 14.0;
 const LEGEND_TEXT_OFFSET_RATIO = 22.0 / 14.0;
 const GRADIENT_BAR_WIDTH_RATIO = 10;
 const GRADIENT_LABEL_GAP_RATIO = 0.2;
-const SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35;
 // The similarity-ring block (gbdraw/legend/circular_layout.py, PD-OI-110).
 const RING_OUTER_CAPTION = 'outer';
 const RING_INNER_CAPTION = 'inner';
@@ -84,6 +83,9 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {number} [strokeWidth]
  * @property {number | string} [minValue] Gradient and ring rows: the lowest identity, which names the scale's
  *   first label.
+ * @property {string} [minLabel] A gradient row that names its scale's ends (an annotation gradient: `start`, `end`;
+ *   Python's `min_label`, `max_label`, drawn as `data-legend-min-label`, `data-legend-max-label`).
+ * @property {string} [maxLabel]
  * @property {boolean} [swatch] Ring rows: whether the row shows its ring's color (the rings differ in color).
  */
 
@@ -330,11 +332,63 @@ export const pythonFloatSum = (values) => {
   return result;
 };
 
-/** @param {number | string | undefined} value */
+/** @param {number | string | undefined} value Python's `gradient_label_text`. */
 const minGradientLabelText = (value) => {
   const minIdentity = Number(value || 0);
   if (minIdentity === Math.trunc(minIdentity)) return `${Math.trunc(minIdentity)}%`;
   return `${String(minIdentity)}%`;
+};
+
+/**
+ * Python's `gradient_scale_texts`: a row's scale texts, its named ends, or its identity percentages (an identity
+ * scale ends at 100%, `identity_color_domain`).
+ * @param {LegendLayoutRow} row
+ * @returns {[string, string]}
+ */
+const gradientScaleTexts = (row) => [
+  typeof row.minLabel === 'string' ? row.minLabel : minGradientLabelText(row.minValue ?? 0),
+  typeof row.maxLabel === 'string' ? row.maxLabel : minGradientLabelText(100)
+];
+
+/**
+ * One scale line below gradient bars (Python's `GradientScaleLayout`).
+ * @typedef {object} GradientScaleLayout
+ * @property {string} minLabelText
+ * @property {string} maxLabelText
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
+ */
+
+/**
+ * Python's `stack_compact_gradient_rows`: the rows that share scale texts, in order of first appearance, then their
+ * one scale line; the next group starts half a legend line below that line. `rows` holds (index of the input row,
+ * centre y of its bar and caption) in drawn order.
+ * @param {readonly [string, string][]} scaleTexts
+ * @param {{ rect: number, lineHeight: number, labelHeight: number, minLabelX: number, maxLabelX: number }} metrics
+ * @returns {{ rows: [number, number][], scales: GradientScaleLayout[], height: number }}
+ */
+const stackCompactGradientRows = (scaleTexts, { rect, lineHeight, labelHeight, minLabelX, maxLabelX }) => {
+  /** @type {Map<string, { texts: [string, string], indexes: number[] }>} */
+  const groups = new Map();
+  scaleTexts.forEach((texts, index) => {
+    const key = JSON.stringify(texts);
+    const group = groups.get(key) || { texts, indexes: [] };
+    group.indexes.push(index);
+    groups.set(key, group);
+  });
+  /** @type {[number, number][]} */
+  const rows = [];
+  /** @type {GradientScaleLayout[]} */
+  const scales = [];
+  let top = 0.0;
+  for (const { texts: [minLabelText, maxLabelText], indexes } of groups.values()) {
+    if (scales.length) top = scales[scales.length - 1].scaleLabelY + labelHeight + (lineHeight / 2.0);
+    indexes.forEach((index, position) => rows.push([index, top + (rect / 2.0) + (position * lineHeight)]));
+    const scaleLabelY = top + rect + ((indexes.length - 1) * lineHeight) + 2.0;
+    scales.push({ minLabelText, maxLabelText, minLabelX, maxLabelX, scaleLabelY });
+  }
+  return { rows, scales, height: scales[scales.length - 1].scaleLabelY + labelHeight };
 };
 
 /**
@@ -394,10 +448,12 @@ const halfStrokeWidth = (row) => {
  * @property {number} width
  * @property {number} height
  * @property {number} barWidth
- * @property {string} minLabelText
+ * @property {string} minLabelText The first group's scale line (`moreScales`: the later groups', each below its rows).
+ * @property {string} maxLabelText
  * @property {number} minLabelX
  * @property {number} maxLabelX
  * @property {number} scaleLabelY
+ * @property {GradientScaleLayout[]} moreScales
  */
 
 /**
@@ -442,36 +498,31 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   const gradients = rows.filter((row) => row.type === 'gradient');
   if (gradients.length === 0) return null;
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
-  const minLabelText = minGradientLabelText(gradients[0].minValue ?? 0);
   // The scale labels share one line box, whatever their digits.
   const scaleLabelHeight = measure('100%').height;
   if (gradients.length > 1) {
     const labelWidth = Math.max(...gradients.map((row) => measure(row.name).width));
     const barX = labelWidth + (GRADIENT_LABEL_GAP_RATIO * rect);
-    const entries = gradients.map((row, index) => ({
-      key: row.key,
-      row,
-      titleX: 0.0,
-      titleY: (rect / 2.0) + (index * lineHeight),
-      barX,
-      barY: (rect / 2.0) + (index * lineHeight)
+    const stack = stackCompactGradientRows(gradients.map(gradientScaleTexts), {
+      rect, lineHeight, labelHeight: scaleLabelHeight, minLabelX: barX, maxLabelX: barX + barWidth
+    });
+    const entries = stack.rows.map(([index, y]) => ({
+      key: gradients[index].key, row: gradients[index], titleX: 0.0, titleY: y, barX, barY: y
     }));
-    const scaleLabelY = rect + ((gradients.length - 1) * lineHeight) + 2.0;
-    return {
-      compact: true, entries, width: barX + barWidth, height: scaleLabelY + scaleLabelHeight, barWidth,
-      minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
-    };
+    const [first, ...moreScales] = stack.scales;
+    return { compact: true, entries, width: barX + barWidth, height: stack.height, barWidth, ...first, moreScales };
   }
   const row = gradients[0];
   const title = measure(row.name);
   const { width, barX } = singleGradientBlockX(barWidth, title.width);
   const barY = title.height + (rect / 2.0);
   const scaleLabelY = barY + (rect / 2.0) + 2.0;
+  const [minLabelText, maxLabelText] = gradientScaleTexts(row);
   return {
     compact: false,
     entries: [{ key: row.key, row, titleX: width / 2.0, titleY: 0.0, barX, barY }],
     width, height: scaleLabelY + scaleLabelHeight, barWidth,
-    minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
+    minLabelText, maxLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY, moreScales: []
   };
 };
 
@@ -635,11 +686,11 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  */
 
 /**
- * A gradient block: its entries, and the one scale (minimum and 100% labels)
- * below the bars that every form draws. Only a Result saved before the
- * similarity-ring block holds Circular gradient rows; Python no longer lays them
- * out, and the frozen cases of tests/fixtures/legend_layout_vectors.json keep
- * the values it computed when it did.
+ * The gradient rows (Python's `CircularGradientLegendLayout`; an annotation gradient's bar, or the identity rows of
+ * a Result saved before the similarity-ring block): two or more rows with their captions left of the bars, or one
+ * row with its title centred over its bar. The rows that share scale texts share one scale line below them; the
+ * `minLabelText` .. `scaleLabelY` fields are the first group's, `moreScales` the later groups'. Every y is in the side
+ * block: below a ring block it includes the ring block's height and the gap.
  * @typedef {object} CircularGradientLayout
  * @property {boolean} compact
  * @property {number} width
@@ -647,9 +698,11 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} barWidth
  * @property {number} barX
  * @property {string} minLabelText
+ * @property {string} maxLabelText
  * @property {number} minLabelX
  * @property {number} maxLabelX
  * @property {number} scaleLabelY
+ * @property {GradientScaleLayout[]} moreScales
  * @property {CircularCompactGradientEntryLayout[]} compactEntries
  * @property {CircularSingleGradientEntryLayout[]} singleEntries
  */
@@ -697,10 +750,9 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} numColumns
  * @property {number} numItemsPerLine
  * @property {LegendEntryLayout[]} entries
- * @property {CircularGradientLayout | null} gradient The gradient rows a saved Result drawn before the ring block
- *   still holds.
- * @property {CircularRingLayout | null} rings The similarity-ring block; it takes the gradient block's place.
- * @property {number} gradientX Where the gradient or ring block sits.
+ * @property {CircularGradientLayout | null} gradient The gradient rows, below the ring block in the side block.
+ * @property {CircularRingLayout | null} rings The similarity-ring block, at the side block's origin.
+ * @property {number} gradientX Where the side block (the ring block, then the gradient rows) sits.
  * @property {number} gradientY
  */
 
@@ -749,35 +801,36 @@ const circularRingLayout = (rings, measure, rect) => {
 };
 
 /**
+ * Python's `_build_gradient_layout`: the gradient rows, their first row `top` below the side block's origin.
  * @param {readonly MeasuredCircularEntry[]} gradients
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
+ * @param {number} top
  * @returns {CircularGradientLayout | null}
  */
-const circularGradientLayout = (gradients, measure, rect) => {
+const circularGradientLayout = (gradients, measure, rect, top) => {
   if (gradients.length === 0) return null;
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
   const rowHeight = LEGEND_LINE_HEIGHT_RATIO * rect;
-  const firstMinLabel = minGradientLabelText(gradients[0].row.minValue ?? 0);
+  // The scale labels share one line box, whatever their digits.
+  const labelHeight = measure('100%').height;
   if (gradients.length > 1) {
     const labelWidth = Math.max(...gradients.map((entry) => entry.textWidth));
     const barX = labelWidth + rect;
-    const scaleLabelY = rect + ((gradients.length - 1) * rowHeight) + 2;
-    // The scale labels share one line box, whatever their digits.
-    const labelHeight = measure('100%').height;
+    const stack = stackCompactGradientRows(gradients.map((entry) => gradientScaleTexts(entry.row)), {
+      rect, lineHeight: rowHeight, labelHeight, minLabelX: barX, maxLabelX: barX + barWidth
+    });
+    const [first, ...moreScales] = stack.scales.map((scale) => ({ ...scale, scaleLabelY: top + scale.scaleLabelY }));
     return {
       compact: true,
       width: barX + barWidth,
-      height: scaleLabelY + labelHeight,
+      height: stack.height,
       barWidth,
       barX,
-      minLabelText: firstMinLabel,
-      minLabelX: barX,
-      maxLabelX: barX + barWidth,
-      scaleLabelY,
-      compactEntries: gradients.map((entry, index) => ({
-        key: entry.key, row: entry.row, labelX: 0.0,
-        labelY: (rect / 2) + (index * rowHeight), barY: (rect / 2) + (index * rowHeight)
+      ...first,
+      moreScales,
+      compactEntries: stack.rows.map(([index, y]) => ({
+        key: gradients[index].key, row: gradients[index].row, labelX: 0, labelY: top + y, barY: top + y
       })),
       singleEntries: []
     };
@@ -786,21 +839,57 @@ const circularGradientLayout = (gradients, measure, rect) => {
   const title = measure(entry.row.name);
   const barY = title.height + (rect / 2);
   const scaleLabelY = barY + (rect / 2) + 2;
-  const labelHeight = measure('100%').height;
-  const height = scaleLabelY + labelHeight + (rowHeight * SINGLE_GRADIENT_TRAILING_GAP_RATIO);
+  const height = scaleLabelY + labelHeight;
   const { width, barX } = singleGradientBlockX(barWidth, title.width);
+  const [minLabelText, maxLabelText] = gradientScaleTexts(entry.row);
   return {
     compact: false,
     width,
     height: Math.max(0.0, height),
     barWidth,
     barX,
-    minLabelText: minGradientLabelText(entry.row.minValue ?? 0),
+    minLabelText,
+    maxLabelText,
     minLabelX: barX,
     maxLabelX: barX + barWidth,
-    scaleLabelY,
+    scaleLabelY: top + scaleLabelY,
+    moreScales: [],
     compactEntries: [],
-    singleEntries: [{ key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY }]
+    singleEntries: [{ key: entry.key, row: entry.row, titleX: width / 2.0, titleY: top, barX, barY: top + barY }]
+  };
+};
+
+/**
+ * Python's `_build_side_block`: the ring block, then the gradient rows half a legend line below it; its size, the
+ * width it reserves (`pairwiseLegendWidth`), and its lines in a vertical Legend. Null without either.
+ * @param {readonly MeasuredCircularEntry[]} ringEntries
+ * @param {readonly MeasuredCircularEntry[]} gradients
+ * @param {(caption: string) => { width: number, height: number }} measure
+ * @param {number} rect
+ */
+const circularSideBlock = (ringEntries, gradients, measure, rect) => {
+  const lineMargin = LEGEND_LINE_HEIGHT_RATIO * rect;
+  const xMargin = LEGEND_TEXT_OFFSET_RATIO * rect;
+  const rings = circularRingLayout(ringEntries, measure, rect);
+  const rowsTop = rings ? rings.height + (lineMargin / 2.0) : 0.0;
+  const rows = circularGradientLayout(gradients, measure, rect, rowsTop);
+  if (!rings && !rows) return null;
+  const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
+  // One gradient reserves its block, title included (OV-1611).
+  const gradientReserved = gradients.length === 0 ? 0.0 : gradients.length > 1
+    ? barWidth + (Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin)
+    : singleGradientBlockX(barWidth, gradients[0].textWidth).width;
+  // outer, the rings, inner, the band and its scale labels; the rows and one scale line per group, or a title,
+  // its bar and its scale line
+  const lines = (rings ? ringEntries.length + 4 : 0)
+    + (rows ? gradients.length + (rows.compact ? 1 + rows.moreScales.length : 2) : 0);
+  return {
+    rings,
+    rows,
+    width: Math.max(rings ? rings.width : 0.0, rows ? rows.width : 0.0),
+    height: rows ? rowsTop + rows.height : /** @type {CircularRingLayout} */ (rings).height,
+    reservedWidth: Math.max(rings ? rings.width : 0.0, gradientReserved),
+    lines
   };
 };
 
@@ -829,21 +918,13 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
     const measured = { row, key: row.key, textWidth, entryWidth: textWidth + (2 * xMargin) };
     ({ solid: solids, gradient: gradients, ring: ringEntries })[row.type].push(measured);
   });
-  const rings = circularRingLayout(ringEntries, measure, rect);
-  const gradientRows = rings ? null : circularGradientLayout(gradients, measure, rect);
-  // The block beside or below the solid rows: the ring block, or a saved Result's gradient rows.
-  const gradient = rings || gradientRows;
-  let pairwiseLegendWidth = 0.0;
-  if (rings) {
-    pairwiseLegendWidth = rings.width;
-  } else if (gradients.length > 0) {
-    const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
-    // One gradient reserves its block, title included (OV-1611).
-    pairwiseLegendWidth = gradients.length > 1
-      ? barWidth + (Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin)
-      : singleGradientBlockX(barWidth, gradients[0].textWidth).width;
-  }
-  const base = { pairwiseLegendWidth, lineMargin, xMargin, gradient: gradientRows, rings };
+  // The block beside or below the solid rows: the ring block, then the gradient rows below it.
+  const gradient = circularSideBlock(ringEntries, gradients, measure, rect);
+  const pairwiseLegendWidth = gradient ? gradient.reservedWidth : 0.0;
+  const base = {
+    pairwiseLegendWidth, lineMargin, xMargin, gradient: gradient ? gradient.rows : null,
+    rings: gradient ? gradient.rings : null
+  };
 
   if (HORIZONTAL_SIDES.has(options.side)) {
     let width = 0.0;
@@ -934,10 +1015,7 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
     gradientY = solids.length * lineMargin + (solids.length ? lineMargin * 0.5 : 0.0);
     height = Math.max(featureHeight, gradientY + gradient.height) + (rect / 2.0);
   }
-  let numLines = solids.length;
-  // outer, the rings, inner, the band and its scale labels
-  if (rings) numLines += ringEntries.length + 4;
-  else if (gradient) numLines += gradients.length + (gradients.length > 1 ? 1 : 2);
+  const numLines = solids.length + (gradient ? gradient.lines : 0);
   return {
     ...base, horizontal: false, width, height, featureWidth: featureBlockWidth, featureHeight, numLines,
     numColumns: 1, numItemsPerLine: solids.length ? 1 : 0, entries, gradientX, gradientY

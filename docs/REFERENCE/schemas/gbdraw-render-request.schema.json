@@ -704,6 +704,39 @@
       ],
       "additionalProperties": false
     },
+    "CanonicalAnnotationGradient": {
+      "type": "object",
+      "properties": {
+        "startColor": {
+          "$ref": "#/$defs/CanonicalAnnotationColor"
+        },
+        "endColor": {
+          "$ref": "#/$defs/CanonicalAnnotationColor"
+        },
+        "direction": {
+          "enum": [
+            "forward",
+            "reverse"
+          ]
+        },
+        "queryStart": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "queryEnd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "startColor",
+        "endColor",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
     "CanonicalRegionAnnotationStyle": {
       "type": "object",
       "properties": {
@@ -791,6 +824,16 @@
         },
         "labelOffset": {
           "type": "number"
+        },
+        "gradient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalAnnotationGradient"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1036,6 +1079,19 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "strand": {
+          "anyOf": [
+            {
+              "enum": [
+                "+",
+                "-"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1075,6 +1131,9 @@
             }
           ],
           "default": null
+        },
+        "keepHighlightOverlay": {
+          "type": "boolean"
         }
       },
       "required": [

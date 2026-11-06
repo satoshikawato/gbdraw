@@ -33,6 +33,9 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import {
+  requestedLosatExecutionMode, requestedLosatParallelWorkers, requestedLosatThreadsPerJob, requestedLosatTotalThreadBudget
+} from '../services/losat-thread-plan.js';
 import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
@@ -458,7 +461,8 @@ export const buildLosatCachePayload = ({
 };
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
-/** @import { LiveSettingWrite } from '../services/session-request.js' */
+/** @import { LiveSearchSets, LiveSettingWrite } from '../services/session-request.js' */
+/** @import { SearchRecordSelector } from '../services/sequence-search.js' */
 /** @import { UndoneTrackHide } from '../services/setting-application.js' */
 
 /**
@@ -952,6 +956,43 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
+};
+// The file names of LOSAT tables (Save Raw LOSAT TSV of Pairwise Comparisons).
+/**
+ * A LOSAT table's file name: the name given, or the fallback, as a safe `.tsv` name.
+ * @param {unknown} name
+ * @param {unknown} fallback
+ */
+const normalizeLosatFilename = (name, fallback) => {
+  const raw = String(name || '').trim() || String(fallback || '');
+  const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
+  return makeSafeFilename(withExt);
+};
+/** @param {DrawingState} drawing */
+const buildLosatSuffix = (drawing) => {
+  if (drawing.losatProgram.value === 'blastn') return 'losatn';
+  if (drawing.losatProgram.value === 'blastp') return 'losatp';
+  return 'tlosatx';
+};
+
+/**
+ * @param {DrawingState} drawing
+ * @param {string} leftLabel
+ * @param {string} rightLabel
+ */
+const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
+  losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
+);
+
+// Every LOSAT run's executor: the parallel runner, or the one a browser test installs.
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} [options]
+ * @returns {Promise<LosatJobResult[]>}
+ */
+const executeLosatJobs = (jobs, options) => {
+  const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  return (typeof override === 'function' ? override : runLosatPairsParallel)(jobs, options);
 };
 // The deferred replay builder outlives its Generate through the CLI helper
 // files. Build it outside that scope so it retains only the published artifact,
@@ -1545,6 +1586,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
+ * @property {SearchRecordSelector} [searchRecordSelector] How the rows of a Sequence search set name their records in the
+ *   shown drawing's committed request, by binding key (`resultRecordBindings`); none by default.
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
@@ -1602,6 +1645,7 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   omittedAnnotationRecordKeys = null,
+  searchRecordSelector = () => null,
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   readRecordIdentitySources = null,
@@ -1698,15 +1742,6 @@ export const createRunAnalysis = ({
       drawingId: drawing.id
     });
   };
-  /**
-   * @param {LosatJob[]} jobs
-   * @param {LosatRunOptions} [options]
-   * @returns {Promise<LosatJobResult[]>}
-   */
-  const executeLosatJobs = (jobs, options) => {
-    const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
-    return (typeof override === 'function' ? override : runLosatPairsParallel)(jobs, options);
-  };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
   /**
@@ -1744,16 +1779,16 @@ export const createRunAnalysis = ({
   let reflowDeferred = false;
   let rerenderHolds = 0;
   const reflowWaits = () => processing.value || rerenderHolds > 0;
-  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
-  // actions committed and its Result does not show yet (R15: per drawing).
-  // An automatic rerender applies them; it runs for a request of these alone
-  // only while one of them still differs from the committed request. A
-  // Generate keeps only the paths it did not draw, and a Load none (6.7).
-  /** @type {Map<DrawingState, Set<string>>} */
+  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's actions committed and its Result does
+  // not show yet (R15: per drawing), and the annotation sets a Sequence search step added (its commit, Undo or Redo,
+  // `searchSetIdsOfStep`; PD-OI-117), which follow the draft at once. An automatic rerender applies them; it runs for
+  // a request of these alone only while one of them still differs from the committed request. A Generate keeps only
+  // the paths it did not draw, and a Load none (6.7).
+  /** @type {Map<DrawingState, { paths: Set<string>, searchSetIds: Set<string> }>} */
   const pendingLiveSettings = new Map();
   /** @param {DrawingState} drawing */
   const pendingLiveSettingsOf = (drawing) => {
-    const pending = pendingLiveSettings.get(drawing) || new Set();
+    const pending = pendingLiveSettings.get(drawing) || { paths: new Set(), searchSetIds: new Set() };
     pendingLiveSettings.set(drawing, pending);
     return pending;
   };
@@ -2138,22 +2173,6 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  /** @param {DrawingState} drawing */
-  const buildLosatSuffix = (drawing) => {
-    if (drawing.losatProgram.value === 'blastn') return 'losatn';
-    if (drawing.losatProgram.value === 'blastp') return 'losatp';
-    return 'tlosatx';
-  };
-
-  /**
-   * @param {DrawingState} drawing
-   * @param {string} leftLabel
-   * @param {string} rightLabel
-   */
-  const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
-    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
-  );
-
   /**
    * @param {DrawingState} drawing
    * @param {unknown} edgeKey
@@ -2210,52 +2229,6 @@ export const createRunAnalysis = ({
     if (drawing.mode !== 'linear') return '';
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
-
-  /**
-   * @param {unknown} name
-   * @param {unknown} fallback
-   */
-  const normalizeLosatFilename = (name, fallback) => {
-    const raw = String(name || '').trim() || String(fallback || '');
-    const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
-    return makeSafeFilename(withExt);
-  };
-
-  // How LOSAT runs is one app-level setting (`state.losatExecution`) for both
-  // drawings: the Linear comparisons and the Circular conservation series.
-  const getLosatParallelWorkers = () => {
-    const raw = String(state.losatExecution.parallelWorkers || 'auto').trim().toLowerCase();
-    if (raw === 'auto') return undefined;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
-  };
-
-  const getLosatExecutionMode = () => {
-    const raw = String(state.losatExecution.executionMode || 'auto').trim().toLowerCase();
-    return ['auto', 'serial', 'threaded'].includes(raw) ? raw : 'auto';
-  };
-
-  /** @param {DrawingState} drawing */
-  const getLosatThreadsPerJob = (drawing) => {
-    if (drawing.losatProgram.value !== 'blastp') return 1;
-    const raw = String(state.losatExecution.threadsPerJob || 'auto').trim().toLowerCase();
-    if (raw === 'auto') return undefined;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
-  };
-
-  const getLosatTotalThreadBudget = () => {
-    const raw = String(state.losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
-    if (raw === 'safe' || raw === 'auto') return undefined;
-    if (raw === 'available') {
-      return Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
-    }
-    const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed < 1) return undefined;
-    const hardwareBudget = Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
-    return Math.min(parsed, hardwareBudget);
-  };
-
 
   /**
    * @param {unknown} cacheKey
@@ -3326,7 +3299,7 @@ export const createRunAnalysis = ({
             /** @type {LosatQueuedJob[]} */
             const losatJobs = [];
             const pendingJobKeys = new Set();
-            const executionMode = getLosatExecutionMode();
+            const executionMode = requestedLosatExecutionMode(state.losatExecution);
 
             for (const [index, ring] of conservationKeys.rings.entries()) {
               throwIfGenerationCanceled();
@@ -3393,9 +3366,9 @@ export const createRunAnalysis = ({
               }
               setProcessingStatus(tn(losatJobs.length, 'Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
               const losatResults = await executeLosatJobs(losatJobs, {
-                concurrency: getLosatParallelWorkers(),
+                concurrency: requestedLosatParallelWorkers(state.losatExecution),
                 executionMode,
-                totalThreadBudget: getLosatTotalThreadBudget(),
+                totalThreadBudget: requestedLosatTotalThreadBudget(state.losatExecution),
                 threadsPerJob: 1,
                 sequences: sequenceEntriesByKey,
                 signal: generationAbortSignal,
@@ -3766,9 +3739,9 @@ export const createRunAnalysis = ({
               uniqueJobs: 0
             }
           : null;
-        const losatExecutionMode = useLosat ? getLosatExecutionMode() : 'serial';
-        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob(drawing) : undefined;
-        const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget() : undefined;
+        const losatExecutionMode = useLosat ? requestedLosatExecutionMode(state.losatExecution) : 'serial';
+        const losatRequestedThreadsPerJob = useLosat ? requestedLosatThreadsPerJob(state.losatExecution, drawing.losatProgram.value) : undefined;
+        const losatRequestedTotalThreadBudget = useLosat ? requestedLosatTotalThreadBudget(state.losatExecution) : undefined;
         const losatRuntimeWarmup = useLosat
           ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
               if (runtime?.threaded && losatThreadingStatus) {
@@ -4567,7 +4540,7 @@ export const createRunAnalysis = ({
             setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
-              concurrency: getLosatParallelWorkers(),
+              concurrency: requestedLosatParallelWorkers(state.losatExecution),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,
               threadsPerJob: losatRequestedThreadsPerJob,
@@ -6094,12 +6067,12 @@ export const createRunAnalysis = ({
   // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide> }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide>, searchSets: LiveSearchSets }} options
    *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too;
-   *   `undoneHides`: the hides an Undo took back.
+   *   `undoneHides`: the hides an Undo took back; `searchSets`: the sets a Sequence search step added.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides, searchSets }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -6112,7 +6085,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides, searchSets });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6280,23 +6253,28 @@ export const createRunAnalysis = ({
         const editor = editorRerenderRequested;
         editorRerenderRequested = false;
         const pending = pendingLiveSettingsOf(drawing);
-        const settings = [...pending];
+        const settings = [...pending.paths];
         activeLiveSettings = settings;
         const undoneHides = undoneHidesOf(drawing);
+        const searchSetIds = [...pending.searchSetIds];
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
           historyRequestedAt,
           settings,
           editor,
-          undoneHides
+          undoneHides,
+          searchSets: { ids: searchSetIds, recordSelector: searchRecordSelector }
         });
         // A stale iteration leaves its values and its editor request to the
         // next one; an applied, failed or empty one is done with them (a
         // failed value waits for its next change or Generate, PD-OI-102).
         const replaced = outcome.status === 'stale' || outcome.status === 'canceled';
         if (replaced) editorRerenderRequested ||= editor;
-        else settings.forEach((path) => pending.delete(path));
+        else {
+          settings.forEach((path) => pending.paths.delete(path));
+          searchSetIds.forEach((id) => pending.searchSetIds.delete(id));
+        }
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
         // A Cancel can end a rerender with no iteration after it: that Undo did not apply, and its track waits.
         if (!replaced || activeReflowRequestId === pendingReflowRequestId) setUndoneHides(drawing, undoneHides, false);
@@ -6321,10 +6299,11 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettings.get(drawing);
     const committed = getCommittedCanonicalSession?.();
     if (!pending || !committed) return;
-    for (const path of [...pending]) {
+    const searchSets = { ids: [...pending.searchSetIds], recordSelector: searchRecordSelector };
+    for (const path of [...pending.paths]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf) }).length === 0) {
-          pending.delete(path);
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), searchSets }).length === 0) {
+          pending.paths.delete(path);
         }
       } catch {
         // A value Generate would refuse stays for the rerender, which reports it.
@@ -6342,8 +6321,9 @@ export const createRunAnalysis = ({
    * @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode
    * @param {ReadonlySet<UndoneTrackHide>} [changedHides] The hides the step changed (`changedTrackHides`).
    * @param {boolean} [undone] The step is an Undo: it names them; any other step drops their names.
+   * @param {readonly string[]} [searchSetIds] The sets a Sequence search step added (`searchSetIdsOfStep`).
    */
-  const requestLiveSettingApply = (requestPaths, mode, changedHides = new Set(), undone = false) => {
+  const requestLiveSettingApply = (requestPaths, mode, changedHides = new Set(), undone = false, searchSetIds = []) => {
     const committed = getCommittedCanonicalSession?.();
     const drawing = displayedArtifactDrawing();
     const applies = requestPaths.length > 0 && committed && committed.renderRequest?.mode === mode;
@@ -6351,7 +6331,8 @@ export const createRunAnalysis = ({
     setUndoneHides(drawing, trackHidesOn(drawing.form), false);
     if (!applies) return false;
     const pending = pendingLiveSettingsOf(drawing);
-    requestPaths.forEach((path) => pending.add(path));
+    requestPaths.forEach((path) => pending.paths.add(path));
+    searchSetIds.forEach((id) => pending.searchSetIds.add(id));
     labelReflowLastError.value = null;
     void runLabelReflow({ settings: requestPaths });
     return true;
@@ -6433,7 +6414,53 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = [];
   };
 
+  // LOSAT jobs of a run that is not a Generate (a Sequence search, PD-OI-117), with the LOSAT settings Generate uses,
+  // under the full-window overlay with their progress and Cancel. They draw nothing. Busy (with the reason) while a
+  // Generate or a Session load or save runs, whose overlay they would replace.
+  /**
+   * @param {{ jobs: LosatJob[], sequences: Map<string, string> }} plan
+   * @returns {Promise<{ status: 'ok', results: LosatJobResult[] } | { status: 'canceled' } | { status: 'busy', reason: string }>}
+   */
+  const runLosatJobsInOverlay = async ({ jobs, sequences }) => {
+    const busy = state.sessionOperationAvailability?.('not-during-run');
+    if (busy) return busy;
+    const controller = new AbortController();
+    activeLosatAbortController = controller;
+    generationCancelRequested.value = false;
+    processing.value = true;
+    labelCapacityNotices.value = [];
+    /** @param {number} completed */
+    const progress = (completed) => {
+      if (controller.signal.aborted) return;
+      processingStatus.value = tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length });
+    };
+    progress(0);
+    try {
+      const results = await executeLosatJobs(jobs, {
+        concurrency: requestedLosatParallelWorkers(state.losatExecution),
+        executionMode: requestedLosatExecutionMode(state.losatExecution),
+        totalThreadBudget: requestedLosatTotalThreadBudget(state.losatExecution),
+        threadsPerJob: requestedLosatThreadsPerJob(state.losatExecution, jobs[0]?.program),
+        sequences,
+        signal: controller.signal,
+        onRuntimeStatus: (status) => { losatThreadingStatus.value = status; },
+        onProgress: ({ completed }) => progress(completed)
+      });
+      return { status: 'ok', results };
+    } catch (error) {
+      if (controller.signal.aborted) return { status: 'canceled' };
+      throw error;
+    } finally {
+      if (activeLosatAbortController === controller) activeLosatAbortController = null;
+      processingStatus.value = '';
+      generationCancelRequested.value = false;
+      processing.value = false;
+      replayDeferredLabelReflow();
+    }
+  };
+
   return {
+    runLosatJobsInOverlay,
     runAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,

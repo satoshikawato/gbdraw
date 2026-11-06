@@ -5,12 +5,17 @@ import {
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 import { bindAnnotationRecords } from '../../services/drawing/annotation-sets.js';
+import { bindingKeyOfRequestRecord } from '../../services/record-draw-selection.js';
+import { withRecordSelectors } from './record-catalog.js';
 import { t } from '../../utils/i18n.js';
 
 /**
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  * @import { AnnotationRecordBinding, AnnotationRow, AnnotationSetsSlice, AnnotationSetsView } from '../../services/drawing/annotation-sets.js'
+ * @import { RecordSettingsOwner } from '../../services/record-draw-selection.js'
+ * @import { RegionAxisRecord } from '../../services/region-axis.js'
+ * @import { ResultRecordBindings } from '../../services/sequence-search.js'
  */
 /**
  * The annotation sets of a drawing, and the handle their writers take.
@@ -99,6 +104,47 @@ export const annotationRecordValue = (catalog, annotation) => {
   const saved = annotationRecordSelectorValue(annotation?.target?.record);
   return saved ? `saved:${saved}` : '';
 };
+
+/**
+ * How a row binds a record of a Result (its request key), as Add to annotation set and Sequence search bind one: by
+ * the catalog key the record select writes, that of the record settings owner that holds it (`bindingKeyOf`; an OFF
+ * record's too), and by the selector that names it among the records the Result draws, those of the committed request
+ * it was made from (`withRecordSelectors`, as the catalog names the draft's; review r2 B1). The draft's catalog is not
+ * read: a record change that waits for Generate changes neither. A record no owner holds (its card was deleted after
+ * Generate) binds by a key no catalog record has (a catalog key ends in a JSON array; this one is a JSON object), so
+ * its row's target is unavailable as any row's whose record is gone, and Generate refuses it until the row is deleted
+ * or rebound, never binding it by selector to another record (OV-2631, D-57); the live draw still names the record.
+ * @param {readonly Pick<RegionAxisRecord, 'recordKey' | 'recordId' | 'recordIndex'>[]} axisRecords The Result's records.
+ * @param {readonly RecordSettingsOwner[]} owners The drawing's record settings owners.
+ * @returns {ResultRecordBindings}
+ */
+export const resultRecordBindings = (axisRecords, owners) => {
+  const drawn = [...new Map(axisRecords.map((record) => [record.recordKey, record])).values()]
+    .sort((a, b) => a.recordIndex - b.recordIndex);
+  const named = withRecordSelectors(drawn.map(({ recordKey, recordId, recordIndex }) => ({ recordKey, recordId, selector: `#${recordIndex + 1}` })));
+  /** @param {string} recordKey */
+  const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey) || JSON.stringify({ resultRecord: recordKey });
+  return {
+    bindingKeyOf,
+    selectorOf: (recordKey) => named.find((record) => record.recordKey === recordKey)?.backendSelector ?? null,
+    selectorOfBinding: (bindingKey) => (bindingKey
+      ? named.find(({ recordKey }) => bindingKeyOf(recordKey) === bindingKey)?.backendSelector ?? null : null)
+  };
+};
+
+/**
+ * A new annotation bound to the catalog `record` as the record select binds one: its target names the record's
+ * selector and its metadata the record's key.
+ * @template {AnnotationRow} T
+ * @param {T} annotation
+ * @param {Pick<AnnotationCatalogRecord, 'key' | 'backendSelector'>} record
+ * @returns {T}
+ */
+export const boundAnnotation = (annotation, record) => ({
+  ...annotation,
+  target: { ...annotation.target, record: { ...record.backendSelector } },
+  metadata: metadataWithBinding(annotation, record.key)
+});
 
 /**
  * Binds an annotation of the drawing to the record `value` names (none when

@@ -21,6 +21,7 @@ from .feature_underlays import (
     merge_feature_underlays,
 )
 from .models import (
+    AnnotationGradient,
     AnnotationOptions,
     AnnotationSet,
     AnnotationTrackParams,
@@ -49,6 +50,7 @@ from .resolve import (
 )
 
 __all__ = [
+    "AnnotationGradient",
     "AnnotationOptions",
     "AnnotationSet",
     "AnnotationTrackParams",

@@ -14,9 +14,14 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
 /**
  * @typedef {{ angle: number, spacing: number, color: string, width: number, cross: boolean }} AnnotationHatch
  * @typedef {{
+ *   startColor: string, endColor: string, direction: 'forward' | 'reverse', queryStart?: number, queryEnd?: number
+ * }} AnnotationGradient A `band` or `highlight` row drawn from `startColor` to `endColor` in place of its fill
+ *   (Python's `AnnotationGradient`; a sequence search's gradient by query position).
+ * @typedef {{
  *   stroke: string, strokeWidth: number, strokeDasharray: number[], lineCap: string,
  *   fill: string | null, fillOpacity: number, hatch: AnnotationHatch | null, labelColor: string,
- *   labelFontSize: number | null, labelOrientation: string, labelPosition: string, labelOffset: number
+ *   labelFontSize: number | null, labelOrientation: string, labelPosition: string, labelOffset: number,
+ *   gradient?: AnnotationGradient | null
  * }} AnnotationStyle
  * @typedef {{
  *   kind: string, record?: AnnotationRecordSelector | null, envelope?: string, circularPath?: string,
@@ -26,11 +31,15 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
  * }} AnnotationTarget One shape for `coordinateSpan`, `featureSpan`, and `featureIdentity`; each kind reads its own fields.
  * @typedef {{
  *   id: string, target: AnnotationTarget, label: string, mark: string, lane: number | null,
- *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>
- * }} AnnotationItem
+ *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>,
+ *   strand?: '+' | '-' | null
+ * }} AnnotationItem `strand`: the source strand of a sequence search's hit (PD-OI-117), written only by Python's
+ *   search set builder; Python draws the hit on that strand's lane of a feature track that separates the strands.
  * @typedef {{
- *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null
- * }} AnnotationSet
+ *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null,
+ *   keepHighlightOverlay?: boolean
+ * }} AnnotationSet `keepHighlightOverlay`: a sequence search's set (PD-OI-117), written only by Python's search
+ *   set builder; Python draws its highlights in front of the features, also in a custom stack that names no slot for it.
  */
 
 const DEFAULT_STYLE = Object.freeze({
@@ -135,7 +144,9 @@ export const createAnnotationSet = (overrides = {}) => ({
   id: cleanId(overrides.id, 'annotations'),
   annotations: Array.isArray(overrides.annotations) ? /** @type {AnnotationItem[]} */ (clone(overrides.annotations)) : [],
   defaultStyle: createDefaultAnnotationStyle(overrides.defaultStyle),
-  legendLabel: overrides.legendLabel == null ? null : String(overrides.legendLabel)
+  legendLabel: overrides.legendLabel == null ? null : String(overrides.legendLabel),
+  // Kept as written, and only when set, so every other set is as before.
+  ...(overrides.keepHighlightOverlay === true ? { keepHighlightOverlay: true } : {})
 });
 
 /**
@@ -169,7 +180,9 @@ export const normalizeAnnotationSets = (sets) => {
         lane: item.lane == null || item.lane === '' ? null : Math.max(0, Number(item.lane) || 0),
         style: item.style == null ? null : createDefaultAnnotationStyle(item.style),
         legendLabel: item.legendLabel == null ? null : String(item.legendLabel),
-        metadata: item.metadata && typeof item.metadata === 'object' ? clone(item.metadata) : {}
+        metadata: item.metadata && typeof item.metadata === 'object' ? clone(item.metadata) : {},
+        // Kept as written, and only when set, so every other item is as before.
+        ...(item.strand === '+' || item.strand === '-' ? { strand: item.strand } : {})
       };
     });
     return set;

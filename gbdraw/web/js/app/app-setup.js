@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
+/** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -243,7 +244,7 @@ import {
   buildAnnotationRecordCatalog
 } from './annotations/record-catalog.js';
 import {
-  reconcileAnnotationRecordBindings
+  reconcileAnnotationRecordBindings, resultRecordBindings
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
@@ -278,7 +279,6 @@ import {
 } from '../services/linear-comparisons.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
-  bindingKeyOfRequestRecord,
   circularRecordDrawKey,
   circularRecordRequestKeys,
   linearCardHasSettings,
@@ -288,7 +288,9 @@ import {
 } from '../services/record-draw-selection.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
-import { removeAnnotations } from '../services/drawing/annotation-sets.js';
+import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
+import { createSequenceSearch } from './sequence-search.js';
+import { resultRecordBinding } from '../services/sequence-search.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -444,6 +446,40 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
     return COMPOSITION_ROOT_ATTRIBUTE.test(rootTag) ? !storedLegendSideIsOfMode(rootTag, mode) : composes;
   }
 });
+
+// The shown Result as the region tools (Select region, New drawing from region) and Sequence search read it.
+/** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
+const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? null;
+/** The records of every Result of the shown drawing whose axis Python wrote (the subjects of Sequence search). */
+const shownResultsAxisRecords = () => Array.from({ length: state.results.value.length },
+  (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat();
+const closeRegionPopup = () => {
+  if (state.clickedPairwiseMatch.value?.previewItem?.kind === 'region') state.clickedPairwiseMatch.value = null;
+};
+// The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
+// Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
+/** @param {readonly RecordSpanRead[]} spans */
+const readShownRecordSpans = (spans) => requestRecordSpanSequences(
+  getCommittedCanonicalSession(), spans,
+  (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+    resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+);
+// The annotation sets of the committed request the shown Result was made from (Sequence search names a new set apart).
+const shownCommittedSets = () => getCommittedCanonicalSession()?.renderRequest.diagramOptions.annotations?.sets ?? [];
+// The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
+/** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
+const shownResultFeatures = (recordKey) => {
+  const catalog = toRaw(state.featureCatalog.value);
+  const rows = catalog ? catalogNameIndex(catalog).rowsByRecord.get(recordKey) : undefined;
+  if (!rows) return null;
+  const seen = new Set();
+  return rows.flatMap((row) => {
+    const featureId = String(row.biologicalFeatureId ?? '');
+    if (!featureId || seen.has(featureId)) return [];
+    seen.add(featureId);
+    return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
+  });
+};
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
 const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
@@ -2188,6 +2224,7 @@ export const createAppSetup = () => {
     };
   };
   const {
+    runLosatJobsInOverlay,
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
@@ -2280,6 +2317,7 @@ export const createAppSetup = () => {
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
     },
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog(state.activeDrawing()).omittedRecordKeys || [],
+    searchRecordSelector: (bindingKey) => shownResultRecordBindings().selectorOfBinding(bindingKey),
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
   // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the
@@ -2350,11 +2388,6 @@ export const createAppSetup = () => {
     })) return;
     if (featureActions.requestAutomaticRerender() && !direction) history.markLastStepUndrawn();
   };
-  history.setSettingsStepListener((changes, direction, undrawn) => {
-    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
-      changes ? changedTrackHides(changes) : undefined, direction === 'undo');
-    refitSizedFigure(changes, direction, undrawn);
-  });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
     /** @param {{ record_key?: unknown, recordKey?: unknown, biological_feature_id?: unknown, biologicalFeatureId?: unknown } | null | undefined} feature */
@@ -2607,6 +2640,7 @@ export const createAppSetup = () => {
     },
     transformLegacyResultSvg,
     beforeImport: async () => {
+      sequenceSearch.loadStarts();
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
@@ -2649,6 +2683,7 @@ export const createAppSetup = () => {
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
         previewFeatureSearch.resetModeSearches();
+        sequenceSearch.reset();
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
         // The Load's commit gave each loaded drawing an empty History
@@ -5013,6 +5048,8 @@ export const createAppSetup = () => {
       displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
     }));
   };
+  /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
+  const recordSettingsOwners = (drawing) => (drawing.mode === 'circular' ? circularRecordSettingsOwners(drawing) : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq)));
   /** @param {DrawingState} drawing @returns {RecordEditData} */
   const recordEditData = (drawing) => ({
     featureEdits: drawing.slices.featureEdits,
@@ -5077,9 +5114,7 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode(listMode);
     if (!drawing) return false;
     const deleted = new Set(keys);
-    const owners = listMode === 'circular'
-      ? circularRecordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key))
-      : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map((seq) => linearRecordSettingsOwner(drawing, seq));
+    const owners = recordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key));
     const ruleCount = drawing.manualSpecificRules.length;
     retireLegendStylesOfUnnamedCaptions(drawing, () => removeRecordEdits(owners, recordEditData(drawing)));
     // The color rows it took back color nothing drawn; the rule matches follow the table.
@@ -5238,20 +5273,6 @@ export const createAppSetup = () => {
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });
   };
-  // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
-  /** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
-  const shownResultFeatures = (recordKey) => {
-    const catalog = toRaw(state.featureCatalog.value);
-    const rows = catalog ? catalogNameIndex(catalog).rowsByRecord.get(recordKey) : undefined;
-    if (!rows) return null;
-    const seen = new Set();
-    return rows.flatMap((row) => {
-      const featureId = String(row.biologicalFeatureId ?? '');
-      if (!featureId || seen.has(featureId)) return [];
-      seen.add(featureId);
-      return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
-    });
-  };
   const regionDrawings = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
     projectShownRequest,
@@ -5262,52 +5283,67 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
+  /** Reads the record catalog of `drawing` when it is unread (OV-373); one that cannot be read throws (OV-2562). @param {DrawingState} drawing */
+  const readRecordCatalog = async (drawing) => {
+    if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
+    const catalog = getAnnotationRecordCatalog(drawing);
+    if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
+  };
+  // How a row binds a record of the shown Result (Add to annotation set, Sequence search, its live draw; PD-OI-117).
+  const shownResultRecordBindings = () => resultRecordBindings(shownResultsAxisRecords(), recordSettingsOwners(state.activeDrawing()));
+  const sequenceSearch = createSequenceSearch({
+    state,
+    readAxisRecords: shownResultsAxisRecords,
+    readRecordSpans: readShownRecordSpans,
+    committedSets: shownCommittedSets,
+    readRecordBindings: shownResultRecordBindings,
+    runLosatJobs: runLosatJobsInOverlay,
+    runHelper: runDiagramHelperOperation,
+    helperOperations: { readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES, buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET },
+    addSearchSet: (drawingId, set) => history.runUndoable(msg('Sequence search'),
+      () => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)),
+    shownRoot: shownResultRoot,
+    closeRegionPopup,
+    revealSection: () => settingsPaneActions.revealSettingsSection('sequence-search')
+  });
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).
   const regionSelect = createRegionSelect({
     readAxisRecords: shownAxisRecords,
-    shownRoot: () => svgContainer.value?.querySelector('svg') ?? null,
+    shownRoot: shownResultRoot,
     layoutEdit: layoutRepositionMode,
     openSelection: () => {
       const item = clickedPairwiseMatch.value?.previewItem;
       return item?.kind === 'region' ? item : null;
     },
     openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),
-    closeRegionPopup: () => {
-      if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
-    },
+    closeRegionPopup,
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
-    // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
-    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why, as the
-    // record list does (`recordCatalogError`), under the operation addRegionAnnotation (OV-2562). The popup
-    // is teleported out of the app root, where the History adapter listens, so the action is its own step.
+    // Binds as a search hit does; the popup is teleported out of the app root (no History adapter): its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
-      if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
-      const catalog = getAnnotationRecordCatalog(drawing);
-      if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
+      await readRecordCatalog(drawing);
       if (drawing !== state.activeDrawing()) return null;
-      return history.runUndoable(msg('Add to annotation set'), () => {
-        const owners = drawing.mode === 'circular'
-          ? circularRecordSettingsOwners(drawing)
-          : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
-        return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
-      });
+      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ record: resultRecordBinding(shownResultRecordBindings(), recordKey), start, end }));
     },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.
-    readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
-      getCommittedCanonicalSession(), [{ recordKey, start, end }],
-      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
-        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
-    )).fasta,
+    readRegionFasta: async ({ recordKey, start, end }) => (await readShownRecordSpans([{ recordKey, start, end }])).fasta,
+    useAsSearchQuery: sequenceSearch.useSpanAsQuery,
     // While the tool is on, a touch that misses the tracks pans as a mouse drag does.
     panStart: startPan,
     panMove: doPan,
     panEnd: endPan
   });
+  // Registered once sequenceSearch exists: a search's step names the sets it added (the live annotation-sets row).
+  history.setSettingsStepListener((changes, direction, undrawn) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
+      changes ? changedTrackHides(changes) : undefined, direction === 'undo', sequenceSearch.searchSetIdsOf(changes));
+    refitSizedFigure(changes, direction, undrawn);
+  });
   return {
+    sequenceSearch,
     hostedBuild: readHostedBuild(document),
     fontSettings,
     defaultColorGroups,

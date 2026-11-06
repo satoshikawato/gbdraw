@@ -168,19 +168,28 @@ export const annotationRecordKeysOf = (source, fallbackSourceKey) => (
 );
 
 /**
+ * The selector an annotation names each of a request's drawn records by (`selector` is its `#<n>`): its record ID when
+ * no other drawn record has it, else its `#<n>`. The catalog names the draft's records so, and Sequence search the
+ * records of the shown Result (`resultRecordBindings`).
+ * @template {{ recordId: string, selector: string }} T
+ * @param {readonly T[]} records
+ */
+export const withRecordSelectors = (records) => buildDisambiguatedRecordEntries(records).map((record) => ({
+  ...record,
+  // `value` is a safe record ID or `#<n>`, never an unspecified token, so it parses to a selector.
+  backendSelector: /** @type {AnnotationRecordSelector} */ (annotationRecordSelectorFromValue(record.value))
+}));
+
+/**
  * @param {(SourceRecord & { sourceIndex?: number })[]} records
  * @returns {AnnotationCatalogRecord[]}
  */
-const finalizeRecords = (records) => {
-  const indexed = records.map((record, index) => ({ ...record, selector: `#${index + 1}` }));
-  return buildDisambiguatedRecordEntries(indexed).map((record, index) => ({
+const finalizeRecords = (records) => withRecordSelectors(records.map((record, index) => ({ ...record, selector: `#${index + 1}` })))
+  .map((record, index) => ({
     ...record,
     index,
-    // `value` is a safe record ID or `#<n>`, never an unspecified token, so it parses to a selector.
-    backendSelector: /** @type {AnnotationRecordSelector} */ (annotationRecordSelectorFromValue(record.value)),
     label: `#${index + 1} · ${record.recordId}${record.recordLength ? ` · ${formatRecordLength(record.recordLength)}` : ''}`
   }));
-};
 
 /**
  * @param {AnnotationCatalogIssue[]} issues

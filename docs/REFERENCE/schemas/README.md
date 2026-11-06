@@ -415,6 +415,7 @@ classDiagram
   class CanonicalRegionAnnotationStyle
   CanonicalRegionAnnotationStyle --> CanonicalAnnotationColor : 3 fields
   CanonicalRegionAnnotationStyle --> CanonicalHatchStyle : hatch
+  CanonicalRegionAnnotationStyle --> CanonicalAnnotationGradient : gradient
   class CanonicalScalarSpec
   class CanonicalLinearScalarSpec
   class CanonicalCollinearityParameters
@@ -429,6 +430,8 @@ classDiagram
   <<union>> CanonicalAnnotationColor
   class CanonicalHatchStyle
   CanonicalHatchStyle --> CanonicalAnnotationColor : color
+  class CanonicalAnnotationGradient
+  CanonicalAnnotationGradient --> CanonicalAnnotationColor : startColor, endColor
   class CanonicalLosslessCollinearityParameters
   class CanonicalFeatureSelector
 ```

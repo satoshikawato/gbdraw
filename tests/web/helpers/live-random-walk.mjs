@@ -33,7 +33,9 @@ import { join } from 'node:path';
 import { evaluateWithRetainedPromise, takePageErrors } from './app-lifecycle.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
-import { generate, openBothDrawings, otherMode, switchDrawing } from './live-generate-parity-steps.cjs';
+import { BATCH_FIXTURE } from './audit-browser.cjs';
+import { SINGLE_FIXTURE, generate, openBothDrawings, otherMode, switchDrawing } from './live-generate-parity-steps.cjs';
+import { fasta, genbankBases, reverseComplement, span } from './sequence-search.cjs';
 import { BARRIER_KINDS, FIXTURES, createRandom, planWalk } from './live-random-walk-plan.mjs';
 import { shrinkWalk } from './live-random-walk-shrink.mjs';
 
@@ -81,7 +83,9 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'Legend rename on a sized figure': null,
   'History step (Undo of a Legend rename on a sized figure)': null,
   'Legend row color on a sized figure': null,
-  'Canvas padding on a sized figure': null
+  'Canvas padding on a sized figure': null,
+  'sequence search': 'sequenceSearch',
+  'History step (Undo of a sequence search)': 'undo'
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),
@@ -91,6 +95,8 @@ const KNOWN_MISMATCHES = Object.freeze({});
 
 // The records of each file, for a Depth file over them.
 const FILE_RECORDS = { single: ['FORCEDLBL'], batch: ['TESTA', 'TESTB'] };
+// The bases of each file's records, for the queries of a sequence search.
+const FILE_BASES = { single: genbankBases(SINGLE_FIXTURE), batch: genbankBases(BATCH_FIXTURE) };
 
 const COLORS = ['#c83366', '#123456', '#2a9d8f', '#e63946', '#7b2cbf', '#f4a261', '#264653'];
 const LABEL_TEXTS = [
@@ -280,6 +286,17 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
       return { kind, prepare: { kind: 'depthFile', tsv } };
     }
     case 'palette': return { kind, palette: random.pick(state.palettes), picks };
+    case 'sequenceSearch': {
+      // One query per record of the drawn file, cut from a random span on either strand: the shown Result draws one of
+      // them at least, so the search adds a set; the hit colours are one per query or the gradient.
+      const queries = Object.entries(FILE_BASES[fileOf(fixture, state.drawing)]).map(([name, bases]) => {
+        const length = 150 + random.int(250);
+        const start = 1 + random.int(bases.length - length);
+        const cut = span(bases, start, start + length - 1);
+        return { name: `walk_${name}_${start}`, bases: random.next() < 0.5 ? cut : reverseComplement(cut) };
+      });
+      return { kind, fasta: fasta(queries), colorMode: random.pick(['query', 'gradient']) };
+    }
     case 'undo': return canUndo ? { kind } : { kind, prepare: fill() };
     case 'undoRedo': return canUndo ? { kind } : { kind, prepare: fill() };
     case 'resultSwitch': {
@@ -509,6 +526,18 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
       case 'reset':
         await app.resetSettings();
         break;
+      case 'sequenceSearch': {
+        // The test server is not cross-origin isolated: LOSAT runs Serial.
+        app.losatExecution.executionMode = 'serial';
+        const search = app.sequenceSearch;
+        search.panel.colorMode = current.colorMode;
+        await search.readQueries(current.fasta);
+        await search.search();
+        if (search.panel.searchError || search.panel.queryError || !search.shownOutcome?.setId) {
+          throw new Error(`the search added no set: ${JSON.stringify(search.panel.searchError || search.panel.queryError || search.noHitText)}`);
+        }
+        break;
+      }
       case 'undo':
         await history.undo();
         break;
@@ -565,7 +594,9 @@ const saveAndLoad = async (page, path) => {
 // The draft settings the fixtures set that apply on Generate (R1). Reset
 // Settings returns them to their defaults in the draft only, so the Result
 // keeps drawing them until Generate; the reset step writes them back in both
-// drawings, so its comparison covers what Reset Settings shows live.
+// drawings, so its comparison covers what Reset Settings shows live. So are a
+// drawing's annotation sets (a sequence search's set): deleting a set applies
+// on Generate.
 const GENERATE_SETTINGS = Object.freeze({
   circular: [['form', 'labels_mode'], ['form', 'multi_record_canvas'], ['adv', 'circular_grouping_intent']],
   linear: [['form', 'show_labels_linear']]
@@ -573,17 +604,22 @@ const GENERATE_SETTINGS = Object.freeze({
 const resetKeepingGenerateSettings = async (page) => {
   const kept = await page.evaluate(async (settings) => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return Object.fromEntries(Object.entries(settings).map(([drawingId, paths]) => [
-      drawingId, paths.map(([group, key]) => [group, key, window.Vue.unref(state.drawingOf(drawingId)[group])[key]])
-    ]));
+    const { ANNOTATION_SETS_SLICE } = await import('/gbdraw/web/js/services/drawing/annotation-sets.js');
+    return Object.fromEntries(Object.entries(settings).map(([drawingId, paths]) => [drawingId, {
+      values: paths.map(([group, key]) => [group, key, window.Vue.unref(state.drawingOf(drawingId)[group])[key]]),
+      annotationSets: ANNOTATION_SETS_SLICE.capture(state.drawingOf(drawingId).slices.annotationSets)
+    }]));
   }, GENERATE_SETTINGS);
   const notes = await applyStepWithin(page, { kind: 'reset' });
   await settleLive(page);
   const shown = await page.evaluate(() => window.__GBDRAW_APP__.mode);
-  const writeBack = (drawingId) => page.evaluate((values) => {
+  const writeBack = (drawingId) => page.evaluate(async ({ drawingId, values, annotationSets }) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { ANNOTATION_SETS_SLICE } = await import('/gbdraw/web/js/services/drawing/annotation-sets.js');
     const app = window.__GBDRAW_APP__;
     for (const [group, key, value] of values) app[group][key] = value;
-  }, kept[drawingId]);
+    ANNOTATION_SETS_SLICE.install(state.drawingOf(drawingId).slices.annotationSets, annotationSets);
+  }, { drawingId, ...kept[drawingId] });
   await writeBack(shown);
   await switchDrawing(page, otherMode(shown));
   await writeBack(otherMode(shown));

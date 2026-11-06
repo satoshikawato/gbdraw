@@ -24,6 +24,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.annotations import (
+    AnnotationGradient,
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
@@ -2348,6 +2349,15 @@ def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
                             (FeatureSelector("dnaA", "gene"),),
                             envelope="segments",
                             circular_path="forward",
+                        ),
+                    ),
+                    RegionAnnotation(
+                        "query#1",
+                        CoordinateSpan(parse_record_selector("#1"), 30, 60),
+                        mark="highlight",
+                        style=RegionAnnotationStyle(
+                            fill="#5b1a4a",
+                            gradient=AnnotationGradient("#f6c9d8", "#5b1a4a", "reverse", query_start=0.25, query_end=0.75),
                         ),
                     ),
                 ),

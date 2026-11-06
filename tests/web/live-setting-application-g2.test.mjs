@@ -369,6 +369,28 @@ test('a null committed item style takes the set default with the new colors', ()
   }
 });
 
+// Receipt web.sequence-search: a gradient row's start and end colours apply as its other colours do; its direction
+// and query positions stay, and the live request equals Generate's.
+test('a gradient row\'s start and end colors draw live as Generate sends them', () => {
+  try {
+    fixtures('circular');
+    const drawing = modeDrawing(state, 'circular');
+    const gradient = { startColor: '#f6c9d8', endColor: '#5b1a4a', direction: 'reverse', queryStart: 0.25, queryEnd: 0.5 };
+    set(drawing.annotationSets[0].annotations[0], 'style', { fill: '#5b1a4a', gradient });
+    const committed = generate('circular');
+    set(drawing.annotationSets[0].annotations[0], 'style', { fill: '#5b1a4a', gradient: { ...gradient, startColor: '#ffffff', endColor: '#000000' } });
+    const writes = project(committed, 'circular', [ANNOTATIONS]);
+    assert.equal(writes.length, 1);
+    const live = applied(committed, writes);
+    const draft = generate('circular');
+    assert.deepEqual(live.renderRequest.diagramOptions.annotations, draft.renderRequest.diagramOptions.annotations);
+    assert.deepEqual(live.renderRequest.diagramOptions.annotations.sets[0].annotations[0].style.gradient,
+      { ...gradient, startColor: '#ffffff', endColor: '#000000' });
+  } finally {
+    undoAll();
+  }
+});
+
 test('Match height applies to a committed comparison only, LOSAT-only intent and Python-written pairs included', () => {
   try {
     const drawing = modeDrawing(state, 'linear');

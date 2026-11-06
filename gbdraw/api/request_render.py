@@ -1043,13 +1043,13 @@ class CircularBatchRequestPlan:
                     request=item_request,
                     records=(record,),
                     layout=None,
-                    resolved_annotations=ResolvedAnnotationBundle(
+                    resolved_annotations=replace(
+                        self.resolved_annotations,
                         annotations=tuple(replace(item, record_index=0)
                             for item in self.resolved_annotations.annotations
                             if item.record_index == index),
                         warnings=tuple(item for item in self.resolved_annotations.warnings
                             if item.record_index == index),
-                        set_ids=self.resolved_annotations.set_ids,
                     ),
                     precomputed_depth_track_specs=(
                         tuple(normalized_depth[index])

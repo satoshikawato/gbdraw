@@ -96,6 +96,37 @@ and title at the bottom and states them in what it saves. The format does not ch
 request this way before; only the Web's reading changes. Positive fixture:
 `tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
 
+Session 51 also adds an optional `gradient` to a region annotation's style in the canonical request
+(`diagramOptions.annotations.sets[].defaultStyle` and `.annotations[].style`; PR-B, the Web's Sequence search, receipt
+`web.sequence-search` rev 1): `startColor` and `endColor`, the colours at the start and at the end of what the region
+stands for (a search hit: its query); `queryStart` and `queryEnd`, where the region's two ends lie on that scale as
+fractions from 0 to 1 in query order (a hit over a part of its query), written only when they are not 0 and 1; and
+`direction`, `forward` or `reverse`, which way that order runs on the record's source strand. A `band` or `highlight` mark draws it along the region in place of its fill (`gbdraw/render/drawers/annotation_marks.py`,
+`gradient_steps`), and the Legend draws one bar per caption and pair of colours, from "start" to "end". The writer
+writes the key only when a style has a gradient, so every request without one encodes byte for byte as before; the
+reader reads an absent or null key as no gradient. Request schema 9 is unchanged: the key is a new optional field
+of the request description (`CanonicalAnnotationGradient`). Session 51 has not reached `main`, so the version does
+not change; `main`'s build (0.14.5) refuses every Session 51 file. Positive fixture:
+`tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz` (Python `save_session_document`).
+
+Session 51 also adds an optional `keepHighlightOverlay` to an annotation set (`diagramOptions.annotations.sets[]`,
+and the Web draft `config.annotationSets[]`; the same receipt, its custom-stack line): `true` on a set that
+Sequence search wrote (`gbdraw/annotations/search_hits.py`, the only writer). Its highlights are then drawn in front of
+the feature track, covering its features, also in an explicit track stack (Use custom stack) that has no enabled slot naming the
+set: `prepare_annotation_track_slots` adds the set's automatic highlight overlay after the stack's slots, in front of
+the stack's feature track. A slot that names the set takes its place; other sets keep following the stack. The writer
+writes the key only when it is true, so every other set encodes as before; the reader reads an absent key as false.
+Request schema 9 is unchanged (a new optional field of `CanonicalAnnotationSet`). The same positive fixture holds it.
+
+Session 51 also adds an optional `strand` (`"+"` or `"-"`) to an annotation row (`diagramOptions.annotations.sets[].annotations[]`,
+and the Web draft `config.annotationSets[].annotations[]`; the same receipt, its strand line): the strand on the
+record's source that a Sequence search hit lies on (`gbdraw/annotations/search_hits.py`, the only writer). Where the
+row's highlight covers a feature track that separates the strands (`cover_anchor`), it covers that strand's lane as
+the record is drawn (a reverse-complemented record draws the source's plus strand as its minus strand); a row without
+it covers the whole feature track, as before. The writer writes the key only when it is set, so every other row
+encodes as before; the reader reads an absent key as no strand. Request schema 9 is unchanged (a new optional field of
+`CanonicalRegionAnnotation`). The same positive fixture holds it.
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

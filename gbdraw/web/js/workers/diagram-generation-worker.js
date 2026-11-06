@@ -1115,6 +1115,22 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Sequence search: Python reads the pasted or chosen queries with the FASTA-only loader,
+  // and turns one search's LOSAT rows into an annotation set (data, never SVG).
+  [DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES]: {
+    keys: ['files'],
+    fileRoles: ['source'],
+    run: (pyodide, _payload, paths, operation) => callJsonHelper(
+      pyodide, 'read_search_queries_json', [requireHelperFile(paths, 'source', operation)]
+    )
+  },
+  [DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET]: {
+    keys: ['search'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide, 'sequence_search_annotation_set_json', [jsonArgument(payload.search, null)]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE]: {
     keys: ['files'],
     fileRoles: ['source'],

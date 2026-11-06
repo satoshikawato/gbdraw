@@ -1392,6 +1392,13 @@
             stroke-width: 1.5;
             vector-effect: non-scaling-stroke;
         }
+        .search-hit-outline {
+            fill: none;
+            stroke: #0f172a;
+            stroke-width: 2.5;
+            vector-effect: non-scaling-stroke;
+            filter: drop-shadow(0 0 1.5px #fff);
+        }
         .region-select-readout {
             position: fixed;
             z-index: 35;
@@ -2518,7 +2525,7 @@
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
-        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
+        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ sequenceSearch.panel.running ? t('Searching sequences...') : t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
         <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
@@ -4060,7 +4067,11 @@
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
                                         <div data-setting="annotation-style" class="flex items-center gap-0.5">
-                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
+                                        <template v-if="(item.style || set.defaultStyle).gradient">
+                                        <input type="color" data-annotation-gradient="start" :value="(item.style || set.defaultStyle).gradient.startColor" @input="setAnnotationStyle(set, item, 'gradient', { ...(item.style || set.defaultStyle).gradient, startColor: $event.target.value })" class="form-input h-6 w-6 p-0" :title="t('Gradient start color')" :aria-label="t('Annotation gradient start color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
+                                        <input type="color" data-annotation-gradient="end" :value="(item.style || set.defaultStyle).gradient.endColor" @input="setAnnotationStyle(set, item, 'gradient', { ...(item.style || set.defaultStyle).gradient, endColor: $event.target.value })" class="form-input h-6 w-6 p-0" :title="t('Gradient end color')" :aria-label="t('Annotation gradient end color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
+                                        </template>
+                                        <input v-else type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :aria-describedby="`annotation-fill-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable">
                                         <setting-note :id="`annotation-fill-timing-${setIndex}-${itemIndex}`" setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note>
                                         </div>
                                         <button :aria-label="t('Delete annotation')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" :title="t('Delete annotation')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
@@ -4117,6 +4128,113 @@
                                 </div>
                             </div>
                         </div>
+                    </details>
+                </div>
+
+                <div v-settings-section="'sequence-search'" data-setting="sequence-search" class="card">
+                    <details>
+                        <summary :aria-label="t('Sequence search')"><settings-section-title section="sequence-search"></settings-section-title> <setting-note setting="sequence-search"></setting-note> <help-tip :text="t('Search the records of the shown drawing, as last generated, for query sequences with LOSAT. Each search adds an annotation set of its hits, drawn at once. The queries and settings here are not saved in the Session.')"></help-tip></summary>
+                        <!-- The panel's values are its own and transient: no History step (data-history-ignore) and not in the Session.
+                             A pending Session operation disables the whole panel, as every other settings control (GX-01, GX-12). -->
+                        <fieldset data-history-ignore data-sequence-search :disabled="!semanticMutationAvailable" class="min-w-0 mt-2 space-y-2 pt-2 border-t border-slate-200">
+                            <button v-if="sequenceSearch.panel.folded" type="button" data-sequence-search-unfold class="btn btn-secondary w-full justify-between text-[10px] px-2" @click="sequenceSearch.setFolded(false)" :aria-expanded="false">
+                                <span class="truncate">{{ tn(sequenceSearch.panel.queries.length, '{count} query', '{count} queries', { count: sequenceSearch.panel.queries.length }) }} · {{ sequenceSearch.programText }} · {{ sequenceSearch.panel.colorMode === 'gradient' ? t('Gradient by query position') : t('One color per query') }}</span>
+                                <i class="ph ph-caret-down" aria-hidden="true"></i>
+                            </button>
+                            <div v-else class="space-y-2">
+                                <label for="sequence-search-query" class="input-label text-[10px] mb-0">{{ t('Query FASTA') }}</label>
+                                <textarea id="sequence-search-query" :value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
+                                <p v-if="sequenceSearch.panel.queryError" id="sequence-search-query-error" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.queryError.summaryParts) }}</p>
+                                <button type="button" class="btn btn-secondary text-[10px] w-full" @click="$refs.sequenceSearchQueryInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Choose file') }}</button>
+                                <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
+                                <ul v-if="sequenceSearch.panel.queries.length" class="space-y-1" :aria-label="t('Queries')">
+                                    <li v-for="query in sequenceSearch.panel.queries" :key="query.name" data-sequence-search-query class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 text-[10px]">
+                                        <input type="color" :value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
+                                        <span class="truncate font-mono" :title="query.name">{{ query.name }}</span>
+                                        <span class="text-slate-500">{{ t('{length} bp', { length: query.length.toLocaleString() }) }}</span>
+                                        <button type="button" class="btn btn-secondary h-5 w-5 p-0" @click="sequenceSearch.removeQuery(query.name)" :aria-label="t('Remove {query}', { query: query.name })" :title="t('Remove {query}', { query: query.name })"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                    </li>
+                                </ul>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <span class="input-label text-[10px]">{{ t('Program') }}</span>
+                                        <p class="text-[10px] py-0.5">blastn</p>
+                                    </div>
+                                    <div>
+                                        <label for="sequence-search-task" class="input-label text-[10px]">{{ t('Task') }}</label>
+                                        <select id="sequence-search-task" v-model="sequenceSearch.panel.task" class="form-input px-1 py-0.5 text-xs">
+                                            <option v-for="task in sequenceSearch.tasks" :key="task" :value="task">{{ task }}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="sequence-search-bitscore" class="input-label text-[10px]">{{ t('Bitscore') }}</label>
+                                        <input id="sequence-search-bitscore" type="number" min="0" v-model="sequenceSearch.panel.thresholds[mode].min_bitscore" class="form-input px-1 py-0.5 text-xs">
+                                    </div>
+                                    <div>
+                                        <label for="sequence-search-evalue" class="input-label text-[10px]">{{ t('E-value') }}</label>
+                                        <input id="sequence-search-evalue" type="text" v-model="sequenceSearch.panel.thresholds[mode].evalue" class="form-input px-1 py-0.5 text-xs">
+                                    </div>
+                                    <div>
+                                        <label for="sequence-search-identity" class="input-label text-[10px]">{{ t('Minimum Identity') }}</label>
+                                        <input id="sequence-search-identity" type="number" min="0" max="100" v-model="sequenceSearch.panel.thresholds[mode].identity" class="form-input px-1 py-0.5 text-xs">
+                                    </div>
+                                    <div>
+                                        <label for="sequence-search-length" class="input-label text-[10px]">{{ t('Minimum Length') }}</label>
+                                        <input id="sequence-search-length" type="number" min="0" step="1" v-model="sequenceSearch.panel.thresholds[mode].alignment_length" class="form-input px-1 py-0.5 text-xs">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="sequence-search-color-mode" class="input-label text-[10px]">{{ t('Hit color') }}</label>
+                                    <select id="sequence-search-color-mode" v-model="sequenceSearch.panel.colorMode" class="form-input px-1 py-0.5 text-xs">
+                                        <option value="query">{{ t('One color per query') }}</option>
+                                        <option value="gradient">{{ t('Gradient by query position') }}</option>
+                                    </select>
+                                    <div v-if="sequenceSearch.panel.colorMode === 'gradient'" data-sequence-search-gradient class="mt-1 text-[10px]">
+                                        <span>{{ t('Query position') }}</span>
+                                        <div class="h-2 rounded border border-slate-300" :style="{ background: sequenceSearch.gradientBar }" aria-hidden="true"></div>
+                                        <div class="flex justify-between text-slate-500"><span>{{ t('start') }}</span><span>{{ t('end') }}</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" data-sequence-search-run class="btn btn-primary text-xs w-full" @click="sequenceSearch.search()" :disabled="Boolean(sequenceSearch.searchDisabledReason) || sequenceSearch.panel.running" :aria-describedby="sequenceSearch.searchDisabledReason ? 'sequence-search-reason' : null"><i class="ph ph-binoculars" aria-hidden="true"></i> {{ t('Search') }}</button>
+                            <p v-if="sequenceSearch.searchDisabledReason" id="sequence-search-reason" class="ui-hint">{{ sequenceSearch.searchDisabledReason }}</p>
+                            <p v-if="sequenceSearch.panel.searchError" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.searchError.summaryParts) }}</p>
+                            <p v-if="sequenceSearch.panel.busy" role="status" class="text-[10px] text-amber-700 break-words">{{ sequenceSearch.panel.busy }}</p>
+                            <p v-if="sequenceSearch.noHitText" role="status" data-sequence-search-no-hits class="text-[10px] text-slate-700">{{ sequenceSearch.noHitText }}</p>
+                            <div v-if="sequenceSearch.shownOutcome && sequenceSearch.shownOutcome.setId" data-sequence-search-hits class="space-y-1">
+                                <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Show the hits of')">
+                                    <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === ''" @click="sequenceSearch.chooseChip('')">{{ t('All') }} ({{ sequenceSearch.shownOutcome.hits.length }})</button>
+                                    <button v-for="chip in sequenceSearch.chips" :key="chip.name" type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === chip.name" @click="sequenceSearch.chooseChip(chip.name)">{{ chip.name }} ({{ chip.count }})</button>
+                                </div>
+                                <!-- Fits the 320 px pane: the Query and Record cell takes the width left and truncates, the
+                                     numbers keep their width, and short headers name their columns in full. -->
+                                <div class="overflow-x-auto" data-sequence-search-table>
+                                    <table class="w-full text-[10px] tabular-nums" :aria-label="t('Hits of {set}', { set: sequenceSearch.shownOutcome.setId })">
+                                        <thead><tr class="text-left align-bottom text-[9px] leading-tight text-slate-500">
+                                            <th scope="col" class="font-medium pr-0.5">{{ t('Query') }} · {{ t('record') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap">{{ t('Start-end') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5" :aria-label="t('Strand')" :title="t('Strand')">{{ t('Str.') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Identity')" :title="t('Identity')">{{ t('Ident. %') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 text-right" :aria-label="t('Length')" :title="t('Length')">{{ t('Len.') }}</th>
+                                            <th scope="col" class="font-medium pr-0.5 whitespace-nowrap text-right">{{ t('E-value') }}</th>
+                                            <th scope="col" class="font-medium text-right" :aria-label="t('Bit score')" :title="t('Bit score')">{{ t('Bits') }}</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            <tr v-for="hit in sequenceSearch.hitRows" :key="hit.annotationId" data-sequence-search-hit :aria-selected="sequenceSearch.panel.selectedHit === hit.annotationId" tabindex="0" class="cursor-pointer align-top hover:bg-slate-100 aria-selected:bg-blue-50" @click="sequenceSearch.selectHit(hit)" @keydown.enter.prevent="sequenceSearch.selectHit(hit)">
+                                                <td class="w-full max-w-0 pr-0.5"><span class="block font-mono truncate" :title="hit.query">{{ hit.query }}</span><span class="block text-slate-500 truncate" :title="sequenceSearch.recordOf(hit)">{{ sequenceSearch.recordOf(hit) }}</span></td>
+                                                <td class="pr-0.5">{{ hit.start.toLocaleString() }}–{{ hit.end.toLocaleString() }}</td>
+                                                <td class="pr-0.5 text-center">{{ hit.strand }}</td>
+                                                <td class="pr-0.5 text-right" :title="String(hit.identity)">{{ hit.identity.toFixed(1) }}</td>
+                                                <td class="pr-0.5 text-right">{{ hit.alignmentLength }}</td>
+                                                <td class="pr-0.5 text-right whitespace-nowrap">{{ hit.evalue }}</td>
+                                                <td class="text-right">{{ hit.bitscore }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <button v-if="sequenceSearch.shownOutcome" type="button" class="btn btn-secondary text-xs w-full" @click="sequenceSearch.saveRawTsv()"><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
+                        </fieldset>
                     </details>
                 </div>
 
@@ -6885,6 +7003,10 @@
                     <svg v-if="regionOverlay" :ref="regionSelect.bindOverlay" class="region-select-overlay absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
                         <path v-if="regionOverlayMatrix" :ref="regionSelect.bindBand" data-region-select-band :transform="regionOverlayMatrix" :d="regionOverlay.path" class="region-select-band"></path>
                     </svg>
+                    <!-- The outline of the search hits a row or a chip of the hit table names, over the Result (never in it). -->
+                    <svg v-if="sequenceSearch.outline" :ref="sequenceSearch.hitOutline.bindOverlay" data-search-hit-outline class="absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
+                        <path v-for="(shape, index) in sequenceSearch.hitOutline.shapes" :key="index" :transform="shape.transform" :d="shape.d" class="search-hit-outline"></path>
+                    </svg>
 
                     <Teleport to="body">
                     <!-- Feature Editor Popup -->
@@ -7554,6 +7676,13 @@
                                                 :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
                                                 @click="regionSelect.newDrawing()"><i class="ph ph-file-plus" aria-hidden="true"></i><span>{{ t('New drawing from region') }}</span></button>
                                         <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="text-xs text-slate-500 mt-0.5 px-1" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
+                                    </div>
+                                    <!-- Use as search query: a query of the Sequence search panel (transient, no History step). -->
+                                    <div>
+                                        <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-search-query
+                                                :disabled="regionPopup.busy" :aria-busy="regionPopup.query.busy ? 'true' : 'false'"
+                                                @click="regionSelect.useAsQuery()"><i class="ph ph-binoculars" aria-hidden="true"></i><span>{{ t('Use as search query') }}</span></button>
+                                        <p v-if="regionPopup.query.status" class="text-xs text-red-700 mt-0.5 px-1" role="status" data-region-query-status>{{ regionPopup.query.status }}</p>
                                     </div>
                                 </div>
                                 <p v-else class="match-muted">{{ t('This item is no longer in the diagram.') }}</p>
