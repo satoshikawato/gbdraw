@@ -4,9 +4,10 @@
 //   node tools/ci-inventory.mjs [--post]
 //
 // Reports the last 7 days of GitHub Actions use: runner-minutes by workflow and event
-// and by job, the wall and queue time of `Tests` runs, and the functional Playwright
-// shards of the latest green dev `Tests` run with the plan that
-// tools/balance-functional-shards.mjs would write. It prints Markdown; with --post it
+// and by job, the wall and queue time of `Tests` runs, the pull request feedback time
+// against its targets, and the functional Playwright shards of the latest green dev
+// `Tests` run with the plan that tools/balance-functional-shards.mjs would write. It
+// prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
 // come from the data block of the workflow's own previous comment. Job lists are read
@@ -43,6 +44,15 @@ const PARALLEL_REQUESTS = 8;
 const DATA_BLOCK = /<!-- ci-inventory-data (\{.*?\}) -->/s;
 const WEEK = /^\d{4}-W\d{2}$/;
 const DATA_NUMBERS = ['cases', 'functionalTestMinutes', 'runnerMinutes', 'testJobs'];
+// Pull request feedback targets (docs/internal/SELECTIVE_CI.md, "Validation tiers"): the
+// median wall time, in minutes, of the head `Tests` runs of the last PR_WINDOW pull
+// requests merged into dev, by whether a functional Playwright shard ran.
+export const PR_WINDOW = 20;
+export const PR_TARGETS = [
+  { kind: 'without functional Playwright', functional: false, minutes: 20 },
+  { kind: 'with functional Playwright', functional: true, minutes: 35 }
+];
+const FUNCTIONAL_JOB = 'Playwright functional';
 
 const sum = (values) => values.reduce((total, value) => total + value, 0);
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -121,6 +131,31 @@ export const summarizeRuns = ({ runs, jobsByRun }) => {
     byWorkflow: ranked(byWorkflow),
     byJob: ranked(byJob),
     tests: { pull_request: timing('pull_request'), 'dev push': timing('dev push') }
+  };
+};
+
+// The pull request feedback time against PR_TARGETS. `jobLists` holds, for each pull
+// request of the window, the jobs of its latest green head `Tests` run, or null when it
+// has none. A run's wall time is its first job start to its last job end, so a re-run
+// of some jobs counts until the re-run finished. The median is the nearest-rank p50.
+export const summarizePullRequests = (jobLists) => {
+  const walls = jobLists.flatMap((jobs) => {
+    const ran = (jobs || []).filter((job) => job.conclusion !== 'skipped' && job.started_at && job.completed_at);
+    if (!ran.length) return [];
+    return [{
+      functional: ran.some((job) => jobLabel(job.name) === FUNCTIONAL_JOB),
+      minutes: minutesBetween(ran.map((job) => job.started_at).sort()[0], ran.map((job) => job.completed_at).sort().pop())
+    }];
+  });
+  return {
+    pullRequests: jobLists.length,
+    measured: walls.length,
+    kinds: PR_TARGETS.map((target) => {
+      const minutes = walls.filter((wall) => wall.functional === target.functional).map((wall) => wall.minutes);
+      const median = percentile(minutes, 50);
+      // One rounded median decides the warning and is the number the report prints.
+      return { ...target, runs: minutes.length, median, over: median !== null && round1(median) > target.minutes };
+    })
   };
 };
 
@@ -228,7 +263,8 @@ const table = (header, rows) => [
 
 // The weekly report as Markdown, ending with its data block.
 export const renderReport = ({
-  week, since, until, runs, partial = null, functional, functionalRun, testJobs, previous, serverUrl, repository
+  week, since, until, runs, partial = null, pullRequests, functional, functionalRun, testJobs, previous, serverUrl,
+  repository
 }) => {
   const data = {
     week,
@@ -244,7 +280,8 @@ export const renderReport = ({
       ? `${functional.unmeasured.length} spec file(s) without recorded minutes: ${functional.unmeasured.map((file) => `\`${file}\``).join(', ')}`
       : null
   ].filter(Boolean);
-  const runLink = `[${functionalRun.id}](${serverUrl}/${repository}/actions/runs/${functionalRun.id})`;
+  const overTarget = pullRequests.kinds.filter((kind) => kind.over);
+  const runLink =`[${functionalRun.id}](${serverUrl}/${repository}/actions/runs/${functionalRun.id})`;
   const perWorker = (minutes) => fmt(minutes / WORKERS_PER_SHARD);
   return [
     `## CI inventory ${week}`,
@@ -256,6 +293,12 @@ export const renderReport = ({
     functional.rebalance
       ? `**Rebalance the functional shards**: ${reasons.join('; ')}.`
       : `Functional shards are balanced (slowest ${functional.slowestToMean}x the mean).`,
+    '',
+    overTarget.length
+      ? `**Pull request feedback over target**: ${overTarget.map((kind) =>
+        `median ${fmt(kind.median)} minutes ${kind.kind} (target ${kind.minutes})`).join('; ')}.`
+      : `Pull request feedback is within target (${pullRequests.kinds.map((kind) =>
+        `median ${fmt(kind.median)} of ${kind.minutes} minutes ${kind.kind}`).join('; ')}).`,
     '',
     table(['Measure', 'This week', 'Previous', 'Change'], [
       ['Functional cases', data.cases, previous?.cases ?? '-', delta(data.cases, previous?.cases)],
@@ -286,6 +329,17 @@ export const renderReport = ({
     table(['Runs', 'Count', 'Wall p50', 'Wall p90', 'Queue p50', 'Queue p90'],
       Object.entries(runs.tests).map(([kind, timing]) => [
         kind, timing.runs, ...timing.wall.map(fmt), ...timing.queue.map(fmt)
+      ])),
+    '',
+    '### Pull request feedback time (minutes)',
+    '',
+    `The latest green head \`Tests\` run of each of the last ${pullRequests.pullRequests} pull requests merged into`
+      + ` \`dev\` (${pullRequests.measured} had one), first job start to last job end.`
+      + ' Targets: docs/internal/SELECTIVE_CI.md, "Validation tiers".',
+    '',
+    table(['Pull requests', 'Count', 'Median', 'Target', 'Over target'],
+      pullRequests.kinds.map((kind) => [
+        kind.kind, kind.runs, fmt(kind.median), kind.minutes, kind.over ? '**yes**' : 'no'
       ])),
     '',
     `### Functional shards of run ${runLink} (\`${functionalRun.head_sha.slice(0, 8)}\`)`,
@@ -400,6 +454,24 @@ const listJobs = async (client, runs) => {
   return jobsByRun;
 };
 
+// The jobs of the latest green head `Tests` run of each of the last PR_WINDOW pull
+// requests merged into dev, or null for a pull request without one. A merge updates a
+// pull request, so the 100 closed ones updated last hold the ones merged last.
+const listPullRequestRuns = async (client) => {
+  const closed = await client.json('/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=100');
+  const merged = closed.filter((pull) => pull.merged_at)
+    .sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1))
+    .slice(0, PR_WINDOW);
+  const jobLists = [];
+  for (const pull of merged) {
+    const { workflow_runs: [run] } = await client.json(
+      `/actions/workflows/test.yml/runs?event=pull_request&status=success&head_sha=${pull.head.sha}&per_page=1`
+    );
+    jobLists.push(run ? await client.pages(`/actions/runs/${run.id}/jobs?filter=latest`, 'jobs') : null);
+  }
+  return jobLists;
+};
+
 // The latest green dev push `Tests` run that kept an artifact for every shard.
 const latestFunctionalRun = async (client, shardCount) => {
   const { workflow_runs: runs } = await client.json(
@@ -469,6 +541,8 @@ const main = async (argv) => {
   const functional = summarizeFunctional({
     reports: await readShardReports(client, shards), shardsFile, casesPerFile, testDir
   });
+  // Before the job lists, which use the request budget until RATE_RESERVE is left.
+  const pullRequests = summarizePullRequests(await listPullRequestRuns(client));
   const { runs, partial } = await listRuns(client, since, until);
   const summary = summarizeRuns({ runs, jobsByRun: await listJobs(client, runs) });
 
@@ -478,7 +552,7 @@ const main = async (argv) => {
   );
 
   const markdown = renderReport({
-    week, since, until, runs: summary, partial, functional, functionalRun,
+    week, since, until, runs: summary, partial, pullRequests, functional, functionalRun,
     testJobs: countWorkflowJobs(readFileSync(TESTS_WORKFLOW, 'utf8')),
     previous, serverUrl: process.env.GITHUB_SERVER_URL || 'https://github.com', repository
   });
