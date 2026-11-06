@@ -103,16 +103,17 @@ const searchDrawsAtOnce = async (page, testInfo, mode) => {
   const section = page.locator('[data-settings-section="sequence-search"]');
   await expect(section.locator('[data-sequence-search-hit]')).toHaveCount(4);
   await expect(section.locator('[data-sequence-search-hit]', { hasText: 'origin600' })).toContainText(`${(MT.length - 299).toLocaleString('en-US')}–300`);
-  // Every hit is drawn, the crossing one as two marks (each side of the origin, or each end of a Linear row).
+  // Every hit is drawn. The crossing one is one mark over the origin of a Circular drawing, and in Linear a mark at
+  // each end of the row: a fill and the border that leaves its cut at the record's end open.
   const drawn = await drawnHits(page, 'Search 1');
   expect(Object.keys(drawn).sort()).toEqual(outcome.hits.map(({ annotationId }) => annotationId).sort());
-  expect(drawn[crossing]).toBe(2);
+  expect(drawn[crossing]).toBe(mode === 'circular' ? 1 : 4);
 
   // The chips and a row click outline hits outside the Result, without a History step; All outlines nothing.
   const depth = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await expect(page.locator(OUTLINE)).toHaveCount(0);
   await section.getByRole('button', { name: 'origin600 (1)', exact: true }).click();
-  await expect(page.locator(OUTLINE)).toHaveCount(2);
+  await expect(page.locator(OUTLINE)).toHaveCount(drawn[crossing]);
   await expect(section.locator('[data-sequence-search-hit]')).toHaveCount(1);
   await section.getByRole('button', { name: 'All (4)', exact: true }).click();
   await expect(page.locator(OUTLINE)).toHaveCount(0);
@@ -149,18 +150,25 @@ test('Linear: a search of a circular record drawn whole draws a hit across the o
   test.setTimeout(600_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: readFileSync(HMMT, 'utf8') });
   await searchDrawsAtOnce(page, testInfo, 'linear');
-  // The crossing hit's two marks lie at the two ends of the record's row.
+  // The crossing hit's marks lie at the two ends of the record's row, none in its middle.
   const ends = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const svg = app.svgContainer.querySelector('svg');
     const hit = app.sequenceSearch.shownOutcome.hits.find((entry) => entry.query === 'origin600');
     const group = [...svg.querySelectorAll('g[data-gbdraw-annotation-id]')].find((entry) => entry.getAttribute('data-gbdraw-annotation-id') === hit.annotationId);
-    const marks = [...group.querySelectorAll('path, rect')].map((mark) => mark.getBoundingClientRect()).sort((left, right) => left.left - right.left);
+    const marks = [...group.querySelectorAll('path, rect')].map((mark) => mark.getBoundingClientRect());
     const record = [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map((feature) => feature.getBoundingClientRect());
-    return { first: marks[0].left, last: marks[1].right, recordLeft: Math.min(...record.map((box) => box.left)), recordRight: Math.max(...record.map((box) => box.right)) };
+    const recordLeft = Math.min(...record.map((box) => box.left));
+    const recordRight = Math.max(...record.map((box) => box.right));
+    const middle = 0.5 * (recordLeft + recordRight);
+    return {
+      first: Math.min(...marks.map((box) => box.left)), last: Math.max(...marks.map((box) => box.right)), recordLeft, recordRight,
+      overMiddle: marks.filter((box) => box.left < middle && box.right > middle).length,
+    };
   });
   expect(ends.first).toBeLessThan(ends.recordLeft + 40);
   expect(ends.last).toBeGreaterThan(ends.recordRight - 40);
+  expect(ends.overMiddle).toBe(0);
 });
 
 // With Use custom stack the search's set is drawn at once in front of the features, and the stack does not change.
