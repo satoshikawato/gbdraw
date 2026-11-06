@@ -92,6 +92,13 @@ pinned hash.
   200 MiB compressed or 512 MiB expanded.
 - The LOSAT release is checked by hash, not by signature; the hashes are as
   trustworthy as the gbdraw package that carries them.
+- Every file under `gbdraw/web/vendor/` is pinned by SHA-256
+  (`tools/immutable-web-assets.json`), and `python tools/verify_gui_offline.py
+  vendor-assets` refuses a download whose SHA-256 differs from the one
+  recorded in `gbdraw/_web_assets.py`. Dependabot reports advisories for the
+  vendored npm packages, which `tools/vendored-web-assets/package.json` lists,
+  but not for the vendored Pyodide runtime and wheels: no manifest that
+  Dependabot reads lists them at their vendored versions.
 
 ## Response
 

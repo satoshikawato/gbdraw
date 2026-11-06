@@ -27,7 +27,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from gbdraw._web_assets import (
-    ASSET_URLS,
+    ASSET_DOWNLOADS,
+    BROWSER_WASI_SHIM_FILES,
+    NPM_ADVISORY_MANIFEST,
+    PHOSPHOR_REGULAR_FILES,
     PYODIDE_CORE_FILES,
     PYODIDE_LOCAL_WHEELS,
     PYODIDE_RUNTIME_DIR,
@@ -37,6 +40,7 @@ from gbdraw._web_assets import (
     VENDOR_ROOT,
     VUE_RUNTIME_FILE,
     WEB_ROOT,
+    npm_advisory_manifest_text,
 )
 
 
@@ -63,16 +67,28 @@ def _parse_local_wheel_paths() -> tuple[Path, ...]:
     return PYODIDE_LOCAL_WHEELS
 
 
-def _download(url: str, target: Path) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
+def _download(key: str, directory: Path) -> Path:
+    """The file ``ASSET_DOWNLOADS[key]`` names, saved in ``directory`` after its SHA-256 matched the recorded one."""
+    download = ASSET_DOWNLOADS[key]
     request = urllib.request.Request(
-        url,
+        download.url,
         headers={
             "User-Agent": "gbdraw-offline-vendor/1.0",
         },
     )
+    target = directory / key
+    digest = hashlib.sha256()
     with urllib.request.urlopen(request, timeout=120) as response, target.open("wb") as dst:
-        shutil.copyfileobj(response, dst)
+        while chunk := response.read(1 << 20):
+            digest.update(chunk)
+            dst.write(chunk)
+    if digest.hexdigest() != download.sha256:
+        raise RuntimeError(
+            f"{download.url} has SHA-256 {digest.hexdigest()}, not the {download.sha256} that "
+            "gbdraw/_web_assets.py records; nothing was vendored. Record a new SHA-256 only "
+            "for a new URL, after checking the bytes against the upstream release."
+        )
+    return target
 
 
 def _extract_tgz_member(archive: Path, member_name: str, destination: Path) -> None:
@@ -86,32 +102,16 @@ def _extract_tgz_member(archive: Path, member_name: str, destination: Path) -> N
             shutil.copyfileobj(extracted, dst)
 
 
-def _extract_tgz_prefix(archive: Path, prefix: str, destination_dir: Path) -> None:
-    destination_dir.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive, "r:gz") as tar:
-        for member in tar.getmembers():
-            if not member.isfile() or not member.name.startswith(prefix):
-                continue
-            relative = Path(member.name).relative_to(prefix)
-            if relative.name == "":
-                continue
-            target = destination_dir / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            extracted = tar.extractfile(member)
-            if extracted is None:
-                continue
-            with target.open("wb") as dst:
-                shutil.copyfileobj(extracted, dst)
-
-
-def _extract_tgz_files(archive: Path, members: tuple[str, ...], destination_dir: Path) -> None:
+def _extract_tgz_files(archive: Path, folder: str, members: tuple[str, ...], destination_dir: Path) -> None:
     for member_name in members:
-        _extract_tgz_member(archive, f"package/files/{member_name}", destination_dir / member_name)
+        _extract_tgz_member(archive, f"package/{folder}/{member_name}", destination_dir / member_name)
 
 
 def vendor_assets() -> None:
     with tempfile.TemporaryDirectory(prefix="gbdraw-offline-assets-") as tmpdir:
         tmp = Path(tmpdir)
+        # Every download is checked before any vendored file is written.
+        downloaded = {key: _download(key, tmp) for key in ASSET_DOWNLOADS}
         for path in [
             (WEB_ROOT / VUE_RUNTIME_FILE).parent,
             PYODIDE_RUNTIME_DIR,
@@ -125,15 +125,9 @@ def vendor_assets() -> None:
         ]:
             path.mkdir(parents=True, exist_ok=True)
 
-        vue_archive = tmp / VUE_RUNTIME_FILE.name
-        _download(ASSET_URLS["vue"], vue_archive)
-        shutil.copy2(vue_archive, WEB_ROOT / VUE_RUNTIME_FILE)
+        shutil.copyfile(downloaded["vue"], WEB_ROOT / VUE_RUNTIME_FILE)
 
-        pyodide_archive = tmp / "pyodide-core.tar.bz2"
-        _download(ASSET_URLS["pyodide_core"], pyodide_archive)
-        pyodide_target = PYODIDE_RUNTIME_DIR
-        pyodide_target.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(pyodide_archive, "r:bz2") as tar:
+        with tarfile.open(downloaded["pyodide_core"], "r:bz2") as tar:
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
@@ -143,63 +137,48 @@ def vendor_assets() -> None:
                 extracted = tar.extractfile(member)
                 if extracted is None:
                     continue
-                with (pyodide_target / name).open("wb") as dst:
+                with (PYODIDE_RUNTIME_DIR / name).open("wb") as dst:
                     shutil.copyfileobj(extracted, dst)
 
         for asset_key, filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.items():
-            _download(ASSET_URLS[asset_key], PYODIDE_RUNTIME_DIR / filename)
+            shutil.copyfile(downloaded[asset_key], PYODIDE_RUNTIME_DIR / filename)
 
-        browser_wasi_archive = tmp / "browser_wasi_shim.tgz"
-        _download(ASSET_URLS["browser_wasi_shim"], browser_wasi_archive)
-        _extract_tgz_prefix(
-            browser_wasi_archive,
-            "package/dist",
+        _extract_tgz_files(
+            downloaded["browser_wasi_shim"],
+            "dist",
+            BROWSER_WASI_SHIM_FILES,
             VENDOR_ROOT / "browser_wasi_shim" / "dist",
         )
-
-        jspdf_archive = tmp / "jspdf.tgz"
-        _download(ASSET_URLS["jspdf"], jspdf_archive)
         _extract_tgz_member(
-            jspdf_archive,
+            downloaded["jspdf"],
             "package/dist/jspdf.umd.min.js",
             VENDOR_ROOT / "jspdf" / "jspdf.umd.min.js",
         )
-
-        svg2pdf_archive = tmp / "svg2pdf.tgz"
-        _download(ASSET_URLS["svg2pdf"], svg2pdf_archive)
         _extract_tgz_member(
-            svg2pdf_archive,
+            downloaded["svg2pdf"],
             "package/dist/svg2pdf.umd.min.js",
             VENDOR_ROOT / "svg2pdf.js" / "svg2pdf.umd.min.js",
         )
-
-        dompurify_archive = tmp / "dompurify.tgz"
-        _download(ASSET_URLS["dompurify"], dompurify_archive)
         _extract_tgz_member(
-            dompurify_archive,
+            downloaded["dompurify"],
             "package/dist/purify.min.js",
             VENDOR_ROOT / "dompurify" / "purify.min.js",
         )
-
-        phosphor_archive = tmp / "phosphor-icons.tgz"
-        _download(ASSET_URLS["phosphor"], phosphor_archive)
-        _extract_tgz_prefix(
-            phosphor_archive,
-            "package/src/regular",
+        _extract_tgz_files(
+            downloaded["phosphor"],
+            "src/regular",
+            PHOSPHOR_REGULAR_FILES,
             VENDOR_ROOT / "phosphor-icons" / "regular",
         )
-
-        inter_archive = tmp / "inter.tgz"
-        _download(ASSET_URLS["inter"], inter_archive)
-        _extract_tgz_files(inter_archive, UI_FONT_ASSETS["inter"], VENDOR_ROOT / "fonts" / "inter")
-
-        noto_sans_jp_archive = tmp / "noto-sans-jp.tgz"
-        _download(ASSET_URLS["noto_sans_jp"], noto_sans_jp_archive)
+        _extract_tgz_files(downloaded["inter"], "files", UI_FONT_ASSETS["inter"], VENDOR_ROOT / "fonts" / "inter")
         _extract_tgz_files(
-            noto_sans_jp_archive,
+            downloaded["noto_sans_jp"],
+            "files",
             UI_FONT_ASSETS["noto-sans-jp"],
             VENDOR_ROOT / "fonts" / "noto-sans-jp",
         )
+    (REPO_ROOT / NPM_ADVISORY_MANIFEST).parent.mkdir(parents=True, exist_ok=True)
+    (REPO_ROOT / NPM_ADVISORY_MANIFEST).write_text(npm_advisory_manifest_text(), encoding="utf-8", newline="\n")
 
 
 def _parse_wheel_name() -> str:
