@@ -178,6 +178,7 @@ from gbdraw.labels.circular_fit import (
     CircularLabelLayout,
     check_circular_label_fit,
     circular_label_outcome,
+    labels_not_placed,
 )
 from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
@@ -211,6 +212,7 @@ from gbdraw.layout.composition import (
 from gbdraw.layout.figure_size import (
     FigurePrimaryItem,
     LargerFigure,
+    MeasuredBase,
     check_figure_height,
     figure_size_excess,
     figure_size_refusal,
@@ -3650,13 +3652,14 @@ def _fitted_circular_pass(
 
     The first pass draws the configured radius, the auto figure. A smaller radius whose tracks cannot be drawn
     (``TRACK_LAYOUT``) is too small; any other error, and any error at the configured radius, is raised. A box the
-    smallest drawn map does not fit is refused with that map's parts (D-13).
+    smallest drawn map does not fit is refused with that map's parts (D-13). A radius whose labels were not placed
+    for lack of room (CAPACITY-STOP) left them out, and so does every smaller radius.
     """
 
     radius = float(cfg.canvas.circular.radius)
     first_base = max(1, round(radius))
 
-    def measure(base: int) -> tuple[float, _CircularPass] | None:
+    def measure(base: int) -> MeasuredBase[_CircularPass] | None:
         scaled = cfg if base == first_base else _scale_circular_cfg(cfg, scale=base / radius)
         try:
             built = _circular_pass(assemble, scaled)
@@ -3664,7 +3667,11 @@ def _fitted_circular_pass(
             if base < first_base and track_layout_reason(error) is not None:
                 return None
             raise
-        return figure_size_excess(applied_composition_plan(built.drawing), size), built
+        return MeasuredBase(
+            figure_size_excess(applied_composition_plan(built.drawing), size),
+            built,
+            left_out=labels_not_placed(_circular_label_layouts(built.drawing)),
+        )
 
     fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
     if not fit.fits:
@@ -4097,9 +4104,9 @@ def _checked_linear_build(
 
         target = figure_size.width.px
 
-        def measure(base: int) -> tuple[float, Drawing | LinearDiagramBuildResult]:
+        def measure(base: int) -> MeasuredBase[Drawing | LinearDiagramBuildResult]:
             built = build({LINEAR_SEQUENCE_WIDTH_PATH: base})
-            return applied_composition_plan(_linear_drawing(built)).content_bounds.width - target, built
+            return MeasuredBase(applied_composition_plan(_linear_drawing(built)).content_bounds.width - target, built)
 
         # The composed width grows about 1 px per px of sequence width.
         fit = fit_base_length(measure, first_base=max(1, math.floor(target)), slope=1.0)

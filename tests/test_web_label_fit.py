@@ -204,17 +204,17 @@ def test_each_fit_pass_sends_its_capacity_notice_while_the_caller_gets_the_kept_
     warnings stay those of the kept pass, once (D-16)."""
 
     from gbdraw.labels.circular_capacity import CircularLabelCapacity, check_label_capacity
-    from gbdraw.layout.figure_size import fit_base_length
+    from gbdraw.layout.figure_size import MeasuredBase, fit_base_length
 
     notices: list[str] = []
     events: list[str] = []
 
-    def measure(base: int) -> tuple[float, int]:
+    def measure(base: int) -> MeasuredBase[int]:
         events.append(f"pass {base} with {len(notices)} notices")
         ratio = round(base / 1000, 2)
         check_label_capacity("r", [CircularLabelCapacity(
             "circular_outer", LabelCapacityRecord(195, 14.0, ratio, ()), 1.0, "near")])
-        return base + 100.0 - 500.0, base
+        return MeasuredBase(base + 100.0 - 500.0, base)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

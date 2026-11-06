@@ -21,7 +21,7 @@ from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, f
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.figure_length import FigureLength, argparse_figure_length, parse_figure_length
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.figure_size import fit_base_length
+from gbdraw.layout.figure_size import MeasuredBase, fit_base_length
 from gbdraw.layout.composition import CompositionItem, CompositionRequest, LegendPlacement, plan_composition
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.composition import applied_composition_plan
@@ -129,15 +129,20 @@ def test_a_smaller_requested_canvas_keeps_the_content_size() -> None:
 # --- the base length resolver (D-09) ---
 
 
-def _fit(size_of_base, target: float, *, first_base: int | None = None, slope: float = 1.0):
-    """Fit a measured size to ``target`` as a mode does: the measure returns the excess over the target."""
+def _fit(size_of_base, target: float, *, first_base: int | None = None, slope: float = 1.0, left_out=None):
+    """Fit a measured size to ``target`` as a mode does: the measure returns the excess over the target, and whether
+    the pass left content out (``left_out(base)``, none by default)."""
 
     bases: list[int] = []
 
-    def measure(base: int) -> tuple[float, int] | None:
+    def measure(base: int) -> MeasuredBase[int] | None:
         bases.append(base)
+        # The walk measures at most 8 costly and 12 cheap bases, the first, and one middle base.
+        assert len(bases) <= 40, f"the walk measured more than 40 bases: {bases[:12]} ..."
         size = size_of_base(base)
-        return None if size is None else (size - target, base)
+        if size is None:
+            return None
+        return MeasuredBase(size - target, base, left_out=left_out is not None and left_out(base))
 
     first = max(1, math.floor(target)) if first_base is None else first_base
     return fit_base_length(measure, first_base=first, slope=slope), bases
@@ -237,13 +242,112 @@ def test_a_size_that_jumps_returns_the_widest_pass_under() -> None:
     assert len(bases) <= 8
 
 
+# The MjeNMV map with labels on both sides against a 180 mm box, measured per radius (CPython, 2026-11-06): from
+# radius 112 the labels are placed and the content is over the box, the slope flattening near 112; below it the
+# inner labels need more than 1.5 times the room, so the map's labels are not placed (CAPACITY-STOP) and the content
+# stays 91.3 px under. A pass with labels near 112 took over a minute.
+_MJENMV_EXCESS_WITH_LABELS = (
+    (112, 30.8), (115, 34.2), (120, 40.0), (130, 51.7), (140, 62.9), (150, 85.8), (160, 108.3), (180, 155.6),
+    (200, 202.7), (220, 249.5), (250, 320.0), (300, 436.7), (390, 646.6),
+)
+
+
+def _mjenmv_walk(shift_px: float):
+    """Fit the measured MjeNMV radii (above) to a box ``shift_px`` narrower than 180 mm; returns the fit and the radii
+    measured with labels."""
+
+    with_labels: list[int] = []
+
+    def measure(base: int) -> MeasuredBase[int]:
+        if base < 112:
+            return MeasuredBase(-91.3 + shift_px, base, left_out=True)
+        with_labels.append(base)
+        points = _MJENMV_EXCESS_WITH_LABELS
+        (b0, e0), (b1, e1) = next(
+            ((low, high) for low, high in zip(points, points[1:]) if base <= high[0]), points[-2:]
+        )
+        return MeasuredBase(e0 + (e1 - e0) * (base - b0) / (b1 - b0) + shift_px, base)
+
+    return fit_base_length(measure, first_base=390, slope=2.0), with_labels
+
+
+def test_passes_whose_labels_were_not_placed_do_not_steer_the_walk() -> None:
+    """A pass under the box only because its labels were left out (CAPACITY-STOP) says nothing about the size with
+    labels: the step comes from the passes with labels, and the walk ends once even a line twice as steep as the
+    first step reaches the box only where the labels are left out. It keeps the pass it kept before (the first one
+    under) after three passes with labels instead of five."""
+
+    fit, with_labels = _mjenmv_walk(0.0)
+    assert fit.fits and fit.base == 65
+    assert with_labels == [390, 138, 117]
+
+
+def test_a_radius_with_labels_just_above_the_capacity_stop_is_still_found() -> None:
+    """In a box 10 mm wider, radii from 112 with labels fit: the walk finds one within 3 px under, with four passes
+    with labels instead of six."""
+
+    fit, with_labels = _mjenmv_walk(-37.8)
+    assert fit.fits and fit.base >= 112 and -3.0 <= fit.excess_px <= 0.0
+    assert len(with_labels) <= 4
+
+
+def _stop_walk(stop: int, without_labels, with_labels, *, first_base: int):
+    """Fit a size that leaves the labels out below radius ``stop``; returns the fit and every radius measured."""
+
+    def size(base: int) -> float:
+        return without_labels(base) if base < stop else with_labels(base)
+
+    return _fit(size, 0.0, first_base=first_base, slope=2.0, left_out=lambda base: base < stop)
+
+
+def test_a_pass_without_labels_over_the_box_is_not_measured_again() -> None:
+    """Without labels the map reaches the box at radius 190, below the stop at 200, so passes without labels can be
+    over the box too. The walk keeps the widest of them under the box and measures no radius twice."""
+
+    fit, bases = _stop_walk(
+        200,
+        lambda base: 2.0 * (base - 190),
+        lambda base: 20 + 0.8 * (base - 200) if base <= 260 else 68 + 2.0 * (base - 260),
+        first_base=300,
+    )
+    assert fit.fits and fit.base == 189
+    assert len(set(bases)) == len(bases)
+
+
+def test_a_radius_with_labels_less_than_2_px_under_the_box_is_found() -> None:
+    """With labels the size reaches the box at radius 102, 0.5 px per px above the stop at 100: a step that aims
+    2 px under lands where the labels are left out, but the walk still tries where the line reaches the box."""
+
+    fit, bases = _stop_walk(
+        100,
+        lambda base: -50.0,
+        lambda base: -1.0 + 0.5 * (base - 100) if base <= 140 else 19 + 2.0 * (base - 140),
+        first_base=300,
+    )
+    assert fit.fits and fit.base >= 100 and -3.0 <= fit.excess_px <= 0.0
+
+
+def test_a_size_that_shrinks_faster_near_the_stop_still_fits_with_labels() -> None:
+    """With labels the size shrinks 1.2 px per px of radius above 200 but 2.5 near the stop at 150, so the line
+    through the passes above reaches the box below the stop while radii 150 to 153 fit. A line twice as steep as the
+    first step still reaches the box above the stop, so the walk goes on and finds one of them."""
+
+    fit, _bases = _stop_walk(
+        150,
+        lambda base: -60 + 2.0 * (base - 150),
+        lambda base: -8 + 2.5 * (base - 150) if base <= 200 else 117 + 1.2 * (base - 200),
+        first_base=390,
+    )
+    assert fit.fits and fit.base >= 150 and -3.0 <= fit.excess_px <= 0.0
+
+
 def test_only_the_kept_pass_warns_once() -> None:
     """D-16: warnings raised in a pass that is not kept do not reach the caller; the kept pass's arrive once."""
 
-    def measure(base: int) -> tuple[float, int]:
+    def measure(base: int) -> MeasuredBase[int]:
         warnings.warn(f"pass {base}", UserWarning)
         warnings.warn(f"pass {base} again", UserWarning)
-        return base + 100.0 - 500.0, base
+        return MeasuredBase(base + 100.0 - 500.0, base)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -253,9 +357,9 @@ def test_only_the_kept_pass_warns_once() -> None:
 
 
 def test_a_refused_fit_emits_no_warning() -> None:
-    def measure(base: int) -> tuple[float, int]:
+    def measure(base: int) -> MeasuredBase[int]:
         warnings.warn(f"pass {base}", UserWarning)
-        return base + 600.0 - 500.0, base
+        return MeasuredBase(base + 600.0 - 500.0, base)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -640,8 +744,8 @@ def test_tracks_that_do_not_fit_the_configured_radius_raise_as_before() -> None:
     assert str(sized.value) == str(auto.value)
 
 
-def _crowded_map():
-    """400 CDS labels at 16 pt on a 80 kb map: they need about 3.7 times the room, so they are not placed."""
+def _crowded_map(count: int = 400):
+    """``count`` CDS labels on a 80 kb map. 400 at 16 pt need about 3.7 times the room, so they are not placed."""
 
     from Bio.Seq import Seq
     from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -649,10 +753,11 @@ def _crowded_map():
 
     record = SeqRecord(Seq("ATGC" * 20000), id="SYN1", name="SYN1", description="crowded map")
     record.annotations.update(molecule_type="DNA", topology="circular")
-    for index in range(400):
-        start = index * 200
+    step = 80000 // count
+    for index in range(count):
+        start = index * step
         record.features.append(SeqFeature(
-            FeatureLocation(start, start + 150, strand=1 if index % 2 else -1), type="CDS",
+            FeatureLocation(start, start + step * 3 // 4, strand=1 if index % 2 else -1), type="CDS",
             qualifiers={"product": [f"DNA polymerase subunit {index:03d}"]},
         ))
     return [record]
@@ -683,6 +788,38 @@ def test_labels_not_placed_at_a_requested_size_offer_a_larger_figure() -> None:
     assert lines.index(line) == lines.index("  - or draw a Linear map (gbdraw linear).") - 1
     about = float(re.search(r"about ([\d.]+)mm", line)[1])
     assert about > 150 * 3.0
+
+
+def test_the_fit_steps_with_the_radii_whose_labels_were_placed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """120 labels at 10 pt are placed at the configured radius and not placed below about 128 px (CAPACITY-STOP). A
+    radius drawn without them is marked as leaving them out, so the walk stops after two radii with labels instead of
+    measuring radii just above 128."""
+
+    import gbdraw.api.diagram as diagram
+    from gbdraw.exceptions import LabelsDoNotFitError
+
+    passes: list[tuple[bool, bool]] = []
+    fit_base_length = diagram.fit_base_length
+
+    def recorded(measure, **kwargs):
+        def measured(base: int):
+            result = measure(base)
+            if result is not None:
+                drawn_labels = "DNA polymerase subunit" in result.built.drawing.tostring()
+                passes.append((result.left_out, drawn_labels))
+            return result
+
+        return fit_base_length(measured, **kwargs)
+
+    monkeypatch.setattr(diagram, "fit_base_length", recorded)
+    labels = {"labels.circular.scope": "outer", "labels.font_size.short": 10, "labels.font_size.long": 10}
+    with pytest.raises(LabelsDoNotFitError) as caught:
+        gbdraw.draw_circular(
+            _crowded_map(120), options=gbdraw.CircularOptions(config_overrides=labels, figure_width="130mm")
+        )
+    assert caught.value.report.larger_figure is not None
+    assert all(left_out != drawn_labels for left_out, drawn_labels in passes)
+    assert [left_out for left_out, _drawn_labels in passes] == [False, False, True]
 
 
 def test_the_larger_figure_estimate_adds_the_missing_room_to_each_requested_side() -> None:
