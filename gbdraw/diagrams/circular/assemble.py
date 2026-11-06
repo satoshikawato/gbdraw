@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Collection, Optional, Mapping, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Mapping, Sequence, TypeAlias, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -47,7 +47,6 @@ from ...configurators import (
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
-    LegendDrawingConfigurator,
     LegendMeasurement,
 )
 from ...configurators.bundle import DiagramConfigurators
@@ -55,7 +54,6 @@ from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
 from ...config.modify import with_config_overrides, with_fit_row_overrides
-from ...core.figure_length import RequestedFigureSize
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
@@ -103,7 +101,6 @@ from ...layout.composition import (
     CompositionPlan,
     CompositionRequest,
     DEFAULT_COMPOSITION_SPACING,
-    NO_CANVAS_PADDING_SIDES,
     CompositionSpacing,
     LegendPlacement,
     TitlePlacement,
@@ -3684,92 +3681,8 @@ def _assemble_circular_diagram_result(
     return _compose_circular_plot(plot, composition)
 
 
-def assemble_circular_diagram(
-    gb_record: SeqRecord,
-    canvas_config: CircularCanvasConfigurator,
-    gc_df: DataFrame,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    feature_config: FeatureDrawingConfigurator,
-    species: Optional[str],
-    strain: Optional[str],
-    plot_title: Optional[str],
-    legend_config: LegendDrawingConfigurator,
-    depth_df: DataFrame | None = None,
-    depth_config: DepthConfigurator | None = None,
-    depth_tracks: Sequence[DepthTrackData] | None = None,
-    depth_track_count_value: int | None = None,
-    conservation_tracks: Sequence[ConservationTrack] | None = None,
-    conservation_min_identity: float = 0.0,
-    circular_track_slots: list[CircularTrackSlot] | None = None,
-    circular_track_axis_index: int | None = None,
-    dinucleotide_dataframes: dict[str, DataFrame] | None = None,
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
-    definition_position: str = "center",
-    definition_profile: CircularDefinitionProfile = "full",
-    definition_group_id: str | None = None,
-    center_reserved_radius: float | None = None,
-    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
-    annotation_record_index: int = 0,
-    definition_record_count: int = 1,
-) -> tuple[Drawing, LegendMeasurement]:
-    """Assemble and compose a no-title Circular diagram.
-
-    This release-backed wrapper intentionally preserves its historical
-    signature and return tuple.  Internal callers that need authoritative
-    geometry or a plot title use :func:`_assemble_circular_diagram_result`.
-    """
-    result = _assemble_circular_diagram_result(
-        canvas_config,
-        DiagramConfigurators(
-            feature=feature_config,
-            gc=gc_config,
-            skew=skew_config,
-            legend=legend_config,
-            depth=depth_config,
-        ),
-        CircularRecordData(
-            gb_record=gb_record,
-            gc_df=gc_df,
-            depth_df=depth_df,
-            depth_tracks=depth_tracks,
-            depth_track_count_value=depth_track_count_value,
-            conservation_tracks=conservation_tracks,
-            conservation_min_identity=conservation_min_identity,
-            dinucleotide_dataframes=dinucleotide_dataframes,
-            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
-        ),
-        CircularTrackInputs(
-            circular_track_slots=circular_track_slots,
-            circular_track_axis_index=circular_track_axis_index,
-            annotations=annotations,
-            annotation_record_index=annotation_record_index,
-        ),
-        CircularPresentationInputs(
-            species=species,
-            strain=strain,
-            plot_title=plot_title,
-            definition_position=definition_position,
-            definition_profile=definition_profile,
-            definition_group_id=definition_group_id,
-            definition_record_count=definition_record_count,
-            center_reserved_radius=center_reserved_radius,
-        ),
-        CompositionInputs(
-            title_content=None,
-            title_placement=TitlePlacement.NONE,
-            requested_size=RequestedFigureSize(),
-            canvas_padding=NO_CANVAS_PADDING_SIDES,
-        ),
-    )
-    return result.drawing, result.legend_measurement
-
-
 __all__ = [
     "CircularAssemblyResult",
-    "assemble_circular_diagram",
     "add_record_on_circular_canvas",
     "build_circular_legend_table",
     "plan_circular_annotation_slots",

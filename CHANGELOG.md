@@ -125,6 +125,9 @@ write-up of a release.
   ends a Similarity alignment in one step that one Undo reverts. A Generate,
   `--session`, or Python render that would cut a moved record is refused; it
   drew the record's rows shifted by one x before.
+- Removed: `gbdraw.diagrams.circular.assemble_circular_diagram`, an internal assembler that no
+  code called. Draw a Circular diagram with `gbdraw.draw_circular` or the `gbdraw.api`
+  render functions such as `render_request`.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 
