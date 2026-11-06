@@ -396,6 +396,57 @@ const validateJob = (job, run, expected, repositoryApiPath) => {
   return job;
 };
 
+// Every job of one run attempt, through the bounded pagination.
+const collectAttemptJobs = ({ repositoryApiPath, runId, runAttempt, token, fetchImpl, expected }) => {
+  const jobsPath = `${repositoryApiPath}/actions/runs/${runId}/attempts/${runAttempt}/jobs`;
+  const jobParameters = new Map([['per_page', String(PER_PAGE)]]);
+  const jobsUrl = new URL(`${API_ORIGIN}${jobsPath}`);
+  jobParameters.forEach((value, name) => jobsUrl.searchParams.set(name, value));
+  return collectPaginated({
+    initialUrl: jobsUrl.toString(),
+    pathname: jobsPath,
+    immutableParameters: jobParameters,
+    arrayField: 'jobs',
+    token,
+    fetchImpl,
+    expected
+  });
+};
+
+/**
+ * The jobs of one attempt of a run, such as the attempt a gate job runs in
+ * (SELECTIVE_CI.md "Job times against their limits").
+ * @returns {Promise<object[]>} The API's job objects, each of that run.
+ */
+export const readRunAttemptJobs = async ({ repository, runId, runAttempt, token, fetchImpl = globalThis.fetch }) => {
+  const [owner, repo] = repositoryParts(repository);
+  const expected = { repository, runId, runAttempt };
+  if (!positiveInteger(runId) || !positiveInteger(runAttempt)) {
+    fail('INVALID_RUN_IDENTITY', 'Run ID and attempt must be positive integers.', { expected });
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    fail('MISSING_TOKEN', 'A GitHub token with Actions read access is required.', {
+      expected,
+      observed: { token: 'missing' }
+    });
+  }
+  if (typeof fetchImpl !== 'function') {
+    fail('MISSING_FETCH', 'A fetch implementation is required.', { expected });
+  }
+  const jobs = await collectAttemptJobs({
+    repositoryApiPath: `/repos/${owner}/${repo}`, runId, runAttempt, token, fetchImpl, expected
+  });
+  jobs.forEach((job) => {
+    if (!isObject(job) || job.run_id !== runId || typeof job.name !== 'string' || typeof job.status !== 'string') {
+      fail('MALFORMED_JOB', 'GitHub workflow job metadata is malformed or identity-mismatched.', {
+        expected,
+        observed: { runId: job?.run_id, name: boundedText(String(job?.name)) }
+      });
+    }
+  });
+  return jobs;
+};
+
 // Newest run first: by creation time, then run number, then run ID.
 const newestRunFirst = (left, right) => (
   Date.parse(right.created_at) - Date.parse(left.created_at)
@@ -532,15 +583,10 @@ export const verifyWorkflowEvidence = async ({
   });
   requireSuccessfulRun(currentRun, runExpected);
 
-  const jobsPath = `${repositoryApiPath}/actions/runs/${currentRun.id}/attempts/${currentRun.run_attempt}/jobs`;
-  const jobParameters = new Map([['per_page', String(PER_PAGE)]]);
-  const jobsUrl = new URL(`${API_ORIGIN}${jobsPath}`);
-  jobParameters.forEach((value, name) => jobsUrl.searchParams.set(name, value));
-  const jobs = await collectPaginated({
-    initialUrl: jobsUrl.toString(),
-    pathname: jobsPath,
-    immutableParameters: jobParameters,
-    arrayField: 'jobs',
+  const jobs = await collectAttemptJobs({
+    repositoryApiPath,
+    runId: currentRun.id,
+    runAttempt: currentRun.run_attempt,
     token,
     fetchImpl,
     expected: { ...runExpected, runId: currentRun.id, runAttempt: currentRun.run_attempt }
