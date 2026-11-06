@@ -17,6 +17,8 @@ import { createDefaultForm } from '../../gbdraw/web/js/services/session-active-c
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { labelCapacityRemedyText } from '../../gbdraw/web/js/services/label-fit.js';
 import { defaultSettingsContainers, installStoredSettings } from '../../gbdraw/web/js/services/config-field-readers.js';
+import { SETTINGS_SLICE } from '../../gbdraw/web/js/services/drawing/settings.js';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 test('the units are Python\'s, and an empty side shows px (the Owner, 2026-11-04)', () => {
@@ -103,9 +105,8 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
   assert.equal(field.figureWidthUnit.value, 'px');
   assert.equal(field.figureWidthAmount.value, '');
   assert.equal(field.figureSizeLine.value, '', 'no line while the drawing shows no Result');
-  // A unit change with no amount writes nothing.
+  // A unit change with no amount writes nothing, so no watch fires.
   field.changeFigureSize({ target: { value: 'mm' } }, 'width', 'unit');
-  changed();
   assert.equal(drawing.form.figure_width, null);
   assert.equal(field.figureWidthUnit.value, 'mm');
   field.changeFigureSize({ target: { value: '180' } }, 'width', 'amount');
@@ -152,7 +153,12 @@ test('a side that becomes Auto from outside the field shows px; a side the field
   const field = createFigureSizeField({ state: { activeDrawing: () => shownDrawing }, watch: (_source, callback) => watchers.push(callback), shownSize: () => null });
   const changed = () => watchers.forEach((callback) => callback());
   const shown = () => [field.figureWidthUnit.value, field.figureWidthAmount.value];
-  const type = (value, part = 'amount') => { field.changeFigureSize({ target: { value } }, 'width', part); changed(); };
+  // A watch fires when the form changes (Vue's watch does not fire for a write that changes nothing).
+  const type = (value, part = 'amount') => {
+    const before = [a.form.figure_width, b.form.figure_width];
+    field.changeFigureSize({ target: { value } }, 'width', part);
+    if (before.some((was, index) => was !== [a, b][index].form.figure_width)) changed();
+  };
   type('mm', 'unit');
   type('85');
   assert.equal(a.form.figure_width, '85mm');
@@ -181,8 +187,6 @@ test('a side that becomes Auto from outside the field shows px; a side the field
   type('');
   assert.equal(a.form.figure_width, null);
   assert.deepEqual(shown(), ['in', ''], 'a side the field cleared keeps its unit');
-  changed();
-  assert.deepEqual(shown(), ['in', '']);
   type('7');
   assert.equal(a.form.figure_width, '7in');
 });
@@ -283,5 +287,85 @@ test('a sized Result exports its SVG root in the requested unit, and the page ro
     assert.equal(serialized.at(-1).width, '680.3149606299213px', 'an Auto Result exports its root as shown');
   } finally {
     Object.assign(globalThis, saved);
+  }
+});
+
+// An Auto side whose unit the user picked without an amount writes nothing, so the form holds Auto before and after
+// Reset Settings. The field still returns to px: Reset Settings (SETTINGS_SLICE.reset) writes the form's keys, which
+// triggers the watch, and nothing the field wrote is waiting to be read back. Real Vue and the real slice reset.
+test('Reset Settings returns an Auto side whose unit was picked without an amount to px', async () => {
+  const Vue = loadPageVue();
+  globalThis.window = { Vue };
+  try {
+    const { handle, view } = SETTINGS_SLICE.create({}, () => ({ form: createDefaultForm() }));
+    const drawing = { id: 'circular', mode: 'circular', form: view.form };
+    const field = createFigureSizeField({ state: { activeDrawing: () => drawing }, watch: Vue.watch, shownSize: () => null });
+    const shown = () => [field.figureWidthUnit.value, field.figureWidthAmount.value, field.figureHeightUnit.value];
+    const settle = () => Vue.nextTick();
+    field.changeFigureSize({ target: { value: 'mm' } }, 'width', 'unit');
+    field.changeFigureSize({ target: { value: 'in' } }, 'height', 'unit');
+    await settle();
+    assert.deepEqual(shown(), ['mm', '', 'in']);
+    assert.equal(drawing.form.figure_width, null, 'a unit with no amount writes nothing');
+    SETTINGS_SLICE.reset(handle);
+    await settle();
+    assert.deepEqual(shown(), ['px', '', 'px'], 'Reset Settings');
+    // A side the field cleared keeps its unit until something else writes it: a second Reset is such a write.
+    field.changeFigureSize({ target: { value: 'cm' } }, 'width', 'unit');
+    field.changeFigureSize({ target: { value: '9' } }, 'width', 'amount');
+    await settle();
+    assert.deepEqual([drawing.form.figure_width, shown()[0]], ['9cm', 'cm']);
+    field.changeFigureSize({ target: { value: '' } }, 'width', 'amount');
+    await settle();
+    assert.deepEqual([drawing.form.figure_width, shown()[0]], [null, 'cm'], 'a side the field cleared keeps its unit');
+    SETTINGS_SLICE.reset(handle);
+    await settle();
+    assert.equal(shown()[0], 'px', 'Reset Settings after the field cleared the side');
+    // A Load or an Undo that installs a value, then one that installs Auto again, reads each in its own unit.
+    SETTINGS_SLICE.install(handle, { form: { ...createDefaultForm(), figure_width: '20cm' } });
+    await settle();
+    assert.deepEqual(shown().slice(0, 2), ['cm', '20']);
+    field.changeFigureSize({ target: { value: 'in' } }, 'width', 'unit');
+    await settle();
+    SETTINGS_SLICE.install(handle, { form: createDefaultForm() });
+    await settle();
+    assert.deepEqual(shown().slice(0, 2), ['px', ''], 'a Load or Undo of Auto');
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+// The watch reads the shown drawing through `state.activeDrawing()`, which reads the drawing map. Adding, deleting, or
+// restoring (Undo) another drawing replaces that map around the shown drawing, and the field's units must not move:
+// a unit picked without an amount and a side the field cleared both keep their unit. Real Vue, a shallowRef map.
+test('replacing the drawing map around the shown drawing keeps the picked and the cleared units', async () => {
+  const Vue = loadPageVue();
+  globalThis.window = { Vue };
+  try {
+    const a = { id: 'circular', mode: 'circular', form: Vue.reactive(createDefaultForm()) };
+    const b = { id: 'linear', mode: 'linear', form: Vue.reactive(createDefaultForm()) };
+    const drawings = Vue.shallowRef(new Map([[a.id, a], [b.id, b]]));
+    const activeId = Vue.ref(a.id);
+    const field = createFigureSizeField({ state: { activeDrawing: () => drawings.value.get(activeId.value) }, watch: Vue.watch, shownSize: () => null });
+    const units = () => [field.figureWidthUnit.value, field.figureHeightUnit.value];
+    const settle = () => Vue.nextTick();
+    field.changeFigureSize({ target: { value: 'mm' } }, 'width', 'unit');
+    field.changeFigureSize({ target: { value: 'cm' } }, 'height', 'unit');
+    field.changeFigureSize({ target: { value: '9' } }, 'height', 'amount');
+    await settle();
+    field.changeFigureSize({ target: { value: '' } }, 'height', 'amount');
+    await settle();
+    assert.deepEqual([a.form.figure_width, a.form.figure_height, ...units()], [null, null, 'mm', 'cm']);
+    drawings.value = new Map([[a.id, a]]);
+    await settle();
+    assert.deepEqual(units(), ['mm', 'cm'], 'another drawing deleted');
+    drawings.value = new Map([[a.id, a], [b.id, b]]);
+    await settle();
+    assert.deepEqual(units(), ['mm', 'cm'], 'its deletion undone');
+    activeId.value = b.id;
+    await settle();
+    assert.deepEqual(units(), ['px', 'px'], 'a drawing switch to an Auto side');
+  } finally {
+    delete globalThis.window;
   }
 });
