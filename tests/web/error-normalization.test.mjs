@@ -67,6 +67,17 @@ assert.equal(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', { se
   { stage: 'write', operation: 'session-save' }), { operation: 'session-save' }).context.sessionSizeKind, undefined);
 assert.match(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' }), { operation: 'session-load' }).summary,
   /^The Session exceeds the browser size limit\. Use a smaller Session file\.$/);
+// A gzip input over the expanded cap (gbdraw/io/input_text.py, services/file-content-cache.js) names the file and
+// the cap, and says to give the plain file; Retry would fail the same way. Python, which cannot name the file the
+// browser picked, sends the cap alone.
+const gzipTooLarge = normalizeUserFacingError(diagnosticError('INPUT_UNREADABLE',
+  { reason: 'GZIP_EXPANDED_SIZE', inputName: 'big\u0007genome.gbff.gz', limit: 512 }, { stage: 'read' }));
+assert.equal(gzipTooLarge.summary, 'An input could not be read. Replace or reselect it. File: big genome.gbff.gz. '
+  + 'gbdraw reads gzip files that expand to at most 512 MiB. Decompress the gzip file and choose the plain file.');
+assert.deepEqual(gzipTooLarge.actions, ['select-input']);
+assert.equal(normalizeUserFacingError({ code: 'INPUT_UNREADABLE', stage: 'render', context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512 } }).summary,
+  'An input could not be read. Replace or reselect it. gbdraw reads gzip files that expand to at most 512 MiB. '
+  + 'Decompress the gzip file and choose the plain file.');
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',

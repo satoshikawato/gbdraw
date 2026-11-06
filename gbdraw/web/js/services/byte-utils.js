@@ -193,14 +193,59 @@ export const GZIP_SIGNATURE = Object.freeze([0x1f, 0x8b]);
 export const isGzipBytes = (bytes) => GZIP_SIGNATURE.every((byte, index) => bytes[index] === byte);
 
 /**
+ * Hands each chunk of `stream` to `onChunk` until the stream ends, and rejects
+ * with `overCap()` once the chunks pass `maxBytes`, before that chunk is handed
+ * on or another is read. The one capped reader of an expanded stream: a gzip
+ * input file (`expandGzipBytes`) and a Session (services/session-file.js).
+ * @param {ReadableStream<Uint8Array>} stream
+ * @param {number} maxBytes
+ * @param {(chunk: Uint8Array) => void} onChunk
+ * @param {() => Error} overCap The error past the cap.
+ * @returns {Promise<void>}
+ */
+export const readCappedStream = async (stream, maxBytes, onChunk, overCap) => {
+  const reader = stream.getReader();
+  let byteCount = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      byteCount += value.byteLength;
+      if (byteCount > maxBytes) throw overCap();
+      onChunk(value);
+    }
+  } catch (error) {
+    await reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+};
+
+/**
  * The bytes a gzip file holds, or the bytes themselves when they are not gzip
  * or the browser has no `DecompressionStream` (Python reads a gzip input file
- * as well, so the Worker still draws it).
+ * as well, under its own cap, so the Worker still draws it). Expanding stops
+ * with `overCap()` past `maxBytes`.
  * @param {Uint8Array<ArrayBuffer>} bytes
+ * @param {number} maxBytes
+ * @param {() => Error} overCap
  * @returns {Promise<Uint8Array<ArrayBuffer>>}
  */
-export const expandGzipBytes = async (bytes) => {
+export const expandGzipBytes = async (bytes, maxBytes, overCap) => {
   if (!isGzipBytes(bytes) || typeof DecompressionStream !== 'function') return bytes;
-  const expanded = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(expanded).arrayBuffer());
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let length = 0;
+  await readCappedStream(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')), maxBytes, (chunk) => {
+    chunks.push(chunk);
+    length += chunk.byteLength;
+  }, overCap);
+  const expanded = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    expanded.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return expanded;
 };

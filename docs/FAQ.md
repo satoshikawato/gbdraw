@@ -130,7 +130,8 @@ explains ID matching, coordinates, phase, and translation.
 
 Yes. A `.gbff.gz`, `.fna.gz`, `.gff.gz`, or gzip TSV file is read as the plain
 file it holds, in the CLI, the Python API, and the web app; the first two bytes
-decide, not the name. See
+decide, not the name. A gzip file that expands to more than 512 MiB is refused:
+decompress it and give the plain file. See
 [input formats](REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files).
 
 ### My labels overlap. What should I do?

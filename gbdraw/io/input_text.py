@@ -7,6 +7,9 @@ spelling after they read it. A line that needs no repair reaches the parser as
 written, so the text is streamed, never held twice. An input file may be
 gzip-compressed, whatever its name: ``open_input_text`` and ``read_input_bytes``
 expand one, told by its first two bytes, and every reader opens its file there.
+A gzip input expands to at most ``MAX_EXPANDED_INPUT_BYTES``: a small file can
+hold gigabytes, so reading stops past the cap and names the file. A plain file
+has no cap.
 """
 
 from __future__ import annotations
@@ -15,13 +18,19 @@ import codecs
 import gzip
 import io
 import locale
+import os
 import re
 import zlib
 from collections.abc import Callable, Iterator
 from os import PathLike
-from typing import Literal, TextIO, TypeVar
+from typing import TYPE_CHECKING, Literal, TextIO, TypeVar
 
 from Bio.SeqFeature import SeqFeature
+
+from gbdraw.exceptions import InputFileError
+
+if TYPE_CHECKING:
+    from _typeshed import WriteableBuffer
 
 FlatFileFormat = Literal["genbank", "embl"]
 FLAT_FILE_FORMAT_NAMES: dict[FlatFileFormat, str] = {"genbank": "GenBank", "embl": "EMBL"}
@@ -62,7 +71,54 @@ GZIP_SIGNATURE = b"\x1f\x8b"
 # A reader spreads it into its except tuple: ``except (ValueError, *GZIP_ERRORS)``.
 GZIP_ERRORS = (EOFError, zlib.error, gzip.BadGzipFile)
 
+# The most bytes a gzip input file expands to (512 MiB, the Web's cap on an expanded
+# Session too). The Web reads it from the generated contracts.
+MAX_EXPANDED_INPUT_BYTES = 512 * 1024 * 1024
+_MIB = 1024 * 1024
+# Expanded bytes are buffered 128 KiB at a time: with the default 8 KiB, lines read slower than gzip.open's.
+_READ_CHUNK = 128 * 1024
+
 _Read = TypeVar("_Read")
+
+
+class _CappedExpansion(io.RawIOBase):
+    """The expanded bytes of a gzip file, refused once they pass ``limit``.
+
+    The one place a gzip input is expanded: ``open_input_text`` and
+    ``read_input_bytes`` read through it, so both stop at the same count.
+    """
+
+    def __init__(self, path: str | PathLike[str], limit: int) -> None:
+        super().__init__()
+        self._gzip = gzip.open(path, "rb")
+        self._path = os.fspath(path)
+        self._limit = limit
+        self._expanded = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: WriteableBuffer) -> int:
+        count = self._gzip.readinto(buffer)
+        self._expanded += count
+        if self._expanded > self._limit:
+            raise InputFileError(
+                f"{self._path}: this gzip file expands to more than {self._limit / _MIB:g} MiB "
+                f"({self._limit:,} bytes), the most gbdraw reads. Decompress it and give the plain file.",
+                diagnostic={"code": "INPUT_UNREADABLE", "reason": "GZIP_EXPANDED_SIZE", "limit": self._limit // _MIB},
+            )
+        return count
+
+    def close(self) -> None:
+        if not self.closed:
+            self._gzip.close()
+        super().close()
+
+
+def _expanded_gzip(path: str | PathLike[str], capped: bool) -> io.BufferedReader | gzip.GzipFile:
+    if not capped:
+        return gzip.open(path, "rb")
+    return io.BufferedReader(_CappedExpansion(path, MAX_EXPANDED_INPUT_BYTES), buffer_size=_READ_CHUNK)
 
 
 def is_gzip_file(path: str | PathLike[str]) -> bool:
@@ -73,19 +129,25 @@ def is_gzip_file(path: str | PathLike[str]) -> bool:
 
 
 def open_input_text(
-    path: str | PathLike[str], *, encoding: str = "utf-8", newline: str | None = None
+    path: str | PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    newline: str | None = None,
+    capped: bool = True,
 ) -> TextIO:
     """An input file opened as text, expanded when it is gzip-compressed.
 
     Every reader of an input file (sequence, annotation, table, depth, Session)
     opens it here, so a gzip file reads wherever a plain one does, streamed as a
     plain one is. Reading a gzip stream that is cut off or damaged raises one of
-    ``GZIP_ERRORS``. A sequence or annotation file is read through
-    :func:`read_sequence_text` instead.
+    ``GZIP_ERRORS``; reading past ``MAX_EXPANDED_INPUT_BYTES`` of it raises an
+    ``InputFileError`` that names the file. A Session file opts out with
+    ``capped=False``: its cap is the Web's. A sequence or annotation file is read
+    through :func:`read_sequence_text` instead.
     """
 
     if is_gzip_file(path):
-        return gzip.open(path, "rt", encoding=encoding, newline=newline)
+        return io.TextIOWrapper(_expanded_gzip(path, capped), encoding=encoding, newline=newline)
     return open(path, "r", encoding=encoding, newline=newline)
 
 
@@ -113,7 +175,7 @@ def read_input_bytes(path: str | PathLike[str]) -> bytes:
     """The bytes of an input file, expanded when it is gzip-compressed (see ``open_input_text``)."""
 
     if is_gzip_file(path):
-        with gzip.open(path, "rb") as handle:
+        with _expanded_gzip(path, capped=True) as handle:
             return handle.read()
     with open(path, "rb") as handle:
         return handle.read()
@@ -277,6 +339,7 @@ __all__ = [
     "GZIP_ERRORS",
     "GZIP_SIGNATURE",
     "LineStream",
+    "MAX_EXPANDED_INPUT_BYTES",
     "canonical_feature_type",
     "canonicalize_feature_types",
     "flat_file_format",
