@@ -12,7 +12,10 @@
   "none): Python's gbdraw.contract_shapes.read_spelling and the Web's readSpelling.",
   "requestTypes lists values of a named type of the canonical request description",
   "(gbdraw.session_request_codec.describe_canonical_request and the Web's generated",
-  "CANONICAL_REQUEST_DESCRIPTION), checked by both against that description's types."
+  "CANONICAL_REQUEST_DESCRIPTION), checked by both against that description's types.",
+  "A pattern in a vector's shape is read by each checker in its own dialect (Python's re, ECMA-262), so",
+  "those vectors use text both read alike. requestTypes check the pattern each side publishes: Python's,",
+  "and the ECMA-262 spelling of it that the generator writes for the Web."
  ],
  "types": {
   "Point": {
@@ -1529,6 +1532,80 @@
      "reason": "pattern"
     }
    ]
+  },
+  {
+   "id": "record-key-of-a-character-python-reads-as-a-space",
+   "type": "CanonicalRecord",
+   "value": {
+    "source": {
+     "kind": "genbank",
+     "resourceId": "record-1-genbank"
+    },
+    "selector": null,
+    "region": null,
+    "presentation": {
+     "label": null,
+     "subtitle": null,
+     "reverseComplement": false,
+     "gridRow": null,
+     "gridColumn": null
+    },
+    "recordKey": "\u001c",
+    "cardinality": "exactly_one",
+    "display": {
+     "isCircular": null,
+     "startCoordinate": null
+    }
+   },
+   "violations": [
+    {
+     "path": "value.recordKey",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "record-key-of-a-byte-order-mark",
+   "type": "CanonicalRecord",
+   "value": {
+    "source": {
+     "kind": "genbank",
+     "resourceId": "record-1-genbank"
+    },
+    "selector": null,
+    "region": null,
+    "presentation": {
+     "label": null,
+     "subtitle": null,
+     "reverseComplement": false,
+     "gridRow": null,
+     "gridColumn": null
+    },
+    "recordKey": "\ufeff",
+    "cardinality": "exactly_one",
+    "display": {
+     "isCircular": null,
+     "startCoordinate": null
+    }
+   },
+   "violations": []
+  },
+  {
+   "id": "annotation-color-hex-after-a-byte-order-mark",
+   "type": "CanonicalAnnotationColor",
+   "value": "\ufeff#abc",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "annotation-color-hex-before-a-character-python-reads-as-a-space",
+   "type": "CanonicalAnnotationColor",
+   "value": "#abc\u001c",
+   "violations": []
   }
  ]
 }

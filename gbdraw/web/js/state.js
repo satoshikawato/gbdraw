@@ -179,9 +179,9 @@ export const createDefaultEditorDraftState = () => ({
 
 const defaultEditorDraftState = createDefaultEditorDraftState();
 
-// App-level settings shared by both drawings: the LOSAT execution and thread
+// App-level settings shared by every drawing: the LOSAT execution and thread
 // settings (Session `ui.losatExecution`) and the rich feature popup
-// (`ui.richFeaturePopup`), PD-OI-086.
+// (`ui.richFeaturePopup`), PD-OI-090.
 const losatExecution = reactive(createDefaultLosatExecution());
 const richFeaturePopup = ref(true);
 
@@ -886,9 +886,9 @@ export const sessionOperationAvailability = (
 // values derived from them, under their former `state` names and kinds (a ref
 // stays a ref). Only the drawing holds them: a service reads them from the
 // drawing it is given, and an owner resolves `state.activeDrawing()` or the
-// drawing of the mode its action is about (PD-OI-086). Each mode has its own
-// drawing: an edit in one mode never reaches the other, and a mode switch
-// writes neither (R10). A drawing holds the complete default `form` and `adv`
+// drawing its action is about (PD-OI-090). Each drawing holds its own: an
+// edit in one drawing never reaches another, and a drawing switch writes
+// none (R10). A drawing holds the complete default `form` and `adv`
 // of its mode, so every reader stays valid; its `form.legend` and
 // `adv.plot_title_position` read and write its own mode's layout slot.
 // A drawing's settings as a new drawing and Reset Settings hold them, fresh

@@ -1,6 +1,6 @@
 // @ts-check
 // Session 46 keeps each diagram mode's settings and edits in its own slice
-// (`modes.circular`, `modes.linear`, PD-OI-086). This state-free module owns
+// (`modes.circular`, `modes.linear`, PD-OI-090). This state-free module owns
 // the registry's slice shape (mode-scoped-settings.generated.js, written from
 // gbdraw/web_support/mode_scoped_settings.py). Python alone splits a Session
 // 27-44 draft into the two slices (`split_draft_into_modes` in

@@ -71,7 +71,7 @@ export const detectedTopologyNote = (topology) => tm(topology === 'circular' || 
 const isRecordSelectorText = (selector) => typeof selector === 'string' && /^#[1-9]\d*$/.test(selector);
 
 // A record display row or draft names its source input and record. A drawing
-// holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a
+// holds the drafts of its own inputs (PD-OI-090): `circular`, or a
 // Linear File card's UID.
 /** @param {{ sourceUid?: string, selector: string }} identity */
 export const recordDisplayKey = ({ sourceUid, selector }) => {

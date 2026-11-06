@@ -94,11 +94,14 @@ const allShapes = (types) => {
   return found;
 };
 
-test('the generated request description is the data Python describes', () => {
+test('the generated request description is the data Python describes, its patterns spelled for ECMA-262', () => {
   const python = execFileSync('python', ['-c', [
-    'import json',
+    'import json, sys',
+    'sys.path.insert(0, "tools")',
+    'from generate_web_contracts import ecma_types',
     'from gbdraw.session_request_codec import describe_canonical_request',
-    'print(json.dumps(describe_canonical_request()))'
+    'description = describe_canonical_request()',
+    'print(json.dumps({**description, "types": ecma_types(description["types"])}))'
   ].join('\n')], { cwd: fileURLToPath(REPO), encoding: 'utf8', maxBuffer: 1 << 26 });
   assert.deepEqual(CANONICAL_REQUEST_DESCRIPTION, JSON.parse(python));
 });

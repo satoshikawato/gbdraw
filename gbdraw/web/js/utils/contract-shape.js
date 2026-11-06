@@ -9,7 +9,8 @@
  */
 /**
  * The value domain Python checks beyond the kind (gbdraw.contract_shapes.bounded):
- * `pattern` must match somewhere in a string.
+ * `pattern` must match somewhere in a string. A generated description spells
+ * it for ECMA-262, so it matches the text Python's `re` pattern matches.
  * @typedef {{ readonly minimum?: number, readonly exclusiveMinimum?: number, readonly maximum?: number }} NumberBounds
  * @typedef {{ readonly kind: 'integer' | 'number' } & NumberBounds} NumberShape
  * @typedef {{ readonly kind: 'string', readonly pattern?: string }} StringShape

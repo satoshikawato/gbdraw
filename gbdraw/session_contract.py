@@ -217,7 +217,7 @@ class GbdrawSession(_GbdrawSessionRequired, total=False):
     webFiles: SessionWebFiles
     ui: SessionUi
     orthogroupState: SessionOrthogroupState
-    # Each diagram mode's Web draft (PD-OI-086).
+    # Each diagram mode's Web draft (PD-OI-090).
     modes: ModeSlicesJson
     # The CLI options a Session 27-44 draft kept in ``config``.
     cliOptions: dict[str, object]

@@ -1,4 +1,4 @@
-"""The registry of mode-scoped Web settings (Session 46, PD-OI-086).
+"""The registry of mode-scoped Web settings (Session 46, PD-OI-090).
 
 Session 46 keeps every diagram setting and editor edit per diagram mode in
 ``modes.circular`` and ``modes.linear``. Each slice holds the Web draft parts

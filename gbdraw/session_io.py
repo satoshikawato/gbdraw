@@ -107,7 +107,7 @@ SESSION_FORMAT = "gbdraw-session"
 CURRENT_SESSION_VERSION = 51
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
-# ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
+# ``modes`` (PD-OI-090) and keys per-feature edits by source identity;
 # version 47 keys a slice's Legend color and stroke edits by the row key
 # (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
 # and adds each slice's ``adv.font_family`` (PD-OI-098); version 48 stores
