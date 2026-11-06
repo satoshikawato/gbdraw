@@ -25,6 +25,8 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ShowNotice } from './app-messages.js' */
+/** @import { ExportRootSize, ExportSnapshot, FontEmbedding } from '../services/export.js' */
+/** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 
 const { computed, reactive, ref } = window.Vue;
 
@@ -301,16 +303,24 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
 };
 
 /**
+ * @typedef {(state: WebState, drawing: DrawingState, options: { interactive: boolean }) => ExportSnapshot} CaptureSvgExport
+ *   The capture of the shown Result, taken before the export modules load.
+ * @typedef {(operation: string, payload: Record<string, unknown>) => Promise<{ result: unknown }>} RunHelperOperation
+ *   One operation of the Worker's helpers; `result` is the operation's reply.
+ * @typedef {{ EMBED_FONTS: string, PDF_FONTS: string, CHECK_EXPORT_LIMIT: string }} ExportHelperOperations
+ *   The names of the helper operations an export runs.
+ */
+
+/**
  * @typedef {object} ResultExportPorts
  * @property {WebState} state
  * @property {ErrorLogRef} errorLog
  * @property {ShowNotice} showNotice
- * @property {typeof import('../services/svg-serialization.js').captureSvgExport} captureSvgExport
- *   The capture of the shown Result before the export modules load.
+ * @property {CaptureSvgExport} captureSvgExport
  * @property {() => Promise<typeof import('../services/export.js')>} loadExportService
  *   The composition root's lazy load of the export modules.
- * @property {typeof import('../services/diagram-generation.js').runDiagramHelperOperation} runDiagramHelperOperation
- * @property {typeof import('../services/diagram-generation.js').DIAGRAM_HELPER_OPERATIONS} DIAGRAM_HELPER_OPERATIONS
+ * @property {RunHelperOperation} runDiagramHelperOperation
+ * @property {ExportHelperOperations} DIAGRAM_HELPER_OPERATIONS
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the shown Result belongs to.
  * @property {{ value: boolean }} embedInExports Embed font in exported SVG.
  * @property {{ value: InputSummary | null }} shownInputSummary Python's input summary of the shown Result.
@@ -376,22 +386,23 @@ export const createResultExport = ({
       /** @type {import('../services/export.js').ExportPorts} */
       const exportPorts = {
         embedFonts: state.loadedFonts.value.length > 0
-          ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
+          ? async (svg, kind) => /** @type {FontEmbedding} */ (
+            (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result)
           : null,
         embedInSvg: embedInExports.value,
-        resolvePdfFonts: async (runs, known) => (
+        resolvePdfFonts: async (runs, known) => /** @type {PdfFontsReply} */ ((
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
-        ).result,
+        ).result),
         checkExportLimit: async (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
           ...request, linearWrap: await linearWrap()
         }),
         // A Result drawn to a requested size states it in its SVG as the CLI writes it (Python's
         // `export_root_size`, through the export check); a Result drawn at Auto exports its root as shown.
-        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => (
+        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => /** @type {{ root: ExportRootSize }} */ ((
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
             format: 'svg', width, height, dpi: null, linearWrap: null, figureSize: exportedFigureSize
           })
-        ).result.root
+        ).result).root
       };
       /** @type {import('../services/export.js').ExportOutcome} */
       const result = await exportMethod(snapshot, exportPorts);
