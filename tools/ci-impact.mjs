@@ -8,8 +8,10 @@ import { pathToFileURL } from 'node:url';
 import {
   PromotionReadinessError,
   readDevTestsState,
+  readRunAttemptJobs,
   verifyWorkflowEvidence
 } from './check-promotion-readiness.mjs';
+import { formatJobTimeReport, jobTimes, workflowJobLimits } from './ci-impact-job-times.mjs';
 import {
   IMPACT_PLAN_SCHEMA_VERSION,
   PR_TREE_BASIS,
@@ -888,7 +890,36 @@ const checkDevState = async ({ env, fetchImpl, writeSummary }) => {
   }
 };
 
-const runGateCommand = async ({ env, stdout, appendFileImpl, fetchImpl }) => {
+// SELECTIVE_CI.md "Job times against their limits": with CI_IMPACT_WORKFLOW_FILE, the gate first
+// reports the jobs of its run attempt near their limits, also when it then fails. Report only.
+const reportJobTimes = async ({ env, cwd, stdout, writeSummary, fetchImpl }) => {
+  if (!env.CI_IMPACT_WORKFLOW_FILE) return;
+  let report;
+  try {
+    const limits = workflowJobLimits(readFileSync(resolve(cwd, env.CI_IMPACT_WORKFLOW_FILE), 'utf8'));
+    const jobs = await readRunAttemptJobs({
+      repository: env.CI_IMPACT_REPOSITORY,
+      runId: Number(env.GITHUB_RUN_ID),
+      runAttempt: Number(env.GITHUB_RUN_ATTEMPT),
+      token: env.GITHUB_TOKEN,
+      fetchImpl
+    });
+    report = formatJobTimeReport({ times: jobTimes({ jobs, limits }) });
+  } catch (error) {
+    report = formatJobTimeReport({
+      failure: evidenceFailure(typeof error?.code === 'string' ? error.code : 'UNEXPECTED_ERROR',
+        error?.message, env.GITHUB_TOKEN)
+    });
+  }
+  report.annotations.forEach((line) => stdout.write(`${line}\n`));
+  writeSummary(report.summary);
+};
+
+const runGateCommand = async ({ env, cwd, stdout, appendFileImpl, fetchImpl }) => {
+  const writeSummary = (content) => {
+    if (env.GITHUB_STEP_SUMMARY) appendOutput(env.GITHUB_STEP_SUMMARY, content, appendFileImpl);
+  };
+  await reportJobTimes({ env, cwd, stdout, writeSummary, fetchImpl });
   const plan = parseJsonEnvironment(env, 'CI_IMPACT_PLAN_JSON');
   const needs = parseJsonEnvironment(env, 'CI_IMPACT_NEEDS_JSON');
   const expectedProfile = requiredEnvironment(env, 'CI_IMPACT_EXPECTED_PROFILE');
@@ -899,9 +930,6 @@ const runGateCommand = async ({ env, stdout, appendFileImpl, fetchImpl }) => {
     knownJobs: knownJobsFor(expectedProfile),
     expected: { profile: expectedProfile, workflowSha: expectedWorkflowSha }
   });
-  const writeSummary = (content) => {
-    if (env.GITHUB_STEP_SUMMARY) appendOutput(env.GITHUB_STEP_SUMMARY, content, appendFileImpl);
-  };
   if (expectedProfile === 'pr') await checkDevState({ env, fetchImpl, writeSummary });
   stdout.write(`${JSON.stringify(result)}\n`);
   writeSummary(formatGateSummary({ plan, result }));
@@ -982,7 +1010,7 @@ export const runCiImpactCli = async ({
         verifyWorkflowEvidenceImpl
       });
     } else {
-      await runGateCommand({ env, stdout, appendFileImpl, fetchImpl });
+      await runGateCommand({ env, cwd, stdout, appendFileImpl, fetchImpl });
     }
     return 0;
   } catch (error) {
