@@ -400,9 +400,11 @@ test('no module but the pane-state service writes the popup', () => {
   assert.deepEqual(writers.map((file) => file.replaceAll('\\', '/')), ['services/settings-pane-state.js']);
   // A popup of the Result is dragged through a port that moves it; the drag holds no placement to write.
   const setup = readFileSync(join(root, 'app', 'app-setup.js'), 'utf8');
-  assert.match(setup, /moveTo: settingsPaneActions\.moveSettingsPopup/);
+  const popups = readFileSync(join(root, 'app', 'result-popups.js'), 'utf8');
+  assert.match(setup, /moveSettingsPopup: settingsPaneActions\.moveSettingsPopup/);
+  assert.match(popups, /moveTo: moveSettingsPopup,/);
   // OV-626: one resize rule for every popup of the Result, in the helper that drags them.
-  assert.match(setup, /\[featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag\]\.forEach\(\(popup\) => popup\.keepInWindow\(\)\)/);
+  assert.match(popups, /\[featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag\]\.forEach\(\(popup\) => popup\.keepInWindow\(\)\)/);
   assert.equal(modules.filter((file) => /addEventListener\('resize', keepPopupsInWindow\)/.test(readFileSync(join(root, file), 'utf8'))).length, 1);
   assert.doesNotMatch(readFileSync(join(root, 'app', 'settings-pane.js'), 'utf8'), /placePopupWithin/);
   // Only the four sections a drawn element opens can be shown beside the Result: the port takes no other key.

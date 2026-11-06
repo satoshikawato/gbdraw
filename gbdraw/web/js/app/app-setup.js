@@ -5,7 +5,7 @@
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
-/** @import { DiagramMode, DrawingState, LinearSeq, PopupPosition } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { NoticeLink } from './app-messages.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
@@ -27,7 +27,7 @@
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
-/** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
+/** @import { LinearComparisonEdge, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordIdentitySources, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
@@ -153,7 +153,6 @@ import { captureSvgExport, serializeCleanSvg } from '../services/svg-serializati
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
-import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from '../services/reset.js';
 import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
 import {
@@ -185,10 +184,12 @@ import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
+import { createResultPopups } from './result-popups.js';
+import {
+  createClickedFeatureCopy, createImportedComparisonChoice, createMissingBlastTsvChoice, createResultExport, createRunInfoCopy
+} from './result-actions.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
-/** @import { PopupPlacement } from '../utils/popup-bounds.js' */
-import { formatElapsedMs, reproducibilityLabel, shownRunInfoNoteParts } from './run-info.js';
+import { shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { pythonLegendRowKeys, stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
 /** @import { HistoryChangeLike } from '../services/setting-application.js' */
@@ -232,10 +233,10 @@ import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
 import { createFigureSizeField } from './figure-size-field.js';
 import {
-  figureGrowth, requestFigureSizeLeaves, requestedFigureSize, requestedLengthText, shownFigureSize
+  figureGrowth, requestFigureSizeLeaves, requestedLengthText, shownFigureSize
 } from '../services/figure-size-form.js';
 import { getSvgDimensions } from '../services/svg-dimensions.js';
-import { exportLinearWrap, requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
+import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
@@ -321,13 +322,11 @@ import {
 import {
   comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd, linearAxisRulerApplies
 } from '../mode-profiles.js';
-import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
-  IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
-  importedComparisonExecution,
-  resolveImportedComparisonAction
+  importedComparisonExecution
 } from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
@@ -362,7 +361,6 @@ import {
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
-/** @import { FeatureListRow } from './pairwise-match-popup.js' */
 /** @import { OrthogroupGroup } from './orthogroups.js' */
 /** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
 /** @import { DepthFileSlots, RawDepthTrackConfig, ReindexDepthSlotsOptions, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
@@ -5269,44 +5267,10 @@ export const createAppSetup = () => {
   };
   const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
   const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
-  const runInfoCopyStatus = ref('');
-  const exactReplayCopyStatus = ref('');
-
-  /** @param {{ elapsedMs?: unknown } | null | undefined} info */
-  const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
-  /** @param {{ reproducibility?: { level?: unknown } | null } | null | undefined} info */
-  const runInfoReproducibilityText = (info) => reproducibilityLabel(info?.reproducibility?.level);
-  const runInfoHasCliHelperFiles = computed(() =>
-    Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
-  );
-  /** @param {unknown} commandValue @param {{ value: string }} status */
-  const copyRunInfoCommand = async (commandValue, status) => {
-    const command = String(commandValue || '');
-    if (!command) return;
-    try {
-      await copyTextToClipboard(command);
-      const copied = t('Copied!');
-      status.value = copied;
-      setTimeout(() => {
-        if (status.value === copied) status.value = '';
-      }, 1600);
-    } catch (error) {
-      console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
-      const failed = t('Copy failed');
-      status.value = failed;
-      setTimeout(() => {
-        if (status.value === failed) status.value = '';
-      }, 2200);
-    }
-  };
-  const copyRunCommand = () => copyRunInfoCommand(
-    lastRunInfo.value?.sourceRecipe?.command || lastRunInfo.value?.command,
-    runInfoCopyStatus
-  );
-  const copyExactReplayCommand = () => copyRunInfoCommand(
-    lastRunInfo.value?.exactReplay?.command || lastRunInfo.value?.sessionCommand,
-    exactReplayCopyStatus
-  );
+  const {
+    runInfoCopyStatus, exactReplayCopyStatus, runInfoElapsedText, runInfoReproducibilityText, runInfoHasCliHelperFiles,
+    copyRunCommand, copyExactReplayCommand
+  } = createRunInfoCopy({ lastRunInfo });
 
   /** @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog */
   const catalogIssueError = (catalog) => {
@@ -5456,78 +5420,6 @@ export const createAppSetup = () => {
     return runAnalysis();
   };
 
-  // The buttons that choose what happens to a saved comparison, the History
-  // step of the choice, and the line that names the chosen one. English names
-  // it as the Session stores it (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the
-  // English text); another language names it by its button.
-  /** @type {Readonly<Record<string, string>>} */
-  const importedComparisonActionLabels = Object.freeze({
-    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
-    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
-    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
-  });
-  /** @param {DrawingState} drawing @param {string} action */
-  const chooseImportedComparisonAction = (drawing, action) => history.runUndoable(
-    importedComparisonActionLabels[action],
-    () => {
-      const outcome = resolveImportedComparisonAction({
-        intent: drawing.importedComparisonIntent,
-        action,
-        draftResolution: drawing.linearComparisonResolution.value
-      });
-      if (!outcome.ok) {
-        errorLog.value = normalizeUserFacingError(outcome.message, { operation: 'generate', stage: 'request-validation' });
-        return false;
-      }
-      if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
-        replaceLinearComparisonPlan(drawing, { mode: 'none', defaultSource: 'losat', edges: [] });
-      }
-      errorLog.value = null;
-      return true;
-    }
-  );
-  const inheritImportedComparison = () => {
-    const drawing = state.activeDrawing();
-    return chooseImportedComparisonAction(
-      drawing,
-      IMPORTED_COMPARISON_ACTIONS.INHERIT
-    );
-  };
-  const replaceImportedComparison = () => {
-    const drawing = state.activeDrawing();
-    return chooseImportedComparisonAction(
-      drawing,
-      IMPORTED_COMPARISON_ACTIONS.REPLACE
-    );
-  };
-  const clearImportedComparison = () => {
-    const drawing = state.activeDrawing();
-    return chooseImportedComparisonAction(
-      drawing,
-      IMPORTED_COMPARISON_ACTIONS.CLEAR
-    );
-  };
-  const importedComparisonNeedsResolution = computed(() => (
-    state.activeDrawing().importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-  ));
-  const importedComparisonActionText = computed(() => {
-    /** @type {string | null} */
-    const action = state.activeDrawing().importedComparisonIntent.action;
-    if (!action || uiLocale.value === SOURCE_LOCALE || !Object.hasOwn(importedComparisonActionLabels, action)) return action ?? '';
-    return tm(importedComparisonActionLabels[action]);
-  });
-  const importedComparisonCanInherit = computed(() => (
-    state.activeDrawing().importedComparisonIntent.disposition
-      === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY
-  ));
-  const importedComparisonCanReplace = computed(() => {
-    const drawing = state.activeDrawing();
-    return (
-      drawing.linearComparisonResolution.value.valid
-      && drawing.linearComparisonResolution.value.hasComparisonIntent
-    );
-  });
-
   const cancelGeneration = () => cancelRunAnalysis();
 
   similarityAlignmentActions = createSimilarityAlignmentActions({
@@ -5560,6 +5452,11 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
+  // The saved comparison's choice replaces a plan, which clears the alignment candidate: created once that owner exists.
+  const {
+    importedComparisonActionLabels, inheritImportedComparison, replaceImportedComparison, clearImportedComparison,
+    importedComparisonNeedsResolution, importedComparisonActionText, importedComparisonCanInherit, importedComparisonCanReplace
+  } = createImportedComparisonChoice({ state, runUndoable: history.runUndoable, errorLog, replaceLinearComparisonPlan });
   // Align at feature and Reset record positions write the record translations as one step without the
   // alignment plan, as a manual record movement does (PD-OI-028). The display starts Align at feature writes for the
   // records it rotated go into those records' drafts in the same step (R13: the root runs the candidate with the
@@ -5652,43 +5549,10 @@ export const createAppSetup = () => {
     },
     watch
   });
-  // Generate asks about Upload pairs without a file: each pair's row
-  // takes its own file; Skip sets the pairs still without one to No comparison
-  // in one History step, then Generates.
-  /** @type {{ show: boolean, drawingId: DrawingId, pairs: ReturnType<typeof missingUploadPairsToResolve> }} */
-  const missingBlastTsvDialog = reactive({ show: false, drawingId: state.activeDrawingId.value, pairs: [] });
-  const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
-  const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
-    () => msg('Set pairs to No comparison'),
-    () => {
-      // The pairs as they are now: Undo may have changed them while the dialog was open.
-      const drawing = state.drawingOf(missingBlastTsvDialog.drawingId);
-      const pairs = missingUploadPairsToResolve(drawing.linearComparisonResolution.value);
-      if (pairs.length) omitLinearComparisonPairs(drawing, pairs.map((entry) => entry.edgeKey));
-      dialogChoice.closeAfterChoice(closeMissingBlastTsvDialog);
-      return true;
-    },
-    closeMissingBlastTsvDialog
-  );
-  // The dialog's rows: the pairs it opened with, each with its file as it is now.
-  const missingBlastTsvRows = computed(() => {
-    const missing = new Set(/** @type {readonly LinearComparisonIssue[]} */ (state.drawingOf(missingBlastTsvDialog.drawingId).linearComparisonResolution.value?.errors || [])
-      .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
-    return missingBlastTsvDialog.pairs.map((pair) => {
-      const found = linearComparisonPairForEdgeKey(pair.edgeKey);
-      return { ...pair, queryUid: found?.queryUid || '', subjectUid: found?.subjectUid || '',
-        fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
-    });
+  const { missingBlastTsvDialog, missingBlastTsvRows, resolveMissingBlastTsv } = createMissingBlastTsvChoice({
+    state, withHistory: dialogChoice.withHistory, closeAfterChoice: dialogChoice.closeAfterChoice, choicePending: dialogChoice.pending,
+    omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis
   });
-  /** @param {'generate' | 'none' | 'cancel'} choice */
-  const resolveMissingBlastTsv = async (choice) => {
-    if (choice === 'generate') {
-      if (dialogChoice.pending.value) return undefined;
-      closeMissingBlastTsvDialog();
-      return runAnalysis();
-    }
-    return await setMissingBlastTsvPairsToNone(choice) === true ? runAnalysis() : undefined;
-  };
   // The Review alignment panel, docked in the Result workspace. The figure overlay and the
   // panel's strips show one draft: the root passes the draft to the preview's owner, which
   // returns the figure geometry the strips are laid out from.
@@ -6153,297 +6017,17 @@ export const createAppSetup = () => {
     decorationsMoved() || Boolean(Number(canvasPan.x) || Number(canvasPan.y)) || zoom.value !== 1 || canvasPadded(state.activeDrawing())
   ));
 
-  /** @param {Element | null} target */
-  const isInteractiveTarget = (target) => {
-    if (!target) return false;
-    return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
-  };
-
-  const FEATURE_POPUP_MARGIN = 12;
-  const FEATURE_POPUP_RICH_MIN_WIDTH = 360;
-  const FEATURE_POPUP_SIMPLE_MIN_WIDTH = 300;
-  const FEATURE_POPUP_MIN_HEIGHT = 220;
-  const PAIRWISE_MATCH_POPUP_MIN_WIDTH = 280;
-  const PAIRWISE_MATCH_POPUP_MIN_HEIGHT = 180;
-
-  /** @param {unknown} value @param {number} min @param {number} max */
-  const clampNumber = (value, min, max) => {
-    const safeMin = Number.isFinite(min) ? min : 0;
-    const safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return safeMin;
-    return Math.min(Math.max(numeric, safeMin), safeMax);
-  };
-
-  // A popup's size limits at its position, inside the popup bounds.
-  /**
-   * @param {number} left
-   * @param {number} top
-   * @param {number} desiredMinWidth
-   * @param {number} desiredMinHeight
-   */
-  const popupConstraints = (left, top, desiredMinWidth, desiredMinHeight) => {
-    const bounds = popupViewportBounds();
-    const availableWidth = Math.max(1, bounds.right - (FEATURE_POPUP_MARGIN * 2));
-    const availableHeight = Math.max(1, bounds.bottom - bounds.top - (FEATURE_POPUP_MARGIN * 2));
-    const minWidth = Math.min(desiredMinWidth, availableWidth);
-    const minHeight = Math.min(desiredMinHeight, availableHeight);
-    return {
-      minWidth,
-      minHeight,
-      maxWidth: Math.max(minWidth, bounds.right - left - FEATURE_POPUP_MARGIN),
-      maxHeight: Math.max(minHeight, bounds.bottom - top - FEATURE_POPUP_MARGIN)
-    };
-  };
-  // The popup's size follows the app-level rich popup preference.
-  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => popupConstraints(
-    left, top,
-    richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH,
-    FEATURE_POPUP_MIN_HEIGHT
-  );
-  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => popupConstraints(
-    left, top, PAIRWISE_MATCH_POPUP_MIN_WIDTH, PAIRWISE_MATCH_POPUP_MIN_HEIGHT
-  );
-
-  /**
-   * @param {PopupPlacement} pos
-   * @param {{ width: number, height: number }} size
-   * @param {{ maxHeight: number }} constraints
-   */
-  const popupStyle = (pos, size, constraints) => ({
-    top: `${pos.y}px`,
-    left: `${pos.x}px`,
-    maxHeight: `${pos.maxHeight > 0 ? Math.min(pos.maxHeight, constraints.maxHeight) : constraints.maxHeight}px`,
-    ...(size.width > 0 ? { width: `${size.width}px` } : {}),
-    ...(size.height > 0 ? { height: `${size.height}px` } : {})
+  const {
+    featurePopupStyle, pairwiseMatchPopupStyle, settingsPopupStyle, featurePopupDragging, pairwiseMatchPopupDragging,
+    settingsPopupDrag, keepSettingsPopupSectionOpen, pairwiseGroupView, selectPairwiseBlockOrthogroup, openPairwiseFeatureRow,
+    startFeaturePopupResize, startPairwiseMatchPopupResize
+  } = createResultPopups({
+    state, clickedFeature, clickedFeaturePos, clickedPairwiseMatch, clickedPairwiseMatchPos, richFeaturePopup,
+    featurePopupRef, featurePopupDrag, featurePopupSize, featurePopupResize,
+    pairwiseMatchPopupRef, pairwiseMatchPopupDrag, pairwiseMatchPopupSize, pairwiseMatchPopupResize,
+    selectedPairwiseBlockOrthogroupId, moveSettingsPopup: settingsPaneActions.moveSettingsPopup,
+    openFeatureEditorForFeature, markSelectedPairwiseMatch: featureActions.markSelectedPairwiseMatch
   });
-  const featurePopupStyle = computed(() => popupStyle(clickedFeaturePos, featurePopupSize, getFeaturePopupConstraints()));
-  const pairwiseMatchPopupStyle = computed(() => popupStyle(clickedPairwiseMatchPos, pairwiseMatchPopupSize, getPairwiseMatchPopupConstraints()));
-  // The settings popup has the width of its stylesheet and the height of its section.
-  const settingsPopupStyle = computed(() => {
-    const pos = state.settingsPopup.value;
-    return pos ? popupStyle(pos, { width: 0, height: 0 }, popupConstraints(pos.x, pos.y, 0, 0)) : null;
-  });
-
-  // OV-371: a popup opened at a clicked point was placed with an expected
-  // size; once rendered it is placed again with its own size and content height.
-  /**
-   * @param {PopupPosition} pos
-   * @param {HTMLElement | null} element
-   * @param {string} bodySelector
-   */
-  const placeRenderedPopup = (pos, element, bodySelector) => {
-    const point = pos.anchor;
-    pos.anchor = null;
-    if (!point || !element) return;
-    const body = element.querySelector(bodySelector);
-    const height = element.offsetHeight + (body ? body.scrollHeight - body.clientHeight : 0);
-    Object.assign(pos, placePopupNearPoint({ point, width: element.offsetWidth, height, bounds: popupViewportBounds() }));
-  };
-  watch(clickedFeature, () => placeRenderedPopup(clickedFeaturePos, featurePopupRef.value, '.feature-popup-body'), { flush: 'post' });
-  watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
-
-  // A press on the handle of an open popup drags it; every popup of the Result moves this way.
-  // A drag keeps the popup inside the popup bounds (OV-384: below the header), and a window that
-  // changed size moves an open popup the least distance back inside them (OV-626).
-  /**
-   * @param {object} popup
-   * @param {{ active: boolean, offsetX: number, offsetY: number }} popup.drag
-   * @param {() => boolean} popup.isOpen
-   * @param {(placement: PopupPlacement) => void} popup.moveTo The popup owner's move to a placement.
-   * @param {() => HTMLElement | null} popup.element
-   * @param {(target: Element) => boolean} popup.isHandle Whether a press on `target` drags the popup.
-   */
-  const createPopupDrag = ({ drag, isOpen, moveTo, element, isHandle }) => {
-    /** @param {MouseEvent} event */
-    const move = (event) => {
-      const popup = element();
-      if (!drag.active || !isOpen()) return;
-      moveTo(placePopupWithin({
-        x: event.clientX - drag.offsetX, y: event.clientY - drag.offsetY,
-        width: popup?.offsetWidth || 0, height: popup?.offsetHeight || 0, bounds: popupViewportBounds()
-      }));
-    };
-    const end = () => {
-      drag.active = false;
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', end);
-    };
-    /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
-    const start = (event) => {
-      const popup = element();
-      if (event.button !== 0 || !popup || !isOpen() || !isHandle(event.target)) return;
-      const rect = popup.getBoundingClientRect();
-      drag.active = true;
-      drag.offsetX = event.clientX - rect.left;
-      drag.offsetY = event.clientY - rect.top;
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', end);
-      event.preventDefault();
-    };
-    const keepInWindow = () => {
-      const popup = element();
-      if (!popup || !isOpen()) return;
-      const { left: x, top: y } = popup.getBoundingClientRect();
-      const within = placePopupWithin({ x, y, width: popup.offsetWidth, height: popup.offsetHeight, bounds: popupViewportBounds() });
-      if (within.x !== x || within.y !== y) moveTo(within);
-    };
-    return { start, end, keepInWindow };
-  };
-  const featurePopupDragging = createPopupDrag({
-    drag: featurePopupDrag,
-    isOpen: () => Boolean(clickedFeature.value),
-    moveTo: (placement) => { Object.assign(clickedFeaturePos, placement); },
-    element: () => featurePopupRef.value,
-    isHandle: (target) => !featurePopupResize.active && !isInteractiveTarget(target)
-  });
-  const pairwiseMatchPopupDragging = createPopupDrag({
-    drag: pairwiseMatchPopupDrag,
-    isOpen: () => Boolean(clickedPairwiseMatch.value),
-    moveTo: (placement) => { Object.assign(clickedPairwiseMatchPos, placement); },
-    element: () => pairwiseMatchPopupRef.value,
-    isHandle: (target) => !pairwiseMatchPopupResize.active && !isInteractiveTarget(target)
-  });
-  // The heading of the section in the settings popup is the popup's handle. It is the section's
-  // own disclosure heading, which does not fold the section there.
-  const SETTINGS_POPUP_HEADING = '#settings-popup > [data-settings-section] > details > summary';
-  /** @param {Element} target */
-  const isSettingsPopupHeading = (target) => !isInteractiveTarget(target) && Boolean(target.closest(SETTINGS_POPUP_HEADING));
-  const settingsPopupDrag = createPopupDrag({
-    drag: { active: false, offsetX: 0, offsetY: 0 },
-    isOpen: () => Boolean(state.settingsPopup.value),
-    moveTo: settingsPaneActions.moveSettingsPopup,
-    element: () => document.getElementById('settings-popup'),
-    isHandle: isSettingsPopupHeading
-  });
-  const keepPopupsInWindow = () => [featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag].forEach((popup) => popup.keepInWindow());
-  onMounted(() => window.addEventListener('resize', keepPopupsInWindow));
-  onUnmounted(() => window.removeEventListener('resize', keepPopupsInWindow));
-  /** @param {MouseEvent & { target: Element }} event A click in the popup; its target is an element. */
-  const keepSettingsPopupSectionOpen = (event) => {
-    if (isSettingsPopupHeading(event.target)) event.preventDefault();
-  };
-
-  const pairwiseBlockOrthogroups = computed(() => (
-    Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
-      ? clickedPairwiseMatch.value.blockOrthogroups
-      : []
-  ));
-  const selectedPairwiseBlockOrthogroup = computed(() => {
-    const selectedId = String(selectedPairwiseBlockOrthogroupId.value || '').trim();
-    if (!selectedId) return null;
-    return pairwiseBlockOrthogroups.value.find((/** @type {{ id?: unknown }} */ group) => String(group?.id || '').trim() === selectedId) || null;
-  });
-  // The group the match popup lists members of: a similarity-group ribbon's
-  // own group, or the group picked in a collinear block's gene-pair table.
-  const pairwiseGroupView = computed(() => (
-    clickedPairwiseMatch.value?.block
-      ? selectedPairwiseBlockOrthogroup.value
-      : clickedPairwiseMatch.value?.group || null
-  ));
-  /** @param {{ id?: unknown } | null | undefined} group */
-  const selectPairwiseBlockOrthogroup = (group) => {
-    const id = String(group?.id || '').trim();
-    selectedPairwiseBlockOrthogroupId.value = selectedPairwiseBlockOrthogroupId.value === id ? '' : id;
-  };
-  /** @param {FeatureListRow} row @param {MouseEvent} event */
-  const openPairwiseFeatureRow = (row, event) => {
-    if (!row?.canOpen || !row?.feature) return;
-    openFeatureEditorForFeature(row.feature, event);
-  };
-
-  // The bands of the open match popup carry `gbdraw-match-selected`; the SVG
-  // owner marks them from its band indexes (OV-937).
-  watch(clickedPairwiseMatch, (/** @type {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown } | null} */ match) => {
-    selectedPairwiseBlockOrthogroupId.value = '';
-    featureActions.markSelectedPairwiseMatch(match);
-  });
-
-  /** @param {MouseEvent} event */
-  const onPairwiseMatchPopupResize = (event) => {
-    if (!pairwiseMatchPopupResize.active) return;
-    const constraints = getPairwiseMatchPopupConstraints(clickedPairwiseMatchPos.x, clickedPairwiseMatchPos.y);
-    const nextWidth = pairwiseMatchPopupResize.startWidth + (event.clientX - pairwiseMatchPopupResize.startX);
-    const nextHeight = pairwiseMatchPopupResize.startHeight + (event.clientY - pairwiseMatchPopupResize.startY);
-    pairwiseMatchPopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
-    pairwiseMatchPopupSize.height = clampNumber(nextHeight, constraints.minHeight, constraints.maxHeight);
-    event.preventDefault();
-  };
-
-  const endPairwiseMatchPopupResize = () => {
-    if (!pairwiseMatchPopupResize.active) return;
-    pairwiseMatchPopupResize.active = false;
-    document.removeEventListener('mousemove', onPairwiseMatchPopupResize);
-    document.removeEventListener('mouseup', endPairwiseMatchPopupResize);
-  };
-
-  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
-  const startPairwiseMatchPopupResize = (event) => {
-    if (event.button !== 0) return;
-    if (!clickedPairwiseMatch.value) return;
-    const popup = pairwiseMatchPopupRef.value;
-    if (!popup) return;
-    const rect = popup.getBoundingClientRect();
-    const constraints = getPairwiseMatchPopupConstraints(rect.left, rect.top);
-
-    pairwiseMatchPopupDragging.end();
-
-    clickedPairwiseMatchPos.maxHeight = 0;
-    pairwiseMatchPopupResize.active = true;
-    pairwiseMatchPopupResize.startX = event.clientX;
-    pairwiseMatchPopupResize.startY = event.clientY;
-    pairwiseMatchPopupResize.startWidth = clampNumber(rect.width, constraints.minWidth, constraints.maxWidth);
-    pairwiseMatchPopupResize.startHeight = clampNumber(rect.height, constraints.minHeight, constraints.maxHeight);
-    pairwiseMatchPopupSize.width = pairwiseMatchPopupResize.startWidth;
-    pairwiseMatchPopupSize.height = pairwiseMatchPopupResize.startHeight;
-    document.addEventListener('mousemove', onPairwiseMatchPopupResize);
-    document.addEventListener('mouseup', endPairwiseMatchPopupResize);
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  /** @param {MouseEvent} event */
-  const onFeaturePopupResize = (event) => {
-    if (!featurePopupResize.active) return;
-    const constraints = getFeaturePopupConstraints(clickedFeaturePos.x, clickedFeaturePos.y);
-    const nextWidth = featurePopupResize.startWidth + (event.clientX - featurePopupResize.startX);
-    const nextHeight = featurePopupResize.startHeight + (event.clientY - featurePopupResize.startY);
-    featurePopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
-    featurePopupSize.height = clampNumber(nextHeight, constraints.minHeight, constraints.maxHeight);
-    event.preventDefault();
-  };
-
-  const endFeaturePopupResize = () => {
-    if (!featurePopupResize.active) return;
-    featurePopupResize.active = false;
-    document.removeEventListener('mousemove', onFeaturePopupResize);
-    document.removeEventListener('mouseup', endFeaturePopupResize);
-  };
-
-  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
-  const startFeaturePopupResize = (event) => {
-    if (event.button !== 0) return;
-    if (!clickedFeature.value) return;
-    const popup = featurePopupRef.value;
-    if (!popup) return;
-    const rect = popup.getBoundingClientRect();
-    const constraints = getFeaturePopupConstraints(rect.left, rect.top);
-
-    featurePopupDragging.end();
-
-    clickedFeaturePos.maxHeight = 0;
-    featurePopupResize.active = true;
-    featurePopupResize.startX = event.clientX;
-    featurePopupResize.startY = event.clientY;
-    featurePopupResize.startWidth = clampNumber(rect.width, constraints.minWidth, constraints.maxWidth);
-    featurePopupResize.startHeight = clampNumber(rect.height, constraints.minHeight, constraints.maxHeight);
-    featurePopupSize.width = featurePopupResize.startWidth;
-    featurePopupSize.height = featurePopupResize.startHeight;
-    document.addEventListener('mousemove', onFeaturePopupResize);
-    document.addEventListener('mouseup', endFeaturePopupResize);
-    event.preventDefault();
-    event.stopPropagation();
-  };
 
   /** @param {unknown} value */
   const normalizeSessionTitle = (value) => {
@@ -6480,121 +6064,17 @@ export const createAppSetup = () => {
     }
   );
 
-  // The popup header names the gene (else the feature label), then
-  // its product, then "<record ID> · <location>" with grouped digits (parts
-  // joined by "; ", since a grouped number holds a comma), all from payload
-  // fields only.
-  const clickedFeatureHeading = computed(() => {
-    const cf = clickedFeature.value;
-    const title = String(cf?.gene || cf?.label || '');
-    return { title, product: cf?.product && cf.product !== title ? cf.product : '' };
+  const {
+    clickedFeatureHeading, clickedFeatureSummary, copyClickedFeatureDetails, copyClickedFeatureQualifiers
+  } = createClickedFeatureCopy({ clickedFeature });
+
+  const {
+    downloadText, canRetryInteractiveSvgExport, downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF
+  } = createResultExport({
+    state, errorLog, showNotice, captureSvgExport, loadExportService, runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS,
+    displayedArtifactDrawing: historySnapshots.displayedArtifactDrawing, embedInExports: fontSettings.embedInExports,
+    shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest, awaitLinearRecordDiscovery, committedLinearRecordsOf
   });
-  const clickedFeatureSummary = computed(() => {
-    const cf = clickedFeature.value;
-    const location = String(cf?.location || '').replaceAll(', ', '; ')
-      .replace(/\d{4,}/g, (digits) => Number(digits).toLocaleString('en-US'));
-    return [cf?.recordId, location].filter(Boolean).join(' · ');
-  });
-
-  // One Copy per tab: the header lines and the rows, or every qualifier.
-  const copyClickedFeatureDetails = () => {
-    const cf = clickedFeature.value;
-    if (!cf) return;
-    const { title, product } = clickedFeatureHeading.value;
-    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((/** @type {{ label: string, value: string }} */ row) => `${row.label}: ${row.value}`)]
-      .filter(Boolean).join('\n'));
-  };
-  const copyClickedFeatureQualifiers = () => {
-    const rows = clickedFeature.value?.qualifierRows || [];
-    copyTextToClipboard(rows.flatMap((/** @type {{ key: string, values: string[] }} */ row) => row.values.map((value) => `/${row.key}="${value}"`)).join('\n'));
-  };
-
-  /** @param {unknown} filename @param {unknown} text @param {string} [type] */
-  const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
-    const value = String(text ?? '');
-    if (!value) return;
-    downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
-  };
-
-  let latestExportOperation = 0;
-  const failedInteractiveSvgExport = ref(null);
-  const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
-    && errorLog.value === failedInteractiveSvgExport.value));
-  /** @param {'downloadSVG' | 'downloadInteractiveSVG' | 'downloadPNG' | 'downloadPDF'} methodName @param {string} operation */
-  const runExportAction = async (methodName, operation) => {
-    const operationId = ++latestExportOperation;
-    const previousError = errorLog.value;
-    try {
-      const snapshot = captureSvgExport(state, historySnapshots.displayedArtifactDrawing(), { interactive: methodName === 'downloadInteractiveSVG' });
-      const exportService = await loadExportService();
-      const exportMethod = exportService?.[methodName];
-      if (typeof exportMethod !== 'function') {
-        throw new Error('The export service did not provide the requested action.');
-      }
-      // Custom fonts in exports (D-05, D-13): the Worker holds the fonts of
-      // this page, so only a page with a loaded font embeds. SVG and
-      // Interactive SVG follow Embed font in exported SVG; a PNG always draws
-      // with the fonts, and a PDF always registers the faces its text uses.
-      // The size check of a PNG or PDF reads the exported Result's wrap
-      // (D-52, D-55): Python reads its stored leaf, and decides from it
-      // whether a record is cut, and the row length it advises. A loaded
-      // Result has no input summary: its records are discovered first, and
-      // Python crops each by the region its request drew (D-70, D-73).
-      const exportedDrawing = historySnapshots.displayedArtifactDrawing();
-      const exportedSummary = shownInputSummary.value ?? undefined;
-      const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
-      const exportedRequest = shownCommittedRequest(exportedDrawing);
-      const exportedFigureSize = exportedRequest ? requestedFigureSize(exportedRequest) : null;
-      const linearWrap = () => exportLinearWrap({
-        leaf: exportedWrapLeaf,
-        summary: exportedSummary,
-        discoverRecords: async () => {
-          await awaitLinearRecordDiscovery(exportedDrawing);
-          return committedLinearRecordsOf(exportedDrawing);
-        }
-      });
-      /** @type {import('../services/export.js').ExportPorts} */
-      const exportPorts = {
-        embedFonts: state.loadedFonts.value.length > 0
-          ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
-          : null,
-        embedInSvg: fontSettings.embedInExports.value,
-        resolvePdfFonts: async (runs, known) => (
-          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
-        ).result,
-        checkExportLimit: async (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
-          ...request, linearWrap: await linearWrap()
-        }),
-        // A Result drawn to a requested size states it in its SVG as the CLI writes it (Python's
-        // `export_root_size`, through the export check); a Result drawn at Auto exports its root as shown.
-        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => (
-          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
-            format: 'svg', width, height, dpi: null, linearWrap: null, figureSize: exportedFigureSize
-          })
-        ).result.root
-      };
-      /** @type {import('../services/export.js').ExportOutcome} */
-      const result = await exportMethod(snapshot, exportPorts);
-      if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
-      if (result.fontWarnings.length > 0) {
-        showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
-      }
-      return result;
-    } catch (error) {
-      const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
-      if (operationId !== latestExportOperation || errorLog.value !== previousError) return { status: 'stale' };
-      errorLog.value = normalized;
-      failedInteractiveSvgExport.value = methodName === 'downloadInteractiveSVG' ? normalized : null;
-      return { status: 'error', error: normalized };
-    }
-  };
-
-  const downloadSVG = () => runExportAction('downloadSVG', 'export-svg');
-  const downloadInteractiveSVG = () => (
-    runExportAction('downloadInteractiveSVG', 'export-svg')
-  );
-  const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
-  const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   // The list under the popup's Legend name: the color-rule Legend groups of
   // the clicked feature's type, by name (PD-OI-061 revision 4). Each is shown

@@ -5,7 +5,7 @@ import test from 'node:test';
 const read = (path) => fs.readFileSync(new URL(`../../gbdraw/web/js/${path}`, import.meta.url), 'utf8');
 
 test('clickedFeatureSummary shows only the location the popup payload carries', () => {
-  const source = read('app/app-setup.js');
+  const source = read('app/result-actions.js');
   const start = source.indexOf('const clickedFeatureSummary = computed(');
   assert.notEqual(start, -1);
   const body = source.slice(start, source.indexOf('\n\n', start));

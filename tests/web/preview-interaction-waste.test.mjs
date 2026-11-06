@@ -507,13 +507,16 @@ test('OV-937: the open match popup marks its bands from the band index', () => {
   local.actions.dispose();
 });
 
-test('OV-937: the popup watch of the composition root leaves the bands to the SVG owner', async () => {
-  const source = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+test('OV-937: the match popup\'s watch leaves the bands to the SVG owner', async () => {
+  const source = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'result-popups.js'), 'utf8');
   const start = source.lastIndexOf('watch(clickedPairwiseMatch,', source.indexOf("selectedPairwiseBlockOrthogroupId.value = '';"));
   assert.ok(start > 0);
   const watchSource = source.slice(start, source.indexOf('\n  });', start));
-  assert.match(watchSource, /featureActions\.markSelectedPairwiseMatch\(match\)/);
+  assert.match(watchSource, /markSelectedPairwiseMatch\(match\)/);
   assert.doesNotMatch(watchSource, /querySelectorAll/);
+  // The composition root passes the SVG owner's mark as the port.
+  const setup = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /markSelectedPairwiseMatch: featureActions\.markSelectedPairwiseMatch/);
 });
 
 test('OV-935: the Review alignment finds each candidate through one identity index', () => {
