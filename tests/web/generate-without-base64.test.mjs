@@ -39,6 +39,7 @@ const { encodeSessionResources } = await import('../../gbdraw/web/js/services/se
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+const backing = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { serializeActiveRenderFiles } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
@@ -79,6 +80,22 @@ test('The Worker receives the bytes of a file-backed descriptor', async () => {
   const prepared = await createDiagramResourceTransport().prepare({ request: request('src'), resources: { src: descriptor } });
   assert.equal(prepared.stagedResources.length, 1);
   assert.equal(Buffer.from(prepared.stagedResources[0].bytes).toString('utf8'), '>x\nACGTACGT\n');
+});
+
+test('A second Generate describes a view of a file-backed resource under its shown name with its bytes', async () => {
+  // After Generate 1, LOSAT conservation binds each FASTA as a view over the committed,
+  // file-backed resource, shown under the name the user chose.
+  const bytes = new TextEncoder().encode('>s\nACGT\n');
+  const id = 'conservation-losat-fasta-files-1';
+  const committed = backing.fileBackedDescriptor({ kind: 'conservation-fasta-file', name: `${id}-phage2.fasta`,
+    type: '', size: bytes.byteLength, lastModified: 0 }, async () => bytes);
+  const view = backing.createSessionResourceFileView(backing.adoptCurrentSessionResources({ [id]: committed }), id, { name: 'phage2.fasta' });
+  const { descriptor } = await generateDescriptor(view);
+  assert.equal(descriptor.name, 'phage2.fasta');
+  assert.ok(backing.fileBackedReaderOf(descriptor), 'the renamed descriptor keeps its reader');
+  const adopted = adoptRuntimeCanonicalSession({ renderRequest: request('src'), resources: { src: descriptor }, webFiles: {} });
+  const prepared = await createDiagramResourceTransport().prepare({ request: request('src'), resources: adopted.resources });
+  assert.equal(Buffer.from(prepared.stagedResources[0].bytes).toString('utf8'), '>s\nACGT\n');
 });
 
 test('Save encodes a File Generate described, once, under the committed ID', async () => {

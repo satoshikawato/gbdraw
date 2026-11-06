@@ -10,6 +10,7 @@ import {
   createSessionResourceFileView,
   fileBackedDescriptor,
   fileBackedReaderOf,
+  renamedResourceDescriptor,
   resourcePayloadKey,
   sessionResourceSource
 } from './session-resource-backing.js';
@@ -91,15 +92,26 @@ const sameEncodedPayload = (left, right) => (
 );
 
 /**
- * The descriptor under another name; a file-backed one stays file-backed.
- * @param {RawSessionResourceDescriptor} descriptor
- * @param {string} name
- * @returns {RawSessionResourceDescriptor}
+ * A committed resource of a Save and the candidate that reads its bytes.
+ * @typedef {{ id: string, descriptor: RawSessionResourceDescriptor, candidate: ResourceCandidate }} CommittedPayload
  */
-const renamedDescriptor = (descriptor, name) => {
-  const readFile = fileBackedReaderOf(descriptor);
-  const fields = { ...descriptor, name };
-  return readFile ? fileBackedDescriptor(/** @type {typeof fields & { type: string, size: number, lastModified: number }} */ (fields), readFile) : fields;
+/**
+ * The ID of the first of `earlier` whose bytes equal `entry`'s, or null (D-228).
+ * Two encoded texts compare as text, with no read or hash; when either is
+ * file-backed, the content identities of their bytes compare.
+ * @param {readonly CommittedPayload[]} earlier
+ * @param {CommittedPayload} entry
+ * @param {(candidate: ResourceCandidate) => Promise<string>} identityOf
+ * @returns {Promise<string | null>}
+ */
+const firstEqualPayload = async (earlier, entry, identityOf) => {
+  for (const other of earlier) {
+    const equal = fileBackedReaderOf(other.descriptor) || fileBackedReaderOf(entry.descriptor)
+      ? await identityOf(other.candidate) === await identityOf(entry.candidate)
+      : other.descriptor.encoding === entry.descriptor.encoding && other.descriptor.data === entry.descriptor.data;
+    if (equal) return other.id;
+  }
+  return null;
 };
 
 // A reference is replaced by another string id, so the rewritten value has the shape of `value`.
@@ -388,7 +400,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
         name = `${id}-${safeResourceLeaf(metadata.name)}`;
       }
       if (descriptor) {
-        resources[id] = safePreferred ? descriptor : renamedDescriptor(descriptor, String(name));
+        resources[id] = safePreferred ? descriptor : renamedResourceDescriptor(descriptor, String(name));
       } else {
         // Bytes read here are encoded with the other files when the Session is written (`encodeSessionResources`).
         const bytes = await bytesFor(candidate);
@@ -410,9 +422,9 @@ export const buildSessionDrawingResources = async (state, sets) => {
     // Only what the committed request and its Web metadata name is kept as
     // is; the bindings and the other mode's request (E1) are allocated below,
     // so a resource that nothing names any more is not written. A resource
-    // whose encoded text, kind and original name equal an earlier one's is
-    // written once (D-220, D-228): its id becomes an alias of the earlier id.
-    // Equal text is equal bytes, found with no read or hash.
+    // whose bytes, kind and original name equal an earlier one's is written
+    // once (D-220, D-228): its id becomes an alias of the earlier id. Bytes are
+    // compared only when kind, name and size match (`firstEqualPayload`).
     const webFiles = committedRequest?.webFiles || {};
     const named = collectCanonicalResourceIds(committedRequest?.renderRequest);
     collectCanonicalResourceIds(webFiles, named);
@@ -421,27 +433,28 @@ export const buildSessionDrawingResources = async (state, sets) => {
         .forEach((/** @type {unknown} */ id) => { if (typeof id === 'string' && id) named.add(id); });
     });
     const hints = webFiles.resourceOriginalNames || {};
-    /** @type {Map<string, Map<unknown, string>>} */
+    /** @type {Map<string, CommittedPayload[]>} */
     const firstIds = new Map();
-    Object.entries(committedResources).forEach(([id, descriptor]) => {
+    for (const [id, descriptor] of Object.entries(committedResources)) {
       // A missing name equals only a missing name.
-      const key = JSON.stringify([descriptor.kind, Object.hasOwn(hints, id) ? hints[id] : null, descriptor.encoding, descriptor.size]);
-      let byData = firstIds.get(key);
-      if (!byData) firstIds.set(key, byData = new Map());
-      const equal = byData.get(resourcePayloadKey(descriptor));
+      const key = JSON.stringify([descriptor.kind, Object.hasOwn(hints, id) ? hints[id] : null, descriptor.size]);
+      let earlier = firstIds.get(key);
+      if (!earlier) firstIds.set(key, earlier = []);
+      // A view of one resource id is a single backing.
+      const entry = { id, descriptor, candidate: candidateFor(/** @type {ResourceSource} */ (
+        sessionResourceSource(createSessionResourceFileView(committedTable, id))
+      )) };
+      const equal = await firstEqualPayload(earlier, entry, identityFor);
       if (equal) {
         aliases.set(id, named.has(id) ? use(equal) : equal);
-        return;
+        continue;
       }
-      byData.set(resourcePayloadKey(descriptor), id);
+      earlier.push(entry);
       if (named.has(id)) resources[id] = descriptor;
       else reserved.set(id, descriptor);
       aliases.set(id, id);
-      // A view of one resource id is a single backing.
-      register(id, candidateFor(/** @type {ResourceSource} */ (
-        sessionResourceSource(createSessionResourceFileView(committedTable, id))
-      )));
-    });
+      register(id, entry.candidate);
+    }
   }
   for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
     if (!Object.hasOwn(committedResources, id)) {

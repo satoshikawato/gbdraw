@@ -1492,6 +1492,13 @@ export const executeCanonicalRenderCandidate = async ({
  * @typedef {(resources: Readonly<Record<string, RawSessionResourceDescriptor>>) => Promise<Record<string, RawSessionResourceDescriptor>>} EncodeSessionResources
  */
 /**
+ * The reproducibility files with their content: a builder may read and encode inputs, and may fail.
+ * @param {ReadonlyArray<Partial<Pick<GeneratedCliFile, 'name' | 'data' | 'buildData'>>>} files
+ */
+const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) => ({
+  name: file.name, data: typeof file.buildData === 'function' ? await file.buildData() : file.data
+})));
+/**
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
@@ -1945,10 +1952,10 @@ export const createRunAnalysis = ({
       showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
-    const materializedFiles = await Promise.all(latestCliHelperFiles.map(async (file) => ({
-      name: file.name,
-      data: typeof file.buildData === 'function' ? await file.buildData() : file.data
-    })));
+    // A refused replay Session (or an input unreadable now) is shown where Save shows its errors.
+    const materializedFiles = await materializeCliHelperFiles(latestCliHelperFiles)
+      .catch((error) => { errorLog.value = formatError(error, 'session-save', 'write'); return null; });
+    if (!materializedFiles) return;
     const archiveNames = new Set();
     materializedFiles.forEach((file) => {
       const name = String(file.name || '');

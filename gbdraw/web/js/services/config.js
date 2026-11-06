@@ -131,6 +131,7 @@ import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
   fileBackedDescriptor,
+  renamedResourceDescriptor,
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
@@ -3512,7 +3513,7 @@ const sessionViewDescriptor = (file) => {
   // A view: its name is read as an unvalidated value.
   const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
   const descriptor = visibleName && visibleName !== source.descriptor.name
-    ? { ...source.descriptor, name: visibleName }
+    ? renamedResourceDescriptor(source.descriptor, visibleName)
     : source.descriptor;
   setResourcePayloadOwner(descriptor, file);
   return descriptor;

@@ -705,3 +705,30 @@ for (const adopted of [false, true]) {
   assert.deepEqual(await save([['x', 'fasta'], ['y1', depthKind], ['y2', depthKind]], { x: 's.tsv', y1: 's.tsv', y2: 's.tsv' }),
     ['x', 'y1', 'y1'], 'X, Y, Y: the two Y copies merge');
 }
+
+// D-228 for the files Generate described (OV-2612): two picks of one file are
+// file-backed descriptors with different readers. Equal bytes still merge, also
+// with a loaded (encoded) copy; different bytes under one name stay two.
+{
+  const fields = (id, text) => ({ kind: 'depth-track-file', name: `${id}.dat`, type: 'text/plain',
+    size: Buffer.byteLength(text), lastModified: 0 });
+  const picked = (id, text) => backing.fileBackedDescriptor(fields(id, text), async () => new TextEncoder().encode(text));
+  const loadedCopy = (id, text) => ({ ...fields(id, text), encoding: 'base64', data: base64(text) });
+  const save = async (resources) => {
+    const renderRequest = { schema: CANONICAL_REQUEST_SCHEMA, mode: 'circular', layout: {}, comparisons: [], records: [],
+      diagramOptions: { depthTracks: Object.keys(resources).map((resourceId, index) => ({ id: `t${index}`, source: { resourceId } })) },
+      output: { prefix: 'x', formats: ['svg'], overwrite: false } };
+    const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
+    const saved = await buildSessionResources(draft, authority.adoptRuntimeCanonicalSession({
+      renderRequest, resources, webFiles: { resourceOriginalNames: { a: 'same.tsv', b: 'same.tsv' } }
+    }), bindingDrawings(draft));
+    return { ids: saved.renderRequest.diagramOptions.depthTracks.map((track) => track.source.resourceId), resources: saved.resources };
+  };
+  const twoPicks = await save({ a: picked('a', 'SAME\n'), b: picked('b', 'SAME\n') });
+  assert.deepEqual(twoPicks.ids, ['a', 'a'], 'two picks of one file merge');
+  assert.equal(Buffer.from(twoPicks.resources.a.data, 'base64').toString(), 'SAME\n');
+  assert.deepEqual((await save({ a: loadedCopy('a', 'SAME\n'), b: picked('b', 'SAME\n') })).ids, ['a', 'a'],
+    'a loaded copy and a new pick of the same file merge');
+  assert.deepEqual((await save({ a: picked('a', 'SAME\n'), b: picked('b', 'DIFF\n') })).ids, ['a', 'b'],
+    'equal names, different bytes: two');
+}

@@ -938,6 +938,17 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
+  // A replay Session over the Session limit is refused where the app shows errors, not lost.
+  globalThis.__GBDRAW_TEST_HOOKS__.maxExpandedSessionBytes = 1;
+  downloadedFilename = null;
+  try {
+    await runner.downloadCliHelperFiles();
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__.maxExpandedSessionBytes;
+  }
+  assert.equal(state.errorLog.value?.code, 'SESSION_SIZE_LIMIT');
+  assert.equal(downloadedFilename, null);
+  state.errorLog.value = null;
   // The exact replay is a Session 49 of the drawn drawing alone, by its ID and name (OV-1806).
   const drawn = state.activeDrawing();
   const drawnTab = state.drawingTabs.value.find((tab) => tab.id === drawn.id);

@@ -41,6 +41,7 @@ const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
   '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
 const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
 
 /** A GenBank record of `length` bp with one CDS per `[start, end, tag]`. */
 const genbankRecord = (name, length, cds, topology = 'circular') => {
@@ -64,15 +65,22 @@ const genbankRecord = (name, length, cds, topology = 'circular') => {
 };
 const genbankFile = (name, records) => new File([`${records.join('\n')}\n`], name, { type: 'text/plain', lastModified: 1 });
 
+// The bytes the page stages to the Worker for a request (the staging owner,
+// `createDiagramResourceTransport`), by resource ID; Python writes each to a file.
+/** @param {unknown} request @param {Record<string, unknown>} resources */
+const stagedFiles = async (request, resources) => {
+  const { resourceManifest, stagedResources } = await createDiagramResourceTransport().prepare({ request, resources });
+  const bytesByToken = new Map(stagedResources.map(({ cacheToken, bytes }) => [cacheToken, Buffer.from(bytes).toString('base64')]));
+  return Object.fromEntries(resourceManifest.map(({ resourceId, cacheToken, name }) => [resourceId, { name, base64: bytesByToken.get(cacheToken) }]));
+};
 const STAGE = `
 import base64, json, os, tempfile
 directory = tempfile.mkdtemp()
 paths = {}
-for index, (resource_id, descriptor) in enumerate(payload['resources'].items()):
-    path = os.path.join(directory, f'r{index}_{descriptor.get("name") or "resource"}')
-    data = descriptor['data']
+for index, (resource_id, staged) in enumerate(payload['staged'].items()):
+    path = os.path.join(directory, f'r{index}_{staged["name"]}')
     with open(path, 'wb') as handle:
-        handle.write(base64.b64decode(data) if descriptor.get('encoding') == 'base64' else data.encode())
+        handle.write(base64.b64decode(staged['base64']))
     paths[resource_id] = path
 `;
 
@@ -85,7 +93,7 @@ result = json.dumps({
     str(feature.location_parts[0][0]): feature.biological_feature_id
     for item in resolve_request_records(request).provenance for feature in item.source_feature_catalog
 })
-`, { canonicalRequest: renderRequest, resources }));
+`, { canonicalRequest: renderRequest, staged: await stagedFiles(renderRequest, resources) }));
 
 /** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
 const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`${STAGE}
@@ -93,7 +101,7 @@ from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 result = derive_web_region_drawing_json(
     json.dumps(payload['canonicalRequest']), json.dumps(paths), directory,
     json.dumps(payload['regions']), json.dumps(payload['adaptSizes']))
-`, payload)) });
+`, { ...payload, resources: undefined, staged: await stagedFiles(payload.canonicalRequest, payload.resources) })) });
 
 const noWorker = () => { throw new Error('the records are read by the fast path'); };
 /**

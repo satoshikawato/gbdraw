@@ -24,14 +24,22 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * }} RawSessionResourceDescriptor
  */
 /**
- * A Session resource after `validateDescriptor`: a base64 text, or an encoded
- * depth table (`encoding` names which `data` holds). A file-backed descriptor
- * (`fileBackedDescriptor`) has neither: its reader gives its bytes.
+ * A Session resource after `validateDescriptor` that holds its payload: a
+ * base64 text, or an encoded depth table (`encoding` names which `data` holds).
  * @typedef {{
  *   kind?: unknown, name?: unknown, type?: unknown, encoding: string, data: string | DepthFilePayload,
  *   size: number, lastModified?: number, checksum?: unknown
- * }} SessionResourceDescriptor
+ * }} EncodedSessionResourceDescriptor
  */
+/**
+ * A Session resource after `validateDescriptor` whose reader gives its bytes
+ * (`fileBackedDescriptor`): a File Generate described. It never leaves the page.
+ * @typedef {{
+ *   kind?: unknown, name?: unknown, type?: unknown, encoding?: undefined, data?: undefined,
+ *   size: number, lastModified?: number, checksum?: unknown
+ * }} FileBackedSessionResourceDescriptor
+ */
+/** @typedef {EncodedSessionResourceDescriptor | FileBackedSessionResourceDescriptor} SessionResourceDescriptor */
 /**
  * The stand-in for a `File` that a Session resource backs.
  * @typedef {Readonly<{ name: string, type: string, size: number, lastModified: number }>} SessionResourceFileView
@@ -127,6 +135,21 @@ export const fileBackedReaderOf = (descriptor) => (
  * @returns {unknown}
  */
 export const resourcePayloadKey = (descriptor) => fileBackedReaderOf(descriptor) ?? descriptor.data;
+
+/**
+ * The same descriptor under another name: the one owner of a rename, so a
+ * file-backed descriptor keeps its reader (a spread copy would lose it).
+ * @template {RawSessionResourceDescriptor} D
+ * @param {D} descriptor
+ * @param {string} name
+ * @returns {D}
+ */
+export const renamedResourceDescriptor = (descriptor, name) => {
+  const renamed = { ...descriptor, name };
+  const readFile = fileBackedReaderOf(descriptor);
+  if (readFile) fileBackedReaders.set(renamed, readFile);
+  return renamed;
+};
 
 const CHECKSUM_PATTERN = /^[0-9a-f]{64}$/;
 /** @param {unknown} value A checked checksum: absent, or a SHA-256 digest text. */
