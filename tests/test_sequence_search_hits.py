@@ -344,3 +344,36 @@ def test_session_fixture_keeps_the_gradient_through_load_and_save(tmp_path: Path
         (0.0, 1.0), (16 / 650, 171 / 650), (319 / 650, 365 / 650),
     ]
     assert encoded == stored["diagramOptions"]["annotations"]["sets"]
+
+
+def test_queries_are_read_as_nucleotide_fasta_records(tmp_path: Path) -> None:
+    from gbdraw.web_support.sequence_search import read_search_queries_json
+
+    path = tmp_path / "queries.fasta"
+    path.write_text(">q1 first\nacgtac\ngtn\n>q2\nTTTT\n", encoding="utf-8")
+    reply = json.loads(read_search_queries_json(str(path)))
+    assert reply == {"queries": [
+        {"name": "q1", "length": 9, "fasta": ">q1\nACGTACGTN\n"},
+        {"name": "q2", "length": 4, "fasta": ">q2\nTTTT\n"},
+    ]}
+
+
+@pytest.mark.parametrize(
+    ("text", "code", "reason"),
+    [
+        (">p\nMKVLHHW\n", "INPUT_INVALID", "NOT_NUCLEOTIDE"),
+        ("not a sequence\n", "NO_RECORDS", "FASTA_NO_ENTRIES"),
+        (">q\nACGT\n>q\nACGT\n", "INPUT_INVALID", "UNIQUE_IDS"),
+    ],
+)
+def test_a_query_that_cannot_be_searched_is_refused_with_its_reason(
+    tmp_path: Path, text: str, code: str, reason: str
+) -> None:
+    from gbdraw.web_support.sequence_search import read_search_queries
+
+    path = tmp_path / "queries.fasta"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ValidationError) as error:
+        read_search_queries(str(path))
+    assert error.value.diagnostic is not None
+    assert (error.value.diagnostic["code"], error.value.diagnostic.get("reason")) == (code, reason)

@@ -20,14 +20,15 @@ const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
 // Short name and section title of every rail entry, per mode, in rail order.
 const RAIL = {
   circular: [
-    ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Compare', 'Pairwise Comparisons'],
+    ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Search', 'Sequence search'],
+    ['Compare', 'Pairwise Comparisons'],
     ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'], ['Legend', 'Legend'], ['Colors', 'Colors'],
     ['Features', 'Features'], ['Labels', 'Labels'], ['Axis', 'Axis & Scale'],
     ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ],
   linear: [
     ['Input', 'Input Genomes'], ['Compare', 'Comparison'], ['Advanced', 'Advanced comparison and layout'],
-    ['Regions', 'Region Annotations'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
+    ['Regions', 'Region Annotations'], ['Search', 'Sequence search'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
     ['Legend', 'Legend'], ['Colors', 'Colors'], ['Features', 'Features'], ['Labels', 'Labels'],
     ['Axis', 'Axis & Scale'], ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ]

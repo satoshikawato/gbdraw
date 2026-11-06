@@ -63,9 +63,11 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   READ_RECORD_SPAN_SEQUENCES: 'readRecordSpanSequences',
+  READ_SEARCH_QUERIES: 'readSearchQueries',
   RESOLVE_FEATURE_ANCHOR: 'resolveFeatureAnchor',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
+  SEARCH_HIT_ANNOTATION_SET: 'searchHitAnnotationSet',
   SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
   UPGRADE_LEGACY_SESSION: 'upgradeLegacySession',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'

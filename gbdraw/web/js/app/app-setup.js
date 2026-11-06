@@ -288,7 +288,8 @@ import {
 } from '../services/record-draw-selection.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
-import { removeAnnotations } from '../services/drawing/annotation-sets.js';
+import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
+import { createSequenceSearch } from './sequence-search.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -2188,6 +2189,7 @@ export const createAppSetup = () => {
     };
   };
   const {
+    runSequenceSearchLosat,
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
@@ -2350,11 +2352,6 @@ export const createAppSetup = () => {
     })) return;
     if (featureActions.requestAutomaticRerender() && !direction) history.markLastStepUndrawn();
   };
-  history.setSettingsStepListener((changes, direction, undrawn) => {
-    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
-      changes ? changedTrackHides(changes) : undefined, direction === 'undo');
-    refitSizedFigure(changes, direction, undrawn);
-  });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
     /** @param {{ record_key?: unknown, recordKey?: unknown, biological_feature_id?: unknown, biologicalFeatureId?: unknown } | null | undefined} feature */
@@ -5307,7 +5304,35 @@ export const createAppSetup = () => {
     panMove: doPan,
     panEnd: endPan
   });
+  // Sequence search (PD-OI-116): the subject is the records of the shown drawing's Results, read by Python from the
+  // committed request; the set a search adds is one History step of that drawing.
+  const sequenceSearch = createSequenceSearch({
+    state,
+    committedSession: () => getCommittedCanonicalSession(),
+    readAxisRecords: () => Array.from({ length: results.value.length },
+      (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat(),
+    readRecordSpans: (spans) => requestRecordSpanSequences(
+      getCommittedCanonicalSession(), spans,
+      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+    ),
+    runSearchLosat: runSequenceSearchLosat,
+    runHelper: (operation, payload) => runDiagramHelperOperation(operation, payload),
+    helperOperations: {
+      readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES,
+      buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET
+    },
+    addSetStep: (label, write) => history.runUndoable(label, write),
+    addSet: (drawingId, set) => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)
+  });
+  // Registered once sequenceSearch exists: a search's step names the sets it added (the live annotation-sets row).
+  history.setSettingsStepListener((changes, direction, undrawn) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
+      changes ? changedTrackHides(changes) : undefined, direction === 'undo', sequenceSearch.searchSetIdsOf(changes));
+    refitSizedFigure(changes, direction, undrawn);
+  });
   return {
+    sequenceSearch,
     hostedBuild: readHostedBuild(document),
     fontSettings,
     defaultColorGroups,

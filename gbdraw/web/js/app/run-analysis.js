@@ -1757,6 +1757,17 @@ export const createRunAnalysis = ({
     pendingLiveSettings.set(drawing, pending);
     return pending;
   };
+  // The annotation sets a Sequence search step added (its commit, Undo or
+  // Redo, `searchSetIdsOfStep`), per drawing, until the rerender that draws
+  // them ends: they follow the draft at once (PD-OI-116).
+  /** @type {Map<DrawingState, Set<string>>} */
+  const pendingSearchSets = new Map();
+  /** @param {DrawingState} drawing */
+  const pendingSearchSetsOf = (drawing) => {
+    const pending = pendingSearchSets.get(drawing) || new Set();
+    pendingSearchSets.set(drawing, pending);
+    return pending;
+  };
   // The GC and skew hides an Undo took back, per drawing (`state.undoneTrackHides`):
   // named until the rerender that applied them ends, a later step or Redo
   // changes that hide, or that hide is on, so a rerender that is replaced
@@ -6094,12 +6105,12 @@ export const createRunAnalysis = ({
   // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide> }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide>, searchSetIds: readonly string[] }} options
    *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too;
-   *   `undoneHides`: the hides an Undo took back.
+   *   `undoneHides`: the hides an Undo took back; `searchSetIds`: the sets a Sequence search step added.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides, searchSetIds }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -6112,7 +6123,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides, searchSetIds });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6283,20 +6294,25 @@ export const createRunAnalysis = ({
         const settings = [...pending];
         activeLiveSettings = settings;
         const undoneHides = undoneHidesOf(drawing);
+        const searchSetIds = [...pendingSearchSetsOf(drawing)];
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
           historyRequestedAt,
           settings,
           editor,
-          undoneHides
+          undoneHides,
+          searchSetIds
         });
         // A stale iteration leaves its values and its editor request to the
         // next one; an applied, failed or empty one is done with them (a
         // failed value waits for its next change or Generate, PD-OI-102).
         const replaced = outcome.status === 'stale' || outcome.status === 'canceled';
         if (replaced) editorRerenderRequested ||= editor;
-        else settings.forEach((path) => pending.delete(path));
+        else {
+          settings.forEach((path) => pending.delete(path));
+          searchSetIds.forEach((id) => pendingSearchSetsOf(drawing).delete(id));
+        }
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
         // A Cancel can end a rerender with no iteration after it: that Undo did not apply, and its track waits.
         if (!replaced || activeReflowRequestId === pendingReflowRequestId) setUndoneHides(drawing, undoneHides, false);
@@ -6321,9 +6337,10 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettings.get(drawing);
     const committed = getCommittedCanonicalSession?.();
     if (!pending || !committed) return;
+    const searchSetIds = [...pendingSearchSetsOf(drawing)];
     for (const path of [...pending]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf) }).length === 0) {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), searchSetIds }).length === 0) {
           pending.delete(path);
         }
       } catch {
@@ -6332,7 +6349,7 @@ export const createRunAnalysis = ({
     }
   };
   // A Load replaces both drawings' committed Sessions and applies nothing (6.7).
-  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); state.undoneTrackHides.value = new Map(); };
+  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); pendingSearchSets.clear(); state.undoneTrackHides.value = new Map(); };
 
   // R1 (c), PD-OI-102: an action committed the values of these live setting
   // request paths in the drawing of `mode` (the shown one). Its Result shows
@@ -6342,14 +6359,16 @@ export const createRunAnalysis = ({
    * @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode
    * @param {ReadonlySet<UndoneTrackHide>} [changedHides] The hides the step changed (`changedTrackHides`).
    * @param {boolean} [undone] The step is an Undo: it names them; any other step drops their names.
+   * @param {readonly string[]} [searchSetIds] The sets a Sequence search step added (`searchSetIdsOfStep`).
    */
-  const requestLiveSettingApply = (requestPaths, mode, changedHides = new Set(), undone = false) => {
+  const requestLiveSettingApply = (requestPaths, mode, changedHides = new Set(), undone = false, searchSetIds = []) => {
     const committed = getCommittedCanonicalSession?.();
     const drawing = displayedArtifactDrawing();
     const applies = requestPaths.length > 0 && committed && committed.renderRequest?.mode === mode;
     if (applies) setUndoneHides(drawing, changedHides, undone);
     setUndoneHides(drawing, trackHidesOn(drawing.form), false);
     if (!applies) return false;
+    searchSetIds.forEach((id) => pendingSearchSetsOf(drawing).add(id));
     const pending = pendingLiveSettingsOf(drawing);
     requestPaths.forEach((path) => pending.add(path));
     labelReflowLastError.value = null;
@@ -6433,7 +6452,57 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = [];
   };
 
+  // Sequence search (PD-OI-116): one blastn search of the panel's queries
+  // against the drawn records, through the Pairwise Comparisons runtime (the
+  // LOSAT execution and thread settings, the serial engine's task check) and the
+  // full-window overlay with its progress and Cancel. It draws nothing: the
+  // caller turns the rows into an annotation set. Busy while a Generate runs.
+  /**
+   * @param {{ queryFasta: string, subjectFasta: string, task: string }} search
+   * @returns {Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy' }>}
+   */
+  const runSequenceSearchLosat = async ({ queryFasta, subjectFasta, task }) => {
+    if (processing.value || state.sessionOperationAvailability?.()) return { status: 'busy' };
+    const controller = new AbortController();
+    activeLosatAbortController = controller;
+    generationCancelRequested.value = false;
+    processing.value = true;
+    /** @param {number} completed */
+    const progress = (completed) => {
+      if (!controller.signal.aborted) {
+        processingStatus.value = tn(1, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: 1 });
+      }
+    };
+    progress(0);
+    try {
+      const [result] = await executeLosatJobs([{
+        pairIndex: 0, cacheKey: 'sequence-search', program: 'blastn', querySequenceKey: 'search-query',
+        subjectSequenceKey: 'search-subject', extraArgs: ['--task', task]
+      }], {
+        concurrency: getLosatParallelWorkers(),
+        executionMode: getLosatExecutionMode(),
+        totalThreadBudget: getLosatTotalThreadBudget(),
+        threadsPerJob: 1,
+        sequences: new Map([['search-query', queryFasta], ['search-subject', subjectFasta]]),
+        signal: controller.signal,
+        onRuntimeStatus: (status) => { losatThreadingStatus.value = status; },
+        onProgress: ({ completed }) => progress(completed)
+      });
+      return { status: 'ok', text: result.text };
+    } catch (error) {
+      if (controller.signal.aborted) return { status: 'canceled' };
+      throw error;
+    } finally {
+      if (activeLosatAbortController === controller) activeLosatAbortController = null;
+      processingStatus.value = '';
+      generationCancelRequested.value = false;
+      processing.value = false;
+      replayDeferredLabelReflow();
+    }
+  };
+
   return {
+    runSequenceSearchLosat,
     runAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,

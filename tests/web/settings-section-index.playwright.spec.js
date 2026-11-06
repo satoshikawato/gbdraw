@@ -16,6 +16,7 @@ const SECTIONS = {
   circular: [
     ['input-genomes', 'Input Genomes'],
     ['region-annotations', 'Region Annotations'],
+    ['sequence-search', 'Sequence search'],
     ['pairwise-comparisons', 'Pairwise Comparisons'],
     ['layout', 'Layout'],
     ['font', 'Font'],
@@ -32,6 +33,7 @@ const SECTIONS = {
     ['comparison', 'Comparison'],
     ['advanced-comparison', 'Advanced comparison and layout'],
     ['region-annotations', 'Region Annotations'],
+    ['sequence-search', 'Sequence search'],
     ['layout', 'Layout'],
     ['font', 'Font'],
     ['titles', 'Titles & Record Labels'],

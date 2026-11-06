@@ -7,12 +7,16 @@ panel's thresholds, the program, the queries in order with their lengths, and th
 Python reads the table with ``read_comparison_table`` and builds the set with
 ``search_hit_annotation_set``; the reply is data (the set as the canonical
 request writes it, the hit table, and the threshold tally). It renders nothing.
+
+The queries themselves are read here too (``read_search_queries``), with the
+FASTA loader of a FASTA-only input, so the Web has no sequence reader of its own.
 """
 
 from __future__ import annotations
 
 import io
 import json
+from collections import Counter
 from collections.abc import Mapping
 from typing import Literal, TypedDict, cast
 
@@ -23,8 +27,10 @@ from gbdraw.annotations.search_hits import (
     SearchSubject,
     search_hit_annotation_set,
 )
+from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.genome import load_fasta
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.session_request_codec import decode_record_selector, encode_annotation_set
 
@@ -96,6 +102,50 @@ class SequenceSearchReply(TypedDict):
     thresholds: list[ThresholdTallyReply]
     unmatchedRows: int
     unmatchedSubjectIds: list[str]
+
+
+class SearchQueryRead(TypedDict):
+    """One query as read: its FASTA ID, its length in bases, and the FASTA text LOSAT reads."""
+
+    name: str
+    length: int
+    fasta: str
+
+
+class SearchQueriesReply(TypedDict):
+    queries: list[SearchQueryRead]
+
+
+# The queries name their hits and their colours, so two queries may not share an ID.
+_DUPLICATE_QUERY_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
+
+
+def read_search_queries(path: str) -> SearchQueriesReply:
+    """The queries of a FASTA file: nucleotide records only, each with its own ID.
+
+    The FASTA-only loader (``load_fasta``) refuses a file without an entry, a
+    record without sequence and a letter that is not a nucleotide code (a
+    protein query, which PR-C searches with tblastn), each with its diagnostic.
+    """
+
+    records = load_fasta([path])
+    repeated = sorted(name for name, count in Counter(str(record.id) for record in records).items() if count > 1)
+    if repeated:
+        raise ValidationError(
+            f"Query IDs repeat: {', '.join(repeated)}. Give each query its own ID.", diagnostic=_DUPLICATE_QUERY_IDS
+        )
+    return {
+        "queries": [
+            {"name": str(record.id), "length": len(record.seq), "fasta": losat_fasta_text(str(record.id), str(record.seq))}
+            for record in records
+        ]
+    }
+
+
+def read_search_queries_json(path: str) -> str:
+    """JSON boundary of the diagram Worker."""
+
+    return json.dumps(read_search_queries(path))
 
 
 _FIELDS = ("table", "setId", "subjects", "thresholds", "program", "queries", "colorMode", "queryColors")
@@ -183,12 +233,16 @@ def sequence_search_annotation_set_json(payload_json: str) -> str:
 
 __all__ = [
     "SearchHitReply",
+    "SearchQueriesReply",
+    "SearchQueryRead",
     "SearchQueryInput",
     "SearchSubjectInput",
     "SearchThresholdsInput",
     "SequenceSearchInput",
     "SequenceSearchReply",
     "ThresholdTallyReply",
+    "read_search_queries",
+    "read_search_queries_json",
     "sequence_search_annotation_set",
     "sequence_search_annotation_set_json",
 ]

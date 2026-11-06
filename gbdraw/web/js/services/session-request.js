@@ -1918,7 +1918,9 @@ export const liveSettingInputsOf = (drawing, fileOf) => ({
  * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
  */
 /**
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide> }} LiveSettingContext
+ * `searchSetIds`: the annotation sets a Sequence search step added, which its commit, Undo and Redo draw at once
+ * (`searchSetIdsOfStep` in services/sequence-search.js); the other set changes wait for Generate.
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSetIds?: readonly string[] }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
@@ -2424,12 +2426,20 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   // The Fill and Stroke color of each committed item whose colors are live
   // (`annotationItemColorsLive`), matched by set and item id. A draft item
   // without its own style follows the committed set's Default, whose change
-  // is not live.
-  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request) => {
-    const committedSets = request.diagramOptions.annotations?.sets;
-    if (!Array.isArray(committedSets)) return [];
+  // is not live. The sets a Sequence search step added (`searchSetIds`, by set
+  // id) follow the draft at once, as Generate sends them: present, or gone
+  // after its Undo (PD-OI-116); every other set change waits.
+  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request, { searchSetIds = [] }) => {
     const draftSets = normalizeAnnotationSets(drawing.annotationSets);
-    return [[['diagramOptions', 'annotations', 'sets'], committedSets.map((set) => {
+    const searched = new Set(searchSetIds);
+    const committed = request.diagramOptions.annotations;
+    const committedSets = [...(committed?.sets ?? [])].filter((set) => !searched.has(set.id));
+    const added = annotationOptionsPayload(draftSets.filter((set) => searched.has(set.id))).sets;
+    if (committedSets.length === 0 && added.length === 0) {
+      return committed ? [[['diagramOptions', 'annotations'], undefined]] : [];
+    }
+    if (!committed) return [[['diagramOptions', 'annotations'], { sets: added, table: null, tableFile: null }]];
+    return [[['diagramOptions', 'annotations', 'sets'], [...committedSets.map((set) => {
       const draftSet = draftSets.find((candidate) => candidate.id === set.id);
       if (!draftSet) return set;
       return { ...set, annotations: set.annotations.map((item) => {
@@ -2440,7 +2450,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
         return drawn.fill === draft.fill && drawn.stroke === draft.stroke
           ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke } };
       }) };
-    })]];
+    }), ...added]]];
   },
   // The GT set: one track projection (`trackPlanApplied`), each key its own leaves.
   [GT_REQUEST_PATHS.gc]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.gc],
@@ -2612,17 +2622,17 @@ const valueAtPath = (root, path) => path.reduce(
  * The writes that apply the draft values of `requestPaths` to the committed
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
- *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSetIds?: readonly string[] }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`); `searchSetIds`: the sets a Sequence search step added.
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides, searchSetIds }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
   const { resources } = committed;
   // One context per call: the track projection runs once for its five keys.
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles, resources, undoneHides };
+  const context = { inputs, webFiles, resources, undoneHides, searchSetIds };
   let trackWrites = 0;
   const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
