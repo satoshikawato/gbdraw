@@ -149,6 +149,7 @@ from ...render.groups.circular.conservation import conservation_ring_ink
 from ...render.groups.circular.ticks import TickGroup
 from ...render.drawers.circular.gc_skew import SkewDrawer
 from ...render.drawers.circular.annotations import (
+    AnnotationRing,
     CircularAnnotationLabel,
     CircularLabelObstacles,
     LeaderSegment,
@@ -933,12 +934,9 @@ def _record_track_ink(
                         annotation_layout,
                         record_index=sources.annotation_record_index,
                         record_length=record_length,
-                        inner_radius_px=float(slot.draw_inner_radius_px),
-                        outer_radius_px=float(slot.draw_outer_radius_px),
-                        side=str(slot.side),
+                        ring=_annotation_ring(slot),
                         params=annotation_track_params_from_mapping(slot.params),
                         labels=annotation_labels.get(slot.id, ()),
-                        strand_bands_px=slot.strand_bands_px,
                     )
                 )
         elif renderer == "ticks":
@@ -1818,6 +1816,17 @@ def _slot_paint_data(
     return data
 
 
+def _annotation_ring(resolved_slot: CircularResolvedSlot) -> AnnotationRing:
+    """Where an annotation slot's track is drawn, for its content and for the ink that content paints."""
+
+    return AnnotationRing(
+        inner_radius_px=float(resolved_slot.draw_inner_radius_px),
+        outer_radius_px=float(resolved_slot.draw_outer_radius_px),
+        side=str(resolved_slot.side),
+        strand_bands_px=resolved_slot.strand_bands_px,
+    )
+
+
 def _slot_conservation_track(
     resolved_slot: CircularResolvedSlot, conservation_tracks: Sequence[ConservationTrack] | None
 ) -> ConservationTrack | None:
@@ -2110,9 +2119,7 @@ def _draw_resolved_circular_slot(
             record_id=str(gb_record.id),
             record_index=annotation_record_index,
             record_length=len(gb_record.seq),
-            inner_radius_px=float(resolved_slot.draw_inner_radius_px),
-            outer_radius_px=float(resolved_slot.draw_outer_radius_px),
-            side=str(resolved_slot.side),
+            ring=_annotation_ring(resolved_slot),
             font_family=str(cfg.objects.text.font_family),
             params=params,
             labels=annotation_labels.get(resolved_slot.id, ()),
@@ -2128,7 +2135,6 @@ def _draw_resolved_circular_slot(
             semantic_slot_id=(
                 str(resolved_slot.id) if use_slot_group_id else None
             ),
-            strand_bands_px=resolved_slot.strand_bands_px,
         )
         group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
         canvas.add(center_group_on_canvas(group, canvas_config))

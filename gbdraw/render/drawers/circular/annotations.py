@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Literal, NamedTuple, TypeAlias
 
@@ -181,6 +181,18 @@ def _lane_radii(
 StrandBands: TypeAlias = Mapping[Literal["+", "-"], RadialBand]
 
 
+@dataclass(frozen=True)
+class AnnotationRing:
+    """Where a circular annotation track is drawn: the slot's ring (``CircularResolvedSlot.draw_inner_radius_px`` and
+    ``draw_outer_radius_px``), the side its lanes stack from, and each strand's lane of the feature track it covers
+    (``CircularResolvedSlot.strand_bands_px``; none when it covers no track that separates the strands)."""
+
+    inner_radius_px: float
+    outer_radius_px: float
+    side: str
+    strand_bands_px: StrandBands = field(default_factory=dict)
+
+
 def _strand_lanes(
     track: ResolvedAnnotationTrack, *, record_index: int, strand_bands_px: StrandBands, params: AnnotationTrackParams
 ) -> dict[Literal["+", "-"], tuple[RadialBand, float]]:
@@ -200,20 +212,19 @@ def _mark_lane(
     lane_width: float,
     strand_lanes: Mapping[Literal["+", "-"], tuple[RadialBand, float]],
     *,
-    side: str,
-    inner_radius_px: float,
-    outer_radius_px: float,
+    ring: AnnotationRing,
     params: AnnotationTrackParams,
 ) -> tuple[float, float, float]:
     """The inner and outer radius of a placement's lane and the lane's width: in its strand's lane when the slot
     covers a feature track that separates the strands, else in the slot's band."""
 
+    inner_radius_px, outer_radius_px = ring.inner_radius_px, ring.outer_radius_px
     strand = placement.annotation.display_strand
     if strand is not None and strand in strand_lanes:
         band, lane_width = strand_lanes[strand]
         inner_radius_px, outer_radius_px = band.inner_px, band.outer_px
     lane_inner, lane_outer = _lane_radii(
-        placement.lane, lane_width, side=side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
+        placement.lane, lane_width, side=ring.side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
         params=params,
     )
     return lane_inner, lane_outer, lane_width
@@ -777,12 +788,9 @@ def circular_annotation_track_ink(
     *,
     record_index: int,
     record_length: int,
-    inner_radius_px: float,
-    outer_radius_px: float,
-    side: str,
+    ring: AnnotationRing,
     params: AnnotationTrackParams,
     labels: Sequence[CircularAnnotationLabel] = (),
-    strand_bands_px: StrandBands | None = None,
 ) -> tuple[CircularInk, ...]:
     """What ``circular_annotation_track_content`` paints with the same arguments: each band or highlight (its
     area when filled, else its outline), each line with its end caps, and the labels' letters."""
@@ -790,19 +798,17 @@ def circular_annotation_track_ink(
     if record_length <= 0:
         return ()
     placements, slot_lane_width = _record_lanes(
-        track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
+        track, record_index=record_index, inner_radius_px=ring.inner_radius_px, outer_radius_px=ring.outer_radius_px,
+        params=params,
     )
-    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=strand_bands_px or {}, params=params)
+    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=ring.strand_bands_px, params=params)
     labels_by_id = {label.annotation_id: label for label in labels}
     inks: list[CircularInk] = []
     for placement in placements:
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer, lane_width = _mark_lane(
-            placement, slot_lane_width, strand_lanes, side=side, inner_radius_px=inner_radius_px,
-            outer_radius_px=outer_radius_px, params=params,
-        )
+        lane_inner, lane_outer, lane_width = _mark_lane(placement, slot_lane_width, strand_lanes, ring=ring, params=params)
         radius = 0.5 * (lane_inner + lane_outer)
         pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
         for part in mark_parts(annotation, join_origin=True):
@@ -855,21 +861,18 @@ def circular_annotation_track_content(
     record_id: str,
     record_index: int,
     record_length: int,
-    inner_radius_px: float,
-    outer_radius_px: float,
-    side: str,
+    ring: AnnotationRing,
     font_family: str,
     params: AnnotationTrackParams,
     labels: Sequence[CircularAnnotationLabel] = (),
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
-    strand_bands_px: StrandBands | None = None,
 ) -> GroupContent:
     """Build an annotation track around the circle centre (render stage ``annotation_content``).
 
     ``labels`` are the track's labels (``circular_annotation_labels``), drawn
     with their annotations. A region with a strand is drawn in its strand's
-    lane of ``strand_bands_px`` (a slot that covers a feature track that
+    lane of ``ring.strand_bands_px`` (a slot that covers a feature track that
     separates the strands), any other in the slot's band. The hatch patterns the marks use, in order of first
     use, and the clip path of a clipped track are the content's definitions.
     """
@@ -881,19 +884,17 @@ def circular_annotation_track_content(
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
     placements, slot_lane_width = _record_lanes(
-        track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
+        track, record_index=record_index, inner_radius_px=ring.inner_radius_px, outer_radius_px=ring.outer_radius_px,
+        params=params,
     )
-    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=strand_bands_px or {}, params=params)
+    strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=ring.strand_bands_px, params=params)
     labels_by_id = {label.annotation_id: label for label in labels}
 
     for placement in placements:
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer, lane_width = _mark_lane(
-            placement, slot_lane_width, strand_lanes, side=side, inner_radius_px=inner_radius_px,
-            outer_radius_px=outer_radius_px, params=params,
-        )
+        lane_inner, lane_outer, lane_width = _mark_lane(placement, slot_lane_width, strand_lanes, ring=ring, params=params)
         radius = 0.5 * (lane_inner + lane_outer)
         item_group = Group(
             id=annotation_dom_id(
@@ -992,12 +993,12 @@ def circular_annotation_track_content(
             if dom_group_id
             else f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
         )
-        ring = Path(
-            d=f"{circle_arc(outer_radius_px, 0.0, -360.0)} Z {circle_arc(inner_radius_px, 0.0, 360.0)} Z"
+        clip_ring = Path(
+            d=f"{circle_arc(ring.outer_radius_px, 0.0, -360.0)} Z {circle_arc(ring.inner_radius_px, 0.0, 360.0)} Z"
         )
-        ring.attribs["clip-rule"] = "evenodd"
+        clip_ring.attribs["clip-rule"] = "evenodd"
         clip_path = ClipPath(id=clip_id)
-        clip_path.add(ring)
+        clip_path.add(clip_ring)
         clip_paths.append(clip_path)
         group.attribs["clip-path"] = f"url(#{clip_id})"
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
@@ -1005,6 +1006,7 @@ def circular_annotation_track_content(
 
 __all__ = [
     "CURVED_LABEL_ORIENTATIONS",
+    "AnnotationRing",
     "CircularAnnotationLabel",
     "CircularLabelArc",
     "CircularLabelObstacles",

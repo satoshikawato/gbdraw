@@ -199,7 +199,7 @@ from .annotation_labels import (
     LabelObstacle,
     PlacedAnnotationLabels,
     linear_annotation_label_inks,
-    linear_annotation_row_frames,
+    linear_annotation_slot_frame,
     linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
     place_linear_annotation_labels,
@@ -3699,7 +3699,7 @@ def _draw_linear_annotation_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
         record_length=drawing.axis_length,
         bar_length_px=float(drawing.placement.sequence_width),
         y_offset_px=0.0,
-        height_px=float(slot.resolved.height),
+        frame=linear_annotation_slot_frame(drawing.vertical_plan, slot_id),
         font_family=str(drawing.canvas_config.profile.config.objects.text.font_family),
         params=annotation_track_params_from_mapping(slot.slot.params),
         labels=drawing.annotation_labels.get(slot_id, ()),
@@ -3707,10 +3707,6 @@ def _draw_linear_annotation_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
         semantic_slot_id=(
             str(slot_id) if slot.group_id is not None else None
         ),
-        row_frames=linear_annotation_row_frames(drawing.vertical_plan, slot_id),
-        strand_bands={
-            strand: band.translate(-float(slot.resolved.origin_y)) for strand, band in slot.resolved.strand_bands.items()
-        },
     )
     annotation_group = place_content(
         canvas,

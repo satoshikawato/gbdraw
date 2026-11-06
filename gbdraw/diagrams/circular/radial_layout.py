@@ -2464,6 +2464,81 @@ def _resolve_in_pass(
         raise error.limited_by_center(float(definition_reserved_radius_px)) from None
 
 
+def _anchored_annotation_overlay(
+    intent: _RadialSlotIntent,
+    overlay_resolved: CircularResolvedSlot,
+    by_id: dict[str, CircularResolvedSlot],
+    *,
+    axis_radius_px: float,
+    strands_separated: bool,
+) -> CircularResolvedSlot | None:
+    """An annotation overlay drawn over the slots it names (``anchor_slot``, ``to_slot``), once those are placed:
+    its ring, the band it spans, and the strand lanes it covers; ``None`` when it names no placed slot."""
+
+    annotation = intent.slot.annotation
+    if annotation is None:
+        return None
+    referenced = [
+        by_id[slot_id]
+        for slot_id in (annotation.anchor_slot, annotation.to_slot)
+        if slot_id in by_id
+    ]
+    if not referenced:
+        return None
+    anchor = referenced[0]
+    anchor_band = anchor.draw_band_px or anchor.packing_band_px
+    # to_slot: the hull of the two slots' whole bands, every feature lane included.
+    # cover_anchor alone keeps the draw band (the first feature lane of each strand).
+    whole_bands = [slot.packing_band_px or slot.draw_band_px for slot in referenced]
+    span_band = (
+        band_union([item for item in whole_bands if item is not None])
+        if annotation.to_slot is not None
+        else None
+    )
+    if span_band is not None:
+        anchor_radius, width, draw_band = span_band.center_px, span_band.width_px, span_band
+    else:
+        anchor_radius = (
+            float(anchor_band.center_px)
+            if anchor_band is not None
+            else float(anchor.anchor_radius_px or axis_radius_px)
+        )
+        # The overlay's own width is the intent's, the one its labels' room is measured from (``_SpanLabelRoom``).
+        width = (
+            float(anchor_band.width_px)
+            if annotation.cover_anchor and anchor_band is not None
+            else float(intent.width_px)
+        )
+        # The same band its labels' room is measured from when the anchor holds that room.
+        anchor_draw_band = _span_room_band(anchor, _span_extent(annotation), width)
+        draw_band = (
+            anchor_draw_band if anchor_draw_band is not None else _band_from_center_width(anchor_radius, width)
+        )
+    # The room lies past the holder, so it keeps the labels off other tracks only when the holder sets the span's
+    # outer edge.
+    holder = _span_room_holder(annotation, by_id)
+    holder_band = None if holder is None else _span_room_band(holder, _span_extent(annotation), width)
+    # Covering a feature track that separates the strands, a region with a strand covers that strand's lane.
+    strand_bands = (
+        anchor.payload.strand_lane_bands(strands_separated=strands_separated)
+        if span_band is None and annotation.cover_anchor and isinstance(anchor.payload, CircularFeatureLayout)
+        else {}
+    )
+    return replace(
+        overlay_resolved,
+        anchor_radius_px=anchor_radius,
+        anchor_offset_px=anchor_radius - axis_radius_px,
+        resolved_width_px=width,
+        packing_band_px=None,
+        draw_band_px=draw_band,
+        reserved_band_px=None,
+        spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
+        span_keeps_label_room=holder_band is not None
+        and float(holder_band.outer_px) >= float(draw_band.outer_px) - LAYOUT_EPSILON,
+        strand_bands_px=strand_bands,
+    )
+
+
 def _resolve_circular_radial_layout(
     *,
     total_length: int,
@@ -2840,71 +2915,15 @@ def _resolve_circular_radial_layout(
 
     by_id = {slot.id: slot for slot in resolved_by_index.values()}
     for intent in intents:
-        if intent.renderer != "annotations" or intent.side != "overlay":
-            continue
         overlay_resolved = resolved_by_index.get(intent.slot_index)
-        annotation = intent.slot.annotation
-        if overlay_resolved is None or annotation is None:
+        if intent.renderer != "annotations" or intent.side != "overlay" or overlay_resolved is None:
             continue
-        referenced = [
-            by_id[slot_id]
-            for slot_id in (annotation.anchor_slot, annotation.to_slot)
-            if slot_id in by_id
-        ]
-        if not referenced:
+        anchored = _anchored_annotation_overlay(
+            intent, overlay_resolved, by_id, axis_radius_px=axis_radius_px,
+            strands_separated=bool(cfg.canvas.strandedness),
+        )
+        if anchored is None:
             continue
-        anchor = referenced[0]
-        anchor_band = anchor.draw_band_px or anchor.packing_band_px
-        # to_slot: the hull of the two slots' whole bands, every feature lane included.
-        # cover_anchor alone keeps the draw band (the first feature lane of each strand).
-        whole_bands = [slot.packing_band_px or slot.draw_band_px for slot in referenced]
-        span_band = (
-            band_union([item for item in whole_bands if item is not None])
-            if annotation.to_slot is not None
-            else None
-        )
-        if span_band is not None:
-            anchor_radius, width, draw_band = span_band.center_px, span_band.width_px, span_band
-        else:
-            anchor_radius = (
-                float(anchor_band.center_px)
-                if anchor_band is not None
-                else float(anchor.anchor_radius_px or axis_radius_px)
-            )
-            # The overlay's own width is the intent's, the one its labels' room is measured from (``_SpanLabelRoom``).
-            width = (
-                float(anchor_band.width_px)
-                if annotation.cover_anchor and anchor_band is not None
-                else float(intent.width_px)
-            )
-            # The same band its labels' room is measured from when the anchor holds that room.
-            anchor_draw_band = _span_room_band(anchor, _span_extent(annotation), width)
-            draw_band = (
-                anchor_draw_band if anchor_draw_band is not None else _band_from_center_width(anchor_radius, width)
-            )
-        # The room lies past the holder, so it keeps the labels off other tracks only when the holder sets the span's
-        # outer edge.
-        holder = _span_room_holder(annotation, by_id)
-        holder_band = None if holder is None else _span_room_band(holder, _span_extent(annotation), width)
-        # Covering a feature track that separates the strands, a region with a strand covers that strand's lane.
-        strand_bands = (
-            anchor.payload.strand_lane_bands(strands_separated=bool(cfg.canvas.strandedness))
-            if span_band is None and annotation.cover_anchor and isinstance(anchor.payload, CircularFeatureLayout)
-            else {}
-        )
-        anchored = replace(
-            overlay_resolved,
-            anchor_radius_px=anchor_radius,
-            anchor_offset_px=anchor_radius - axis_radius_px,
-            resolved_width_px=width,
-            packing_band_px=None,
-            draw_band_px=draw_band,
-            reserved_band_px=None,
-            spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
-            span_keeps_label_room=holder_band is not None
-            and float(holder_band.outer_px) >= float(draw_band.outer_px) - LAYOUT_EPSILON,
-            strand_bands_px=strand_bands,
-        )
         resolved_by_index[intent.slot_index] = anchored
         by_id[intent.slot_id] = anchored
 

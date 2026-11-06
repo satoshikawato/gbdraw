@@ -280,7 +280,8 @@ def test_gradient_steps_follow_the_hit_strand_and_the_record_direction(
 def test_a_partial_hit_draws_only_its_part_of_the_query_scale(direction: str) -> None:
     # The hit covers query positions 301-600 of 600: from the mid colour to the dark end (D-44).
     annotation, gradient = _resolved(direction, 1, query_start=0.5, query_end=1.0)
-    steps = gradient_steps(annotation, gradient, 0, 100.0, 200.0, record_length=1000, length_px=40.0)
+    (part,) = mark_parts(annotation, join_origin=False)
+    steps = gradient_steps(annotation, gradient, part, 100.0, 200.0, record_length=1000, length_px=40.0)
     # Each of the 20 steps takes the colour at its middle: 1/40 of the span in from each end.
     near_mid = interpolate_color("#ffffff", "#000000", 0.5 + 0.5 / 40)
     near_end = interpolate_color("#ffffff", "#000000", 1.0 - 0.5 / 40)

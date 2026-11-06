@@ -53,7 +53,12 @@ from gbdraw.labels.linear import (
 from gbdraw.layout.linear import LinearFeatureLaneGeometry
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
-from gbdraw.render.drawers.linear.annotations import AnnotationRowFrame, LinearAnnotationLabel, linear_annotation_labels
+from gbdraw.render.drawers.linear.annotations import (
+    AnnotationRowFrame,
+    AnnotationSlotFrame,
+    LinearAnnotationLabel,
+    linear_annotation_labels,
+)
 
 from .track_slots import LinearRecordVerticalPlan
 
@@ -202,6 +207,18 @@ def linear_annotation_row_frames(plan: LinearRecordVerticalPlan, slot_id: str) -
     return tuple(
         AnnotationRowFrame(shift, float(row.plan.slot_by_id(slot_id).height))
         for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
+    )
+
+
+def linear_annotation_slot_frame(plan: LinearRecordVerticalPlan, slot_id: str) -> AnnotationSlotFrame:
+    """An annotation slot as its marks are drawn, slot-local: its height, its frame on each row of a wrapped record,
+    and the strand lanes it covers (``LinearResolvedSlot.strand_bands``, moved from record coordinates)."""
+
+    slot = plan.slot_by_id(slot_id)
+    return AnnotationSlotFrame(
+        height_px=float(slot.height),
+        row_frames=linear_annotation_row_frames(plan, slot_id),
+        strand_bands={strand: band.translate(-float(slot.origin_y)) for strand, band in slot.strand_bands.items()},
     )
 
 
@@ -634,6 +651,7 @@ __all__ = [
     "PlacedAnnotationLabels",
     "linear_annotation_label_inks",
     "linear_annotation_row_frames",
+    "linear_annotation_slot_frame",
     "linear_feature_glyph_boxes",
     "linear_feature_label_obstacles",
     "place_linear_annotation_labels",

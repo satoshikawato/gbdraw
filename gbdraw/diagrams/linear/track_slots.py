@@ -706,6 +706,53 @@ def _pack_side_slots(
     return resolved
 
 
+@dataclass(frozen=True)
+class _OverlayAnchoring:
+    """An anchored overlay's anchor, its origin from the anchor, the slots it spans, and whether it covers its anchor
+    alone (``cover_anchor``), so a region with a strand covers that strand's lane of it."""
+
+    anchor_id: str
+    relative_origin: float
+    span_tracks: tuple[LinearResolvedTrack, ...]
+    covers_anchor: bool
+
+
+def _place_anchored_overlays(
+    overlay_tracks: Sequence[LinearResolvedTrack],
+    anchorings: Mapping[str, _OverlayAnchoring],
+    *,
+    anchors: Sequence[LinearResolvedSlot],
+    footprint_of: Callable[[LinearResolvedTrack], LinearSlotFootprint],
+) -> list[LinearResolvedSlot]:
+    """Each anchored overlay at its origin from its placed anchor (``anchors``, then the overlays placed before it),
+    over the slots it spans, with its anchor's strand lanes when it covers its anchor alone."""
+
+    placed = {slot.id: slot for slot in anchors}
+    resolved: list[LinearResolvedSlot] = []
+    for overlay in overlay_tracks:
+        anchoring = anchorings.get(overlay.id)
+        if anchoring is None:
+            continue
+        anchor_slot = placed.get(anchoring.anchor_id)
+        if anchor_slot is None:
+            continue
+        item = _resolved_slot(overlay, footprint_of(overlay), anchor_slot.origin_y + anchoring.relative_origin)
+        if anchoring.span_tracks:
+            item = _span_resolved_slot(
+                item,
+                [
+                    (track, footprint_of(track), placed[track.id].origin_y)
+                    for track in anchoring.span_tracks
+                    if track.id in placed
+                ],
+            )
+        if anchoring.covers_anchor:
+            item = replace(item, strand_bands=anchor_slot.strand_bands)
+        resolved.append(item)
+        placed[overlay.id] = item
+    return resolved
+
+
 def resolve_linear_record_vertical_plan(
     layout: LinearTrackLayout,
     *,
@@ -720,9 +767,7 @@ def resolve_linear_record_vertical_plan(
     overlays_by_anchor: dict[str, list[tuple[float, LinearSlotFootprint]]] = {}
     label_rooms: dict[str, list[VerticalBand]] = {}
     standalone_overlays: list[LinearResolvedSlot] = []
-    # Per anchored overlay: its anchor, its origin from the anchor, the slots it spans, and whether it covers its
-    # anchor alone (``cover_anchor``), so a region with a strand covers that strand's lane of it.
-    relative_overlay_origins: dict[str, tuple[str, float, tuple[LinearResolvedTrack, ...], bool]] = {}
+    overlay_anchorings: dict[str, _OverlayAnchoring] = {}
 
     def footprint_of(track: LinearResolvedTrack) -> LinearSlotFootprint:
         return footprint_map.get(track.id, _default_slot_footprint(track))
@@ -766,7 +811,7 @@ def resolve_linear_record_vertical_plan(
             )
             for slot_id, room in rooms:
                 label_rooms.setdefault(slot_id, []).append(room)
-        relative_overlay_origins[overlay.id] = (
+        overlay_anchorings[overlay.id] = _OverlayAnchoring(
             anchor.id, relative_origin, span_tracks, span is not None and annotation.to_slot is None,
         )
 
@@ -808,34 +853,15 @@ def resolve_linear_record_vertical_plan(
         initial_spacing=structural_spacing,
     )
 
-    anchors = {
-        slot.id: slot
-        for slot in (*structural_slots, *above_slots, *below_slots, *standalone_overlays)
-    }
-    resolved_overlays = list(standalone_overlays)
-    for overlay in overlay_tracks:
-        relation = relative_overlay_origins.get(overlay.id)
-        if relation is None:
-            continue
-        anchor_id, relative_origin, span_tracks, covers_anchor = relation
-        anchor_slot = anchors.get(anchor_id)
-        if anchor_slot is None:
-            continue
-        item = _resolved_slot(overlay, footprint_of(overlay), anchor_slot.origin_y + relative_origin)
-        if span_tracks:
-            item = _span_resolved_slot(
-                item,
-                [
-                    (track, footprint_of(track), anchors[track.id].origin_y)
-                    for track in span_tracks
-                    if track.id in anchors
-                ],
-            )
-        if covers_anchor:
-            item = replace(item, strand_bands=anchor_slot.strand_bands)
-        resolved_overlays.append(item)
-        anchors[overlay.id] = item
-
+    resolved_overlays = [
+        *standalone_overlays,
+        *_place_anchored_overlays(
+            overlay_tracks,
+            overlay_anchorings,
+            anchors=(*structural_slots, *above_slots, *below_slots, *standalone_overlays),
+            footprint_of=footprint_of,
+        ),
+    ]
     resolved_by_index = {
         slot.slot_index: slot
         for slot in (*structural_slots, *above_slots, *below_slots, *resolved_overlays)
