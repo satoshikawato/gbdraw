@@ -487,7 +487,9 @@ searches no row of a figure drawn anyway; the dialog computes each row that
 Generate did not reach, one after another, for at most 30 seconds each. A row
 that finds no value in that time shows "No value found within 30 seconds."
 The next time the dialog opens, that row is searched again for up to 30
-seconds, continuing from where it stopped, so it can still find a value.
+seconds, continuing from where it stopped, so it can still find a value. If
+the last setting it tried took 30 seconds or more, it tries no further
+setting and shows the same message at once.
 While a row is being computed, Apply and Cancel first wait for it to finish,
 at most 30 seconds, and the dialog shows "Finishing the choice being
 computed…". Over a drawn figure, Cancel reads **Keep as drawn**. When the
