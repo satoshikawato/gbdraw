@@ -23,7 +23,10 @@ through its existing explicit dispatch. Deployment stress checks also remain.
 `Release / gate` is CI evidence for S11, not certification of the entire release
 process. S11 still requires its candidate freeze, package install/offline and
 cross-platform evidence, complete-refresh/performance budgets, and source checks.
-The tag publication workflow and `tools/check_release_source.py` are unchanged;
+The tag publication workflow admits its source with `tools/check_release_source.py`
+and publishes to PyPI only when a release-tier run's evidence carries to the
+tagged commit
+([Release evidence check](WEB_PERIODIC_AUDIT.md#release-evidence-check));
 passing a tier never authorizes tagging, publication, or deployment.
 
 ### Line coverage
@@ -374,7 +377,9 @@ change to it meets no verdict. `docs/recipes/` and `docs/capture/` hold
 executable scenario runners and expected outputs that recipe and capture tests
 read, so the verdicts whose evidence reads them exclude them. The periodic audit
 uses these verdicts for promotion evidence
-([carry-forward rule](WEB_PERIODIC_AUDIT.md#carrying-evidence-forward)).
+([carry-forward rule](WEB_PERIODIC_AUDIT.md#carrying-evidence-forward)), and the
+release workflow uses `releaseEvidenceCarries` before PyPI publication
+([Release evidence check](WEB_PERIODIC_AUDIT.md#release-evidence-check)).
 
 ## Smoke inventory and regression retention
 

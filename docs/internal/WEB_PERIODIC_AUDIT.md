@@ -253,6 +253,8 @@ request and complete them.
   - [ ] Count baselines (Procedure step 7): no `BASELINE may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
   - [ ] Release records for <version>: each `## Unreleased:` heading in `docs/internal/SESSION_FORMAT_HISTORY.md` whose entry this promotion ships starts with `<version>:` instead, and the Supported versions table of `SECURITY.md` lists the <version> line (any other change to that table is the Owner's)
+  - [ ] Release date for <version>: the `CHANGELOG.md` heading of <version> and `date-released` in `CITATION.cff` carry the day the Owner plans to publish the release; if the tag is published on another day, a pull request into `dev` corrects both lines to the tag's date
+  - [ ] Release evidence for the tag: the release-tier run above is on H or on an ancestor whose evidence carries to H, its `Release / gate` passed, no newer release-tier run on such a commit failed it, and the promotion merge adds nothing to `main` beyond H, so the release workflow's `Release-tier evidence carries to the tag` job can pass on the tagged commit ([Release evidence check](#release-evidence-check))
 ```
 
 ### First promotion after the 2026-09-30 audit
@@ -277,6 +279,52 @@ Check each one on the promotion head, or on an ancestor under
   different. Main-saved Sessions are converted once on load.
 - [ ] D-17: a Web PDF is 75% of its former physical size (CSS px converted to
   pt), which now matches CLI PDF and the PNG DPI.
+
+## Release evidence check
+
+When the Owner publishes a GitHub Release, `.github/workflows/release.yml`
+builds the distributions and, in parallel, runs the job
+`Release-tier evidence carries to the tag` (`tools/check-release-evidence.mjs`).
+`pypi-publish` needs both jobs, so nothing reaches PyPI when the check fails.
+The GitHub Release itself stays published.
+
+The check passes when one `Tests` run carries its release-tier evidence to the
+tagged commit T. It reads the newest 100 completed `workflow_dispatch` runs of
+`Tests` on `dev`, newest first, and keeps those whose commit carries to T:
+`node tools/ci-impact.mjs classify --base <its commit> --head <T>` reports
+`releaseEvidenceCarries` true, the same rule as
+[Carrying evidence forward](#carrying-evidence-forward), so the commit is an
+ancestor of T. Among them, the newest run whose `Release / gate` job has a
+result decides:
+
+- `Release / gate` succeeded: the check passes. The run's own result does not
+  count, because the report-only `Promotion audit / ...` jobs can fail it.
+- `Release / gate` failed, timed out, or failed to start: the check fails,
+  even when an older run passed.
+- A dev-tier dispatch skips `Release / gate`, and a cancelled gate has no
+  result; such runs are passed over.
+
+The job summary names the run it used, or lists why each run does not count,
+the promotion's `dev` commit H (the second parent of T), and whether `dev`
+still points at H.
+
+When the check fails:
+
+1. If the newest release-tier run on a carrying commit failed its
+   `Release / gate`, fix the cause or re-run that run's failed jobs
+   (`gh run rerun <Tests run ID> --failed`); a re-run keeps its commit, so this
+   works after `dev` has moved too. Then re-run the release workflow's failed
+   jobs as in step 2.
+2. If `dev` still points at H, dispatch the release tier
+   (`gh workflow run test.yml --ref dev -f tier=release`). When its
+   `Release / gate` passes, re-run the release workflow's failed jobs
+   (`gh run rerun <release run ID> --failed`). The re-run uses the
+   distributions already built and waits for the `pypi` environment's approval
+   as before.
+3. If `dev` has moved past H, a dispatch tests a later commit, which is not
+   an ancestor of T, so no new run can carry evidence to T. Tell the Owner;
+   the Owner decides how to continue, for example with a new patch release
+   from a promotion that has release-tier evidence.
 
 ## Hosted site check and rollback
 
