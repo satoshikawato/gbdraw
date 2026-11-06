@@ -20,13 +20,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { maskJavaScript } from '../../tools/web-change-source.mjs';
 import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
+
+import { pinnedTypeScript } from './helpers/count-baseline.mjs';
 
 const UNCHECKED_MODULES = new Set([]);
 
@@ -211,16 +212,7 @@ test('R14: every module is checked or listed in UNCHECKED_MODULES, never both', 
 });
 
 test('R14: tsc reports no diagnostic and its program holds every module', () => {
-  const require = createRequire(import.meta.url);
-  let packagePath;
-  try {
-    packagePath = require.resolve('typescript/package.json');
-  } catch {
-    assert.fail('typescript is not installed: run `npm ci` (R14 runs the pinned devDependency)');
-  }
-  const pinned = JSON.parse(readFileSync(join(REPOSITORY_ROOT, 'package.json'), 'utf8')).devDependencies.typescript;
-  const installed = JSON.parse(readFileSync(packagePath, 'utf8')).version;
-  assert.equal(installed, pinned, `typescript ${installed} is installed but package.json pins ${pinned}: run \`npm ci\``);
+  const packagePath = pinnedTypeScript();
   const run = spawnSync(
     process.execPath,
     [join(dirname(packagePath), 'bin', 'tsc'), '-p', TSCONFIG, '--listFiles', '--pretty', 'false'],

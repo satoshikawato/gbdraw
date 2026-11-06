@@ -111,6 +111,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/helpers/app-lifecycle.cjs` | `playwright-functional` | not a test | never |
 | [TYPE-DEBT](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking) | `tests/test_type_check_ratchet.py` | `core-pr` | `core` | never |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `core-pr` | `core` | never |
+| [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `web-contracts-pr` | `browser` | never |
 
 ### Allowlists
 
@@ -140,6 +141,8 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `FUNCTION_PARAMETERS` | py-count-map |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `MAX_FUNCTION_LINES` | py-count |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `MAX_FUNCTION_PARAMETERS` | py-count |
+| [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `FUNCTION_LINES` | count-map |
+| [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `MAX_FUNCTION_LINES` | count |
 
 ## Product Contract records and the tests that cite them
 

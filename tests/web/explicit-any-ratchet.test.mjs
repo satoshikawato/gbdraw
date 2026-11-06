@@ -23,13 +23,12 @@
 // or raising one is an authority-only change. Owner decisions R15-5
 // (2026-10-09) and BA-D04 (2026-10-10).
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { readdirSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
+import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
 
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
@@ -110,27 +109,9 @@ const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..'
 const WEB_JS = join(REPOSITORY_ROOT, 'gbdraw', 'web', 'js');
 const TSCONFIG = join(REPOSITORY_ROOT, 'tests', 'web', 'types', 'tsconfig.json');
 
-const typescriptApi = async () => {
-  const require = createRequire(import.meta.url);
-  let packagePath;
-  try {
-    packagePath = require.resolve('typescript/package.json');
-  } catch {
-    assert.fail('typescript is not installed: run `npm ci` (R14 runs the pinned devDependency)');
-  }
-  const pinned = JSON.parse(readFileSync(join(REPOSITORY_ROOT, 'package.json'), 'utf8')).devDependencies.typescript;
-  const installed = JSON.parse(readFileSync(packagePath, 'utf8')).version;
-  assert.equal(installed, pinned, `typescript ${installed} is installed but package.json pins ${pinned}: run \`npm ci\``);
-  const [{ API }, { isTypeNode, SyntaxKind }] = await Promise.all([
-    import(require.resolve('typescript/unstable/sync')),
-    import(require.resolve('typescript/unstable/ast'))
-  ]);
-  return { API, isTypeNode, SyntaxKind };
-};
-
 // The explicit-any nodes of every counted module: Map(path -> [{ line, type }]).
 const explicitAnyByModule = async () => {
-  const { API, isTypeNode, SyntaxKind } = await typescriptApi();
+  const { API, ast: { isTypeNode, SyntaxKind } } = await typescriptApi();
   const paths = readdirSync(WEB_JS, { recursive: true })
     .map((path) => path.split(sep).join('/'))
     .filter((path) => path.endsWith('.js'))
