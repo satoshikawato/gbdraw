@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import binascii
 import functools
 import importlib
 import math
@@ -13,7 +14,6 @@ import sys
 import logging
 import warnings
 import xml.etree.ElementTree as ET
-import zlib
 from pathlib import Path
 from types import ModuleType
 from typing import Any, List, Sequence
@@ -289,7 +289,7 @@ def png_with_resolution(png: bytes, dpi: float) -> bytes:
         raise ValueError("Not a PNG.")
     per_metre = math.floor(dpi / _METRES_PER_INCH + 0.5)
     data = struct.pack(">IIB", per_metre, per_metre, 1)
-    chunk = struct.pack(">I", len(data)) + b"pHYs" + data + struct.pack(">I", zlib.crc32(b"pHYs" + data))
+    chunk = struct.pack(">I", len(data)) + b"pHYs" + data + struct.pack(">I", binascii.crc32(b"pHYs" + data))
     offset = 8
     while offset + 8 <= len(png):
         length, kind = struct.unpack(">I4s", png[offset : offset + 8])
