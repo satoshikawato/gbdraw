@@ -1,0 +1,334 @@
+// @ts-check
+// The Comparison card of the shown Linear drawing: the comparison height
+// check, the card's projection (its intent, pairs, issues), the pair timeline
+// and the record names its rows show, the LOSAT cache rows of the pairs, and
+// the paths that open a disclosure of the card and bring a pair, an issue, or
+// a pair's BLAST TSV uploader into view. The File card row input and the
+// record row tokens are here too. The composition root passes the state, the
+// shown-drawing readers, the config service's LOSAT cache-info write, and the
+// settings pane's reveal as ports. The comparison plan's edits are in
+// app/linear-comparison-edits.js.
+import { bindDrawingCanonicalComparisons } from '../services/drawing/inputs.js';
+import {
+  adjacentRowPairs,
+  buildLinearComparisonTimeline,
+  linearComparisonEdgeKey
+} from '../services/linear-comparisons.js';
+import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
+import { linearRecordNames } from '../services/linear-sources.js';
+import { inputSourceFiles } from '../services/input-types.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
+import { t } from '../utils/i18n.js';
+import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import { projectLinearComparisonUi } from './comparison-ui.js';
+/** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { LinearComparisonPair, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
+/** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
+/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
+
+const { computed, nextTick, watch } = window.Vue;
+
+/** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
+/** @typedef {(next: LosatCacheInfoEntry[]) => void} WriteLosatCacheInfo The write of the project's LOSAT cache-info rows. */
+/** @typedef {{ readonly value: unknown }} LosatCacheInfoRows The project's LOSAT cache-info rows (an array once a run or a Load wrote them). */
+/**
+ * The control of the Comparison card that an issue names, and the pair it is about.
+ * @typedef {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string }} LinearComparisonFocusTarget
+ */
+/** @typedef {(target: HTMLElement, options?: { align?: 'start', focus?: HTMLElement }) => Promise<void>} RevealSetting */
+
+/** @param {DrawingState} drawing */
+export const effectiveLinearComparisonLayout = (drawing) => (
+  drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : []
+);
+/** @param {DrawingState} drawing @param {string} uid @param {number} fallback */
+export const linearRecordRowFor = (drawing, uid, fallback) => (
+  drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback
+);
+
+/**
+ * @typedef {object} LinearComparisonViewPorts
+ * @property {WebState} state
+ * @property {{ readonly value: DiagramMode }} mode The shown drawing's mode.
+ * @property {LosatCacheInfoRows} losatCacheInfo
+ * @property {WriteLosatCacheInfo} writeLosatCacheInfo
+ * @property {ShownDrawingOfMode} shownDrawingOfMode
+ */
+
+/**
+ * The Comparison card of the shown drawing: the comparison height check, the card's projection and its pressed
+ * global action, whether LOSAT can run, and the invalidation of a drawing's generated comparisons and LOSAT cache rows
+ * after its plan or record rows changed.
+ * @param {LinearComparisonViewPorts} ports
+ */
+export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeLosatCacheInfo, shownDrawingOfMode }) => {
+  const comparisonHeightValidationError = computed(() => {
+    const drawing = state.activeDrawing();
+    if (
+      mode.value !== 'linear' ||
+      drawing.linearComparisonResolution.value?.hasComparisonIntent !== true
+    ) return '';
+    return classifyOptionalPositiveNumber(drawing.adv.comparison_height).status === 'invalid'
+      // A diagnostic error object is truthy, so it always normalizes to a model.
+      ? errorText(/** @type {UserFacingError} */ (normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' }))).summaryParts)
+      : '';
+  });
+
+  /** @param {DrawingState} drawing */
+  const reindexLinearLosatCacheInfo = (drawing) => {
+    if (!Array.isArray(losatCacheInfo.value)) return;
+    // Resolution indexes are positions among the drawn records.
+    const indexByUid = new Map(
+      drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
+    );
+    const resolvedByEdgeKey = new Map(
+      drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
+    );
+    writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
+      const edgeKey = String(entry?.edgeKey || '');
+      if (!edgeKey) return [entry];
+      const resolved = resolvedByEdgeKey.get(edgeKey);
+      const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
+      const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');
+      const queryIndex = indexByUid.get(queryUid);
+      const subjectIndex = indexByUid.get(subjectUid);
+      if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return [];
+      return [{
+        ...entry,
+        edgeKey,
+        queryUid,
+        subjectUid,
+        queryIndex,
+        subjectIndex,
+        ordinal: Number.isInteger(Number(resolved?.ordinal))
+          ? Number(resolved?.ordinal)
+          : entry.ordinal
+      }];
+    }));
+  };
+
+  /** @param {DrawingState} drawing */
+  const invalidateLinearComparisonArtifacts = (drawing, { preserveLosatCacheInfo = false } = {}) => {
+    bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, []);
+    if (Array.isArray(losatCacheInfo.value)) {
+      if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
+      else writeLosatCacheInfo(losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey));
+    }
+  };
+
+  const linearComparisonUi = computed(() => {
+    const drawing = state.activeDrawing();
+    return projectLinearComparisonUi({
+      plan: drawing.linearComparisonPlan,
+      resolution: drawing.linearComparisonResolution.value,
+      adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
+        .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
+      losatProgram: drawing.losatProgram.value,
+      blastpMode: drawing.losat.blastp.mode,
+      inferOrthogroups: drawing.losat.blastp.collinearInferOrthogroups === true,
+      anchorMode: drawing.losat.blastp.collinearAnchorMode,
+      filters: {
+        min_bitscore: drawing.adv.min_bitscore,
+        evalue: drawing.adv.evalue,
+        identity: drawing.adv.identity,
+        alignment_length: drawing.adv.alignment_length
+      }
+    });
+  });
+  // The pressed global action follows the projected intent (UJ-05).
+  const linearComparisonGlobalAction = computed(() => {
+    const { intentKey } = linearComparisonUi.value;
+    return intentKey === 'custom' ? 'selected' : intentKey;
+  });
+  const canRunLinearLosat = computed(() => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing !== null && drawing.drawnLinearSeqs.value.filter((sequence) => (
+      inputSourceFiles(drawing.inputType.value, sequence).complete
+    )).length >= 2;
+  });
+  return {
+    comparisonHeightValidationError, invalidateLinearComparisonArtifacts, linearComparisonUi,
+    linearComparisonGlobalAction, canRunLinearLosat
+  };
+};
+
+/**
+ * @typedef {object} LinearComparisonTimelinePorts
+ * @property {WebState} state
+ * @property {() => readonly LinearSeq[]} shownLinearSeqs The record rows of the shown Linear drawing.
+ */
+
+/**
+ * The pair timeline of the shown drawing, a pair by its edge key, and the record names its rows show.
+ * @param {LinearComparisonTimelinePorts} ports
+ */
+export const createLinearComparisonTimeline = ({ state, shownLinearSeqs }) => {
+  const linearComparisonTimeline = computed(() => {
+    const drawing = state.activeDrawing();
+    return buildLinearComparisonTimeline({
+      sequences: drawing.linearSeqs,
+      recordsOff: drawing.recordsOff,
+      layout: effectiveLinearComparisonLayout(drawing),
+      plan: drawing.linearComparisonPlan,
+      resolution: drawing.linearComparisonResolution.value
+    });
+  });
+  /** @param {string} edgeKey */
+  const linearComparisonPairForEdgeKey = (edgeKey) => {
+    for (const row of linearComparisonTimeline.value.rows) {
+      const pair = row.boundaryAfter?.pairs.find((/** @type {LinearComparisonPair} */ entry) => entry.edgeKey === edgeKey);
+      if (pair) return pair;
+    }
+    return null;
+  };
+  // Every panel names a record the same way (OV-436).
+  const linearRecordNameMap = computed(() => linearRecordNames(shownLinearSeqs()));
+  /** @param {string} uid */
+  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || t('Record');
+  // The parts <record-name> lays out: the name shrinks, the accession stays whole.
+  /** @param {string} uid */
+  const linearComparisonRecordName = (uid) => {
+    const entry = linearRecordNameMap.value.get(uid);
+    return { name: entry?.name || t('Record'), detail: entry?.accession || '' };
+  };
+  return {
+    linearComparisonTimeline, linearComparisonPairForEdgeKey, linearComparisonRecordLabel, linearComparisonRecordName
+  };
+};
+
+/**
+ * @typedef {object} LinearComparisonFocusPorts
+ * @property {WebState} state
+ * @property {{ readonly value: DiagramMode }} mode The shown drawing's mode.
+ * @property {{ readonly value: UserFacingError | null }} errorLog The banner's error.
+ * @property {{ readonly value: { readonly issues: readonly LinearComparisonFocusTarget[] } }} linearComparisonUi
+ *   The Comparison card's projection: its issues.
+ * @property {RevealSetting} revealSetting The settings pane shows and focuses a control.
+ */
+
+/**
+ * The paths into the Comparison card: a disclosure that opens itself while LOSAT compares the shown drawing, a pair's
+ * row, an issue's control, a pair's BLAST TSV chooser, and the cause of a Generate error.
+ * @param {LinearComparisonFocusPorts} ports
+ */
+export const createLinearComparisonFocus = ({ state, mode, errorLog, linearComparisonUi, revealSetting }) => {
+  /** @param {string} disclosureKey */
+  const openLinearComparisonDisclosure = async (disclosureKey) => {
+    if (!disclosureKey) return null;
+    const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
+      .find((element) => element.dataset.linearComparisonDisclosure === disclosureKey);
+    if (!details) return null;
+    details.open = true;
+    await nextTick();
+    return details;
+  };
+  watch([mode, () => state.activeDrawing().hasActiveLinearLosatIntent.value], (/** @type {[DiagramMode, boolean]} */ [activeMode, activeLosat]) => {
+    if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
+  }, { flush: 'post' });
+
+  /** @param {string} edgeKey */
+  const focusLinearComparisonPair = async (edgeKey) => {
+    await openLinearComparisonDisclosure('selected-pairs');
+    const container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
+      .find((element) => element.dataset.edgeKey === edgeKey);
+    const control = /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'));
+    if (control) await revealSetting(control);
+  };
+
+  /** @param {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string } | null | undefined} target */
+  const focusLinearComparisonIssue = async (target = linearComparisonUi.value.issues[0]) => {
+    if (!target) return false;
+    const details = await openLinearComparisonDisclosure(target.disclosureKey);
+    /** @type {HTMLElement | null} */
+    let container = details;
+    if (target.edgeKey) {
+      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
+        .find((element) => element.dataset.edgeKey === target.edgeKey) || container;
+    }
+    if (target.edgeId && target.focusTargetKey === 'pair-row') {
+      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-unplaced-draft]')])
+        .find((element) => element.dataset.linearUnplacedDraft === target.edgeId) || container;
+    }
+    const marked = container?.querySelector(
+      `[data-comparison-focus="${target.focusTargetKey}"]`
+    );
+    const focusable = marked?.matches?.('input, select, button, [tabindex]')
+      ? marked
+      : marked?.querySelector?.('input, select, button, [tabindex]');
+    const control = /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'));
+    if (control) await revealSetting(control);
+    return true;
+  };
+
+  // The one way to choose a pair's BLAST TSV outside its row:
+  // the pair's own uploader opens its file chooser inside the click, so the
+  // file takes the uploader's availability check and History step.
+  /** @param {string} edgeKey @param {{ focus?: boolean }} [options] */
+  const chooseLinearComparisonPairFile = (edgeKey, { focus = false } = {}) => {
+    void openLinearComparisonDisclosure('selected-pairs');
+    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
+      .find((element) => element.dataset.linearComparisonPairUpload === edgeKey);
+    const button = /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'));
+    if (focus && button) void revealSetting(button);
+    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
+    return Boolean(uploader);
+  };
+
+  // The Generate error's "Show in Comparison": the first issue's
+  // control, the Execution setting for a LOSAT runtime failure, or the
+  // Comparison card when the cause has no control.
+  const showLinearComparisonCause = async () => {
+    const code = normalizeUserFacingError(errorLog.value)?.code;
+    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
+      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
+    if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
+    const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
+    if (!card) return;
+    await revealSetting(card, {
+      align: 'start', focus: /** @type {HTMLElement | null} */ (card.querySelector('button:not([disabled])')) ?? undefined
+    });
+  };
+  return {
+    openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
+    showLinearComparisonCause
+  };
+};
+
+/**
+ * @typedef {object} LinearLayoutReadersPorts
+ * @property {WebState} state
+ * @property {ShownDrawingOfMode} shownDrawingOfMode
+ * @property {LosatCacheInfoRows} losatCacheInfo
+ */
+
+/**
+ * The File card's row input of the shown Linear drawing, its record row tokens, and the LOSAT cache rows by pair.
+ * @param {LinearLayoutReadersPorts} ports
+ */
+export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCacheInfo }) => {
+  /**
+   * The File card's row input: the row of `uid` in the shown Linear drawing,
+   * or `fallback` (its position) when the drawing gives it none.
+   * @param {string} uid @param {number} fallback
+   */
+  const shownLinearRecordRowFor = (uid, fallback) => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing === null ? fallback : linearRecordRowFor(drawing, uid, fallback);
+  };
+  const linearLayoutTokens = computed(() => {
+    const drawing = state.activeDrawing();
+    return (
+      drawing.linearRecordLayoutEnabled.value
+        ? linearRecordPositionTokens(drawing.linearSeqs, drawing.linearRecordRows)
+        : []
+    );
+  });
+  const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
+    (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
+      .filter((/** @type {LosatCacheInfoEntry} */ entry) => String(entry?.edgeKey || ''))
+      .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
+  ));
+  return { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey };
+};

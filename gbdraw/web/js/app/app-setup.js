@@ -11,7 +11,6 @@
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingInputSite } from './drawing-list.js' */
 /** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
-/** @import { InputSlot } from '../services/input-types.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -27,8 +26,6 @@
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
-/** @import { LinearComparisonEdge, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
-/** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordIdentitySources, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RegionSourceFeature } from './region-drawing.js' */
@@ -52,9 +49,18 @@ import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
-import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
+import { PNG_DPI_CHOICES } from '../services/session-active-config-contract.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
+import {
+  createLinearComparisonFocus, createLinearComparisonTimeline, createLinearComparisonView, createLinearLayoutReaders,
+  linearRecordRowFor
+} from './linear-comparison-panel.js';
+import {
+  createLinearComparisonGapEdits, createLinearComparisonModes, createLinearComparisonPairEdits,
+  createLinearComparisonPlanWriter
+} from './linear-comparison-edits.js';
+import { createLinearFileCards } from './linear-file-cards.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
@@ -126,20 +132,16 @@ import {
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import { bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileTree, createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
+import { bindDrawingInputFile, bindDrawingInputFileTree, createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
 import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec, normalizeInputType } from '../services/input-types.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
   groupLinearSourceRecords,
-  linearCardFileFields,
-  linearCardInputComplete,
-  linearRecordNames,
   linearFileCardRecord,
   isPristineLinearSource,
   linearSourceHasPrimaryInput,
   moveLinearSourceGroup,
   planLinearSourceRemoval,
-  setLinearSourceFolded,
   getLinearSourceDefaultDefinition,
   inferredDefinitionForRecord,
   setLinearSourceDefaultDefinition,
@@ -239,7 +241,6 @@ import {
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
-import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
@@ -265,26 +266,13 @@ import {
   resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import {
-  linearRecordPositionTokens,
-  moveLinearRecordInRow,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from '../services/linear-record-layout.js';
 import {
-  LINEAR_COMPARISON_MODES,
-  LINEAR_COMPARISON_SOURCES,
-  adjacentRowPairs,
-  buildLinearComparisonTimeline,
-  createLinearComparisonEdge,
-  setComparisonEdgeFile,
-  swapComparisonEdgeFile,
-  linearComparisonEdgeKey,
-  materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
-  normalizeLinearComparisonPlan,
-  reconcileLinearComparisonPlan,
-  resolveLinearComparisonPlan
+  reconcileLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
@@ -302,11 +290,6 @@ import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../se
 import { removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
-import {
-  projectLinearComparisonLosatModeSelection,
-  projectLinearComparisonLosatpModeSelection,
-  projectLinearComparisonUi
-} from './comparison-ui.js';
 import {
   circularDiscoveryForInput,
   discoverInputRecords
@@ -343,10 +326,8 @@ import {
 /** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive, isRef } = window.Vue;
@@ -670,787 +651,29 @@ export const createAppSetup = () => {
     mutationAvailability: sessionOperationAvailability
   });
 
-  const comparisonHeightValidationError = computed(() => {
-    const drawing = state.activeDrawing();
-    if (
-      mode.value !== 'linear' ||
-      drawing.linearComparisonResolution.value?.hasComparisonIntent !== true
-    ) return '';
-    return classifyOptionalPositiveNumber(drawing.adv.comparison_height).status === 'invalid'
-      // A diagnostic error object is truthy, so it always normalizes to a model.
-      ? errorText(/** @type {UserFacingError} */ (normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' }))).summaryParts)
-      : '';
-  });
-
-  /**
-   * @param {LinearComparisonEdge | undefined} left
-   * @param {LinearComparisonEdge | undefined} right
-   */
-  const sameLinearComparisonEdge = (left, right) => (
-    left?.id === right?.id &&
-    left?.queryUid === right?.queryUid &&
-    left?.subjectUid === right?.subjectUid &&
-    left?.included === right?.included &&
-    left?.fileActive === right?.fileActive &&
-    left?.losatFilenameActive === right?.losatFilenameActive &&
-    left?.source === right?.source &&
-    left?.file === right?.file &&
-    left?.losatFilename === right?.losatFilename
-  );
-
-  /** @param {DrawingState} drawing */
-  const reindexLinearLosatCacheInfo = (drawing) => {
-    if (!Array.isArray(losatCacheInfo.value)) return;
-    // Resolution indexes are positions among the drawn records.
-    const indexByUid = new Map(
-      drawing.drawnLinearSeqs.value.map((sequence, index) => [String(sequence?.uid || ''), index])
-    );
-    const resolvedByEdgeKey = new Map(
-      drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
-    );
-    writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
-      const edgeKey = String(entry?.edgeKey || '');
-      if (!edgeKey) return [entry];
-      const resolved = resolvedByEdgeKey.get(edgeKey);
-      const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
-      const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');
-      const queryIndex = indexByUid.get(queryUid);
-      const subjectIndex = indexByUid.get(subjectUid);
-      if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return [];
-      return [{
-        ...entry,
-        edgeKey,
-        queryUid,
-        subjectUid,
-        queryIndex,
-        subjectIndex,
-        ordinal: Number.isInteger(Number(resolved?.ordinal))
-          ? Number(resolved?.ordinal)
-          : entry.ordinal
-      }];
-    }));
-  };
-
-  /** @param {DrawingState} drawing */
-  const invalidateLinearComparisonArtifacts = (drawing, { preserveLosatCacheInfo = false } = {}) => {
-    bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, []);
-    if (Array.isArray(losatCacheInfo.value)) {
-      if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
-      else writeLosatCacheInfo(losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey));
-    }
-  };
-
-  // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
-  // without a file) compares nothing new, so it keeps the alignment. Every
-  // other pair must keep its current comparison; the pending pairs count as
-  // their current one.
-  /** @typedef {import('../services/linear-comparisons.js').LinearComparisonResolvedEdge} ResolvedEdge */
-  /** @param {DrawingState} drawing @param {import('../services/linear-comparisons.js').LinearComparisonPlan} normalized */
-  const onlyPendingSourcesChanged = (drawing, normalized) => {
-    /** @param {ResolvedEdge} edge */
-    const pending = (edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD && !(edge.fileActive && edge.file);
-    /** @type {readonly ResolvedEdge[]} */
-    const before = drawing.linearComparisonResolution.value.edges;
-    /** @type {readonly ResolvedEdge[]} */
-    const after = resolveLinearComparisonPlan({
-      plan: normalized, sequences: drawing.linearSeqs, layout: effectiveLinearComparisonLayout(drawing),
-      losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp?.mode
-    }).edges;
-    if (!after.some(pending)) return false;
-    const beforeByKey = new Map(before.map((edge) => [edge.edgeKey, edge]));
-    const effective = after.map((edge) => (pending(edge) ? beforeByKey.get(edge.edgeKey) : edge));
-    return effective.length === before.length && effective.every((edge, index) => (
-      edge?.edgeKey === before[index].edgeKey && edge.source === before[index].source
-      && edge.file === before[index].file && edge.losatFilename === before[index].losatFilename
-    ));
-  };
-
-  /**
-   * @param {DrawingState} drawing
-   * @param {unknown} nextPlan An unvalidated plan; `normalizeLinearComparisonPlan` validates it.
-   */
-  const replaceLinearComparisonPlan = (drawing, nextPlan, { invalidate = true } = {}) => {
-    const normalized = normalizeLinearComparisonPlan(nextPlan);
-    const changed = normalized.mode !== drawing.linearComparisonPlan.mode
-      || normalized.defaultSource !== drawing.linearComparisonPlan.defaultSource
-      || normalized.edges.length !== drawing.linearComparisonPlan.edges.length
-      || normalized.edges.some((edge, index) => (
-        !sameLinearComparisonEdge(edge, drawing.linearComparisonPlan.edges[index])
-      ));
-    if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
-      similarityAlignmentActions?.clearForMutation?.(msg('comparison configuration changed.'));
-    }
-    SETTINGS_SLICE.install(drawing.slices.settings, { linearComparisonPlan: normalized });
-    if (invalidate) invalidateLinearComparisonArtifacts(drawing);
-  };
-
-  /**
-   * @param {DrawingState} drawing
-   * @param {(next: LinearComparisonPlan) => void} mutator
-   */
-  const mutateLinearComparisonPlan = (drawing, mutator) => history.runUndoable(msg('Change comparisons'), () => {
-    const next = normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
-    mutator(next);
-    replaceLinearComparisonPlan(drawing, next);
-  });
-
-  /** @param {DrawingState} drawing */
-  const effectiveLinearComparisonLayout = (drawing) => (
-    drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : []
-  );
-
-  /** @param {DrawingState} drawing */
-  const syncLinearComparisonRecords = (drawing, { invalidate = true } = {}) => {
-    const next = reconcileLinearComparisonPlan(drawing.linearComparisonPlan, drawing.linearSeqs);
-    const currentEdges = drawing.linearComparisonPlan.edges;
-    const unchanged = (
-      next.mode === drawing.linearComparisonPlan.mode &&
-      next.defaultSource === drawing.linearComparisonPlan.defaultSource &&
-      next.edges.length === currentEdges.length &&
-      next.edges.every((edge, index) => sameLinearComparisonEdge(edge, currentEdges[index]))
-    );
-    if (!unchanged) replaceLinearComparisonPlan(drawing, next, { invalidate });
-    return !unchanged;
-  };
-
-  const syncLinearRecordLayout = ({ preserveLosatCacheInfo = false } = {}) => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return false;
-    const next = reconcileLinearRecordLayout(drawing.linearSeqs, drawing.linearRecordRows);
-    const rowsUnchanged = next.length === drawing.linearRecordRows.length && next.every((entry, index) => (
-      entry.uid === drawing.linearRecordRows[index]?.uid && entry.row === drawing.linearRecordRows[index]?.row
-    ));
-    if (!rowsUnchanged) drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...next);
-    const comparisonsChanged = syncLinearComparisonRecords(drawing, { invalidate: false });
-    if (!rowsUnchanged || comparisonsChanged) {
-      invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo });
-    }
-    return !rowsUnchanged || comparisonsChanged;
-  };
-  /** @param {string} uid @param {unknown} row */
-  const setLinearRecordRow = (uid, row) => shownAction('linear', (drawing) => {
-    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
-    const previous = drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row;
-    updateLinearRecordRow(drawing.linearRecordRows, uid, row);
-    if (drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row !== previous) {
-      invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
-    }
-  });
-  /** @param {boolean} enabled */
-  const setLinearRecordLayoutEnabled = (enabled) => shownAction('linear', (drawing) => {
-    const nextEnabled = Boolean(enabled);
-    if (drawing.linearRecordLayoutEnabled.value === nextEnabled) return;
-    drawing.linearRecordLayoutEnabled.value = nextEnabled;
-    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
-    invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
-    if (nextEnabled) return materializeAutomaticLinearRecords(drawing);
-  });
-  /** @param {string} uid @param {number} direction */
-  const moveLinearRecordWithinRow = (uid, direction) => shownAction('linear', (drawing) => {
-    const next = moveLinearRecordInRow(drawing.linearSeqs, drawing.linearRecordRows, uid, direction);
-    drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...next);
-    syncLinearComparisonRecords(drawing, { invalidate: false });
-    invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
-  });
-
-  const linearComparisonUi = computed(() => {
-    const drawing = state.activeDrawing();
-    return projectLinearComparisonUi({
-      plan: drawing.linearComparisonPlan,
-      resolution: drawing.linearComparisonResolution.value,
-      adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
-        .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
-      losatProgram: drawing.losatProgram.value,
-      blastpMode: drawing.losat.blastp.mode,
-      inferOrthogroups: drawing.losat.blastp.collinearInferOrthogroups === true,
-      anchorMode: drawing.losat.blastp.collinearAnchorMode,
-      filters: {
-        min_bitscore: drawing.adv.min_bitscore,
-        evalue: drawing.adv.evalue,
-        identity: drawing.adv.identity,
-        alignment_length: drawing.adv.alignment_length
-      }
-    });
-  });
-  // The pressed global action follows the projected intent (UJ-05).
-  const linearComparisonGlobalAction = computed(() => {
-    const { intentKey } = linearComparisonUi.value;
-    return intentKey === 'custom' ? 'selected' : intentKey;
-  });
-  const canRunLinearLosat = computed(() => {
-    const drawing = shownDrawingOfMode('linear');
-    return drawing !== null && drawing.drawnLinearSeqs.value.filter((sequence) => (
-      inputSourceFiles(drawing.inputType.value, sequence).complete
-    )).length >= 2;
-  });
-
-  /** @type {{ readonly value: LinearSourceGroup[] }} */
-  const linearSourceGroups = computed(() => groupLinearSourceRecords(shownLinearSeqs()));
-  const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
-  const linearSourceRemovalReturnFocus = ref(null);
-  const linearSourceRemovalTarget = computed(() => (
-    linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
-  ));
-  const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
-  /** @param {{ name?: string } | null} file */
-  const chosenFileName = (file) => String(file?.name || t('Unnamed file'));
-  /**
-   * The file names of a Linear File, as its dialogs name it: every file the
-   * row holds, which a removal takes, also one of the other input type.
-   * @param {LinearSourceGroup} source
-   */
-  const linearSourceFileName = (source) => {
-    const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
-    return names.length ? names.join(' + ') : t('File {n}', { n: linearSourceGroups.value.indexOf(source) + 1 });
-  };
-  const LINEAR_FILE_SLOT_NAMES = { gb: 'GenBank', gff: 'GFF3', fasta: 'FASTA' };
-  /**
-   * What a File card's header line says of the slots the card shows: each
-   * file's name, "no FASTA" for a slot still empty, "No file" for none.
-   * @param {LinearSourceGroup} source
-   */
-  const linearCardFileLine = (source) => {
-    const drawing = shownDrawingOfMode('linear');
-    if (drawing === null) return t('No file');
-    const fields = linearCardFileFields(drawing.inputType.value);
-    if (!fields.some((field) => source.sequence[field])) return t('No file');
-    return fields.map((field) => (
-      source.sequence[field] ? chosenFileName(source.sequence[field]) : t('no {file}', { file: LINEAR_FILE_SLOT_NAMES[field] })
-    )).join(' + ');
-  };
-  /**
-   * Whether the shown drawing of a mode has every file its input type reads.
-   * @param {'circular' | 'linear'} drawingMode
-   * @param {Readonly<Partial<Record<InputSlot, unknown>>>} [linearSlots] a Linear card's slots; Circular reads the drawing's own files
-   */
-  const shownInputComplete = (drawingMode, linearSlots = {}) => {
-    const drawing = shownDrawingOfMode(drawingMode);
-    if (drawing === null) return false;
-    const slots = drawingMode === 'circular' ? circularInputSlots(drawing.files) : linearSlots;
-    return inputSourceFiles(drawing.inputType.value, slots).complete;
-  };
-  /** @param {LinearSourceGroup} source */
-  const linearCardHoldsInput = (source) => {
-    const drawing = shownDrawingOfMode('linear');
-    return drawing !== null && linearCardInputComplete(source, drawing.inputType.value);
-  };
-  // A File card folds to its header line. The disclosure reports every change
-  // of its own state: the user's press, and a path that opened the card to
-  // show a setting inside it.
-  /** @param {LinearSourceGroup} source */
-  const isLinearSourceFolded = (source) => linearFoldedSources.has(source.uid);
-  /** @param {LinearSourceGroup} source @param {Event} event */
-  const syncLinearSourceFold = (source, event) => setLinearSourceFolded(
-    linearFoldedSources, source.uid, !(/** @type {HTMLDetailsElement} */ (event.currentTarget)).open
-  );
-  const linearSourceRemovalTargetName = computed(() => {
-    const source = linearSourceRemovalTarget.value;
-    return source ? linearSourceFileName(source) : t('Unavailable File');
-  });
-  const linearComparisonTimeline = computed(() => {
-    const drawing = state.activeDrawing();
-    return buildLinearComparisonTimeline({
-      sequences: drawing.linearSeqs,
-      recordsOff: drawing.recordsOff,
-      layout: effectiveLinearComparisonLayout(drawing),
-      plan: drawing.linearComparisonPlan,
-      resolution: drawing.linearComparisonResolution.value
-    });
-  });
-  /** @param {string} edgeKey */
-  const linearComparisonPairForEdgeKey = (edgeKey) => {
-    for (const row of linearComparisonTimeline.value.rows) {
-      const pair = row.boundaryAfter?.pairs.find((/** @type {LinearComparisonPair} */ entry) => entry.edgeKey === edgeKey);
-      if (pair) return pair;
-    }
-    return null;
-  };
-  // Every panel names a record the same way (OV-436).
-  const linearRecordNameMap = computed(() => linearRecordNames(shownLinearSeqs()));
-  /** @param {string} uid */
-  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || t('Record');
-  // The parts <record-name> lays out: the name shrinks, the accession stays whole.
-  /** @param {string} uid */
-  const linearComparisonRecordName = (uid) => {
-    const entry = linearRecordNameMap.value.get(uid);
-    return { name: entry?.name || t('Record'), detail: entry?.accession || '' };
-  };
+  const {
+    comparisonHeightValidationError, invalidateLinearComparisonArtifacts, linearComparisonUi,
+    linearComparisonGlobalAction, canRunLinearLosat
+  } = createLinearComparisonView({ state, mode, losatCacheInfo, writeLosatCacheInfo, shownDrawingOfMode });
+  const {
+    linearSourceGroups, linearSourceRemovalDialog, linearSourceRemovalReturnFocus, linearSourceRemovalTarget,
+    linearSourceRemovalCanDelete, linearSourceFileName, linearCardFileLine, shownInputComplete, linearCardHoldsInput,
+    isLinearSourceFolded, syncLinearSourceFold, linearSourceRemovalTargetName
+  } = createLinearFileCards({ shownDrawingOfMode, shownLinearSeqs, linearFoldedSources });
+  const {
+    linearComparisonTimeline, linearComparisonPairForEdgeKey, linearComparisonRecordLabel, linearComparisonRecordName
+  } = createLinearComparisonTimeline({ state, shownLinearSeqs });
   // The settings pane's display, and the one way to bring a setting into
   // view: every "show this setting" path below ends in `revealSetting`, so a
   // setting of a section the icon rail does not show is docked first.
   const settingsPaneActions = createSettingsPaneController({ state });
-  /** @param {string} disclosureKey */
-  const openLinearComparisonDisclosure = async (disclosureKey) => {
-    if (!disclosureKey) return null;
-    const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
-      .find((element) => element.dataset.linearComparisonDisclosure === disclosureKey);
-    if (!details) return null;
-    details.open = true;
-    await nextTick();
-    return details;
-  };
-  watch([mode, () => state.activeDrawing().hasActiveLinearLosatIntent.value], (/** @type {[DiagramMode, boolean]} */ [activeMode, activeLosat]) => {
-    if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
-  }, { flush: 'post' });
-
-  /** @param {string} edgeKey */
-  const focusLinearComparisonPair = async (edgeKey) => {
-    await openLinearComparisonDisclosure('selected-pairs');
-    const container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
-      .find((element) => element.dataset.edgeKey === edgeKey);
-    const control = /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'));
-    if (control) await settingsPaneActions.revealSetting(control);
-  };
-
-  /** @param {{ disclosureKey: string, focusTargetKey: string, edgeKey?: string, edgeId?: string } | null | undefined} target */
-  const focusLinearComparisonIssue = async (target = linearComparisonUi.value.issues[0]) => {
-    if (!target) return false;
-    const details = await openLinearComparisonDisclosure(target.disclosureKey);
-    /** @type {HTMLElement | null} */
-    let container = details;
-    if (target.edgeKey) {
-      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
-        .find((element) => element.dataset.edgeKey === target.edgeKey) || container;
-    }
-    if (target.edgeId && target.focusTargetKey === 'pair-row') {
-      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-unplaced-draft]')])
-        .find((element) => element.dataset.linearUnplacedDraft === target.edgeId) || container;
-    }
-    const marked = container?.querySelector(
-      `[data-comparison-focus="${target.focusTargetKey}"]`
-    );
-    const focusable = marked?.matches?.('input, select, button, [tabindex]')
-      ? marked
-      : marked?.querySelector?.('input, select, button, [tabindex]');
-    const control = /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'));
-    if (control) await settingsPaneActions.revealSetting(control);
-    return true;
-  };
-
-  // The one way to choose a pair's BLAST TSV outside its row:
-  // the pair's own uploader opens its file chooser inside the click, so the
-  // file takes the uploader's availability check and History step.
-  /** @param {string} edgeKey @param {{ focus?: boolean }} [options] */
-  const chooseLinearComparisonPairFile = (edgeKey, { focus = false } = {}) => {
-    void openLinearComparisonDisclosure('selected-pairs');
-    const uploader = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-pair-upload]')])
-      .find((element) => element.dataset.linearComparisonPairUpload === edgeKey);
-    const button = /** @type {HTMLElement | null | undefined} */ (uploader?.querySelector('[role="button"]'));
-    if (focus && button) void settingsPaneActions.revealSetting(button);
-    /** @type {HTMLInputElement | null | undefined} */ (uploader?.querySelector('input[type="file"]'))?.click();
-    return Boolean(uploader);
-  };
-
-  // An action of an entry in the Comparison card's issue list; a
-  // setting it changes is one Undo step.
-  /** @param {LinearComparisonUiIssue} issue @param {string} actionKey */
-  const runLinearComparisonIssueAction = (issue, actionKey) => {
-    if (actionKey === 'all-losat') return setLinearComparisonGlobalAction('losat');
-    if (actionKey === 'pairwise') {
-      return history.runUndoable(msg('Change setting'), () => setLinearComparisonLosatpMode('pairwise'));
-    }
-    if (actionKey === 'choose-file' && chooseLinearComparisonPairFile(issue.edgeKey, { focus: true })) return true;
-    return focusLinearComparisonIssue(issue);
-  };
-
-  // The Generate error's "Show in Comparison": the first issue's
-  // control, the Execution setting for a LOSAT runtime failure, or the
-  // Comparison card when the cause has no control.
-  const showLinearComparisonCause = async () => {
-    const code = normalizeUserFacingError(errorLog.value)?.code;
-    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
-      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
-    if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
-    const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
-    if (!card) return;
-    await settingsPaneActions.revealSetting(card, {
-      align: 'start', focus: /** @type {HTMLElement | null} */ (card.querySelector('button:not([disabled])')) ?? undefined
-    });
-  };
-
-  /** @param {unknown} action */
-  const setLinearComparisonGlobalAction = async (action) => shownAction('linear', async (drawing) => {
-    const normalized = String(action || '').trim().toLowerCase();
-    const result = await mutateLinearComparisonPlan(drawing, (next) => {
-      if (normalized === 'none') {
-        next.mode = LINEAR_COMPARISON_MODES.NONE;
-        return;
-      }
-      next.mode = LINEAR_COMPARISON_MODES.ADJACENT;
-      next.defaultSource = normalized === LINEAR_COMPARISON_SOURCES.UPLOAD
-        ? LINEAR_COMPARISON_SOURCES.UPLOAD
-        : LINEAR_COMPARISON_SOURCES.LOSAT;
-    });
-    if (normalized === LINEAR_COMPARISON_SOURCES.LOSAT) {
-      await openLinearComparisonDisclosure('settings');
-    }
-    return result;
+  const {
+    openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
+    showLinearComparisonCause
+  } = createLinearComparisonFocus({ state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting });
+  const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey } = createLinearLayoutReaders({
+    state, shownDrawingOfMode, losatCacheInfo
   });
-
-  /** @param {string} modeKey */
-  const setLinearComparisonLosatMode = (modeKey) => shownAction('linear', (drawing) => {
-    const selection = projectLinearComparisonLosatModeSelection({ modeKey });
-    if (!selection.selectable || !selection.patch) return false;
-    const nextProgram = selection.patch.losatProgram;
-    if (drawing.losatProgram.value === nextProgram) return true;
-    similarityAlignmentActions?.clearForMutation?.(msg('comparison program changed.'));
-    drawing.losatProgram.value = nextProgram;
-    invalidateLinearComparisonArtifacts(drawing);
-    return true;
-  });
-
-  /** @param {string} modeKey */
-  const setLinearComparisonLosatpMode = (modeKey) => shownAction('linear', (drawing) => {
-    const selection = projectLinearComparisonLosatpModeSelection({
-      plan: drawing.linearComparisonPlan,
-      modeKey
-    });
-    if (!selection.selectable || !selection.patch) return false;
-    const nextBlastpMode = selection.patch.blastpMode;
-    if (drawing.losat.blastp?.mode === nextBlastpMode) return true;
-    similarityAlignmentActions?.clearForMutation?.(msg('comparison mode changed.'));
-    const hitLimits = drawing.losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
-    hitLimits[drawing.losat.blastp.mode] = {
-      candidateLimit: drawing.losat.blastp.candidateLimit,
-      orthogroupMemberMaxHits: drawing.losat.blastp.orthogroupMemberMaxHits
-    };
-    Object.assign(drawing.losat.blastp, hitLimits[nextBlastpMode]);
-    drawing.losat.blastp.mode = nextBlastpMode;
-    invalidateLinearComparisonArtifacts(drawing);
-    return true;
-  });
-
-  /** @param {DrawingState} drawing */
-  const selectedPlanForEdit = (drawing) => {
-    if (drawing.linearComparisonPlan.mode === LINEAR_COMPARISON_MODES.SELECTED) {
-      return normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
-    }
-    return materializeResolvedEdgesAsSelectedPlan(
-      drawing.linearComparisonPlan,
-      drawing.linearComparisonResolution.value
-    );
-  };
-
-  /**
-   * @param {readonly LinearComparisonEdge[]} edges
-   * @param {string} id
-   */
-  const findEdgeIndex = (edges, id) => edges.findIndex((edge) => edge.id === id);
-  /**
-   * @param {readonly LinearComparisonEdge[]} edges
-   * @param {Pick<LinearComparisonPair, 'edgeKey' | 'edgeId'> & Partial<Pick<LinearComparisonPair, 'draft' | 'resolved'>>} pair
-   */
-  const findEdgeIndexForPair = (edges, pair) => {
-    const ownerId = pair?.draft?.id || pair?.resolved?.id || pair?.edgeId || '';
-    const ownerIndex = ownerId ? findEdgeIndex(edges, ownerId) : -1;
-    if (ownerIndex >= 0) return ownerIndex;
-    const matchingIndexes = edges
-      .map((edge, index) => (
-        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === pair?.edgeKey ? index : -1
-      ))
-      .filter((index) => index >= 0);
-    return matchingIndexes.length === 1 ? matchingIndexes[0] : -1;
-  };
-
-  /**
-   * @param {LinearComparisonPlan} next
-   * @param {{ id?: string, queryUid: string, subjectUid: string, source?: LinearComparisonSource }} edge
-   */
-  const upsertSelectedComparison = (next, {
-    id = '',
-    queryUid,
-    subjectUid,
-    source = next.defaultSource
-  }) => {
-    const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
-    let index = id ? findEdgeIndex(next.edges, id) : -1;
-    if (index < 0) {
-      const matchingIndexes = next.edges
-        .map((edge, edgeIndex) => (
-          linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey ? edgeIndex : -1
-        ))
-        .filter((edgeIndex) => edgeIndex >= 0);
-      if (!id || matchingIndexes.length === 1) index = matchingIndexes[0] ?? -1;
-    }
-    if (index < 0) {
-      next.edges.push(createLinearComparisonEdge({
-        queryUid,
-        subjectUid,
-        included: true,
-        source
-      }));
-      return next.edges[next.edges.length - 1];
-    }
-    const edge = next.edges[index];
-    edge.queryUid = String(queryUid || '');
-    edge.subjectUid = String(subjectUid || '');
-    edge.included = true;
-    edge.source = source;
-    return edge;
-  };
-
-  const addLinearComparison = async () => shownAction('linear', async (drawing) => {
-    const drawn = drawing.drawnLinearSeqs.value;
-    if (drawn.length < 2) return;
-    syncLinearRecordLayout();
-    const [firstPair] = adjacentRowPairs(drawn, effectiveLinearComparisonLayout(drawing));
-    const [queryUid, subjectUid] = firstPair || [drawn[0].uid, drawn[1].uid];
-    const next = selectedPlanForEdit(drawing);
-    upsertSelectedComparison(next, { queryUid, subjectUid });
-    replaceLinearComparisonPlan(drawing, next);
-    await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
-  });
-  /**
-   * An omitted edge stays in the plan only to retain its file or LOSAT filename.
-   * @param {LinearComparisonPlan} next
-   * @param {number} index
-   */
-  const omitPlanEdge = (next, index) => {
-    if (index < 0) return;
-    const edge = next.edges[index];
-    edge.included = false;
-    if (!edge.file && !String(edge.losatFilename || '').trim()) next.edges.splice(index, 1);
-  };
-  /**
-   * Sets the pairs to No comparison as one plan replacement: a pair's radio,
-   * and the pairs of the BLAST TSV missing dialog (D-54).
-   * @param {DrawingState} drawing
-   * @param {string[]} edgeKeys
-   */
-  const omitLinearComparisonPairs = (drawing, edgeKeys) => {
-    const next = selectedPlanForEdit(drawing);
-    edgeKeys.forEach((edgeKey) => {
-      const pair = linearComparisonPairForEdgeKey(edgeKey);
-      if (pair) omitPlanEdge(next, findEdgeIndexForPair(next.edges, pair));
-    });
-    replaceLinearComparisonPlan(drawing, next);
-  };
-  /** @param {string} id */
-  const omitLinearComparison = (id) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const index = findEdgeIndex(next.edges, id);
-    if (index < 0) return;
-    omitPlanEdge(next, index);
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  const clearSelectedLinearComparisons = () => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    next.edges = next.edges
-      .filter((edge) => edge.file || String(edge.losatFilename || '').trim())
-      .map((edge) => ({ ...edge, included: false }));
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} id @param {'queryUid' | 'subjectUid'} endpoint @param {unknown} uid */
-  const setLinearComparisonEndpoint = (id, endpoint, uid) => shownAction('linear', (drawing) => {
-    if (!['queryUid', 'subjectUid'].includes(endpoint)) return;
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    edge[endpoint] = String(uid || '');
-    edge.included = true;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} id @param {unknown} source */
-  const setLinearComparisonSource = (id, source) => shownAction('linear', (drawing) => {
-    const normalized = source === LINEAR_COMPARISON_SOURCES.LOSAT
-      ? LINEAR_COMPARISON_SOURCES.LOSAT
-      : LINEAR_COMPARISON_SOURCES.UPLOAD;
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    edge.source = normalized;
-    edge.included = true;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /**
-   * The shown drawing's upload into a comparison's file input, found by the
-   * comparison's id: the file becomes the pair's active upload.
-   * @param {string} id @param {InputFileCandidate} file
-   */
-  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    const ref = state.inputFiles.registerFile(file);
-    setComparisonEdgeFile(edge, ref);
-    edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
-    edge.included = Boolean(ref) || edge.included;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /**
-   * A replacement of the file a comparison binds, in any drawing (PD-OI-090
-   * 〔入力ファイル〕): only the file changes (R17-28).
-   * @param {DrawingState} drawing @param {string} id @param {InputFileCandidate | InputFileRef} file
-   */
-  const swapLinearComparisonFile = (drawing, id, file) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    const ref = state.inputFiles.registerFile(file);
-    if (!ref) return;
-    swapComparisonEdgeFile(edge, ref);
-    replaceLinearComparisonPlan(drawing, next);
-  };
-  /** @param {string} id */
-  const reuseLinearComparisonFile = (id) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge?.file) return;
-    edge.fileActive = true;
-    edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
-    edge.included = true;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} id */
-  const deactivateLinearComparisonFile = (id) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge?.file) return;
-    edge.fileActive = false;
-    if (edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD) edge.included = false;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} id @param {unknown} value */
-  const setLinearComparisonLosatFilename = (id, value) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    edge.losatFilename = String(value || '');
-    edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
-    replaceLinearComparisonPlan(drawing, next, { invalidate: false });
-  });
-  /** @param {string} id */
-  const reuseLinearComparisonLosatFilename = (id) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge || !String(edge.losatFilename || '').trim()) return;
-    edge.losatFilenameActive = true;
-    edge.source = LINEAR_COMPARISON_SOURCES.LOSAT;
-    edge.included = true;
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} id */
-  const deactivateLinearComparisonLosatFilename = (id) => shownAction('linear', (drawing) => {
-    const next = selectedPlanForEdit(drawing);
-    const edge = next.edges.find((entry) => entry.id === id);
-    if (!edge) return;
-    edge.losatFilenameActive = false;
-    replaceLinearComparisonPlan(drawing, next, { invalidate: false });
-  });
-  /**
-   * @param {DrawingState} drawing
-   * @param {string} edgeKey
-   * @param {(edge: LinearComparisonEdge) => void} updater
-   */
-  const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    const resolved = drawing.linearComparisonResolution.value.edges.find((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === edgeKey);
-    if (!resolved) return;
-    const next = normalizeLinearComparisonPlan(drawing.linearComparisonPlan);
-    const pair = linearComparisonPairForEdgeKey(edgeKey) || {
-      edgeKey,
-      edgeId: resolved.id,
-      resolved
-    };
-    let index = findEdgeIndexForPair(next.edges, pair);
-    if (index < 0) {
-      next.edges.push(createLinearComparisonEdge({
-        queryUid: resolved.queryUid,
-        subjectUid: resolved.subjectUid,
-        included: false,
-        source: /** @type {any} */ (LINEAR_COMPARISON_SOURCES.LOSAT)
-      }));
-      index = next.edges.length - 1;
-    }
-    updater(next.edges[index]);
-    replaceLinearComparisonPlan(drawing, next, { invalidate: false });
-  };
-  /** @param {string} edgeKey @param {unknown} value */
-  const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => shownAction('linear', (drawing) => {
-    updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
-      edge.losatFilename = String(value || '');
-      edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
-    });
-  });
-  /** @param {string} edgeKey */
-  const reuseResolvedLinearComparisonLosatFilename = (edgeKey) => shownAction('linear', (drawing) => {
-    updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
-      if (String(edge.losatFilename || '').trim()) edge.losatFilenameActive = true;
-    });
-  });
-  /** @param {string} edgeKey */
-  const deactivateResolvedLinearComparisonLosatFilename = (edgeKey) => shownAction('linear', (drawing) => {
-    updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
-      edge.losatFilenameActive = false;
-    });
-  });
-  const addLinearComparisonBatch = (allPairs = false) => shownAction('linear', (drawing) => {
-    syncLinearRecordLayout();
-    const next = selectedPlanForEdit(drawing);
-    adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), allPairs).forEach(([queryUid, subjectUid]) => {
-      upsertSelectedComparison(next, { queryUid, subjectUid });
-    });
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} edgeKey @param {string} action */
-  const setLinearComparisonGapAction = (edgeKey, action) => shownAction('linear', (drawing) => {
-    const pair = linearComparisonPairForEdgeKey(edgeKey);
-    if (!pair) return;
-    if (action === 'none') {
-      omitLinearComparisonPairs(drawing, [edgeKey]);
-      return;
-    }
-    const next = selectedPlanForEdit(drawing);
-    upsertSelectedComparison(next, {
-      id: pair.edgeId,
-      queryUid: pair.queryUid,
-      subjectUid: pair.subjectUid,
-      source: action === LINEAR_COMPARISON_SOURCES.UPLOAD
-        ? LINEAR_COMPARISON_SOURCES.UPLOAD
-        : LINEAR_COMPARISON_SOURCES.LOSAT
-    });
-    replaceLinearComparisonPlan(drawing, next);
-  });
-  /** @param {string} edgeKey @param {File | null} file */
-  const setLinearComparisonCardFile = (edgeKey, file) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    let pair = linearComparisonPairForEdgeKey(edgeKey);
-    let draft = pair?.draft || null;
-    if (!draft) {
-      setLinearComparisonGapAction(edgeKey, LINEAR_COMPARISON_SOURCES.UPLOAD);
-      pair = linearComparisonPairForEdgeKey(edgeKey);
-      draft = pair?.draft || null;
-    }
-    if (draft) setLinearComparisonFile(draft.id, file);
-  };
-  /** @param {DrawingState} drawing @param {string} uid @param {number} fallback */
-  const linearRecordRowFor = (drawing, uid, fallback) => (
-    drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback
-  );
-  /**
-   * The File card's row input: the row of `uid` in the shown Linear drawing,
-   * or `fallback` (its position) when the drawing gives it none.
-   * @param {string} uid @param {number} fallback
-   */
-  const shownLinearRecordRowFor = (uid, fallback) => {
-    const drawing = shownDrawingOfMode('linear');
-    return drawing === null ? fallback : linearRecordRowFor(drawing, uid, fallback);
-  };
-  const linearLayoutTokens = computed(() => {
-    const drawing = state.activeDrawing();
-    return (
-      drawing.linearRecordLayoutEnabled.value
-        ? linearRecordPositionTokens(drawing.linearSeqs, drawing.linearRecordRows)
-        : []
-    );
-  });
-  const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
-    (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
-      .filter((/** @type {LosatCacheInfoEntry} */ entry) => String(entry?.edgeKey || ''))
-      .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
-  ));
 
   /**
    * What a drawing's next record discoveries do, for the rows and input of
@@ -4632,6 +3855,40 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
+  // The comparison plan's edits clear the alignment candidate: created once that owner exists.
+  const {
+    replaceLinearComparisonPlan, mutateLinearComparisonPlan, syncLinearRecordLayout, setLinearRecordRow,
+    setLinearRecordLayoutEnabled, moveLinearRecordWithinRow
+  } = createLinearComparisonPlanWriter({
+    shownAction, shownDrawingOfMode, runUndoable: history.runUndoable,
+    clearAlignmentForMutation: similarityAlignmentActions.clearForMutation, invalidateLinearComparisonArtifacts,
+    materializeAutomaticLinearRecords
+  });
+  const {
+    runLinearComparisonIssueAction, setLinearComparisonGlobalAction, setLinearComparisonLosatMode,
+    setLinearComparisonLosatpMode
+  } = createLinearComparisonModes({
+    shownAction, runUndoable: history.runUndoable, mutateLinearComparisonPlan, openLinearComparisonDisclosure,
+    chooseLinearComparisonPairFile, focusLinearComparisonIssue,
+    clearAlignmentForMutation: similarityAlignmentActions.clearForMutation, invalidateLinearComparisonArtifacts
+  });
+  const {
+    addLinearComparison, omitLinearComparisonPairs, omitLinearComparison, clearSelectedLinearComparisons,
+    setLinearComparisonEndpoint, setLinearComparisonSource, setLinearComparisonFile, swapLinearComparisonFile,
+    reuseLinearComparisonFile, deactivateLinearComparisonFile
+  } = createLinearComparisonPairEdits({
+    state, shownAction, replaceLinearComparisonPlan, syncLinearRecordLayout, focusLinearComparisonPair,
+    linearComparisonPairForEdgeKey
+  });
+  const {
+    setLinearComparisonLosatFilename, reuseLinearComparisonLosatFilename, deactivateLinearComparisonLosatFilename,
+    setResolvedLinearComparisonLosatFilename, reuseResolvedLinearComparisonLosatFilename,
+    deactivateResolvedLinearComparisonLosatFilename, addLinearComparisonBatch, setLinearComparisonGapAction,
+    setLinearComparisonCardFile
+  } = createLinearComparisonGapEdits({
+    sessionOperationAvailability, shownAction, replaceLinearComparisonPlan, syncLinearRecordLayout,
+    linearComparisonPairForEdgeKey, omitLinearComparisonPairs, setLinearComparisonFile
+  });
   // The saved comparison's choice replaces a plan, which clears the alignment candidate: created once that owner exists.
   const {
     importedComparisonActionLabels, inheritImportedComparison, replaceImportedComparison, clearImportedComparison,
