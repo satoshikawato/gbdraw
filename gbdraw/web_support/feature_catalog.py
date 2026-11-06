@@ -16,6 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.render.drawers.annotation_marks import ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE
 from gbdraw.render.group_content import GroupContent, GroupKind, held_group, leaf_groups
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
@@ -379,10 +380,10 @@ _MATCH_SNAPSHOT_ATTRIBUTES = tuple(
 )
 _ANNOTATION_SNAPSHOT_ATTRIBUTES = (
     "id",
-    "data-gbdraw-annotation-id",
+    ANNOTATION_ID_ATTRIBUTE,
     "data-gbdraw-record-index",
     "data-gbdraw-annotation-track-id",
-    "data-gbdraw-annotation-set-id",
+    ANNOTATION_SET_ID_ATTRIBUTE,
     "data-gbdraw-record-id",
     "data-gbdraw-annotation-mark",
     "data-gbdraw-annotation-label",
@@ -531,7 +532,7 @@ def _catalog_element_reads(root: ET.Element) -> _CatalogTraversal:
                 entries.append(entry)
         if _is_match_candidate(element):
             matches.append(_snapshot_attributes(element, _MATCH_SNAPSHOT_ATTRIBUTES))
-        if element.get("data-gbdraw-annotation-id"):
+        if element.get(ANNOTATION_ID_ATTRIBUTE):
             annotations.append(_snapshot_attributes(element, _ANNOTATION_SNAPSHOT_ATTRIBUTES))
     return _CatalogTraversal(
         _CatalogElementReads(tuple(spans), tuple(entries), tuple(matches), tuple(annotations)),
@@ -1936,11 +1937,11 @@ def _normalized_annotations(
     annotations: list[dict[str, object]] = []
     for candidate in candidates:
         attributes = candidate.attributes
-        annotation_id = _text(attributes.get("data-gbdraw-annotation-id"))
+        annotation_id = _text(attributes.get(ANNOTATION_ID_ATTRIBUTE))
         key = (
             _text(attributes.get("data-gbdraw-record-index")),
             _text(attributes.get("data-gbdraw-annotation-track-id")),
-            _text(attributes.get("data-gbdraw-annotation-set-id")),
+            _text(attributes.get(ANNOTATION_SET_ID_ATTRIBUTE)),
             annotation_id,
         )
         payload = context_by_key.get(

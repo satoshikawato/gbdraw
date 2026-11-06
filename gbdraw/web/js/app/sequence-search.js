@@ -17,12 +17,12 @@ import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
 import { boundAnnotation } from './annotations/record-selector.js';
 import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
-  nextSearchSetId, readSequenceSearchReply, searchedRecord, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
+  nextSearchSetId, readSequenceSearchReply, resultRecordSelector, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
 } from '../services/sequence-search.js';
 import { createSearchQueries } from './sequence-search/queries.js';
 import { createSearchHitTable } from './sequence-search/hit-table.js';
 
-/** @import { SearchColorMode, SearchHit, SearchQuery, SearchRecordBinding, SequenceSearchInput } from '../services/sequence-search.js' */
+/** @import { ResultRecordBindings, SearchColorMode, SearchHit, SearchQuery, SequenceSearchInput } from '../services/sequence-search.js' */
 /** @import { HistoryIntentChange } from '../services/history.js' */
 /** @import { RegionAxisRecord } from '../services/region-axis.js' */
 /** @import { LosatJob, LosatJobResult } from '../services/losat.js' */
@@ -42,8 +42,8 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
  * @property {(spans: readonly RecordSpanRead[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
  * @property {() => readonly { id: string }[]} committedSets The annotation sets of the committed request the shown
  *   Results were made from.
- * @property {() => Promise<SearchRecordBinding>} readRecordBindings The catalog record of each Result record of the shown
- *   drawing, by which Add to annotation set binds a row.
+ * @property {() => ResultRecordBindings} readRecordBindings How a row binds each record of the shown Result
+ *   (`resultRecordBindings`): the binding key Add to annotation set writes, and its selector in the committed request.
  * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string> }) => Promise<{ status: 'ok', results: LosatJobResult[] } | { status: 'canceled' } | { status: 'busy', reason: string }>} runLosatJobs
  *   LOSAT jobs under the full-window overlay with its progress and Cancel (`runLosatJobsInOverlay`).
  * @property {RunHelper} runHelper
@@ -59,15 +59,20 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
 export const SEARCH_TASKS = Object.freeze(['megablast', 'blastn', 'dc-megablast']);
 
 /**
- * The set of a search with each hit bound to the catalog record that draws it, as the record select binds a row.
+ * The set of a search with each hit bound to its Result record as the record select binds a row: by the binding key of
+ * the record's settings owner (an OFF record's too, so its rows wait with it at Generate), its target naming the record
+ * in the committed request, which the live draw resolves again by that key (services/session-request.js).
  * @param {AnnotationSet} set
  * @param {readonly SearchHit[]} hits
- * @param {SearchRecordBinding} recordOf
+ * @param {ResultRecordBindings} bindings
  * @returns {AnnotationSet}
  */
-const boundSearchSet = (set, hits, recordOf) => {
+const boundSearchSet = (set, hits, bindings) => {
   const recordKeys = new Map(hits.map((hit) => [hit.annotationId, hit.recordKey]));
-  return { ...set, annotations: set.annotations.map((row) => boundAnnotation(row, searchedRecord(recordOf, recordKeys.get(row.id) ?? ''))) };
+  return { ...set, annotations: set.annotations.map((row) => {
+    const recordKey = recordKeys.get(row.id) ?? '';
+    return boundAnnotation(row, { key: bindings.bindingKeyOf(recordKey), backendSelector: resultRecordSelector(bindings, recordKey) });
+  }) };
 };
 
 // The panel as it opens, and after a Session Load.
@@ -103,7 +108,8 @@ export const createSequenceSearch = ({
   addSearchSet, shownRoot, closeRegionPopup, revealSection
 }) => {
   const panel = reactive(initialPanel());
-  // A Session Load counts here: a search it overtook adds nothing to the loaded document.
+  // A Session Load counts here from its start (`loadStarts`), before it installs the loaded document: a search it
+  // overtook adds nothing to that document and writes nothing in the panel it empties.
   let loads = 0;
   // The sets each drawing's searches added, by id, with the set as written: a History step that adds one of them
   // (its own, its Redo) or whose Undo removes it draws at once.
@@ -133,9 +139,10 @@ export const createSequenceSearch = ({
     try {
       await queries.readQueries(panel.queryText);
       // The read may refuse the text or find no query; its reason then shows.
-      if (searchDisabledReason.value) return;
+      if (searchDisabledReason.value || load !== loads) return;
       const drawing = state.activeDrawing();
-      const recordOf = await readRecordBindings();
+      // The records of the shown Result, as last generated (receipt): never the draft's (review r2 B1).
+      const bindings = readRecordBindings();
       const searchQueries = panel.queries.map(({ name, length, color }) => ({ name, length, color }));
       const queryFasta = panel.queries.map((query) => query.fasta).join('');
       const thresholds = resolveComparisonThresholds(panel.thresholds[drawing.mode], drawing.mode);
@@ -143,8 +150,9 @@ export const createSequenceSearch = ({
       const read = await readRecordSpans(searchSpans(records, Math.max(...searchQueries.map(({ length }) => length))));
       const run = await runLosatJobs(searchLosatPlan({ queryFasta, subjectFasta: read.fasta, task: panel.task }));
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
+      if (load !== loads) return;
       if (run.status === 'busy') panel.busy = tm(run.reason);
-      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id || load !== loads) return;
+      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
       const [{ text }] = run.results;
       /** @type {SequenceSearchInput} */
       const input = {
@@ -153,7 +161,7 @@ export const createSequenceSearch = ({
         // committed Session still draws, or that History can bring back, is not reused.
         setId: nextSearchSetId([...drawing.annotationSets, ...committedSets()].map(({ id }) => id)
           .concat([...(searched.get(drawing.id)?.keys() ?? [])])),
-        subjects: searchSubjects(read, recordOf),
+        subjects: searchSubjects(read, bindings),
         thresholds: {
           evalue: Number(thresholds.evalue), bitscore: Number(thresholds.bitscore),
           identity: Number(thresholds.identity), alignmentLength: Number(thresholds.alignmentLength)
@@ -166,7 +174,7 @@ export const createSequenceSearch = ({
       const reply = readSequenceSearchReply((await runHelper(helperOperations.buildHitSet, { search: input })).result);
       if (state.activeDrawing().id !== drawing.id || load !== loads) return;
       const [found] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
-      const set = found && boundSearchSet(found, reply.hits, recordOf);
+      const set = found && boundSearchSet(found, reply.hits, bindings);
       panel.outcome = {
         drawingId: drawing.id, setId: set ? set.id : null, hits: reply.hits, queries: searchQueries,
         rowsLeftOut: reply.rowsRead - reply.rowsKept, rawText: text,
@@ -180,7 +188,7 @@ export const createSequenceSearch = ({
       searched.set(drawing.id, sets.set(set.id, JSON.stringify(set)));
       addSearchSet(drawing.id, set);
     } catch (error) {
-      panel.searchError = normalizeUserFacingError(error, { stage: 'losat', operation: helperOperations.buildHitSet });
+      if (load === loads) panel.searchError = normalizeUserFacingError(error, { stage: 'losat', operation: helperOperations.buildHitSet });
     } finally {
       panel.running = false;
     }
@@ -213,9 +221,11 @@ export const createSequenceSearch = ({
   // The folded line names the program once: "blastn" for the blastn task, "blastn, task megablast" for another task.
   const programText = computed(() => (panel.task === 'blastn' ? 'blastn' : t('{program}, task {task}', { program: 'blastn', task: panel.task })));
 
-  // A Session Load replaces the document: the panel empties (receipt), and its searches' sets are no search's any more.
+  // A Session Load starts: a search still running is overtaken.
+  const loadStarts = () => { loads += 1; };
+  // The Session Load replaced the document: the panel empties (receipt), and its searches' sets are no search's any more.
   const reset = () => {
-    loads += 1;
+    loadStarts();
     Object.assign(panel, initialPanel(), { running: panel.running });
     searched.clear();
     queries.clearReads();
@@ -223,7 +233,7 @@ export const createSequenceSearch = ({
 
   // Reactive, so the template reads the computed values unwrapped (`sequenceSearch.hitRows`).
   return reactive({
-    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programText, reset,
+    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programText, loadStarts, reset,
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
     gradientBar: `linear-gradient(to right, ${SEARCH_GRADIENT_START_COLOR}, ${SEARCH_GRADIENT_END_COLOR})`,

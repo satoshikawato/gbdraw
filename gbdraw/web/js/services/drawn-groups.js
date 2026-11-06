@@ -4,6 +4,7 @@
 // This module is the one owner of their slot renderer names, ids, and marks,
 // which Python writes
 // (gbdraw/svg/ids.py, gbdraw/features/ids.py, and the track renderers).
+import { ANNOTATION_ID_ATTRIBUTE } from './drawn-attributes.generated.js';
 
 /**
  * The groups that draw one kind of track. A Result marks each with its slot
@@ -23,12 +24,10 @@ export const DINUCLEOTIDE_CONTENT_GROUPS = trackGroups(['dinucleotide_content'],
 export const DINUCLEOTIDE_SKEW_GROUPS = trackGroups(['dinucleotide_skew'], ['skew', 'gc_skew']);
 export const DEPTH_GROUPS = trackGroups(['depth'], ['depth']);
 
-// A region annotation's group names its annotation in both modes
-// (gbdraw/render/drawers/circular/annotations.py, linear/annotations.py); in
-// Linear, the group of a region label drawn in front of the leader lines names
-// that group's id (linear/annotations.py).
-export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
-export const ANNOTATION_SET_ID_ATTRIBUTE = 'data-gbdraw-annotation-set-id';
+// A region annotation's group names its annotation in both modes (its
+// attribute is generated from Python's name); in Linear, the group of a region
+// label drawn in front of the leader lines names that group's id
+// (linear/annotations.py).
 export const REGION_LABEL_FOR_ATTRIBUTE = 'data-gbdraw-region-label-for';
 export const ANNOTATION_SELECTOR = `[${ANNOTATION_ID_ATTRIBUTE}]`;
 export const REGION_LABEL_FRONT_SELECTOR = `[${REGION_LABEL_FOR_ATTRIBUTE}]`;

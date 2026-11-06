@@ -23,6 +23,11 @@ from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.svg.elements import Group
 
+# The group of a drawn region annotation names its annotation and its set (both modes); the Web reads them in a
+# Result (services/drawn-attributes.generated.js, tools/generate_web_contracts.py).
+ANNOTATION_ID_ATTRIBUTE = "data-gbdraw-annotation-id"
+ANNOTATION_SET_ID_ATTRIBUTE = "data-gbdraw-annotation-set-id"
+
 
 def dom_token(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value)).strip("-") or "annotation"

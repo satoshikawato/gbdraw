@@ -75,7 +75,7 @@ const FUNCTION_LINES = {
   'app/region-select.js::createRegionSelect': 396,
   'app/results.js::createResultsManager': 285,
   'app/rule-matching.js::createRulePreparation': 224,
-  'app/run-analysis.js::createRunAnalysis': 4869,
+  'app/run-analysis.js::createRunAnalysis': 4868,
   'app/run-analysis.js::createRunAnalysis.runAnalysis': 179,
   'app/run-analysis.js::createRunAnalysis.runAnalysisInternal': 2811,
   'app/run-analysis.js::createRunAnalysis.runAnalysisInternal.getSeqEntry': 180,

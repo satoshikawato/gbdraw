@@ -461,7 +461,8 @@ export const buildLosatCachePayload = ({
 };
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
-/** @import { LiveSettingWrite } from '../services/session-request.js' */
+/** @import { LiveSearchSets, LiveSettingWrite } from '../services/session-request.js' */
+/** @import { SearchRecordSelector } from '../services/sequence-search.js' */
 /** @import { UndoneTrackHide } from '../services/setting-application.js' */
 
 /**
@@ -1585,6 +1586,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
+ * @property {SearchRecordSelector} [searchRecordSelector] How the rows of a Sequence search set name their records in the
+ *   shown drawing's committed request, by binding key (`resultRecordBindings`); none by default.
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
@@ -1642,6 +1645,7 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   omittedAnnotationRecordKeys = null,
+  searchRecordSelector = () => null,
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   readRecordIdentitySources = null,
@@ -1775,13 +1779,11 @@ export const createRunAnalysis = ({
   let reflowDeferred = false;
   let rerenderHolds = 0;
   const reflowWaits = () => processing.value || rerenderHolds > 0;
-  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
-  // actions committed and its Result does not show yet (R15: per drawing), and
-  // the annotation sets a Sequence search step added (its commit, Undo or
-  // Redo, `searchSetIdsOfStep`; PD-OI-117), which follow the draft at once.
-  // An automatic rerender applies them; it runs for a request of these alone
-  // only while one of them still differs from the committed request. A
-  // Generate keeps only the paths it did not draw, and a Load none (6.7).
+  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's actions committed and its Result does
+  // not show yet (R15: per drawing), and the annotation sets a Sequence search step added (its commit, Undo or Redo,
+  // `searchSetIdsOfStep`; PD-OI-117), which follow the draft at once. An automatic rerender applies them; it runs for
+  // a request of these alone only while one of them still differs from the committed request. A Generate keeps only
+  // the paths it did not draw, and a Load none (6.7).
   /** @type {Map<DrawingState, { paths: Set<string>, searchSetIds: Set<string> }>} */
   const pendingLiveSettings = new Map();
   /** @param {DrawingState} drawing */
@@ -6065,12 +6067,12 @@ export const createRunAnalysis = ({
   // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide>, searchSetIds: readonly string[] }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide>, searchSets: LiveSearchSets }} options
    *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too;
-   *   `undoneHides`: the hides an Undo took back; `searchSetIds`: the sets a Sequence search step added.
+   *   `undoneHides`: the hides an Undo took back; `searchSets`: the sets a Sequence search step added.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides, searchSetIds }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides, searchSets }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -6083,7 +6085,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides, searchSetIds });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), undoneHides, searchSets });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6262,7 +6264,7 @@ export const createRunAnalysis = ({
           settings,
           editor,
           undoneHides,
-          searchSetIds
+          searchSets: { ids: searchSetIds, recordSelector: searchRecordSelector }
         });
         // A stale iteration leaves its values and its editor request to the
         // next one; an applied, failed or empty one is done with them (a
@@ -6297,10 +6299,10 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettings.get(drawing);
     const committed = getCommittedCanonicalSession?.();
     if (!pending || !committed) return;
-    const searchSetIds = [...pending.searchSetIds];
+    const searchSets = { ids: [...pending.searchSetIds], recordSelector: searchRecordSelector };
     for (const path of [...pending.paths]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), searchSetIds }).length === 0) {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf), searchSets }).length === 0) {
           pending.paths.delete(path);
         }
       } catch {

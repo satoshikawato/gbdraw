@@ -402,6 +402,21 @@ test('Circular: a Web Save then Load keeps a search set and empties the panel', 
   }
 });
 
+// Ticks or unticks the record-list box of the Linear card at `index` (a record ON/OFF waits for Generate).
+const drawCard = async (page, index, on) => {
+  const uid = await page.evaluate((at) => window.__GBDRAW_APP__.linearSeqs[at].uid, index);
+  const box = page.locator(`input[data-record-draw="${uid}"]`);
+  await reveal(box);
+  await box.scrollIntoViewIfNeeded();
+  if (on) await box.check(); else await box.uncheck();
+};
+
+// The record index each drawn hit of a set sits on in the shown Result (Python's `data-gbdraw-record-index`).
+const hitRecords = (page, setId) => page.evaluate((id) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+  .querySelectorAll('g[data-gbdraw-annotation-id]')]
+  .filter((group) => group.getAttribute('data-gbdraw-annotation-set-id') === id)
+  .map((group) => group.getAttribute('data-gbdraw-record-index')), setId);
+
 // Review N1: a search's rows bind their record through the record catalog, as Add to annotation set does, so the hits
 // of a record turned OFF wait with it: Generate draws the other record, and the hits come back with the record.
 test('Linear: the hits of a record turned OFF wait with it and come back with it', async ({ page }) => {
@@ -413,13 +428,7 @@ test('Linear: the hits of a record turned OFF wait with it and come back with it
   expect((await searchOutcome(page)).searchError).toBeNull();
   const drawn = await drawnHits(page, 'Search 1');
   expect(Object.keys(drawn)).toHaveLength(1);
-  const draw = async (on) => {
-    const uid = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.find((seq) => seq.region_record_id.startsWith('NC_001416')).uid);
-    const box = page.locator(`input[data-record-draw="${uid}"]`);
-    await reveal(box);
-    await box.scrollIntoViewIfNeeded();
-    if (on) await box.check(); else await box.uncheck();
-  };
+  const draw = async (on) => drawCard(page, await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.findIndex((seq) => seq.region_record_id.startsWith('NC_001416'))), on);
   await draw(false);
   // Generate fails when a row names a record the request no longer draws (`generate` expects an ok run).
   await generate(page);
@@ -428,3 +437,55 @@ test('Linear: the hits of a record turned OFF wait with it and come back with it
   await generate(page);
   expect(await drawnHits(page, 'Search 1')).toEqual(drawn);
 });
+
+// Review r2 B1, receipt: the search runs against the records the shown drawing draws, as last generated. A record
+// turned OFF since the Generate (which waits for Generate) neither refuses the search nor moves its hits: they are
+// drawn at once on the record the Result draws, and Generate then draws them on the draft's records.
+test('Linear: a record turned OFF after Generate does not refuse a search of the other record', async ({ page }) => {
+  test.setTimeout(600_000);
+  const lambdaText = readFileSync('tests/test_inputs/NC_001416.gb', 'utf8');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: `${readFileSync(HMMT, 'utf8')}${lambdaText}` });
+  const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
+  await drawCard(page, 0, false);
+  await searchFromPanel(page, fasta([{ name: 'cosL', bases: span(lambda, 5001, 5400) }]));
+  expect((await searchOutcome(page)).searchError).toBeNull();
+  expect(await hitRecords(page, 'Search 1')).toEqual(['1']);
+  await generate(page);
+  expect(await hitRecords(page, 'Search 1')).toEqual(['0']);
+});
+
+// `count` records of one file that share the ID contig1 (lambda's bases, 4 kb each), the first turned OFF after
+// Generate: a hit on the second is drawn on the second at once (the Result's `#2`, not the draft's), and on it again
+// after Generate.
+const genbankRecord = (id, bases) => {
+  const lines = [];
+  for (let at = 0; at < bases.length; at += 60) {
+    lines.push(`${String(at + 1).padStart(9)} ${bases.slice(at, at + 60).toLowerCase().match(/.{1,10}/g).join(' ')}`);
+  }
+  return `LOCUS       ${id.padEnd(16)}${String(bases.length).padStart(12)} bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  ${id}.
+ACCESSION   ${id}
+VERSION     ${id}
+FEATURES             Location/Qualifiers
+     CDS             1..300
+                     /product="test protein"
+ORIGIN
+${lines.join('\n')}
+//
+`;
+};
+for (const count of [3, 2]) {
+  test(`Linear: ${count} records named contig1, the first turned OFF after Generate: a hit on the second is drawn on it`, async ({ page }) => {
+    test.setTimeout(600_000);
+    const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
+    const contigs = Array.from({ length: count }, (_unused, index) => genbankRecord('contig1', span(lambda, index * 4000 + 1, (index + 1) * 4000)));
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: contigs.join('') });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(count);
+    await drawCard(page, 0, false);
+    await searchFromPanel(page, fasta([{ name: 'second', bases: span(lambda, 5001, 5400) }]));
+    expect((await searchOutcome(page)).searchError).toBeNull();
+    expect(await hitRecords(page, 'Search 1')).toEqual(['1']);
+    await generate(page);
+    expect(await hitRecords(page, 'Search 1')).toEqual(['0']);
+  });
+}

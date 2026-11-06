@@ -20,7 +20,6 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
-const owner = await import('../../gbdraw/web/js/services/setting-application.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
@@ -97,6 +96,7 @@ const undoAll = () => { while (restore.length) restore.pop()(); };
 
 
 const search = await import('../../gbdraw/web/js/services/sequence-search.js');
+const { resultRecordBindings } = await import('../../gbdraw/web/js/app/annotations/record-selector.js');
 const ANNOTATIONS = 'diagramOptions.annotations.sets';
 
 // The set a search adds, as the Python helper writes it (`encode_annotation_set`) and the panel reads it.
@@ -109,8 +109,9 @@ const searchSet = (id) => createAnnotationSet({
     metadata: { query: 'q1', program: 'blastn', identity: 100, alignment_length: 16, evalue: 1e-5, bitscore: 30 }
   }]
 });
-const projectSearch = (committed, mode, searchSetIds) => request.projectLiveSettingWrites({
-  committed, drawing: modeDrawing(state, mode), requestPaths: [ANNOTATIONS], inputs, searchSetIds
+// `recordSelector` names a bound row's record in the committed request (the shown Result's, by binding key).
+const projectSearch = (committed, mode, ids, recordSelector = () => null) => request.projectLiveSettingWrites({
+  committed, drawing: modeDrawing(state, mode), requestPaths: [ANNOTATIONS], inputs, searchSets: { ids, recordSelector }
 });
 
 for (const mode of ['circular', 'linear']) {
@@ -153,7 +154,7 @@ test('a History step names the sets a search added: its own step, Undo and Redo;
   assert.equal(search.nextSearchSetId(['Search 1', 'Search 3']), 'Search 2');
 });
 
-test('the search reads each drawn record once over the bases it draws, and names its record by the catalog', () => {
+test('the search reads each drawn record once over the bases it draws, and names its record as the Result draws it', () => {
   const axis = (drawnLength, recordBase = 1, step = 1) => ({
     kind: 'linear', rows: [], source: { anchorBase: recordBase, recordBase, step, sourceLength: 100, drawnLength, isCircular: false }
   });
@@ -167,13 +168,14 @@ test('the search reads each drawn record once over the bases it draws, and names
     { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:1-100', sequence: '' },
     { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:41-70', sequence: '' }
   ] };
-  // The catalog's selector of each record (Add to annotation set's binding), not one the search makes up.
-  const catalog = { a: { key: 'card:1', backendSelector: { kind: 'recordIndex', index: 0 } }, b: { key: 'card:2', backendSelector: { kind: 'recordIndex', index: 1 } } };
-  assert.deepEqual(search.searchSubjects(read, (key) => catalog[key] ?? null), [
+  // Two drawn records share the ID X: each is named by its `#<n>` among the Result's records (`resultRecordBindings`).
+  const bindings = resultRecordBindings(records, []);
+  assert.deepEqual(search.searchSubjects(read, bindings), [
     { subjectId: 'X:1-100', record: { kind: 'recordIndex', index: 0 }, recordKey: 'a', sourceStart: 1, originWindow: false, recordLength: 100 },
     { subjectId: 'X:41-70', record: { kind: 'recordIndex', index: 1 }, recordKey: 'b', sourceStart: 41, originWindow: false, recordLength: 100 }
   ]);
-  assert.throws(() => search.searchSubjects(read, () => null), /INPUT_INVALID/, 'a record no catalog record draws is refused');
+  assert.throws(() => search.searchSubjects(read, resultRecordBindings([], [])), (error) => error.code === 'RESULT_INVALID',
+    'a span of a record the Result does not draw does not match the read');
 });
 
 // OV-2571, D-52: a record that a span may cross the origin of (circular, drawn whole), in either mode, is also read
@@ -196,8 +198,7 @@ test('the search also reads the origin window of each record drawn whole across 
     { recordKey: 'c', recordId: 'C', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'C:1-100', sequence: '' },
     { recordKey: 'c', recordId: 'C', start: 71, end: 30, length: 60, wrapsOrigin: true, originWindow: true, recordLength: 100, header: 'C:71-30', sequence: '' }
   ] };
-  const recordOf = () => ({ key: 'c-key', backendSelector: { kind: 'recordId', value: 'C' } });
-  assert.deepEqual(search.searchSubjects(read, recordOf), [
+  assert.deepEqual(search.searchSubjects(read, resultRecordBindings(records, [])), [
     { subjectId: 'C:1-100', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 1, originWindow: false, recordLength: 100 },
     { subjectId: 'C:71-30', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 71, originWindow: true, recordLength: 100 }
   ]);
@@ -363,10 +364,12 @@ test('Search stays on while a pasted text is read, so a click right after the pa
   assert.deepEqual(panel.panel.queries.map(({ name }) => name), ['q']);
 });
 
-// A search through the panel with stand-in ports: one drawn record (`card-b`, the second record of its catalog), one
-// query, and the reply Python gives for one hit on it. `ports` replaces any port.
+// A search through the panel with stand-in ports: a Result of two records that share the ID X (cards `card-a` and
+// `card-b`, whose record settings owners bind them by `card-a:1` and `card-b:1`), one query, and the reply Python gives
+// for one hit on `card-b`. `ports` replaces any port; given as a function, it reads the panel (`ref.panel`).
 const { ANNOTATION_RECORD_BINDING_KEY, annotationOptionsPayload } = await import('../../gbdraw/web/js/services/annotation-state.js');
-const CATALOG_RECORD = { key: 'card-b:1', backendSelector: { kind: 'recordIndex', index: 1 } };
+/** @param {string} uid @param {string[]} bindingKeys */
+const owner = (uid, bindingKeys) => ({ key: uid, requestKeys: [uid], ownsExpansions: true, bindingKeys, displaySource: uid, displaySelector: null });
 const runPanelSearch = async (ports = {}) => {
   const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
   const drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
@@ -386,12 +389,17 @@ const runPanelSearch = async (ports = {}) => {
     hits: [{ annotationId: 'q#1', query: 'q', recordKey: 'card-b', start: 5, end: 20, strand: '+', identity: 100, alignmentLength: 16, evalue: 1e-5, bitscore: 30, qstart: 1, qend: 16 }],
     rowsRead: 1, rowsKept: 1, thresholds: [], unmatchedRows: 0, unmatchedSubjectIds: []
   });
+  const ref = {};
+  const axisRecords = [
+    { resultIndex: 0, recordIndex: 0, recordKey: 'card-a', recordId: 'X', axis },
+    { resultIndex: 0, recordIndex: 1, recordKey: 'card-b', recordId: 'X', axis }
+  ];
   const panel = createSequenceSearch({
     state: { activeDrawing: () => drawing },
-    readAxisRecords: () => [{ resultIndex: 0, recordIndex: 0, recordKey: 'card-b', recordId: 'X', axis }],
+    readAxisRecords: () => axisRecords,
     readRecordSpans: async () => ({ fasta: '>X:1-100\nACGT\n', spans: [span] }),
     committedSets: () => [],
-    readRecordBindings: async () => (recordKey) => (recordKey === 'card-b' ? CATALOG_RECORD : null),
+    readRecordBindings: () => resultRecordBindings(axisRecords, [owner('card-a', ['card-a:1']), owner('card-b', ['card-b:1'])]),
     runLosatJobs: async () => ({ status: 'ok', results: [{ text: 'q\tX:1-100\t100\t16\t0\t0\t1\t16\t5\t20\t1e-5\t30\n' }] }),
     runHelper: async (operation, payload) => {
       if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
@@ -403,24 +411,81 @@ const runPanelSearch = async (ports = {}) => {
     shownRoot: () => null,
     closeRegionPopup: () => {},
     revealSection: async () => {},
-    ...ports
+    ...(typeof ports === 'function' ? ports(ref) : ports)
   });
+  ref.panel = panel;
   await panel.readQueries('>q\nACGT\n');
   await panel.search();
   return { panel, drawing, added, sent };
 };
 
-// Review N1 (#1667): a search's rows bind their record as Add to annotation set binds a row, through the record
-// catalog (the key the record select writes, and its selector), so a row of a record turned OFF waits with it.
-test('a search binds each hit to its record by the catalog, so a row of an OFF record leaves the request', async () => {
+// Review N1 and r2 B1 (#1667): a search's rows bind their record as Add to annotation set binds a row, by the key of
+// its record settings owner (so a row of a record turned OFF waits with it at Generate), and name it as the shown
+// Result draws it (`#2` of two records named X), never through the draft's record catalog.
+test('a search binds each hit by its record settings owner and names its record as the Result draws it', async () => {
   const { panel, added, sent } = await runPanelSearch();
   assert.equal(panel.panel.searchError, null);
-  assert.deepEqual(sent[0].subjects.map(({ record }) => record), [CATALOG_RECORD.backendSelector]);
+  const second = { kind: 'recordIndex', index: 1 };
+  assert.deepEqual(sent[0].subjects.map(({ record }) => record), [second]);
   const [row] = added[0].annotations;
-  assert.equal(row.metadata[ANNOTATION_RECORD_BINDING_KEY], CATALOG_RECORD.key);
-  assert.deepEqual(row.target.record, CATALOG_RECORD.backendSelector);
-  assert.deepEqual(annotationOptionsPayload(added, [], [CATALOG_RECORD.key]).sets[0].annotations, []);
+  assert.equal(row.metadata[ANNOTATION_RECORD_BINDING_KEY], 'card-b:1');
+  assert.deepEqual(row.target.record, second);
+  assert.deepEqual(annotationOptionsPayload(added, [], ['card-b:1']).sets[0].annotations, []);
   assert.equal(annotationOptionsPayload(added, [], []).sets[0].annotations.length, 1);
+});
+
+// Review r2 B1: the binding owner of a Result's records. A record binds by its record settings owner's key (a card
+// that draws every record of its file binds its k-th record by its k-th key; an OFF card's owner binds too; a record
+// no owner holds binds by none) and is named among the Result's records as the catalog names the draft's: by its
+// record ID when no other drawn record has it, else `#<n>`.
+test('a Result record binds by its settings owner and is named among the Result records', () => {
+  const owners = [owner('u1', ['f1::a']), owner('u2', ['f2::a']), owner('u3', ['f3::a', 'f3::b'])];
+  const bindings = resultRecordBindings([
+    { resultIndex: 0, recordIndex: 0, recordKey: 'u1', recordId: 'contig1' },
+    { resultIndex: 0, recordIndex: 1, recordKey: 'u2', recordId: 'contig1' },
+    { resultIndex: 0, recordIndex: 2, recordKey: 'u3:1', recordId: 'NC_1' },
+    { resultIndex: 1, recordIndex: 2, recordKey: 'u3:1', recordId: 'NC_1' },
+    { resultIndex: 0, recordIndex: 3, recordKey: 'u3:2', recordId: 'NC_2' },
+    { resultIndex: 0, recordIndex: 4, recordKey: 'gone', recordId: 'NC_9' }
+  ], owners);
+  assert.deepEqual(['u1', 'u2', 'u3:1', 'u3:2', 'gone'].map(bindings.bindingKeyOf), ['f1::a', 'f2::a', 'f3::a', 'f3::b', '']);
+  assert.deepEqual(['u1', 'u2', 'u3:2', 'other'].map(bindings.selectorOf), [
+    { kind: 'recordIndex', index: 0 }, { kind: 'recordIndex', index: 1 }, { kind: 'recordId', value: 'NC_2' }, null
+  ]);
+  assert.deepEqual(['f2::a', 'f3::a', '', 'f9::a'].map(bindings.selectorOfBinding), [
+    { kind: 'recordIndex', index: 1 }, { kind: 'recordId', value: 'NC_1' }, null, null
+  ]);
+});
+
+// Review r2 B1: the live draw names a search row's record among the committed request's records by its binding key,
+// not by the selector the draft holds (it follows the draft's records, which may differ from the Result's: a record
+// OFF, the Record choice changed, a Redo after a Generate). A row of a record that request does not draw is not
+// drawn, as Generate draws no row of an OFF record; the live request then equals Generate's.
+test('linear: the live draw names the record of a search row by its binding key among the committed records', () => {
+  const drawing = modeDrawing(state, 'linear');
+  const before = [...drawing.annotationSets];
+  try {
+    const committed = generate('linear');
+    const set = searchSet('Search 1');
+    const [row] = set.annotations;
+    // The draft names LIVE1 (the draft's own selector); the row's key is LIVE2's in the committed request.
+    set.annotations = [
+      { ...row, metadata: { ...row.metadata, [ANNOTATION_RECORD_BINDING_KEY]: 'card-2' } },
+      { ...row, id: 'q1#2', metadata: { ...row.metadata, [ANNOTATION_RECORD_BINDING_KEY]: 'card-off' } }
+    ];
+    drawing.annotationSets.push(set);
+    const recordSelector = (key) => (key === 'card-2' ? { kind: 'recordId', value: 'LIVE2' } : null);
+    const live = applied(committed, projectSearch(committed, 'linear', ['Search 1'], recordSelector));
+    const [drawn] = live.renderRequest.diagramOptions.annotations.sets[0].annotations;
+    assert.deepEqual(live.renderRequest.diagramOptions.annotations.sets[0].annotations.map(({ id }) => id), ['q1#1']);
+    assert.deepEqual(drawn.target.record, { kind: 'recordId', value: 'LIVE2' });
+    // Generate of the draft once the record select resolved the key (`reconcileAnnotationRecordBindings`) and with the
+    // OFF row left out.
+    set.annotations = [{ ...set.annotations[0], target: { ...row.target, record: { kind: 'recordId', value: 'LIVE2' } } }];
+    assert.deepEqual(live.renderRequest.diagramOptions.annotations, generate('linear').renderRequest.diagramOptions.annotations);
+  } finally {
+    drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
+  }
 });
 
 // Review B2 (#1667): a set id the draft freed (its set renamed or deleted, which waits for Generate) is not reused
@@ -483,4 +548,52 @@ test('a Session Load empties the panel: queries, settings, hit table, chips and 
   assert.deepEqual(panel.hitRows.value, []);
   assert.equal(panel.outline.value, null);
   assert.deepEqual(panel.searchSetIdsOf(step), []);
+});
+
+// Review r2 N-r2-1, receipt "after a Load the panel is empty": a Session Load counts from its start (`loadStarts`,
+// before it installs the loaded document); a search it overtook adds nothing, and its failure or busy reason is not
+// written into the panel the Load empties (`reset`, at the Load's end).
+test('a search a Session Load overtakes adds nothing and leaves the emptied panel empty', async () => {
+  const replied = await runPanelSearch((ref) => ({
+    runHelper: async (operation) => {
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      ref.panel.loadStarts();
+      return { result: { annotationSet: null, hits: [], rowsRead: 0, rowsKept: 0, thresholds: [], unmatchedRows: 0, unmatchedSubjectIds: [] } };
+    }
+  }));
+  assert.deepEqual(replied.added, []);
+  assert.equal(replied.panel.panel.outcome, null, 'the reply of the previous document is not shown');
+  const failed = await runPanelSearch((ref) => ({
+    runHelper: async (operation) => {
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      ref.panel.loadStarts();
+      ref.panel.reset();
+      throw new Error('The search subject ID names more than one searched sequence.');
+    }
+  }));
+  assert.equal(failed.panel.panel.searchError, null);
+  const busy = await runPanelSearch((ref) => ({
+    runLosatJobs: async () => {
+      ref.panel.loadStarts();
+      ref.panel.reset();
+      return { status: 'busy', reason: 'A Session load is in progress.' };
+    }
+  }));
+  assert.equal(busy.panel.panel.busy, '');
+  assert.equal(busy.panel.panel.searchError, null);
+});
+
+// Review r2 N-r2-2 (N5): the hit set reply is checked in full, its threshold tallies and unmatched subject IDs too.
+test('a hit set reply with a malformed threshold tally or unmatched subject ID is refused', () => {
+  const good = {
+    annotationSet: null, hits: [], rowsRead: 2, rowsKept: 0, unmatchedRows: 0, unmatchedSubjectIds: ['X:1-9'],
+    thresholds: [{ name: 'E-value', threshold: 0.01, rowsLeftOut: 2, bestValue: 0.5 }]
+  };
+  assert.deepEqual(search.readSequenceSearchReply(good), good);
+  for (const bad of [
+    { thresholds: [{ name: 'E-value' }] }, { thresholds: [{ ...good.thresholds[0], rowsLeftOut: '2' }] }, { thresholds: undefined },
+    { unmatchedSubjectIds: [1] }, { unmatchedSubjectIds: undefined }
+  ]) {
+    assert.throws(() => search.readSequenceSearchReply({ ...good, ...bad }), (error) => error.code === 'RESULT_INVALID', JSON.stringify(bad));
+  }
 });

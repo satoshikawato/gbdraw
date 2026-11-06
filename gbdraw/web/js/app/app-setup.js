@@ -244,7 +244,7 @@ import {
   buildAnnotationRecordCatalog
 } from './annotations/record-catalog.js';
 import {
-  reconcileAnnotationRecordBindings, recordBindingsOf
+  reconcileAnnotationRecordBindings, resultRecordBindings
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
@@ -2316,6 +2316,7 @@ export const createAppSetup = () => {
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
     },
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog(state.activeDrawing()).omittedRecordKeys || [],
+    searchRecordSelector: (bindingKey) => shownResultRecordBindings().selectorOfBinding(bindingKey),
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
   // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the
@@ -2638,6 +2639,7 @@ export const createAppSetup = () => {
     },
     transformLegacyResultSvg,
     beforeImport: async () => {
+      sequenceSearch.loadStarts();
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
@@ -5280,21 +5282,20 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
-  /** How a row of `drawing` binds a Result's record (`recordBindingsOf`); an unread catalog is read first (OV-373), one that cannot be read throws (OV-2562). @param {DrawingState} drawing */
-  const readRecordBindings = async (drawing) => {
+  /** Reads the record catalog of `drawing` when it is unread (OV-373); one that cannot be read throws (OV-2562). @param {DrawingState} drawing */
+  const readRecordCatalog = async (drawing) => {
     if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
     const catalog = getAnnotationRecordCatalog(drawing);
     if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
-    return recordBindingsOf(catalog, recordSettingsOwners(drawing));
   };
-  // Sequence search (PD-OI-117): the subject is the records of the shown drawing's Results, read by Python from the
-  // committed request; the set a search adds is one History step of that drawing.
+  // How a row binds a record of the shown Result (Add to annotation set, Sequence search, its live draw; PD-OI-117).
+  const shownResultRecordBindings = () => resultRecordBindings(shownResultsAxisRecords(), recordSettingsOwners(state.activeDrawing()));
   const sequenceSearch = createSequenceSearch({
     state,
     readAxisRecords: shownResultsAxisRecords,
     readRecordSpans: readShownRecordSpans,
     committedSets: shownCommittedSets,
-    readRecordBindings: async () => (await readRecordBindings(state.activeDrawing())).recordOf,
+    readRecordBindings: shownResultRecordBindings,
     runLosatJobs: runLosatJobsInOverlay,
     runHelper: runDiagramHelperOperation,
     helperOperations: { readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES, buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET },
@@ -5321,9 +5322,9 @@ export const createAppSetup = () => {
     // Binds as the record select does; the popup is teleported out of the app root (no History adapter): its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
-      const { bindingKeyOf } = await readRecordBindings(drawing);
+      await readRecordCatalog(drawing);
       if (drawing !== state.activeDrawing()) return null;
-      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOf(recordKey), start, end }));
+      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ bindingKey: shownResultRecordBindings().bindingKeyOf(recordKey), start, end }));
     },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.

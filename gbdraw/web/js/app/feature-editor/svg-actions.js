@@ -30,9 +30,8 @@ import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
-import {
-  ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR
-} from '../../services/drawn-groups.js';
+import { ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR } from '../../services/drawn-groups.js';
+import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from '../../services/drawn-attributes.generated.js';
 import {
   featureIdentity,
   indexFeatureIdentities,
@@ -1888,7 +1887,7 @@ export const createFeatureSvgActions = ({
           if (selectedAnnotation) {
             selectedAnnotation.value = {
               id: annotationEl.getAttribute(ANNOTATION_ID_ATTRIBUTE) || '',
-              setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
+              setId: annotationEl.getAttribute(ANNOTATION_SET_ID_ATTRIBUTE) || '',
               trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
             };
           }

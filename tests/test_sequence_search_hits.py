@@ -857,3 +857,27 @@ def test_only_an_origin_window_drops_its_rows_that_do_not_cross_the_origin() -> 
 
     assert hits(subject) == [(71, 80)]
     assert hits(replace(subject, origin_window=True)) == []
+
+
+def test_a_query_longer_than_half_the_record_can_give_two_overlapping_rows_across_the_origin() -> None:
+    # Review N4, pinned (the origin window is at most half the record, step 2d2): a 4000-base query across the origin
+    # of a 5000 bp record, 3000 bases before it and 1000 after. The window (its last and first 2500 bases) holds only
+    # the query's bases 501-4000; that row crosses the origin and stands for the head half, but not for the tail half,
+    # which starts before the window. Both stay, and they overlap on 2501-5000.
+    subjects = (
+        SearchSubject("P:1-5000", parse_record_selector("P"), "p"),
+        SearchSubject("P:2501-2500", parse_record_selector("P"), "p", source_start=2501, record_length=5000, origin_window=True),
+    )
+    assert origin_window_span(5000, 4000) == (2501, 2500)
+    rows = (
+        ("long", "P:1-5000", "100.000", "3000", "0", "0", "1", "3000", "2001", "5000", "0.0", "5000"),
+        ("long", "P:1-5000", "100.000", "1000", "0", "0", "3001", "4000", "1", "1000", "0.0", "1800"),
+        ("long", "P:2501-2500", "100.000", "3500", "0", "0", "501", "4000", "1", "3500", "0.0", "6400"),
+    )
+    loose = ComparisonThresholds(evalue=1.0, bitscore=0.0, identity=0.0, alignment_length=0)
+    result = search_hit_annotation_set(
+        read_comparison_table(io.StringIO("\n".join("\t".join(row) for row in rows))), set_id="Search 1",
+        subjects=subjects, thresholds=loose, program="blastn", queries=(SearchQuery("long", 4000),),
+    )
+    assert sorted((hit.start, hit.end, hit.alignment_length) for hit in result.hits) == [(2001, 5000, 3000), (2501, 1000, 3500)]
+    assert (result.tally.rows_read, result.tally.rows_kept) == (2, 2)

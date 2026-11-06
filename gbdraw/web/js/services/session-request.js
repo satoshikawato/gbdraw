@@ -118,8 +118,10 @@ import {
 } from './track-slot-validation.js';
 /** @import { CustomTrackPlan, CustomTrackPlanInput, OverlayCheckRow } from './track-slot-validation.js' */
 import {
-  annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+  ANNOTATION_RECORD_BINDING_KEY, annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest,
+  normalizeAnnotationSets
 } from './annotation-state.js';
+/** @import { SearchRecordSelector } from './sequence-search.js' */
 import { classifyOptionalPositiveNumber, integerSettingOr, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
@@ -1918,11 +1920,32 @@ export const liveSettingInputsOf = (drawing, fileOf) => ({
  * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
  */
 /**
- * `searchSetIds`: the annotation sets a Sequence search step added, which its commit, Undo and Redo draw at once
- * (`searchSetIdsOfStep` in services/sequence-search.js); the other set changes wait for Generate.
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSetIds?: readonly string[] }} LiveSettingContext
+ * The annotation sets a Sequence search step added (`ids`), which its commit, Undo and Redo draw at once
+ * (`searchSetIdsOfStep` in services/sequence-search.js; the other set changes wait for Generate), and how their rows
+ * name their records in the committed request (`recordSelector`, by binding key).
+ * @typedef {{ readonly ids: readonly string[], readonly recordSelector: SearchRecordSelector }} LiveSearchSets
+ */
+/**
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSets?: LiveSearchSets }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
+/**
+ * A search row as the live draw sends it: its record named among the committed request's records by its binding key
+ * (the key the record select writes), not by the draft's selector, which names a record of the draft's records and is
+ * resolved by Generate (review r2 B1); none when that request draws no record of the key, as a Generate draws no row
+ * of an OFF record. A row with no binding (its record had no settings owner) keeps the selector the search wrote, the
+ * shown Result's.
+ * @template {{ target: { kind: string }, metadata?: Record<string, unknown> | null }} T
+ * @param {T} item
+ * @param {SearchRecordSelector} recordSelector
+ * @returns {T[]}
+ */
+const committedSearchRow = (item, recordSelector) => {
+  const key = String(item.metadata?.[ANNOTATION_RECORD_BINDING_KEY] ?? '').trim();
+  if (!key || item.target.kind === 'featureIdentity') return [item];
+  const record = recordSelector(key);
+  return record ? [{ ...item, target: { ...item.target, record } }] : [];
+};
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
 const configWrites = (path, value) => {
   const overrides = sharedLengthOverrides(path, value);
@@ -2431,15 +2454,16 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   // The Fill and Stroke color of each committed item whose colors are live
   // (`annotationItemColorsLive`), matched by set and item id. A draft item
   // without its own style follows the committed set's Default, whose change
-  // is not live. The sets a Sequence search step added (`searchSetIds`, by set
+  // is not live. The sets a Sequence search step added (`searchSets`, by set
   // id) follow the draft at once, as Generate sends them: present, or gone
   // after its Undo (PD-OI-117); every other set change waits.
-  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request, { searchSetIds = [] }) => {
+  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request, { searchSets }) => {
     const draftSets = normalizeAnnotationSets(drawing.annotationSets);
-    const searched = new Set(searchSetIds);
+    const searched = new Set(searchSets ? searchSets.ids : []);
     const committed = request.diagramOptions.annotations;
     const committedSets = [...(committed?.sets ?? [])].filter((set) => !searched.has(set.id));
-    const added = annotationOptionsPayload(draftSets.filter((set) => searched.has(set.id))).sets;
+    const added = searchSets ? annotationOptionsPayload(draftSets.filter((set) => searched.has(set.id))).sets
+      .map((set) => ({ ...set, annotations: set.annotations.flatMap((item) => committedSearchRow(item, searchSets.recordSelector)) })) : [];
     if (committedSets.length === 0 && added.length === 0) {
       return committed ? [[['diagramOptions', 'annotations'], undefined]] : [];
     }
@@ -2634,17 +2658,17 @@ const valueAtPath = (root, path) => path.reduce(
  * The writes that apply the draft values of `requestPaths` to the committed
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSetIds?: readonly string[] }} input
- *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`); `searchSetIds`: the sets a Sequence search step added.
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide>, searchSets?: LiveSearchSets }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`); `searchSets`: the sets a Sequence search step added.
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides, searchSetIds }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides, searchSets }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
   const { resources } = committed;
   // One context per call: the track projection runs once for its five keys.
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles, resources, undoneHides, searchSetIds };
+  const context = { inputs, webFiles, resources, undoneHides, searchSets };
   let trackWrites = 0;
   const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];

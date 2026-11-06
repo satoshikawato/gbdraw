@@ -27,8 +27,9 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 
 /**
  * One searched sequence (`SearchSubjectInput`): the ID LOSAT names it by (its FASTA header, unique in one read), the
- * selector of the catalog record that draws it, the request's record key, the source coordinate of its first base,
- * and, as Python read the span, whether it is an origin window and its record's length.
+ * selector that names its record in the committed request the shown Result was made from, the request's record key,
+ * the source coordinate of its first base, and, as Python read the span, whether it is an origin window and its
+ * record's length.
  * @typedef {object} SearchSubject
  * @property {string} subjectId
  * @property {AnnotationRecordSelector} record
@@ -38,9 +39,18 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
  * @property {number} recordLength
  */
 /**
- * The record-catalog record that draws a Result's record (by its request key), as Add to annotation set binds a row:
- * its key, which the record select writes, and its selector. Null when no catalog record draws it.
- * @typedef {(recordKey: string) => { key: string, backendSelector: AnnotationRecordSelector } | null} SearchRecordBinding
+ * The selector that names, among the records of the committed request the shown Result was made from, the record a
+ * row binds by `bindingKey` (the key the record select writes); null when that request draws no such record.
+ * @typedef {(bindingKey: string) => AnnotationRecordSelector | null} SearchRecordSelector
+ */
+/**
+ * How a search row binds a record of the shown Result, by the Result's request record key (`resultRecordBindings`):
+ * the binding key of the record settings owner that holds it ('' when none does), the selector that names it in the
+ * committed request (null for a record the Result does not draw), and that selector by binding key.
+ * @typedef {object} ResultRecordBindings
+ * @property {(recordKey: string) => string} bindingKeyOf
+ * @property {(recordKey: string) => AnnotationRecordSelector | null} selectorOf
+ * @property {SearchRecordSelector} selectorOfBinding
  */
 
 /** @typedef {'query' | 'gradient'} SearchColorMode */
@@ -168,26 +178,28 @@ export const searchSpans = (records, longestQuery) => {
 };
 
 /**
- * The catalog record that draws the Result record `recordKey`; one that no catalog record draws is refused.
- * @param {SearchRecordBinding} recordOf
+ * The selector of the Result record `recordKey` in the committed request; a span of a record the Result does not draw
+ * is a reply that does not match its read.
+ * @param {ResultRecordBindings} bindings
  * @param {string} recordKey
+ * @returns {AnnotationRecordSelector}
  */
-export const searchedRecord = (recordOf, recordKey) => {
-  const record = recordOf(recordKey);
-  if (!record) throw diagnosticError('INPUT_INVALID', { field: 'record_selector' }, { stage: 'helper', operation: 'searchHitAnnotationSet' });
-  return record;
+export const resultRecordSelector = (bindings, recordKey) => {
+  const selector = bindings.selectorOf(recordKey);
+  if (!selector) throw invalid('readRecordSpanSequences');
+  return selector;
 };
 
 /**
  * The searched sequences of the spans Python read: LOSAT names each by its FASTA header, and an annotation names its
- * record by the selector of the catalog record that draws it (`recordOf`, the binding of Add to annotation set).
+ * record by its selector among the records the shown Result draws (`resultRecordSelector`).
  * @param {RecordSpanSequencesReply} read
- * @param {SearchRecordBinding} recordOf
+ * @param {ResultRecordBindings} bindings
  * @returns {SearchSubject[]}
  */
-export const searchSubjects = (read, recordOf) => read.spans.map((span) => ({
+export const searchSubjects = (read, bindings) => read.spans.map((span) => ({
   subjectId: span.header,
-  record: searchedRecord(recordOf, span.recordKey).backendSelector,
+  record: resultRecordSelector(bindings, span.recordKey),
   recordKey: span.recordKey,
   sourceStart: span.start,
   originWindow: span.originWindow,

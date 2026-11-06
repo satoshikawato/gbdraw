@@ -6,6 +6,7 @@ import {
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 import { bindAnnotationRecords } from '../../services/drawing/annotation-sets.js';
 import { bindingKeyOfRequestRecord } from '../../services/record-draw-selection.js';
+import { withRecordSelectors } from './record-catalog.js';
 import { t } from '../../utils/i18n.js';
 
 /**
@@ -13,6 +14,8 @@ import { t } from '../../utils/i18n.js';
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  * @import { AnnotationRecordBinding, AnnotationRow, AnnotationSetsSlice, AnnotationSetsView } from '../../services/drawing/annotation-sets.js'
  * @import { RecordSettingsOwner } from '../../services/record-draw-selection.js'
+ * @import { RegionAxisRecord } from '../../services/region-axis.js'
+ * @import { ResultRecordBindings } from '../../services/sequence-search.js'
  */
 /**
  * The annotation sets of a drawing, and the handle their writers take.
@@ -103,17 +106,27 @@ export const annotationRecordValue = (catalog, annotation) => {
 };
 
 /**
- * How a row binds a Result's record (its request key): by the catalog key of the record that draws it (`bindingKeyOf`,
- * the key the record select writes; '' when no record draws it) and that catalog record (`recordOf`, null when none).
- * @param {AnnotationRecordCatalog} catalog
+ * How a row binds a record of a Result (its request key), as Add to annotation set and Sequence search bind one: by
+ * the catalog key the record select writes, that of the record settings owner that holds it (`bindingKeyOf`; an OFF
+ * record's too; '' when no owner holds it), and by the selector that names it among the records the Result draws,
+ * those of the committed request it was made from (`withRecordSelectors`, as the catalog names the draft's; review r2
+ * B1). The draft's catalog is not read: a record change that waits for Generate changes neither.
+ * @param {readonly Pick<RegionAxisRecord, 'recordKey' | 'recordId' | 'recordIndex'>[]} axisRecords The Result's records.
  * @param {readonly RecordSettingsOwner[]} owners The drawing's record settings owners.
+ * @returns {ResultRecordBindings}
  */
-export const recordBindingsOf = (catalog, owners) => {
+export const resultRecordBindings = (axisRecords, owners) => {
+  const drawn = [...new Map(axisRecords.map((record) => [record.recordKey, record])).values()]
+    .sort((a, b) => a.recordIndex - b.recordIndex);
+  const named = withRecordSelectors(drawn.map(({ recordKey, recordId, recordIndex }) => ({ recordKey, recordId, selector: `#${recordIndex + 1}` })));
   /** @param {string} recordKey */
   const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey);
-  /** @param {string} recordKey */
-  const recordOf = (recordKey) => catalog.records.find(({ key }) => key === bindingKeyOf(recordKey)) ?? null;
-  return { bindingKeyOf, recordOf };
+  return {
+    bindingKeyOf,
+    selectorOf: (recordKey) => named.find((record) => record.recordKey === recordKey)?.backendSelector ?? null,
+    selectorOfBinding: (bindingKey) => (bindingKey
+      ? named.find(({ recordKey }) => bindingKeyOf(recordKey) === bindingKey)?.backendSelector ?? null : null)
+  };
 };
 
 /**

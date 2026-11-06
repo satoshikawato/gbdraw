@@ -27,6 +27,8 @@ from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
+    ANNOTATION_ID_ATTRIBUTE,
+    ANNOTATION_SET_ID_ATTRIBUTE,
     MarkPart,
     annotation_dom_id,
     cap_size,
@@ -522,8 +524,8 @@ def linear_annotation_track_content(
         if not auto_feature_underlay:
             item_group.attribs.update(
                 {
-                    "data-gbdraw-annotation-id": annotation.id,
-                    "data-gbdraw-annotation-set-id": track.set_id,
+                    ANNOTATION_ID_ATTRIBUTE: annotation.id,
+                    ANNOTATION_SET_ID_ATTRIBUTE: track.set_id,
                     "data-gbdraw-annotation-track-id": track.slot_id,
                     "data-gbdraw-record-id": record_id,
                     "data-gbdraw-record-index": str(record_index),
