@@ -8,10 +8,10 @@
 // sequence and decides no hit itself.
 import { diagnosticError } from '../utils/error-normalization.js';
 import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.js';
-import { sourceSpanOf } from './region-axis.js';
+import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 
 /** @import { RegionAxisRecord } from './region-axis.js' */
-/** @import { RecordSpanInput, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
+/** @import { RecordSpanInput, RecordSpanRead, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 
 /**
@@ -25,12 +25,15 @@ import { sourceSpanOf } from './region-axis.js';
 
 /**
  * One searched sequence (`SearchSubjectInput`): the ID LOSAT names it by (its FASTA header), the drawing's record
- * selector, the request's record key, and the source coordinate of its first base.
+ * selector, the request's record key, the source coordinate of its first base, and, as Python read the span, whether
+ * it crosses the origin (an origin window) and its record's length.
  * @typedef {object} SearchSubject
  * @property {string} subjectId
  * @property {AnnotationRecordSelector} record
  * @property {string} recordKey
  * @property {number} sourceStart
+ * @property {boolean} wrapsOrigin
+ * @property {number} recordLength
  */
 
 /** @typedef {'query' | 'gradient'} SearchColorMode */
@@ -135,19 +138,25 @@ export const panelQueries = (read, previous = []) => read.map((query, index) => 
 
 /**
  * The spans a search reads: each record the shown drawing draws (every Result's), once, over the bases it draws, on
- * its source strand (a whole record from 1).
+ * its source strand (a whole record from 1); then the origin window of each record a span may cross the origin of
+ * (`mayPassOrigin`), which Python places from the longest query's length (`origin_window_span`), so a hit across the
+ * origin is found whole (OV-2571).
  * @param {readonly RegionAxisRecord[]} records
- * @returns {RecordSpanInput[]}
+ * @param {number} longestQuery The length of the longest query.
+ * @returns {RecordSpanRead[]}
  */
-export const searchSpans = (records) => {
+export const searchSpans = (records, longestQuery) => {
   /** @type {Map<string, RecordSpanInput>} */
   const spans = new Map();
+  /** @type {RecordSpanRead[]} */
+  const windows = [];
   for (const { recordKey, axis } of records) {
     if (spans.has(recordKey)) continue;
     const { start, end } = sourceSpanOf(axis.source, { start: 0, length: axis.source.drawnLength });
     spans.set(recordKey, { recordKey, start, end });
+    if (mayPassOrigin(axis.source)) windows.push({ recordKey, originWindow: longestQuery });
   }
-  return [...spans.values()];
+  return [...spans.values(), ...windows];
 };
 
 /**
@@ -158,13 +167,16 @@ export const searchSpans = (records) => {
  * @returns {SearchSubject[]}
  */
 export const searchSubjects = (read, records) => read.spans.map((span) => {
-  const shared = read.spans.filter((other) => other.recordId === span.recordId).length > 1;
+  // Two drawn records, not a record and its origin window.
+  const shared = new Set(read.spans.filter((other) => other.recordId === span.recordId).map((other) => other.recordKey)).size > 1;
   const index = records.find((record) => record.recordKey === span.recordKey)?.recordIndex ?? 0;
   return {
     subjectId: span.header,
     record: shared || !span.recordId ? { kind: 'recordIndex', index } : { kind: 'recordId', value: span.recordId },
     recordKey: span.recordKey,
-    sourceStart: span.start
+    sourceStart: span.start,
+    wrapsOrigin: span.wrapsOrigin,
+    recordLength: span.recordLength
   };
 });
 

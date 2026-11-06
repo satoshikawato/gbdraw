@@ -61,7 +61,8 @@ def test_a_span_of_a_forward_record_reads_its_source_bases_with_a_source_header(
     [span] = reply["spans"]
     assert span == {
         "recordKey": "mito", "recordId": "NC_012920.1", "start": 4001, "end": 4100, "length": 100,
-        "wrapsOrigin": False, "header": "NC_012920.1:4001-4100", "sequence": _BASES[4000:4100],
+        "wrapsOrigin": False, "recordLength": 16569, "header": "NC_012920.1:4001-4100",
+        "sequence": _BASES[4000:4100],
     }
     # 60 columns, uppercase: the one FASTA writer of the package (losat_fasta_text).
     lines = reply["fasta"].splitlines()
@@ -112,4 +113,29 @@ def test_a_span_across_the_end_of_a_linear_record_is_refused(tmp_path: Path) -> 
     ))
     with pytest.raises(ValidationError) as raised:
         _read(request, tmp_path, ("card", 500, 100))
+    assert raised.value.diagnostic["reason"] == "RECORD_BOUNDS"
+
+
+def _read_window(request: DiagramRequest, directory: Path, key: str, reach: int):
+    payload, paths = _committed(request, directory)
+    return read_record_span_sequences(payload, paths, str(directory / "out"), [{"recordKey": key, "originWindow": reach}])
+
+
+@pytest.mark.parametrize(("reach", "width"), [(600, 600), (20000, 16569 // 2)])
+def test_an_origin_window_reads_the_last_and_first_bases_of_a_circular_record(tmp_path: Path, reach: int, width: int) -> None:
+    # OV-2571, D-52: the search's second subject of a circular record drawn whole, at most half the record each side.
+    request = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_MITO), record_key="mito")])
+    [span] = _read_window(request, tmp_path, "mito", reach)["spans"]
+    start = 16569 - width + 1
+    assert (span["start"], span["end"], span["wrapsOrigin"], span["recordLength"]) == (start, width, True, 16569)
+    assert span["header"] == f"NC_012920.1:{start}-{width}"
+    assert span["sequence"] == _BASES[start - 1:] + _BASES[:width]
+
+
+def test_an_origin_window_of_a_record_that_cannot_cross_its_origin_is_refused(tmp_path: Path) -> None:
+    request = LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(_INPUTS.parent.parent / "examples" / "MjeNMV.gb"), record_key="card"),
+    ))
+    with pytest.raises(ValidationError) as raised:
+        _read_window(request, tmp_path, "card", 100)
     assert raised.value.diagnostic["reason"] == "RECORD_BOUNDS"

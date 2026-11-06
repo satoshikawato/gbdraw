@@ -162,14 +162,39 @@ test('the search reads each drawn record once over the bases it draws, and names
     { resultIndex: 1, recordIndex: 0, recordKey: 'a', recordId: 'X', axis: axis(100) },
     { resultIndex: 0, recordIndex: 1, recordKey: 'b', recordId: 'X', axis: axis(30, 41) }
   ];
-  assert.deepEqual(search.searchSpans(records), [{ recordKey: 'a', start: 1, end: 100 }, { recordKey: 'b', start: 41, end: 70 }]);
+  assert.deepEqual(search.searchSpans(records, 600), [{ recordKey: 'a', start: 1, end: 100 }, { recordKey: 'b', start: 41, end: 70 }]);
   const read = { fasta: '', spans: [
-    { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, header: 'X:1-100', sequence: '' },
-    { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, header: 'X:41-70', sequence: '' }
+    { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, recordLength: 100, header: 'X:1-100', sequence: '' },
+    { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, recordLength: 100, header: 'X:41-70', sequence: '' }
   ] };
   assert.deepEqual(search.searchSubjects(read, records), [
-    { subjectId: 'X:1-100', record: { kind: 'recordIndex', index: 0 }, recordKey: 'a', sourceStart: 1 },
-    { subjectId: 'X:41-70', record: { kind: 'recordIndex', index: 1 }, recordKey: 'b', sourceStart: 41 }
+    { subjectId: 'X:1-100', record: { kind: 'recordIndex', index: 0 }, recordKey: 'a', sourceStart: 1, wrapsOrigin: false, recordLength: 100 },
+    { subjectId: 'X:41-70', record: { kind: 'recordIndex', index: 1 }, recordKey: 'b', sourceStart: 41, wrapsOrigin: false, recordLength: 100 }
+  ]);
+});
+
+// OV-2571, D-52: a record that a span may cross the origin of (circular, drawn whole), in either mode, is also read
+// over its origin window, which Python places (origin_window_span); its two subjects still name the record by ID.
+test('the search also reads the origin window of each record drawn whole across its origin', () => {
+  const axis = (kind, drawnLength, isCircular) => ({
+    kind, rows: [], source: { anchorBase: 1, recordBase: 1, step: 1, sourceLength: 100, drawnLength, isCircular }
+  });
+  const records = [
+    { resultIndex: 0, recordIndex: 0, recordKey: 'c', recordId: 'C', axis: axis('circular', 100, true) },
+    { resultIndex: 0, recordIndex: 1, recordKey: 'l', recordId: 'L', axis: axis('linear', 100, true) },
+    { resultIndex: 0, recordIndex: 2, recordKey: 'n', recordId: 'N', axis: axis('circular', 100, false) }
+  ];
+  assert.deepEqual(search.searchSpans(records, 30), [
+    { recordKey: 'c', start: 1, end: 100 }, { recordKey: 'l', start: 1, end: 100 }, { recordKey: 'n', start: 1, end: 100 },
+    { recordKey: 'c', originWindow: 30 }, { recordKey: 'l', originWindow: 30 }
+  ]);
+  const read = { fasta: '', spans: [
+    { recordKey: 'c', recordId: 'C', start: 1, end: 100, length: 100, wrapsOrigin: false, recordLength: 100, header: 'C:1-100', sequence: '' },
+    { recordKey: 'c', recordId: 'C', start: 71, end: 30, length: 60, wrapsOrigin: true, recordLength: 100, header: 'C:71-30', sequence: '' }
+  ] };
+  assert.deepEqual(search.searchSubjects(read, records), [
+    { subjectId: 'C:1-100', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 1, wrapsOrigin: false, recordLength: 100 },
+    { subjectId: 'C:71-30', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 71, wrapsOrigin: true, recordLength: 100 }
   ]);
 });
 

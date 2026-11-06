@@ -13,6 +13,7 @@ const committed = { renderRequest: { mode: 'circular', records: [] }, resources:
 const spans = [{ recordKey: 'record-1', start: 16_001, end: 501 }];
 const reply = {
   spans: [{ recordKey: 'record-1', recordId: 'NC_012920.1', start: 16_001, end: 501, length: 1_070, wrapsOrigin: true,
+    recordLength: 16_569,
     header: 'NC_012920.1:16001-501', sequence: 'ACGT' }],
   fasta: '>NC_012920.1:16001-501\nACGT\n'
 };

@@ -238,8 +238,12 @@ export const linearRowPosition = (axis, row, x) => {
   return { position: Math.min(Math.max(position, displayStart), displayEnd - 1e-9), row };
 };
 
-/** Whether a span may pass display index 0: on a circular record drawn whole. @param {AxisSourceMap} source */
-const wraps = (source) => source.isCircular && source.drawnLength === source.sourceLength;
+/**
+ * Whether a span may pass display index 0, the record's origin: on a circular record drawn whole (Select region's
+ * drag, the search's origin window).
+ * @param {AxisSourceMap} source
+ */
+export const mayPassOrigin = (source) => source.isCircular && source.drawnLength === source.sourceLength;
 
 /**
  * The span of a Circular drag that started at `start` and has turned `sweep` bases (negative counter-clockwise).
@@ -255,7 +259,7 @@ export const circularDragSpan = (axis, start, sweep) => {
   const from = Math.floor(start);
   if (Math.abs(sweep) >= drawnLength) return { start: 0, length: drawnLength };
   const to = Math.floor(start + sweep);
-  if (!wraps(axis.source)) {
+  if (!mayPassOrigin(axis.source)) {
     const low = Math.max(0, Math.min(from, to));
     const high = Math.min(drawnLength - 1, Math.max(from, to));
     return { start: low, length: high - low + 1 };

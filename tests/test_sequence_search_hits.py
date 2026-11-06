@@ -30,6 +30,7 @@ from gbdraw.annotations.search_hits import (
     SEARCH_QUERY_COLORS,
     SearchQuery,
     SearchSubject,
+    origin_window_span,
     search_hit_annotation_set,
 )
 from gbdraw.api.diagram import build_circular_diagram, build_linear_diagram
@@ -156,8 +157,10 @@ def test_worker_helper_returns_the_set_as_the_request_writes_it() -> None:
     payload = {
         "table": ROWS, "setId": "Search 1",
         "subjects": [
-            {"subjectId": "rec1:1-5000", "record": {"kind": "recordId", "value": "rec1"}, "recordKey": "record-1", "sourceStart": 1},
-            {"subjectId": "rec2:1-3000", "record": {"kind": "recordId", "value": "rec2"}, "recordKey": "record-2", "sourceStart": 1001},
+            {"subjectId": "rec1:1-5000", "record": {"kind": "recordId", "value": "rec1"}, "recordKey": "record-1", "sourceStart": 1,
+             "wrapsOrigin": False, "recordLength": 5000},
+            {"subjectId": "rec2:1-3000", "record": {"kind": "recordId", "value": "rec2"}, "recordKey": "record-2", "sourceStart": 1001,
+             "wrapsOrigin": False, "recordLength": 4000},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
         "program": "blastn", "queries": [{"name": "qA", "length": 600}, {"name": "qB", "length": 400}],
@@ -644,3 +647,158 @@ def test_a_wrapped_linear_record_draws_a_hit_on_its_strands_lane_of_its_row() ->
     assert _apart(plus, minus)
     assert _inside(plus, hits["p"]) and _apart(hits["p"], minus)
     assert _inside(minus, hits["m"]) and _apart(hits["m"], plus)
+
+
+# OV-2571, D-52: a circular record drawn whole is also searched over its origin window (its last w and first w
+# bases, w the longest query), so a hit across the origin is one row with wraps_origin, its halves in the record's
+# own subject are dropped, and "the thresholds removed N" counts each alignment once.
+_MITO_LENGTH = 16569
+_WINDOW_START = _MITO_LENGTH - 600 + 1
+ORIGIN_SUBJECTS = (
+    SearchSubject(f"NC_012920.1:1-{_MITO_LENGTH}", parse_record_selector("NC_012920.1"), "mito"),
+    SearchSubject(
+        f"NC_012920.1:{_WINDOW_START}-600", parse_record_selector("NC_012920.1"), "mito",
+        source_start=_WINDOW_START, record_length=_MITO_LENGTH,
+    ),
+)
+ORIGIN_QUERIES = (SearchQuery("origin600", 600), SearchQuery("origin50", 50), SearchQuery("inner", 100))
+_MAIN, _WINDOW = (subject.subject_id for subject in ORIGIN_SUBJECTS)
+# The rows LOSAT writes for the last and first 300 bases of NC_012920.1 (origin600), and for the last and first 25
+# (origin50, whose halves score under the bitscore threshold of 50): two halves on the record, one row on the window.
+ORIGIN_ROWS = (
+    ("origin600", _MAIN, "100.000", "300", "0", "0", "301", "600", "1", "300", "1e-150", "555"),
+    ("origin600", _MAIN, "100.000", "300", "0", "0", "1", "300", "16270", "16569", "1e-150", "555"),
+    ("origin600", _WINDOW, "100.000", "600", "0", "0", "1", "600", "301", "900", "0.0", "1109"),
+    ("origin50", _MAIN, "100.000", "25", "0", "0", "26", "50", "1", "25", "3e-06", "46.4"),
+    ("origin50", _MAIN, "100.000", "25", "0", "0", "1", "25", "16545", "16569", "3e-06", "46.4"),
+    ("origin50", _WINDOW, "100.000", "50", "0", "0", "1", "50", "576", "625", "1e-20", "92.7"),
+    # A hit near the origin that does not cross it is found on the record and on the window: read once.
+    ("inner", _MAIN, "100.000", "100", "0", "0", "1", "100", "16301", "16400", "1e-50", "185"),
+    ("inner", _WINDOW, "100.000", "100", "0", "0", "1", "100", "332", "431", "1e-50", "185"),
+)
+
+
+def _origin_search(rows=ORIGIN_ROWS, thresholds=THRESHOLDS):
+    return search_hit_annotation_set(
+        read_comparison_table(io.StringIO("\n".join("\t".join(row) for row in rows))),
+        set_id="Search 1", subjects=ORIGIN_SUBJECTS, thresholds=thresholds, program="blastn", queries=ORIGIN_QUERIES,
+    )
+
+
+def test_a_hit_across_the_origin_is_one_row_and_its_halves_are_dropped() -> None:
+    result = _origin_search()
+    assert result.annotation_set is not None
+    targets = {row.id: row.target for row in result.annotation_set.annotations}
+    assert set(targets) == {"origin600#1", "origin50#1", "inner#1"}
+    assert (targets["origin600#1"].start, targets["origin600#1"].end, targets["origin600#1"].wraps_origin) == (
+        16270, 300, True,
+    )
+    assert (targets["inner#1"].start, targets["inner#1"].end, targets["inner#1"].wraps_origin) == (16301, 16400, False)
+    hit = next(hit for hit in result.hits if hit.query == "origin600")
+    # The window row's values: the whole alignment.
+    assert (hit.start, hit.end, hit.strand, hit.alignment_length, hit.bitscore, hit.evalue) == (
+        16270, 300, "+", 600, 1109.0, 0.0,
+    )
+    assert [hit.query for hit in result.hits].count("origin600") == 1
+
+
+def test_a_short_hit_across_the_origin_is_found_when_the_whole_alignment_passes() -> None:
+    result = _origin_search()
+    [hit] = [hit for hit in result.hits if hit.query == "origin50"]
+    assert (hit.start, hit.end, hit.bitscore) == (16545, 25, 92.7)
+
+
+def test_a_minus_strand_hit_across_the_origin_keeps_its_strand() -> None:
+    minus = (
+        ("origin600", _MAIN, "100.000", "300", "0", "0", "1", "300", "300", "1", "1e-150", "555"),
+        ("origin600", _MAIN, "100.000", "300", "0", "0", "301", "600", "16569", "16270", "1e-150", "555"),
+        ("origin600", _WINDOW, "100.000", "600", "0", "0", "1", "600", "900", "301", "0.0", "1109"),
+    )
+    [hit] = _origin_search(minus).hits
+    assert (hit.start, hit.end, hit.strand) == (16270, 300, "-")
+
+
+def test_the_thresholds_removed_count_counts_an_origin_alignment_once() -> None:
+    # Every alignment once: the two crossing hits and the inner hit, not their halves or the inner hit's twin.
+    assert (_origin_search().tally.rows_read, _origin_search().tally.rows_kept) == (3, 3)
+    strict = ComparisonThresholds(evalue=1e-2, bitscore=5000.0, identity=70.0, alignment_length=0)
+    result = _origin_search(thresholds=strict)
+    assert result.annotation_set is None
+    assert result.rows_removed_by_thresholds == 3
+
+
+def test_a_half_that_passes_stands_for_a_crossing_alignment_that_does_not() -> None:
+    # The whole alignment is under the identity threshold, one half is over it: the half is the hit, and the
+    # alignment is counted once.
+    rows = (
+        ("origin600", _MAIN, "100.000", "300", "0", "0", "301", "600", "1", "300", "1e-150", "555"),
+        ("origin600", _MAIN, "40.000", "300", "0", "0", "1", "300", "16270", "16569", "1e-5", "60"),
+        ("origin600", _WINDOW, "69.000", "600", "0", "0", "1", "600", "301", "900", "1e-100", "600"),
+    )
+    result = _origin_search(rows)
+    assert [(hit.start, hit.end) for hit in result.hits] == [(1, 300)]
+    assert (result.tally.rows_read, result.tally.rows_kept) == (1, 1)
+
+
+def test_an_origin_window_spans_the_last_and_first_bases_of_at_most_half_the_record() -> None:
+    assert origin_window_span(_MITO_LENGTH, 600) == (_WINDOW_START, 600)
+    assert origin_window_span(_MITO_LENGTH, 20000) == (_MITO_LENGTH - 8284 + 1, 8284)
+    with pytest.raises(ValidationError):
+        origin_window_span(1, 10)
+    with pytest.raises(ValidationError):
+        SearchSubject("w", parse_record_selector("r"), "r", source_start=1, record_length=100)
+
+
+def test_the_worker_helper_reads_an_origin_window_subject() -> None:
+    selector = {"kind": "recordId", "value": "NC_012920.1"}
+    payload = {
+        "table": "\n".join("\t".join(row) for row in ORIGIN_ROWS[:3]), "setId": "Search 1",
+        "subjects": [
+            {"subjectId": _MAIN, "record": selector, "recordKey": "mito", "sourceStart": 1,
+             "wrapsOrigin": False, "recordLength": _MITO_LENGTH},
+            {"subjectId": _WINDOW, "record": selector, "recordKey": "mito", "sourceStart": _WINDOW_START,
+             "wrapsOrigin": True, "recordLength": _MITO_LENGTH},
+        ],
+        "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
+        "program": "blastn", "queries": [{"name": "origin600", "length": 600}],
+        "colorMode": "query", "queryColors": {},
+    }
+    reply = json.loads(sequence_search_annotation_set_json(json.dumps(payload)))
+    [row] = reply["annotationSet"]["annotations"]
+    assert (row["target"]["start"], row["target"]["end"], row["target"]["wrapsOrigin"]) == (16270, 300, True)
+    assert [(hit["start"], hit["end"]) for hit in reply["hits"]] == [(16270, 300)]
+    assert (reply["rowsRead"], reply["rowsKept"]) == (1, 1)
+
+
+# LOSAT 0.1.0 (blastn -task blastn -outfmt 6) on the subjects the Web sends for NC_012920.1 drawn whole with a 600 bp
+# longest query: the record from base 1 and its origin window 15970-600 (prb/2d2/losat-origin-window.tsv).
+LOSAT_ORIGIN_TABLE = (
+    "origin600\tNC_012920.1:15970-600\t100.000\t600\t0\t0\t1\t600\t301\t900\t0.0\t1083\n"
+    "origin600\tNC_012920.1:15970-600\t100.000\t12\t0\t0\t508\t519\t819\t808\t1.3\t22.9\n"
+    "origin600\tNC_012920.1:15970-600\t100.000\t11\t0\t0\t39\t49\t185\t195\t4.5\t21.1\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t300\t0\t0\t301\t600\t1\t300\t5.85e-157\t542\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t300\t0\t0\t1\t300\t16270\t16569\t5.85e-157\t542\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t13\t0\t0\t310\t322\t2275\t2287\t0.37\t24.7\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t12\t0\t0\t508\t519\t219\t208\t1.3\t22.9\n"
+    "origin600\tNC_012920.1:1-16569\t88.235\t17\t2\t0\t12\t28\t1991\t2007\t1.3\t22.9\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t12\t0\t0\t449\t460\t4310\t4299\t1.3\t22.9\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t12\t0\t0\t321\t332\t14786\t14797\t1.3\t22.9\n"
+    "origin600\tNC_012920.1:1-16569\t93.750\t16\t0\t1\t502\t517\t14795\t14781\t4.5\t22.0\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t11\t0\t0\t343\t353\t6083\t6093\t4.5\t21.1\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t11\t0\t0\t261\t271\t13140\t13150\t4.5\t21.1\n"
+    "origin600\tNC_012920.1:1-16569\t100.000\t11\t0\t0\t39\t49\t16154\t16164\t4.5\t21.1\n"
+    "origin50\tNC_012920.1:15970-600\t100.000\t50\t0\t0\t1\t50\t576\t625\t1.93e-22\t91.5\n"
+    "origin50\tNC_012920.1:1-16569\t100.000\t25\t0\t0\t26\t50\t1\t25\t7.22e-09\t46.4\n"
+    "origin50\tNC_012920.1:1-16569\t100.000\t25\t0\t0\t1\t25\t16545\t16569\t7.22e-09\t46.4\n"
+    "origin50\tNC_012920.1:1-16569\t100.000\t13\t0\t0\t35\t47\t2275\t2287\t0.024\t24.7\n"
+)
+
+
+def test_losat_rows_of_an_origin_window_give_each_alignment_once() -> None:
+    result = _origin_search(tuple(tuple(line.split("\t")) for line in LOSAT_ORIGIN_TABLE.splitlines()))
+    assert [(hit.query, hit.start, hit.end, hit.strand) for hit in result.hits] == [
+        ("origin600", 16270, 300, "+"), ("origin50", 16545, 25, "+"),
+    ]
+    # The window rows that do not cross the origin (twins of record rows) and the four halves are not read; the ten
+    # short record rows are, and the thresholds remove them.
+    assert (result.tally.rows_read, result.tally.rows_kept) == (12, 2)

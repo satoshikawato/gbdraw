@@ -203,16 +203,27 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
+ * The origin window of a circular record (`OriginWindowInput`): its last and first bases, as many as `originWindow`
+ * (a sequence search's longest query) and at most half the record each; Python places it (`origin_window_span`).
+ * @typedef {object} OriginWindowInput
+ * @property {string} recordKey
+ * @property {number} originWindow
+ */
+
+/** A span to read: by its coordinates, or a record's origin window. @typedef {RecordSpanInput | OriginWindowInput} RecordSpanRead */
+
+/**
  * The payload of `readRecordSpanSequences`: the request the shown Result was made from (the committed request),
  * whose resources the page stages, and the spans to read.
  * @typedef {object} RecordSpanSequencesPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
- * @property {readonly RecordSpanInput[]} spans
+ * @property {readonly RecordSpanRead[]} spans
  */
 
 /**
- * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them.
+ * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them and the length
+ * of its record.
  * @typedef {object} RecordSpanSequence
  * @property {string} recordKey
  * @property {string} recordId
@@ -220,6 +231,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} end
  * @property {number} length
  * @property {boolean} wrapsOrigin
+ * @property {number} recordLength
  * @property {string} header
  * @property {string} sequence
  */

@@ -21,7 +21,7 @@ import {
 
 /** @import { SearchColorMode, SearchHit, SearchQuery, SearchStepChange, SequenceSearchInput } from '../services/sequence-search.js' */
 /** @import { RegionAxisRecord } from '../services/region-axis.js' */
-/** @import { RecordSpanInput, RecordSpanSequencesReply } from '../services/diagram-worker-protocol.js' */
+/** @import { RecordSpanRead, RecordSpanSequencesReply } from '../services/diagram-worker-protocol.js' */
 /** @import { AnnotationSet } from '../services/annotation-state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 
@@ -46,7 +46,7 @@ import {
  * @typedef {object} SequenceSearchPorts
  * @property {{ activeDrawing: () => { id: DrawingId, mode: 'circular' | 'linear', annotationSets: readonly { id: string }[] } }} state
  * @property {() => RegionAxisRecord[]} readAxisRecords Every drawn record of the shown drawing's Results.
- * @property {(spans: readonly RecordSpanInput[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
+ * @property {(spans: readonly RecordSpanRead[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
  * @property {(search: { queryFasta: string, subjectFasta: string, task: string }) => Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy', reason: string }>} runSearchLosat
  * @property {(operation: string, payload: Record<string, unknown>) => Promise<{ result?: unknown }>} runHelper
  * @property {{ readQueries: string, buildHitSet: string }} helperOperations The Worker helper operations (`readSearchQueries`,
@@ -202,7 +202,7 @@ export const createSequenceSearch = ({
       const queryFasta = panel.queries.map((query) => query.fasta).join('');
       const thresholds = resolveComparisonThresholds(panel.thresholds[drawing.mode], drawing.mode);
       const records = readAxisRecords();
-      const read = await readRecordSpans(searchSpans(records));
+      const read = await readRecordSpans(searchSpans(records, Math.max(...queries.map(({ length }) => length))));
       const run = await runSearchLosat({ queryFasta, subjectFasta: read.fasta, task: panel.task });
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
       if (run.status === 'busy') panel.busy = tm(run.reason);

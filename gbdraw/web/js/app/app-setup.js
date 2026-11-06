@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
-/** @import { RecordSpanInput } from '../services/diagram-worker-protocol.js' */
+/** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -5263,7 +5263,7 @@ export const createAppSetup = () => {
   });
   // The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
   // Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
-  /** @param {readonly RecordSpanInput[]} spans */
+  /** @param {readonly RecordSpanRead[]} spans */
   const readShownRecordSpans = (spans) => requestRecordSpanSequences(
     getCommittedCanonicalSession(), spans,
     (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,

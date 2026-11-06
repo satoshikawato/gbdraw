@@ -7,6 +7,10 @@ against sequences of the records a drawing draws. Its outfmt 6 rows, read by
 one ``highlight`` annotation per hit, in source coordinates of the record the
 row's subject names. The hit colour is one colour per query, or a gradient by
 query position whose Legend row is ``QUERY_POSITION_LEGEND_LABEL``.
+
+A circular record drawn whole is searched as its sequence from base 1 and over
+its origin window (``origin_window_span``), so a hit across the origin is one
+row with ``wraps_origin`` and is not split at the seam (OV-2571).
 """
 
 from __future__ import annotations
@@ -59,12 +63,16 @@ class SearchSubject:
     ``record`` the drawing's record the annotation names, ``record_key`` the
     request's identity of that record, and ``source_start`` the source
     coordinate of the sequence's first base (1, or the start of a crop).
+    ``record_length`` is set on an origin window only (``origin_window_span``:
+    the record's last bases, then its first): the record's length, after which
+    the window's coordinates go on at 1.
     """
 
     subject_id: str
     record: RecordSelector
     record_key: str
     source_start: int = 1
+    record_length: int | None = None
 
     def __post_init__(self) -> None:
         if not str(self.subject_id).strip() or not str(self.record_key).strip():
@@ -76,6 +84,38 @@ class SearchSubject:
                 "A search subject's source start must be a positive integer.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE_INTEGER"},
             )
+        length = self.record_length
+        if length is not None and (
+            isinstance(length, bool) or not isinstance(length, int) or not 1 < self.source_start <= length
+        ):
+            raise ValidationError(
+                "An origin window starts after base 1 and within its record's length.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
+
+    def source_span(self, low: int, high: int) -> tuple[int, int, bool]:
+        """The source span of the subject's bases ``low``..``high`` (1-based), and whether it crosses the origin
+        (then the start is after the end)."""
+
+        start, end = low + self.source_start - 1, high + self.source_start - 1
+        length = self.record_length
+        if length is None:
+            return start, end, False
+        return (start - 1) % length + 1, (end - 1) % length + 1, start <= length < end
+
+
+def origin_window_span(record_length: int, reach: int) -> tuple[int, int]:
+    """The origin window of a circular record, as a source span across its origin: its last ``w`` bases, then its
+    first ``w``, with ``w`` the longest query's length (``reach``) and at most half the record. A hit across the
+    origin lies in it whole, when it is no longer than the query."""
+
+    width = min(int(reach), int(record_length) // 2)
+    if width < 1:
+        raise ValidationError(
+            f"A record of {record_length} bases has no origin window.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
+    return record_length - width + 1, width
 
 
 @dataclass(frozen=True)
@@ -147,6 +187,76 @@ def _number_text(value: float) -> str:
     return text[:-2] if text.endswith(".0") else text
 
 
+def _strand(sstart: int, send: int, qstart: int, qend: int) -> Literal["+", "-"]:
+    """The hit's strand on the subject, the source strand of its record: the query runs along it forward."""
+
+    return "+" if (sstart <= send) == (qstart <= qend) else "-"
+
+
+@dataclass(frozen=True)
+class _Placed:
+    """One row where it lies: its query, record, strand, source span and query span."""
+
+    index: object
+    query: str
+    record_key: str
+    strand: Literal["+", "-"]
+    start: int
+    end: int
+    qlow: int
+    qhigh: int
+
+    def holds(self, other: _Placed) -> bool:
+        """Whether ``other``, a row of the record's own sequence, is a part of this alignment across the origin
+        (its start after its end): the same query and strand, inside it on the record and in the query."""
+
+        return (
+            (other.query, other.record_key, other.strand) == (self.query, self.record_key, self.strand)
+            and (other.start >= self.start or other.end <= self.end)
+            and self.qlow <= other.qlow and other.qhigh <= self.qhigh
+        )
+
+
+def _one_row_per_alignment(
+    frame: DataFrame, subject_of: Mapping[str, SearchSubject], thresholds: ComparisonFilter
+) -> DataFrame:
+    """The rows of ``frame`` with each alignment once (OV-2571).
+
+    A row of an origin window is kept only when it crosses the origin: one that
+    does not is the same alignment as a row of the record's own sequence. A
+    crossing row stands for its halves, the rows of the record's own sequence
+    inside it (same query and strand); when it does not pass ``thresholds`` but a
+    half does, the halves that pass stand for it instead.
+    """
+
+    passing = set(filter_comparison_dataframe(frame, thresholds).index)
+    crossing: list[_Placed] = []
+    record_rows: list[_Placed] = []
+    dropped: set[object] = set()
+    for index, row in zip(frame.index, frame.itertuples(index=False)):
+        values = dict(zip(COMPARISON_COLUMNS, row))
+        subject = subject_of[str(values["subject"]).strip()]
+        sstart, send, qstart, qend = (int(values[key]) for key in ("sstart", "send", "qstart", "qend"))
+        start, end, wraps = subject.source_span(min(sstart, send), max(sstart, send))
+        placed = _Placed(
+            index, str(values["query"]).strip(), subject.record_key, _strand(sstart, send, qstart, qend),
+            start, end, min(qstart, qend), max(qstart, qend),
+        )
+        if subject.record_length is None:
+            record_rows.append(placed)
+        elif wraps:
+            crossing.append(placed)
+        else:
+            dropped.add(index)
+    for whole in crossing:
+        halves = [half for half in record_rows if whole.holds(half)]
+        stands = whole.index in passing or not any(half.index in passing for half in halves)
+        if not stands:
+            dropped.add(whole.index)
+        dropped.update(half.index for half in halves if stands or half.index not in passing)
+    return frame.drop(index=list(dropped))
+
+
 def search_hit_annotation_set(
     table: DataFrame,
     *,
@@ -165,7 +275,10 @@ def search_hit_annotation_set(
     colour, with their lengths; ``query_colors`` replaces a query's colour. A hit's target is the
     span ``sstart``..``send`` of the subject it names, in source coordinates,
     and its ``strand`` the strand the query runs forward on there;
-    its metadata holds ``SEARCH_HIT_METADATA_KEYS``. With ``color_mode``
+    its metadata holds ``SEARCH_HIT_METADATA_KEYS``. A row of an origin window
+    (``SearchSubject.record_length``) gives a target with ``wraps_origin`` when
+    it crosses the origin; each alignment is one row and counts once in the
+    tally (``_one_row_per_alignment``). With ``color_mode``
     ``gradient`` the scale runs from ``SEARCH_GRADIENT_START_COLOR`` at the
     query's start to ``SEARCH_GRADIENT_END_COLOR`` at its end; each hit draws
     its part of the scale (``qstart``..``qend`` of the query's length),
@@ -192,7 +305,10 @@ def search_hit_annotation_set(
             diagnostic={"code": "COMPARISON_INPUT", "reason": "RECORD_ID", "column": 2},
         )
     unknown = [value for value, items in named.items() if not items]
-    known = frame[~frame["subject"].astype(str).str.strip().isin(unknown)]
+    subject_of = {value: subjects[items[0]] for value, items in named.items() if items}
+    known = _one_row_per_alignment(
+        frame[~frame["subject"].astype(str).str.strip().isin(unknown)], subject_of, thresholds
+    )
     tally = comparison_row_tally(known, thresholds)
     kept = filter_comparison_dataframe(known, thresholds)
     lengths = {query.name: query.length for query in queries}
@@ -207,7 +323,7 @@ def search_hit_annotation_set(
     for row in kept.itertuples(index=False):
         values = dict(zip(COMPARISON_COLUMNS, row))
         query = str(values["query"]).strip()
-        subject = subjects[named[str(values["subject"]).strip()][0]]
+        subject = subject_of[str(values["subject"]).strip()]
         sstart, send = int(values["sstart"]), int(values["send"])
         qstart, qend = int(values["qstart"]), int(values["qend"])
         if query not in lengths:
@@ -220,10 +336,8 @@ def search_hit_annotation_set(
                 f"A hit of {query!r} ends past the query's length {lengths[query]}.",
                 diagnostic={"code": "COMPARISON_INPUT", "column": 8},
             )
-        offset = subject.source_start - 1
-        # The hit's strand on the subject, the source strand of its record: the query runs along it forward.
-        forward = (sstart <= send) == (qstart <= qend)
-        strand: Literal["+", "-"] = "+" if forward else "-"
+        strand = _strand(sstart, send, qstart, qend)
+        forward = strand == "+"
         counts[query] = counts.get(query, 0)
         annotation_id = ""
         while not annotation_id or annotation_id in taken:
@@ -246,7 +360,7 @@ def search_hit_annotation_set(
             color = colors[query]
             style = RegionAnnotationStyle(stroke=color, fill=color, fill_opacity=SEARCH_HIT_FILL_OPACITY)
             legend_label = query
-        start, end = min(sstart, send) + offset, max(sstart, send) + offset
+        start, end, wraps = subject.source_span(min(sstart, send), max(sstart, send))
         metadata = {
             "query": query,
             "program": program,
@@ -257,7 +371,7 @@ def search_hit_annotation_set(
         }
         annotations.append(RegionAnnotation(
             id=annotation_id,
-            target=CoordinateSpan(record=subject.record, start=start, end=end),
+            target=CoordinateSpan(record=subject.record, start=start, end=end, wraps_origin=wraps),
             label="",
             mark="highlight",
             style=style,
@@ -303,6 +417,7 @@ __all__ = [
     "SearchProgram",
     "SearchQuery",
     "SearchSubject",
+    "origin_window_span",
     "search_hit_annotation_set",
     "search_query_color",
 ]
