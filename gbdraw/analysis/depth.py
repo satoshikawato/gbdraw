@@ -5,22 +5,30 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Generator, Iterable, Iterator, Mapping, TypeAlias
 
 import numpy as np
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
+from numpy.typing import NDArray
 from pandas import DataFrame
 
-from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
+from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 _DEPTH_TSV_CACHE_MAXSIZE = 8
+# Rows per chunk read: a chunk's transient columns stay small beside the stored depths.
+_CHUNK_ROWS = 1 << 20
+_EMPTY_DEPTH_DTYPES = {"reference_name": "category", "position": "int64", "depth": "float64"}
+# Whole depths take the first of these that holds the largest; others are float64.
+_WHOLE_DEPTH_DTYPES = (np.dtype(np.uint8), np.dtype(np.uint16), np.dtype(np.uint32))
+DepthArray: TypeAlias = NDArray[np.uint8] | NDArray[np.uint16] | NDArray[np.uint32] | NDArray[np.float64]
 _UNREADABLE = {"code": "INPUT_UNREADABLE"}
 
 
@@ -84,18 +92,152 @@ def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
 
 
 @lru_cache(maxsize=_DEPTH_TSV_CACHE_MAXSIZE)
-def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> DataFrame:
+def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> DepthCoverage:
     return _parse_depth_file(resolved_path)
 
 
-def _parse_depth_file(resolved_path: str) -> DataFrame:
-    """Parse and validate one depth file into a canonical table (see ``parse_depth_tsv``)."""
+@dataclass(frozen=True, eq=False)
+class DepthCoverage:
+    """The parsed form of depth rows: per reference, the depth at each 1-based source position.
+
+    ``depths[name][position - 1]`` is the mean of the rows for that position
+    (their sum, in row order, divided by their count) and 0 where no row names
+    it. Names keep the order of their first row. Each array is read-only and
+    has the smallest dtype that holds every value exactly: ``uint8``,
+    ``uint16`` or ``uint32`` for whole depths, ``float64`` otherwise.
+    """
+
+    depths: Mapping[str, DepthArray]
+
+    @property
+    def nbytes(self) -> int:
+        return sum(int(array.nbytes) for array in self.depths.values())
+
+
+def _smallest_exact_dtype(values: NDArray[np.float64], dtype: np.dtype) -> np.dtype:
+    """The first dtype of the ladder from ``dtype`` that holds ``values`` exactly."""
+
+    if dtype == np.float64 or not values.size:
+        return dtype
+    whole = np.isfinite(values) & (values == np.floor(values))
+    if not whole.all():
+        return np.dtype(np.float64)
+    largest = float(values.max())
+    for candidate in _WHOLE_DEPTH_DTYPES[_WHOLE_DEPTH_DTYPES.index(dtype):]:
+        if largest <= np.iinfo(candidate).max:
+            return candidate
+    return np.dtype(np.float64)
+
+
+class _SortedDepths:
+    """One reference's rows while each comes after the last: depths are stored, not summed."""
+
+    def __init__(self) -> None:
+        self.values: DepthArray = np.zeros(0, dtype=np.uint8)
+        self.length = 0
+
+    def add(self, positions: NDArray[np.int64], depths: NDArray[np.float64]) -> bool:
+        """Store rows that follow every earlier one; False (nothing stored) when they do not."""
+
+        if positions[0] <= self.length or (positions.size > 1 and bool((np.diff(positions) <= 0).any())):
+            return False
+        dtype = _smallest_exact_dtype(depths, self.values.dtype)
+        if dtype != self.values.dtype:
+            self.values = self.values.astype(dtype)
+        last = int(positions[-1])
+        if last > self.values.size:
+            # Grow in place where the allocator can; the new tail is zero.
+            self.values.resize(max(last, self.values.size * 3 // 2), refcheck=False)
+        # ``0.0 + depth`` as the row table summed it: -0.0 is stored as 0.0.
+        self.values[positions - 1] = depths + 0.0
+        self.length = last
+        return True
+
+    def finish(self) -> DepthArray:
+        self.values.resize(self.length, refcheck=False)
+        return self.values
+
+
+class _SummedDepths:
+    """One reference's rows in any order: sums in row order and counts, divided at the end."""
+
+    def __init__(self) -> None:
+        self.sums: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
+        self.counts: NDArray[np.uint32] = np.zeros(0, dtype=np.uint32)
+
+    def add(self, positions: NDArray[np.int64], depths: NDArray[np.float64]) -> None:
+        last = int(positions.max())
+        if last > self.sums.size:
+            size = max(last, self.sums.size * 3 // 2)
+            self.sums.resize(size, refcheck=False)
+            self.counts.resize(size, refcheck=False)
+        indexes = positions - 1
+        np.add.at(self.sums, indexes, depths)
+        np.add.at(self.counts, indexes, 1)
+
+    def finish(self) -> DepthArray:
+        present = self.counts > 0
+        means = self.sums
+        means[present] /= self.counts[present]
+        self.counts = np.zeros(0, dtype=np.uint32)
+        dtype = _smallest_exact_dtype(means, np.dtype(np.uint8))
+        return means if dtype == np.float64 else means.astype(dtype)
+
+
+def _reference_rows(chunk: DataFrame) -> Iterator[tuple[str, NDArray[np.int64], NDArray[np.float64]]]:
+    """The positions and depths of each reference in a chunk, references in the order of their first row."""
+
+    names = chunk["reference_name"]
+    positions = chunk["position"].to_numpy(dtype=np.int64)
+    depths = chunk["depth"].to_numpy(dtype=np.float64)
+    references = [str(name) for name in names.unique()]
+    if len(references) == 1:
+        yield references[0], positions, depths
+        return
+    for reference in references:
+        mask = (names == reference).to_numpy(dtype=bool)
+        yield reference, positions[mask], depths[mask]
+
+
+def _coverage(arrays: Mapping[str, DepthArray]) -> DepthCoverage:
+    for array in arrays.values():
+        array.flags.writeable = False
+    return DepthCoverage(dict(arrays))
+
+
+def _summed_coverage(chunks: Iterable[DataFrame]) -> DepthCoverage:
+    references: dict[str, _SummedDepths] = {}
+    for chunk in chunks:
+        for reference, positions, depths in _reference_rows(chunk):
+            references.setdefault(reference, _SummedDepths()).add(positions, depths)
+    return _coverage({name: summed.finish() for name, summed in references.items()})
+
+
+def _sorted_coverage(chunks: Iterable[DataFrame]) -> DepthCoverage | None:
+    """The coverage of a file whose rows of each reference come in increasing positions, else None."""
+
+    references: dict[str, _SortedDepths] = {}
+    for chunk in chunks:
+        for reference, positions, depths in _reference_rows(chunk):
+            if not references.setdefault(reference, _SortedDepths()).add(positions, depths):
+                return None
+    return _coverage({name: stored.finish() for name, stored in references.items()})
+
+
+def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
+    """The rows of one depth file in file order, a chunk at a time, each one valid.
+
+    A file with an invalid row raises once it is read to the end, so a value
+    that does not parse anywhere in it is reported first, and then the first
+    failed check in the order of ``_DEPTH_CHECKS``, as for the whole table.
+    """
 
     depth_path = Path(resolved_path)
     skiprows = 1 if _first_line_has_header(depth_path) else 0
+    failed: set[str] = set()
     try:
         with open_input_text(depth_path, encoding="utf-8") as handle:
-            depth_table = pd.read_csv(
+            reader = pd.read_csv(
                 handle,
                 sep="\t",
                 header=None,
@@ -108,88 +250,86 @@ def _parse_depth_file(resolved_path: str) -> DataFrame:
                     "position": "int64",
                     "depth": "float64",
                 },
+                chunksize=_CHUNK_ROWS,
                 **EXACT_FLOAT_READ_OPTIONS,
             )
+            with reader:
+                for chunk in reader:
+                    failed.update(_failed_depth_checks(chunk))
+                    if not failed:
+                        yield chunk
     except (ValueError, *GZIP_ERRORS) as exc:
         raise ParseError(
             f"Unable to parse depth file '{resolved_path}': {exc}",
             diagnostic=_invalid_depth("DEPTH_VALUES"),
         ) from exc
+    _raise_first_failed_check(failed)
 
-    _validate_depth_table(depth_table)
-    return depth_table
+
+def _parse_depth_file(resolved_path: str) -> DepthCoverage:
+    """Parse and validate one depth file into its coverage (see ``parse_depth_tsv``).
+
+    Rows in increasing positions per reference (a samtools depth file) are
+    stored as they are read; any other file is read again and summed.
+    """
+
+    chunks = _depth_chunks(resolved_path)
+    try:
+        coverage = _sorted_coverage(chunks)
+    finally:
+        chunks.close()
+    if coverage is None:
+        coverage = _summed_coverage(_depth_chunks(resolved_path))
+    return coverage
 
 
 def clear_depth_tsv_cache() -> None:
-    """Clear the process-local cache used by read_depth_tsv."""
+    """Clear the process-local cache of parsed depth files used by renders."""
 
     _read_depth_tsv_cached.cache_clear()
 
 
-def parse_depth_tsv(path: str) -> DataFrame:
-    """Parse one depth file without the process cache of ``read_depth_tsv``.
+def parse_depth_tsv(path: str) -> DepthCoverage:
+    """Parse one depth file without the process cache of renders.
 
-    The Worker's decoded-resource layer owns the table it returns and shares it
-    read-only with every record and render: callers must not modify it.
+    The Worker's decoded-resource layer owns the coverage it returns and shares
+    it, read-only, with every record and render.
     """
 
     resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
     return _parse_depth_file(resolved_path)
 
 
-def read_cached_depth_table(path: str) -> DataFrame:
-    """A copy of the process cache's canonical table for one file (CLI and Python API renders).
-
-    The table has the parser's shape (categorical names), so each record selects
-    its rows from it without another copy.
-    """
+def read_cached_depth_coverage(path: str) -> DepthCoverage:
+    """The process cache's coverage of one file (CLI and Python API renders), shared read-only."""
 
     resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
-    return _read_depth_tsv_cached(resolved_path, mtime_ns, size).copy(deep=True)
+    return _read_depth_tsv_cached(resolved_path, mtime_ns, size)
 
 
 def read_depth_tsv(path: str) -> DataFrame:
-    """Read a samtools-depth-like TSV file.
+    """Read a samtools-depth-like TSV file as a table of its rows.
 
     The expected columns are reference name, 1-based position, and non-negative
     depth. Headerless files are expected; a single header line is tolerated when
     the position/depth fields on the first line are non-numeric. Reference names
-    are a ``string`` column. Parsed files are cached per process and invalidated
-    when file mtime or size changes; each call returns a copy.
+    are a ``string`` column. Each call reads the file and returns a new table.
     """
 
-    table = read_cached_depth_table(path)
+    resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
+    chunks = list(_depth_chunks(resolved_path))
+    table = (
+        pd.concat(chunks, ignore_index=True)
+        if chunks
+        else pd.DataFrame({column: pd.Series(dtype=dtype) for column, dtype in _EMPTY_DEPTH_DTYPES.items()})
+    )
     table["reference_name"] = table["reference_name"].astype("string")
     return table
 
 
-def _is_canonical_depth_table(depth_table: DataFrame) -> bool:
-    """Whether the table has the parser's shape: exact columns, ``str`` categories, int64 and float64.
+def _table_coverage(depth_table: DataFrame) -> DepthCoverage:
+    """The coverage of an API table: its depth columns, by name or the first three, made numeric."""
 
-    Any other table, an API table with integer categories among them, is converted.
-    """
-
-    if list(depth_table.columns) != DEPTH_COLUMNS:
-        return False
-    names = depth_table["reference_name"].dtype
-    return (
-        isinstance(names, pd.CategoricalDtype)
-        and all(type(category) is str for category in names.categories)
-        and depth_table["position"].dtype == np.int64
-        and depth_table["depth"].dtype == np.float64
-    )
-
-
-def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
-    """Return a DataFrame with canonical depth columns.
-
-    A canonical table (a parsed file) is validated and returned itself, not a
-    copy: callers only select its rows.
-    """
-
-    if _is_canonical_depth_table(depth_table):
-        _validate_depth_table(depth_table)
-        return depth_table
     if set(DEPTH_COLUMNS).issubset(depth_table.columns):
         normalized = depth_table.loc[:, DEPTH_COLUMNS].copy()
     elif len(depth_table.columns) >= 3:
@@ -210,50 +350,70 @@ def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
             "Depth table positions and values must be numeric.",
             diagnostic=_invalid_depth("DEPTH_VALUES"),
         ) from exc
-    _validate_depth_table(normalized)
-    return normalized
+    _raise_first_failed_check(_failed_depth_checks(normalized))
+    return _summed_coverage([normalized])
 
 
-def _validate_depth_table(depth_table: DataFrame) -> None:
-    if depth_table.empty:
-        return
-    if depth_table["reference_name"].isna().any():
-        raise ValidationError(
-            "Depth table contains missing reference names.",
-            diagnostic=_invalid_depth("REFERENCE_REQUIRED"),
-        )
-    if (depth_table["position"] <= 0).any():
-        raise ValidationError(
-            "Depth positions must be 1-based positive integers.",
-            diagnostic=_invalid_depth("POSITIVE_INTEGER"),
-        )
-    if (depth_table["depth"] < 0).any():
-        raise ValidationError(
-            "Depth values must be non-negative.",
-            diagnostic=_invalid_depth("NONNEGATIVE"),
-        )
+# The checks of depth rows in the order a failure is reported: reason, message, and whether rows fail it.
+_DEPTH_CHECKS: tuple[tuple[str, str, Callable[[DataFrame], bool]], ...] = (
+    (
+        "REFERENCE_REQUIRED",
+        "Depth table contains missing reference names.",
+        lambda rows: bool(rows["reference_name"].isna().any()),
+    ),
+    (
+        "POSITIVE_INTEGER",
+        "Depth positions must be 1-based positive integers.",
+        lambda rows: bool((rows["position"] <= 0).any()),
+    ),
+    (
+        "NONNEGATIVE",
+        "Depth values must be non-negative.",
+        lambda rows: bool((rows["depth"] < 0).any()),
+    ),
+)
 
 
-def _unique_references(depth_table: DataFrame) -> list[str]:
-    values: Iterable[object] = depth_table["reference_name"].dropna().unique()
-    return [str(value) for value in values]
+def _failed_depth_checks(rows: DataFrame) -> set[str]:
+    return {reason for reason, _message, fails in _DEPTH_CHECKS if fails(rows)}
 
 
-def _select_record_depth_rows(record: SeqRecord, depth_table: DataFrame) -> DataFrame:
+def _raise_first_failed_check(failed: set[str]) -> None:
+    for reason, message, _fails in _DEPTH_CHECKS:
+        if reason in failed:
+            raise ValidationError(message, diagnostic=_invalid_depth(reason))
+
+
+def _select_record_depths(record: SeqRecord, coverage: DepthCoverage) -> DepthArray:
     record_id = str(record.id)
-    exact_rows = depth_table[depth_table["reference_name"] == record_id]
-    if not exact_rows.empty:
-        return exact_rows
-
-    references = _unique_references(depth_table)
+    depths = coverage.depths.get(record_id)
+    if depths is not None:
+        return depths
+    references = list(coverage.depths)
     if len(references) == 1:
-        return depth_table[depth_table["reference_name"] == references[0]]
-
+        return coverage.depths[references[0]]
     raise ValidationError(
         "Depth file references do not match record "
         f"'{record_id}'. Available references: {', '.join(references)}",
         diagnostic=_invalid_depth("REFERENCE_MISMATCH"),
     )
+
+
+def _record_coverage(record: SeqRecord, depths: DepthArray, record_len: int) -> NDArray[np.float64]:
+    """The depth at each local base of the record, through its coordinate map.
+
+    The record shows source positions ``start .. start + record_len - 1``,
+    read backwards for a reverse complement.
+    """
+
+    source_start = _record_source_start(record)
+    _coord_base, coord_step = _read_coord_map(record)
+    coverage = np.zeros(record_len, dtype=np.float64)
+    first = max(source_start, 1)
+    last = min(source_start + record_len - 1, int(depths.size))
+    if first <= last:
+        coverage[first - source_start : last - source_start + 1] = depths[first - 1 : last]
+    return coverage if coord_step > 0 else coverage[::-1]
 
 
 def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> None:
@@ -267,7 +427,7 @@ def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> N
 
 def depth_df(
     record: SeqRecord,
-    depth_table: DataFrame,
+    depth_table: DepthCoverage | DataFrame,
     window: int,
     step: int,
     *,
@@ -277,10 +437,11 @@ def depth_df(
 ) -> DataFrame:
     """Bin depth values for a record into fixed windows of its drawn sequence.
 
-    Table positions are 1-based source coordinates of the named record. The
-    record coordinate map keeps only the positions inside a crop and maps them
-    to local positions, flipped for a reverse complement. Output positions are
-    0-based local window starts.
+    ``depth_table`` is a parsed file or a table of rows (an API table, which is
+    converted here). Positions are 1-based source coordinates of the named
+    record. The record coordinate map keeps only the positions inside a crop
+    and maps them to local positions, flipped for a reverse complement. Output
+    positions are 0-based local window starts.
     """
 
     if window <= 0:
@@ -289,27 +450,12 @@ def depth_df(
         raise ValidationError("step must be > 0.")
     _validate_depth_range(min_depth, max_depth)
 
-    normalized_table = _normalize_depth_table(depth_table)
+    coverage_source = depth_table if isinstance(depth_table, DepthCoverage) else _table_coverage(depth_table)
     record_len = len(record.seq)
     if record_len <= 0:
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
-    rows = _select_record_depth_rows(record, normalized_table)
-    coord_base, coord_step = _read_coord_map(record)
-    local_indexes = _source_to_local_index(
-        rows["position"].to_numpy(dtype=np.int64), coord_base, coord_step
-    )
-    inside = (local_indexes >= 0) & (local_indexes < record_len)
-    local_indexes = local_indexes[inside]
-
-    coverage = np.zeros(record_len, dtype=np.float64)
-    if local_indexes.size:
-        depths = rows["depth"].to_numpy(dtype=np.float64)[inside]
-        summed_depths = np.bincount(local_indexes, weights=depths, minlength=record_len)
-        counts = np.bincount(local_indexes, minlength=record_len)
-        nonzero = counts > 0
-        coverage[nonzero] = summed_depths[nonzero] / counts[nonzero]
-
+    coverage = _record_coverage(record, _select_record_depths(record, coverage_source), record_len)
     prefix = np.concatenate(([0.0], np.cumsum(coverage)))
     starts = np.arange(0, record_len, int(step), dtype=np.int64)
     ends = np.minimum(starts + int(window), record_len)
@@ -354,4 +500,12 @@ def depth_df(
     )
 
 
-__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "parse_depth_tsv", "read_cached_depth_table", "read_depth_tsv"]
+__all__ = [
+    "DEPTH_COLUMNS",
+    "DepthCoverage",
+    "clear_depth_tsv_cache",
+    "depth_df",
+    "parse_depth_tsv",
+    "read_cached_depth_coverage",
+    "read_depth_tsv",
+]

@@ -12,13 +12,14 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
+import numpy as np
 import pandas as pd
 import pytest
 
 from tests.utils.session_drawing_view import drawing_view
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
-from gbdraw.analysis.depth import DEPTH_COLUMNS, _read_depth_tsv_cached, clear_depth_tsv_cache
+from gbdraw.analysis.depth import DEPTH_COLUMNS, DepthCoverage, _read_depth_tsv_cached, clear_depth_tsv_cache
 import gbdraw.analysis.depth as depth_module
 from gbdraw.api import (
     CircularBatchRequest,
@@ -2894,16 +2895,15 @@ def test_hiding_depth_releases_its_parsed_table(
 
     clear_depth_tsv_cache()
     request.addfinalizer(clear_depth_tsv_cache)
-    parsed: list[weakref.ref[pd.DataFrame]] = []
-    real_read_csv = depth_module.pd.read_csv
+    parsed: list[weakref.ref[DepthCoverage]] = []
+    real_parse = depth_module._parse_depth_file
 
-    def recording_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
-        table = real_read_csv(*args, **kwargs)
-        if list(table.columns) == DEPTH_COLUMNS:
-            parsed.append(weakref.ref(table))
-        return table
+    def recording_parse(resolved_path: str) -> DepthCoverage:
+        coverage = real_parse(resolved_path)
+        parsed.append(weakref.ref(coverage))
+        return coverage
 
-    monkeypatch.setattr(depth_module.pd, "read_csv", recording_read_csv)
+    monkeypatch.setattr(depth_module, "_parse_depth_file", recording_parse)
     shown, hidden = _depth_documents(tmp_path)
     cache = PreparedBiologicalInputCache()
 
@@ -2951,7 +2951,7 @@ def test_a_shown_depth_render_copies_no_depth_table(
 
 
 def test_the_shared_depth_table_is_unchanged_by_the_renders_that_select_from_it(tmp_path: Path) -> None:
-    """A crop and a reverse complement select from the one table; it stays equal to a fresh parse."""
+    """A crop and a reverse complement read the one parsed file; it stays equal to a fresh parse."""
 
     from gbdraw.analysis.depth import parse_depth_tsv
 
@@ -2970,8 +2970,12 @@ def test_the_shared_depth_table_is_unchanged_by_the_renders_that_select_from_it(
     metrics = _metrics(diagnostics)
     assert metrics["renderStageBuild:depth_frame"] == 2
     assert _depth_entries(cache) == [table]
-    assert isinstance(table, pd.DataFrame)
-    pd.testing.assert_frame_equal(table, parse_depth_tsv(str(tmp_path / "depth.tsv")))
+    assert isinstance(table, DepthCoverage)
+    fresh = parse_depth_tsv(str(tmp_path / "depth.tsv"))
+    assert list(table.depths) == list(fresh.depths)
+    for name, depths in fresh.depths.items():
+        assert table.depths[name].dtype == depths.dtype
+        assert np.array_equal(table.depths[name], depths)
 
 
 # The Depth file's token in the held-resource tests; the GenBank files keep theirs.
@@ -2995,15 +2999,13 @@ def _drawing_retention(
 
 def _depth_parse_counter(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     counts = {"parse": 0}
-    real_read_csv = depth_module.pd.read_csv
+    real_parse = depth_module._parse_depth_file
 
-    def counting_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
-        table = real_read_csv(*args, **kwargs)
-        if list(table.columns) == DEPTH_COLUMNS:
-            counts["parse"] += 1
-        return table
+    def counting_parse(resolved_path: str) -> DepthCoverage:
+        counts["parse"] += 1
+        return real_parse(resolved_path)
 
-    monkeypatch.setattr(depth_module.pd, "read_csv", counting_read_csv)
+    monkeypatch.setattr(depth_module, "_parse_depth_file", counting_parse)
     return counts
 
 

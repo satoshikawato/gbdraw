@@ -17,8 +17,9 @@ from pathlib import Path
 from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sized, cast
 
 from Bio.SeqRecord import SeqRecord
-from pandas import CategoricalDtype, DataFrame
+from pandas import DataFrame
 
+from gbdraw.analysis.depth import DepthCoverage
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
@@ -567,12 +568,10 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
     of another kind (an orthogroup or collinearity result).
     """
 
+    if isinstance(value, DepthCoverage):
+        return value.nbytes
     if isinstance(value, DataFrame):
-        # A categorical column (a parsed depth table's names) holds codes and
-        # a few names, which the deep count reads without walking the rows.
-        object_cells = len(value) * sum(
-            1 for dtype in value.dtypes if dtype.kind == "O" and not isinstance(dtype, CategoricalDtype)
-        )
+        object_cells = len(value) * sum(1 for dtype in value.dtypes if dtype.kind == "O")
         if not object_cells:
             return int(value.memory_usage(index=True, deep=True).sum())
         return (

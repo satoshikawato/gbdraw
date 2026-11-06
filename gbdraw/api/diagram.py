@@ -56,11 +56,12 @@ from gbdraw.analysis.depth import depth_df as build_depth_df
 from gbdraw.analysis.depth_tracks import (
     DepthTrackData,
     DepthTrackSpec,
+    assembly_depth_tracks,
     build_depth_track_dataframes,
     depth_track_count,
     depth_track_data_count,
     depth_track_indices,
-    depth_track_inputs,
+    freeze_depth_tracks,
     index_depth_track_row,
     normalize_depth_tracks,
     representative_depth_tracks,
@@ -2306,21 +2307,24 @@ def assemble_linear_diagram_from_records(
             ),
         ),
     )
-    record_depth_tracks = normalize_depth_tracks(
-        records,
-        depth_tracks=inputs.depth_tracks,
-        depth_table=inputs.depth_table,
-        depth_file=inputs.depth_file,
-        depth_tables=inputs.depth_tables,
-        depth_files=inputs.depth_files,
-        depth_track_tables=inputs.depth_track_tables,
-        depth_track_files=inputs.depth_track_files,
-        depth_track_labels=inputs.depth_track_labels,
-        depth_track_colors=inputs.depth_track_colors,
-        depth_track_heights=inputs.depth_track_heights,
-        depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+    record_depth_tracks = assembly_depth_tracks(
+        inputs._resolved_depth_tracks,
+        lambda: normalize_depth_tracks(
+            records,
+            depth_tracks=inputs.depth_tracks,
+            depth_table=inputs.depth_table,
+            depth_file=inputs.depth_file,
+            depth_tables=inputs.depth_tables,
+            depth_files=inputs.depth_files,
+            depth_track_tables=inputs.depth_track_tables,
+            depth_track_files=inputs.depth_track_files,
+            depth_track_labels=inputs.depth_track_labels,
+            depth_track_colors=inputs.depth_track_colors,
+            depth_track_heights=inputs.depth_track_heights,
+            depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+        ),
     )
     parsed_linear_track_slots = _parse_linear_track_slot_inputs(inputs.linear_track_slots)
     resolved_linear_track_axis_index = _validate_linear_track_axis_index(
@@ -2670,18 +2674,21 @@ def assemble_circular_diagram_from_record(
     record_depth_tracks = (
         [list(context.precomputed_depth_track_specs)]
         if context.precomputed_depth_track_specs is not None
-        else normalize_depth_tracks(
-            [gb_record],
-            depth_tracks=inputs.depth_tracks,
-            depth_table=inputs.depth_table,
-            depth_file=inputs.depth_file,
-            depth_track_tables=inputs.depth_track_tables,
-            depth_track_files=inputs.depth_track_files,
-            depth_track_labels=inputs.depth_track_labels,
-            depth_track_colors=inputs.depth_track_colors,
-            depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+        else assembly_depth_tracks(
+            inputs._resolved_depth_tracks,
+            lambda: normalize_depth_tracks(
+                [gb_record],
+                depth_tracks=inputs.depth_tracks,
+                depth_table=inputs.depth_table,
+                depth_file=inputs.depth_file,
+                depth_track_tables=inputs.depth_track_tables,
+                depth_track_files=inputs.depth_track_files,
+                depth_track_labels=inputs.depth_track_labels,
+                depth_track_colors=inputs.depth_track_colors,
+                depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
+                depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
+                depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+            ),
         )
     )
     precomputed_depth_tracks_provided = context.precomputed_depth_tracks is not None
@@ -3064,20 +3071,23 @@ def assemble_circular_diagram_from_records(
     )
 
     records = list(records)
-    record_depth_tracks = normalize_depth_tracks(
-        records,
-        depth_tracks=inputs.depth_tracks,
-        depth_table=inputs.depth_table,
-        depth_file=inputs.depth_file,
-        depth_tables=inputs.depth_tables,
-        depth_files=inputs.depth_files,
-        depth_track_tables=inputs.depth_track_tables,
-        depth_track_files=inputs.depth_track_files,
-        depth_track_labels=inputs.depth_track_labels,
-        depth_track_colors=inputs.depth_track_colors,
-        depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+    record_depth_tracks = assembly_depth_tracks(
+        inputs._resolved_depth_tracks,
+        lambda: normalize_depth_tracks(
+            records,
+            depth_tracks=inputs.depth_tracks,
+            depth_table=inputs.depth_table,
+            depth_file=inputs.depth_file,
+            depth_tables=inputs.depth_tables,
+            depth_files=inputs.depth_files,
+            depth_track_tables=inputs.depth_track_tables,
+            depth_track_files=inputs.depth_track_files,
+            depth_track_labels=inputs.depth_track_labels,
+            depth_track_colors=inputs.depth_track_colors,
+            depth_track_large_tick_intervals=inputs.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=inputs.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=inputs.depth_track_tick_font_sizes,
+        ),
     )
     if cfg.canvas.show_depth and record_depth_tracks is None:
         raise ValidationError("show_depth requires depth_tables, depth_files, or depth_track input.")
@@ -3826,7 +3836,7 @@ def build_circular_diagram(
     depth_tracks = (
         None
         if _precomputed_depth_track_specs is not None
-        else depth_track_inputs(
+        else freeze_depth_tracks(
             normalize_depth_tracks(
                 [gb_record],
                 depth_tracks=options.depth_tracks,
@@ -3858,7 +3868,7 @@ def build_circular_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 conservation_blast_files=conservation_inputs,
                 conservation_dataframes=options.conservation_dataframes,
                 conservation_reference=options.conservation_reference,
@@ -3951,7 +3961,7 @@ def _build_linear_diagram(
         resolved_inputs=_resolved_feature_inputs,
     )
     annotations = read_annotation_options(options.annotations, mode="linear")
-    depth_tracks = depth_track_inputs(
+    depth_tracks = freeze_depth_tracks(
         normalize_depth_tracks(
             records,
             depth_tracks=options.depth_tracks,
@@ -4004,7 +4014,7 @@ def _build_linear_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 linear_track_slots=tracks.linear_track_slots if tracks else None,
                 linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
                 annotation_options=annotations,
@@ -4247,7 +4257,7 @@ def build_circular_multi_diagram(
         options, load_comparison_colors=False, resolved_inputs=_resolved_feature_inputs
     )
     annotations = read_annotation_options(options.annotations, mode="circular")
-    depth_tracks = depth_track_inputs(
+    depth_tracks = freeze_depth_tracks(
         normalize_depth_tracks(
             records,
             depth_tracks=options.depth_tracks,
@@ -4287,7 +4297,7 @@ def build_circular_multi_diagram(
                 step=options.step,
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
-                depth_tracks=depth_tracks,
+                _resolved_depth_tracks=depth_tracks,
                 species=options.species,
                 strain=options.strain,
                 plot_title=options.plot_title,

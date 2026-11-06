@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from gbdraw.analysis.depth import depth_df, parse_depth_tsv, read_cached_depth_table
+from gbdraw.analysis.depth import DepthCoverage, depth_df, parse_depth_tsv, read_cached_depth_coverage
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
@@ -38,11 +38,14 @@ class DepthTrackStyle:
 
 @dataclass(frozen=True)
 class DepthTrackSpec:
-    """One normalized depth table for one displayed record and logical track."""
+    """One depth source for one displayed record and logical track.
+
+    ``table`` is a parsed file, or an API table that ``depth_df`` converts.
+    """
 
     id: str
     label: str
-    table: DataFrame
+    table: DepthCoverage | DataFrame
     track_index: int = 0
     fill_color: str | None = None
     height: float | None = None
@@ -73,6 +76,8 @@ class DepthTrackData:
 
 
 DepthDfBuilder = Callable[..., DataFrame]
+# Record-major normalized specs a builder read once (``freeze_depth_tracks``).
+ResolvedDepthTracks = tuple[tuple[DepthTrackSpec, ...], ...]
 DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData, DepthLegendSource)
 
 
@@ -173,23 +178,24 @@ def _record_major_sources(
     return rows, False
 
 
-def _read_depth_table(path: str) -> DataFrame:
-    """Read one depth file; in a Worker transaction, give the table its resource identity.
+def _read_depth_table(path: str) -> DepthCoverage:
+    """Read one depth file; in a Worker transaction, give its coverage its resource identity.
 
-    There the decoded-resource layer owns the parsed table, one per resource,
-    shared read-only by every record and render, so callers must not modify
-    it. Elsewhere (CLI, Python API) it is a copy of the process cache's table.
+    There the decoded-resource layer owns the coverage, one per resource;
+    elsewhere (CLI, Python API) the process cache does. Either way every record
+    and render shares it read-only.
     """
 
     # Deferred: gbdraw.api imports this module.
     from gbdraw.api.prepared import get_or_build_decoded_resource, prepared_resource_identity
 
     if prepared_resource_identity(path) is None:
-        return read_cached_depth_table(path)
-    return get_or_build_decoded_resource(path, ("depth-table-v1",), lambda: parse_depth_tsv(path))
+        return read_cached_depth_coverage(path)
+    coverage: DepthCoverage = get_or_build_decoded_resource(path, ("depth-coverage-v1",), lambda: parse_depth_tsv(path))
+    return coverage
 
 
-def _read_depth_series(path: str, series_index: int) -> DataFrame:
+def _read_depth_series(path: str, series_index: int) -> DepthCoverage:
     """Read one logical series source; failures name the series, not the file."""
 
     try:
@@ -257,7 +263,7 @@ def _tracks_from_record_major_values(
         field_name="depth_track_tick_font_sizes",
     )
     record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
-    loaded_files: dict[str, DataFrame] = {}
+    loaded_files: dict[str, DepthCoverage] = {}
 
     for track_index in range(track_count):
         raw_track_values = [
@@ -276,14 +282,15 @@ def _tracks_from_record_major_values(
         for record_index, source_value in enumerate(source_values):
             if source_value is None:
                 continue
+            table: DepthCoverage | DataFrame
             if values_are_files:
                 source_path = str(source_value)
                 if source_path not in loaded_files:
                     loaded_files[source_path] = _read_depth_series(source_path, track_index)
                 table = loaded_files[source_path]
-            else:
+            elif isinstance(source_value, DataFrame):
                 table = source_value
-            if not isinstance(table, DataFrame):
+            else:
                 raise ValidationError(f"Depth track {track_index + 1} must contain pandas DataFrame values.")
             record_tracks[record_index].append(
                 DepthTrackSpec(
@@ -314,7 +321,7 @@ def _tracks_from_logical_inputs(
     record_count = len(records)
     track_count = len(inputs)
     record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
-    loaded_files: dict[str, DataFrame] = {}
+    loaded_files: dict[str, DepthCoverage] = {}
     track_ids = _default_depth_track_ids(track_count)
     default_labels = _default_depth_track_labels(track_count)
 
@@ -343,6 +350,7 @@ def _tracks_from_logical_inputs(
         for record_index, source_value in enumerate(source_values):
             if source_value is None:
                 continue
+            table: DepthCoverage | DataFrame
             if isinstance(source_value, DataFrame):
                 table = source_value
             elif isinstance(source_value, (str, Path)):
@@ -520,39 +528,29 @@ def normalize_depth_tracks(
     )
 
 
-def depth_track_inputs(
+def freeze_depth_tracks(
     record_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
-) -> tuple[DepthTrackInput, ...] | None:
-    """The logical tracks of normalized specs, with the tables already read.
+) -> ResolvedDepthTracks | None:
+    """Normalized specs, frozen for assembly inputs (``_resolved_depth_tracks``).
 
-    ``normalize_depth_tracks`` of the result gives the same specs without
-    reading a file, so a builder that assembles a figure more than once reads
-    each depth file once.
+    A builder that assembles a figure more than once reads each depth file
+    once; on the Web its staged files are gone after the first assembly.
     """
-
-    from gbdraw.api.options import DepthTrackInput
 
     if record_tracks is None:
         return None
-    tracks: dict[int, tuple[DepthTrackSpec, list[DataFrame | None]]] = {}
-    for record_index, row in enumerate(record_tracks):
-        for spec in row:
-            sources = tracks.setdefault(
-                spec.track_index, (spec, [None] * len(record_tracks))
-            )[1]
-            sources[record_index] = spec.table
-    return tuple(
-        DepthTrackInput(
-            source=sources,
-            label=spec.label,
-            color=spec.fill_color,
-            height=spec.height,
-            large_tick_interval=spec.large_tick_interval,
-            small_tick_interval=spec.small_tick_interval,
-            tick_font_size=spec.tick_font_size,
-        )
-        for _index, (spec, sources) in sorted(tracks.items())
-    )
+    return tuple(tuple(row) for row in record_tracks)
+
+
+def assembly_depth_tracks(
+    resolved: ResolvedDepthTracks | None,
+    normalize: Callable[[], list[list[DepthTrackSpec]] | None],
+) -> list[list[DepthTrackSpec]] | None:
+    """The depth tracks an assembly draws: the builder's resolved ones, else ``normalize()``."""
+
+    if resolved is None:
+        return normalize()
+    return [list(row) for row in resolved]
 
 
 def index_depth_track_row(
@@ -845,6 +843,8 @@ __all__ = [
     "DepthTrackData",
     "DepthTrackSpec",
     "DepthTrackStyle",
+    "ResolvedDepthTracks",
+    "assembly_depth_tracks",
     "build_depth_track_dataframes",
     "clone_depth_config",
     "depth_track_config",
@@ -852,7 +852,7 @@ __all__ = [
     "depth_track_data_count",
     "depth_track_heights",
     "depth_track_indices",
-    "depth_track_inputs",
+    "freeze_depth_tracks",
     "index_depth_track_row",
     "normalize_depth_tracks",
     "representative_depth_tracks",
