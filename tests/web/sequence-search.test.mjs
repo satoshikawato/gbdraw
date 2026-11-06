@@ -150,10 +150,10 @@ test('a History step names the sets a search added: its own step, Undo and Redo;
   assert.deepEqual(search.searchSetIdsOfStep([{ path, before: [], after: [{ ...set, legendLabel: 'x' }] }], searched), []);
   assert.deepEqual(search.searchSetIdsOfStep([{ path, before: [], after: [{ ...set, id: 'Search 2' }] }], searched), []);
   assert.deepEqual(search.searchSetIdsOfStep([{ path: ['config', 'form', 'species'], before: 'a', after: 'b' }], searched), []);
-  assert.equal(search.nextSearchSetId([{ id: 'Search 1' }, { id: 'Search 3' }]), 'Search 2');
+  assert.equal(search.nextSearchSetId(['Search 1', 'Search 3']), 'Search 2');
 });
 
-test('the search reads each drawn record once over the bases it draws, and names its record by ID or place', () => {
+test('the search reads each drawn record once over the bases it draws, and names its record by the catalog', () => {
   const axis = (drawnLength, recordBase = 1, step = 1) => ({
     kind: 'linear', rows: [], source: { anchorBase: recordBase, recordBase, step, sourceLength: 100, drawnLength, isCircular: false }
   });
@@ -164,17 +164,21 @@ test('the search reads each drawn record once over the bases it draws, and names
   ];
   assert.deepEqual(search.searchSpans(records, 600), [{ recordKey: 'a', start: 1, end: 100 }, { recordKey: 'b', start: 41, end: 70 }]);
   const read = { fasta: '', spans: [
-    { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, recordLength: 100, header: 'X:1-100', sequence: '' },
-    { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, recordLength: 100, header: 'X:41-70', sequence: '' }
+    { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:1-100', sequence: '' },
+    { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:41-70', sequence: '' }
   ] };
-  assert.deepEqual(search.searchSubjects(read, records), [
-    { subjectId: 'X:1-100', record: { kind: 'recordIndex', index: 0 }, recordKey: 'a', sourceStart: 1, wrapsOrigin: false, recordLength: 100 },
-    { subjectId: 'X:41-70', record: { kind: 'recordIndex', index: 1 }, recordKey: 'b', sourceStart: 41, wrapsOrigin: false, recordLength: 100 }
+  // The catalog's selector of each record (Add to annotation set's binding), not one the search makes up.
+  const catalog = { a: { key: 'card:1', backendSelector: { kind: 'recordIndex', index: 0 } }, b: { key: 'card:2', backendSelector: { kind: 'recordIndex', index: 1 } } };
+  assert.deepEqual(search.searchSubjects(read, (key) => catalog[key] ?? null), [
+    { subjectId: 'X:1-100', record: { kind: 'recordIndex', index: 0 }, recordKey: 'a', sourceStart: 1, originWindow: false, recordLength: 100 },
+    { subjectId: 'X:41-70', record: { kind: 'recordIndex', index: 1 }, recordKey: 'b', sourceStart: 41, originWindow: false, recordLength: 100 }
   ]);
+  assert.throws(() => search.searchSubjects(read, () => null), /INPUT_INVALID/, 'a record no catalog record draws is refused');
 });
 
 // OV-2571, D-52: a record that a span may cross the origin of (circular, drawn whole), in either mode, is also read
-// over its origin window, which Python places (origin_window_span); its two subjects still name the record by ID.
+// over its origin window, which Python places (origin_window_span); both subjects name the record by its catalog
+// record, and the window is marked as one.
 test('the search also reads the origin window of each record drawn whole across its origin', () => {
   const axis = (kind, drawnLength, isCircular) => ({
     kind, rows: [], source: { anchorBase: 1, recordBase: 1, step: 1, sourceLength: 100, drawnLength, isCircular }
@@ -189,12 +193,13 @@ test('the search also reads the origin window of each record drawn whole across 
     { recordKey: 'c', originWindow: 30 }, { recordKey: 'l', originWindow: 30 }
   ]);
   const read = { fasta: '', spans: [
-    { recordKey: 'c', recordId: 'C', start: 1, end: 100, length: 100, wrapsOrigin: false, recordLength: 100, header: 'C:1-100', sequence: '' },
-    { recordKey: 'c', recordId: 'C', start: 71, end: 30, length: 60, wrapsOrigin: true, recordLength: 100, header: 'C:71-30', sequence: '' }
+    { recordKey: 'c', recordId: 'C', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'C:1-100', sequence: '' },
+    { recordKey: 'c', recordId: 'C', start: 71, end: 30, length: 60, wrapsOrigin: true, originWindow: true, recordLength: 100, header: 'C:71-30', sequence: '' }
   ] };
-  assert.deepEqual(search.searchSubjects(read, records), [
-    { subjectId: 'C:1-100', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 1, wrapsOrigin: false, recordLength: 100 },
-    { subjectId: 'C:71-30', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 71, wrapsOrigin: true, recordLength: 100 }
+  const recordOf = () => ({ key: 'c-key', backendSelector: { kind: 'recordId', value: 'C' } });
+  assert.deepEqual(search.searchSubjects(read, recordOf), [
+    { subjectId: 'C:1-100', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 1, originWindow: false, recordLength: 100 },
+    { subjectId: 'C:71-30', record: { kind: 'recordId', value: 'C' }, recordKey: 'c', sourceStart: 71, originWindow: true, recordLength: 100 }
   ]);
 });
 
@@ -356,4 +361,126 @@ test('Search stays on while a pasted text is read, so a click right after the pa
   await reading;
   assert.equal(panel.searchDisabledReason.value, '');
   assert.deepEqual(panel.panel.queries.map(({ name }) => name), ['q']);
+});
+
+// A search through the panel with stand-in ports: one drawn record (`card-b`, the second record of its catalog), one
+// query, and the reply Python gives for one hit on it. `ports` replaces any port.
+const { ANNOTATION_RECORD_BINDING_KEY, annotationOptionsPayload } = await import('../../gbdraw/web/js/services/annotation-state.js');
+const CATALOG_RECORD = { key: 'card-b:1', backendSelector: { kind: 'recordIndex', index: 1 } };
+const runPanelSearch = async (ports = {}) => {
+  const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
+  const drawing = { id: 'linear', mode: 'linear', annotationSets: [] };
+  const added = [];
+  const sent = [];
+  const axis = { kind: 'linear', rows: [], source: { anchorBase: 1, recordBase: 1, step: 1, sourceLength: 100, drawnLength: 100, isCircular: false } };
+  const span = { recordKey: 'card-b', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:1-100', sequence: 'ACGT' };
+  const reply = (input) => ({
+    annotationSet: {
+      id: input.setId, defaultStyle: { fill: '#c8607e', stroke: '#c8607e', fillOpacity: 0.85 }, keepHighlightOverlay: true,
+      annotations: [{
+        id: 'q#1', label: '', mark: 'highlight', lane: null, legendLabel: 'q', style: null, strand: '+',
+        target: { kind: 'coordinateSpan', record: input.subjects[0].record, start: 5, end: 20, coordinateSpace: 'source' },
+        metadata: { query: 'q', program: 'blastn', identity: '100', alignment_length: '16', evalue: '1e-05', bitscore: '30' }
+      }]
+    },
+    hits: [{ annotationId: 'q#1', query: 'q', recordKey: 'card-b', start: 5, end: 20, strand: '+', identity: 100, alignmentLength: 16, evalue: 1e-5, bitscore: 30, qstart: 1, qend: 16 }],
+    rowsRead: 1, rowsKept: 1, thresholds: [], unmatchedRows: 0, unmatchedSubjectIds: []
+  });
+  const panel = createSequenceSearch({
+    state: { activeDrawing: () => drawing },
+    readAxisRecords: () => [{ resultIndex: 0, recordIndex: 0, recordKey: 'card-b', recordId: 'X', axis }],
+    readRecordSpans: async () => ({ fasta: '>X:1-100\nACGT\n', spans: [span] }),
+    committedSets: () => [],
+    readRecordBindings: async () => (recordKey) => (recordKey === 'card-b' ? CATALOG_RECORD : null),
+    runLosatJobs: async () => ({ status: 'ok', results: [{ text: 'q\tX:1-100\t100\t16\t0\t0\t1\t16\t5\t20\t1e-5\t30\n' }] }),
+    runHelper: async (operation, payload) => {
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      sent.push(payload.search);
+      return { result: reply(payload.search) };
+    },
+    helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
+    addSearchSet: (_drawingId, set) => { added.push(set); drawing.annotationSets.push(set); },
+    shownRoot: () => null,
+    closeRegionPopup: () => {},
+    revealSection: async () => {},
+    ...ports
+  });
+  await panel.readQueries('>q\nACGT\n');
+  await panel.search();
+  return { panel, drawing, added, sent };
+};
+
+// Review N1 (#1667): a search's rows bind their record as Add to annotation set binds a row, through the record
+// catalog (the key the record select writes, and its selector), so a row of a record turned OFF waits with it.
+test('a search binds each hit to its record by the catalog, so a row of an OFF record leaves the request', async () => {
+  const { panel, added, sent } = await runPanelSearch();
+  assert.equal(panel.panel.searchError, null);
+  assert.deepEqual(sent[0].subjects.map(({ record }) => record), [CATALOG_RECORD.backendSelector]);
+  const [row] = added[0].annotations;
+  assert.equal(row.metadata[ANNOTATION_RECORD_BINDING_KEY], CATALOG_RECORD.key);
+  assert.deepEqual(row.target.record, CATALOG_RECORD.backendSelector);
+  assert.deepEqual(annotationOptionsPayload(added, [], [CATALOG_RECORD.key]).sets[0].annotations, []);
+  assert.equal(annotationOptionsPayload(added, [], []).sets[0].annotations.length, 1);
+});
+
+// Review B2 (#1667): a set id the draft freed (its set renamed or deleted, which waits for Generate) is not reused
+// while the committed Session still draws it, so the first search's hits stay drawn until Generate and the second
+// search's Undo removes only its own hits.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: a new search set id is unique against the draft and the committed Session`, async () => {
+    const { added } = await runPanelSearch({ committedSets: () => [{ id: 'Search 1' }] });
+    assert.equal(added[0].id, 'Search 2');
+    const drawing = modeDrawing(state, mode);
+    const before = [...drawing.annotationSets];
+    try {
+      drawing.annotationSets.push(searchSet('Search 1'));
+      const live = applied(generate(mode), projectSearch(generate(mode), mode, ['Search 1']));
+      // Renamed in Region Annotations: waits for Generate. The next search adds "Search 2".
+      drawing.annotationSets[drawing.annotationSets.length - 1].id = 'COX1 hits';
+      drawing.annotationSets.push(searchSet('Search 2'));
+      const second = applied(live, projectSearch(live, mode, ['Search 2']));
+      assert.deepEqual(second.renderRequest.diagramOptions.annotations.sets.map(({ id }) => id), ['Search 1', 'Search 2']);
+      drawing.annotationSets.pop();
+      const undone = applied(second, projectSearch(second, mode, ['Search 2']));
+      assert.deepEqual(undone.renderRequest.diagramOptions.annotations, live.renderRequest.diagramOptions.annotations);
+    } finally {
+      drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
+    }
+  });
+}
+
+// Receipt: a search that fails adds nothing and keeps the drawing; the panel says why.
+test('a search whose helper fails adds nothing and shows the reason', async () => {
+  const { panel, added } = await runPanelSearch({
+    runHelper: async (operation) => {
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      throw new Error('The search subject ID names more than one searched sequence.');
+    }
+  });
+  assert.deepEqual(added, []);
+  assert.equal(panel.panel.outcome, null);
+  assert.notEqual(panel.panel.searchError, null);
+});
+
+// Review B1 (#1667), receipt: the panel's queries and settings are not saved; after a Load the panel is empty, and a
+// History step of the loaded document is no search step.
+test('a Session Load empties the panel: queries, settings, hit table, chips and outline', async () => {
+  const { panel, added } = await runPanelSearch();
+  panel.panel.task = 'blastn';
+  panel.panel.colorMode = 'gradient';
+  panel.chooseChip('q');
+  // Outside Vue the computed values are refs.
+  panel.selectHit(panel.hitRows.value[0]);
+  assert.notEqual(panel.outline.value, null);
+  const step = [{ path: ['config', 'annotationSets'], before: [], after: [JSON.parse(JSON.stringify(added[0]))] }];
+  assert.deepEqual(panel.searchSetIdsOf(step), ['Search 1']);
+  panel.reset();
+  const { queryText, queries, outcome, folded, chip, selectedHit, task, colorMode, searchError, queryError } = panel.panel;
+  assert.deepEqual({ queryText, queries, outcome, folded, chip, selectedHit, task, colorMode, searchError, queryError }, {
+    queryText: '', queries: [], outcome: null, folded: false, chip: '', selectedHit: '', task: 'megablast', colorMode: 'query',
+    searchError: null, queryError: null
+  });
+  assert.deepEqual(panel.hitRows.value, []);
+  assert.equal(panel.outline.value, null);
+  assert.deepEqual(panel.searchSetIdsOf(step), []);
 });

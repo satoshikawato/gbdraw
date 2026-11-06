@@ -222,8 +222,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them and the length
- * of its record.
+ * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them (unique in one
+ * read), the length of its record, and whether it was asked as an origin window.
  * @typedef {object} RecordSpanSequence
  * @property {string} recordKey
  * @property {string} recordId
@@ -231,6 +231,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} end
  * @property {number} length
  * @property {boolean} wrapsOrigin
+ * @property {boolean} originWindow
  * @property {number} recordLength
  * @property {string} header
  * @property {string} sequence

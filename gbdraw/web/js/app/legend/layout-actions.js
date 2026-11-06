@@ -11,7 +11,7 @@ import {
 } from '../../services/legend-layout.js';
 import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
-import { GRADIENT_SCALE_NAME_ATTRIBUTES } from '../../services/drawn-groups.js';
+import { GRADIENT_SCALE_NAME_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
 
 /**
  * The Legend layout inputs Python records in the composition metadata

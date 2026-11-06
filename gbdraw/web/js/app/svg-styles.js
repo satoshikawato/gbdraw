@@ -9,8 +9,9 @@ import {
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import {
-  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, GRADIENT_SCALE_NAME_ATTRIBUTES, findTrackGroups
+  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
 } from '../services/drawn-groups.js';
+import { GRADIENT_SCALE_NAME_ATTRIBUTES } from '../services/drawn-attributes.generated.js';
 import { skewTrackColor } from '../services/track-legend-rows.js';
 
 

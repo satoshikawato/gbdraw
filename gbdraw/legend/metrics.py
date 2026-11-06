@@ -83,7 +83,8 @@ def gradient_scale_texts(properties: Mapping[str, object]) -> tuple[str, str]:
     )
 
 
-# The attributes of a drawn gradient row that names its scale's ends, which the Web's Legend layout reads.
+# The attributes of a drawn gradient row that names its scale's ends, which the Web reads (generated into its
+# ``services/drawn-attributes.generated.js``).
 GRADIENT_SCALE_NAME_ATTRIBUTES = ("data-legend-min-label", "data-legend-max-label")
 
 

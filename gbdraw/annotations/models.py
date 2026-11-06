@@ -360,8 +360,8 @@ class AnnotationSet:
     annotations: tuple[RegionAnnotation, ...]
     default_style: RegionAnnotationStyle = field(default_factory=RegionAnnotationStyle)
     legend_label: str | None = None
-    # A sequence search's set (PD-OI-117): its highlights keep the automatic overlay behind the features also in an
-    # explicit track stack that names no slot for the set (``prepare_annotation_track_slots``).
+    # A sequence search's set (PD-OI-117): its highlights keep the automatic overlay, in front of the features, also
+    # in an explicit track stack that names no slot for the set (``prepare_annotation_track_slots``).
     keep_highlight_overlay: bool = False
 
     def __post_init__(self) -> None:

@@ -48,8 +48,8 @@ SEARCH_GRADIENT_START_COLOR = "#f6c9d8"
 SEARCH_GRADIENT_END_COLOR = "#5b1a4a"
 # The Legend row of every gradient hit (one bar from "start" to "end").
 QUERY_POSITION_LEGEND_LABEL = "Query position"
+# Every hit covers the features under it at this fill opacity, a gradient hit too (receipt web.sequence-search).
 SEARCH_HIT_FILL_OPACITY = 0.85
-SEARCH_GRADIENT_FILL_OPACITY = 1.0
 SEARCH_GRADIENT_STROKE_WIDTH = 0.5
 # The keys of each hit's annotation metadata (D-02), as the comparison columns name them.
 SEARCH_HIT_METADATA_KEYS = ("query", "program", "identity", "alignment_length", "evalue", "bitscore")
@@ -63,9 +63,10 @@ class SearchSubject:
     ``record`` the drawing's record the annotation names, ``record_key`` the
     request's identity of that record, and ``source_start`` the source
     coordinate of the sequence's first base (1, or the start of a crop).
-    ``record_length`` is set on an origin window only (``origin_window_span``:
-    the record's last bases, then its first): the record's length, after which
-    the window's coordinates go on at 1.
+    ``record_length`` is the record's length, after which a sequence read
+    across the origin goes on at 1. ``origin_window`` marks the origin window
+    of a record (``origin_window_span``: its last bases, then its first), whose
+    rows that do not cross the origin are rows of the record's own sequence.
     """
 
     subject_id: str
@@ -73,6 +74,7 @@ class SearchSubject:
     record_key: str
     source_start: int = 1
     record_length: int | None = None
+    origin_window: bool = False
 
     def __post_init__(self) -> None:
         if not str(self.subject_id).strip() or not str(self.record_key).strip():
@@ -86,10 +88,15 @@ class SearchSubject:
             )
         length = self.record_length
         if length is not None and (
-            isinstance(length, bool) or not isinstance(length, int) or not 1 < self.source_start <= length
+            isinstance(length, bool) or not isinstance(length, int) or not self.source_start <= length
         ):
             raise ValidationError(
-                "An origin window starts after base 1 and within its record's length.",
+                "A search subject starts within its record's length.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+            )
+        if type(self.origin_window) is not bool or (self.origin_window and (length is None or self.source_start == 1)):
+            raise ValidationError(
+                "An origin window has its record's length and starts after base 1.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
             )
 
@@ -222,7 +229,8 @@ def _one_row_per_alignment(
 ) -> DataFrame:
     """The rows of ``frame`` with each alignment once (OV-2571).
 
-    A row of an origin window is kept only when it crosses the origin: one that
+    A row of an origin window (``SearchSubject.origin_window``) is kept only
+    when it crosses the origin: one that
     does not is the same alignment as a row of the record's own sequence. A
     crossing row stands for its halves, the rows of the record's own sequence
     inside it (same query and strand); when it does not pass ``thresholds`` but a
@@ -242,7 +250,7 @@ def _one_row_per_alignment(
             index, str(values["query"]).strip(), subject.record_key, _strand(sstart, send, qstart, qend),
             start, end, min(qstart, qend), max(qstart, qend),
         )
-        if subject.record_length is None:
+        if not subject.origin_window:
             record_rows.append(placed)
         elif wraps:
             crossing.append(placed)
@@ -275,10 +283,11 @@ def search_hit_annotation_set(
     colour, with their lengths; ``query_colors`` replaces a query's colour. A hit's target is the
     span ``sstart``..``send`` of the subject it names, in source coordinates,
     and its ``strand`` the strand the query runs forward on there;
-    its metadata holds ``SEARCH_HIT_METADATA_KEYS``. A row of an origin window
-    (``SearchSubject.record_length``) gives a target with ``wraps_origin`` when
+    its metadata holds ``SEARCH_HIT_METADATA_KEYS``. A row of a subject read
+    across the origin (``SearchSubject.record_length``) gives a target with ``wraps_origin`` when
     it crosses the origin; each alignment is one row and counts once in the
-    tally (``_one_row_per_alignment``). With ``color_mode``
+    tally (``_one_row_per_alignment``). Every hit is drawn at
+    ``SEARCH_HIT_FILL_OPACITY``. With ``color_mode``
     ``gradient`` the scale runs from ``SEARCH_GRADIENT_START_COLOR`` at the
     query's start to ``SEARCH_GRADIENT_END_COLOR`` at its end; each hit draws
     its part of the scale (``qstart``..``qend`` of the query's length),
@@ -349,7 +358,7 @@ def search_hit_annotation_set(
                 stroke=SEARCH_GRADIENT_END_COLOR,
                 stroke_width=SEARCH_GRADIENT_STROKE_WIDTH,
                 fill=SEARCH_GRADIENT_END_COLOR,
-                fill_opacity=SEARCH_GRADIENT_FILL_OPACITY,
+                fill_opacity=SEARCH_HIT_FILL_OPACITY,
                 gradient=AnnotationGradient(
                     SEARCH_GRADIENT_START_COLOR, SEARCH_GRADIENT_END_COLOR, "forward" if forward else "reverse",
                     query_start=(min(qstart, qend) - 1) / lengths[query], query_end=max(qstart, qend) / lengths[query],

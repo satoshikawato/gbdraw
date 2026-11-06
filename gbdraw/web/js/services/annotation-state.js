@@ -39,7 +39,7 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
  *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null,
  *   keepHighlightOverlay?: boolean
  * }} AnnotationSet `keepHighlightOverlay`: a sequence search's set (PD-OI-117), written only by Python's search
- *   set builder; Python draws its highlights behind the features also in a custom stack that names no slot for it.
+ *   set builder; Python draws its highlights in front of the features, also in a custom stack that names no slot for it.
  */
 
 const DEFAULT_STYLE = Object.freeze({

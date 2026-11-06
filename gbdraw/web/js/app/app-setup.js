@@ -244,7 +244,7 @@ import {
   buildAnnotationRecordCatalog
 } from './annotations/record-catalog.js';
 import {
-  reconcileAnnotationRecordBindings
+  reconcileAnnotationRecordBindings, recordBindingsOf
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
@@ -279,7 +279,6 @@ import {
 } from '../services/linear-comparisons.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
-  bindingKeyOfRequestRecord,
   circularRecordDrawKey,
   circularRecordRequestKeys,
   linearCardHasSettings,
@@ -464,6 +463,8 @@ const readShownRecordSpans = (spans) => requestRecordSpanSequences(
   (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
     resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
 );
+// The annotation sets of the committed request the shown Result was made from (Sequence search names a new set apart).
+const shownCommittedSets = () => getCommittedCanonicalSession()?.renderRequest.diagramOptions.annotations?.sets ?? [];
 // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
 /** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
 const shownResultFeatures = (recordKey) => {
@@ -2679,6 +2680,7 @@ export const createAppSetup = () => {
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
         previewFeatureSearch.resetModeSearches();
+        sequenceSearch.reset();
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
         // The Load's commit gave each loaded drawing an empty History
@@ -5043,6 +5045,8 @@ export const createAppSetup = () => {
       displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
     }));
   };
+  /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
+  const recordSettingsOwners = (drawing) => (drawing.mode === 'circular' ? circularRecordSettingsOwners(drawing) : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq)));
   /** @param {DrawingState} drawing @returns {RecordEditData} */
   const recordEditData = (drawing) => ({
     featureEdits: drawing.slices.featureEdits,
@@ -5107,9 +5111,7 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode(listMode);
     if (!drawing) return false;
     const deleted = new Set(keys);
-    const owners = listMode === 'circular'
-      ? circularRecordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key))
-      : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map((seq) => linearRecordSettingsOwner(drawing, seq));
+    const owners = recordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key));
     const ruleCount = drawing.manualSpecificRules.length;
     retireLegendStylesOfUnnamedCaptions(drawing, () => removeRecordEdits(owners, recordEditData(drawing)));
     // The color rows it took back color nothing drawn; the rule matches follow the table.
@@ -5278,12 +5280,21 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
+  /** How a row of `drawing` binds a Result's record (`recordBindingsOf`); an unread catalog is read first (OV-373), one that cannot be read throws (OV-2562). @param {DrawingState} drawing */
+  const readRecordBindings = async (drawing) => {
+    if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
+    const catalog = getAnnotationRecordCatalog(drawing);
+    if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
+    return recordBindingsOf(catalog, recordSettingsOwners(drawing));
+  };
   // Sequence search (PD-OI-117): the subject is the records of the shown drawing's Results, read by Python from the
   // committed request; the set a search adds is one History step of that drawing.
   const sequenceSearch = createSequenceSearch({
     state,
     readAxisRecords: shownResultsAxisRecords,
     readRecordSpans: readShownRecordSpans,
+    committedSets: shownCommittedSets,
+    readRecordBindings: async () => (await readRecordBindings(state.activeDrawing())).recordOf,
     runLosatJobs: runLosatJobsInOverlay,
     runHelper: runDiagramHelperOperation,
     helperOperations: { readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES, buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET },
@@ -5307,22 +5318,12 @@ export const createAppSetup = () => {
     closeRegionPopup,
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
-    // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
-    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why, as the
-    // record list does (`recordCatalogError`), under the operation addRegionAnnotation (OV-2562). The popup
-    // is teleported out of the app root, where the History adapter listens, so the action is its own step.
+    // Binds as the record select does; the popup is teleported out of the app root (no History adapter): its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
-      if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
-      const catalog = getAnnotationRecordCatalog(drawing);
-      if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
+      const { bindingKeyOf } = await readRecordBindings(drawing);
       if (drawing !== state.activeDrawing()) return null;
-      return history.runUndoable(msg('Add to annotation set'), () => {
-        const owners = drawing.mode === 'circular'
-          ? circularRecordSettingsOwners(drawing)
-          : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
-        return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
-      });
+      return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOf(recordKey), start, end }));
     },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.

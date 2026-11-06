@@ -6,7 +6,8 @@
 // as Python drew it: the marks of the drawn hit, found by its set id and
 // annotation id, are copied with their screen matrix; the Web computes no
 // lane or band.
-import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE, WRAP_ROW_ATTRIBUTE } from '../../services/drawn-groups.js';
+import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from '../../services/drawn-groups.js';
+import { WRAP_ROW_ATTRIBUTE } from '../../services/drawn-attributes.generated.js';
 import { shallowRef } from '../../utils/reactivity.js';
 
 /** The hits to outline: the set they belong to and their annotation ids. @typedef {{ setId: string, annotationIds: readonly string[] }} OutlineTarget */

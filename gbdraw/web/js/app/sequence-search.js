@@ -14,14 +14,16 @@ import { t, tm } from '../utils/i18n.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { comparisonStateForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
+import { boundAnnotation } from './annotations/record-selector.js';
 import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
-  nextSearchSetId, readSequenceSearchReply, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
+  nextSearchSetId, readSequenceSearchReply, searchedRecord, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
 } from '../services/sequence-search.js';
 import { createSearchQueries } from './sequence-search/queries.js';
 import { createSearchHitTable } from './sequence-search/hit-table.js';
 
-/** @import { SearchColorMode, SearchQuery, SearchStepChange, SequenceSearchInput } from '../services/sequence-search.js' */
+/** @import { SearchColorMode, SearchHit, SearchQuery, SearchRecordBinding, SequenceSearchInput } from '../services/sequence-search.js' */
+/** @import { HistoryIntentChange } from '../services/history.js' */
 /** @import { RegionAxisRecord } from '../services/region-axis.js' */
 /** @import { LosatJob, LosatJobResult } from '../services/losat.js' */
 /** @import { RecordSpanRead, RecordSpanSequencesReply } from '../services/diagram-worker-protocol.js' */
@@ -38,6 +40,10 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
  * @property {{ activeDrawing: () => { id: DrawingId, mode: 'circular' | 'linear', annotationSets: readonly { id: string }[] } }} state
  * @property {() => RegionAxisRecord[]} readAxisRecords Every drawn record of the shown drawing's Results.
  * @property {(spans: readonly RecordSpanRead[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
+ * @property {() => readonly { id: string }[]} committedSets The annotation sets of the committed request the shown
+ *   Results were made from.
+ * @property {() => Promise<SearchRecordBinding>} readRecordBindings The catalog record of each Result record of the shown
+ *   drawing, by which Add to annotation set binds a row.
  * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string> }) => Promise<{ status: 'ok', results: LosatJobResult[] } | { status: 'canceled' } | { status: 'busy', reason: string }>} runLosatJobs
  *   LOSAT jobs under the full-window overlay with its progress and Cancel (`runLosatJobsInOverlay`).
  * @property {RunHelper} runHelper
@@ -52,36 +58,53 @@ import { createSearchHitTable } from './sequence-search/hit-table.js';
 
 export const SEARCH_TASKS = Object.freeze(['megablast', 'blastn', 'dc-megablast']);
 
+/**
+ * The set of a search with each hit bound to the catalog record that draws it, as the record select binds a row.
+ * @param {AnnotationSet} set
+ * @param {readonly SearchHit[]} hits
+ * @param {SearchRecordBinding} recordOf
+ * @returns {AnnotationSet}
+ */
+const boundSearchSet = (set, hits, recordOf) => {
+  const recordKeys = new Map(hits.map((hit) => [hit.annotationId, hit.recordKey]));
+  return { ...set, annotations: set.annotations.map((row) => boundAnnotation(row, searchedRecord(recordOf, recordKeys.get(row.id) ?? ''))) };
+};
+
+// The panel as it opens, and after a Session Load.
+const initialPanel = () => ({
+  queryText: '',
+  /** @type {SearchQuery[]} */
+  queries: [],
+  /** @type {SearchError | null} */
+  queryError: null,
+  reading: false,
+  task: 'megablast',
+  /** @type {SearchColorMode} */
+  colorMode: 'query',
+  /** The thresholds of each mode, from that mode's Pairwise Comparisons defaults. @type {Record<'circular' | 'linear', SearchThresholdDraft>} */
+  thresholds: { circular: { ...comparisonStateForMode('circular') }, linear: { ...comparisonStateForMode('linear') } },
+  running: false,
+  /** @type {SearchError | null} */
+  searchError: null,
+  /** Why the latest Search did not run (a Generate or a Session load is in progress); '' otherwise. */
+  busy: '',
+  /** @type {SearchOutcome | null} */
+  outcome: null,
+  folded: false,
+  /** The query whose hits the table shows ('' for all), and the hit outlined on the drawing. */
+  chip: '',
+  /** @type {string} */
+  selectedHit: ''
+});
+
 /** @param {SequenceSearchPorts} ports */
 export const createSequenceSearch = ({
-  state, readAxisRecords, readRecordSpans, runLosatJobs, runHelper, helperOperations, addSearchSet, shownRoot, closeRegionPopup,
-  revealSection
+  state, readAxisRecords, readRecordSpans, committedSets, readRecordBindings, runLosatJobs, runHelper, helperOperations,
+  addSearchSet, shownRoot, closeRegionPopup, revealSection
 }) => {
-  const panel = reactive({
-    queryText: '',
-    /** @type {SearchQuery[]} */
-    queries: [],
-    /** @type {SearchError | null} */
-    queryError: null,
-    reading: false,
-    task: 'megablast',
-    /** @type {SearchColorMode} */
-    colorMode: 'query',
-    /** The thresholds of each mode, from that mode's Pairwise Comparisons defaults. @type {Record<'circular' | 'linear', SearchThresholdDraft>} */
-    thresholds: { circular: { ...comparisonStateForMode('circular') }, linear: { ...comparisonStateForMode('linear') } },
-    running: false,
-    /** @type {SearchError | null} */
-    searchError: null,
-    /** Why the latest Search did not run (a Generate or a Session load is in progress); '' otherwise. */
-    busy: '',
-    /** @type {SearchOutcome | null} */
-    outcome: null,
-    folded: false,
-    /** The query whose hits the table shows ('' for all), and the hit outlined on the drawing. */
-    chip: '',
-    /** @type {string} */
-    selectedHit: ''
-  });
+  const panel = reactive(initialPanel());
+  // A Session Load counts here: a search it overtook adds nothing to the loaded document.
+  let loads = 0;
   // The sets each drawing's searches added, by id, with the set as written: a History step that adds one of them
   // (its own, its Redo) or whose Undo removes it draws at once.
   /** @type {Map<DrawingId, Map<string, string>>} */
@@ -106,11 +129,13 @@ export const createSequenceSearch = ({
     panel.searchError = null;
     panel.busy = '';
     panel.running = true;
+    const load = loads;
     try {
       await queries.readQueries(panel.queryText);
       // The read may refuse the text or find no query; its reason then shows.
       if (searchDisabledReason.value) return;
       const drawing = state.activeDrawing();
+      const recordOf = await readRecordBindings();
       const searchQueries = panel.queries.map(({ name, length, color }) => ({ name, length, color }));
       const queryFasta = panel.queries.map((query) => query.fasta).join('');
       const thresholds = resolveComparisonThresholds(panel.thresholds[drawing.mode], drawing.mode);
@@ -119,13 +144,16 @@ export const createSequenceSearch = ({
       const run = await runLosatJobs(searchLosatPlan({ queryFasta, subjectFasta: read.fasta, task: panel.task }));
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
       if (run.status === 'busy') panel.busy = tm(run.reason);
-      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
+      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id || load !== loads) return;
       const [{ text }] = run.results;
       /** @type {SequenceSearchInput} */
       const input = {
         table: text,
-        setId: nextSearchSetId(drawing.annotationSets),
-        subjects: searchSubjects(read, records),
+        // Unique against the draft, the committed Session, and every set a search added (B2): a freed id that the
+        // committed Session still draws, or that History can bring back, is not reused.
+        setId: nextSearchSetId([...drawing.annotationSets, ...committedSets()].map(({ id }) => id)
+          .concat([...(searched.get(drawing.id)?.keys() ?? [])])),
+        subjects: searchSubjects(read, recordOf),
         thresholds: {
           evalue: Number(thresholds.evalue), bitscore: Number(thresholds.bitscore),
           identity: Number(thresholds.identity), alignmentLength: Number(thresholds.alignmentLength)
@@ -136,8 +164,9 @@ export const createSequenceSearch = ({
         queryColors: Object.fromEntries(searchQueries.map(({ name, color }) => [name, color]))
       };
       const reply = readSequenceSearchReply((await runHelper(helperOperations.buildHitSet, { search: input })).result);
-      if (state.activeDrawing().id !== drawing.id) return;
-      const [set] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
+      if (state.activeDrawing().id !== drawing.id || load !== loads) return;
+      const [found] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
+      const set = found && boundSearchSet(found, reply.hits, recordOf);
       panel.outcome = {
         drawingId: drawing.id, setId: set ? set.id : null, hits: reply.hits, queries: searchQueries,
         rowsLeftOut: reply.rowsRead - reply.rowsKept, rawText: text,
@@ -177,16 +206,24 @@ export const createSequenceSearch = ({
 
   /**
    * The sets a History step of the shown drawing added that its searches wrote (`searchSetIdsOfStep`).
-   * @param {readonly SearchStepChange[] | null | undefined} changes
+   * @param {readonly HistoryIntentChange[] | null | undefined} changes
    */
   const searchSetIdsOf = (changes) => searchSetIdsOfStep(changes, searched.get(state.activeDrawing().id) ?? new Map());
 
   // The folded line names the program once: "blastn" for the blastn task, "blastn, task megablast" for another task.
   const programText = computed(() => (panel.task === 'blastn' ? 'blastn' : t('{program}, task {task}', { program: 'blastn', task: panel.task })));
 
+  // A Session Load replaces the document: the panel empties (receipt), and its searches' sets are no search's any more.
+  const reset = () => {
+    loads += 1;
+    Object.assign(panel, initialPanel(), { running: panel.running });
+    searched.clear();
+    queries.clearReads();
+  };
+
   // Reactive, so the template reads the computed values unwrapped (`sequenceSearch.hitRows`).
   return reactive({
-    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programText,
+    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programText, reset,
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
     gradientBar: `linear-gradient(to right, ${SEARCH_GRADIENT_START_COLOR}, ${SEARCH_GRADIENT_END_COLOR})`,

@@ -158,9 +158,9 @@ def test_worker_helper_returns_the_set_as_the_request_writes_it() -> None:
         "table": ROWS, "setId": "Search 1",
         "subjects": [
             {"subjectId": "rec1:1-5000", "record": {"kind": "recordId", "value": "rec1"}, "recordKey": "record-1", "sourceStart": 1,
-             "wrapsOrigin": False, "recordLength": 5000},
+             "originWindow": False, "recordLength": 5000},
             {"subjectId": "rec2:1-3000", "record": {"kind": "recordId", "value": "rec2"}, "recordKey": "record-2", "sourceStart": 1001,
-             "wrapsOrigin": False, "recordLength": 4000},
+             "originWindow": False, "recordLength": 4000},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
         "program": "blastn", "queries": [{"name": "qA", "length": 600}, {"name": "qB", "length": 400}],
@@ -432,7 +432,7 @@ def _custom_stack_svg(mode: str, *, keep: bool) -> str:
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_a_custom_stack_draws_a_search_set_behind_its_features(mode: str) -> None:
+def test_a_custom_stack_draws_a_search_set_without_a_slot_of_its_own(mode: str) -> None:
     # PD-OI-117: with a custom track stack a search's set is drawn without a slot of its own.
     assert 'data-gbdraw-annotation-id="q#1"' in _custom_stack_svg(mode, keep=True)
     # Another set keeps following the stack: no slot names it, so it is not drawn.
@@ -659,7 +659,7 @@ ORIGIN_SUBJECTS = (
     SearchSubject(f"NC_012920.1:1-{_MITO_LENGTH}", parse_record_selector("NC_012920.1"), "mito"),
     SearchSubject(
         f"NC_012920.1:{_WINDOW_START}-600", parse_record_selector("NC_012920.1"), "mito",
-        source_start=_WINDOW_START, record_length=_MITO_LENGTH,
+        source_start=_WINDOW_START, record_length=_MITO_LENGTH, origin_window=True,
     ),
 )
 ORIGIN_QUERIES = (SearchQuery("origin600", 600), SearchQuery("origin50", 50), SearchQuery("inner", 100))
@@ -747,7 +747,7 @@ def test_an_origin_window_spans_the_last_and_first_bases_of_at_most_half_the_rec
     with pytest.raises(ValidationError):
         origin_window_span(1, 10)
     with pytest.raises(ValidationError):
-        SearchSubject("w", parse_record_selector("r"), "r", source_start=1, record_length=100)
+        SearchSubject("w", parse_record_selector("r"), "r", source_start=1, record_length=100, origin_window=True)
 
 
 def test_the_worker_helper_reads_an_origin_window_subject() -> None:
@@ -756,9 +756,9 @@ def test_the_worker_helper_reads_an_origin_window_subject() -> None:
         "table": "\n".join("\t".join(row) for row in ORIGIN_ROWS[:3]), "setId": "Search 1",
         "subjects": [
             {"subjectId": _MAIN, "record": selector, "recordKey": "mito", "sourceStart": 1,
-             "wrapsOrigin": False, "recordLength": _MITO_LENGTH},
+             "originWindow": False, "recordLength": _MITO_LENGTH},
             {"subjectId": _WINDOW, "record": selector, "recordKey": "mito", "sourceStart": _WINDOW_START,
-             "wrapsOrigin": True, "recordLength": _MITO_LENGTH},
+             "originWindow": True, "recordLength": _MITO_LENGTH},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
         "program": "blastn", "queries": [{"name": "origin600", "length": 600}],
@@ -803,3 +803,57 @@ def test_losat_rows_of_an_origin_window_give_each_alignment_once() -> None:
     # The window rows that do not cross the origin (twins of record rows) and the four halves are not read; the ten
     # short record rows are, and the thresholds remove them.
     assert (result.tally.rows_read, result.tally.rows_kept) == (12, 2)
+
+
+# Receipt web.sequence-search, accepted residual risk: the hits cover the features at fill opacity 0.85; a gradient
+# hit too (D-55, which retires the earlier delegated opacity 1.0).
+def test_gradient_hits_are_drawn_at_the_hit_fill_opacity() -> None:
+    for color_mode in ("query", "gradient"):
+        result = _search(color_mode=color_mode)
+        assert result.annotation_set is not None
+        assert {row.style.fill_opacity for row in result.annotation_set.annotations} == {0.85}
+
+
+def _feature_svg(mode: str, *, keep: bool) -> str:
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+
+    record = SeqRecord(
+        Seq("ACGT" * 2500), id="rec1", annotations={"molecule_type": "DNA", "topology": "circular"},
+        features=[SeqFeature(FeatureLocation(999, 4000, strand=1), type="CDS", qualifiers={"product": ["p"]})],
+    )
+    hit = RegionAnnotation("q#1", CoordinateSpan(None, 1000, 4000), mark="highlight",
+                           style=RegionAnnotationStyle(fill="#c8607e"))
+    annotations = AnnotationOptions(sets=(AnnotationSet("Search 1", (hit,), keep_highlight_overlay=keep),))
+    if mode == "circular":
+        return build_circular_diagram(record, options=CircularDiagramOptions(annotations=annotations)).tostring()
+    return build_linear_diagram([record], options=LinearDiagramOptions(annotations=annotations)).tostring()
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_search_set_is_drawn_in_front_of_the_features_in_the_automatic_stack(mode: str) -> None:
+    # Receipt: the hits are an overlay in front of the feature track, covering the features. Another set's
+    # highlights stay behind them.
+    front = _feature_svg(mode, keep=True)
+    assert front.index('data-gbdraw-annotation-id="q#1"') > front.rindex("data-gbdraw-feature-id=")
+    behind = _feature_svg(mode, keep=False)
+    assert behind.index('data-gbdraw-annotation-id="q#1"') < behind.index("data-gbdraw-feature-id=")
+
+
+def test_only_an_origin_window_drops_its_rows_that_do_not_cross_the_origin() -> None:
+    # A subject read across the origin that is not an origin window keeps every row; an origin window (its typed
+    # flag) keeps only the rows that cross the origin, the others being rows of the record's own sequence.
+    from dataclasses import replace
+
+    subject = SearchSubject("C:71-30", parse_record_selector("C"), "c", source_start=71, record_length=100)
+    table = "qA\tC:71-30\t100.000\t10\t0\t0\t1\t10\t1\t10\t1e-10\t50\n"
+    loose = ComparisonThresholds(evalue=1.0, bitscore=0.0, identity=0.0, alignment_length=0)
+
+    def hits(item: SearchSubject) -> list[tuple[int, int]]:
+        result = search_hit_annotation_set(
+            read_comparison_table(io.StringIO(table)), set_id="S", subjects=[item], thresholds=loose,
+            program="blastn", queries=[SearchQuery("qA", 10)],
+        )
+        return [(hit.start, hit.end) for hit in result.hits]
+
+    assert hits(subject) == [(71, 80)]
+    assert hits(replace(subject, origin_window=True)) == []

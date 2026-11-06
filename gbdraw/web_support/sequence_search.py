@@ -38,13 +38,13 @@ from gbdraw.session_request_codec import decode_record_selector, encode_annotati
 class SearchSubjectInput(TypedDict):
     """One searched sequence: its LOSAT ID, the record selector (``recordId``/``recordIndex``), its record key,
     the source coordinate of its first base, and, as the span reader read it (``RecordSpanSequence``), whether it
-    crosses the origin (an origin window, ``origin_window_span``) and its record's length."""
+    is an origin window (``origin_window_span``) and its record's length."""
 
     subjectId: str
     record: dict[str, object]
     recordKey: str
     sourceStart: int
-    wrapsOrigin: bool
+    originWindow: bool
     recordLength: int
 
 
@@ -162,17 +162,17 @@ def _subject(value: object, index: int) -> SearchSubject:
     if not (
         isinstance(value, Mapping) and isinstance(value.get("subjectId"), str)
         and isinstance(value.get("recordKey"), str) and type(value.get("sourceStart")) is int
-        and type(value.get("wrapsOrigin")) is bool and type(value.get("recordLength")) is int
+        and type(value.get("originWindow")) is bool and type(value.get("recordLength")) is int
     ):
         raise _protocol_error(
-            "A search subject needs an ID, a record, a record key, a source start, its origin crossing and its record's length."
+            "A search subject needs an ID, a record, a record key, a source start, its origin window flag and its record's length."
         )
     record = decode_record_selector(value.get("record"), path=f"subjects[{index}].record")
     if record is None:
         raise _protocol_error("A search subject needs a record.")
     return SearchSubject(
         value["subjectId"], record, value["recordKey"], value["sourceStart"],
-        record_length=value["recordLength"] if value["wrapsOrigin"] else None,
+        record_length=value["recordLength"], origin_window=value["originWindow"],
     )
 
 

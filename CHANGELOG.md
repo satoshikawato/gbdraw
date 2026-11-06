@@ -22,7 +22,10 @@ write-up of a release.
   record is one hit. **Use as search query** in the Region popup adds a
   selected span as a query. Annotation sets gain a gradient style, a hit
   strand, and an overlay marker in the Session (version 51); protein queries
-  are not searched yet.
+  are not searched yet. The Python API `gbdraw.api` gains
+  `AnnotationGradient` and `search_hit_annotation_set` (with `SearchQuery`,
+  `SearchSubject`, `SearchHit` and `SearchAnnotationResult`), which turns
+  LOSAT outfmt 6 rows of a search into such an annotation set.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest

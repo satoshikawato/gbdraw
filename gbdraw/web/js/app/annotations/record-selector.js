@@ -5,12 +5,14 @@ import {
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 import { bindAnnotationRecords } from '../../services/drawing/annotation-sets.js';
+import { bindingKeyOfRequestRecord } from '../../services/record-draw-selection.js';
 import { t } from '../../utils/i18n.js';
 
 /**
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  * @import { AnnotationRecordBinding, AnnotationRow, AnnotationSetsSlice, AnnotationSetsView } from '../../services/drawing/annotation-sets.js'
+ * @import { RecordSettingsOwner } from '../../services/record-draw-selection.js'
  */
 /**
  * The annotation sets of a drawing, and the handle their writers take.
@@ -99,6 +101,34 @@ export const annotationRecordValue = (catalog, annotation) => {
   const saved = annotationRecordSelectorValue(annotation?.target?.record);
   return saved ? `saved:${saved}` : '';
 };
+
+/**
+ * How a row binds a Result's record (its request key): by the catalog key of the record that draws it (`bindingKeyOf`,
+ * the key the record select writes; '' when no record draws it) and that catalog record (`recordOf`, null when none).
+ * @param {AnnotationRecordCatalog} catalog
+ * @param {readonly RecordSettingsOwner[]} owners The drawing's record settings owners.
+ */
+export const recordBindingsOf = (catalog, owners) => {
+  /** @param {string} recordKey */
+  const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey);
+  /** @param {string} recordKey */
+  const recordOf = (recordKey) => catalog.records.find(({ key }) => key === bindingKeyOf(recordKey)) ?? null;
+  return { bindingKeyOf, recordOf };
+};
+
+/**
+ * A new annotation bound to the catalog `record` as the record select binds one: its target names the record's
+ * selector and its metadata the record's key.
+ * @template {AnnotationRow} T
+ * @param {T} annotation
+ * @param {Pick<AnnotationCatalogRecord, 'key' | 'backendSelector'>} record
+ * @returns {T}
+ */
+export const boundAnnotation = (annotation, record) => ({
+  ...annotation,
+  target: { ...annotation.target, record: { ...record.backendSelector } },
+  metadata: metadataWithBinding(annotation, record.key)
+});
 
 /**
  * Binds an annotation of the drawing to the record `value` names (none when

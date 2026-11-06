@@ -11,11 +11,15 @@ sequence and header and the FASTA text of all of them. It renders nothing.
 
 A sequence search over drawn records reads its subjects here as well, with the
 origin window of each circular record it draws whole (``OriginWindowInput``).
+The headers of one read are its LOSAT subject IDs, so they are unique: spans
+that would share a header (two records of one ID and length) name their record
+keys in it.
 """
 
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import TypedDict, final
 
@@ -45,7 +49,8 @@ class OriginWindowInput(TypedDict):
 
 
 class RecordSpanSequence(TypedDict):
-    """One span's bases on the source strand, with the FASTA header that names them."""
+    """One span's bases on the source strand, with the FASTA header that names them; ``originWindow`` when it was
+    asked as an origin window (``OriginWindowInput``)."""
 
     recordKey: str
     recordId: str
@@ -53,6 +58,7 @@ class RecordSpanSequence(TypedDict):
     end: int
     length: int
     wrapsOrigin: bool
+    originWindow: bool
     recordLength: int
     header: str
     sequence: str
@@ -114,7 +120,8 @@ def read_record_span_sequences(
         record = load_render_source_records(request.records[item.input_index].source).records[item.source_record_index]
         bases = str(record.seq)
         length = len(bases)
-        if "originWindow" in span:
+        window = "originWindow" in span
+        if "originWindow" in span:  # the key test narrows the TypedDict
             if not item.is_circular:
                 raise ValidationError(
                     f"{span['recordKey']!r} is not circular and has no origin window.",
@@ -137,10 +144,15 @@ def read_record_span_sequences(
             "end": end,
             "length": len(sequence),
             "wrapsOrigin": wraps,
+            "originWindow": window,
             "recordLength": length,
             "header": span_header(item.source_record_id, start, end),
             "sequence": sequence,
         })
+    shared = {header for header, count in Counter(span["header"] for span in read).items() if count > 1}
+    for span in read:
+        if span["header"] in shared:
+            span["header"] = f"{span['header']}@{span['recordKey']}"
     return {"spans": read, "fasta": "".join(losat_fasta_text(span["header"], span["sequence"]) for span in read)}
 
 

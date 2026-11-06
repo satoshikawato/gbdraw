@@ -3340,15 +3340,27 @@ def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
     }
 
 
-def _encode_annotation_gradient(gradient: AnnotationGradient) -> dict[str, Any]:
-    # The query positions are written only for a region over a part of its query.
-    part = (gradient.query_start, gradient.query_end) != (0.0, 1.0)
-    return {
-        "startColor": gradient.start_color,
-        "endColor": gradient.end_color,
-        "direction": gradient.direction,
-        **({"queryStart": gradient.query_start, "queryEnd": gradient.query_end} if part else {}),
+class _EncodedAnnotationGradientRequired(TypedDict):
+    startColor: str
+    endColor: str
+    direction: str
+
+
+class EncodedAnnotationGradient(_EncodedAnnotationGradientRequired, total=False):
+    """An annotation style's gradient as the request writes it; the query positions only for a part of the query."""
+
+    queryStart: float
+    queryEnd: float
+
+
+def _encode_annotation_gradient(gradient: AnnotationGradient) -> EncodedAnnotationGradient:
+    encoded: EncodedAnnotationGradient = {
+        "startColor": gradient.start_color, "endColor": gradient.end_color, "direction": gradient.direction,
     }
+    # The query positions are written only for a region over a part of its query.
+    if (gradient.query_start, gradient.query_end) != (0.0, 1.0):
+        encoded["queryStart"], encoded["queryEnd"] = gradient.query_start, gradient.query_end
+    return encoded
 
 
 def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationStyle:

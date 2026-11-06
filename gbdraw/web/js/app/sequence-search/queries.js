@@ -104,9 +104,15 @@ export const createSearchQueries = (panel, runHelper, operation) => {
     readFor = panel.queryText;
     pendingRead = Promise.resolve();
   };
+  /** Forgets the reads, and drops one still running (a Session Load empties the panel). */
+  const clearReads = () => {
+    readSequence += 1;
+    readFor = '';
+    pendingRead = Promise.resolve();
+  };
   /** @param {string} name @param {string} color */
   const setQueryColor = (name, color) => {
     panel.queries = panel.queries.map((query) => (query.name === name ? { ...query, color } : query));
   };
-  return { readQueries, unread, editQueryText, chooseQueryFile, addQuery, removeQuery, setQueryColor };
+  return { readQueries, unread, editQueryText, chooseQueryFile, addQuery, removeQuery, setQueryColor, clearReads };
 };

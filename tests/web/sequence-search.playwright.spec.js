@@ -296,8 +296,9 @@ test('Circular: a search colour edit applies at once and keeps a Legend colour e
 });
 
 // Before the first Generate Search says why it is off; a protein query is refused with its reason under the query box;
-// a cancelled search and a search without hits add nothing and keep the Result.
-test('a protein query, Cancel and a search without hits add nothing and keep the Result', async ({ page }) => {
+// a cancelled search, a failed search (dc-megablast on serial LOSAT) and a search without hits add nothing and keep the
+// Result.
+test('a protein query, Cancel, dc-megablast in Serial and a search without hits add nothing and keep the Result', async ({ page }) => {
   test.setTimeout(600_000);
   await openFresh(page);
   await page.getByRole('button', { name: 'Go to Sequence search', exact: true }).click();
@@ -349,9 +350,81 @@ test('a protein query, Cancel and a search without hits add nothing and keep the
   expect((await searchOutcome(page)).outcome).toBeNull();
   await unchanged();
 
+  // dc-megablast needs threaded LOSAT, as in Pairwise Comparisons: a Serial search fails with that reason, before any
+  // search, and adds nothing (a failed search, not a cancelled one).
+  await searchFromPanel(page, fasta([{ name: 'cosL', bases: span(lambda, 5001, 5400) }]), { task: 'dc-megablast' });
+  expect((await searchOutcome(page)).searchError?.summary).toContain(
+    'LOSATN task dc-megablast runs only with threaded LOSAT. Select Threaded or Auto under Execution in a browser where Threaded is available, or choose task megablast or blastn.'
+  );
+  expect((await searchOutcome(page)).outcome).toBeNull();
+  await unchanged();
+
   // No hit passes the thresholds: the panel says so, and nothing is added.
   const unrelated = Array.from({ length: 300 }, (_, index) => 'ACGT'[(index * 7 + Math.floor(index / 5)) % 4]).join('');
   await searchFromPanel(page, fasta([{ name: 'nohit', bases: unrelated }]), { task: 'blastn' });
   await expect(page.locator('[data-sequence-search-no-hits]')).toHaveText(/^No hits for nohit \(300 bp\) The thresholds removed \d+ alignments?\.$/);
   await unchanged();
+});
+
+// Receipt: the panel's queries and settings are not saved; after a Load the panel is empty, and the hits of earlier
+// searches are in Region Annotations (review B1). A Web Save then Load keeps the search set: its gradient, its rows'
+// strands, and its overlay marker, and draws it again (review N7).
+test('Circular: a Web Save then Load keeps a search set and empties the panel', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    await searchFromPanel(page, fasta(ORIGIN_QUERIES.slice(2)), { colorMode: 'gradient' });
+    await page.locator('[data-settings-section="sequence-search"] [data-sequence-search-hit]', { hasText: 'plus3001' }).click();
+    await expect(page.locator(OUTLINE)).toHaveCount(1);
+    const set = () => page.evaluate(() => JSON.parse(JSON.stringify(
+      window.__GBDRAW_APP__.annotationSets.find((entry) => entry.id === 'Search 1')
+    )));
+    const saved = await set();
+    expect(saved.keepHighlightOverlay).toBe(true);
+    expect(saved.annotations.map(({ strand, style }) => [strand, Boolean(style?.gradient)])).toEqual([['+', true], ['-', true]]);
+    const drawn = await drawnHits(page, 'Search 1');
+    const path = testInfo.outputPath('search.gbdraw-session.json');
+    await download(page, 'Save Session', path);
+    await loadSessionFile(page, path);
+    await settleLive(page);
+    const panel = await page.evaluate(() => {
+      const search = window.__GBDRAW_APP__.sequenceSearch;
+      const { queryText, queries, outcome, folded, chip, selectedHit } = search.panel;
+      return { queryText, queries: queries.length, outcome, folded, chip, selectedHit, rows: search.hitRows.length, chips: search.chips.length };
+    });
+    expect(panel).toEqual({ queryText: '', queries: 0, outcome: null, folded: false, chip: '', selectedHit: '', rows: 0, chips: 0 });
+    await expect(page.locator('[data-settings-section="sequence-search"] [data-sequence-search-hit]')).toHaveCount(0);
+    await expect(page.locator(OUTLINE)).toHaveCount(0);
+    expect(await set()).toEqual(saved);
+    expect(await drawnHits(page, 'Search 1')).toEqual(drawn);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// Review N1: a search's rows bind their record through the record catalog, as Add to annotation set does, so the hits
+// of a record turned OFF wait with it: Generate draws the other record, and the hits come back with the record.
+test('Linear: the hits of a record turned OFF wait with it and come back with it', async ({ page }) => {
+  test.setTimeout(600_000);
+  const lambdaText = readFileSync('tests/test_inputs/NC_001416.gb', 'utf8');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: `${readFileSync(HMMT, 'utf8')}${lambdaText}` });
+  const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
+  await searchFromPanel(page, fasta([{ name: 'cosL', bases: span(lambda, 5001, 5400) }]));
+  expect((await searchOutcome(page)).searchError).toBeNull();
+  const drawn = await drawnHits(page, 'Search 1');
+  expect(Object.keys(drawn)).toHaveLength(1);
+  const draw = async (on) => {
+    const uid = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.find((seq) => seq.region_record_id.startsWith('NC_001416')).uid);
+    const box = page.locator(`input[data-record-draw="${uid}"]`);
+    await reveal(box);
+    await box.scrollIntoViewIfNeeded();
+    if (on) await box.check(); else await box.uncheck();
+  };
+  await draw(false);
+  // Generate fails when a row names a record the request no longer draws (`generate` expects an ok run).
+  await generate(page);
+  expect(await drawnHits(page, 'Search 1')).toEqual({});
+  await draw(true);
+  await generate(page);
+  expect(await drawnHits(page, 'Search 1')).toEqual(drawn);
 });

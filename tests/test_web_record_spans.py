@@ -61,7 +61,7 @@ def test_a_span_of_a_forward_record_reads_its_source_bases_with_a_source_header(
     [span] = reply["spans"]
     assert span == {
         "recordKey": "mito", "recordId": "NC_012920.1", "start": 4001, "end": 4100, "length": 100,
-        "wrapsOrigin": False, "recordLength": 16569, "header": "NC_012920.1:4001-4100",
+        "wrapsOrigin": False, "originWindow": False, "recordLength": 16569, "header": "NC_012920.1:4001-4100",
         "sequence": _BASES[4000:4100],
     }
     # 60 columns, uppercase: the one FASTA writer of the package (losat_fasta_text).
@@ -127,7 +127,9 @@ def test_an_origin_window_reads_the_last_and_first_bases_of_a_circular_record(tm
     request = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_MITO), record_key="mito")])
     [span] = _read_window(request, tmp_path, "mito", reach)["spans"]
     start = 16569 - width + 1
-    assert (span["start"], span["end"], span["wrapsOrigin"], span["recordLength"]) == (start, width, True, 16569)
+    assert (span["start"], span["end"], span["wrapsOrigin"], span["originWindow"], span["recordLength"]) == (
+        start, width, True, True, 16569
+    )
     assert span["header"] == f"NC_012920.1:{start}-{width}"
     assert span["sequence"] == _BASES[start - 1:] + _BASES[:width]
 
@@ -139,3 +141,33 @@ def test_an_origin_window_of_a_record_that_cannot_cross_its_origin_is_refused(tm
     with pytest.raises(ValidationError) as raised:
         _read_window(request, tmp_path, "card", 100)
     assert raised.value.diagnostic["reason"] == "RECORD_BOUNDS"
+
+
+# Two drawn records with the same ID and length (two files that hold one record each): each searched sequence keeps
+# a header of its own, which names its record key, so LOSAT's rows map back to the record they hit.
+def test_spans_with_one_header_name_their_record_keys_and_map_back_to_their_records(tmp_path: Path) -> None:
+    from gbdraw.web_support.sequence_search import sequence_search_annotation_set
+
+    request = LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(_MITO), record_key="a"), RecordInput(GenBankInputSource(_MITO), record_key="b"),
+    ))
+    reply = _read(request, tmp_path, ("a", 1, 16569), ("b", 1, 16569), ("a", 101, 200))
+    headers = [span["header"] for span in reply["spans"]]
+    assert headers == ["NC_012920.1:1-16569@a", "NC_012920.1:1-16569@b", "NC_012920.1:101-200"]
+    assert [line[1:] for line in reply["fasta"].splitlines() if line.startswith(">")] == headers
+    rows = "".join(
+        f"q\t{header}\t100.000\t100\t0\t0\t1\t100\t{start}\t{start + 99}\t1e-50\t180\n"
+        for header, start in ((headers[0], 1001), (headers[1], 2001))
+    )
+    search = sequence_search_annotation_set({
+        "table": rows, "setId": "Search 1",
+        "subjects": [
+            {"subjectId": span["header"], "record": {"kind": "recordIndex", "index": index},
+             "recordKey": span["recordKey"], "sourceStart": span["start"], "originWindow": span["originWindow"],
+             "recordLength": span["recordLength"]}
+            for index, span in enumerate(reply["spans"][:2])
+        ],
+        "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
+        "program": "blastn", "queries": [{"name": "q", "length": 100}], "colorMode": "query", "queryColors": {},
+    })
+    assert [(hit["recordKey"], hit["start"]) for hit in search["hits"]] == [("a", 1001), ("b", 2001)]

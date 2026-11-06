@@ -15,7 +15,7 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const isSpanSequence = (value) => isRecord(value)
   && ['recordKey', 'recordId', 'header', 'sequence'].every((key) => typeof value[key] === 'string')
   && ['start', 'end', 'length', 'recordLength'].every((key) => Number.isSafeInteger(value[key]))
-  && typeof value.wrapsOrigin === 'boolean';
+  && typeof value.wrapsOrigin === 'boolean' && typeof value.originWindow === 'boolean';
 
 /**
  * The helper's result, checked against `RecordSpanSequencesReply`.

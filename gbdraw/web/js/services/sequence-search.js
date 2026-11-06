@@ -14,6 +14,7 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 /** @import { RecordSpanInput, RecordSpanRead, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 /** @import { LosatJob } from './losat.js' */
+/** @import { HistoryIntentChange } from './history.js' */
 
 /**
  * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length in bases, and the FASTA text LOSAT reads.
@@ -25,16 +26,21 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 /** A query of the panel: as read, with the hit colour the panel shows and the user may change. @typedef {SearchQueryRead & { color: string }} SearchQuery */
 
 /**
- * One searched sequence (`SearchSubjectInput`): the ID LOSAT names it by (its FASTA header), the drawing's record
- * selector, the request's record key, the source coordinate of its first base, and, as Python read the span, whether
- * it crosses the origin (an origin window) and its record's length.
+ * One searched sequence (`SearchSubjectInput`): the ID LOSAT names it by (its FASTA header, unique in one read), the
+ * selector of the catalog record that draws it, the request's record key, the source coordinate of its first base,
+ * and, as Python read the span, whether it is an origin window and its record's length.
  * @typedef {object} SearchSubject
  * @property {string} subjectId
  * @property {AnnotationRecordSelector} record
  * @property {string} recordKey
  * @property {number} sourceStart
- * @property {boolean} wrapsOrigin
+ * @property {boolean} originWindow
  * @property {number} recordLength
+ */
+/**
+ * The record-catalog record that draws a Result's record (by its request key), as Add to annotation set binds a row:
+ * its key, which the record select writes, and its selector. Null when no catalog record draws it.
+ * @typedef {(recordKey: string) => { key: string, backendSelector: AnnotationRecordSelector } | null} SearchRecordBinding
  */
 
 /** @typedef {'query' | 'gradient'} SearchColorMode */
@@ -118,8 +124,9 @@ const isHit = (hit) => isRecord(hit) && strings(hit, ['annotationId', 'query', '
 export const readSequenceSearchReply = (result) => {
   if (!isRecord(result) || !(result.annotationSet === null || isRecord(result.annotationSet))
     || !Array.isArray(result.hits) || !result.hits.every(isHit) || !numbers(result, ['rowsRead', 'rowsKept', 'unmatchedRows'])
-    || !Array.isArray(result.thresholds) || !result.thresholds.every((item) => isRecord(item) && typeof item.name === 'string')
-    || !Array.isArray(result.unmatchedSubjectIds)) {
+    || !Array.isArray(result.thresholds)
+    || !result.thresholds.every((item) => isRecord(item) && strings(item, ['name']) && numbers(item, ['threshold', 'rowsLeftOut', 'bestValue']))
+    || !Array.isArray(result.unmatchedSubjectIds) || !result.unmatchedSubjectIds.every((id) => typeof id === 'string')) {
     throw invalid('searchHitAnnotationSet');
   }
   return /** @type {SequenceSearchReply} */ (/** @type {unknown} */ (result));
@@ -161,34 +168,41 @@ export const searchSpans = (records, longestQuery) => {
 };
 
 /**
- * The searched sequences of the spans Python read: LOSAT names each by its FASTA header (`recordId:start-end`), and
- * an annotation names its record by ID, or by its place when two drawn records share that ID.
- * @param {RecordSpanSequencesReply} read
- * @param {readonly RegionAxisRecord[]} records
- * @returns {SearchSubject[]}
+ * The catalog record that draws the Result record `recordKey`; one that no catalog record draws is refused.
+ * @param {SearchRecordBinding} recordOf
+ * @param {string} recordKey
  */
-export const searchSubjects = (read, records) => read.spans.map((span) => {
-  // Two drawn records, not a record and its origin window.
-  const shared = new Set(read.spans.filter((other) => other.recordId === span.recordId).map((other) => other.recordKey)).size > 1;
-  const index = records.find((record) => record.recordKey === span.recordKey)?.recordIndex ?? 0;
-  return {
-    subjectId: span.header,
-    record: shared || !span.recordId ? { kind: 'recordIndex', index } : { kind: 'recordId', value: span.recordId },
-    recordKey: span.recordKey,
-    sourceStart: span.start,
-    wrapsOrigin: span.wrapsOrigin,
-    recordLength: span.recordLength
-  };
-});
+export const searchedRecord = (recordOf, recordKey) => {
+  const record = recordOf(recordKey);
+  if (!record) throw diagnosticError('INPUT_INVALID', { field: 'record_selector' }, { stage: 'helper', operation: 'searchHitAnnotationSet' });
+  return record;
+};
 
 /**
- * The id of the set the next search adds: "Search N", N the first number no set of the drawing has.
- * @param {readonly { id: string }[]} sets
+ * The searched sequences of the spans Python read: LOSAT names each by its FASTA header, and an annotation names its
+ * record by the selector of the catalog record that draws it (`recordOf`, the binding of Add to annotation set).
+ * @param {RecordSpanSequencesReply} read
+ * @param {SearchRecordBinding} recordOf
+ * @returns {SearchSubject[]}
  */
-export const nextSearchSetId = (sets) => {
-  const ids = new Set(sets.map(({ id }) => id));
+export const searchSubjects = (read, recordOf) => read.spans.map((span) => ({
+  subjectId: span.header,
+  record: searchedRecord(recordOf, span.recordKey).backendSelector,
+  recordKey: span.recordKey,
+  sourceStart: span.start,
+  originWindow: span.originWindow,
+  recordLength: span.recordLength
+}));
+
+/**
+ * The id of the set the next search adds: "Search N", N the first number none of `ids` has (the drawing's draft sets,
+ * the sets its committed Session draws, and every set a search of it added, which History can bring back).
+ * @param {Iterable<string>} ids
+ */
+export const nextSearchSetId = (ids) => {
+  const used = new Set(ids);
   let n = 1;
-  while (ids.has(`Search ${n}`)) n += 1;
+  while (used.has(`Search ${n}`)) n += 1;
   return `Search ${n}`;
 };
 
@@ -205,10 +219,6 @@ export const outlinedHitIds = (hits, chip, selectedHit) => {
   return chip ? hits.filter((hit) => hit.query === chip).map((hit) => hit.annotationId) : [];
 };
 
-/**
- * One changed value of a History step (`HistoryIntentChange`), as far as this module reads it.
- * @typedef {{ readonly path?: readonly (string | number)[], readonly before?: unknown, readonly after?: unknown }} SearchStepChange
- */
 /** The History intent path of a drawing's annotation sets. */
 const ANNOTATION_SETS_PATH = 'config.annotationSets';
 /** @param {unknown} sets @returns {Map<string, string>} each set's id and its JSON */
@@ -220,12 +230,12 @@ const setsById = (sets) => new Map((Array.isArray(sets) ? sets : [])
  * The sets a History step added that a search added (the search's own step, its Undo, or its Redo): the ids the step
  * adds to the drawing's annotation sets whose set is the one the search wrote (`searched`, by id, the set's JSON).
  * The step's Undo removes them; a step that removed or renamed a set, or added a set no search wrote, names none.
- * @param {readonly SearchStepChange[] | null | undefined} changes
+ * @param {readonly HistoryIntentChange[] | null | undefined} changes
  * @param {ReadonlyMap<string, string>} searched
  * @returns {string[]}
  */
 export const searchSetIdsOfStep = (changes, searched) => (Array.isArray(changes) ? changes : [])
-  .filter((change) => (change.path ?? []).join('.') === ANNOTATION_SETS_PATH)
+  .filter((change) => change.path.join('.') === ANNOTATION_SETS_PATH)
   .flatMap((change) => {
     const before = setsById(change.before);
     return [...setsById(change.after)].filter(([id, json]) => !before.has(id) && searched.get(id) === json).map(([id]) => id);
