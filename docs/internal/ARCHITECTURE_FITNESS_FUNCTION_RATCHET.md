@@ -519,6 +519,22 @@ TypeScript, and holds the limit and the baseline.
 - Adding or raising an entry and raising the limit are authority-only changes
   that need the Owner's approval. Lowering or removing an entry is optional.
 
+## Line coverage
+
+This is the rule `COVERAGE-FLOOR` of `tools/web-design-rule-guards.json`.
+
+- `Core (Python 3.14)` measures the total line coverage of `gbdraw/` except
+  `gbdraw/web/` and fails below `fail_under` in `[tool.coverage.report]` of
+  `pyproject.toml` ([Line coverage](SELECTIVE_CI.md#line-coverage) in the CI
+  tiers).
+- `MAX_UNCOVERED_PERCENT` in `tests/test_coverage_floor.py` holds the floor as
+  the share of lines that may stay uncovered: `fail_under` equals 100 minus it.
+  The test also fails when a workflow passes `--cov-fail-under` or the `core`
+  job runs its tests without `--cov`.
+- Raising the floor lowers `MAX_UNCOVERED_PERCENT` in the same pull request and
+  is optional. Raising `MAX_UNCOVERED_PERCENT`, which lowers the floor, is an
+  authority-only change that needs the Owner's approval.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
