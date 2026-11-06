@@ -180,6 +180,19 @@ export const nextSearchSetId = (sets) => {
 };
 
 /**
+ * The hits the drawing outlines (a transient preview, never part of the figure): the hit of the clicked row, else
+ * the hits of the chosen query's chip; none with All. By annotation id, the identity Python writes on the drawn hit.
+ * @param {readonly SearchHit[]} hits The hits of the search whose set is shown.
+ * @param {string} chip The chosen query ('' for All).
+ * @param {string} selectedHit The annotation id of the clicked row ('' for none).
+ * @returns {string[]}
+ */
+export const outlinedHitIds = (hits, chip, selectedHit) => {
+  if (selectedHit) return hits.some((hit) => hit.annotationId === selectedHit) ? [selectedHit] : [];
+  return chip ? hits.filter((hit) => hit.query === chip).map((hit) => hit.annotationId) : [];
+};
+
+/**
  * One changed value of a History step (`HistoryIntentChange`), as far as this module reads it.
  * @typedef {{ readonly path?: readonly (string | number)[], readonly before?: unknown, readonly after?: unknown }} SearchStepChange
  */

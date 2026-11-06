@@ -300,6 +300,38 @@ test('Circular: a span across the origin leaves New drawing from region disabled
   }
 });
 
+// PD-OI-115 and PD-OI-116: Use as search query adds the span's bases on the source strand, read by Python, as a query
+// named "<record>:<start>-<end>", and opens the Sequence search section; the popup closes, and no History step is made.
+test('Circular: Use as search query adds a span across the origin as a query and opens Sequence search', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    await generate(page);
+    await turnOn(page);
+    await dragAlong(page, 0, [16_000.5, 16_400.5, 16_568.5, 200.5, 500.5]);
+    const popup = regionPopup(page);
+    await expect(popup).toBeVisible();
+    const steps = (await undoLabels(page)).length;
+    await popup.locator('[data-region-search-query]').click();
+    await expect(popup).toHaveCount(0);
+    const queries = () => page.evaluate(() => window.__GBDRAW_APP__.sequenceSearch.panel.queries.map(({ name, length }) => ({ name, length })));
+    await expect.poll(queries).toEqual([{ name: 'NC_012920.1:16001-501', length: 1070 }]);
+    const section = page.locator('[data-settings-section="sequence-search"]');
+    await expect(section.locator('details')).toHaveAttribute('open', '');
+    await expect(section.locator('[data-sequence-search-query]')).toHaveText([/NC_012920\.1:16001-501/]);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[data-settings-section]')?.dataset.settingsSection ?? null))
+      .toBe('sequence-search');
+    expect((await undoLabels(page)).length, 'no History step').toBe(steps);
+    // The same span again adds nothing twice.
+    await dragAlong(page, 0, [16_000.5, 16_400.5, 16_568.5, 200.5, 500.5]);
+    await regionPopup(page).locator('[data-region-search-query]').click();
+    await expect(regionPopup(page)).toHaveCount(0);
+    expect(await queries()).toEqual([{ name: 'NC_012920.1:16001-501', length: 1070 }]);
+  } finally {
+    await page.context().close();
+  }
+});
+
 test('Linear: a drag along a row selects a span that Add to annotation set draws on the next Generate', async ({ browser }) => {
   test.setTimeout(420_000);
   const page = await load(browser, seeds.linear);

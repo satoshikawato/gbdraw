@@ -335,7 +335,7 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
 
   // At every pane width the text of the first and of the last entry stays 8 px inside the viewport,
   // and the row neither overflows nor scrolls sideways. The switch takes the right end of the first row, so
-  // the twelve Linear entries share what is left: 22 px each when there is room, down to 18 px before the
+  // the Linear entries share what is left: 22 px each when there is room, down to 17 px before the
   // list wraps onto a second row.
   for (const width of [240, 320, 500]) {
     await page.evaluate((width) => { window.__GBDRAW_APP__.sidebarWidth = width; }, width);
@@ -366,7 +366,7 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
     });
     // The entries of a row are equally wide.
     expect(layout.widths[1] - layout.widths[0], `entry widths at ${width} px`).toBeLessThanOrEqual(0.5);
-    expect(layout.widths[0], `entry width at ${width} px`).toBeGreaterThanOrEqual(18);
+    expect(layout.widths[0], `entry width at ${width} px`).toBeGreaterThanOrEqual(17);
     expect(layout.widths[1], `entry width at ${width} px`).toBeLessThanOrEqual(22);
     if (width === 500) expect(layout.widths[0]).toBe(22);
     if (width !== 240) expect(layout.height, `row height at ${width} px`).toBe(36);

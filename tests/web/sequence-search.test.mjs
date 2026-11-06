@@ -247,3 +247,56 @@ for (const mode of ['circular', 'linear']) {
     }
   });
 }
+
+// Receipt web.sequence-search: a row click outlines that hit; a chip outlines its query's hits; All outlines none.
+// The outline names hits by the annotation id Python writes on the drawn hit.
+test('the outline names the clicked row\'s hit, else the chosen query\'s hits, by annotation id', () => {
+  const hit = (annotationId, query) => ({ annotationId, query });
+  const hits = [hit('a#1', 'a'), hit('b#1', 'b'), hit('a#2', 'a')];
+  assert.deepEqual(search.outlinedHitIds(hits, '', ''), []);
+  assert.deepEqual(search.outlinedHitIds(hits, 'a', ''), ['a#1', 'a#2']);
+  assert.deepEqual(search.outlinedHitIds(hits, 'a', 'a#2'), ['a#2']);
+  assert.deepEqual(search.outlinedHitIds(hits, '', 'b#1'), ['b#1']);
+  assert.deepEqual(search.outlinedHitIds(hits, '', 'gone#1'), [], 'a row no longer listed outlines nothing');
+});
+
+// PD-OI-115 Use as search query (PD-OI-116): the span's bases, read by Python and named by their header, join the
+// query text, which Python reads again; the folded panel opens. The same span is not added twice, and a removed
+// query stays removed when another span is added. The folded line names the program once.
+test('Use as search query adds a span as a query once; a removed query stays removed', async () => {
+  const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
+  /** The query reader's reply for a FASTA text, as Python's `read_search_queries` reads it (one query per header). */
+  const readFasta = (text) => text.split('>').filter(Boolean).map((entry) => {
+    const [header, ...lines] = entry.split('\n');
+    return { name: header.trim(), length: lines.join('').length, fasta: `>${entry}` };
+  });
+  const reads = [];
+  const panel = createSequenceSearch({
+    state: { activeDrawing: () => ({ id: 'circular', mode: 'circular', annotationSets: [] }) },
+    readAxisRecords: () => [],
+    readRecordSpans: async () => { throw new Error('no search here'); },
+    runSearchLosat: async () => ({ status: 'canceled' }),
+    runHelper: async (_operation, { files }) => {
+      const text = new TextDecoder().decode(files[0].bytes);
+      reads.push(text);
+      return { result: { queries: readFasta(text) } };
+    },
+    helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
+    addSetStep: () => {},
+    addSet: () => {}
+  });
+  await panel.readQueries('>q1\nACGT\n');
+  panel.setFolded(true);
+  await panel.addQuery({ name: 'NC_1:5-8', fasta: '>NC_1:5-8\nTTGA\n' });
+  assert.equal(panel.panel.folded, false);
+  assert.deepEqual(panel.panel.queries.map((query) => query.name), ['q1', 'NC_1:5-8']);
+  assert.equal(reads.at(-1), '>q1\nACGT\n>NC_1:5-8\nTTGA\n');
+  await panel.addQuery({ name: 'NC_1:5-8', fasta: '>NC_1:5-8\nTTGA\n' });
+  assert.equal(reads.length, 2, 'the same span is not read or added twice');
+  panel.removeQuery('q1');
+  await panel.addQuery({ name: 'NC_1:9-12', fasta: '>NC_1:9-12\nCCCC\n' });
+  assert.deepEqual(panel.panel.queries.map((query) => query.name), ['NC_1:5-8', 'NC_1:9-12']);
+  assert.equal(panel.programText.value, 'blastn, task megablast');
+  panel.panel.task = 'blastn';
+  assert.equal(panel.programText.value, 'blastn');
+});

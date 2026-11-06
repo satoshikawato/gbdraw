@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
+/** @import { RecordSpanInput } from '../services/diagram-worker-protocol.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -290,6 +291,7 @@ import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
+import { createSearchHitOutline } from './search-hit-outline.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -5259,20 +5261,52 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
+  // The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
+  // Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
+  /** @param {readonly RecordSpanInput[]} spans */
+  const readShownRecordSpans = (spans) => requestRecordSpanSequences(
+    getCommittedCanonicalSession(), spans,
+    (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+  );
+  // Sequence search (PD-OI-116): the subject is the records of the shown drawing's Results, read by Python from the
+  // committed request; the set a search adds is one History step of that drawing.
+  const sequenceSearch = createSequenceSearch({
+    state,
+    readAxisRecords: () => Array.from({ length: results.value.length },
+      (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat(),
+    readRecordSpans: readShownRecordSpans,
+    runSearchLosat: runSequenceSearchLosat,
+    runHelper: (operation, payload) => runDiagramHelperOperation(operation, payload),
+    helperOperations: {
+      readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES,
+      buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET
+    },
+    addSetStep: (label, write) => history.runUndoable(label, write),
+    addSet: (drawingId, set) => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)
+  });
+  /** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
+  const shownResultRoot = () => svgContainer.value?.querySelector('svg') ?? null;
+  // The outline of the hits a row click or a chip of the hit table names, over the shown Result.
+  const searchHitOutline = createSearchHitOutline({
+    shownRoot: shownResultRoot,
+    target: sequenceSearch.outlineTarget
+  });
+  const closeRegionPopup = () => {
+    if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
+  };
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).
   const regionSelect = createRegionSelect({
     readAxisRecords: shownAxisRecords,
-    shownRoot: () => svgContainer.value?.querySelector('svg') ?? null,
+    shownRoot: shownResultRoot,
     layoutEdit: layoutRepositionMode,
     openSelection: () => {
       const item = clickedPairwiseMatch.value?.previewItem;
       return item?.kind === 'region' ? item : null;
     },
     openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),
-    closeRegionPopup: () => {
-      if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
-    },
+    closeRegionPopup,
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
     // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
@@ -5294,35 +5328,20 @@ export const createAppSetup = () => {
     },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.
-    readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
-      getCommittedCanonicalSession(), [{ recordKey, start, end }],
-      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
-        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
-    )).fasta,
+    readRegionFasta: async ({ recordKey, start, end }) => (await readShownRecordSpans([{ recordKey, start, end }])).fasta,
+    // Use as search query: Python reads the span on the source strand, named by its header `<record>:<start>-<end>`;
+    // the panel adds it as a query, and its section opens.
+    useAsSearchQuery: async ({ recordKey, start, end }) => {
+      const read = await readShownRecordSpans([{ recordKey, start, end }]);
+      await sequenceSearch.addQuery({ name: read.spans[0].header, fasta: read.fasta });
+      // The popup closes first, so the focus the section takes stays there.
+      closeRegionPopup();
+      await settingsPaneActions.revealSettingsSection('sequence-search');
+    },
     // While the tool is on, a touch that misses the tracks pans as a mouse drag does.
     panStart: startPan,
     panMove: doPan,
     panEnd: endPan
-  });
-  // Sequence search (PD-OI-116): the subject is the records of the shown drawing's Results, read by Python from the
-  // committed request; the set a search adds is one History step of that drawing.
-  const sequenceSearch = createSequenceSearch({
-    state,
-    readAxisRecords: () => Array.from({ length: results.value.length },
-      (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat(),
-    readRecordSpans: (spans) => requestRecordSpanSequences(
-      getCommittedCanonicalSession(), spans,
-      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
-        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
-    ),
-    runSearchLosat: runSequenceSearchLosat,
-    runHelper: (operation, payload) => runDiagramHelperOperation(operation, payload),
-    helperOperations: {
-      readQueries: DIAGRAM_HELPER_OPERATIONS.READ_SEARCH_QUERIES,
-      buildHitSet: DIAGRAM_HELPER_OPERATIONS.SEARCH_HIT_ANNOTATION_SET
-    },
-    addSetStep: (label, write) => history.runUndoable(label, write),
-    addSet: (drawingId, set) => addSearchSetToDrawing(state.drawingOf(drawingId).slices.annotationSets, set)
   });
   // Registered once sequenceSearch exists: a search's step names the sets it added (the live annotation-sets row).
   history.setSettingsStepListener((changes, direction, undrawn) => {
@@ -5332,6 +5351,7 @@ export const createAppSetup = () => {
   });
   return {
     sequenceSearch,
+    searchHitOutline,
     hostedBuild: readHostedBuild(document),
     fontSettings,
     defaultColorGroups,

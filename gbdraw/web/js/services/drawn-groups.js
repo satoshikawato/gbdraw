@@ -28,6 +28,10 @@ export const DEPTH_GROUPS = trackGroups(['depth'], ['depth']);
 // Linear, the group of a region label drawn in front of the leader lines names
 // that group's id (linear/annotations.py).
 export const ANNOTATION_ID_ATTRIBUTE = 'data-gbdraw-annotation-id';
+export const ANNOTATION_SET_ID_ATTRIBUTE = 'data-gbdraw-annotation-set-id';
+// A Linear row of a wrapped record is a group of its own (linear/wrap_rows.py); an annotation's marks on that row
+// are its children.
+export const WRAP_ROW_ATTRIBUTE = 'data-gbdraw-wrap-row';
 export const REGION_LABEL_FOR_ATTRIBUTE = 'data-gbdraw-region-label-for';
 export const ANNOTATION_SELECTOR = `[${ANNOTATION_ID_ATTRIBUTE}]`;
 export const REGION_LABEL_FRONT_SELECTOR = `[${REGION_LABEL_FOR_ATTRIBUTE}]`;

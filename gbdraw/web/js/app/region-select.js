@@ -35,7 +35,7 @@ const BAND_SLACK_PX = 6;
  */
 
 /**
- * @typedef {'copy' | 'add'} RegionAction An action of the Region popup that waits on Python.
+ * @typedef {'copy' | 'add' | 'query'} RegionAction An action of the Region popup that waits on Python.
  * @typedef {object} RegionSelectPorts
  * @property {() => RegionAxisRecord[]} readAxisRecords The records of the shown Result whose axis Python wrote.
  * @property {() => SVGSVGElement | null} shownRoot The mounted root of the shown Result.
@@ -53,6 +53,9 @@ const BAND_SLACK_PX = 6;
  * @property {(region: RegionTarget) => Promise<unknown>} newDrawingFromRegion The region drawing owner's derivation.
  * @property {(region: RegionTarget) => Promise<string>} readRegionFasta The FASTA text of the region, which Python
  *   reads from the request the shown Result was made from (a Worker helper, started by Copy FASTA only).
+ * @property {(region: RegionTarget) => Promise<unknown>} useAsSearchQuery Use as search query: the Sequence search
+ *   panel adds the region's bases, which Python reads on the source strand, as a query; then the Region popup closes
+ *   and the panel's section opens.
  * @property {PanPort} panStart The preview's pan starts at a press (the pan owner's, which pans on mouse events).
  * @property {PanPort} panMove The pan follows the pointer.
  * @property {PanPort} panEnd The pan ends.
@@ -112,7 +115,7 @@ const dragSpan = (axis, start, current, sweep) => (axis.kind === 'circular'
  */
 export const createRegionSelect = ({
   readAxisRecords, shownRoot, layoutEdit, openSelection, openRegionPopup, closeRegionPopup, drawnFeatures,
-  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta, panStart, panMove, panEnd
+  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta, useAsSearchQuery, panStart, panMove, panEnd
 }) => {
   const on = ref(false);
   /** Whether the shown Result has an axis to select on (one predicate for the toggle and the gesture). */
@@ -449,7 +452,8 @@ export const createRegionSelect = ({
       // Every action button is disabled while one of them runs; each action's own state is its label and status.
       busy: selectionBusy(chosen),
       copy: actionView(chosen, 'copy'),
-      add: actionView(chosen, 'add')
+      add: actionView(chosen, 'add'),
+      query: actionView(chosen, 'query')
     };
   });
 
@@ -500,10 +504,16 @@ export const createRegionSelect = ({
     'copy', (chosen) => copyPendingTextToClipboard(readRegionFasta(targetOf(chosen))), t('Copied FASTA'), 'readRecordSpanSequences'
   );
 
+  /**
+   * Use as search query: the panel adds the region's bases as a query, the popup closes, and the panel's section opens
+   * (the port's). A failure keeps the popup open with its reason.
+   */
+  const useAsQuery = () => runAction('query', (chosen) => useAsSearchQuery(targetOf(chosen)), '', 'readRecordSpanSequences');
+
   return {
     on, available, active, unavailableReason, toggle, toggleLayoutEdit,
     pointerDown, pointerMove, pointerUp, pointerCancel,
     overlay, overlayMatrix, bindOverlay, bindBand, popup,
-    selectFeaturesInside, addToAnnotationSet, newDrawing, copyFasta
+    selectFeaturesInside, addToAnnotationSet, newDrawing, copyFasta, useAsQuery
   };
 };

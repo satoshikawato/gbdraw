@@ -15,8 +15,8 @@ import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
-  nextSearchSetId, panelQueries, readSearchQueriesReply, readSequenceSearchReply, searchSetIdsOfStep, searchSpans,
-  searchSubjects
+  nextSearchSetId, outlinedHitIds, panelQueries, readSearchQueriesReply, readSequenceSearchReply, searchSetIdsOfStep,
+  searchSpans, searchSubjects
 } from '../services/sequence-search.js';
 
 /** @import { SearchColorMode, SearchHit, SearchQuery, SearchStepChange, SequenceSearchInput } from '../services/sequence-search.js' */
@@ -36,6 +36,8 @@ import {
  * @property {SearchHit[]} hits
  * @property {{ name: string, length: number, color: string }[]} queries
  * @property {number} rowsLeftOut Rows LOSAT wrote that the thresholds removed.
+ * @property {Record<string, string>} recordIds The record ID of each searched record, by its request key (as Python read
+ *   the spans), which the hit table shows.
  * @property {string} rawText The rows as LOSAT wrote them (Save Raw LOSAT TSV).
  */
 
@@ -138,8 +140,32 @@ export const createSequenceSearch = ({
       if (event?.target) event.target.value = '';
     }
   };
-  /** @param {string} name */
-  const removeQuery = (name) => { panel.queries = panel.queries.filter((query) => query.name !== name); };
+  /**
+   * Use as search query (Region popup): adds a span's bases, read by Python on the source strand and named by their
+   * FASTA header (`<record>:<start>-<end>`), to the query text and reads it again; the panel unfolds to show it. A
+   * query of that name is already listed: nothing is added twice.
+   * @param {{ name: string, fasta: string }} query
+   */
+  const addQuery = async ({ name, fasta }) => {
+    panel.folded = false;
+    if (panel.queries.some((query) => query.name === name)) return;
+    const text = panel.queryText.trim() === '' ? '' : panel.queryText.replace(/\s*$/, '\n');
+    await readQueries(`${text}${fasta}`);
+  };
+  /**
+   * Removes a query from the list and from the query text, which then holds the FASTA of the queries left (as read), so
+   * a later read or Use as search query does not bring it back.
+   * @param {string} name
+   */
+  const removeQuery = (name) => {
+    panel.queries = panel.queries.filter((query) => query.name !== name);
+    panel.queryText = panel.queries.map((query) => query.fasta).join('');
+    // A read still running for an earlier text is dropped.
+    readSequence += 1;
+    panel.reading = false;
+    readFor = panel.queryText;
+    pendingRead = Promise.resolve();
+  };
   /** @param {string} name @param {string} color */
   const setQueryColor = (name, color) => {
     panel.queries = panel.queries.map((query) => (query.name === name ? { ...query, color } : query));
@@ -201,7 +227,8 @@ export const createSequenceSearch = ({
       const [set] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
       panel.outcome = {
         drawingId: drawing.id, setId: set ? set.id : null, hits: reply.hits, queries,
-        rowsLeftOut: reply.rowsRead - reply.rowsKept, rawText: run.text
+        rowsLeftOut: reply.rowsRead - reply.rowsKept, rawText: run.text,
+        recordIds: Object.fromEntries(read.spans.map((span) => [span.recordKey, span.recordId]))
       };
       panel.chip = '';
       panel.selectedHit = '';
@@ -241,6 +268,16 @@ export const createSequenceSearch = ({
     const names = outcome.queries.map(({ name, length }) => t('No hits for {query} ({length} bp)', { query: name, length }));
     return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.', { count: outcome.rowsLeftOut })].join(' ');
   });
+  // The hits the drawing outlines, by the shown set's id and the hits' annotation ids (app/search-hit-outline.js).
+  const outline = computed(() => {
+    const outcome = shownOutcome.value;
+    const annotationIds = outcome?.setId ? outlinedHitIds(outcome.hits, panel.chip, panel.selectedHit) : [];
+    return outcome?.setId && annotationIds.length ? { setId: outcome.setId, annotationIds } : null;
+  });
+  // The folded line names the program once: "blastn" for the blastn task, "blastn, task megablast" for another task.
+  const programText = computed(() => (panel.task === 'blastn' ? 'blastn' : t('{program}, task {task}', { program: 'blastn', task: panel.task })));
+  /** The record a hit is on, by its ID (the request key when Python read no ID). @param {SearchHit} hit */
+  const recordOf = (hit) => shownOutcome.value?.recordIds[hit.recordKey] || hit.recordKey;
   /** @param {string} name */
   const chooseChip = (name) => { panel.chip = name; panel.selectedHit = ''; };
   /** @param {SearchHit} hit */
@@ -252,8 +289,10 @@ export const createSequenceSearch = ({
 
   // Reactive, so the template reads the computed values unwrapped (`sequenceSearch.hitRows`).
   return reactive({
-    panel, readQueries, editQueryText, chooseQueryFile, removeQuery, setQueryColor, searchDisabledReason, search, searchSetIdsOf,
-    shownOutcome, hitRows, chips, noHitText, chooseChip, selectHit, saveRawTsv,
+    panel, readQueries, editQueryText, chooseQueryFile, addQuery, removeQuery, setQueryColor, searchDisabledReason, search,
+    searchSetIdsOf, shownOutcome, hitRows, chips, noHitText, outline, programText, recordOf, chooseChip, selectHit, saveRawTsv,
+    /** The hits to outline, for the outline's port (app/search-hit-outline.js). */
+    outlineTarget: () => outline.value,
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
     gradientBar: `linear-gradient(to right, ${SEARCH_GRADIENT_START_COLOR}, ${SEARCH_GRADIENT_END_COLOR})`,
