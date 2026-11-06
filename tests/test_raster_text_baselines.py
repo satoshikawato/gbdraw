@@ -22,6 +22,7 @@ from gbdraw.svg.circular_ticks import (
     resolve_circular_tick_label_geometry,
 )
 from gbdraw.svg.text_path import generate_name_path
+from tests.utils.png_chunks import tiny_png
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FONT_FAMILY = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
@@ -296,15 +297,9 @@ def test_every_cairosvg_export_path_converts_the_rewritten_svg(
 
     class CapturingCairoSvg:
         @staticmethod
-        def svg2png(*, bytestring, write_to=None):
+        def svg2png(*, bytestring):
             converted.append(bytestring)
-            if write_to is None:
-                return b"png"
-            if isinstance(write_to, str):
-                Path(write_to).write_bytes(b"png")
-            else:
-                write_to.write(b"png")
-            return None
+            return tiny_png()
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: CapturingCairoSvg)
 

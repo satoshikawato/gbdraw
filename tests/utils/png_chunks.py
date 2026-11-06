@@ -41,3 +41,17 @@ def png_phys(payload: bytes) -> tuple[int, int, int] | None:
     assert kinds.index(b"pHYs") < kinds.index(b"IDAT")
     data = dict(png_chunks(payload))[b"pHYs"]
     return struct.unpack(">IIB", data)
+
+
+def tiny_png() -> bytes:
+    """A valid 1 x 1 PNG without a pHYs chunk, for fakes of CairoSVG's ``svg2png``."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    return (
+        PNG_SIGNATURE
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+        + chunk(b"IEND", b"")
+    )

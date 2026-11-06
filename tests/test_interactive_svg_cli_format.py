@@ -44,6 +44,7 @@ from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_
 from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.web_support.orthogroup_metadata import enrich_features_with_orthogroups
+from tests.utils.png_chunks import png_phys, tiny_png
 
 
 def _drawing(path: Path) -> Drawing:
@@ -1628,8 +1629,8 @@ def test_save_figure_to_interactive_png_uses_cairosvg_only_for_png(
 
     class FakeCairoSvg:
         @staticmethod
-        def svg2png(*, bytestring, write_to):
-            write_to.write(bytestring)
+        def svg2png(*, bytestring):
+            return tiny_png()
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: FakeCairoSvg)
 
@@ -1682,8 +1683,8 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
 
     class FakeCairoSvg:
         @staticmethod
-        def svg2png(*, bytestring, write_to):
-            write_to.write(b"new png")
+        def svg2png(*, bytestring):
+            return tiny_png()
 
     monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: FakeCairoSvg)
 
@@ -1697,7 +1698,7 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
 
     assert paths == [str(svg_path), str(png_path)]
     assert svg_path.read_text(encoding="utf-8").startswith("<?xml")
-    assert png_path.read_bytes() == b"new png"
+    assert png_phys(png_path.read_bytes()) == (3780, 3780, 1)  # replaced: the stale file had none
 
 
 @pytest.mark.parametrize("blocked_kind", ("directory", "fifo"))
@@ -1773,8 +1774,8 @@ def test_save_figure_to_does_not_follow_binary_target_created_after_preflight(
 
     class FakeCairoSvg:
         @staticmethod
-        def svg2png(*, bytestring, write_to):
-            write_to.write(bytestring)
+        def svg2png(*, bytestring):
+            return tiny_png()
 
     def inject_symlink():
         try:
@@ -1839,8 +1840,8 @@ def test_save_figure_to_raises_when_cairosvg_is_unavailable(
 
 class _PdfFailsCairoSvg:
     @staticmethod
-    def svg2png(*, bytestring, write_to):
-        write_to.write(b"new png")
+    def svg2png(*, bytestring):
+        return tiny_png()
 
     @staticmethod
     def svg2pdf(*, bytestring, write_to):

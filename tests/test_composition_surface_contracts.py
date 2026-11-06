@@ -500,12 +500,9 @@ def test_real_exports_use_the_composed_svg_viewbox(
     real_cairosvg = export_module.get_cairosvg()
     converted_sources: list[bytes] = []
 
-    def capture(method_name: str, *, bytestring: bytes, write_to) -> object:
+    def capture(method_name: str, *, bytestring: bytes, **options) -> object:
         converted_sources.append(bytestring)
-        return getattr(real_cairosvg, method_name)(
-            bytestring=bytestring,
-            write_to=write_to,
-        )
+        return getattr(real_cairosvg, method_name)(bytestring=bytestring, **options)
 
     proxy = SimpleNamespace(
         svg2png=lambda **kwargs: capture("svg2png", **kwargs),
