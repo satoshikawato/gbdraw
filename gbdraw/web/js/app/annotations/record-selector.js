@@ -108,9 +108,12 @@ export const annotationRecordValue = (catalog, annotation) => {
 /**
  * How a row binds a record of a Result (its request key), as Add to annotation set and Sequence search bind one: by
  * the catalog key the record select writes, that of the record settings owner that holds it (`bindingKeyOf`; an OFF
- * record's too; '' when no owner holds it), and by the selector that names it among the records the Result draws,
- * those of the committed request it was made from (`withRecordSelectors`, as the catalog names the draft's; review r2
- * B1). The draft's catalog is not read: a record change that waits for Generate changes neither.
+ * record's too), and by the selector that names it among the records the Result draws, those of the committed request
+ * it was made from (`withRecordSelectors`, as the catalog names the draft's; review r2 B1). The draft's catalog is not
+ * read: a record change that waits for Generate changes neither. A record no owner holds (its card was deleted after
+ * Generate) binds by a key no catalog record has (a catalog key ends in a JSON array; this one is a JSON object), so
+ * its row's target is unavailable as any row's whose record is gone, and Generate refuses it until the row is deleted
+ * or rebound, never binding it by selector to another record (OV-2631, D-57); the live draw still names the record.
  * @param {readonly Pick<RegionAxisRecord, 'recordKey' | 'recordId' | 'recordIndex'>[]} axisRecords The Result's records.
  * @param {readonly RecordSettingsOwner[]} owners The drawing's record settings owners.
  * @returns {ResultRecordBindings}
@@ -120,7 +123,7 @@ export const resultRecordBindings = (axisRecords, owners) => {
     .sort((a, b) => a.recordIndex - b.recordIndex);
   const named = withRecordSelectors(drawn.map(({ recordKey, recordId, recordIndex }) => ({ recordKey, recordId, selector: `#${recordIndex + 1}` })));
   /** @param {string} recordKey */
-  const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey);
+  const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey) || JSON.stringify({ resultRecord: recordKey });
   return {
     bindingKeyOf,
     selectorOf: (recordKey) => named.find((record) => record.recordKey === recordKey)?.backendSelector ?? null,

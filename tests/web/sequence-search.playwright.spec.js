@@ -5,7 +5,7 @@
 // The live draw equals Generate in tests/web/live-generate-parity.playwright.spec.js.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { HMMT, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { download, load, seeds } = require('./helpers/mode-transition.cjs');
@@ -489,3 +489,37 @@ for (const count of [3, 2]) {
     expect(await hitRecords(page, 'Search 1')).toEqual(['0']);
   });
 }
+
+// OV-2631, D-57: three cards of records named contig1; after Generate the second card is deleted, so the draft's `#2`
+// is the third record. A hit on the second record (drawn at once on it, as the Result draws it) is held as "target
+// record unavailable": Generate refuses it instead of drawing it on the third record. Deleting the set lets Generate
+// pass.
+test('Linear: a hit on a record whose card was deleted after Generate is refused at Generate, not moved', async ({ page }) => {
+  test.setTimeout(600_000);
+  const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
+  const contigs = [0, 1, 2].map((index) => genbankRecord('contig1', span(lambda, index * 4000 + 1, (index + 1) * 4000)));
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank: contigs[0] });
+  await page.evaluate(async (texts) => {
+    const app = window.__GBDRAW_APP__;
+    texts.forEach((text, index) => {
+      app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(index + 1, 'gb', new File([text], `contig-${index + 2}.gb`, { type: 'text/plain', lastModified: 1000 }));
+    });
+    await window.Vue.nextTick();
+  }, contigs.slice(1));
+  await generate(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(3);
+  await page.evaluate(() => { const app = window.__GBDRAW_APP__; app.requestLinearSourceRemoval(app.linearSourceGroups[1]); });
+  await page.locator('[data-linear-source-removal-dialog]').getByRole('button', { name: 'Remove file', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+  await searchFromPanel(page, fasta([{ name: 'second', bases: span(lambda, 5001, 5400) }]));
+  expect((await searchOutcome(page)).searchError).toBeNull();
+  expect(await hitRecords(page, 'Search 1')).toEqual(['1']);
+  const rejected = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(rejected.status).toBe('error');
+  expect(rejected.error).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Choose an available target record.');
+  await page.evaluate(() => { const app = window.__GBDRAW_APP__; app.removeAnnotationSet(app.annotationSets.find(({ id }) => id === 'Search 1')); });
+  await generate(page);
+  expect(await hitRecords(page, 'Search 1')).toEqual([]);
+});

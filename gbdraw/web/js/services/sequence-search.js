@@ -45,8 +45,8 @@ import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
  */
 /**
  * How a search row binds a record of the shown Result, by the Result's request record key (`resultRecordBindings`):
- * the binding key of the record settings owner that holds it ('' when none does), the selector that names it in the
- * committed request (null for a record the Result does not draw), and that selector by binding key.
+ * the binding key of the record settings owner that holds it (one no record has when none does), the selector that
+ * names it in the committed request (null for a record the Result does not draw), and that selector by binding key.
  * @typedef {object} ResultRecordBindings
  * @property {(recordKey: string) => string} bindingKeyOf
  * @property {(recordKey: string) => AnnotationRecordSelector | null} selectorOf

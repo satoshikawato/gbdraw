@@ -434,10 +434,46 @@ test('a search binds each hit by its record settings owner and names its record 
   assert.equal(annotationOptionsPayload(added, [], []).sets[0].annotations.length, 1);
 });
 
+// OV-2631, D-57: a hit on a record the shown Result draws but no record settings owner of the draft holds (its card
+// was deleted after Generate; a card added since takes its place as `#2`) binds by a key no record has. dev's rule for
+// a row whose record is gone then applies: the record select shows its target unavailable, and Generate refuses it
+// (TARGET_RECORD) instead of binding it by its selector to the card added since. The live draw still names the
+// Result's record by that key.
+test('a hit on a record whose card was deleted after Generate is held as target record unavailable', async () => {
+  const { reconcileAnnotationRecordBindings, resolveAnnotationRecord, annotationRecordOptions } = await import('../../gbdraw/web/js/app/annotations/record-selector.js');
+  const { validateAnnotationRecordTargets } = await import('../../gbdraw/web/js/app/annotations/validation.js');
+  const bindings = resultRecordBindings([
+    { recordIndex: 0, recordKey: 'card-a', recordId: 'X' }, { recordIndex: 1, recordKey: 'card-b', recordId: 'X' }
+  ], [owner('card-a', ['card-a:1']), owner('card-c', ['card-c:1'])]);
+  const { added } = await runPanelSearch({ readRecordBindings: () => bindings });
+  const [row] = added[0].annotations;
+  const key = row.metadata[ANNOTATION_RECORD_BINDING_KEY];
+  assert.ok(key && !['card-a:1', 'card-c:1'].includes(key), 'a binding key no record has');
+  assert.deepEqual(row.target.record, { kind: 'recordIndex', index: 1 });
+  assert.deepEqual(bindings.selectorOfBinding(key), { kind: 'recordIndex', index: 1 }, 'drawn live on the Result record');
+  const record = (id, index) => ({ key: `${id}:1`, value: `${id}:1`, label: `X (${id})`, recordId: 'X', index, backendSelector: { kind: 'recordIndex', index } });
+  const catalog = { status: 'ready', records: [record('card-a', 0), record('card-c', 1)], issues: [], requiresSelection: true };
+  assert.equal(resolveAnnotationRecord(catalog, row), null);
+  assert.deepEqual(annotationRecordOptions(catalog, row).filter(({ synthetic }) => synthetic).map(({ value, label }) => [value, label]),
+    [[key, '#2 (target record unavailable)']]);
+  // Generate: the record select reconciles the draft's rows with its catalog, then the targets are checked.
+  const drawing = modeDrawing(state, 'linear');
+  const before = [...drawing.annotationSets];
+  try {
+    drawing.annotationSets.push(added[0]);
+    reconcileAnnotationRecordBindings(drawing, catalog);
+    const [held] = drawing.annotationSets.at(-1).annotations;
+    assert.equal(held.metadata[ANNOTATION_RECORD_BINDING_KEY], key, 'not bound to the card added since');
+    assert.deepEqual(validateAnnotationRecordTargets(drawing.annotationSets, catalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+  } finally {
+    drawing.annotationSets.splice(0, drawing.annotationSets.length, ...before);
+  }
+});
+
 // Review r2 B1: the binding owner of a Result's records. A record binds by its record settings owner's key (a card
 // that draws every record of its file binds its k-th record by its k-th key; an OFF card's owner binds too; a record
-// no owner holds binds by none) and is named among the Result's records as the catalog names the draft's: by its
-// record ID when no other drawn record has it, else `#<n>`.
+// no owner holds binds by a key no record has, OV-2631) and is named among the Result's records as the catalog names
+// the draft's: by its record ID when no other drawn record has it, else `#<n>`.
 test('a Result record binds by its settings owner and is named among the Result records', () => {
   const owners = [owner('u1', ['f1::a']), owner('u2', ['f2::a']), owner('u3', ['f3::a', 'f3::b'])];
   const bindings = resultRecordBindings([
@@ -448,7 +484,10 @@ test('a Result record binds by its settings owner and is named among the Result 
     { resultIndex: 0, recordIndex: 3, recordKey: 'u3:2', recordId: 'NC_2' },
     { resultIndex: 0, recordIndex: 4, recordKey: 'gone', recordId: 'NC_9' }
   ], owners);
-  assert.deepEqual(['u1', 'u2', 'u3:1', 'u3:2', 'gone'].map(bindings.bindingKeyOf), ['f1::a', 'f2::a', 'f3::a', 'f3::b', '']);
+  const gone = bindings.bindingKeyOf('gone');
+  assert.deepEqual(['u1', 'u2', 'u3:1', 'u3:2'].map(bindings.bindingKeyOf), ['f1::a', 'f2::a', 'f3::a', 'f3::b']);
+  assert.ok(gone && !owners.some(({ bindingKeys }) => bindingKeys.includes(gone)), 'a record no owner holds: a key no record has');
+  assert.deepEqual(bindings.selectorOfBinding(gone), { kind: 'recordId', value: 'NC_9' });
   assert.deepEqual(['u1', 'u2', 'u3:2', 'other'].map(bindings.selectorOf), [
     { kind: 'recordIndex', index: 0 }, { kind: 'recordIndex', index: 1 }, { kind: 'recordId', value: 'NC_2' }, null
   ]);
