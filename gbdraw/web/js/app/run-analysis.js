@@ -6469,6 +6469,7 @@ export const createRunAnalysis = ({
     activeLosatAbortController = controller;
     generationCancelRequested.value = false;
     processing.value = true;
+    labelCapacityNotices.value = [];
     /** @param {number} completed */
     const progress = (completed) => {
       if (!controller.signal.aborted) {

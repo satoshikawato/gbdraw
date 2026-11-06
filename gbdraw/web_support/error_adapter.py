@@ -26,8 +26,8 @@ OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg e
 buildProteinLosatCacheKeys checkExportLimit convertLosatpPairsToGenomicPayload decideAutoOrientation deriveRegionDrawing convertRingTablesToSearchFrame convertStoredProteinResultFrames
 extractCdsProteinFasta extractFirstFasta hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords promoteLegacyLosatpCache
-readAllSequenceRecords readComparisonSequence readFeatureOverrideTable readRecordSpanSequences registerFonts resolveFeatureAnchor resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
-synthesizeColorRules upgradeLegacySession validateConfigOverrides""".split())
+readAllSequenceRecords readComparisonSequence readFeatureOverrideTable readRecordSpanSequences readSearchQueries registerFonts resolveFeatureAnchor resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
+searchHitAnnotationSet synthesizeColorRules upgradeLegacySession validateConfigOverrides""".split())
 STAGES = frozenset("""unknown initialization resource-staging request-validation helper
 rule-validation render result-admission cleanup export-capture export-conversion font-validation""".split())
 

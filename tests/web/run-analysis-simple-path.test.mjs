@@ -565,10 +565,11 @@ test('the processing overlay keeps each label notice Python sends while it rende
   const refitted = Object.freeze({ ...first, capacityRatio: 1.2 });
   showDiagramProgress({ requestId: 1, stage: 'rendering', notice: refitted }, overlay);
   assert.deepEqual(overlay.labelCapacityNotices.value, [refitted, second]);
-  // Both runs that show the overlay start it without the last run's notices.
+  // Every run that shows the overlay (Generate, a target-record run, a Sequence search) starts it without the last
+  // run's notices.
   const source = await readFile(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
-  assert.equal(source.match(/processing\.value = true;\n\s*labelCapacityNotices\.value = \[\];/g)?.length, 2);
-  assert.equal(source.match(/processing\.value = true;/g)?.length, 2);
+  assert.equal(source.match(/processing\.value = true;\n\s*labelCapacityNotices\.value = \[\];/g)?.length, 3);
+  assert.equal(source.match(/processing\.value = true;/g)?.length, 3);
   // The overlay shows the heading and each notice in the UI language (OV-2179), beside Cancel.
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<div v-if="processing"');
