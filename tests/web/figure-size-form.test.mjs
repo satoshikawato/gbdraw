@@ -334,3 +334,38 @@ test('Reset Settings returns an Auto side whose unit was picked without an amoun
     delete globalThis.window;
   }
 });
+
+// The watch reads the shown drawing through `state.activeDrawing()`, which reads the drawing map. Adding, deleting, or
+// restoring (Undo) another drawing replaces that map around the shown drawing, and the field's units must not move:
+// a unit picked without an amount and a side the field cleared both keep their unit. Real Vue, a shallowRef map.
+test('replacing the drawing map around the shown drawing keeps the picked and the cleared units', async () => {
+  const Vue = loadPageVue();
+  globalThis.window = { Vue };
+  try {
+    const a = { id: 'circular', mode: 'circular', form: Vue.reactive(createDefaultForm()) };
+    const b = { id: 'linear', mode: 'linear', form: Vue.reactive(createDefaultForm()) };
+    const drawings = Vue.shallowRef(new Map([[a.id, a], [b.id, b]]));
+    const activeId = Vue.ref(a.id);
+    const field = createFigureSizeField({ state: { activeDrawing: () => drawings.value.get(activeId.value) }, watch: Vue.watch, shownSize: () => null });
+    const units = () => [field.figureWidthUnit.value, field.figureHeightUnit.value];
+    const settle = () => Vue.nextTick();
+    field.changeFigureSize({ target: { value: 'mm' } }, 'width', 'unit');
+    field.changeFigureSize({ target: { value: 'cm' } }, 'height', 'unit');
+    field.changeFigureSize({ target: { value: '9' } }, 'height', 'amount');
+    await settle();
+    field.changeFigureSize({ target: { value: '' } }, 'height', 'amount');
+    await settle();
+    assert.deepEqual([a.form.figure_width, a.form.figure_height, ...units()], [null, null, 'mm', 'cm']);
+    drawings.value = new Map([[a.id, a]]);
+    await settle();
+    assert.deepEqual(units(), ['mm', 'cm'], 'another drawing deleted');
+    drawings.value = new Map([[a.id, a], [b.id, b]]);
+    await settle();
+    assert.deepEqual(units(), ['mm', 'cm'], 'its deletion undone');
+    activeId.value = b.id;
+    await settle();
+    assert.deepEqual(units(), ['px', 'px'], 'a drawing switch to an Auto side');
+  } finally {
+    delete globalThis.window;
+  }
+});

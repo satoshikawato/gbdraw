@@ -56,7 +56,10 @@ const largerSentence = ({ sides, causes }) => {
 
 /** @param {FigureSizeFieldPorts} ports */
 export const createFigureSizeField = ({ state, shownSize, watch }) => {
-  const form = () => state.activeDrawing().form;
+  // The shown drawing as a computed: it notifies only when another drawing is shown, not when the drawing map is
+  // replaced around the same one (another drawing added, deleted, or restored by Undo).
+  const shown = computed(() => state.activeDrawing());
+  const form = () => shown.value.form;
   /** @type {Record<FigureSide, { value: FigureLengthUnit }>} */
   const units = {
     width: ref(/** @type {FigureLengthUnit} */ (DEFAULT_FIGURE_LENGTH_UNIT)),
@@ -69,7 +72,7 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
   /** @type {Record<FigureSide, { value: FigureLengthFormValue } | null>} */
   const written = { width: null, height: null };
   for (const side of /** @type {const} */ (['width', 'height'])) {
-    watch(() => [state.activeDrawing().id, form()[FIGURE_SIZE_FIELDS[side]]], () => {
+    watch(() => [shown.value.id, form()[FIGURE_SIZE_FIELDS[side]]], () => {
       const value = form()[FIGURE_SIZE_FIELDS[side]];
       const own = written[side];
       written[side] = null;
