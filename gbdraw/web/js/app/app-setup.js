@@ -5308,7 +5308,6 @@ export const createAppSetup = () => {
   // committed request; the set a search adds is one History step of that drawing.
   const sequenceSearch = createSequenceSearch({
     state,
-    committedSession: () => getCommittedCanonicalSession(),
     readAxisRecords: () => Array.from({ length: results.value.length },
       (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat(),
     readRecordSpans: (spans) => requestRecordSpanSequences(

@@ -4131,7 +4131,7 @@
                             </button>
                             <div v-else class="space-y-2">
                                 <label for="sequence-search-query" class="input-label text-[10px] mb-0">{{ t('Query FASTA') }}</label>
-                                <textarea id="sequence-search-query" :value="sequenceSearch.panel.queryText" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
+                                <textarea id="sequence-search-query" :value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
                                 <p v-if="sequenceSearch.panel.queryError" id="sequence-search-query-error" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.queryError.summaryParts) }}</p>
                                 <button type="button" class="btn btn-secondary text-[10px] w-full" @click="$refs.sequenceSearchQueryInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Choose file') }}</button>
                                 <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
@@ -4187,6 +4187,7 @@
                             <button type="button" data-sequence-search-run class="btn btn-primary text-xs w-full" @click="sequenceSearch.search()" :disabled="Boolean(sequenceSearch.searchDisabledReason) || sequenceSearch.panel.running" :aria-describedby="sequenceSearch.searchDisabledReason ? 'sequence-search-reason' : null"><i class="ph ph-binoculars" aria-hidden="true"></i> {{ t('Search') }}</button>
                             <p v-if="sequenceSearch.searchDisabledReason" id="sequence-search-reason" class="ui-hint">{{ sequenceSearch.searchDisabledReason }}</p>
                             <p v-if="sequenceSearch.panel.searchError" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.searchError.summaryParts) }}</p>
+                            <p v-if="sequenceSearch.panel.busy" role="status" class="text-[10px] text-amber-700 break-words">{{ sequenceSearch.panel.busy }}</p>
                             <p v-if="sequenceSearch.noHitText" role="status" data-sequence-search-no-hits class="text-[10px] text-slate-700">{{ sequenceSearch.noHitText }}</p>
                             <div v-if="sequenceSearch.shownOutcome && sequenceSearch.shownOutcome.setId" data-sequence-search-hits class="space-y-1">
                                 <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Show the hits of')">

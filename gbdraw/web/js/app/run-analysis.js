@@ -6456,13 +6456,15 @@ export const createRunAnalysis = ({
   // against the drawn records, through the Pairwise Comparisons runtime (the
   // LOSAT execution and thread settings, the serial engine's task check) and the
   // full-window overlay with its progress and Cancel. It draws nothing: the
-  // caller turns the rows into an annotation set. Busy while a Generate runs.
+  // caller turns the rows into an annotation set. Busy (with the reason) while a Generate or a Session load or save runs.
   /**
    * @param {{ queryFasta: string, subjectFasta: string, task: string }} search
-   * @returns {Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy' }>}
+   * @returns {Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy', reason: string }>}
    */
   const runSequenceSearchLosat = async ({ queryFasta, subjectFasta, task }) => {
-    if (processing.value || state.sessionOperationAvailability?.()) return { status: 'busy' };
+    // A search started during a Generate, a Session load or save would replace the overlay that run owns.
+    const busy = state.sessionOperationAvailability?.('not-during-run');
+    if (busy) return busy;
     const controller = new AbortController();
     activeLosatAbortController = controller;
     generationCancelRequested.value = false;

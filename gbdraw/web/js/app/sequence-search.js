@@ -8,7 +8,7 @@
 // History step of the shown drawing that the automatic rerender draws at once
 // (`searchSetIdsOfStep`, the live projection in services/session-request.js).
 import { computed, reactive } from '../utils/reactivity.js';
-import { msg, t, tn } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { comparisonStateForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
@@ -43,10 +43,9 @@ import {
  * The ports the composition root gives the panel.
  * @typedef {object} SequenceSearchPorts
  * @property {{ activeDrawing: () => { id: DrawingId, mode: 'circular' | 'linear', annotationSets: readonly { id: string }[] } }} state
- * @property {() => unknown} committedSession The committed Session of the shown drawing, or null before its first Generate.
  * @property {() => RegionAxisRecord[]} readAxisRecords Every drawn record of the shown drawing's Results.
  * @property {(spans: readonly RecordSpanInput[]) => Promise<RecordSpanSequencesReply>} readRecordSpans
- * @property {(search: { queryFasta: string, subjectFasta: string, task: string }) => Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy' }>} runSearchLosat
+ * @property {(search: { queryFasta: string, subjectFasta: string, task: string }) => Promise<{ status: 'ok', text: string } | { status: 'canceled' } | { status: 'busy', reason: string }>} runSearchLosat
  * @property {(operation: string, payload: Record<string, unknown>) => Promise<{ result?: unknown }>} runHelper
  * @property {{ readQueries: string, buildHitSet: string }} helperOperations The Worker helper operations (`readSearchQueries`,
  *   `searchHitAnnotationSet` in services/diagram-worker-protocol.js) the panel runs.
@@ -58,7 +57,7 @@ export const SEARCH_TASKS = Object.freeze(['megablast', 'blastn', 'dc-megablast'
 
 /** @param {SequenceSearchPorts} ports */
 export const createSequenceSearch = ({
-  state, committedSession, readAxisRecords, readRecordSpans, runSearchLosat, runHelper, helperOperations, addSetStep, addSet
+  state, readAxisRecords, readRecordSpans, runSearchLosat, runHelper, helperOperations, addSetStep, addSet
 }) => {
   const panel = reactive({
     queryText: '',
@@ -75,6 +74,8 @@ export const createSequenceSearch = ({
     running: false,
     /** @type {SearchError | null} */
     searchError: null,
+    /** Why the latest Search did not run (a Generate or a Session load is in progress); '' otherwise. */
+    busy: '',
     /** @type {SearchOutcome | null} */
     outcome: null,
     folded: false,
@@ -89,10 +90,14 @@ export const createSequenceSearch = ({
   const searched = new Map();
   let readSequence = 0;
 
+  // The text of the latest read and that read: a click on Search blurs the query box, whose change event asks for the
+  // same text again, so a text is read once and Search waits for its read.
+  let readFor = '';
+  /** @type {Promise<void>} */
+  let pendingRead = Promise.resolve();
   /** @param {string} text */
-  const readQueries = async (text) => {
+  const readText = async (text) => {
     const sequence = ++readSequence;
-    panel.queryText = text;
     panel.queryError = null;
     if (text.trim() === '') {
       panel.queries = [];
@@ -112,6 +117,17 @@ export const createSequenceSearch = ({
       if (sequence === readSequence) panel.reading = false;
     }
   };
+  /** @param {string} text */
+  const readQueries = (text) => {
+    panel.queryText = text;
+    if (text !== readFor) {
+      readFor = text;
+      pendingRead = readText(text);
+    }
+    return pendingRead;
+  };
+  /** The query box as typed, before its change event reads it. @param {string} text */
+  const editQueryText = (text) => { panel.queryText = text; };
   /** @param {{ target?: HTMLInputElement | null } | null | undefined} event */
   const chooseQueryFile = async (event) => {
     const file = event?.target?.files?.[0];
@@ -131,11 +147,13 @@ export const createSequenceSearch = ({
 
   // Why Search is off, in the order the user meets them; '' when it can run.
   const searchDisabledReason = computed(() => {
-    // A Result drawn before Python wrote the record axis names no drawn bases (as for Select region).
-    if (!committedSession() || readAxisRecords().length === 0) return t('Generate to search');
-    if (panel.queryError) return t('Correct the query to search');
-    if (panel.reading) return t('Reading the queries...');
-    if (panel.queries.length === 0) return t('Paste or choose a query FASTA');
+    // Only a Result names the drawn bases (its record axis, as for Select region); the axis is reactive, the committed
+    // Session that every Result comes from is not, so the axis alone decides.
+    if (readAxisRecords().length === 0) return t('Generate to search');
+    // A text not read yet is read when Search runs.
+    const unread = panel.queryText !== readFor;
+    if (panel.queryError && !unread) return t('Correct the query to search');
+    if (panel.queries.length === 0 && (!unread || panel.queryText.trim() === '')) return t('Paste or choose a query FASTA');
     return '';
   });
 
@@ -146,18 +164,23 @@ export const createSequenceSearch = ({
 
   const search = async () => {
     if (searchDisabledReason.value || panel.running) return;
-    const drawing = state.activeDrawing();
-    const queries = panel.queries.map(({ name, length, color }) => ({ name, length, color }));
-    const queryFasta = panel.queries.map((query) => query.fasta).join('');
     panel.searchError = null;
+    panel.busy = '';
     panel.running = true;
     try {
+      await readQueries(panel.queryText);
+      // The read may refuse the text or find no query; its reason then shows.
+      if (searchDisabledReason.value) return;
+      const drawing = state.activeDrawing();
+      const queries = panel.queries.map(({ name, length, color }) => ({ name, length, color }));
+      const queryFasta = panel.queries.map((query) => query.fasta).join('');
       const thresholds = resolveComparisonThresholds(panel.thresholds[drawing.mode], drawing.mode);
       const records = readAxisRecords();
       const read = await readRecordSpans(searchSpans(records));
       const run = await runSearchLosat({ queryFasta, subjectFasta: read.fasta, task: panel.task });
-      // A cancelled search, or one a Generate kept from running, adds nothing and keeps the Result.
-      if (run.status !== 'ok' || state.activeDrawing() !== drawing) return;
+      // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
+      if (run.status === 'busy') panel.busy = tm(run.reason);
+      if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
       const setId = nextSearchSetId(drawing.annotationSets);
       /** @type {SequenceSearchInput} */
       const input = {
@@ -174,7 +197,7 @@ export const createSequenceSearch = ({
         queryColors: Object.fromEntries(queries.map(({ name, color }) => [name, color]))
       };
       const reply = readSequenceSearchReply((await runHelper(helperOperations.buildHitSet, { search: input })).result);
-      if (state.activeDrawing() !== drawing) return;
+      if (state.activeDrawing().id !== drawing.id) return;
       const [set] = reply.annotationSet ? draftAnnotationSetsOfRequest([/** @type {Partial<AnnotationSet>} */ (reply.annotationSet)]) : [];
       panel.outcome = {
         drawingId: drawing.id, setId: set ? set.id : null, hits: reply.hits, queries,
@@ -229,7 +252,7 @@ export const createSequenceSearch = ({
 
   // Reactive, so the template reads the computed values unwrapped (`sequenceSearch.hitRows`).
   return reactive({
-    panel, readQueries, chooseQueryFile, removeQuery, setQueryColor, searchDisabledReason, search, searchSetIdsOf,
+    panel, readQueries, editQueryText, chooseQueryFile, removeQuery, setQueryColor, searchDisabledReason, search, searchSetIdsOf,
     shownOutcome, hitRows, chips, noHitText, chooseChip, selectHit, saveRawTsv,
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
