@@ -231,6 +231,9 @@ class, record one of two decisions:
 - add a guard (name the test and the PR stage that runs it); or
 - add no guard, and say why.
 
+A defect class that reached `main` or the hosted site also gets a record from
+[the incident record template](INCIDENT_RECORD_TEMPLATE.md).
+
 The audit is finished when every P1 is fixed, or the Owner has given an
 explicit waiver for it.
 
@@ -328,7 +331,8 @@ When the check fails:
 
 ## Hosted site check and rollback
 
-After each push to `main`, the job `Hosted site serves this main commit` in
+After each push to `main`, and once a day at 21:17 UTC against `main`'s head,
+the job `Hosted site serves this main commit` in
 `.github/workflows/deploy_web.yml` runs `tools/check-hosted-site.mjs`. It waits
 for the `Workers Builds: gbdraw` check run on the commit, then for the
 production Worker to serve that commit's build stamp (the `title="Commit …"`
@@ -336,6 +340,14 @@ of the version label), and then loads the app once in Chromium. Its job
 summary names the commit, the Cloudflare Version ID, and the startup time. A
 later `main` commit already on the site counts as "superseded", not as a
 failure. The job reports only; it gates nothing.
+
+A failed run is the alert: GitHub sends its failed-workflow notification to
+the account that started a push run (the one that merged the promotion) and,
+for the daily run, to the account that last changed its `cron` line on `main`.
+The account's notification settings for Actions decide whether it comes by
+email, on GitHub, or both. GitHub turns a schedule off after 60 days without
+activity in the repository; Actions, `Verify hosted Web app`, "Enable
+workflow" turns it back on.
 
 Cloudflare challenges GitHub runners on https://gbdraw.app/ (HTTP 403,
 `cf-mitigated: challenge`), so the job reads the same Worker at
@@ -360,3 +372,7 @@ When the site is broken after a deploy:
    (`gh workflow run deploy_web.yml -f site_sha=<sha>`).
 5. Fix forward. `main` still holds the bad commit, and the next push to
    `main` deploys again, so the fix goes through `dev` and a promotion.
+6. Write an incident record from
+   [the incident record template](INCIDENT_RECORD_TEMPLATE.md): what users
+   saw and for how long, the cause, the recovery with its run links, and the
+   guard that would have stopped it, or why there is none.
