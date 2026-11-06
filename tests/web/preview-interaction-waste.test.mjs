@@ -32,6 +32,8 @@ const copyModule = async (source, destination = source) => writeFile(
 );
 for (const source of [
   'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js',
+  // error-normalization.js reads Python's figure length units from the generated mode profiles.
+  'mode-profiles.generated.js',
   'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
   'services/svg-serialization.js', 'services/preview-affordances.js', 'services/settings-sections.js', 'services/drawn-groups.js',

@@ -16,6 +16,8 @@ await mkdir(join(tempDir, 'utils'), { recursive: true });
 for (const name of ['control-description.js', 'i18n.js', 'error-normalization.js']) {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'));
 }
+// error-normalization.js reads Python's figure length units from the generated mode profiles.
+await writeFile(join(tempDir, 'mode-profiles.generated.js'), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), 'utf8'));
 
 const { isIgnoredTarget, setupHistoryInputs } = await import(pathToFileURL(join(tempDir, 'app', 'history-inputs.js')));
 await mkdir(join(tempDir, 'services'), { recursive: true });

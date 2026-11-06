@@ -13,7 +13,9 @@ for (const path of [
   'services/feature-utils.js',
   'services/feature-sequence-fasta.js',
   'utils/optional-positive-number.js',
-  'utils/error-normalization.js'
+  'utils/error-normalization.js',
+  // error-normalization.js reads Python's figure length units from the generated mode profiles.
+  'mode-profiles.generated.js'
 ]) {
   await writeFile(join(tempDir, path), await readFile(`gbdraw/web/js/${path}`, 'utf8'), 'utf8');
 }

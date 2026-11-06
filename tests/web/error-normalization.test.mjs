@@ -5,6 +5,7 @@ import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
+import { MODE_PROFILE_DATA } from '../../gbdraw/web/js/mode-profiles.generated.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
@@ -477,6 +478,10 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
   const lengths = roundtrip({ code: 'INPUT_INVALID', context: { reason: 'FIGURE_TOO_NARROW', requested: '85 mm', minimum: '12', legend: '5mm', padding: '3.5 cm', title: '1 in', primary: '9 px <b>' } }).context;
   assert.deepEqual([lengths.requested, lengths.minimum, lengths.legend, lengths.padding, lengths.title, lengths.primary],
     ['85 mm', undefined, undefined, '3.5 cm', '1 in', undefined]);
+  // Only the units Python lists (gbdraw/core/figure_length.py, generated into the mode profiles).
+  const requested = (length) => roundtrip({ code: 'INPUT_INVALID', context: { reason: 'FIGURE_TOO_NARROW', requested: length } }).context.requested;
+  for (const unit of MODE_PROFILE_DATA.figureLength.units) assert.equal(requested(`85 ${unit}`), `85 ${unit}`, unit);
+  for (const length of ['5 pt', '240.3 ft']) assert.equal(requested(length), undefined, length);
   for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {
     assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { configPath } }).context.configPath, undefined);
   }

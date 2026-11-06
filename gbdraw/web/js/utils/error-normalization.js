@@ -1,6 +1,8 @@
 // @ts-check
-// This module has no imports (tests/web/helpers/error-text-keys.mjs loads a
-// copy of it alone), so it declares the identity of utils/i18n.js `msg`.
+// This module imports only the generated mode profiles (a leaf), and declares
+// the identity of utils/i18n.js `msg` instead of importing it, so a test that
+// copies it needs only that leaf beside it.
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 /** @param {string} text */
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
@@ -855,10 +857,10 @@ const FIGURE_PRIMARY_ITEMS = Object.freeze({
   map: 'map at its smallest {length}', maps: 'maps at their smallest {length}'
 });
 const FIGURE_PARTS = Object.freeze({ legend: 'legend {length}', title: 'title {length}', padding: 'padding {length}' });
-// A length as Python's message writes it (`180 mm`): a bounded number and a unit name. Python admits only its own
-// units (gbdraw/web_support/error_adapter.py); this module has no imports, so the Web checks the shape. The one check
-// of it in the Web: a refused size here, and the larger-figure estimate in services/label-fit.js.
-const FIGURE_LENGTH_TEXT = /^[0-9]{1,30}(\.[0-9]{1,6})? [a-z]{1,3}$/;
+// A length as Python's message writes it (`180 mm`): a bounded number and one of Python's units
+// (gbdraw/core/figure_length.py, generated into the mode profiles). The one check of it in the Web: a refused size
+// here, and the larger-figure estimate in services/label-fit.js.
+const FIGURE_LENGTH_TEXT = new RegExp(`^[0-9]{1,30}(\\.[0-9]{1,6})? (${MODE_PROFILE_DATA.figureLength.units.join('|')})$`);
 /**
  * Whether `value` is a length as Python's messages write it (`180 mm`).
  * @param {unknown} value

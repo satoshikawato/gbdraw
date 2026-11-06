@@ -27,6 +27,12 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
+// error-normalization.js reads Python's figure length units from the generated mode profiles.
+await writeFile(
+  join(tempRoot, 'mode-profiles.generated.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'card-row-marks.js'),
   await readFile(join(sourceDir, 'card-row-marks.js'), 'utf8'),
