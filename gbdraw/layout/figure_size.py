@@ -25,13 +25,19 @@ Built = TypeVar("Built")
 _AIM_UNDER_PX = 2.0
 _ACCEPT_UNDER_PX = 3.0
 _MAX_PASSES = 8
-# A base too small to draw fails early (a Circular map's track layout, about 0.05 s), so such passes have their own
+# A base too small to draw fails early (a Circular map's track layout, about 0.05 s), and a pass that left content
+# out skips its costly part (a Circular map whose labels were not placed, about 0.05 s), so such passes have their own
 # bound, after which the search stops: halving the distance between the largest of them below the smallest drawn base
 # and that base reaches 1 from a few thousand.
-_MAX_UNDRAWABLE_PASSES = 12
+_MAX_CHEAP_PASSES = 12
 # The composed size grows with the base length, but labels past the ends can make a stretch nearly flat; a slope
 # measured there is raised to this so one step cannot jump far.
 _MIN_SLOPE = 0.25
+# The search assumes that a figure's content shrinks at most this many times the mode's first slope per px of base
+# (Circular labels sit at up to twice the radius at the outward rows' limit). A search past a pass that left content
+# out ends only when even this slope reaches the box at or below that pass. Content that jumps (a legend that moves to
+# another side) can shrink faster; the search can then end before a base that keeps the content and fits.
+_STEEPEST_SLOPE_FACTOR = 2.0
 
 # The primary item a refusal names, by the id its diagnostic carries (``primaryItem``): the Linear records at their
 # smallest (``record_ends``: what stays of them as the sequence shrinks), the Linear records, the Circular map, or a
@@ -67,16 +73,33 @@ class BaseLengthFit(Generic[Built]):
 
 
 @dataclass(frozen=True)
+class MeasuredBase(Generic[Built]):
+    """What a mode's ``measure`` drew at one base length: how far its composed content is over the requested box
+    (negative when under) and what it assembled.
+
+    ``left_out`` marks content drawn without a part that does not fit at this base, which no smaller base fits
+    either (Circular labels not placed for lack of room, CAPACITY-STOP): such a pass is under the box only because of
+    what it left out, so its excess says nothing about the size of the figure with that part.
+    """
+
+    excess_px: float
+    built: Built
+    left_out: bool = False
+
+
+@dataclass(frozen=True)
 class _Pass(Generic[Built]):
-    """A drawn pass and the Python warnings it raised, which reach the caller only if the pass is kept."""
+    """A drawn pass, whether it left content out, and the Python warnings it raised, which reach the caller only if
+    the pass is kept."""
 
     fit: BaseLengthFit[Built]
+    left_out: bool
     caught: tuple[warnings.WarningMessage, ...]
 
 
 def _measured(
-    measure: Callable[[int], tuple[float, Built] | None], base: int
-) -> tuple[tuple[float, Built] | None, tuple[warnings.WarningMessage, ...]]:
+    measure: Callable[[int], MeasuredBase[Built] | None], base: int
+) -> tuple[MeasuredBase[Built] | None, tuple[warnings.WarningMessage, ...]]:
     with warnings.catch_warnings(record=True) as caught:
         result = measure(base)
     return result, tuple(caught)
@@ -98,12 +121,19 @@ def _slope(a: BaseLengthFit[Built], b: BaseLengthFit[Built]) -> float:
     return (b.excess_px - a.excess_px) / (b.base - a.base)
 
 
+def _costly_passes(drawn: dict[int, _Pass[Built]]) -> int:
+    """The drawn passes that kept their content, which count against ``_MAX_PASSES``."""
+
+    return sum(not drawn_pass.left_out for drawn_pass in drawn.values())
+
+
 def _next_base(
     drawn: dict[int, _Pass[Built]], order: list[int], undrawable: set[int], first_slope: float
 ) -> int | None:
     """The next base to measure, or None when no unmeasured base can come closer to the target."""
 
-    if len(drawn) >= _MAX_PASSES or len(undrawable) >= _MAX_UNDRAWABLE_PASSES:
+    costly = _costly_passes(drawn)
+    if costly >= _MAX_PASSES or len(undrawable) + len(drawn) - costly >= _MAX_CHEAP_PASSES:
         return None
     passes = [drawn_pass.fit for drawn_pass in drawn.values()]
     under = max((fit for fit in passes if fit.fits), key=lambda fit: fit.base, default=None)
@@ -119,6 +149,20 @@ def _next_base(
     if under is not None and over is not None:
         if over.base - under.base <= 1:
             return None
+        above = [base for base in sorted(drawn) if base > over.base and not drawn[base].left_out]
+        if drawn[under.base].left_out and not drawn[over.base].left_out and above:
+            # The pass under left content out, and so does every base below it, so its excess says nothing about the
+            # figure with that content: the line through the pass over and the next pass above that kept it does.
+            # The search ends once even the steepest line from the pass over reaches the box (0 px) only at or below
+            # the pass under. Otherwise it tries the line's step or where the line reaches the box, the first above
+            # the pass under, else the middle of the pass under and where the steepest line reaches the box.
+            slope = max(_MIN_SLOPE, _slope(over, drawn[above[0]].fit))
+            steepest = max(slope, _STEEPEST_SLOPE_FACTOR * first_slope)
+            reach, farthest = (over.base + math.floor(-over.excess_px / line) for line in (slope, steepest))
+            if farthest <= under.base:
+                return None
+            middle = (under.base + farthest + 1) // 2
+            return next((base for base in (_step(over, slope), reach) if base > under.base), middle)
         # The secant between the bracket's ends, kept strictly inside it: one rounded down onto the pass under still
         # has a base above it to try.
         return min(max(_step(under, _slope(under, over)), under.base + 1), over.base - 1)
@@ -136,18 +180,22 @@ def _next_base(
 
 
 def fit_base_length(
-    measure: Callable[[int], tuple[float, Built] | None], *, first_base: int, slope: float
+    measure: Callable[[int], MeasuredBase[Built] | None], *, first_base: int, slope: float
 ) -> BaseLengthFit[Built]:
     """The base length whose composed content is within a few px under the requested box.
 
     ``measure(base)`` returns how far the content drawn at ``base`` is over the box (``excess_px``, negative when
-    under) and what it assembled, or None when ``base`` is too small to draw. ``first_base`` must be drawable; the
-    mode supplies it and ``slope``, the px of content per px of base of the first step. Each step aims 2 px under:
-    later ones with the secant of the last two drawn passes. Once one pass is under and one over, the next base is
-    the secant between them, kept strictly inside, until no base lies between them; then the widest pass under is
-    kept. A base too small to draw above the widest pass under bounds the search as a pass over would (its midpoint
-    is tried); below the smallest drawn pass, a base at or below the largest one too small to draw is not tried: the
-    step halves the way to it instead. After 8 drawn passes, or 12 too small to draw, the widest pass under is kept.
+    under), what it assembled, and whether it left content out (``MeasuredBase``), or None when ``base`` is too small
+    to draw. ``first_base`` must be drawable; the mode supplies it and ``slope``, the px of content per px of base of
+    the first step. Each step aims 2 px under: later ones with the secant of the last two drawn passes. Once one pass
+    is under and one over, the next base is the secant between them, kept strictly inside, until no base lies
+    between them; then the widest pass under is kept. When the widest pass under left content out (``left_out``) and
+    the pass over and another pass above it kept it, the line through those two sets the step instead, and the
+    search ends once a line from the pass over twice as steep as ``slope`` (or the measured one, if steeper), the
+    steepest the content is assumed to shrink, reaches the box only at or below the pass under. A base too small to draw above the widest pass under bounds the search
+    as a pass over would (its midpoint is tried); below the smallest drawn pass, a base at or below the largest one
+    too small to draw is not tried: the step halves the way to it instead. After 8 drawn passes that kept their
+    content, or 12 that were too small to draw or left content out, the widest pass under is kept.
 
     With no pass under, the target is refused (``fits`` False) with the smallest drawn pass. Before refusing, the
     middle of that pass and the next drawn pass above it is measured once, if not yet measured, since a measure
@@ -167,8 +215,8 @@ def fit_base_length(
                 raise ValueError(f"the first base length {base} cannot be drawn")
             undrawable.add(base)
         else:
-            excess, built = result
-            current = _Pass(BaseLengthFit(base, excess, built, fits=excess <= 0.0), caught)
+            excess = result.excess_px
+            current = _Pass(BaseLengthFit(base, excess, result.built, fits=excess <= 0.0), result.left_out, caught)
             if current.fit.fits and excess >= -_ACCEPT_UNDER_PX:
                 return _kept(current)
             drawn[base] = current
@@ -180,7 +228,7 @@ def fit_base_length(
             middle = None if above is None else (lowest + above) // 2
             if (
                 not checked_middle
-                and len(drawn) < _MAX_PASSES
+                and _costly_passes(drawn) < _MAX_PASSES
                 and middle is not None
                 and lowest < middle
                 and middle not in undrawable
@@ -421,6 +469,7 @@ __all__ = [
     "BaseLengthFit",
     "FigurePrimaryItem",
     "LargerFigure",
+    "MeasuredBase",
     "check_figure_height",
     "figure_size_excess",
     "figure_size_refusal",

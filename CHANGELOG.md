@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: a Circular figure with a requested size whose map is too small for
+  its labels usually stops sooner. A radius whose labels were not placed for
+  lack of room no longer steers the fit; it steps by the radii with labels and
+  ends once even a steep line through them reaches the box only where the
+  labels are not placed. The MjeNMV map with labels on both sides at 180 mm
+  places labels at two crowded radii instead of four before the same stop
+  (108 s instead of 226 s in CPython). Such a fit can now end differently:
+  the stop can come from another radius without labels, so the "about N times
+  the room" and the larger figure it suggests can differ; some fits that
+  stopped now find a radius with labels and draw the figure; a figure refused
+  as narrower than its parts can name a smaller map; and the fit can keep
+  another radius within 3 px of the box. A few fits place labels at one more
+  radius than before.
 - Fixed: the Web app's Session Load checks a saved request's record keys,
   annotation colors, blank region fills, and dinucleotide as the command line
   does: U+001C to U+001F and U+0085 count as spaces, and the byte order mark

@@ -229,12 +229,18 @@ class CircularLabelLayout:
 CircularLabelFitVerifier: TypeAlias = Callable[[Mapping[str, LabelFitValue]], LabelFitVerification]
 
 
+def labels_not_placed(layouts: Sequence[CircularLabelLayout]) -> bool:
+    """Whether any record's labels need much more room than the map has, so they were not placed (CAPACITY-STOP)."""
+
+    return any(layout.capacity for layout in layouts)
+
+
 def circular_label_outcome(layouts: Sequence[CircularLabelLayout]) -> LabelFitOutcome:
     """The decision point over a figure's records; refused radial labels and labels over capacity stop."""
 
     return label_fit_outcome(
         [layout.fit for layout in layouts],
-        refused=any(layout.refused or layout.capacity for layout in layouts),
+        refused=labels_not_placed(layouts) or any(layout.refused for layout in layouts),
     )
 
 
@@ -803,7 +809,7 @@ def check_circular_label_fit(
     if outcome == "fits":
         return None
     failing = tuple(layout for layout in layouts if not layout.fits)
-    if any(layout.capacity for layout in failing):
+    if labels_not_placed(failing):
         records = _fit_records(failing)
         ratio = max(shown_capacity_ratio(record.capacity) for record in records if record.capacity is not None)
         raise_or_warn(
@@ -837,4 +843,5 @@ __all__ = [
     "CircularLabelPlacement",
     "check_circular_label_fit",
     "circular_label_outcome",
+    "labels_not_placed",
 ]
