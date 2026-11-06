@@ -1,6 +1,8 @@
 # Multi-drawing project: design (synthesis)
 
 > 2026-10-29: the drawings document is **Session 51**, not 47 as written below. #1435 took 49 into 0.14.3 (Show Definition, mode-scoped; D-15-175). The Web reads 46-50 without Python and 27-44 through Python. Where the text below says 47 for the drawings document or the 46 → 47 step, read 50 and 46-50 → 50; the 47-49 steps keep the mode-scoped shape of 46.
+>
+> 2026-11-06: PD-OI-086 below is the per-mode record of 2026-10-07. Contract Revision 37 replaced it in full with PD-OI-090, the drawings record that this design calls PD-OI-087 or "the next free id"; its acceptance contract OIC-028 is OIC-030. Each PD-OI-086 citation below records the plan or the state of its day, so it stays as written.
 
 Revision 5, 2026-10-07 (§8 rewritten to the consolidated PR plan of Owner R9-1; phone layout UI-10 in §5 and W3;
 Z2 text measurement cited for W3/R3; Reset dialog scopes in U-3; §9 statuses). Orchestrator: session gbdraw-ff

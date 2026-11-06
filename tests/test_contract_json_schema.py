@@ -68,8 +68,8 @@ def _with_root(document: dict[str, Any], name: str) -> dict[str, Any]:
 
 def _shape_schema(shape: dict[str, Any]) -> dict[str, Any]:
     generator = _generator()
-    defs = {name: generator.json_schema(item) for name, item in SHAPE_VECTORS["types"].items()}
-    defs["value"] = generator.json_schema(shape)
+    published = generator.ecma_types({**SHAPE_VECTORS["types"], "value": shape})
+    defs = {name: generator.json_schema(item) for name, item in published.items()}
     return {"$schema": generator.JSON_SCHEMA_DIALECT, "$ref": "#/$defs/value", "$defs": defs}
 
 

@@ -1156,7 +1156,7 @@ export const createFeatureLabelActions = ({
   // rerender, Auto Reflow on or off: a specific-color rule edit or a History
   // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
   // request while one is pending joins it. D-36: an accepted request leaves a
-  // redraw owed by the shown drawing (each mode has its own, PD-OI-086) until
+  // redraw owed by the shown drawing (each drawing has its own, PD-OI-090) until
   // the composition root shows a rerender of that drawing drawn from its
   // current paint (`redrawShown`, OV-346); while one is owed, the shown
   // figure can lack rows Python draws, so a History step does not record it

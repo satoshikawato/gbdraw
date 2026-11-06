@@ -96,6 +96,26 @@ and title at the bottom and states them in what it saves. The format does not ch
 request this way before; only the Web's reading changes. Positive fixture:
 `tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
 
+## Unreleased: the Web reads request text patterns as Python does
+
+No Session or request version changes, and no writer changes. Six text values of a canonical request have a
+pattern in `describe_canonical_request()` (`gbdraw/session_request_codec.py`): a record's `recordKey` (a character
+that is not a space), the two forms of an annotation color (`#rgb` or `#rrggbb`, and a color name, each with outer
+spaces), a region annotation `fill` of spaces only, and the Circular and Linear `dinucleotide`. Python reads a space
+as `re` does: U+0009–U+000D, U+001C–U+0020, U+0085, U+00A0 and the other Unicode spaces, but not U+FEFF. The Web
+Load (`readStoredRenderRequest`, through `shapeViolations` in `gbdraw/web/js/utils/contract-shape.js`) read the same
+pattern text as ECMA-262 does, which counts U+FEFF as a space and U+001C–U+001F and U+0085 as none. Before this
+change, a stored request whose `recordKey` was U+FEFF alone was dropped at Load, and one whose `recordKey` was
+U+001C alone loaded and was refused at Generate; a `dinucleotide` with U+001C around it was replaced by its
+default, and one with U+FEFF around it was kept.
+
+`tools/generate_web_contracts.py` now writes each pattern of `request-shape.generated.js` in the ECMA-262 spelling
+that `docs/REFERENCE/schemas/gbdraw-render-request.schema.json` already used (`ecma_types`), so the Web Load keeps
+and repairs exactly what Python accepts and refuses. No gbdraw writer creates such a value; a file holds one only
+when it was edited by hand. Vectors: `requestTypes` in `tests/fixtures/contract_shape_vectors.json` (U+001C and
+U+FEFF as a `recordKey` and around an annotation color), run by `tests/test_contract_shape_vectors.py` and
+`tests/web/contract-shape.test.mjs`.
+
 ## 0.14.5: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,

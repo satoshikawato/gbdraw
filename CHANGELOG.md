@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: the Web app's Session Load checks a saved request's record keys,
+  annotation colors, blank region fills, and dinucleotide as the command line
+  does: U+001C to U+001F and U+0085 count as spaces, and the byte order mark
+  U+FEFF does not. A record key of U+FEFF alone no longer drops the saved
+  diagram settings at Load, and one of U+001C alone now drops them there, with
+  a row in the repair dialog, instead of loading and failing at Generate.
 - Changed: a Session saved with a `.gz` name (CLI, Python, and the Gallery
   Sessions) is written as "rsyncable" gzip. The compressor restarts at points
   chosen from the content, so a Session saved again after a small change keeps

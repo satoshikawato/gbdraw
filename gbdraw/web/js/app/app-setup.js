@@ -3621,8 +3621,8 @@ export const createAppSetup = () => {
       // displayed is read before its editor intent is projected; it then shows
       // its own inventory, so a Generate or rerender made while another Result
       // was displayed does not replace it.
-      // A Result shown again by a mode switch is a selection in its own
-      // mode's drawing, whose Legend edits it was last shown with (PD-OI-086).
+      // A Result shown again by a drawing switch is a selection in its own
+      // drawing, whose Legend edits it was last shown with (PD-OI-090).
       const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
       if (selecting) {
         const resultLegendOrder = legendActions.captureResultInventory(context.root, {

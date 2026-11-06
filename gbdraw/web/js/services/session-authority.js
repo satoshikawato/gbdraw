@@ -59,7 +59,7 @@ import {
 
 // `TYPED_DRAFT_SESSION_VERSION` (44) introduced the current active-config and
 // record-display draft shapes; `MODE_SCOPED_SESSION_VERSION` (46) keeps the
-// draft of each diagram mode in `modes` (PD-OI-086) and keys per-feature
+// draft of each diagram mode in `modes` (PD-OI-090) and keys per-feature
 // edits by source identity (design Q4).
 
 // One class per top-level key of a Session (the keys are `SessionInput`'s),

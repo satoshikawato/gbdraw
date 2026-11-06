@@ -382,8 +382,11 @@ request format gives them no fixed list of values to check against.
 
 Load reads the saved diagram's settings (the stored render request of request
 schemas 5–9 and the other diagram mode's saved result) through one reader and
-checks them against the request description. What it cannot use is repaired
-instead of refused, and each repair is a row in the dialog:
+checks them against the request description as the command line and the
+Python API do. A text pattern there, such as a record key or an annotation
+color, counts the characters Python counts as spaces: U+001C to U+001F and
+U+0085 are spaces, and the byte order mark U+FEFF is not. What it cannot use
+is repaired instead of refused, and each repair is a row in the dialog:
 
 - an unknown setting is dropped;
 - an invalid value is reset to its default or left unset;

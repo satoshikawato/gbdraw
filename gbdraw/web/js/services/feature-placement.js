@@ -6,8 +6,8 @@ import { recordKeyExpansion } from './record-draw-selection.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
-// per-feature edits (design Q4). Each diagram mode's drawing holds its own
-// drafts (PD-OI-086), so a row is of its drawing's mode and names only its
+// per-feature edits (design Q4). Each drawing holds its own drafts
+// (PD-OI-090), so a row is of its drawing's mode and names only its
 // feature. Each draft map is {JSON.stringify([recordKey, biologicalFeatureId]): row};
 // this module owns the key, the row checks, and the projection onto a render
 // request (R2). Sessions 41-44 saved rows that also named their mode (`scope`);

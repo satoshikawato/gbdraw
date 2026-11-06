@@ -1430,7 +1430,7 @@ const applyDrawingEditorData = (drawing, normalized) => {
   });
 };
 
-// ---- Session 46: one drawing's slice (`modes.<m>`, PD-OI-086) ----
+// ---- Session 46: one drawing's slice (`modes.<m>`, PD-OI-090) ----
 
 // A drawing's complete Session 46 slice: every registry row, as Save writes
 // it. `selectedFeatureRecordIdx` is the Features-list record of the drawing's
@@ -2840,7 +2840,7 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
-  // Session 46 and later keep each mode's draft in its slice (PD-OI-086), a
+  // Session 46 and later keep each mode's draft in its slice (PD-OI-090), a
   // Session 51 in each drawing's part; a Session 27-44 keeps one flat draft.
   const modeScopedSession = versionKeepsModeSlices(sessionData.version);
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
@@ -7379,7 +7379,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? readLegendPositionOfMode(drawnUi.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition',
         formIsResultMode ? 'legend-position-defaulted' : 'legend-side-defaulted') : null;
     if (generatedLegend) repairs.push(...generatedLegend.repairs);
-    // PD-OI-086: each mode's drawing gets its own draft. A Session 46 keeps it
+    // PD-OI-090: each mode's drawing gets its own draft. A Session 46 keeps it
     // in its slice; the committed mode's slice lies over its request's
     // projection (`restoredConfig`, plan 4.1). A Session 27-44 has one flat
     // draft, split below once its edits are migrated.
@@ -7814,7 +7814,7 @@ const importSessionDocument = async (e, options = {}) => {
         repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'features', effect: 'dropped' }));
       }
     }
-    // Each drawing's draft (PD-OI-086, plan 4.1) is its part of the 50
+    // Each drawing's draft (PD-OI-090, plan 4.1) is its part of the 50
     // document (a Session 27-44's part is Python's conversion of it).
     const appUi = isPlainObject(data.ui) ? data.ui : {};
     const sessionCliOptions = data.cliOptions;
@@ -8511,7 +8511,7 @@ export const exportSession = (titleOverride = null, options) => {
     recordSessionLifecycleEvent('session-save-pending-published');
     // Only mutable draft configuration/navigation is copied. Adopted biological
     // payloads, resources, catalogs, caches and Results retain their existing owner.
-    // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
+    // Session 46 keeps each drawing as its mode's slice (PD-OI-090); the
     // Features-list record is the shown Result's. `drawing` is the shown one,
     // which the caller resolves.
     const drawing = options.shownDrawing();

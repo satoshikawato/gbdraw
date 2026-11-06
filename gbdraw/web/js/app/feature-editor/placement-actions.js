@@ -190,7 +190,7 @@ export const createFeaturePlacementActions = ({
   // Q3 (Owner, 2026-10-04) and R10: the one transition for an edit of a draft
   // feature-slot input. It applies the edit and, when a lane placement of the
   // drawing loses its lane, restores the inputs and asks. A drawing's
-  // placements are of its own mode (PD-OI-086). Reset applies the
+  // placements are of its own mode (PD-OI-090). Reset applies the
   // edit and removes those rows as one History step; Cancel keeps the control's
   // value and records none. The control's own History adapter records an edit
   // that loses nothing (R11). Restores (Undo/Redo, Session load, Import, Reset
