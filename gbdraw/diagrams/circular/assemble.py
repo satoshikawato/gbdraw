@@ -182,6 +182,7 @@ from .builders import (
     add_record_definition_group_on_canvas,
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
+    tick_group_content,
 )
 from ...render.groups.circular.definition import (
     CircularDefinitionProfile,
@@ -196,7 +197,12 @@ from .parts import (
     CircularRecordData,
     CircularTrackInputs,
 )
-from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout
+from .radial_layout import (
+    AnnotationLabelRoom,
+    cannot_fit_diagnostic,
+    resolve_circular_radial_layout,
+    track_layout_reason,
+)
 from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
@@ -1867,6 +1873,83 @@ def _slot_tick_options(resolved_slot: CircularResolvedSlot, use_slot_tick_option
 
 
 
+class _TickGroupOptions(_TickOptions):
+    radius_override: float
+    slot_id: str
+    group_id: str | None
+
+
+def _tick_group_options(
+    resolved_slot: CircularResolvedSlot, *, use_slot_group_id: bool, use_slot_tick_options: bool
+) -> _TickGroupOptions | None:
+    """What the tick group of a tick slot is drawn with; ``None`` when it draws neither ticks nor labels."""
+
+    tick_options = _slot_tick_options(resolved_slot, use_slot_tick_options)
+    if tick_options is None:
+        return None
+    anchor_radius_px = resolved_slot.anchor_radius_px
+    assert anchor_radius_px is not None
+    return {
+        **tick_options,
+        "radius_override": float(anchor_radius_px),
+        "slot_id": str(resolved_slot.id),
+        "group_id": (
+            track_slot_svg_id(resolved_slot.id, renderer="ticks", slot_index=int(resolved_slot.slot_index))
+            if use_slot_group_id
+            else None
+        ),
+    }
+
+
+def _with_slot_row(error: ValidationError, slot: CircularResolvedSlot) -> ValidationError:
+    """A tick slot's scale labels that do not fit (``CANNOT_FIT``) as the layout's refusal of that slot's row."""
+
+    if track_layout_reason(error) != "CANNOT_FIT":
+        return error
+    return ValidationError(str(error), diagnostic=cannot_fit_diagnostic(slot.slot_index, renderer=str(slot.renderer)))
+
+
+def _refuse_unfit_scale_labels(
+    radial_layout: CircularRadialLayout,
+    record: CircularRecordData,
+    canvas_config: CircularCanvasConfigurator,
+    user_slot_mode: bool,
+    presentation: CircularPresentationInputs,
+) -> None:
+    """Refuse the figure, before its feature labels are placed, when a tick slot of the layout it draws has scale
+    labels longer than their circle (OV-2559): the slot's row does not fit, and a radius too small for its scale
+    labels fails at once, so a requested figure size tries it cheaply. It builds the tick groups the figure draws (a
+    render stage: within a Worker transaction, drawing them reuses the build); drawing a slot refuses the same way.
+    """
+
+    for slot in radial_layout.slots:
+        tick_group = (
+            _tick_group_options(slot, use_slot_group_id=user_slot_mode, use_slot_tick_options=user_slot_mode)
+            if slot.renderer == "ticks"
+            else None
+        )
+        if tick_group is None:
+            continue
+        try:
+            tick_group_content(
+                record.gb_record, canvas_config, **tick_group, record_transform=presentation.record_transform
+            )
+        except ValidationError as error:
+            raise _with_slot_row(error, slot) from None
+
+
+def _feature_band_overrides(
+    layout: CircularRadialLayout, radius_px: float, track_ratio: float
+) -> tuple[float, float] | None:
+    """The feature row's anchor radius and its width as a factor of the configured feature width (``radius_px`` times
+    ``track_ratio``); None without a feature row."""
+
+    if layout.features is None:
+        return None
+    width_factor = float(layout.features.width_px) / max(FEATURE_BAND_EPSILON, radius_px * track_ratio)
+    return float(layout.features.anchor_radius_px), width_factor
+
+
 def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
@@ -2103,27 +2186,21 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        tick_options = _slot_tick_options(resolved_slot, use_slot_tick_options)
-        if tick_options is not None:
-            tick_group_kwargs: dict[str, Any] = {
-                "group_key": GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id)),
-                "radius_override": float(anchor_radius_px),
-                **tick_options,
-            }
-            tick_group_kwargs["slot_id"] = str(resolved_slot.id)
-            if use_slot_group_id:
-                tick_group_kwargs["group_id"] = track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
+        tick_group = _tick_group_options(
+            resolved_slot, use_slot_group_id=use_slot_group_id, use_slot_tick_options=use_slot_tick_options
+        )
+        if tick_group is not None:
+            try:
+                canvas = add_tick_group_on_canvas(
+                    canvas,
+                    gb_record,
+                    canvas_config,
+                    group_key=GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id)),
+                    **tick_group,
+                    record_transform=record_transform,
                 )
-            canvas = add_tick_group_on_canvas(
-                canvas,
-                gb_record,
-                canvas_config,
-                **tick_group_kwargs,
-                record_transform=record_transform,
-            )
+            except ValidationError as error:
+                raise _with_slot_row(error, resolved_slot) from None
         return canvas
 
     if renderer == "depth":
@@ -2734,15 +2811,9 @@ def circular_labels(
             resolved_slots = replanned_layout.slots
             outer_content_radius_px = float(replanned_layout.outer_content_radius_px)
             inner_reserve_px = radial_label_inner_reserve_px(replanned_layout)
-            if replanned_layout.features is not None:
-                resolved_feature_anchor_radius_px = float(replanned_layout.features.anchor_radius_px)
-                feature_track_ratio_factor_override = (
-                    float(replanned_layout.features.width_px)
-                    / max(
-                        FEATURE_BAND_EPSILON,
-                        float(geometry.radius) * float(geometry.track_ratio),
-                    )
-                )
+            band = _feature_band_overrides(replanned_layout, float(geometry.radius), float(geometry.track_ratio))
+            if band is not None:
+                resolved_feature_anchor_radius_px, feature_track_ratio_factor_override = band
             labels = _place_circular_labels(state(), profile, candidate_caches=candidate_caches)
         radial_refused = radial_refused or any(
             any(label.get("layout_collision_counts", ()))
@@ -3061,13 +3132,12 @@ def add_record_on_circular_canvas(
 
     centre_fit = place_around_definition(cfg)
     radial_layout = centre_fit.layout
+    if not (show_external_labels and profile.label_placement == "radial"):  # Radial labels can move the tracks.
+        _refuse_unfit_scale_labels(radial_layout, record, canvas_config, user_slot_mode, presentation)
     definition_reserved_radius_px = centre_fit.reserved_radius_px
-    if radial_layout.features is not None:
-        resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
-        feature_track_ratio_factor_override = (
-            float(radial_layout.features.width_px)
-            / max(FEATURE_BAND_EPSILON, float(canvas_config.radius) * float(canvas_config.track_ratio))
-        )
+    band = _feature_band_overrides(radial_layout, float(canvas_config.radius), float(canvas_config.track_ratio))
+    if band is not None:
+        resolved_feature_anchor_radius_px, feature_track_ratio_factor_override = band
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
     precalculated_labels: list[CircularLabel] | None = None

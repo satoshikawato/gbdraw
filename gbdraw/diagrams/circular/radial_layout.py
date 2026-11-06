@@ -203,8 +203,8 @@ class _RadialSlotIntent:
     typed_lane_width_narrows: bool = False
 
 
-def _cannot_fit_diagnostic(
-    intent: "_RadialSlotIntent | None", window: PlacementWindow | None = None
+def cannot_fit_diagnostic(
+    slot_index: int | None, window: PlacementWindow | None = None, *, renderer: str | None = None
 ) -> dict[str, object]:
     """Track row and usable band of a fit failure; the slot ID stays private.
 
@@ -221,8 +221,12 @@ def _cannot_fit_diagnostic(
         kept_tracks = window.kept_switched_tracks
         if kept_tracks:
             diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in kept_tracks]
-    if intent is not None:
-        diagnostic["slotIndex"] = int(intent.slot_index)
+    if slot_index is not None:
+        diagnostic["slotIndex"] = int(slot_index)
+    # The failed row, when it has an off option (OV-1276: the scale ticks).
+    switched = _SWITCHED_TRACKS.get(renderer) if renderer is not None else None
+    if switched is not None:
+        diagnostic["slotTrack"] = switched.diagnostic_id
     return diagnostic
 
 
@@ -1087,7 +1091,7 @@ def _place_outside_auto(
             return resolved
     raise ValidationError(
         f"Circular track slot '{intent.slot_id}' cannot be placed outside without overlap.",
-        diagnostic=_cannot_fit_diagnostic(intent, placement_window),
+        diagnostic=cannot_fit_diagnostic(intent.slot_index, placement_window),
     )
 
 
@@ -1526,12 +1530,13 @@ class _InsideFitError(ValidationError):
         self.subject = subject
         self.placement_window = placement_window
         self.hint = hint
-        # The failed row, when it has an off option (OV-1276: the scale ticks).
         self.slot_track = _SWITCHED_TRACKS.get(intent.renderer) if intent is not None else None
         kept = self._kept_inside()
-        diagnostic = _cannot_fit_diagnostic(intent, placement_window)
-        if self.slot_track is not None:
-            diagnostic["slotTrack"] = self.slot_track.diagnostic_id
+        diagnostic = cannot_fit_diagnostic(
+            None if intent is None else intent.slot_index,
+            placement_window,
+            renderer=None if intent is None else intent.renderer,
+        )
         super().__init__(
             f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
             f"disable conflicting labels, {self._switch_remedy()}or use side=outside.{hint}",
@@ -2029,7 +2034,7 @@ def _validate_same_side_order(
                 raise ValidationError(
                     "Circular track slot order cannot be honored with the supplied pinned geometry: "
                     f"'{current.id}' would overlap or move outside '{previous.id}'.",
-                    diagnostic=_cannot_fit_diagnostic(current_intent),
+                    diagnostic=cannot_fit_diagnostic(current_intent.slot_index),
                 )
 
 
@@ -2546,7 +2551,7 @@ def _resolve_circular_radial_layout(
         if _slot_reserves(intent) and pinned_band is not None:
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
-                diagnostic = _cannot_fit_diagnostic(intent)
+                diagnostic = cannot_fit_diagnostic(intent.slot_index)
                 if conflict[0] == _CENTER_RESERVATION:
                     diagnostic = _center_reserved_diagnostic(diagnostic)
                 raise ValidationError(
@@ -2917,6 +2922,7 @@ def _resolve_circular_radial_layout(
 
 __all__ = [
     "build_circular_feature_layout",
+    "cannot_fit_diagnostic",
     "resolve_circular_radial_layout",
     "track_layout_reason",
 ]

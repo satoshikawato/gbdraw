@@ -216,6 +216,7 @@ from gbdraw.layout.figure_size import (
     MeasuredBase,
     check_figure_height,
     figure_size_excess,
+    figure_size_parts,
     figure_size_refusal,
     figure_too_narrow,
     fit_base_length,
@@ -3668,9 +3669,11 @@ def _fitted_circular_pass(
             if base < first_base and track_layout_reason(error) is not None:
                 return None
             raise
+        plan = applied_composition_plan(built.drawing)
         return MeasuredBase(
-            figure_size_excess(applied_composition_plan(built.drawing), size),
+            figure_size_excess(plan, size),
             built,
+            figure_size_parts(plan),
             left_out=labels_not_placed(_circular_label_layouts(built.drawing)),
         )
 
@@ -4107,7 +4110,8 @@ def _checked_linear_build(
 
         def measure(base: int) -> MeasuredBase[Drawing | LinearDiagramBuildResult]:
             built = build({LINEAR_SEQUENCE_WIDTH_PATH: base})
-            return MeasuredBase(applied_composition_plan(_linear_drawing(built)).content_bounds.width - target, built)
+            plan = applied_composition_plan(_linear_drawing(built))
+            return MeasuredBase(plan.content_bounds.width - target, built, figure_size_parts(plan))
 
         # The composed width grows about 1 px per px of sequence width.
         fit = fit_base_length(measure, first_base=max(1, math.floor(target)), slope=1.0)

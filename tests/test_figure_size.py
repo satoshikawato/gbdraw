@@ -143,7 +143,7 @@ def _fit(size_of_base, target: float, *, first_base: int | None = None, slope: f
         size = size_of_base(base)
         if size is None:
             return None
-        return MeasuredBase(size - target, base, left_out=left_out is not None and left_out(base))
+        return MeasuredBase(size - target, base, (size,), left_out=left_out is not None and left_out(base))
 
     first = max(1, math.floor(target)) if first_base is None else first_base
     return fit_base_length(measure, first_base=first, slope=slope), bases
@@ -192,19 +192,23 @@ def test_a_bracket_is_searched_until_a_pass_lands_close_under() -> None:
 
 
 def test_a_middle_base_that_fits_is_found_before_refusing() -> None:
-    """N1: base 1 is over, but a base between it and the next pass fits (a measure that is not monotonic)."""
+    """N1: base 1 is over, but a base between it and the next pass fits (a measure that is not monotonic). Outside
+    the dip the size still shrinks with the base: two passes of the same size would end the walk before base 1."""
 
-    fit, bases = _fit(lambda base: 679.0 if 30 <= base <= 40 else 710.0, 680.0, first_base=100)
+    fit, bases = _fit(lambda base: 679.0 if 30 <= base <= 40 else 700.0 + 0.1 * base, 680.0, first_base=100)
     assert fit.fits and 30 <= fit.base <= 40
     assert 1 in bases
 
 
 def test_bases_too_small_to_draw_are_not_searched_below_the_floor() -> None:
     """Bases under 40 cannot be drawn; the refusal keeps the smallest drawn pass and no step goes below the floor
-    twice."""
+    twice. The size still shrinks a little below radius 100 (a multi-record grid: 0.1 px per px), so the walk goes
+    down to the floor."""
 
-    fit, bases = _fit(lambda base: None if base < 40 else max(2.0 * base, 200.0) + 580.0, 680.0, first_base=390,
-                      slope=2.0)
+    fit, bases = _fit(
+        lambda base: None if base < 40 else max(2.0 * base, 200.0 + 0.1 * base) + 580.0, 680.0, first_base=390,
+        slope=2.0,
+    )
     assert not fit.fits and fit.base == 40
     undrawable = [base for base in bases if base < 40]
     assert undrawable and len(undrawable) <= 12
@@ -234,6 +238,62 @@ def test_bases_too_small_to_draw_end_the_search_after_their_bound() -> None:
     assert 1 < len(bases) <= 13 and len(set(bases)) == len(bases)
 
 
+# The MjeNMV map against a 120 mm box, measured per radius (CPython, 2026-11-06): the centre definition keeps the
+# tracks out, so from radius 220 down to 49, the smallest radius whose tracks can be drawn, the content is 191 px over
+# the box (the same to the last digits but one); above 220 it grows 2 px per px of radius.
+def _mjenmv_without_labels(base: int) -> float | None:
+    return None if base < 49 else max(2.0 * base - 249.0, 191.0)
+
+
+def test_a_refusal_ends_once_the_two_smallest_passes_have_the_same_size() -> None:
+    """When every pass is over the box and the two smallest have the same size, the content no longer shrinks with
+    the base: no smaller base fits, so the walk ends there and the refusal states the figure at its smallest, the same
+    size as at the smallest drawable radius. Before, the walk halved its way down to radius 49 in 11 passes."""
+
+    fit, bases = _fit(_mjenmv_without_labels, 0.0, first_base=390, slope=2.0)
+    assert not fit.fits and fit.excess_px == 191.0 and fit.base > 49
+    assert bases == [390, 123, 1, 62]
+
+
+def test_sizes_equal_up_to_float_rounding_are_flat() -> None:
+    """Parts that do not shrink are added in another order at another radius, so the same size can differ in its
+    last digits (MjeNMV with the legend on the left: 191.0002571393764 and 191.00025713937652)."""
+
+    fit, bases = _fit(
+        lambda base: None if base < 49 else max(2.0 * base - 249.0, 191.0 + (1e-13 if base % 2 else 0.0)),
+        0.0,
+        first_base=390,
+        slope=2.0,
+    )
+    assert not fit.fits and len(bases) == 4
+
+
+def test_a_refusal_goes_on_while_a_part_shrinks_under_the_same_excess() -> None:
+    """A legend beside the map and taller than it keeps the excess over a requested height the same while the map
+    still shrinks. A refusal names the map at its smallest, so the walk goes on while the parts differ and keeps the
+    smallest drawable radius."""
+
+    def measure(base: int) -> MeasuredBase[int] | None:
+        if base < 49:
+            return None
+        map_px, legend_px = 2.0 * base + 40.0, 400.0
+        height = max(map_px, legend_px)
+        return MeasuredBase(height - 189.0, base, (map_px, height - map_px))
+
+    fit = fit_base_length(measure, first_base=390, slope=2.0)
+    assert not fit.fits and fit.base == 49
+
+
+def test_a_flat_stretch_that_shrinks_again_below_is_walked_while_it_differs() -> None:
+    """Only the same size at the two smallest passes ends the walk: a stretch nearly flat (labels past the ends of a
+    Linear record) that shrinks again further down is still walked, and a base there that fits is found."""
+
+    fit, _bases = _fit(
+        lambda base: 700.0 + 0.01 * base if base >= 60 else 700.6 - (60 - base), 680.0, first_base=500
+    )
+    assert fit.fits
+
+
 def test_a_size_that_jumps_returns_the_widest_pass_under() -> None:
     """Labels not placed (CAPACITY-STOP) make a pass much narrower than its neighbour with labels: the measure jumps
     over the target, and the fit keeps the widest pass under it."""
@@ -261,13 +321,14 @@ def _mjenmv_walk(shift_px: float):
 
     def measure(base: int) -> MeasuredBase[int]:
         if base < 112:
-            return MeasuredBase(-91.3 + shift_px, base, left_out=True)
+            return MeasuredBase(-91.3 + shift_px, base, (-91.3,), left_out=True)
         with_labels.append(base)
         points = _MJENMV_EXCESS_WITH_LABELS
         (b0, e0), (b1, e1) = next(
             ((low, high) for low, high in zip(points, points[1:]) if base <= high[0]), points[-2:]
         )
-        return MeasuredBase(e0 + (e1 - e0) * (base - b0) / (b1 - b0) + shift_px, base)
+        excess = e0 + (e1 - e0) * (base - b0) / (b1 - b0)
+        return MeasuredBase(excess + shift_px, base, (excess,))
 
     return fit_base_length(measure, first_base=390, slope=2.0), with_labels
 
@@ -348,7 +409,7 @@ def test_only_the_kept_pass_warns_once() -> None:
     def measure(base: int) -> MeasuredBase[int]:
         warnings.warn(f"pass {base}", UserWarning)
         warnings.warn(f"pass {base} again", UserWarning)
-        return MeasuredBase(base + 100.0 - 500.0, base)
+        return MeasuredBase(base + 100.0 - 500.0, base, (base + 100.0,))
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -360,7 +421,7 @@ def test_only_the_kept_pass_warns_once() -> None:
 def test_a_refused_fit_emits_no_warning() -> None:
     def measure(base: int) -> MeasuredBase[int]:
         warnings.warn(f"pass {base}", UserWarning)
-        return MeasuredBase(base + 600.0 - 500.0, base)
+        return MeasuredBase(base + 600.0 - 500.0, base, (base + 600.0,))
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -731,6 +792,53 @@ def test_a_circular_height_below_the_smallest_map_is_refused_with_its_parts() ->
     assert "map at its smallest" in message and "padding" in message
     assert caught.value.diagnostic["configPath"] == FIGURE_HEIGHT_PATH
     assert caught.value.diagnostic["code"] == "INPUT_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("options", "passes"),
+    [
+        ({"figure_width": "60mm"}, 5),
+        # The legend beside the map is taller than the map, so the excess over 50 mm stays the same while the map
+        # still shrinks: the walk goes on, and the refusal states the map at its smallest.
+        ({"figure_height": "50mm", "legend": "right", "config_overrides": {"objects.definition.circular.show": False}}, 8),
+    ],
+)
+def test_a_circular_refusal_ends_where_the_map_stops_shrinking(
+    monkeypatch: pytest.MonkeyPatch, options: dict, passes: int
+) -> None:
+    """Below about radius 100 the centre definition keeps the tracks of the mitochondrial map out, so the map has the
+    same size down to the smallest radius whose tracks can be drawn. The walk ends at the second pass of that size, in
+    5 passes instead of 11, and states the same sizes as the smallest drawable map. Without the definition the map
+    shrinks down to that radius, and the walk goes there as before."""
+
+    import gbdraw.api.diagram as diagram
+    from gbdraw.layout.figure_size import BaseLengthFit
+
+    fit_base_length = diagram.fit_base_length
+    measured: list[int] = []
+
+    def counted(measure, **kwargs):
+        def measured_base(base: int):
+            measured.append(base)
+            return measure(base)
+
+        return fit_base_length(measured_base, **kwargs)
+
+    def at_the_floor(measure, **kwargs):
+        base = fit_base_length(measure, **kwargs).base
+        while measure(base - 1) is not None:
+            base -= 1
+        floor = measure(base)
+        return BaseLengthFit(base, floor.excess_px, floor.built, fits=False)
+
+    refusals = []
+    for walk in (counted, at_the_floor):
+        monkeypatch.setattr(diagram, "fit_base_length", walk)
+        with pytest.raises(ValidationError) as caught:
+            _draw_mito_circular(**options)
+        refusals.append((str(caught.value), caught.value.diagnostic))
+    assert refusals[0] == refusals[1]
+    assert len(measured) == passes
 
 
 def test_tracks_that_do_not_fit_the_configured_radius_raise_as_before() -> None:

@@ -12,6 +12,32 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: a requested figure size that the figure cannot fit is refused
+  sooner when the figure stops shrinking. Once the two smallest sizes tried are
+  the same, the fit ends instead of trying smaller sizes down to the smallest
+  one that can be drawn. A Circular map whose centre definition keeps its
+  tracks out stops shrinking this way: the MjeNMV map at `--figure_width 120mm`
+  is refused after 4 passes instead of 11 (about 0.35 s instead of 0.85 s in CPython),
+  with the same sizes in the message. The fit assumes that a figure that has
+  stopped shrinking does not shrink again at a smaller size.
+- Fixed: a Circular map too small for its scale labels (a small
+  `canvas.circular.radius`, or a radius tried for a requested figure size, such
+  as the mitochondrial map with labels on both sides at `--figure_width 60mm`)
+  no longer stops with "A circle arc spans at most 360 degrees"; it is refused
+  as a track that does not fit, and a requested figure size counts that radius
+  as too small (OV-2559).
+- Added: `--dpi` also works with `--session` and on `gbdraw render`, where it sets
+  the PNG's DPI. The DPI is the caller's export choice, like `--font_file`: a
+  Session saved by the command line does not record `--dpi`, and a replay takes
+  the DPI from `--dpi` alone, not from the PNG DPI a web app Session stores.
+  Every PNG that the command line or Python writes now carries a pHYs chunk with
+  that DPI (96 when none is given), as the web app's PNG does.
+  `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
+  (#1663).
+- Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
+  size to px. Before, a unit picked for an empty side without typing an amount
+  (for example mm) stayed after Reset Settings, so the next amount typed was
+  written in that unit (#1662).
 - Performance: a per-base depth file takes much less memory on the command
   line, in the Python API and in the Web app. Each reference's depths are held
   as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a
