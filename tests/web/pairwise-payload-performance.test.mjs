@@ -38,6 +38,8 @@ const modulePaths = [
   'gbdraw/web/js/utils/field-reading.js',
   'gbdraw/web/js/utils/optional-positive-number.js',
   'gbdraw/web/js/utils/error-normalization.js',
+  // error-normalization.js reads Python's figure length units from the generated mode profiles.
+  'gbdraw/web/js/mode-profiles.generated.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/contracts/schema.generated.js',

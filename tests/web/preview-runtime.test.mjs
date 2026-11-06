@@ -52,6 +52,8 @@ await mkdir(join(tempDir, 'utils'), { recursive: true });
 await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'reactivity.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
 }));
+// error-normalization.js reads Python's figure length units from the generated mode profiles.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempDir, 'mode-profiles.generated.js'));
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 
