@@ -1,6 +1,5 @@
 // @ts-check
 import {
-  bytesToBase64,
   fileDescriptorOf,
   getSessionResourceSource,
   readFileBytes,
@@ -14,8 +13,6 @@ import {
   resourcePayloadKey,
   sessionResourceSource
 } from './session-resource-backing.js';
-import { MAX_EXPANDED_SESSION_BYTES, sessionSaveSizeLimit } from './session-file.js';
-import { testByteCap } from './runtime-test-hooks.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
@@ -103,37 +100,6 @@ const renamedDescriptor = (descriptor, name) => {
   const readFile = fileBackedReaderOf(descriptor);
   const fields = { ...descriptor, name };
   return readFile ? fileBackedDescriptor(/** @type {typeof fields & { type: string, size: number, lastModified: number }} */ (fields), readFile) : fields;
-};
-
-/**
- * The resources a Session document writes: each file-backed descriptor (a File
- * Generate described, `fileBackedDescriptor`) encoded as base64 text, read
- * once; the others as they are. The base64 text of a Session over its expanded
- * cap would not load again (and past the engine's string limit cannot be made),
- * so it is refused first with `SESSION_SIZE_LIMIT`, naming at least the
- * characters of its resources. The table given is not changed.
- * @param {Readonly<Record<string, RawSessionResourceDescriptor>>} resources
- * @returns {Promise<Record<string, RawSessionResourceDescriptor>>}
- */
-export const encodeSessionResources = async (resources) => {
-  const maxBytes = testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES;
-  const payloadCharacters = Object.values(resources).reduce((total, descriptor) => total + (
-    fileBackedReaderOf(descriptor) ? 4 * Math.ceil(Number(descriptor.size) / 3)
-      : typeof descriptor.data === 'string' ? descriptor.data.length : 0
-  ), 0);
-  if (payloadCharacters > maxBytes) throw sessionSaveSizeLimit({ resources }, payloadCharacters, maxBytes);
-  /** @type {Record<string, RawSessionResourceDescriptor>} */
-  const encoded = { ...resources };
-  for (const [id, descriptor] of Object.entries(resources)) {
-    const readFile = fileBackedReaderOf(descriptor);
-    if (!readFile) continue;
-    const bytes = await readFile();
-    if (bytes.byteLength !== descriptor.size) throw new Error(`Session resource ${id} byte size does not match its descriptor.`);
-    recordStructuralMetric('base64EncodeCount', 1, { resourceName: descriptor.name });
-    recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: descriptor.name });
-    encoded[id] = { ...descriptor, encoding: 'base64', data: bytesToBase64(bytes) };
-  }
-  return encoded;
 };
 
 // A reference is replaced by another string id, so the rewritten value has the shape of `value`.
@@ -258,6 +224,8 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * the store. A Circular drawing binds its input fields, a Linear drawing its
  * records and comparison plan, whose uploaded comparison files the Session
  * also binds; every drawing binds its own five card files (R16-4).
+ * A File's bytes stay file-backed (`fileBackedDescriptor`): the Session
+ * writer encodes them (`encodeSessionResources` in session-file.js).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
@@ -422,7 +390,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       if (descriptor) {
         resources[id] = safePreferred ? descriptor : renamedDescriptor(descriptor, String(name));
       } else {
-        // Bytes read here are encoded with the other files at the end (`encodeSessionResources`).
+        // Bytes read here are encoded with the other files when the Session is written (`encodeSessionResources`).
         const bytes = await bytesFor(candidate);
         resources[id] = fileBackedDescriptor({
           kind: String(metadata.kind || 'web-file'), name: String(name),
@@ -635,7 +603,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
     const webFiles = rewriteOriginalNameHints(set.committed?.webFiles, setAlias);
     written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing) } : webFiles });
   }
-  return { resources: await encodeSessionResources(resources), written };
+  return { resources, written };
 };
 
 /**

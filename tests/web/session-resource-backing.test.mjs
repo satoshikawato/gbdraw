@@ -35,12 +35,15 @@ const { createInputFileStore } = await import('../../gbdraw/web/js/services/hist
 const { buildSessionResources: buildBoundSessionResources } = await import(
   '../../gbdraw/web/js/services/session-resources.js'
 );
+const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
 // A fixture state registers its input files in a store and names them by ref, as the app does;
-// its drawings are those of the bound state, so both name the same refs.
-const buildSessionResources = (state, committed, drawings = bindingDrawings(state), ...rest) => {
-  if (state.inputFiles) return buildBoundSessionResources(state, committed, drawings, ...rest);
-  const bound = boundState(state);
-  return buildBoundSessionResources(bound, committed, bindingDrawings(bound), ...rest);
+// its drawings are those of the bound state, so both name the same refs. Save then encodes the
+// table in the Session file writer.
+const buildSessionResources = async (state, committed, drawings = bindingDrawings(state), ...rest) => {
+  const bound = state.inputFiles ? state : boundState(state);
+  const built = await buildBoundSessionResources(bound, committed,
+    state.inputFiles ? drawings : bindingDrawings(bound), ...rest);
+  return { ...built, resources: await encodeSessionResources(built.resources) };
 };
 
 const encodedDescriptor = (name, text, overrides = {}) => {

@@ -38,6 +38,12 @@ const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
+const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+/** Save's resource table: allocated, then encoded by the Session file writer. */
+const savedSession = async (...args) => {
+  const built = await buildSessionResources(...args);
+  return { ...built, resources: await encodeSessionResources(built.resources) };
+};
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -69,7 +75,7 @@ test('Save binds a File Generate described with no hash or decode and encodes it
   assert.equal(count('base64EncodeCount'), 0);
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, bindingDrawings(sourceState));
+    const saved = await savedSession(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual({
       reads,
       hashes: count('resourceIdentityHashCount'),
@@ -88,7 +94,7 @@ test('Save binds a File Generate described with no hash or decode and encodes it
   const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
   await serializeActiveRenderFiles(otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
-  const saved = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({
+  const saved = await savedSession({ inputFiles: state.inputFiles }, committed, bindingDrawings({
     files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }
   }));
   const otherId = saved.webFiles.bindings.d_color.resourceId;

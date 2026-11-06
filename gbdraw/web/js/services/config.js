@@ -162,8 +162,11 @@ import {
 } from './canonical-comparisons.js';
 import {
   compressSessionData,
+  encodeSessionResources,
   largeSessionDownloadMegabytes
 } from './session-file.js';
+// The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
+export { encodeSessionResources };
 import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources
@@ -6437,9 +6440,7 @@ const exportSessionDocument = async (
     const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
     parts.push({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs });
   }
-  const built = await buildSessionDrawingResources(
-    state, parts.map(({ saved, committed }) => ({ drawing: saved, committed }))
-  );
+  const built = await buildSessionDrawingResources(state, parts.map(({ saved, committed }) => ({ drawing: saved, committed })));
   for (const [index, { editorState }] of parts.entries()) {
     if (!editorState) continue;
     await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, {
@@ -6458,8 +6459,9 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
-  // The project's original-name hints, from every drawing's request metadata.
+  // The project's original-name hints, from every drawing's request metadata; the Session file holds the inputs' bytes.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
+  const writtenResources = await encodeSessionResources(built.resources, resourceOriginalNames);
   const createdAt = new Date().toISOString();
   const proteinIdentityManifest = toRaw(state.proteinIdentityManifest.value) === adoptedProteinIdentityManifest
     ? toRaw(state.proteinIdentityManifest.value)
@@ -6484,7 +6486,7 @@ const exportSessionDocument = async (
         ...(legacyArtifacts ? { legacyArtifacts } : {}),
         ui: { ...projectUi, ...ui },
         renderRequest: built.written[index].renderRequest,
-        resources: built.resources,
+        resources: writtenResources,
         webFiles: {
           ...built.written[index].webFiles,
           ...(Object.keys(resourceOriginalNames).length ? { resourceOriginalNames } : {})

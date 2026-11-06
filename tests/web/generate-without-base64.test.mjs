@@ -34,7 +34,8 @@ globalThis.__GBDRAW_TEST_HOOKS__ = hooks;
 const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
-const { buildSessionResources, encodeSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
+const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
+const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
@@ -48,6 +49,12 @@ const request = (resourceId) => ({
   diagramOptions: { trackSlots: [], annotations: { sets: [] } }, layout: {}, comparisons: [],
   output: { prefix: 'x', formats: ['svg'], overwrite: false }
 });
+
+/** Save's resource table: allocated, then encoded by the Session file writer. */
+const savedSession = async (sourceState, committed, drawings) => {
+  const built = await buildSessionResources(sourceState, committed, drawings);
+  return { ...built, resources: await encodeSessionResources(built.resources) };
+};
 
 /** Generate's description of a File in a Circular drawing. */
 const generateDescriptor = async (file) => {
@@ -82,7 +89,7 @@ test('Save encodes a File Generate described, once, under the committed ID', asy
   const committed = adoptRuntimeCanonicalSession({ renderRequest: request('src'), resources: { src: descriptor }, webFiles: {} });
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, bindingDrawings(sourceState));
+    const saved = await savedSession(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual(Object.keys(saved.resources), ['src'], `Save ${save}`);
     assert.equal(saved.resources.src.encoding, 'base64');
     assert.equal(Buffer.from(saved.resources.src.data, 'base64').toString('utf8'), text);
@@ -106,7 +113,7 @@ test('Two Files with equal metadata stay two resources in a Save', async () => {
     { recordKey: 'r1', source: { kind: 'genbank', resourceId: 'a' }, presentation: { label: 'x' } },
     { recordKey: 'r2', source: { kind: 'genbank', resourceId: 'b' }, presentation: { label: 'y' } }
   ] }, resources: { a: one.descriptor, b: two.descriptor }, webFiles: {} });
-  const written = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({ files: {} }));
+  const written = await savedSession({ inputFiles: state.inputFiles }, committed, bindingDrawings({ files: {} }));
   assert.deepEqual(Object.keys(written.resources).sort(), ['a', 'b']);
   assert.notEqual(written.resources.a.data, written.resources.b.data);
 });
@@ -118,7 +125,7 @@ test('A Save over the Session limit fails with SESSION_SIZE_LIMIT before it enco
   hooks.maxExpandedSessionBytes = 2048;
   metrics.length = 0;
   try {
-    await assert.rejects(buildSessionResources(sourceState, committed, bindingDrawings(sourceState)),
+    await assert.rejects(savedSession(sourceState, committed, bindingDrawings(sourceState)),
       (error) => error.code === 'SESSION_SIZE_LIMIT' && error.operation === 'session-save'
         && error.context.sessionByteLimit === 2048 && error.context.largestInputs === 'big.tsv');
     assert.equal(count('base64EncodeCount'), 0);

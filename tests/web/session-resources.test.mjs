@@ -29,9 +29,17 @@ const boundState = (source, store = createInputFileStore()) => {
     ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
   };
 };
-const { buildSessionDrawingResources, buildSessionResources } = await import(
+const { buildSessionDrawingResources, buildSessionResources: buildUnencodedSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
+const { encodeSessionResources } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-file.js'))
+);
+// Save allocates the resource table, then the Session file writer encodes it.
+const buildSessionResources = async (...args) => {
+  const built = await buildUnencodedSessionResources(...args);
+  return { ...built, resources: await encodeSessionResources(built.resources) };
+};
 
 const makeFile = (text, name, options = {}) => new File([text], name, {
   type: options.type || 'text/plain',

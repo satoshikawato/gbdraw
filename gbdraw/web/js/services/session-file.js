@@ -1,7 +1,10 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
-import { GZIP_SIGNATURE, isGzipBytes, readCappedStream } from './byte-utils.js';
-import { testByteCap } from './runtime-test-hooks.js';
+import { GZIP_SIGNATURE, bytesToBase64, isGzipBytes, readCappedStream } from './byte-utils.js';
+import { recordStructuralMetric, testByteCap } from './runtime-test-hooks.js';
+import { fileBackedReaderOf } from './session-resource-backing.js';
+
+/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 // The largest Session file, gzip or plain, that Load reads; Save refuses to
 // write a larger one (OV-2245).
@@ -302,11 +305,43 @@ const largestInputNames = (data) => {
  * @param {number} sessionByteLimit The cap it exceeds.
  * @param {boolean} [file] The size is the gzip file's, not the expanded JSON's.
  */
-export const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
+const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
   'SESSION_SIZE_LIMIT',
   { sessionBytes, sessionByteLimit, ...(file && { sessionSizeKind: 'file' }), largestInputs: largestInputNames(data) },
   { stage: 'write', operation: 'session-save' }
 );
+
+/**
+ * The resources a Session document writes: each file-backed descriptor (a File
+ * Generate described, `fileBackedDescriptor`) encoded as base64 text, read
+ * once; the others as they are. The base64 text of a Session over its expanded
+ * cap would not load again (and past the engine's string limit cannot be made),
+ * so it is refused first with `SESSION_SIZE_LIMIT`, naming at least the
+ * characters of its resources. The table given is not changed.
+ * @param {Readonly<Record<string, RawSessionResourceDescriptor>>} resources
+ * @param {Readonly<Record<string, unknown>>} [resourceOriginalNames] The names the
+ *   refusal lists for the largest inputs (`webFiles.resourceOriginalNames`).
+ * @returns {Promise<Record<string, RawSessionResourceDescriptor>>}
+ */
+export const encodeSessionResources = async (resources, resourceOriginalNames = {}) => {
+  const maxBytes = testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES;
+  const payloadCharacters = Object.values(resources).reduce((total, descriptor) => total + (
+    fileBackedReaderOf(descriptor) ? 4 * Math.ceil(Number(descriptor.size) / 3)
+      : typeof descriptor.data === 'string' ? descriptor.data.length : 0
+  ), 0);
+  if (payloadCharacters > maxBytes) throw sessionSaveSizeLimit({ resources, webFiles: { resourceOriginalNames } }, payloadCharacters, maxBytes);
+  /** @type {Record<string, RawSessionResourceDescriptor>} */
+  const encoded = { ...resources };
+  for (const [id, descriptor] of Object.entries(resources)) {
+    const readFile = fileBackedReaderOf(descriptor);
+    if (!readFile) continue;
+    const bytes = await readFile();
+    recordStructuralMetric('base64EncodeCount', 1, { resourceName: descriptor.name });
+    recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: descriptor.name });
+    encoded[id] = { ...descriptor, encoding: 'base64', data: bytesToBase64(bytes) };
+  }
+  return encoded;
+};
 
 /**
  * The Session's JSON as bytes. Past `maxBytes` it writes nothing more, counts

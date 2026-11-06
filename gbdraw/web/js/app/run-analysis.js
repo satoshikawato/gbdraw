@@ -69,7 +69,6 @@ import {
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
-import { encodeSessionResources } from '../services/session-resources.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
@@ -963,7 +962,7 @@ const makeSafeFilename = (name) => {
  * @param {{
  *   drawing: { id: string, name: string }, startedAtIso: string | null,
  *   renderRequest: { mode: 'circular' | 'linear' }, resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
- *   publishedArtifact: { results: unknown, featureCatalog: unknown }
+ *   publishedArtifact: { results: unknown, featureCatalog: unknown }, encodeResources: EncodeSessionResources
  * }} replay
  */
 const createCanonicalReplayTextBuilder = ({
@@ -971,11 +970,12 @@ const createCanonicalReplayTextBuilder = ({
   startedAtIso,
   renderRequest,
   resources,
-  publishedArtifact
+  publishedArtifact,
+  encodeResources
 }) => async () => {
   recordSessionLifecycleEvent('canonical-replay-json-start');
   // The Session document holds each input's bytes; Generate described them by their File.
-  const writtenResources = await encodeSessionResources(resources);
+  const writtenResources = await encodeResources(resources);
   const replayText = JSON.stringify(sessionDocumentOfViews([{
     id: drawing.id,
     name: drawing.name,
@@ -1489,12 +1489,17 @@ export const executeCanonicalRenderCandidate = async ({
  */
 
 /**
+ * @typedef {(resources: Readonly<Record<string, RawSessionResourceDescriptor>>) => Promise<Record<string, RawSessionResourceDescriptor>>} EncodeSessionResources
+ */
+/**
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
+ * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
+ *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean, drawing: DrawingState,
  *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
@@ -1564,7 +1569,7 @@ export const createRunAnalysis = ({
   state,
   rulePreparation = null,
   isCurrentFeature,
-  serializeCanonicalFiles,
+  serializeCanonicalFiles, encodeSessionResources,
   adoptCanonicalRenderArtifacts,
   setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
@@ -5089,7 +5094,7 @@ export const createRunAnalysis = ({
         startedAtIso: manualRunStartedAtIso,
         renderRequest: canonical.renderRequest,
         resources: canonical.resources,
-        publishedArtifact: publishedReplayArtifact
+        publishedArtifact: publishedReplayArtifact, encodeResources: encodeSessionResources
       });
       // Run Info names the files of its exact replay, the canonical Session (`buildRunInfo` keeps only those);
       // the Source recipe carries its own file names (OV-1591).
