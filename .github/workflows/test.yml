@@ -78,6 +78,7 @@ jobs:
           CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
           CI_IMPACT_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
+          CI_IMPACT_ALL_PYTHON_VERSIONS: ${{ contains(github.event.pull_request.labels.*.name, 'all-python-versions') && 'true' || 'false' }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs plan
 
@@ -208,11 +209,14 @@ jobs:
   core:
     name: Core (Python ${{ matrix.python-version }})
     needs: ci-impact
+    # Runs on a pull request whose plan has the python-versions capability
+    # (docs/internal/SELECTIVE_CI.md "Python-version coverage").
     if: >-
       !cancelled() &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core') &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -1743,6 +1747,7 @@ jobs:
       - ci-impact
       - web-change-budget
       - core-pr
+      - core
       - recipes-standard
       - gallery
       - lint
@@ -1785,8 +1790,19 @@ jobs:
         with:
           node-version-file: .ci-node-version/.node-version
 
-      # Repository, labels, and token are for a trusted-helper check of dev's Tests state;
-      # a helper without that check ignores them.
+      # The trusted helper reads this run's job limits from it as data
+      # (docs/internal/SELECTIVE_CI.md "Job times against their limits").
+      - name: Checkout this run's workflow file
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-run-workflow
+          sparse-checkout: .github/workflows/test.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # Repository, labels, and token are for a trusted-helper check of dev's Tests state and of
+      # this run's job times; a helper without those checks ignores them.
       - name: Validate required PR evidence
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
@@ -1795,6 +1811,7 @@ jobs:
           CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
           CI_IMPACT_REPOSITORY: ${{ github.repository }}
           CI_IMPACT_PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          CI_IMPACT_WORKFLOW_FILE: .ci-run-workflow/.github/workflows/test.yml
           GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs gate
 
@@ -1839,6 +1856,9 @@ jobs:
           CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
           CI_IMPACT_EXPECTED_PROFILE: dev
           CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_WORKFLOW_FILE: .github/workflows/test.yml
+          GITHUB_TOKEN: ${{ github.token }}
         run: node tools/ci-impact.mjs gate
 
   release-gate:

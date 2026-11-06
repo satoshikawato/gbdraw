@@ -38,6 +38,7 @@ const environment = (overrides = {}) => ({
   CI_IMPACT_CHANGE_HEAD_SHA: SHA.head,
   CI_IMPACT_WORKFLOW_SHA: SHA.workflow,
   CI_IMPACT_ARCHITECTURE_CHANGE: 'false',
+  CI_IMPACT_ALL_PYTHON_VERSIONS: 'false',
   GITHUB_TOKEN: 'test-token',
   ...overrides
 });
@@ -539,6 +540,29 @@ test('manual runs and architecture-change labels force full execution', async ()
   assert.equal(architecture.plan.basis, 'ARCHITECTURE_CHANGE');
 });
 
+test('the all-python-versions label adds the dev-tier Core matrix to a pull request plan only', async () => {
+  const plan = async (overrides) => (await buildImpactPlan({
+    configuration: configuration(overrides),
+    token: 'test-token',
+    runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
+    verifyWorkflowEvidenceImpl: async () => successfulEvidence()
+  })).plan;
+  const labelled = await plan({ CI_IMPACT_ALL_PYTHON_VERSIONS: 'true' });
+  assert.deepEqual(labelled.capabilities, ['documentation', 'python-versions']);
+  assert.equal(labelled.basis, 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE');
+  assert.deepEqual(labelled.requiredJobs, ['core', 'recipes-standard']);
+  assert.deepEqual((await plan({ CI_IMPACT_ALL_PYTHON_VERSIONS: 'false' })).requiredJobs, ['recipes-standard']);
+  const labelledArchitecture = await plan({ CI_IMPACT_ALL_PYTHON_VERSIONS: 'true', CI_IMPACT_ARCHITECTURE_CHANGE: 'true' });
+  assert.ok(labelledArchitecture.requiredJobs.includes('core'));
+  assert.ok(labelledArchitecture.requiredJobs.includes('core-pr'));
+  // A pull request plan needs the input; dev and Gallery plans neither read nor need it.
+  assert.throws(() => configuration({ CI_IMPACT_ALL_PYTHON_VERSIONS: undefined }), /CI_IMPACT_ALL_PYTHON_VERSIONS/);
+  const dev = configuration({ CI_IMPACT_PROFILE: 'dev', CI_IMPACT_EVENT_NAME: 'push', CI_IMPACT_ALL_PYTHON_VERSIONS: 'true' });
+  assert.equal(dev.allPythonVersions, false);
+  assert.match(workflowJobOf(readTestsWorkflow(), 'ci-impact'),
+    /CI_IMPACT_ALL_PYTHON_VERSIONS: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'all-python-versions'\) && 'true' \|\| 'false' \}\}\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n {8}run: node \.ci-trusted-base\/tools\/ci-impact\.mjs plan/);
+});
+
 test('plan command writes one compact output line and escapes summary paths', async () => {
   const stdout = textWriter();
   const stderr = textWriter();
@@ -782,7 +806,7 @@ test('a failed fast job cancels the rest of its pull request run, never a dev ru
   assert.equal(workflow.match(/gh run cancel/g).length, failFastFor.length);
   assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
   assert.deepEqual(gateNeeds(), [
-    'ci-impact', 'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
+    'ci-impact', 'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'lint',
     'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'
   ]);
 });

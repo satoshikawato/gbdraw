@@ -3,9 +3,10 @@ const freeze = (value) => Object.freeze(value);
 export const IMPACT_PLAN_SCHEMA_VERSION = 3;
 
 // Ordered only for the summary label. Routing unions every affected capability.
-// `none` marks an identical tree; no path classifies as `none`.
+// `none` marks an identical tree; no path classifies as `none`. `python-versions` joins the
+// capability of a path listed in PYTHON_VERSION_PATHS, or of any change with the label.
 export const IMPACT_CLASSES = freeze([
-  'none', 'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
+  'none', 'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-versions', 'python-core', 'renderer',
   'web-runtime', 'session-persistence', 'gallery', 'losat-integration',
   'packaging', 'ci-only', 'full'
 ]);
@@ -32,13 +33,19 @@ const PR_FULL_TIER_JOBS = freeze([
 ]);
 const PR_PLAYWRIGHT_JOBS = freeze(['playwright-functional', 'playwright-performance']);
 const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, ...PR_PLAYWRIGHT_JOBS]);
+// `core`, the dev-tier Core on Python 3.10 to 3.14, joins a pull request only through the
+// `python-versions` capability.
+const PR_KNOWN_JOBS = freeze([
+  'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'lint',
+  'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS
+]);
 const DEV_JOBS = freeze([
   'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
   'playwright-functional', 'playwright-performance', 'lint',
   'losat-cache-browser-acceptance'
 ]);
 const PROFILE_REQUIRED_JOBS = freeze({
-  pr: PR_JOBS,
+  pr: PR_KNOWN_JOBS,
   dev: DEV_JOBS,
   release: freeze([...DEV_JOBS, 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']),
   gallery: freeze(['browser', 'performance'])
@@ -49,6 +56,7 @@ const PR_CAPABILITY_JOBS = freeze({
   documentation: freeze(['recipes-standard']),
   'policy-documentation': freeze(['web-change-budget']),
   'tests-only': PR_JOBS,
+  'python-versions': freeze(['core']),
   'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
@@ -167,6 +175,22 @@ const isValidRepositoryPath = (path) => typeof path === 'string'
   && path.split('/').every((part) => part && part !== '.' && part !== '..');
 
 // The base Playwright configuration and the variants that spread it.
+// SELECTIVE_CI.md "Python-version coverage": the package dependencies, and the package modules
+// that read or write through a standard-library codec or format whose behaviour differs between
+// Python 3.10 and 3.14 (gzip and zlib bytes, tar and zip archives, TOML through tomli on 3.10,
+// locale encodings) or that branch on sys.version_info. tests/ci/ci-impact-policy.test.mjs
+// fails when a package module imports such a module and is not listed.
+export const PYTHON_VERSION_PATHS = freeze([
+  'pyproject.toml',
+  'gbdraw/_build_support.py',
+  'gbdraw/cli.py',
+  'gbdraw/config/toml.py',
+  'gbdraw/io/colors.py',
+  'gbdraw/io/input_text.py',
+  'gbdraw/io/rsyncable_gzip.py',
+  'gbdraw/losat_setup.py'
+]);
+
 export const isPlaywrightConfigPath = (path) => path === 'playwright.config.js'
   || /^tests\/web\/playwright\/[^/]+\.config\.js$/.test(path);
 
@@ -322,7 +346,11 @@ export const classifyChanges = (changes) => {
   }
 
   const invalidPath = classifiedPaths.some(({ reason }) => reason === 'INVALID_REPOSITORY_PATH');
-  const capabilities = invalidPath ? ['full'] : orderedCapabilities(classifiedPaths.map(({ impact }) => impact));
+  const versionDependent = classifiedPaths.some(({ path }) => PYTHON_VERSION_PATHS.includes(path));
+  const capabilities = invalidPath ? ['full'] : orderedCapabilities([
+    ...classifiedPaths.map(({ impact }) => impact),
+    ...(versionDependent ? ['python-versions'] : [])
+  ]);
   return freeze({
     impact: primaryImpact(capabilities),
     capabilities: freeze(capabilities),
@@ -331,6 +359,12 @@ export const classifyChanges = (changes) => {
     paths: freeze(classifiedPaths),
     reason: invalidPath ? 'INVALID_REPOSITORY_PATH' : 'CLASSIFIED'
   });
+};
+
+// The label `all-python-versions` adds the capability to any pull request classification.
+export const withPythonVersions = (classification) => {
+  const capabilities = orderedCapabilities([...classification.capabilities, 'python-versions']);
+  return freeze({ ...classification, impact: primaryImpact(capabilities), capabilities: freeze(capabilities) });
 };
 
 const validateLeafTests = ({ profile, capabilities, leafTests }) => {

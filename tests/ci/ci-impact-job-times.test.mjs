@@ -216,3 +216,14 @@ test('a gate without a workflow file makes no job-time request', async () => {
   assert.equal(exitCode, 0);
   assert.equal(calls, 0);
 });
+
+test('both Tests gates read the job times of their run from the run\'s own workflow file', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, WORKFLOW_FILE), 'utf8');
+  const jobOf = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))[0];
+  const pr = jobOf('pr-gate');
+  assert.match(pr, /- name: Checkout this run's workflow file\n {8}uses: actions\/checkout@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}path: \.ci-run-workflow\n {10}sparse-checkout: \.github\/workflows\/test\.yml\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n/);
+  assert.match(pr, /CI_IMPACT_WORKFLOW_FILE: \.ci-run-workflow\/\.github\/workflows\/test\.yml\n/);
+  const dev = jobOf('dev-staging-gate');
+  assert.match(dev, /CI_IMPACT_REPOSITORY: \$\{\{ github\.repository \}\}\n {10}CI_IMPACT_WORKFLOW_FILE: \.github\/workflows\/test\.yml\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n/);
+  for (const gate of [pr, dev]) assert.match(gate, /\n    timeout-minutes: 5\n/);
+});
