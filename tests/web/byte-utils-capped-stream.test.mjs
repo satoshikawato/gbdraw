@@ -38,6 +38,7 @@ test('the capped reader stops past the cap with its error and cancels the stream
   assert.equal(state.cancelled, true);
 });
 
+// PD-OI-116: a gzip input expands up to the cap and is refused past it.
 test('expandGzipBytes expands up to the cap and refuses past it', async () => {
   const content = new Uint8Array(4096).fill(0x61);
   const gzip = Uint8Array.from(gzipSync(content));

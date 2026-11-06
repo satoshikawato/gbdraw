@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `118`
+- Contract revision: `119`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -42,7 +42,8 @@ Status: active Product authority
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
-  `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, and `PD-OI-115`
+  `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
+  and `PD-OI-116`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4486,6 +4487,27 @@ Status: active Product authority
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 119 changes: `PD-OI-116` is added (concern
+  `input.gzip-expansion-cap`, scenario revision `1`; the outcome
+  `A GZIP-INPUT-512`). A gzip-compressed input file is read up to 512 MiB
+  (536,870,912 bytes) expanded. Past that, the command line, the Python API,
+  and the Web refuse it and name the file and 512 MiB. Plain input files keep
+  no size limit, and Session files keep their limits and format.
+  - The Product Decision Owner `satoshikawato` chose option A of a decision
+    pack with four options (A: gzip inputs capped at 512 MiB everywhere, B:
+    512 MiB on the Web and 4 GiB on the command line and in Python, C: plain
+    and gzip inputs capped at 512 MiB, D: no cap) on `2026-11-06`, and on the
+    same day approved the complete receipt below as it was shown. The session
+    drafted the Rationale and the other fields from the decision pack; the
+    Owner approved them as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-116` scenario revision `1`
+    `070023adf87f897aec2a277eb20400c190431e76ba327d997aebe0d1ff1f388e`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
@@ -11579,6 +11601,57 @@ Decision date: 2026-11-05
   "acceptedResidualRisk": "小さい大きさではラベルが混み、置けないラベルは今のラベルの判断による。ラベルの多い Circular では、大きさを指定した Generate が何度か描き直すので遅くなり（MjeNMV でラベルを両側に出した図は、Web で Auto が 13 秒、400 mm が 18 秒。地図を小さくしてラベルが収まらないときは、止まるまでに 300 mm で 49 秒、180 mm で 92 秒かかる）、大きさを指定した図では Legend の名前・削除・並べ替えや Canvas padding を変えるたびに、その描き直しが走る。凡例・題・目盛りをドラッグして枠の外に出すと、図は枠より大きくなり、Generate しても直らない（ドラッグで戻すか Reset positions で戻す）。Legend の行の色と線の編集と、Python が描かない Web で加えた行は、今と同じく Web だけで図に加わり、CLI・Python の図には入らない。収まらないときに示すいちばん小さい大きさは、見つけた中でいちばん小さい図からの値で、もっと小さくても収まる場合がある。ラベルの置き方の候補が 1 つもないとき（NO-ROW-WAYS）は、大きさの案を出さない。新しい文言は翻訳バッチまで英語。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-05"
+}
+```
+
+### PD-OI-116: gzip input expansion cap
+
+- Concern key: `input.gzip-expansion-cap`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed the size of an input file;
+  `PD-OI-099` fixes what the Web Load of a Session refuses, and the Session
+  limits stay as they are.
+- Status: `ACCEPTED`
+- Selected outcome: `A GZIP-INPUT-512`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-06` described in the Revision 119 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `070023adf87f897aec2a277eb20400c190431e76ba327d997aebe0d1ff1f388e`.
+
+```text
+PRODUCT_DECISION
+Concern: input.gzip-expansion-cap（gzip 入力ファイルの展開サイズ上限）
+Scenario revision: 1
+Choice: A GZIP-INPUT-512
+  - gzip 圧縮の入力ファイル（GenBank・DDBJ・EMBL、GFF3、FASTA、TSV 表、depth 表、比較結果の表）は、展開後 512 MiB（536,870,912 バイト）までを読む。それを超えるものは、CLI・Python API・Web のすべてで、ファイル名と 512 MiB を示して拒否する。
+  - 拒否したファイルは描画に使わない。展開して平文のファイルにすれば読める。
+  - 平文の入力ファイルは今までどおり大きさの上限なし。
+  - Session ファイルの扱いは今のまま（Web は 200 MiB のファイルと展開後 512 MiB の上限、Python の Session の読み込みは上限なし）。
+Rationale: 小さな .gz が数 GB に展開される圧縮爆弾で、CLI がメモリを使い切ること、Web のタブが落ちることを防ぐ。上限は一つの数値で、Web の Session の展開後の上限と同じ 512 MiB にする。Web で Session に保存できる入力は何も失わず、平文のファイルを渡す回避策が残る。
+Must preserve: 512 MiB 以下の gzip 入力と、すべての平文入力の読み込み。Session の上限と形式
+May retire: 展開後 512 MiB を超える gzip 入力を直接読むこと
+Accepted residual risk: 約 21 Mbp を超えるゲノムの塩基ごとの depth 表を gzip のまま渡す場合は、展開が必要になる
+Owner: satoshikawato
+Decision date: 2026-11-06
+```
+
+```json
+{
+  "concern": "input.gzip-expansion-cap（gzip 入力ファイルの展開サイズ上限）",
+  "scenarioRevision": 1,
+  "choice": "A GZIP-INPUT-512\n  - gzip 圧縮の入力ファイル（GenBank・DDBJ・EMBL、GFF3、FASTA、TSV 表、depth 表、比較結果の表）は、展開後 512 MiB（536,870,912 バイト）までを読む。それを超えるものは、CLI・Python API・Web のすべてで、ファイル名と 512 MiB を示して拒否する。\n  - 拒否したファイルは描画に使わない。展開して平文のファイルにすれば読める。\n  - 平文の入力ファイルは今までどおり大きさの上限なし。\n  - Session ファイルの扱いは今のまま（Web は 200 MiB のファイルと展開後 512 MiB の上限、Python の Session の読み込みは上限なし）。",
+  "rationale": "小さな .gz が数 GB に展開される圧縮爆弾で、CLI がメモリを使い切ること、Web のタブが落ちることを防ぐ。上限は一つの数値で、Web の Session の展開後の上限と同じ 512 MiB にする。Web で Session に保存できる入力は何も失わず、平文のファイルを渡す回避策が残る。",
+  "mustPreserve": "512 MiB 以下の gzip 入力と、すべての平文入力の読み込み。Session の上限と形式",
+  "mayRetire": "展開後 512 MiB を超える gzip 入力を直接読むこと",
+  "acceptedResidualRisk": "約 21 Mbp を超えるゲノムの塩基ごとの depth 表を gzip のまま渡す場合は、展開が必要になる",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-06"
 }
 ```
 

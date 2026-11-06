@@ -48,7 +48,7 @@ test('a gzip GenBank upload lists its record, generates, and saves the plain fil
 
 // A gzip upload that expands past the cap (Python's MAX_EXPANDED_INPUT_BYTES; a
 // test hook stands in for 512 MiB) is refused with its name and the cap, and
-// no record is listed.
+// no record is listed (PD-OI-116 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md).
 test('a gzip upload past the expanded cap is refused with its name and the cap', async ({ page }, info) => {
   test.setTimeout(240000);
   const cap = 1024 * 1024;

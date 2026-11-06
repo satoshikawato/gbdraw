@@ -103,7 +103,8 @@ def test_the_cli_embeds_the_plain_file_of_a_gzip_input_in_the_session(gbdraw_run
     assert genbank[0]["name"] == "NC_001416.gb.gz"
 
 
-# A gzip input expands to at most MAX_EXPANDED_INPUT_BYTES; past it every reader refuses the file by name.
+# A gzip input expands to at most MAX_EXPANDED_INPUT_BYTES; past it every reader refuses the file by name
+# (PD-OI-116 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md).
 # The tests lower the cap, so their files stay small.
 SMALL_CAP = 4096
 
