@@ -33,7 +33,7 @@ def _highlight_overlay_slot(
     anchor_z: int = 0,
 ) -> SlotT:
     """The automatic slot of a set's highlights, an overlay over the feature track: behind its features, or, for a
-    set that keeps its highlight overlay (a sequence search's, PD-OI-116), in front of them, covering them."""
+    set that keeps its highlight overlay (a sequence search's, PD-OI-117), in front of them, covering them."""
 
     return slot_factory(
         id=slot_id,
@@ -58,7 +58,7 @@ def _with_kept_highlight_overlays(
     slot_factory: Callable[..., SlotT],
 ) -> list[SlotT]:
     """An explicit stack with the automatic highlight overlay of each set that keeps it
-    (``AnnotationSet.keep_highlight_overlay``, a sequence search's set, PD-OI-116) and that no enabled slot names:
+    (``AnnotationSet.keep_highlight_overlay``, a sequence search's set, PD-OI-117) and that no enabled slot names:
     after the stack's own slots, so its axis index stays, in front of the stack's feature track. A slot that names
     the set wins; a stack without a feature track draws no overlay. Other sets follow the stack."""
 

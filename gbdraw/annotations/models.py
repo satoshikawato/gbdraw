@@ -321,7 +321,7 @@ class RegionAnnotation:
     style: RegionAnnotationStyle | None = None
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
-    # The strand the region lies on, on the record's source (a sequence search's hit, PD-OI-116): on a feature
+    # The strand the region lies on, on the record's source (a sequence search's hit, PD-OI-117): on a feature
     # track that separates the strands its highlight covers that strand's lane. None: no strand.
     strand: Literal["+", "-"] | None = None
 
@@ -360,7 +360,7 @@ class AnnotationSet:
     annotations: tuple[RegionAnnotation, ...]
     default_style: RegionAnnotationStyle = field(default_factory=RegionAnnotationStyle)
     legend_label: str | None = None
-    # A sequence search's set (PD-OI-116): its highlights keep the automatic overlay behind the features also in an
+    # A sequence search's set (PD-OI-117): its highlights keep the automatic overlay behind the features also in an
     # explicit track stack that names no slot for the set (``prepare_annotation_track_slots``).
     keep_highlight_overlay: bool = False
 

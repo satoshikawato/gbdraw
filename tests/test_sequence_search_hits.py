@@ -433,7 +433,7 @@ def _custom_stack_svg(mode: str, *, keep: bool) -> str:
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_a_custom_stack_draws_a_search_set_behind_its_features(mode: str) -> None:
-    # PD-OI-116: with a custom track stack a search's set is drawn without a slot of its own.
+    # PD-OI-117: with a custom track stack a search's set is drawn without a slot of its own.
     assert 'data-gbdraw-annotation-id="q#1"' in _custom_stack_svg(mode, keep=True)
     # Another set keeps following the stack: no slot names it, so it is not drawn.
     assert 'data-gbdraw-annotation-id="q#1"' not in _custom_stack_svg(mode, keep=False)

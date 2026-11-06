@@ -1,4 +1,4 @@
-"""Sequence-search hits as one annotation set (PD-OI-116, the Web's Sequence search).
+"""Sequence-search hits as one annotation set (PD-OI-117, the Web's Sequence search).
 
 A search runs its queries with LOSAT (blastn, or tblastn for a protein query)
 against sequences of the records a drawing draws. Its outfmt 6 rows, read by

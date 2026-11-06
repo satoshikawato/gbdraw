@@ -1988,7 +1988,7 @@ const LINEAR_TRACK_SLOTS_REQUEST_PATH = 'diagramOptions.tracks.linearTrackSlots'
  * colors in a Legend row, a change the live-settings measurement of
  * PD-OI-103 did not cover (O-8). A sequence search's set
  * (`keepHighlightOverlay`) is drawn live whatever its Legend labels: every row
- * has one, and its colours apply at once (PD-OI-116). The rerender draws its
+ * has one, and its colours apply at once (PD-OI-117). The rerender draws its
  * Legend rows from the same colours, and a Legend color edit stays on its row
  * as after Generate. An item the committed request lacks waits (its targets
  * and the omitted record keys stay committed, F-11).
@@ -2433,7 +2433,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   // without its own style follows the committed set's Default, whose change
   // is not live. The sets a Sequence search step added (`searchSetIds`, by set
   // id) follow the draft at once, as Generate sends them: present, or gone
-  // after its Undo (PD-OI-116); every other set change waits.
+  // after its Undo (PD-OI-117); every other set change waits.
   [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request, { searchSetIds = [] }) => {
     const draftSets = normalizeAnnotationSets(drawing.annotationSets);
     const searched = new Set(searchSetIds);

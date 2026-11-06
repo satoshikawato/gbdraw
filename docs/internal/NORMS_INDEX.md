@@ -196,7 +196,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-037](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-037-operation-feedback-without-derived-application-status) | Operation feedback without derived application status | ACCEPTED | web.edit-application-feedback | 3 | scenario revision 2 | 11 |
 | [PD-OI-038](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-038-compact-editor-presentation) | Compact Editor presentation | ACCEPTED | web.editor.compact-presentation | 1 | — | 2 |
 | [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions) | Compact review with exclusive alignment directions | ACCEPTED | web.similarity-alignment.review-presentation | 5 | scenario revision 4 | 2 |
-| [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns) | Annotation TSV auxiliary columns | ACCEPTED | annotations.table-auxiliary-columns | 1 | — | 0 |
+| [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns) | Annotation TSV auxiliary columns | ACCEPTED | annotations.table-auxiliary-columns | 1 | — | 1 |
 | [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors) | Unmatched annotation feature selectors | ACCEPTED | annotations.feature-selector-miss | 1 | — | 1 |
 | [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation) | Specific-color caption disambiguation | ACCEPTED | styles.specific-color-caption-multiplicity | 2 | scenario revision 1 | 18 |
 | [PD-OI-043](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-043-pure-pixel-track-text-inputs) | Pure pixel track text inputs | ACCEPTED | tracks.pixel-text-input-domain | 1 | — | 0 |
@@ -215,7 +215,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-056](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-056-feature-search-all-field-scope) | Feature search All-field scope | ACCEPTED | web.feature-search.all-field-scope | 1 | — | 0 |
 | [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips) | Keyboard- and touch-reachable help tips | ACCEPTED | web.help-tip.reachability | 1 | — | 2 |
 | [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle) | Managed Depth track-row lifecycle | ACCEPTED | web.depth.managed-slot-lifecycle | 1 | — | 4 |
-| [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply) | When the definition settings apply | ACCEPTED | web.circular.definition-application | 3 | scenario revision 2 | 6 |
+| [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply) | When the definition settings apply | ACCEPTED | web.circular.definition-application | 3 | scenario revision 2 | 7 |
 | [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply) | When the diagram-wide stroke settings apply | ACCEPTED | web.stroke.application | 2 | scenario revision 1 | 2 |
 | [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry) | Legend rename collisions for every entry | ACCEPTED | web.legend.rename-collision | 5 | scenario revision 4 | 10 |
 | [PD-OI-062](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-062-batch-live-edits-projected-on-result-mount) | Batch live edits projected on Result mount | ACCEPTED | web.batch.live-edit-projection | 1 | — | 5 |
@@ -230,7 +230,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-071](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-071-location-only-feature-search-positions) | Location-only feature-search positions | ACCEPTED | web.feature-search.location-fields | 1 | — | 0 |
 | [PD-OI-072](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-072-web-pdf-physical-size) | Web PDF physical size | ACCEPTED | web.export.pdf-physical-size | 1 | — | 1 |
 | [PD-OI-073](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-073-comparison-table-coordinate-frame) | Comparison table coordinate frame | ACCEPTED | comparison.table-coordinate-frame | 1 | — | 8 |
-| [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding) | Uploaded comparison table record binding | ACCEPTED | comparison.uploaded-table-record-binding | 1 | — | 5 |
+| [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding) | Uploaded comparison table record binding | ACCEPTED | comparison.uploaded-table-record-binding | 1 | — | 6 |
 | [PD-OI-075](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-075-similarity-group-name-and-description-identity) | Similarity group name and description identity | ACCEPTED | web.similarity-group.override-identity | 1 | — | 0 |
 | [PD-OI-076](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-076-match-popup-coordinates) | Match popup coordinates | ACCEPTED | web.match-popup.coordinates | 1 | — | 1 |
 | [PD-OI-077](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-077-outfmt-6-tables-with-extra-columns) | outfmt 6 tables with extra columns | ACCEPTED | comparison.outfmt6-extra-columns | 1 | — | 1 |
@@ -247,8 +247,8 @@ are listed under "Cited ids without a record".
 | [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette) | Default colors a user edits win over the palette | ACCEPTED | web.default-colors-over-palette | 2 | scenario revision 1 | 2 |
 | [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings) | Project with drawings | ACCEPTED | session.project-drawings | 10 | scenario revision 9 | 47 |
 | [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff) | Per-record draw ON/OFF | ACCEPTED | diagram-generation.record-draw-selection | 1 | — | 2 |
-| [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index) | Settings pane section index | ACCEPTED | web.settings-pane.section-index | 2 | scenario revision 1 | 2 |
-| [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 4 | scenario revision 3 | 1 |
+| [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index) | Settings pane section index | ACCEPTED | web.settings-pane.section-index | 3 | scenario revision 2 | 2 |
+| [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 5 | scenario revision 4 | 1 |
 | [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line) | Linear File cards fold to one line | ACCEPTED | web.linear.file-card-fold | 1 | — | 0 |
 | [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name) | One naming rule for Legend rows that share a name | ACCEPTED | legend.row-name-multiplicity | 1 | — | 5 |
 | [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load) | Legend position of a diagram mode at Load | ACCEPTED | web.legend.position-of-mode | 3 | scenario revision 2 | 1 |
@@ -258,7 +258,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo) | Rich Feature Popup outside Undo | ACCEPTED | web.history.rich-feature-popup | 1 | — | 0 |
 | [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses) | Task yield after the later Generate statuses | ACCEPTED | web.generate.later-status-paint-yields | 1 | — | 1 |
 | [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed) | Live settings redraw the Result when a value is committed | ACCEPTED | web.settings.live-application | 1 | — | 8 |
-| [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live) | Settings sections that apply live | ACCEPTED | web.settings.live-sections | 2 | scenario revision 1 | 12 |
+| [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live) | Settings sections that apply live | ACCEPTED | web.settings.live-sections | 2 | scenario revision 1 | 13 |
 | [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply) | When the GC, skew and depth toggles apply | ACCEPTED | web.layout.track-toggle-application | 9 | scenario revision 8 | 17 |
 | [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup) | A click on a drawn element shows its settings in a popup | ACCEPTED | web.result.element-settings-entry | 1 | — | 0 |
 | [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language) | Web UI language | ACCEPTED | product.web-ui-language | 6 | scenario revision 5 | 2 |
@@ -270,8 +270,9 @@ are listed under "Cited ids without a record".
 | [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
 | [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 2 | scenario revision 1 | 8 |
-| [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 6 |
+| [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 7 |
 | [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
+| [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 7 |
 
 ### Test files that cite each record
 
@@ -328,6 +329,8 @@ are listed under "Cited ids without a record".
 - [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions)
   - `tests/web/similarity-alignment-actions.test.mjs`
   - `tests/web/similarity-alignment-ui.playwright.spec.js`
+- [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns)
+  - `tests/web/annotations.test.mjs`
 - [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors)
   - `tests/web/annotations.test.mjs`
 - [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation)
@@ -391,6 +394,7 @@ are listed under "Cited ids without a record".
   - `tests/web/live-setting-application-g2.playwright.spec.js`
   - `tests/web/live-setting-application-g2.test.mjs`
   - `tests/web/live-setting-application.test.mjs`
+  - `tests/web/sequence-search.test.mjs`
 - [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply)
   - `tests/web/history-generated-authority.playwright.spec.js`
   - `tests/web/preview-bind-coalescing.playwright.spec.js`
@@ -480,6 +484,7 @@ are listed under "Cited ids without a record".
   - `tests/web/session-losat-cache-validation.test.mjs`
 - [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding)
   - `tests/test_comparison_tables.py`
+  - `tests/test_sequence_search_hits.py`
   - `tests/test_web_request_render.py`
   - `tests/web/comparison-ui.playwright.spec.js`
   - `tests/web/linear-multi-record.playwright.spec.js`
@@ -632,6 +637,7 @@ are listed under "Cited ids without a record".
   - `tests/web/live-setting-application-gt.test.mjs`
   - `tests/web/live-setting-application.playwright.spec.js`
   - `tests/web/live-setting-application.test.mjs`
+  - `tests/web/sequence-search.test.mjs`
 - [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply)
   - `tests/web/annotation-style-integration.playwright.spec.js`
   - `tests/web/candidate-render.test.mjs`
@@ -710,10 +716,19 @@ are listed under "Cited ids without a record".
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/region-select.playwright.spec.js`
   - `tests/web/region-select.test.mjs`
+  - `tests/web/sequence-search.test.mjs`
 - [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap)
   - `tests/test_gzip_inputs.py`
   - `tests/web/byte-utils-capped-stream.test.mjs`
   - `tests/web/gzip-inputs.playwright.spec.js`
+- [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search)
+  - `tests/test_sequence_search_hits.py`
+  - `tests/web/helpers/live-work-allowlist.mjs`
+  - `tests/web/helpers/sequence-search.cjs`
+  - `tests/web/live-generate-parity.playwright.spec.js`
+  - `tests/web/region-select.playwright.spec.js`
+  - `tests/web/sequence-search.playwright.spec.js`
+  - `tests/web/sequence-search.test.mjs`
 
 ### Cited ids without a record
 

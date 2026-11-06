@@ -1716,7 +1716,7 @@ test('a color edit of a feature cut over Wrap Rows shows what Generate draws (li
   await expectLiveEqualsGenerate(page, { label: 'color of a feature cut over rows' });
 });
 
-// PD-OI-116: a sequence search's hits are drawn right after the search by the automatic rerender. The live Result
+// PD-OI-117: a sequence search's hits are drawn right after the search by the automatic rerender. The live Result
 // equals a Generate of the same draft, with the strands separated (each hit on its strand's lane) and not (the whole
 // feature track), and so does every drawn hit mark: its slot, geometry and paint.
 for (const mode of ['circular', 'linear']) {

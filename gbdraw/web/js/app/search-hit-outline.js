@@ -1,5 +1,5 @@
 // @ts-check
-// The outline of Sequence search hits (PD-OI-116): a row click or a chip of
+// The outline of Sequence search hits (PD-OI-117): a row click or a chip of
 // the hit table outlines hits on the drawing. The outline is a preview over
 // the Result, drawn in the overlay's own SVG and never in the Result, so it
 // is no History step, is not saved, and is not exported. It follows each hit

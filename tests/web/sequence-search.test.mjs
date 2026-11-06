@@ -206,7 +206,7 @@ test('the helper replies are checked against their typed shapes', () => {
   assert.deepEqual(search.panelQueries([{ name: 'q', length: 4, fasta: '' }], [{ name: 'q', length: 4, fasta: '', color: '#000000' }])[0].color, '#000000');
 });
 
-// PD-OI-116 (Q-B10 A): with a custom track stack, or the Circular track sizes (an explicit stack too), the search's
+// PD-OI-117 (Q-B10 A): with a custom track stack, or the Circular track sizes (an explicit stack too), the search's
 // set is sent with its marker and the stack unchanged; Python places it, so the live request equals Generate's.
 const STACKS = [
   ['circular', 'custom stack', (drawing) => set(drawing.adv, 'circular_track_slots_enabled', true)],
@@ -285,7 +285,7 @@ test('the outline names the clicked row\'s hit, else the chosen query\'s hits, b
   assert.deepEqual(search.outlinedHitIds(hits, '', 'gone#1'), [], 'a row no longer listed outlines nothing');
 });
 
-// PD-OI-115 Use as search query (PD-OI-116): the span's bases, read by Python and named by their header, join the
+// PD-OI-115 Use as search query (PD-OI-117): the span's bases, read by Python and named by their header, join the
 // query text, which Python reads again; the folded panel opens. The same span is not added twice, and a removed
 // query stays removed when another span is added. The folded line names the program once.
 test('Use as search query adds a span as a query once; a removed query stays removed', async () => {

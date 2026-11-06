@@ -1919,7 +1919,7 @@ _WEB_JSON_HELPERS = {
     "read_record_span_sequences_json": (
         _with_prepared_input_lookup(read_record_span_sequences_json, 1), "readRecordSpanSequences"
     ),
-    # Sequence search: the queries, and one search's rows as an annotation set (PD-OI-116).
+    # Sequence search: the queries, and one search's rows as an annotation set (PD-OI-117).
     "read_search_queries_json": (read_search_queries_json, "readSearchQueries"),
     "sequence_search_annotation_set_json": (sequence_search_annotation_set_json, "searchHitAnnotationSet"),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),

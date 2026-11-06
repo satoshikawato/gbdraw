@@ -1,5 +1,5 @@
 // @ts-check
-// The Sequence search section (PD-OI-116): the panel's queries and settings,
+// The Sequence search section (PD-OI-117): the panel's queries and settings,
 // the search, and the hit table of the latest search. The queries and settings
 // are the panel's own, transient values: not in the Session, no History step,
 // and never written to Pairwise Comparisons. A search runs LOSAT through the

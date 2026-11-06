@@ -5269,7 +5269,7 @@ export const createAppSetup = () => {
     (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
       resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
   );
-  // Sequence search (PD-OI-116): the subject is the records of the shown drawing's Results, read by Python from the
+  // Sequence search (PD-OI-117): the subject is the records of the shown drawing's Results, read by Python from the
   // committed request; the set a search adds is one History step of that drawing.
   const sequenceSearch = createSequenceSearch({
     state,

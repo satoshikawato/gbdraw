@@ -1,4 +1,4 @@
-"""Worker helper that turns one Sequence search's LOSAT rows into an annotation set (PD-OI-116).
+"""Worker helper that turns one Sequence search's LOSAT rows into an annotation set (PD-OI-117).
 
 The page sends the raw outfmt 6 text LOSAT wrote, the sequences it searched
 (each with the ID LOSAT names it by, the drawing's record selector, the

@@ -1,4 +1,4 @@
-// Sequence search (PD-OI-116) steps shared by the search specs, the live-vs-Generate parity cases, the R3 work
+// Sequence search (PD-OI-117) steps shared by the search specs, the live-vs-Generate parity cases, the R3 work
 // allowlist and the random walk. Queries are cut from the GenBank file the drawing draws, so a test names the bases
 // it expects to hit; the search itself runs LOSAT and Python as a user's search does. The test server is not
 // cross-origin isolated, so LOSAT runs Serial (the default Threaded refuses there, as for Pairwise Comparisons).

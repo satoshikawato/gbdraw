@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `119`
+- Contract revision: `120`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -43,7 +43,7 @@ Status: active Product authority
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
-  and `PD-OI-116`
+  `PD-OI-116`, and `PD-OI-117`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4505,6 +4505,77 @@ Status: active Product authority
     additional terms.
   - New receipt SHA-256: `PD-OI-116` scenario revision `1`
     `070023adf87f897aec2a277eb20400c190431e76ba327d997aebe0d1ff1f388e`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 120 changes: `PD-OI-117` is added (concern
+  `web.sequence-search`, scenario revision `1`; the outcome `A`, the Sequence
+  search section), and `PD-OI-092` (concern `web.settings-pane.section-index`)
+  and `PD-OI-093` (concern `web.settings-pane.display`) are replaced for
+  scenario revisions `3` and `5`. They come from the Product Decision Owner
+  `satoshikawato`'s replies in the Claude Code sessions of the campaign
+  `region-select-seq-search-20261104` (`DECISIONS.md` `D-02`, `D-03`, `D-39`,
+  `D-40`, `D-41`, `D-42`, `D-47`, `D-49`, `D-51`). The receipts name no ID of their own and are
+  recorded byte for byte. Each reply is quoted as written.
+  - D-02 (`2026-11-04`). The session offered A, the hits of one search become
+    an ordinary annotation set (recommended), or B, the query and the LOSAT
+    settings are kept in the Session and searched again on Load or Generate.
+    Reply: 「推奨通り」.
+  - D-03 (`2026-11-04`). The session first offered blastp against CDS
+    translations, on the premise that LOSAT had no tblastn. Reply:
+    「今はできる」, then 「推奨通り」 for the revised recommendation, tblastn of
+    a protein query against the loaded records with hits in genome
+    coordinates. Confirmed on `2026-11-06` (`D-40`).
+  - Q-B1 to Q-B7 (`2026-11-06`), asked with Before and After images of the
+    panel and the hits in each mode. Replies: Q-B1 A, its own section after
+    Region Annotations with a rail icon; Q-B2 C, both colourings, then one
+    colour per query as the default; Q-B3 A, one new annotation set per search;
+    Q-B4 A, the hits drawn right after the search as one History step, and A,
+    the query name, the program and the scores stay in the Session and not in
+    the annotation TSV; Q-B5 A, the hit table as shown; Q-B6 B, megablast by
+    default as in Pairwise Comparisons; Q-B7 B, the full-window LOSAT overlay.
+  - Q-B8 and Q-B9 (`2026-11-06`). Q-B8, the gradient by query position: 「B 1
+    行のまま、凡例に色の帯」, one row per hit drawn with a gradient style and a
+    Legend row "Query position" with a colour bar. Q-B9, the query chips: 「B
+    表を絞り、図では強調（推奨）」.
+  - The `PD-OI-117` receipt was shown in full twice. The first text, written
+    for Q-B8 A, was not approved (「承認しない（直してから再提示）」). The
+    second text, changed only where Q-B8 B required, was approved:
+    「承認（全文このまま）」.
+  - The `PD-OI-092` scenario revision `3` and `PD-OI-093` scenario revision
+    `5` receipts were shown in full together. Reply: 「承認（2 つともこのまま）」.
+  - After the implementation measured the section index and found that a
+    custom track stack draws no annotation set it does not name, the session
+    asked again on `2026-11-06`. Q-B10, a search set in a custom track stack:
+    「オーバーレイ的にすれば？Thoughts?」, then, offered A (a search set is
+    always drawn over the feature track), B (every highlight set that no slot
+    names), or C (the stack decides): 「A 検索のセットは常に重ねる（推奨）」.
+    Q-B11, the Linear index wrapping to a second row in a browser whose
+    scrollbar is always shown: 「検索は基本オーバーレイ的にすれば再配置しなくていいのでは？Thoughts?」.
+    The corrected `PD-OI-093` scenario revision `5` text (the measured widths
+    and a 17 px minimum) was shown in full: 「承認（全文このまま）」; that
+    approval settles Q-B11. A third `PD-OI-117` text, written for C, was
+    approved (「承認（全文このまま）」) and then replaced by a fourth text
+    written for Q-B10 A, shown in full: 「承認（全文このまま）」. On the
+    fourth text, which still drew the hits behind the features, the Owner
+    wrote: 「Overlayっつったじゃん。あと、ヒットのstrandに合わせて配置してね。」
+    A fifth text, with the hits drawn in front of the feature track on the
+    lane of their strand, was shown in full: 「承認（全文このまま）」.
+  - After the strand lanes were implemented, the session asked, with images
+    of both strand layouts, how to draw a hit whose strand has no lane on its
+    record: 「A トラック全体を覆う（推奨）」. A sixth `PD-OI-117` text, adding the
+    hit row's strand to the Session changes, the first lane of each strand,
+    that case, and the strand left out of the annotation TSV, was shown in
+    full: 「承認（全文このまま）」. The texts recorded below are the sixth
+    `PD-OI-117` text and the corrected `PD-OI-093` text.
+    They keep their outcomes and add the Sequence search section to the index
+    and its Search item to the icon rail. Each replaces the former scenario
+    revision as a whole; Git history retains the former receipts.
+  - New receipt SHA-256: `PD-OI-117` scenario revision `1`
+    `315bb92d173c5a4f3dd5a3f09cad9bf346cb26985648fb4116191b4395ee2338`; `PD-OI-092` scenario revision `3`
+    `dc50ad9b1832a1b0d046aa43c7bb72b44ef65e7067cb203f0ac52d2d6d9005ca`; `PD-OI-093` scenario revision `5`
+    `6f31923564c8723d0d95fb9ca463fec059d5f193b92fd6ecaf1ee963a87e2cc0`.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
@@ -9409,95 +9480,93 @@ Decision date: 2026-10-10
 ### PD-OI-092: Settings pane section index
 
 - Concern key: `web.settings-pane.section-index`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-092`, scenario revision `1` (`A / PINNED-ICON-SECTION-INDEX`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-092`, scenario revision `2` (`A / PINNED-ICON-SECTION-INDEX`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / PINNED-ICON-SECTION-INDEX`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
-  Revision 51 entry above. The Owner approved the receipt text below as
-  written. The receipt reproduces its fields without translation or
-  additional terms. Scenario revision `2` keeps the outcome and adds the Font section of the Revision 51 entry to the index. The runtime, tests, and documentation that
-  implement it merge with it (static Product Contract co-change); this record
-  supplies no runtime acceptance evidence.
+- Decision source: the Owner reply of `2026-11-06` quoted in the Revision
+  120 entry above. The Owner approved the receipt text below as written.
+  The receipt reproduces its fields without translation or additional terms.
+  Scenario revision `3` keeps the outcome and adds the Sequence search
+  section to the index. The runtime, tests, and documentation that implement
+  it merge with it (static Product Contract co-change); this record supplies
+  no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `0fba5433eeb10e8c606b967f142c4a33b938d23db7fc3d6dc7fde5396e636c92`.
+  `dc50ad9b1832a1b0d046aa43c7bb72b44ef65e7067cb203f0ac52d2d6d9005ca`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.settings-pane.section-index
-Scenario revision: 2
+Scenario revision: 3
 Choice: A / PINNED-ICON-SECTION-INDEX
-Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。
-Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
+Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。配列検索は query の欄、設定、ヒットの表を持つ長いパネルなので、Region Annotations の中には置かず、そのすぐ後ろに section を 1 つ加えて置く。
+Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Sequence search、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Sequence search、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 14 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔Sequence search section〕配列検索の query、設定、ヒットの表は、Region Annotations のすぐ後ろの新しい section「Sequence search」に置く。目次のアイコンは双眼鏡。〔変えないもの〕Font section と Sequence search section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
 May retire: none
-Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。
+Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 13、Linear で 14 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が増えるので撮り直すまで古い。設定ペインが 2 section ぶん（Font と Sequence search）長くなる。
 Owner: satoshikawato
-Decision date: 2026-10-13
+Decision date: 2026-11-06
 ```
 
 ```json
 {
   "concern": "web.settings-pane.section-index",
-  "scenarioRevision": 2,
+  "scenarioRevision": 3,
   "choice": "A / PINNED-ICON-SECTION-INDEX",
-  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。",
-  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
+  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。配列検索は query の欄、設定、ヒットの表を持つ長いパネルなので、Region Annotations の中には置かず、そのすぐ後ろに section を 1 つ加えて置く。",
+  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Sequence search、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Sequence search、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 14 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔Sequence search section〕配列検索の query、設定、ヒットの表は、Region Annotations のすぐ後ろの新しい section「Sequence search」に置く。目次のアイコンは双眼鏡。〔変えないもの〕Font section と Sequence search section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
   "mayRetire": "none",
-  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。",
+  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 13、Linear で 14 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が増えるので撮り直すまで古い。設定ペインが 2 section ぶん（Font と Sequence search）長くなる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-13"
+  "decisionDate": "2026-11-06"
 }
 ```
 
 ### PD-OI-093: Settings pane display switch and icon rail
 
 - Concern key: `web.settings-pane.display`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-093`, scenario revision `3` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
+- Scenario revision: `5`
+- Supersedes: `PD-OI-093`, scenario revision `4` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
 - Status: `ACCEPTED`
 - Selected outcome: `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner replies of `2026-10-24` quoted verbatim in the
-  Revision 88 entry above, and the Owner reply of `2026-10-25` quoted in the
-  Revision 98 entry above. The Owner approved the receipt text below as
-  written. The receipt reproduces its fields without translation or
-  additional terms. Scenario revision `3` kept the outcome and retired the
-  Circular comparison-ring layout warning before Generate, with the rail's
-  Layout warning mark that showed it. Scenario revision `4` changes only the
-  height of a rail item in a window 800 px high or lower in the Accepted
-  residual risk. The runtime, tests, and documentation that implement it
-  merge with it (static Product Contract co-change); this record supplies no
-  runtime acceptance evidence.
+- Decision source: the Owner reply of `2026-11-06` quoted in the Revision
+  120 entry above. The Owner approved the receipt text below as written.
+  The receipt reproduces its fields without translation or additional terms.
+  Scenario revision `5` keeps the outcome and adds the Search item (Sequence
+  search) to the icon rail, with the index button widths and the rail scroll
+  of its Accepted residual risk. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `a0a77fd5e3c5fb19c03ccaef75d7f1d5792301caf260de37cbf8195b6bc247f9`.
+  `6f31923564c8723d0d95fb9ca463fec059d5f193b92fd6ecaf1ee963a87e2cc0`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.settings-pane.display
-Scenario revision: 4
+Scenario revision: 5
 Choice: A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH
-Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。
-Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
+Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section と、配列検索のために加えた Sequence search section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。
+Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Search（Sequence search）、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
 May retire: Circular の比較リングの Generate 前の layout の警告（Pairwise Comparisons の欄の注意、Generate Diagram の上の注意と、列だけのときの Layout warning の印）。
-Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 30〜34 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。
+Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px より狭くなる（Circular は約 19.5 px、Linear は約 18.0 px。スクロールバーが常に出るブラウザでは約 18.8 px と約 17.4 px）。目次が 1 行に収まるよう、ボタンの最小幅は 18 px から 17 px になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 30〜34 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 2 つ（Font と Search）増えるので、低い窓では列がスクロールしやすくなる（Linear では 1280 × 720 でもスクロールすることがある）。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。
 Owner: satoshikawato
-Decision date: 2026-10-25
+Decision date: 2026-11-06
 ```
 
 ```json
 {
   "concern": "web.settings-pane.display",
-  "scenarioRevision": 4,
+  "scenarioRevision": 5,
   "choice": "A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH",
-  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。",
-  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
+  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section と、配列検索のために加えた Sequence search section も、目次と同じ順で列に置く。Circular の比較リングの Generate 前の layout の警告は、Python のレイアウトと違う規則で判定していて、描画と合わないので消す。収まらないときは Generate のエラーで知らせ、レイアウトが縮めた幅は Generate のあと各行の Width 欄に出る。",
+  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Search（Sequence search）、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
   "mayRetire": "Circular の比較リングの Generate 前の layout の警告（Pairwise Comparisons の欄の注意、Generate Diagram の上の注意と、列だけのときの Layout warning の印）。",
-  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 30〜34 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。",
+  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px より狭くなる（Circular は約 19.5 px、Linear は約 18.0 px。スクロールバーが常に出るブラウザでは約 18.8 px と約 17.4 px）。目次が 1 行に収まるよう、ボタンの最小幅は 18 px から 17 px になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 30〜34 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 2 つ（Font と Search）増えるので、低い窓では列がスクロールしやすくなる（Linear では 1280 × 720 でもスクロールすることがある）。比較リングが収まらないことは、Generate を押すまでわからない（LOSAT で比較を作るときは、その計算のあとでエラーになる）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-25"
+  "decisionDate": "2026-11-06"
 }
 ```
 
@@ -11650,6 +11719,76 @@ Decision date: 2026-11-06
   "mustPreserve": "512 MiB 以下の gzip 入力と、すべての平文入力の読み込み。Session の上限と形式",
   "mayRetire": "展開後 512 MiB を超える gzip 入力を直接読むこと",
   "acceptedResidualRisk": "約 21 Mbp を超えるゲノムの塩基ごとの depth 表を gzip のまま渡す場合は、展開が必要になる",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-06"
+}
+```
+
+### PD-OI-117: Sequence search
+
+- Concern key: `web.sequence-search`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed a search of query sequences
+  against the loaded records. `PD-OI-092` and `PD-OI-093` gain the section in
+  the same revision; `PD-OI-115` lists Use as search query, which this record
+  makes available. `PD-OI-016`, `PD-OI-020`, `PD-OI-022`, `PD-OI-040`,
+  `PD-OI-073`, `PD-OI-074`, `PD-OI-077`, `PD-OI-102`, `PD-OI-103`, and
+  `PD-OI-115` stay.
+- Status: `ACCEPTED`
+- Selected outcome: `A`, the Sequence search section
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies of `2026-11-04` and `2026-11-06` quoted
+  in the Revision 120 entry above. The receipt and JSON below reproduce the
+  approved fields without translation or additional terms. The runtime that
+  implements it merges with it (static Product Contract co-change); this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `315bb92d173c5a4f3dd5a3f09cad9bf346cb26985648fb4116191b4395ee2338`.
+
+```text
+PRODUCT_DECISION
+Concern: web.sequence-search
+Scenario revision: 1
+Choice: A. Sequence search section; each search adds an annotation set that is drawn at once.
+  - A "Sequence search" section sits right after Region Annotations in both modes, with a binoculars icon in the section index and the icon rail.
+  - Queries are pasted as FASTA or chosen from a FASTA file, one or more sequences. Each query is listed with its name, its length and its hit colour, which can be changed, and can be removed.
+  - The search runs against the records that the shown drawing draws, as last generated. Before the first Generate, Search is disabled with the reason "Generate to search".
+  - A nucleotide query is searched with blastn. The Task select offers megablast, blastn and dc-megablast, with megablast as the default, as in Pairwise Comparisons. The thresholds are Bitscore, E-value, Minimum Identity and Minimum Length, with the defaults of Pairwise Comparisons in the shown mode; they are the panel's own values and do not change Pairwise Comparisons.
+  - A protein query is searched with tblastn against the same records. Its hits are drawn in genome coordinates, as a nucleotide query's hits are.
+  - While the search runs, the full-window LOSAT overlay shows its progress and Cancel, as for Generate.
+  - The hits of one search become one new annotation set in Region Annotations, named "Search 1", "Search 2" and so on. Earlier sets stay and can be deleted there. Each hit row carries the query name, the strand, the program, the identity, the alignment length, the E-value and the bit score. The Session keeps them; an annotation TSV export does not, and its columns stay as they are.
+  - The hits are drawn right after the search, without Generate, as an overlay in front of the feature track, covering the features. Each hit sits on its strand: when the feature track separates the strands, a hit on the plus strand covers the first plus-strand lane and a hit on the minus strand the first minus-strand lane; when it does not, or when the record draws no lane for the hit's strand, a hit covers the whole feature track. Adding the set is one History step: Undo removes the hits at once, and Redo draws them again. Settings that wait for Generate keep waiting.
+  - With a custom track stack (Use custom stack), a search set is still drawn at once in the same way, and the stack does not change; a track slot that names the set takes its place. Other annotation sets are drawn as before and keep following the stack.
+  - Hit colour is chosen with the other settings before Search: one colour per query (the default), or a gradient by query position. With one colour per query, the Legend has one row per query, named by the query. With the gradient, each hit is still one row, drawn with a colour gradient from pale at the query's start to dark at its end, following the hit's strand, the same for every query. The Legend then has one row "Query position" with a colour bar from "start" to "end", in the form of the identity colour bar of Pairwise Comparisons, and the panel shows the same bar.
+  - The gradient is part of the row's style. In Region Annotations a gradient row shows its start and end colours in place of its fill colour, and a change of either applies at once, as the other colours do. The Session keeps the gradient; an annotation TSV export writes the row as a plain row in its end colour.
+  - After a search the query box and the settings fold to one line. The hit table lists each hit of the latest search, while its set exists, with Query and Record (two lines in one cell), Start-end, Strand, Identity, Length, E-value and Bit score. Clicking a row outlines that hit on the drawing.
+  - Chips above the table (All, then each query with its hit count) show one query's hits in the table and outline them on the drawing. The figure keeps every hit. The chips and the outline are no History step, are not saved in the Session, and are not in an export.
+  - Save Raw LOSAT TSV saves the search's rows as LOSAT wrote them.
+  - A search with no hit that passes the thresholds adds no set and no History step. The panel says "No hits for <query> (N bp)" and how many alignments the thresholds removed.
+  - A query that cannot be searched, such as text that is not a sequence, disables Search, with the reason under the query box.
+  - A search that fails or is cancelled adds nothing and keeps the drawing and the last Result.
+  - In the Region popup, Use as search query adds the span's sequence on the source strand to the queries, named "<record>:<start>-<end>", and opens the Sequence search section.
+  - The queries and settings of the panel are not saved in the Session. After a Load the panel is empty, and the hits of earlier searches are in Region Annotations.
+  - Edits of a search's set in Region Annotations keep that section's timing: colours apply at once; the other edits, and deleting the set, apply on Generate.
+  - This record decides that the hits are drawn right after the search. That drawing is not a unit of the live-settings evidence rule of PD-OI-103; the pull request reports how long it takes.
+Rationale: クエリ配列が読み込んだゲノムのどこに当たるかを、検索のすぐ後に図の上で示し、表で確かめられるようにする。ヒットは普通の注釈セットとして残すので、Region Annotations の編集と書き出しがそのまま使える。クエリ上の位置で塗るときも 1 つのヒットは 1 行のままにし、色の意味は凡例の帯で示す（そのために注釈のスタイルにグラデーションを 1 項目足す）。
+Must preserve: Pairwise Comparisons の LOSAT の実行、しきい値の意味、スレッド数、検索結果の再利用（PD-OI-016、PD-OI-020、PD-OI-022）。検索の失敗とキャンセルで図と直前の Result を保つこと（PD-OI-016）。LOSAT の表の座標と record の読み方（PD-OI-073、PD-OI-074、PD-OI-077）。注釈 TSV の列（PD-OI-040）。ライブの再描画の規則：失敗したら前の Result を保つ、1 つの操作が 1 つの History の操作になる、ライブの Result は同じ draft の Generate と同じ（PD-OI-102）。Region Annotations のほかの操作の適用時期（PD-OI-103）。Select region と Region popup（PD-OI-115）。設定ペインの目次とアイコンの列（PD-OI-092、PD-OI-093。Sequence search を加えること以外）。
+May retire: none
+Accepted residual risk: 最初の Generate の前は検索できない。Session の形式が変わる（注釈のスタイルにグラデーションの 1 項目、注釈セットに重ねて描く印の 1 項目、注釈の行に strand の 1 項目）。グラデーションは注釈 TSV に出ない（TSV では終わりの色 1 色の行になり、読み込み直すと単色で描かれる）。tblastn がアプリの LOSAT のすべての実行方法で使えるようになるまで、タンパク質の query は理由つきで検索できない。dc-megablast は Pairwise Comparisons と同じく threaded LOSAT が要る。検索のすぐ後の再描画は、大きな Session では数秒かかることがある。クエリの切り替えは図からほかのクエリのヒットを外さない（1 つのクエリだけの図には、そのクエリだけで検索し直すか、ほかの行を消す）。ヒットは feature の手前に重ねて描くので、ヒットの下の feature とその色は見えにくくなる（塗りの不透明度は 0.85）。ヒットは各 strand の 1 段目のレーンだけを覆うので、Resolve overlaps で 2 段目以降に移った feature は覆われない。strand を分けていても、その record にヒットの strand の feature が 1 つもなくそのレーンが描かれないときは、ヒットはトラック全体（もう一方の strand のレーン）を覆う。strand は注釈 TSV に出ない（TSV から読み込み直したヒットはトラック全体を覆う）。独自のトラック構成（Use custom stack）でも検索のセットは構成の一覧に出ずに描かれ、構成から外して隠すことはできない（隠すにはセットを消す）。
+Owner: satoshikawato
+Decision date: 2026-11-06
+```
+
+```json
+{
+  "concern": "web.sequence-search",
+  "scenarioRevision": 1,
+  "choice": "A. Sequence search section; each search adds an annotation set that is drawn at once.\n  - A \"Sequence search\" section sits right after Region Annotations in both modes, with a binoculars icon in the section index and the icon rail.\n  - Queries are pasted as FASTA or chosen from a FASTA file, one or more sequences. Each query is listed with its name, its length and its hit colour, which can be changed, and can be removed.\n  - The search runs against the records that the shown drawing draws, as last generated. Before the first Generate, Search is disabled with the reason \"Generate to search\".\n  - A nucleotide query is searched with blastn. The Task select offers megablast, blastn and dc-megablast, with megablast as the default, as in Pairwise Comparisons. The thresholds are Bitscore, E-value, Minimum Identity and Minimum Length, with the defaults of Pairwise Comparisons in the shown mode; they are the panel's own values and do not change Pairwise Comparisons.\n  - A protein query is searched with tblastn against the same records. Its hits are drawn in genome coordinates, as a nucleotide query's hits are.\n  - While the search runs, the full-window LOSAT overlay shows its progress and Cancel, as for Generate.\n  - The hits of one search become one new annotation set in Region Annotations, named \"Search 1\", \"Search 2\" and so on. Earlier sets stay and can be deleted there. Each hit row carries the query name, the strand, the program, the identity, the alignment length, the E-value and the bit score. The Session keeps them; an annotation TSV export does not, and its columns stay as they are.\n  - The hits are drawn right after the search, without Generate, as an overlay in front of the feature track, covering the features. Each hit sits on its strand: when the feature track separates the strands, a hit on the plus strand covers the first plus-strand lane and a hit on the minus strand the first minus-strand lane; when it does not, or when the record draws no lane for the hit's strand, a hit covers the whole feature track. Adding the set is one History step: Undo removes the hits at once, and Redo draws them again. Settings that wait for Generate keep waiting.\n  - With a custom track stack (Use custom stack), a search set is still drawn at once in the same way, and the stack does not change; a track slot that names the set takes its place. Other annotation sets are drawn as before and keep following the stack.\n  - Hit colour is chosen with the other settings before Search: one colour per query (the default), or a gradient by query position. With one colour per query, the Legend has one row per query, named by the query. With the gradient, each hit is still one row, drawn with a colour gradient from pale at the query's start to dark at its end, following the hit's strand, the same for every query. The Legend then has one row \"Query position\" with a colour bar from \"start\" to \"end\", in the form of the identity colour bar of Pairwise Comparisons, and the panel shows the same bar.\n  - The gradient is part of the row's style. In Region Annotations a gradient row shows its start and end colours in place of its fill colour, and a change of either applies at once, as the other colours do. The Session keeps the gradient; an annotation TSV export writes the row as a plain row in its end colour.\n  - After a search the query box and the settings fold to one line. The hit table lists each hit of the latest search, while its set exists, with Query and Record (two lines in one cell), Start-end, Strand, Identity, Length, E-value and Bit score. Clicking a row outlines that hit on the drawing.\n  - Chips above the table (All, then each query with its hit count) show one query's hits in the table and outline them on the drawing. The figure keeps every hit. The chips and the outline are no History step, are not saved in the Session, and are not in an export.\n  - Save Raw LOSAT TSV saves the search's rows as LOSAT wrote them.\n  - A search with no hit that passes the thresholds adds no set and no History step. The panel says \"No hits for <query> (N bp)\" and how many alignments the thresholds removed.\n  - A query that cannot be searched, such as text that is not a sequence, disables Search, with the reason under the query box.\n  - A search that fails or is cancelled adds nothing and keeps the drawing and the last Result.\n  - In the Region popup, Use as search query adds the span's sequence on the source strand to the queries, named \"<record>:<start>-<end>\", and opens the Sequence search section.\n  - The queries and settings of the panel are not saved in the Session. After a Load the panel is empty, and the hits of earlier searches are in Region Annotations.\n  - Edits of a search's set in Region Annotations keep that section's timing: colours apply at once; the other edits, and deleting the set, apply on Generate.\n  - This record decides that the hits are drawn right after the search. That drawing is not a unit of the live-settings evidence rule of PD-OI-103; the pull request reports how long it takes.",
+  "rationale": "クエリ配列が読み込んだゲノムのどこに当たるかを、検索のすぐ後に図の上で示し、表で確かめられるようにする。ヒットは普通の注釈セットとして残すので、Region Annotations の編集と書き出しがそのまま使える。クエリ上の位置で塗るときも 1 つのヒットは 1 行のままにし、色の意味は凡例の帯で示す（そのために注釈のスタイルにグラデーションを 1 項目足す）。",
+  "mustPreserve": "Pairwise Comparisons の LOSAT の実行、しきい値の意味、スレッド数、検索結果の再利用（PD-OI-016、PD-OI-020、PD-OI-022）。検索の失敗とキャンセルで図と直前の Result を保つこと（PD-OI-016）。LOSAT の表の座標と record の読み方（PD-OI-073、PD-OI-074、PD-OI-077）。注釈 TSV の列（PD-OI-040）。ライブの再描画の規則：失敗したら前の Result を保つ、1 つの操作が 1 つの History の操作になる、ライブの Result は同じ draft の Generate と同じ（PD-OI-102）。Region Annotations のほかの操作の適用時期（PD-OI-103）。Select region と Region popup（PD-OI-115）。設定ペインの目次とアイコンの列（PD-OI-092、PD-OI-093。Sequence search を加えること以外）。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "最初の Generate の前は検索できない。Session の形式が変わる（注釈のスタイルにグラデーションの 1 項目、注釈セットに重ねて描く印の 1 項目、注釈の行に strand の 1 項目）。グラデーションは注釈 TSV に出ない（TSV では終わりの色 1 色の行になり、読み込み直すと単色で描かれる）。tblastn がアプリの LOSAT のすべての実行方法で使えるようになるまで、タンパク質の query は理由つきで検索できない。dc-megablast は Pairwise Comparisons と同じく threaded LOSAT が要る。検索のすぐ後の再描画は、大きな Session では数秒かかることがある。クエリの切り替えは図からほかのクエリのヒットを外さない（1 つのクエリだけの図には、そのクエリだけで検索し直すか、ほかの行を消す）。ヒットは feature の手前に重ねて描くので、ヒットの下の feature とその色は見えにくくなる（塗りの不透明度は 0.85）。ヒットは各 strand の 1 段目のレーンだけを覆うので、Resolve overlaps で 2 段目以降に移った feature は覆われない。strand を分けていても、その record にヒットの strand の feature が 1 つもなくそのレーンが描かれないときは、ヒットはトラック全体（もう一方の strand のレーン）を覆う。strand は注釈 TSV に出ない（TSV から読み込み直したヒットはトラック全体を覆う）。独自のトラック構成（Use custom stack）でも検索のセットは構成の一覧に出ずに描かれ、構成から外して隠すことはできない（隠すにはセットを消す）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-06"
 }

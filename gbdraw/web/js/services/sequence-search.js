@@ -1,5 +1,5 @@
 // @ts-check
-// Sequence search (PD-OI-116): the data the panel sends to Python and reads
+// Sequence search (PD-OI-117): the data the panel sends to Python and reads
 // back. Python reads the queries (`readSearchQueries`, the FASTA-only loader)
 // and turns one search's LOSAT rows into an annotation set
 // (`searchHitAnnotationSet`, gbdraw/web_support/sequence_search.py); this

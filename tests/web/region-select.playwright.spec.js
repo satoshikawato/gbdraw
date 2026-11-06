@@ -300,7 +300,7 @@ test('Circular: a span across the origin leaves New drawing from region disabled
   }
 });
 
-// PD-OI-115 and PD-OI-116: Use as search query adds the span's bases on the source strand, read by Python, as a query
+// PD-OI-115 and PD-OI-117: Use as search query adds the span's bases on the source strand, read by Python, as a query
 // named "<record>:<start>-<end>", and opens the Sequence search section; the popup closes, and no History step is made.
 test('Circular: Use as search query adds a span across the origin as a query and opens Sequence search', async ({ browser }) => {
   test.setTimeout(420_000);

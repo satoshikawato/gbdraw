@@ -33,12 +33,12 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
  *   id: string, target: AnnotationTarget, label: string, mark: string, lane: number | null,
  *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>,
  *   strand?: '+' | '-' | null
- * }} AnnotationItem `strand`: the source strand of a sequence search's hit (PD-OI-116), written only by Python's
+ * }} AnnotationItem `strand`: the source strand of a sequence search's hit (PD-OI-117), written only by Python's
  *   search set builder; Python draws the hit on that strand's lane of a feature track that separates the strands.
  * @typedef {{
  *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null,
  *   keepHighlightOverlay?: boolean
- * }} AnnotationSet `keepHighlightOverlay`: a sequence search's set (PD-OI-116), written only by Python's search
+ * }} AnnotationSet `keepHighlightOverlay`: a sequence search's set (PD-OI-117), written only by Python's search
  *   set builder; Python draws its highlights behind the features also in a custom stack that names no slot for it.
  */
 

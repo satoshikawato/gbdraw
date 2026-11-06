@@ -1759,7 +1759,7 @@ export const createRunAnalysis = ({
   };
   // The annotation sets a Sequence search step added (its commit, Undo or
   // Redo, `searchSetIdsOfStep`), per drawing, until the rerender that draws
-  // them ends: they follow the draft at once (PD-OI-116).
+  // them ends: they follow the draft at once (PD-OI-117).
   /** @type {Map<DrawingState, Set<string>>} */
   const pendingSearchSets = new Map();
   /** @param {DrawingState} drawing */
@@ -6452,7 +6452,7 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = [];
   };
 
-  // Sequence search (PD-OI-116): one blastn search of the panel's queries
+  // Sequence search (PD-OI-117): one blastn search of the panel's queries
   // against the drawn records, through the Pairwise Comparisons runtime (the
   // LOSAT execution and thread settings, the serial engine's task check) and the
   // full-window overlay with its progress and Cancel. It draws nothing: the

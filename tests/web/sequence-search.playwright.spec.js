@@ -1,4 +1,4 @@
-// Sequence search (PD-OI-116): a search adds one annotation set of its hits, drawn at once without Generate as one
+// Sequence search (PD-OI-117): a search adds one annotation set of its hits, drawn at once without Generate as one
 // History step; Undo removes the hits at once and Redo draws them again. A hit across the origin of a circular record
 // drawn whole is one hit in both modes. The chips and a row click outline hits outside the Result. A gradient and a
 // search colour edit apply at once; a Legend colour edit stays. No hits, Cancel and a protein query add nothing.

@@ -372,7 +372,7 @@ export const WORK_ALLOWLIST = [
       await settleLive(page);
     }
   },
-  // Sequence search (PD-OI-116): Python reads the query text and the bases of the shown Result's records, LOSAT
+  // Sequence search (PD-OI-117): Python reads the query text and the bases of the shown Result's records, LOSAT
   // searches them (in its own Worker, no diagram request), Python builds the set of hits, and the set's History step
   // asks for the automatic rerender, which draws the hits. Its Undo restores the editor's Legend rows and their fills
   // (one compile, as the Undo of a Legend edit) and asks for the rerender that removes the hits.
