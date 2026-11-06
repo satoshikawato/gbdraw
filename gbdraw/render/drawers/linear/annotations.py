@@ -27,9 +27,9 @@ from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
     annotation_dom_id,
     cap_size,
-    capped_ends,
     dom_token,
     label_ink_offsets,
+    mark_parts,
     mark_reach,
     past_span_edge,
 )
@@ -443,18 +443,18 @@ def linear_annotation_track_content(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        part_count = len(annotation.geometry_segments)
+        parts = mark_parts(annotation, join_origin=False)
+        part_count = len(parts)
         row_targets: dict[int, Group] = {}
-        for part_index, (start, end) in enumerate(annotation.geometry_segments, start=1):
-            x1, x2 = float(start) * scale, float(end) * scale
-            fragment = annotation.display_parts[part_index - 1] if annotation.display_parts is not None else None
-            cap_start, cap_end = capped_ends(annotation, part_index - 1)
+        for part_index, part in enumerate(parts, start=1):
+            x1, x2 = float(part.start) * scale, float(part.end) * scale
+            cap_start, cap_end = part.capped_start, part.capped_end
             part_target = item_group
-            if row_frames and fragment is not None:
-                frame = row_frames[fragment.row]
-                part_target = row_targets.get(fragment.row) or wrap_row_group(fragment.row, frame.shift_y)
-                if fragment.row not in row_targets:
-                    row_targets[fragment.row] = part_target
+            if row_frames and annotation.display_parts is not None:
+                frame = row_frames[part.row]
+                part_target = row_targets.get(part.row) or wrap_row_group(part.row, frame.shift_y)
+                if part.row not in row_targets:
+                    row_targets[part.row] = part_target
                     item_group.add(part_target)
                 lane_height = _lane_height(track, placements, frame.height_px, params)
                 lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
@@ -484,7 +484,7 @@ def linear_annotation_track_content(
                         part_count=part_count,
                         include_stable_id=True,
                     )
-                if not auto_feature_underlay and fragment is not None and (fragment.artificial_start or fragment.artificial_end):
+                if not auto_feature_underlay and not (cap_start and cap_end):
                     rect.attribs['stroke'] = 'none'
                     top = lane_center - 0.5 * height_factor * lane_height
                     bottom = lane_center + 0.5 * height_factor * lane_height
@@ -506,7 +506,7 @@ def linear_annotation_track_content(
                 fill="none",
                 stroke=style.stroke,
                 stroke_width=style.stroke_width,
-                stroke_linecap=("butt" if fragment is not None and (fragment.artificial_start or fragment.artificial_end) else "round"),
+                stroke_linecap="round" if cap_start and cap_end else "butt",
             )
             if dash:
                 line.attribs["stroke-dasharray"] = dash
