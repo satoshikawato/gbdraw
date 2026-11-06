@@ -770,6 +770,31 @@
           "kind": "py-count"
         }
       ]
+    },
+    {
+      "id": "WEB-FUNCTION-SIZE",
+      "heading": "Web function size",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/web/function-size-ratchet.test.mjs",
+          "rootCause": "new",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/function-size-ratchet.test.mjs",
+          "symbol": "FUNCTION_LINES",
+          "kind": "count-map"
+        },
+        {
+          "path": "tests/web/function-size-ratchet.test.mjs",
+          "symbol": "MAX_FUNCTION_LINES",
+          "kind": "count"
+        }
+      ]
     }
   ]
 }

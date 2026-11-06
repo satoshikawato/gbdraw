@@ -492,6 +492,33 @@ and holds the layer table, the limits, and the baselines.
   A new unit goes into `LAYERS` in a pull request without production code,
   before the code that adds it.
 
+## Web function size
+
+This is the rule `WEB-FUNCTION-SIZE` of `tools/web-design-rule-guards.json`.
+`tests/web/function-size-ratchet.test.mjs` reads the modules under
+`gbdraw/web/js/`, except the generated `*.generated.js` ones, with the pinned
+TypeScript, and holds the limit and the baseline.
+
+- A function stays within `MAX_FUNCTION_LINES` lines, the limit Python
+  functions have. `FUNCTION_LINES` holds the longer functions the rule started
+  with at their length; a listed function may shrink but not grow.
+- A function is each function declaration, function expression, arrow
+  function, method, accessor, and constructor, nested ones included. Its lines
+  run from its first token to its last, so a nested function counts in the
+  functions around it as well: a `create*` factory counts with every function
+  inside it.
+- A function is named `<path under gbdraw/web/js/>::<qualified name>`, the
+  names of the functions, classes, and named object literals around it and its
+  own, joined by `.`. A function expression takes the name it is bound to,
+  through the calls around it; a callback bound to no name is named after the
+  call it is passed to, such as `forEach()`. Functions with one name in one
+  module count as the longest of them. The test's header gives the details.
+- A listed function that moves to another module or takes another name is a
+  new entry. A split moves out parts within the limit and lowers the entry of
+  the function they leave.
+- Adding or raising an entry and raising the limit are authority-only changes
+  that need the Owner's approval. Lowering or removing an entry is optional.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
