@@ -95,7 +95,13 @@ const loadPdfLibraries = () => {
  * A PNG or PDF size, in SVG pixels, for the Worker's limit check
  * (gbdraw/render/export_limits.py); `dpi` is the PNG's, null for a PDF.
  * @typedef {{ format: 'png' | 'pdf', width: number, height: number, dpi: number | null }} ExportLimitRequest
- * @typedef {(request: ExportLimitRequest) => Promise<unknown>} CheckExportLimit
+ * A PNG's width and height in pixels: Python's `png_pixel_size`, the size the
+ * command line's PNG of the same figure and DPI has.
+ * @typedef {{ width: number, height: number }} PngPixelSize
+ * The check's answer for a figure that fits (`ExportLimitReply` in
+ * gbdraw/web_support/export_limit.py): `pixels` is the PNG's size, null for a PDF.
+ * @typedef {{ ok: true, pixels: PngPixelSize | null }} ExportLimitReply
+ * @typedef {(request: ExportLimitRequest) => Promise<ExportLimitReply>} CheckExportLimit
  *   Rejects with the EXPORT_LIMIT error when the figure is over the format's limit.
  */
 
@@ -128,10 +134,11 @@ const loadPdfLibraries = () => {
  * nothing is downloaded. A missing port fails here, as a missing PDF font port does.
  * @param {CheckExportLimit | undefined} checkExportLimit
  * @param {ExportLimitRequest} request
+ * @returns {Promise<ExportLimitReply>}
  */
 const requireExportWithinLimit = async (checkExportLimit, request) => {
   if (typeof checkExportLimit !== 'function') throw new Error('The export size check is not available.');
-  await checkExportLimit(request);
+  return checkExportLimit(request);
 };
 
 /**
@@ -570,11 +577,12 @@ export const downloadPNG = async (snapshot, { embedFonts, checkExportLimit } = {
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
-  await requireExportWithinLimit(checkExportLimit, { format: 'png', width: dims.width, height: dims.height, dpi });
+  const { pixels } = await requireExportWithinLimit(checkExportLimit, { format: 'png', width: dims.width, height: dims.height, dpi });
+  if (!pixels) throw new Error('The export size check named no PNG size.');
+  // The size the command line's PNG has: Python rounds it as CairoSVG does, where a canvas would truncate.
   const canvas = document.createElement('canvas');
-  const scale = dpi / CSS_PX_PER_INCH;
-  canvas.width = dims.width * scale;
-  canvas.height = dims.height * scale;
+  canvas.width = pixels.width;
+  canvas.height = pixels.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('The browser could not initialize PNG conversion.');

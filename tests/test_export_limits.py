@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import struct
 from pathlib import Path
 
 import pytest
@@ -14,7 +16,9 @@ from gbdraw.api.request_render import plan_request
 from gbdraw.exceptions import ExportError
 from gbdraw.layout.linear_wrap import LinearWrapSummary, longer_row_lengths
 from gbdraw.render import export_limits
+from gbdraw.render.export import convert_svg_with_cairosvg
 from gbdraw.render.export_limits import bind_export_wrap, check_export_limit
+from gbdraw.web_support.export_limit import check_web_export_limit_json
 
 SORANGIUM_BP = 13_033_779
 # Measured: examples/NC_010162.gb at 50 kb per row, 261 rows.
@@ -184,3 +188,34 @@ def test_a_drawn_wrapped_figure_carries_its_rows_to_the_check(tmp_path: Path, mo
     monkeypatch.setattr(export_limits, "PNG_MAX_PIXELS", 10)
     with pytest.raises(ExportError, match="No longer row length would fit"):
         render_to_bytes(built.drawing, "png")
+
+
+@pytest.mark.parametrize(
+    ("size", "dpi"),
+    [
+        # 1,236 x 3.125 = 3,862.5: CairoSVG rounds half to even, as Python does (a JavaScript Math.round gives 3,863).
+        ((1_236.0, 100.0), 300),
+        # 1,237 x 3.125 = 3,865.625: a canvas that truncated drew 3,865.
+        ((1_237.0, 101.0), 300),
+        ((10.0, 10.0), 72),
+    ],
+)
+def test_the_web_png_check_returns_the_pixel_size_the_cli_png_has(size: tuple[float, float], dpi: int) -> None:
+    # OV-2682: the Web sizes its PNG canvas by the size the check returns, so a Web PNG and a CLI PNG of the same
+    # figure at the same DPI are the same size.
+    pytest.importorskip("cairosvg")
+    width, height = size
+    reply = json.loads(check_web_export_limit_json(json.dumps(
+        {"format": "png", "width": width, "height": height, "dpi": dpi, "linearWrap": None})))
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+           f'viewBox="0 0 {width} {height}"><rect width="{width}" height="{height}"/></svg>')
+    png = convert_svg_with_cairosvg(svg, "png", dpi=dpi)
+    cli_width, cli_height = struct.unpack(">II", png[16:24])
+    assert reply == {"ok": True, "pixels": {"width": cli_width, "height": cli_height}}
+    assert (cli_width, cli_height) == export_limits.png_pixel_size(width, height, dpi)
+
+
+def test_a_pdf_check_names_no_pixel_size() -> None:
+    reply = check_web_export_limit_json(json.dumps(
+        {"format": "pdf", "width": 1_237.0, "height": 101.0, "dpi": None, "linearWrap": None}))
+    assert json.loads(reply) == {"ok": True, "pixels": None}

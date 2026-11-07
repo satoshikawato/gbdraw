@@ -57,6 +57,16 @@ def png_export_dpi(dpi: float | None) -> float:
     return DEFAULT_PNG_DPI if dpi is None else dpi
 
 
+def png_pixel_size(width_px: float, height_px: float, dpi: float | None) -> tuple[int, int]:
+    """The width and height in pixels of a PNG of an SVG ``width_px`` x ``height_px`` drawn at ``dpi``
+    (:func:`png_export_dpi`): ``dpi / 96`` pixels per SVG pixel, each side rounded half to even, as CairoSVG rounds
+    its PNG surface. The limit check and the Web PNG canvas read it here, so a Web PNG is the CLI's size.
+    """
+
+    scale = png_export_dpi(dpi) / CSS_PX_PER_INCH
+    return round(width_px * scale), round(height_px * scale)
+
+
 def _row_length_advice(wrap: LinearWrapSummary, width: float, height: float, limit: int) -> tuple[int, float] | None:
     """The next longer 1-2-5 row length that fits and its estimated height, from the drawn height per row: the rows
     share the height. ``None`` when no longer row length would fit."""
@@ -91,8 +101,7 @@ def check_export_limit(
     if fmt == "png":
         scale = png_dpi / CSS_PX_PER_INCH
         limit, unit = PNG_MAX_PIXELS, "px"
-        # CairoSVG rounds a PNG's size to whole pixels.
-        over = max(round(width_px * scale), round(height_px * scale)) > limit
+        over = max(png_pixel_size(width_px, height_px, png_dpi)) > limit
     elif fmt == "pdf" and wrap is not None:
         scale = PDF_PT_PER_SVG_PX
         limit, unit = PDF_MAX_PAGE_PT, "pt"
@@ -152,4 +161,5 @@ __all__ = [
     "check_export_limit",
     "checked_png_dpi",
     "png_export_dpi",
+    "png_pixel_size",
 ]

@@ -25,7 +25,7 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ShowNotice } from './app-messages.js' */
-/** @import { ExportRootSize, ExportSnapshot, FontEmbedding } from '../services/export.js' */
+/** @import { ExportLimitReply, ExportRootSize, ExportSnapshot, FontEmbedding } from '../services/export.js' */
 /** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 
 const { computed, reactive, ref } = window.Vue;
@@ -393,9 +393,11 @@ export const createResultExport = ({
         resolvePdfFonts: async (runs, known) => /** @type {PdfFontsReply} */ ((
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
         ).result),
-        checkExportLimit: async (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
-          ...request, linearWrap: await linearWrap()
-        }),
+        checkExportLimit: async (request) => /** @type {ExportLimitReply} */ ((
+          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
+            ...request, linearWrap: await linearWrap()
+          })
+        ).result),
         // A Result drawn to a requested size states it in its SVG as the CLI writes it (Python's
         // `export_root_size`, through the export check); a Result drawn at Auto exports its root as shown.
         sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => /** @type {{ root: ExportRootSize }} */ ((
