@@ -235,7 +235,7 @@ export const createSimilarityAlignmentReview = ({
   const similarityAlignmentGeometry = shallowRef(/** @type {AlignmentFigureGeometry | null} */ (null));
   const refreshSimilarityAlignmentCanvas = () => {
     similarityAlignmentCanvasHover.value = null;
-    // Read only after the checks below pass: an open dialog has a draft.
+    // Used only after the checks below pass: an open dialog has a draft.
     const current = /** @type {AlignmentDraft} */ (alignmentDraft.value);
     if (!alignmentDialogOpen.value) {
       clearAlignmentOverlay();
