@@ -145,9 +145,8 @@ def _ink(item: ElementTree.Element) -> tuple[float, float, float, float]:
     return x + left, x + right, y + top, y + bottom
 
 
-def _ink_radii(item: ElementTree.Element) -> tuple[float, float]:
-    """How near the circle's centre and how far from it a straight label's letters come: its ink box, turned by
-    its ``rotate`` about its anchor."""
+def _ink_corners(item: ElementTree.Element) -> list[tuple[float, float]]:
+    """The corners of a straight label's ink box, turned by its ``rotate`` about its anchor."""
 
     (text,) = item.iter(f"{_SVG}text")
     x, y = float(text.get("x", "nan")), float(text.get("y", "nan"))
@@ -156,10 +155,16 @@ def _ink_radii(item: ElementTree.Element) -> tuple[float, float]:
     left, right, top, bottom = label_ink_offsets(
         "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
     )
-    corners = [
+    return [
         (x + dx * math.cos(angle) - dy * math.sin(angle), y + dx * math.sin(angle) + dy * math.cos(angle))
         for dx, dy in ((left, top), (right, top), (right, bottom), (left, bottom))
     ]
+
+
+def _ink_radii(item: ElementTree.Element) -> tuple[float, float]:
+    """How near the circle's centre and how far from it a straight label's letters come."""
+
+    corners = _ink_corners(item)
 
     def nearest(start: tuple[float, float], end: tuple[float, float]) -> float:
         # The distance from the centre to one edge of the box.
@@ -169,6 +174,19 @@ def _ink_radii(item: ElementTree.Element) -> tuple[float, float]:
 
     near = min(nearest(corners[index], corners[(index + 1) % 4]) for index in range(4))
     return near, max(math.hypot(cx, cy) for cx, cy in corners)
+
+
+def _ink_polar(item: ElementTree.Element, record_length: int = 10_000) -> list[tuple[float, float]]:
+    """Points over a straight label's ink box on a Circular drawing, each as its radius and its bp."""
+
+    (x0, y0), (x1, y1), _corner, (x3, y3) = _ink_corners(item)
+    points = []
+    for across in range(201):
+        for down in range(21):
+            u, v = across / 200, down / 20
+            x, y = x0 + u * (x1 - x0) + v * (x3 - x0), y0 + u * (y1 - y0) + v * (y3 - y0)
+            points.append((math.hypot(x, y), math.degrees(math.atan2(x, -y)) % 360 / 360 * record_length))
+    return points
 
 
 def test_linear_label_above_gets_room_from_the_lane_it_would_cross() -> None:
@@ -283,19 +301,34 @@ def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -
     assert bottom == pytest.approx(b_top - _EDGE, abs=0.01)
 
 
-@pytest.mark.parametrize("radius", (",r=0.6", ""))
-@pytest.mark.parametrize("orientation", ("tangent", "horizontal"))
-def test_an_inside_circular_label_is_measured_on_the_slots_side_and_radius(orientation: str, radius: str) -> None:
+@pytest.mark.parametrize(
+    ("orientation", "radius", "b_span"),
+    (
+        *((orientation, radius, (2500, 3500)) for radius in (",r=0.6", "") for orientation in ("tangent", "horizontal")),
+        # A slot centred on its radius widens both ways by the room: its lanes' edge moves out, where the letters
+        # would cross nothing, so a room that a gap needed where the slot was drawn before stays.
+        ("tangent", ",r=0.6", (3640, 4440)),
+        ("tangent", ",r=0.6", (3640, 3680)),
+        ("horizontal", ",r=0.6", (3500, 3900)),
+    ),
+)
+def test_an_inside_circular_label_is_measured_on_the_slots_side_and_radius(
+    orientation: str, radius: str, b_span: tuple[int, int]
+) -> None:
     # On an inside slot at 0.6 of the radius, or where the plan places it (about 330 px from the centre, well inside
     # the axis circle), a (lane 0) labels inward at bp 3000 over b's mark in lane 1.
-    regions = (_region("a", 1000, 5000, "A rather long region label text", orientation), _region("b", 2500, 3500, ""))
+    regions = (_region("a", 1000, 5000, "A rather long region label text", orientation), _region("b", *b_span, ""))
     items = _groups(_svg("circular", regions, f"regions:annotations@side=inside,set_id=regions{radius}"))
     a_inner, _a_outer = _radii(items["a"])
-    _b_inner, b_outer = _radii(items["b"])
-    near, far = _ink_radii(items["a"])
+    b_inner, b_outer = _radii(items["b"])
+    _near, far = _ink_radii(items["a"])
 
-    # A Circular band fills its lane: the room leaves the letters right at the next mark's paint.
-    assert near >= b_outer + _PAINT - 0.05
+    # A Circular band fills its lane: the room leaves the letters right at the next mark's paint, or past it.
+    assert not [
+        (radius, bp)
+        for radius, bp in _ink_polar(items["a"])
+        if b_inner - _PAINT < radius < b_outer + _PAINT - 0.05 and b_span[0] <= bp <= b_span[1]
+    ]
     assert far == pytest.approx(a_inner - _EDGE, abs=0.05)
 
 

@@ -135,6 +135,7 @@ from ...tracks import (
 from ...annotations import (
     AnnotationOptions,
     LabelSizing,
+    LaneRoom,
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
@@ -415,7 +416,9 @@ def _place_annotation_tracks_where_drawn(
 
     ``slots`` are the slots as requested: an annotation slot without a width takes its required extent. The
     planner packed every annotation slot at the axis circle; a slot whose packing changes where it is drawn lays the
-    tracks out again, until the slots' edges settle."""
+    tracks out again, until the slots' edges settle. A gap that needed room where the slot was drawn keeps it in
+    later packings: a slot centred on its radius widens toward the axis too, and its lanes' edge moving back as the
+    room dropped would bring the crossing back."""
 
     annotations = tuple(item for item in bundle.annotations if item.record_index == record_index)
     packed_at: dict[str, float] = {}
@@ -462,7 +465,9 @@ def _annotation_tracks_packed_where_drawn(
 ) -> dict[str, ResolvedAnnotationTrack]:
     """The annotation slots beside the axis packed again at the edge their lanes stack from in ``radial_layout``
     (the inner edge outside the axis, the outer edge inside it), where that edge moved from where they were packed
-    (``packed_at``, which this updates; the axis circle at first): only the slots whose packing changed.
+    (``packed_at``, which this updates; the axis circle at first): only the slots whose packing changed. A slot
+    packed where it was drawn before keeps at least the rooms of that packing; the planner's at the axis circle
+    are not kept.
 
     ``slots`` are the slots as requested (an annotation slot without a width takes its required extent)."""
 
@@ -475,6 +480,7 @@ def _annotation_tracks_packed_where_drawn(
         edge = resolved.draw_outer_radius_px if inside else resolved.draw_inner_radius_px
         if abs(edge - packed_at.get(resolved.id, float(canvas_config.radius))) <= _LANE_EDGE_SETTLED_PX:
             continue
+        rooms_at_least = layouts[resolved.id].lane_rooms if resolved.id in packed_at else ()
         packed_at[resolved.id] = edge
         layout = _circular_annotation_track(
             gb_record,
@@ -484,6 +490,7 @@ def _annotation_tracks_packed_where_drawn(
             record_index=record_index,
             inside=inside,
             lanes_from_px=edge,
+            rooms_at_least=rooms_at_least,
         )
         if layout != layouts[resolved.id]:
             repacked[resolved.id] = layout
@@ -499,10 +506,11 @@ def _circular_annotation_track(
     record_index: int,
     inside: bool,
     lanes_from_px: float,
+    rooms_at_least: Sequence[LaneRoom] = (),
 ) -> ResolvedAnnotationTrack:
     """Pack one annotation slot, its labels measured beside their marks on the slot's side
     (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest the
-    axis side it starts from."""
+    axis side it starts from; each gap keeps at least its room in ``rooms_at_least``."""
 
     axis_radius = float(canvas_config.radius)
     params = annotation_track_params_from_mapping(slot.params)
@@ -526,6 +534,7 @@ def _circular_annotation_track(
             bp_per_px={record_index: length / max(1.0, 2.0 * math.pi * axis_radius)},
         ),
         join_origin=True,
+        rooms_at_least=rooms_at_least,
     )
 
 

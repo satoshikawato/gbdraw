@@ -325,6 +325,7 @@ def _lane_rooms(
     labels_above: bool,
     join_origin: bool,
     label_position: Callable[[ResolvedRegionAnnotation], LabelPosition],
+    at_least: Sequence[LaneRoom],
 ) -> tuple[LaneRoom, ...]:
     """The room between lanes for the labels that would cross a mark of the next lane on their side (PD-OI-119,
     lane room), per record and row.
@@ -334,7 +335,8 @@ def _lane_rooms(
     the rooms of the gaps before its own). A label would cross where those letters meet a mark of the next lane on the label's
     row. The room between two lanes is the largest of their crossing labels' rooms: the letters' depth, the
     label's ``label_offset`` and half of each of the two strokes (the label's mark and the widest mark it would
-    cross), so the letters clear the next mark's paint as they clear their own.
+    cross), so the letters clear the next mark's paint as they clear their own. A gap keeps at least its room in
+    ``at_least``.
     """
 
     marks: dict[tuple[int, int, int], list[tuple[float, float, float]]] = {}
@@ -361,7 +363,7 @@ def _lane_rooms(
         ),
         key=lambda item: item[:3],
     )
-    rooms: dict[tuple[int, int, int], float] = {}
+    rooms = {(room.record_index, room.row, room.gap): room.px for room in at_least}
     for record_index, row, gap, placement, place in labelled:
         annotation = placement.annotation
         before = sum(
@@ -400,6 +402,7 @@ def layout_annotation_track(
     lane_extent_px: float = 14.0,
     labels: LabelSizing,
     join_origin: bool,
+    rooms_at_least: Sequence[LaneRoom] = (),
 ) -> ResolvedAnnotationTrack:
     """Pack one set and calculate its radial/vertical required extent.
 
@@ -408,7 +411,7 @@ def layout_annotation_track(
     (``_lane_rooms``), and the track's required extent grows by the largest room a record's row takes
     (``ResolvedAnnotationTrack.lane_room_px``). A span over other slots (``to_slot``, ``cover_anchor``) gets none:
     where it covers a slot its labels stand outside the slots it covers, and whether it covers one on a record is
-    known only after the lanes are packed."""
+    known only after the lanes are packed. A gap keeps at least its room in ``rooms_at_least`` (an earlier packing's)."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -484,6 +487,7 @@ def layout_annotation_track(
             labels_above=labels.labels_above,
             join_origin=join_origin,
             label_position=label_position,
+            at_least=rooms_at_least,
         )
     )
     room = _largest_room(lane_rooms)
