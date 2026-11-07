@@ -315,11 +315,9 @@ def test_radial_labels_that_grow_the_circle_measure_an_outside_slot_where_it_is_
     assert gbdraw.draw_circular(record, options=options)._drawing.tostring() == drawn
 
 
-def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    # 150 labelled regions on an inside slot need lane rooms that carry the slot over the centre definition, so the
-    # label fit check scans smaller definition fonts, each laying the tracks out again (OV-2664). A slot's label room
-    # is measured once for each band, axis and side it is asked for, however often the layouts ask.
-    import gbdraw.diagrams.circular.assemble as assemble_module
+def _inside_slot_over_the_definition() -> tuple[SeqRecord, gbdraw.CircularOptions]:
+    """150 labelled regions on an inside slot: their lane rooms carry the slot over the centre definition, so the
+    label fit check scans smaller definition fonts, each verified with a full assembly (OV-2664)."""
 
     record = gbdraw.read_genbank(str(_HMMT))[0]
     length = len(record.seq)
@@ -331,6 +329,19 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
         for index in range(150)
         for start in (rng.randint(1, length - 400),)
     )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("i1", regions),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "i1:annotations@side=inside,set_id=i1")),
+    )
+    return record, options
+
+
+def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The scan lays the tracks out again for each smaller definition font (OV-2664). A slot's label room is measured
+    # once for each band, axis and side it is asked for, however often the layouts ask.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    record, options = _inside_slot_over_the_definition()
     measured: list[tuple[object, ...]] = []
     original = assemble_module.circular_annotation_label_room
 
@@ -340,15 +351,60 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
         return original(track, **kwargs)
 
     monkeypatch.setattr(assemble_module, "circular_annotation_label_room", counting)
-    options = gbdraw.CircularOptions(
-        annotations=AnnotationOptions(sets=(AnnotationSet("i1", regions),)),
-        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "i1:annotations@side=inside,set_id=i1")),
-    )
     with pytest.warns(UserWarning, match="definition lines do not fit"):
         gbdraw.draw_circular(record, options=options)
 
     distinct = {(id(track), *rest) for track, *rest in measured}
     assert distinct and len(measured) == len(distinct)
+
+
+def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The scan's assemblies differ in the definition font only (OV-2664): a slot packed from the same edge with the
+    # same rooms is packed once, and its labels drawn at the same radii among the same obstacles are placed once,
+    # however many rows the check verifies. Placing a track's labels counts each label against one obstacle index
+    # that takes every label placed before it, not an index made again for each label.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    import gbdraw.render.drawers.circular.annotations as drawer
+    from gbdraw.api.diagram import label_fit_report
+
+    record, options = _inside_slot_over_the_definition()
+    packed: list[tuple[object, ...]] = []
+    placed: list[tuple[object, ...]] = []
+    indexes: list[int] = []
+    pack, place, index_init = (
+        assemble_module.layout_annotation_track,
+        assemble_module.circular_annotation_labels,
+        drawer._ObstacleIndex.__init__,
+    )
+
+    def counting_pack(slot_id: str, set_id: str, annotations: object, **kwargs: object) -> object:
+        labels = kwargs["labels"]
+        assert isinstance(labels, LabelSizing)
+        packed.append((slot_id, tuple(sorted(labels.extent.keywords.items())), tuple(kwargs["rooms_at_least"])))
+        return pack(slot_id, set_id, annotations, **kwargs)
+
+    def counting_place(track: object, **kwargs: object) -> object:
+        if kwargs.get("obstacles") is not None:
+            placed.append((kwargs["inner_radius_px"], kwargs["outer_radius_px"], kwargs["obstacles"]))
+        return place(track, **kwargs)
+
+    def counting_index(self: object, obstacles: object) -> None:
+        indexes.append(1)
+        index_init(self, obstacles)
+
+    monkeypatch.setattr(assemble_module, "layout_annotation_track", counting_pack)
+    monkeypatch.setattr(assemble_module, "circular_annotation_labels", counting_place)
+    monkeypatch.setattr(drawer._ObstacleIndex, "__init__", counting_index)
+    with pytest.warns(UserWarning, match="definition lines do not fit"):
+        drawing = gbdraw.draw_circular(record, options=options)
+
+    report = label_fit_report(drawing._drawing)
+    assert report is not None and any(row.kind == "smaller_definition_font" for row in report.rows)
+    assert packed and len(packed) == len(set(packed))
+    assert placed and len(placed) == len(set(placed))
+    assert len(indexes) == len(placed)
 
 
 def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> None:
