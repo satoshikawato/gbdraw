@@ -431,7 +431,10 @@ def save_figure(
     for fmt in formats_to_process:
         out_file = resolve_format_output_path(base_filename, fmt)
         try:
-            check_drawing_export_limits(canvas, [fmt], dpi=dpi)
+            if fmt == "png":
+                # Only the PNG is checked here: its size follows the DPI, whose default is now 300. The other
+                # formats keep what this deprecated function wrote before (a wrapped PDF over the page limit too).
+                check_drawing_export_limits(canvas, [fmt], dpi=dpi)
             convert_svg_with_cairosvg(
                 svg_bytes,
                 fmt,

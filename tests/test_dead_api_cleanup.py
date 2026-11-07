@@ -159,6 +159,24 @@ def test_internal_save_figure_dpi_96_writes_the_wide_png(tmp_path: Path) -> None
     assert (tmp_path / "wide.pdf").exists()
 
 
+def test_internal_save_figure_still_writes_a_wrapped_pdf_over_the_page_limit(tmp_path: Path) -> None:
+    """Only the PNG is checked: a wrapped figure taller than a PDF page, written before, is still written."""
+
+    pytest.importorskip("cairosvg")
+    from gbdraw.layout.linear_wrap import LinearWrapSummary
+    from gbdraw.render.export_limits import bind_export_wrap
+
+    path = tmp_path / "wrapped.svg"
+    drawing = Drawing(filename=str(path), size=("2000px", "45967px"), viewBox="0 0 2000 45967")
+    drawing.add(drawing.rect((0, 0), (2000, 45967), fill="red"))
+    # Measured: examples/NC_010162.gb at 50 kb per row (tests/test_export_limits.py, SORANGIUM).
+    bind_export_wrap(drawing, LinearWrapSummary(50_000, 50_000, (13_033_779,)))
+    with pytest.warns(DeprecationWarning):
+        render_export.save_figure(drawing, ["pdf"])
+
+    assert (tmp_path / "wrapped.pdf").exists()
+
+
 def test_dead_web_style_module_and_color_dialog_aliases_are_removed() -> None:
     web_root = Path(__file__).parents[1] / "gbdraw" / "web"
 
