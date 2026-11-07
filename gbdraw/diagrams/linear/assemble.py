@@ -21,6 +21,7 @@ from ...layout.record_labels import source_ruler_ticks
 
 import copy
 from dataclasses import dataclass, replace
+from functools import partial
 import logging
 import math
 from collections.abc import Callable
@@ -177,6 +178,7 @@ from ...tracks import (
 from ...tracks.parsing import slot_dinucleotide, slot_legend_label
 from ...annotations import (
     AnnotationOptions,
+    LabelSizing,
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
@@ -190,6 +192,7 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import (
+    linear_annotation_label_extent,
     linear_annotation_label_room,
     linear_annotation_track_content,
     linear_region_label_front_content,
@@ -319,6 +322,7 @@ def _prepare_linear_annotation_tracks(
     label_font_size: float,
     sequence_widths: Sequence[float],
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    axis_index: int | None = None,
 ) -> tuple[
     list[LinearTrackSlot] | None,
     ResolvedAnnotationBundle,
@@ -351,6 +355,9 @@ def _prepare_linear_annotation_tracks(
         bundle,
         auto_slot_ids=auto_slot_ids,
         label_font_size=label_font_size,
+        font_family=str(profile.config.objects.text.font_family),
+        # The side each slot is drawn on, which puts its labels above or below its marks.
+        slot_sides={slot.id: slot.side for slot in normalize_linear_track_slots_with_axis(slots, axis_index)},
         sequence_widths=sequence_widths,
         record_transforms=record_transforms,
     )
@@ -364,6 +371,8 @@ def _layout_linear_annotation_tracks(
     *,
     auto_slot_ids: frozenset[str],
     label_font_size: float,
+    font_family: str,
+    slot_sides: Mapping[str, str],
     sequence_widths: Sequence[float],
     record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> tuple[list[LinearTrackSlot], dict[str, ResolvedAnnotationTrack]]:
@@ -371,7 +380,8 @@ def _layout_linear_annotation_tracks(
     ``sequence_width``).
 
     ``label_font_size`` is the feature label font size of the diagram, the size of a region label whose style
-    sets none."""
+    sets none; ``font_family`` measures the labels' letters. ``slot_sides`` is the side each enabled slot is
+    drawn on (``NormalizedLinearTrackSlot.side``)."""
 
     if len(sequence_widths) != len(records):
         raise ValueError("sequence_widths must contain one width for every record")
@@ -389,6 +399,7 @@ def _layout_linear_annotation_tracks(
             if slot.id in auto_slot_ids
             else (slot.height.resolve(1.0) if slot.height is not None else None)
         )
+        side = slot_sides.get(slot.id)
         layout = layout_annotation_track(
             slot.id,
             params.set_id,
@@ -396,8 +407,13 @@ def _layout_linear_annotation_tracks(
             record_lengths=record_lengths,
             params=params,
             available_extent_px=available,
-            bp_per_px=bp_per_px,
-            label_font_size=label_font_size,
+            labels=LabelSizing(
+                font_size=label_font_size,
+                extent=partial(linear_annotation_label_extent, font_family=font_family, bp_per_px=bp_per_px),
+                bp_per_px=bp_per_px,
+                # A disabled slot is not drawn.
+                labels_above=side is not None and linear_annotation_labels_above(side, params),
+            ),
             join_origin=False,
         )
         layouts[slot.id] = layout
@@ -418,6 +434,7 @@ def _add_linear_feature_underlays(
     auto_slot_ids: frozenset[str],
     *,
     label_font_size: float,
+    font_family: str,
     sequence_widths: Sequence[float],
     record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> tuple[
@@ -460,6 +477,8 @@ def _add_linear_feature_underlays(
         merged,
         auto_slot_ids=frozenset((slot_id,)),
         label_font_size=label_font_size,
+        font_family=font_family,
+        slot_sides={slot_id: str(underlay_slot.side)},
         sequence_widths=sequence_widths,
         record_transforms=record_transforms,
     )
@@ -2315,6 +2334,7 @@ def _linear_slot_plan(
         label_font_size=label_font_size,
         sequence_widths=frame.sequence_widths,
         record_transforms=record_inputs.record_transforms,
+        axis_index=track_inputs.linear_track_axis_index,
     )
     if linear_track_slots is None:
         linear_track_slots = default_linear_track_slots(
@@ -2499,6 +2519,7 @@ def _linear_track_plan(
         slot_plan.annotation_track_layouts,
         slot_plan.auto_annotation_slot_ids,
         label_font_size=label_font_size,
+        font_family=str(cfg.objects.text.font_family),
         sequence_widths=frame.sequence_widths,
         record_transforms=record_transforms,
     )

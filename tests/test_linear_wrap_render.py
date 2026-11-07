@@ -652,8 +652,8 @@ def _annotations(*items: RegionAnnotation) -> AnnotationOptions:
     return AnnotationOptions(sets=(AnnotationSet("regions", tuple(items)),))
 
 
-def _region(name: str, start: int, end: int, mark: str = "band") -> RegionAnnotation:
-    return RegionAnnotation(id=name, target=CoordinateSpan(None, start, end), label=name, mark=mark)
+def _region(name: str, start: int, end: int, mark: str = "band", *, labelled: bool = True) -> RegionAnnotation:
+    return RegionAnnotation(id=name, target=CoordinateSpan(None, start, end), label=name if labelled else "", mark=mark)
 
 
 @pytest.mark.parametrize("mark", ["band", "bracket", "highlight"])
@@ -668,13 +668,14 @@ def test_annotation_cut_at_the_seam_stays_one_item_labelled_once(mark: str) -> N
 
 
 def test_annotation_lanes_are_kept_per_row() -> None:
+    # Without labels: a label of "second" over "first" would part row 0's lanes (lane room, PD-OI-119).
     root = _root(
         _build(
             annotations=_annotations(
-                _region("first", 1_000, 2_000),
-                _region("second", 1_500, 2_500),
+                _region("first", 1_000, 2_000, labelled=False),
+                _region("second", 1_500, 2_500, labelled=False),
                 # Same row-local span as "first" on the next row: it does not push a lane.
-                _region("next_row", 11_000, 12_000),
+                _region("next_row", 11_000, 12_000, labelled=False),
             ),
         )
     )

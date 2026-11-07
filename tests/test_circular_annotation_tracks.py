@@ -898,8 +898,9 @@ def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None
             options=CircularDiagramOptions(
                 annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
                 config_overrides={"labels.circular.scope": "none"},
+                # 60 px hold the two lanes and the room of the long label, which would cross the short one's lane.
                 tracks=CircularRequestTrackOptions(
-                    circular_track_slots=("features:features", "regions:annotations@side=inside,set_id=regions,r=0.5,w=40px")
+                    circular_track_slots=("features:features", "regions:annotations@side=inside,set_id=regions,r=0.5,w=60px")
                 ),
             ),
         )
@@ -1229,7 +1230,7 @@ def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
 
 
 def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_conflicts() -> None:
-    from gbdraw.annotations import annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
     from gbdraw.layout.text_geometry import convex_polygons_intersect
     from gbdraw.layout.text_geometry import grown_convex_polygon
     from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, circular_annotation_labels
@@ -1239,8 +1240,8 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
-        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params, label_font_size=10.0,
-        join_origin=True,
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
     )
 
     def labels(*polygons):

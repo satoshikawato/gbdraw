@@ -2,6 +2,9 @@
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .layout import (
+    LabelExtent,
+    LabelSizing,
+    LaneRoom,
     PlacedRegionAnnotation,
     ResolvedAnnotationTrack,
     assign_annotation_lanes,
@@ -42,12 +45,12 @@ from .models import (
     linear_annotation_labels_above,
     mark_parts,
     parse_feature_selector,
+    region_run,
 )
 from .resolve import (
     annotation_midpoint,
     merge_annotation_segments,
     read_annotation_options,
-    region_run,
     resolve_annotation_set,
     resolve_annotations,
 )
@@ -86,6 +89,9 @@ __all__ = [
     "feature_underlay_slot_id",
     "assign_annotation_lanes",
     "layout_annotation_track",
+    "LabelExtent",
+    "LabelSizing",
+    "LaneRoom",
     "is_auto_feature_underlay",
     "mark_parts",
     "merge_annotation_segments",

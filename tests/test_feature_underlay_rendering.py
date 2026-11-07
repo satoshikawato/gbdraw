@@ -553,9 +553,10 @@ def test_linear_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest
 
 
 @pytest.mark.circular
-def test_circular_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_circular_underlay_is_laid_out_once_and_each_annotation_track_twice(monkeypatch: pytest.MonkeyPatch) -> None:
     """Circular twin of the Linear case: the underlay pass lays out only the underlay slot and keeps the
-    layouts of the annotation tracks laid out before it."""
+    layouts of the annotation tracks laid out before it. Each of those is packed once more where the radial
+    layout draws it (its labels measured there), and the underlay, which covers its anchor, is not."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
     from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
@@ -581,8 +582,8 @@ def test_circular_underlay_lays_each_annotation_track_out_once(monkeypatch: pyte
     )
 
     assert _underlay_shapes(drawing.tostring())
-    assert sorted(calls) == sorted(set(calls))
-    assert PRIVATE_SLOT_ID in calls and len(calls) >= 2
+    assert calls.count(PRIVATE_SLOT_ID) == 1
+    assert len(calls) >= 3 and all(calls.count(slot_id) == 2 for slot_id in calls if slot_id != PRIVATE_SLOT_ID)
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

@@ -19,6 +19,8 @@ from gbdraw.annotations import (
     CoordinateSpan,
     FeatureSelector,
     FeatureSpan,
+    LabelExtent,
+    LabelSizing,
     RegionAnnotation,
     RegionAnnotationStyle,
     annotation_sets_from_dataframe,
@@ -73,7 +75,7 @@ def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
         bundle.annotations,
         record_lengths={0: 100},
         params=params,
-        label_font_size=10.0,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
         join_origin=False,
     )
 
@@ -118,7 +120,7 @@ def test_spanning_annotation_track_does_not_fit_lanes_to_its_own_extent() -> Non
                 {"set_id": "s", "show_labels": False, "anchor_slot": "features", **extra}
             ),
             available_extent_px=14.0,
-            label_font_size=10.0,
+            labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
             join_origin=False,
         )
 
@@ -147,7 +149,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
         bundle.annotations,
         record_lengths={0: 100},
         params=AnnotationTrackParams(set_id="s", marks=("line", "band")),
-        label_font_size=10.0,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
         join_origin=False,
     )
     customized = layout_annotation_track(
@@ -161,7 +163,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
             lane_gap_px=7,
             padding_px=5,
         ),
-        label_font_size=10.0,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
         join_origin=False,
     )
 
@@ -594,7 +596,7 @@ def test_lane_packing_measures_a_label_in_the_slot_style_font() -> None:
             bundle.annotations,
             record_lengths={0: 100},
             params=AnnotationTrackParams(set_id="s", style_override=style_override),
-            label_font_size=1.0,
+            labels=LabelSizing(font_size=1.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
             join_origin=False,
         )
         return {placement.lane for placement in track.placements}
@@ -617,7 +619,7 @@ def test_lane_packing_pads_a_bracket_by_the_slot_style_stroke() -> None:
             bundle.annotations,
             record_lengths={0: 100},
             params=AnnotationTrackParams(set_id="s", padding_px=0.0, style_override=style_override),
-            label_font_size=10.0,
+            labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
             join_origin=False,
         )
         return {placement.lane for placement in track.placements}

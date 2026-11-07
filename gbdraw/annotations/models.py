@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, NamedTuple, TypeAlias, cast
+from typing import Literal, Mapping, NamedTuple, Sequence, TypeAlias, cast
 
 from pandas import DataFrame
 
@@ -43,6 +43,9 @@ COLOR_NAME_TEXT_PATTERN = r"^\s*(?:{})\s*$".format(
     "|".join("".join(f"[{letter}{letter.upper()}]" for letter in name) for name in COLOR_NAMES)
 )
 BLANK_TEXT_PATTERN = r"^\s*$"
+
+# Where a Linear region label stands along its region (``ResolvedRegionAnnotation.label_anchor``).
+LabelPosition: TypeAlias = Literal["center", "start", "end"]
 
 
 def _color(value: object | None, name: str, *, optional: bool = False) -> str | None:
@@ -273,7 +276,7 @@ class RegionAnnotationStyle:
     # None: the font size of the feature labels of the drawing (annotation_label_font_size).
     label_font_size: float | None = None
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
-    label_position: Literal["center", "start", "end"] = "center"
+    label_position: LabelPosition = "center"
     label_offset: float = 4.0
     # A fill along the region in place of ``fill`` (band and highlight marks).
     gradient: AnnotationGradient | None = None
@@ -575,43 +578,66 @@ class ResolvedRegionAnnotation:
         return tuple((part.display_start, part.display_end) for part in self.display_parts)
 
     def label_place(self, *, join_origin: bool) -> LabelPlace:
-        """Where the label of a region with display parts stands, and the drawn part it stands on.
+        """Where the region's centred label stands (display bp), and the drawn part it stands on.
 
         When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
         row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
-        as the display shows it. Else it stands on the centre of its longest part, ties to the earlier row, then
-        the earlier start.
+        as the display shows it. Else it stands on the centre of its longest part (PD-OI-119): where only the
+        origin cuts it (no display seam), two equal parts go to the one where the region starts.
         """
-        assert self.display_parts is not None
         parts = mark_parts(self, join_origin=join_origin)
-        longest = min(parts, key=lambda part: (part.start - part.end, part.row, part.start))
+        if not all(part.capped_start and part.capped_end for part in parts):
+            seamless = self.display_parts is None or not any(
+                part.artificial_start or part.artificial_end for part in self.display_parts
+            )
+            longest = _longest_part(
+                parts, prefer=self.label_anchor("start", join_origin=join_origin).part if seamless else None
+            )
+            return LabelPlace((longest.start + longest.end) / 2.0, longest)
+        longest = _longest_part(parts)
         midpoint = self.midpoint_bp
-        fragment = next(
-            (part for part in self.display_parts if part.local_start <= midpoint <= part.local_end), None
+        if self.display_parts is None:
+            return LabelPlace(midpoint, next((part for part in parts if part.start <= midpoint <= part.end), longest))
+        fragment = next(part for part in self.display_parts if part.local_start <= midpoint <= part.local_end)
+        # A display fragment runs the same way as its record-local span.
+        bp = fragment.display_start + (midpoint - fragment.local_start)
+        return LabelPlace(
+            bp, next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
         )
-        if fragment is not None and all(part.capped_start and part.capped_end for part in parts):
-            # A display fragment runs the same way as its record-local span.
-            bp = fragment.display_start + (midpoint - fragment.local_start)
-            on = next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
-            return LabelPlace(bp, on)
-        return LabelPlace((longest.start + longest.end) / 2.0, longest)
 
     def label_midpoint_bp(self, *, join_origin: bool) -> float:
-        """Where the label stands: halfway along the region, or with display parts its ``label_place``."""
-        if self.display_parts is None:
-            return self.midpoint_bp
+        """Where the region's centred label stands (``label_place``)."""
         return self.label_place(join_origin=join_origin).bp
 
-    def label_row(self, *, join_origin: bool) -> int:
-        """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
-        return 0 if self.display_parts is None else self.label_place(join_origin=join_origin).part.row
+    def label_anchor(self, position: LabelPosition, *, join_origin: bool) -> LabelPlace:
+        """Where a Linear label at ``position`` stands and the drawn part it stands on: centred at
+        ``label_place``; at the start, the region's first base, at the end its last, as the region runs
+        (``region_run``) and as the display shows them (PD-OI-119)."""
 
-    def label_room_bp(self, *, join_origin: bool) -> int:
-        """What the annotation's label can stand over: its span, or on several rows the part it stands on."""
-        if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
-            return self.span_bp
-        part = self.label_place(join_origin=join_origin).part
-        return part.end - part.start
+        if position == "center":
+            return self.label_place(join_origin=join_origin)
+        run = region_run(self.segments, crosses_origin=self.crosses_origin)
+        first = position == "start"
+        local = run[0][0] if first else run[-1][1]
+        bp, row = float(local), 0
+        if self.display_parts is not None:
+            fragment = next(
+                part for part in self.display_parts if (part.local_start if first else part.local_end) == local
+            )
+            bp, row = float(fragment.display_start if first else fragment.display_end), fragment.row
+        parts = mark_parts(self, join_origin=join_origin)
+        return LabelPlace(bp, next(part for part in parts if part.row == row and part.start <= bp <= part.end))
+
+    def label_stretch(self, position: LabelPosition, *, join_origin: bool) -> tuple[LabelPlace, tuple[int, int]]:
+        """Where a label at ``position`` stands (``label_anchor``) and the stretch of its row it may cover without
+        leaving its mark: the region's drawn extent on that row where the mark draws every part whole, else the
+        part it stands on."""
+        place = self.label_anchor(position, join_origin=join_origin)
+        parts = mark_parts(self, join_origin=join_origin)
+        if all(part.capped_start and part.capped_end for part in parts):
+            row = [part for part in parts if part.row == place.part.row]
+            return place, (min(part.start for part in row), max(part.end for part in row))
+        return place, (place.part.start, place.part.end)
 
     @property
     def geometry_rows(self) -> tuple[int, ...]:
@@ -652,6 +678,35 @@ class LabelPlace(NamedTuple):
     part: MarkPart
 
 
+def _longest_part(parts: Sequence[MarkPart], *, prefer: MarkPart | None = None) -> MarkPart:
+    """The longest drawn part; ties to ``prefer``, then to the earlier row, then the earlier start."""
+
+    return min(parts, key=lambda part: (part.start - part.end, part != prefer, part.row, part.start))
+
+
+def origin_sides(bounds: Sequence[tuple[int, int]]) -> tuple[int, int]:
+    """The two sides at the origin of a span across it (``crosses_origin``), as indices into its record-local
+    ``bounds``: the one that ends at the record's end, then the one that starts at 0."""
+
+    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
+    record_end = max(end for _start, end in bounds)
+    before = next(index for index, (_start, end) in enumerate(bounds) if end == record_end)
+    after = next(index for index, (start, _end) in enumerate(bounds) if start == 0)
+    return before, after
+
+
+def region_run(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> tuple[tuple[int, int], ...]:
+    """A span's segments in the order the region runs (PD-OI-119): ascending, or across the origin from its side
+    that ends at the record's end over the origin into its side that starts at 0 (``origin_sides``), then its
+    other segments in ascending order. Its midpoint, its gradient and its start and end labels read this run."""
+
+    ordered = tuple(sorted(segments))
+    if not crosses_origin:
+        return ordered
+    before, after = origin_sides(ordered)
+    return (ordered[before], ordered[after], *(item for index, item in enumerate(ordered) if index not in {before, after}))
+
+
 def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
     """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut, which
     its drawing and its label read.
@@ -675,13 +730,9 @@ def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tu
     ]
     if not annotation.crosses_origin:
         return tuple(parts)
-    local_bounds = (
+    before, after = origin_sides(
         annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
     )
-    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
-    record_end = max(end for _start, end in local_bounds)
-    before = next(index for index, (_start, end) in enumerate(local_bounds) if end == record_end)
-    after = next(index for index, (start, _end) in enumerate(local_bounds) if start == 0)
     if join_origin or (parts[before].row == parts[after].row and parts[before].end == parts[after].start):
         joined = parts[after]
         parts[before] = replace(
@@ -757,5 +808,7 @@ __all__ = [
     "effective_annotation_style",
     "linear_annotation_labels_above",
     "mark_parts",
+    "origin_sides",
     "parse_feature_selector",
+    "region_run",
 ]
