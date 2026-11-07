@@ -1268,6 +1268,20 @@
       "retireWhen": "Web Load reads ui.downloadDpi through the Python owner instead of its own reader",
       "source": "figure-size-1427 session 12 (D-93, D-104)",
       "pending": true
+    },
+    {
+      "id": "vector:tests/fixtures/png_phys_vectors.json",
+      "concern": "The pHYs chunk a PNG gets for a DPI: pixels per metre (rounded half up) and where the chunk goes",
+      "pythonOwner": [
+        "gbdraw/render/export.py:png_with_resolution"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/png.js:setDpiInPng"
+      ],
+      "vector": "tests/fixtures/png_phys_vectors.json",
+      "reason": "the web app writes the chunk into a browser canvas PNG and cannot call Python, while every PNG the command line or Python writes gets it from png_with_resolution (#1663); the vectors pin the pixels per metre, the half-up rounding (D-84) and the chunk bytes to each other",
+      "retireWhen": "the web app's PNG export is written by Python (Worker) instead of setDpiInPng",
+      "source": "figure-size-1427 session 11 (D-84, D-87), registered in session 12"
     }
   ]
 }
