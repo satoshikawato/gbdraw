@@ -68,13 +68,18 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  * @property {typeof collectHistoryFileIds} collectIds
  */
 /**
- * @param {{ sourceOf?: (file: HistoryFile) => object | null | undefined }} [options] `sourceOf`: the
- *   object a file's bytes come from when other files share them (a Session resource view's descriptor);
- *   refs of files with one source share `sourceId`. The project's store is given the Session's
- *   (`state.js`), so this module imports nothing.
+ * @param {{
+ *   sourceOf?: (file: HistoryFile) => object | null | undefined,
+ *   onHold?: (file: HistoryFile) => void,
+ *   onRelease?: (file: HistoryFile) => void
+ * }} [options] `sourceOf`: the object a file's bytes come from when other files share them (a
+ *   Session resource view's descriptor); refs of files with one source share `sourceId`.
+ *   `onHold` and `onRelease`: the store now holds a file, and no longer holds it (its temporary
+ *   copy, PD-OI-121). The project's store is given the Session's and the copies' (`state.js`),
+ *   so this module imports nothing.
  * @returns {InputFileStore}
  */
-export const createInputFileStore = ({ sourceOf = () => null } = {}) => {
+export const createInputFileStore = ({ sourceOf = () => null, onHold = () => {}, onRelease = () => {} } = {}) => {
   /** @type {Map<string, { file: HistoryFile, ref: InputFileRef }>} */
   const files = new Map();
   /** @type {WeakMap<HistoryFile, string>} */
@@ -111,6 +116,7 @@ export const createInputFileStore = ({ sourceOf = () => null } = {}) => {
       lastModified: file.lastModified || 0
     });
     files.set(fileId, { file, ref });
+    onHold(file);
     return ref;
   };
 
@@ -126,8 +132,10 @@ export const createInputFileStore = ({ sourceOf = () => null } = {}) => {
   /** @param {Iterable<string> | null | undefined} fileIds */
   const retainOnly = (fileIds) => {
     const retained = fileIds instanceof Set ? fileIds : new Set(fileIds || []);
-    Array.from(files.keys()).forEach((fileId) => {
-      if (!retained.has(fileId)) files.delete(fileId);
+    Array.from(files.entries()).forEach(([fileId, { file }]) => {
+      if (retained.has(fileId)) return;
+      files.delete(fileId);
+      onRelease(file);
     });
   };
 

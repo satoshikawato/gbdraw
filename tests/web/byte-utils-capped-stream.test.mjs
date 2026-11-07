@@ -1,11 +1,11 @@
 // The one capped reader of an expanded stream (services/byte-utils.js): a gzip
-// input file (`expandGzipBytes`) and a Session (`readSessionText`) stop reading
+// input file (`expandGzipPieces`) and a Session (`readSessionText`) stop reading
 // once the bytes pass their cap.
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { test } from 'node:test';
 
-const { expandGzipBytes, readCappedStream } = await import('../../gbdraw/web/js/services/byte-utils.js');
+const { expandGzipPieces, expandsAsGzip, joinBytes, readCappedStream } = await import('../../gbdraw/web/js/services/byte-utils.js');
 
 /** @param {number[]} sizes */
 const chunkStream = (sizes) => {
@@ -38,14 +38,22 @@ test('the capped reader stops past the cap with its error and cancels the stream
   assert.equal(state.cancelled, true);
 });
 
-// PD-OI-116: a gzip input expands up to the cap and is refused past it.
-test('expandGzipBytes expands up to the cap and refuses past it', async () => {
-  const content = new Uint8Array(4096).fill(0x61);
+// PD-OI-116: a gzip input expands up to the cap and is refused past it. Its
+// expanded bytes arrive in pieces of the given size, each in its own buffer.
+test('expandGzipPieces expands in pieces up to the cap and refuses past it', async () => {
+  const content = new Uint8Array(4096).map((_, index) => index % 251);
   const gzip = Uint8Array.from(gzipSync(content));
   const overCap = () => new Error('gzip over the cap');
-  assert.deepEqual(await expandGzipBytes(gzip, 4096, overCap), content);
-  await assert.rejects(expandGzipBytes(gzip, 4095, overCap), /gzip over the cap/);
-  // Bytes that are not gzip are returned as they are, whatever their size.
-  const plain = new Uint8Array(8192);
-  assert.equal(await expandGzipBytes(plain, 4095, overCap), plain);
+  const pieces = [];
+  await expandGzipPieces(gzip, 4096, overCap, 1000, async (piece) => { pieces.push(piece); });
+  assert.deepEqual(pieces.map((piece) => piece.byteLength), [1000, 1000, 1000, 1000, 96]);
+  assert.ok(pieces.every((piece) => piece.byteOffset === 0 && piece.buffer.byteLength === piece.byteLength));
+  assert.deepEqual(joinBytes(pieces), content);
+  await assert.rejects(expandGzipPieces(gzip, 4095, overCap, 1000, async () => {}), /gzip over the cap/);
+  const empty = [];
+  await expandGzipPieces(Uint8Array.from(gzipSync(new Uint8Array(0))), 10, overCap, 1000, async (piece) => { empty.push(piece); });
+  assert.deepEqual(empty.map((piece) => piece.byteLength), [0], 'an empty file is one empty piece');
+  // Bytes that are not gzip are not expanded, whatever their size.
+  assert.equal(expandsAsGzip(gzip), true);
+  assert.equal(expandsAsGzip(new Uint8Array(8192)), false);
 });

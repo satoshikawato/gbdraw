@@ -207,7 +207,7 @@ export const isGzipBytes = (bytes) => GZIP_SIGNATURE.every((byte, index) => byte
  * input file (`expandGzipBytes`) and a Session (services/session-file.js).
  * @param {ReadableStream<Uint8Array>} stream
  * @param {number} maxBytes
- * @param {(chunk: Uint8Array) => void} onChunk
+ * @param {(chunk: Uint8Array) => void | Promise<void>} onChunk Awaited before the next chunk is read.
  * @param {() => Error} overCap The error past the cap.
  * @returns {Promise<void>}
  */
@@ -220,7 +220,7 @@ export const readCappedStream = async (stream, maxBytes, onChunk, overCap) => {
       if (done) return;
       byteCount += value.byteLength;
       if (byteCount > maxBytes) throw overCap();
-      onChunk(value);
+      await onChunk(value);
     }
   } catch (error) {
     await reader.cancel(error).catch(() => {});
@@ -231,29 +231,57 @@ export const readCappedStream = async (stream, maxBytes, onChunk, overCap) => {
 };
 
 /**
- * The bytes a gzip file holds, or the bytes themselves when they are not gzip
- * or the browser has no `DecompressionStream` (Python reads a gzip input file
- * as well, under its own cap, so the Worker still draws it). Expanding stops
- * with `overCap()` past `maxBytes`.
+ * Whether `bytes` are a gzip file this browser expands: without
+ * `DecompressionStream`, a gzip input stays as it is (Python reads a gzip input
+ * file as well, under its own cap, so the Worker still draws it).
+ * @param {Uint8Array} bytes
+ */
+export const expandsAsGzip = (bytes) => isGzipBytes(bytes) && typeof DecompressionStream === 'function';
+
+/**
+ * Hands the bytes a gzip file holds to `onPiece` as they expand, in pieces of
+ * `pieceBytes` (the last one shorter; one empty piece for an empty file), each
+ * in a buffer of its own that `onPiece` may transfer. Expanding stops with
+ * `overCap()` past `maxBytes`. The caller checks `expandsAsGzip` first.
  * @param {Uint8Array<ArrayBuffer>} bytes
  * @param {number} maxBytes
  * @param {() => Error} overCap
- * @returns {Promise<Uint8Array<ArrayBuffer>>}
+ * @param {number} pieceBytes
+ * @param {(piece: Uint8Array<ArrayBuffer>) => Promise<void>} onPiece Awaited before more is expanded.
+ * @returns {Promise<void>}
  */
-export const expandGzipBytes = async (bytes, maxBytes, overCap) => {
-  if (!isGzipBytes(bytes) || typeof DecompressionStream !== 'function') return bytes;
-  /** @type {Uint8Array[]} */
-  const chunks = [];
-  let length = 0;
-  await readCappedStream(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')), maxBytes, (chunk) => {
-    chunks.push(chunk);
-    length += chunk.byteLength;
+export const expandGzipPieces = async (bytes, maxBytes, overCap, pieceBytes, onPiece) => {
+  let piece = new Uint8Array(pieceBytes);
+  let filled = 0;
+  let total = 0;
+  await readCappedStream(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')), maxBytes, async (chunk) => {
+    for (let offset = 0; offset < chunk.byteLength;) {
+      const count = Math.min(pieceBytes - filled, chunk.byteLength - offset);
+      piece.set(chunk.subarray(offset, offset + count), filled);
+      filled += count;
+      offset += count;
+      total += count;
+      if (filled === pieceBytes) {
+        await onPiece(piece);
+        piece = new Uint8Array(pieceBytes);
+        filled = 0;
+      }
+    }
   }, overCap);
-  const expanded = new Uint8Array(length);
+  if (filled > 0 || total === 0) await onPiece(piece.slice(0, filled));
+};
+
+/**
+ * `pieces` joined in order into one buffer.
+ * @param {readonly Uint8Array[]} pieces
+ * @returns {Uint8Array<ArrayBuffer>}
+ */
+export const joinBytes = (pieces) => {
+  const joined = new Uint8Array(pieces.reduce((length, piece) => length + piece.byteLength, 0));
   let offset = 0;
-  for (const chunk of chunks) {
-    expanded.set(chunk, offset);
-    offset += chunk.byteLength;
+  for (const piece of pieces) {
+    joined.set(piece, offset);
+    offset += piece.byteLength;
   }
-  return expanded;
+  return joined;
 };
