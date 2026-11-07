@@ -134,3 +134,54 @@ test('a staging shares one read between a token it computes and the transfer', a
   assert.equal(file.reads, 1);
   assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), bytes);
 });
+
+const { readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
+
+test('a hold ends when its reading rejects or throws', async () => {
+  const bytes = new TextEncoder().encode('LOCUS d\n//\n');
+  const rejected = countingFile(bytes);
+  await assert.rejects(readOncePerFile([rejected], 'test-reject:', async () => {
+    await readFileBytes(rejected);
+    throw new Error('the reading failed');
+  }), /the reading failed/);
+  await readFileBytes(rejected);
+  assert.equal(rejected.reads, 2, 'a rejected reading gave its bytes back');
+
+  const thrown = countingFile(bytes);
+  await assert.rejects(readOncePerFile([thrown], 'test-throw:', () => { throw new Error('thrown at once'); }),
+    /thrown at once/);
+  await readFileBytes(thrown);
+  await readFileBytes(thrown);
+  assert.equal(thrown.reads, 2, 'no hold stayed open after a reading that threw');
+
+  const staged = countingFile(bytes);
+  await assert.rejects(createDiagramResourceTransport().prepare({
+    request: fileRequest, resources: fileResources(staged, bytes.byteLength + 1)
+  }), /byte size does not match/);
+  await readFileBytes(staged);
+  assert.equal(staged.reads, 2, 'a staging that failed after its read gave the bytes back');
+});
+
+test('a Generate during a running discovery shares its one read', async () => {
+  const bytes = new TextEncoder().encode('LOCUS e\nORIGIN\n//\n');
+  let resolveRead;
+  const file = {
+    name: 'input.gb',
+    reads: 0,
+    arrayBuffer() {
+      this.reads += 1;
+      return new Promise((resolve) => { resolveRead = () => resolve(bytes.slice().buffer); });
+    }
+  };
+  const discovery = readOncePerFile([file], 'test-discovery:', async () => (await readFileBytes(file)).byteLength);
+  const generate = createDiagramResourceTransport().prepare({
+    request: fileRequest, resources: fileResources(file, bytes.byteLength)
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  resolveRead();
+  const [length, prepared] = await Promise.all([discovery, generate]);
+  assert.equal(file.reads, 1, 'discovery and Generate read the File once');
+  assert.equal(length, bytes.byteLength);
+  assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), bytes);
+  assert.equal(prepared.resourceManifest[0].cacheToken, expectedToken(Buffer.from(bytes)));
+});
