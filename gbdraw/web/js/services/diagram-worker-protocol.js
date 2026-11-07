@@ -203,14 +203,18 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The origin window of a circular record (`OriginWindowInput`): its last and first bases, as many as `originWindow`
- * (a sequence search's longest query) and at most half the record each; Python places it (`origin_window_span`).
- * @typedef {object} OriginWindowInput
+ * A record the request draws (`DrawnRecordInput`): Python reads the bases it draws and, when a span of it may cross
+ * its origin, its origin window (its last and first bases, as many as `originWindow`, a sequence search's longest query,
+ * and at most half the record each); a record asked twice is read once, and the windows follow every drawn span.
+ * @typedef {object} DrawnRecordInput
  * @property {string} recordKey
  * @property {number} originWindow
  */
 
-/** A span to read: by its coordinates, or a record's origin window. @typedef {RecordSpanInput | OriginWindowInput} RecordSpanRead */
+/**
+ * What to read: a span by its coordinates, or a drawn record; one read asks for one kind.
+ * @typedef {RecordSpanInput | DrawnRecordInput} RecordSpanRead
+ */
 
 /**
  * The payload of `readRecordSpanSequences`: the request the shown Result was made from (the committed request),
@@ -238,7 +242,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The `readRecordSpanSequences` reply (`RecordSpanSequencesReply`): the spans in the order asked, and their FASTA text.
+ * The `readRecordSpanSequences` reply (`RecordSpanSequencesReply`): one span per span asked by coordinates, in order;
+ * or, for drawn records, one span per record in the order first asked, then the origin windows; and their FASTA text.
  * @typedef {object} RecordSpanSequencesReply
  * @property {readonly RecordSpanSequence[]} spans
  * @property {string} fasta

@@ -9,8 +9,10 @@ span whose start is after its end crosses the origin of a circular record and
 reads the end of the record, then its start. The reply holds each span's
 sequence and header and the FASTA text of all of them. It renders nothing.
 
-A sequence search over drawn records reads its subjects here as well, with the
-origin window of each circular record it draws whole (``OriginWindowInput``).
+A sequence search reads its subjects here as well, naming the drawn records by
+key alone (``DrawnRecordInput``): Python reads the bases each record draws,
+from the transform it is drawn by, and the origin window of each record a span
+may cross the origin of.
 The headers of one read are its LOSAT subject IDs, so they are unique: spans
 that would share a header (two records of one ID and length) name their record
 keys in it.
@@ -27,6 +29,8 @@ from gbdraw.annotations.search_hits import origin_window_span
 from gbdraw.api.request_render import load_render_source_records, resolve_request_records
 from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
+from gbdraw.core.record_metadata import _record_source_start
+from gbdraw.layout.record_transform import spans_may_cross_origin
 from gbdraw.session_request_codec import decode_canonical_request
 
 
@@ -40,9 +44,13 @@ class RecordSpanInput(TypedDict):
 
 
 @final
-class OriginWindowInput(TypedDict):
-    """The origin window of a circular record (``origin_window_span``): its last and first bases, as many as
-    ``originWindow`` (a sequence search's longest query) and at most half the record each."""
+class DrawnRecordInput(TypedDict):
+    """A record the request draws, read over the bases it draws (from ``_record_source_start``, the source base of
+    its first base on the source strand that a crop records, for as many bases as it has); and, when a span of it may
+    cross its origin (``spans_may_cross_origin``, the axis source map's ``isCircular``), over its origin window
+    (``origin_window_span``): its last and first bases, as many as ``originWindow`` (a sequence search's longest
+    query) and at most half the record each. A record asked twice is read once; the origin windows follow every
+    drawn span."""
 
     recordKey: str
     originWindow: int
@@ -50,7 +58,7 @@ class OriginWindowInput(TypedDict):
 
 class RecordSpanSequence(TypedDict):
     """One span's bases on the source strand, with the FASTA header that names them; ``originWindow`` when it was
-    asked as an origin window (``OriginWindowInput``)."""
+    read as an origin window (``DrawnRecordInput``)."""
 
     recordKey: str
     recordId: str
@@ -65,7 +73,7 @@ class RecordSpanSequence(TypedDict):
 
 
 class RecordSpanSequencesReply(TypedDict):
-    """The spans in the order asked, and their FASTA text."""
+    """The spans in the order asked (the origin windows of drawn records last), and their FASTA text."""
 
     spans: list[RecordSpanSequence]
     fasta: str
@@ -75,19 +83,22 @@ def _protocol_error(message: str) -> ValidationError:
     return ValidationError(message, diagnostic={"code": "HELPER_PROTOCOL"})
 
 
-def _span_inputs(value: object) -> list[RecordSpanInput | OriginWindowInput]:
+def _span_inputs(value: object) -> list[RecordSpanInput | DrawnRecordInput]:
     if not isinstance(value, list) or not value:
         raise _protocol_error("A record span read needs a list of spans.")
-    spans: list[RecordSpanInput | OriginWindowInput] = []
+    spans: list[RecordSpanInput | DrawnRecordInput] = []
     for item in value:
         if not (isinstance(item, Mapping) and isinstance(item.get("recordKey"), str)):
             raise _protocol_error("A span needs a record key.")
-        if set(item) == {"recordKey", "originWindow"} and type(item["originWindow"]) is int:
+        if set(item) == {"recordKey", "originWindow"} and type(item["originWindow"]) is int and item["originWindow"] >= 1:
             spans.append({"recordKey": item["recordKey"], "originWindow": item["originWindow"]})
         elif all(type(item.get(key)) is int for key in ("start", "end")):
             spans.append({"recordKey": item["recordKey"], "start": item["start"], "end": item["end"]})
         else:
-            raise _protocol_error("A span needs a start and an end, or the reach of an origin window.")
+            raise _protocol_error("A span needs a start and an end, or, for a drawn record, the reach of its origin window.")
+    # One read is spans by coordinates (Select region) or drawn records (a search), so the page can check its reply.
+    if len({"originWindow" in span for span in spans}) > 1:
+        raise _protocol_error("A record span read asks for spans by coordinates or for drawn records, not both.")
     return spans
 
 
@@ -101,38 +112,54 @@ def read_record_span_sequences(
     request_payload: Mapping[str, object],
     resource_paths: Mapping[str, str],
     output_directory: str,
-    spans: Sequence[RecordSpanInput | OriginWindowInput],
+    spans: Sequence[RecordSpanInput | DrawnRecordInput],
 ) -> RecordSpanSequencesReply:
     """The bases of ``spans`` of the records that the canonical request ``request_payload`` draws."""
 
     asked = _span_inputs(list(spans))
     request = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     collection = resolve_request_records(request)
-    by_key = {item.record_key: item for item in collection.provenance}
-    read: list[RecordSpanSequence] = []
+    by_key = {item.record_key: index for index, item in enumerate(collection.provenance)}
+    # (record index, start, end, origin window) in reading order: the drawn records once each, their windows last.
+    reads: list[tuple[int, int, int, bool]] = []
+    windows: list[tuple[int, int]] = []
+    drawn: set[str] = set()
     for span in asked:
-        item = by_key.get(span["recordKey"])
-        if item is None:
+        index = by_key.get(span["recordKey"])
+        if index is None:
             raise ValidationError(
                 f"The drawing has no record {span['recordKey']!r}.",
                 diagnostic={"code": "INPUT_INVALID", "field": "record_selector"},
             )
-        record = load_render_source_records(request.records[item.input_index].source).records[item.source_record_index]
-        bases = str(record.seq)
-        length = len(bases)
-        window = "originWindow" in span
         if "originWindow" in span:  # the key test narrows the TypedDict
-            if not item.is_circular:
-                raise ValidationError(
-                    f"{span['recordKey']!r} is not circular and has no origin window.",
-                    diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
-                )
-            start, end = origin_window_span(length, span["originWindow"])
+            if span["recordKey"] in drawn:
+                continue
+            drawn.add(span["recordKey"])
+            record, transform = collection.records[index], collection.transforms[index]
+            start = _record_source_start(record)
+            reads.append((index, start, start + len(record.seq) - 1, False))
+            if spans_may_cross_origin(record, transform):
+                windows.append((index, span["originWindow"]))
         else:
-            start, end = span["start"], span["end"]
+            reads.append((index, span["start"], span["end"], False))
+    sources: dict[int, str] = {}
+
+    def source_bases(index: int) -> str:
+        if index not in sources:
+            item = collection.provenance[index]
+            source = load_render_source_records(request.records[item.input_index].source)
+            sources[index] = str(source.records[item.source_record_index].seq)
+        return sources[index]
+
+    reads.extend((index, *origin_window_span(len(source_bases(index)), reach), True) for index, reach in windows)
+    read: list[RecordSpanSequence] = []
+    for index, start, end, window in reads:
+        item = collection.provenance[index]
+        bases = source_bases(index)
+        length = len(bases)
         if not (1 <= start <= length and 1 <= end <= length) or (start > end and not item.is_circular):
             raise ValidationError(
-                f"Span {start}..{end} of {span['recordKey']!r} is outside 1..{length}.",
+                f"Span {start}..{end} of {item.record_key!r} is outside 1..{length}.",
                 diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
             )
         wraps = start > end
@@ -175,7 +202,7 @@ def read_record_span_sequences_json(
 
 
 __all__ = [
-    "OriginWindowInput",
+    "DrawnRecordInput",
     "RecordSpanInput",
     "RecordSpanSequence",
     "RecordSpanSequencesReply",

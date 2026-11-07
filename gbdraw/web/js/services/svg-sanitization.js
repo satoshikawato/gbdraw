@@ -1,6 +1,7 @@
 // @ts-check
 import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
 import { LEGEND_MERGED_ROW } from './result-records.generated.js';
+import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from './drawn-attributes.generated.js';
 
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
@@ -114,8 +115,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-bitscore',
     'data-orientation',
     'data-reference-record-id',
-    'data-gbdraw-annotation-id',
-    'data-gbdraw-annotation-set-id',
+    ANNOTATION_ID_ATTRIBUTE,
+    ANNOTATION_SET_ID_ATTRIBUTE,
     'data-gbdraw-annotation-track-id',
     'data-gbdraw-record-id',
     'data-gbdraw-record-index',
