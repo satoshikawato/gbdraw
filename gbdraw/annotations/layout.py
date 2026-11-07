@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Callable, Mapping, NamedTuple, Sequence
+from typing import Callable, Iterable, Literal, Mapping, NamedTuple, Sequence
 
 from gbdraw.exceptions import ValidationError
 
@@ -26,6 +26,13 @@ class PlacedRegionAnnotation:
     mark_geometry: object | None = None
     label_geometry: object | None = None
     occupied_bounds: tuple[tuple[float, float], ...] = ()
+
+
+def lane_count_of(placements: Iterable[PlacedRegionAnnotation]) -> int:
+    """How many lanes ``placements`` take: one past the deepest. The drawers share a record's band among its lanes by
+    it, and the lane packer measures a record's lanes the same way."""
+
+    return max((item.lane for item in placements), default=-1) + 1
 
 
 class LaneRoom(NamedTuple):
@@ -58,7 +65,7 @@ def lane_width_px(band_px: float, *, padding_px: float, room_px: float, lane_cou
 
 
 def lane_edge_px(
-    lane: float, width_px: float, *, padding_px: float, room_before_px: float, from_px: float = 0.0, toward: int = 1
+    lane: float, width_px: float, *, padding_px: float, room_before_px: float, from_px: float = 0.0, toward: Literal[1, -1] = 1
 ) -> float:
     """Where a slot's lane ``lane`` starts, from the edge ``from_px`` its lanes stack from (``toward`` 1 when they
     stack toward larger values, -1 toward smaller ones): past the band's padding, the lanes before it (``width_px``
@@ -436,12 +443,12 @@ def _lane_rooms(
             marks.setdefault((annotation.record_index, row, placement.lane), []).extend(
                 (float(start), float(end), stroke) for start, end in annotation.row_segments(row)
             )
-    lane_count = max((placement.lane for placement in placements), default=-1) + 1
+    lane_count = lane_count_of(placements)
     # Each record's lanes fill the slot where the drawers draw them (``_LaneBand.width_px``).
-    record_lanes: dict[int, int] = {}
-    for placement in placements:
-        record = placement.annotation.record_index
-        record_lanes[record] = max(record_lanes.get(record, 0), placement.lane + 1)
+    record_lanes = {
+        record: lane_count_of(item for item in placements if item.annotation.record_index == record)
+        for record in {placement.annotation.record_index for placement in placements}
+    }
     step = -1 if band.labels_above else 1
     labelled = [
         (placement, annotation.label_anchor(label_position(annotation), join_origin=join_origin))
@@ -642,7 +649,7 @@ def layout_annotation_track(
         )
     )
     room = _largest_room(lane_rooms.rooms)
-    lane_count = max((item.lane for item in placements), default=-1) + 1
+    lane_count = lane_count_of(placements)
     lane_gap = float(track_params.lane_gap_px)
     required = band.bare_px(lane_count) + room
     clipped = False
@@ -699,6 +706,7 @@ __all__ = [
     "ResolvedAnnotationTrack",
     "RoomBounds",
     "assign_annotation_lanes",
+    "lane_count_of",
     "lane_edge_px",
     "lane_width_px",
     "layout_annotation_track",
