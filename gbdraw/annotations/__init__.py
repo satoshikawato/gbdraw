@@ -7,6 +7,7 @@ from .layout import (
     LaneRoom,
     PlacedRegionAnnotation,
     ResolvedAnnotationTrack,
+    RoomBounds,
     assign_annotation_lanes,
     layout_annotation_track,
 )
@@ -78,6 +79,7 @@ __all__ = [
     "ResolvedAnnotationBundle",
     "ResolvedAnnotationTrack",
     "ResolvedRegionAnnotation",
+    "RoomBounds",
     "ResolutionWarning",
     "annotation_sets_from_dataframe",
     "annotation_label_font_size",

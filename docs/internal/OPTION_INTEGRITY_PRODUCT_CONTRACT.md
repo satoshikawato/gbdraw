@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `123`
+- Contract revision: `124`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4660,6 +4660,48 @@ Status: active Product authority
     Rationale, Must preserve, May retire and Accepted residual risk were the
     session's drafts. Reply: 「全文で承認」.
   - New receipt SHA-256: `PD-OI-119` scenario revision `1` `0629ef33724358dd1422a80113c4ebc2deefee9b1100744cadab7385c0fdec92`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 124 changes: `PD-OI-119` gains scenario revision `2` (concern
+  `product.region-label-place`; the outcomes `LBL-ROOM-BEFORE-MET-LANE` and
+  `LBL-ROOM-STOP-AT-CENTRE-WARN` join the five of scenario revision `1`). A
+  label whose letters would meet a mark in a lane further on than the next
+  one gets its room in the gap just before that lane, and the lanes between
+  keep their spacing beside the label's lane. A Circular slot inside the axis
+  whose width is not set adds no room that would carry its lanes past the
+  centre; those labels are drawn across the mark they meet, and a warning in
+  the form of `RGN-ROOM-WARN` counts them. It comes from the Product Decision
+  Owner `satoshikawato`'s replies in the Claude Code session `a49ae2a6` of the
+  campaign `region-select-seq-search-20261104` (`DECISIONS.md` `D-68`,
+  `D-69`). The receipt names no ID of its own and is recorded byte for byte.
+  A choice in the question dialog is named by its option.
+  - D-68 (`2026-11-07`). The session asked two questions (Q6, a label that
+    crosses a mark two lanes away; Q7, an inside slot whose lane rooms add up
+    past the centre), each with options and a Before and After image per
+    option, and reported a third finding (Q8, the lane packer's 0.6 em
+    estimate of a label's letters) as a defect with no Product question. The
+    Owner chose the recommended option of each: Q6
+    `LBL-ROOM-BEFORE-MET-LANE`, Q7 `LBL-ROOM-STOP-AT-CENTRE-WARN`, and the
+    defect fix for Q8. The Q8 fix is not part of this revision; a later pull
+    request makes it.
+  - D-69 (`2026-11-07`). The receipt below was shown in full in the question
+    dialog, with the note that its six changes from scenario revision `1`
+    (two Choice IDs, the Lane room item rewritten, the inside-slot item
+    added, and one sentence each in the Rationale, Must preserve, May retire,
+    and Accepted residual risk) were the session's drafts from the Q6 and Q7
+    answers. The Owner chose 「全文で承認 (推奨)」. The note undercounted the
+    receipt it described: the receipt adds two sentences to the Rationale and
+    two items to May retire (one sentence each to Must preserve and Accepted
+    residual risk), and it was shown in full.
+  - New receipt SHA-256: `PD-OI-119` scenario revision `2`
+    `f2ee828966fb3ca3f185f9b8053471ca0e882f304d5d0f47676832578e0ea51c`.
+  - `PD-OI-119` scenario revision `2` supersedes scenario revision `1`; its
+    May retire names what is retired. The scenario revision `1` receipt and
+    JSON are kept as they were approved.
+  - `PD-OI-097` is not revised: the new warning takes the form of its
+    `RGN-ROOM-WARN` and leaves its outcomes as they are.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
@@ -11981,22 +12023,41 @@ Decision date: 2026-11-07
 ### PD-OI-119: Region label place
 
 - Concern key: `product.region-label-place`
-- Scenario revision: `1`
-- Supersedes: none. No earlier record fixed where a region annotation's label
-  stands or the order in which a region runs. `PD-OI-097` (region label
-  warnings and moves) stays.
+- Scenario revision: `2`
+- Supersedes: `PD-OI-119`, scenario revision `1` (Revision 123 entry above).
+  The scenario revision `2` receipt repeats the scenario revision `1`
+  receipt, adds the outcomes `LBL-ROOM-BEFORE-MET-LANE` and
+  `LBL-ROOM-STOP-AT-CENTRE-WARN` to its Choice, rewrites its Lane room item,
+  adds an item on a Circular slot inside the axis whose width is not set, and
+  adds two sentences to the Rationale, one to Must preserve, two items to May
+  retire, and one sentence to Accepted residual risk. Scenario revision `1`
+  superseded none: no earlier
+  record fixed where a region annotation's label stands or the order in which
+  a region runs. `PD-OI-097` (region label warnings and moves) stays.
 - Status: `ACCEPTED`
-- Selected outcome: `LBL-LANE-ROOM`, `LBL-ORIGIN-LONGER`, `LBL-CUT-LONGEST`,
-  `LBL-START-FIRST-BASE`, `RUN-FROM-ORIGIN-STRETCH`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
-- Decision source: the Owner replies of `2026-11-07` quoted in the Revision
-  123 entry above. The receipt and JSON below reproduce the approved fields
-  without translation or additional terms. The runtime, tests, and
-  documentation that implement it merge with it (static Product Contract
-  co-change); this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcome: `LBL-LANE-ROOM`, `LBL-ROOM-BEFORE-MET-LANE`,
+  `LBL-ROOM-STOP-AT-CENTRE-WARN`, `LBL-ORIGIN-LONGER`, `LBL-CUT-LONGEST`,
+  `LBL-START-FIRST-BASE`, `RUN-FROM-ORIGIN-STRETCH` (scenario revision `2`;
+  scenario revision `1` selected the same outcomes without
+  `LBL-ROOM-BEFORE-MET-LANE` and `LBL-ROOM-STOP-AT-CENTRE-WARN`)
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The scenario
+  revision `1` receipt and JSON are kept as they were approved.
+- Decision source (scenario revision `1`): the Owner replies of `2026-11-07`
+  quoted in the Revision 123 entry above. The receipt and JSON below
+  reproduce the approved fields without translation or additional terms. The
+  runtime, tests, and documentation that implement it merged with it in PR
+  `#1693`.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `0629ef33724358dd1422a80113c4ebc2deefee9b1100744cadab7385c0fdec92`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-11-07`
+  quoted in the Revision 124 entry above. The receipt and JSON below
+  reproduce the approved fields without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `f2ee828966fb3ca3f185f9b8053471ca0e882f304d5d0f47676832578e0ea51c`.
 
 ```text
 PRODUCT_DECISION
@@ -12028,6 +12089,42 @@ Decision date: 2026-11-07
   "mustPreserve": "表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。",
   "mayRetire": "回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。",
   "acceptedResidualRisk": "原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-07"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: product.region-label-place
+Scenario revision: 2
+Choice: LBL-LANE-ROOM ; LBL-ROOM-BEFORE-MET-LANE ; LBL-ROOM-STOP-AT-CENTRE-WARN ; LBL-ORIGIN-LONGER ; LBL-CUT-LONGEST ; LBL-START-FIRST-BASE ; RUN-FROM-ORIGIN-STRETCH. Where a region annotation's label stands, and the order in which a region runs.
+  - The run of a region: a region runs along its segments in ascending order on the record. A region across the origin of a circular record runs first over the origin, from its segment that ends at the record's end into its segment that starts at 0, and then along its other segments in ascending order. The run follows the record, not the region's strand.
+  - The centred label (label_position center) stands halfway along the run. Where the display leaves every part of the drawn mark whole (no display start, display cut or row boundary inside it), it stands there as the display shows it.
+  - Linear without a display start: the mark of a region across the origin is drawn as two parts, at the two ends of the record's bar (on wrapped rows, at the start of the first row and the end of the last). When only the origin cuts the region, its centred label stands on the centre of the longer part; when the two parts are equally long, on the part where the region starts (the part at the bar's right end, or on the last row).
+  - Linear, a region that a display start, the display cut or a row boundary cuts: its centred label stands on the centre of its longest drawn part. On a tie, the part on the earlier row, then the one further left (as now).
+  - label_position start puts the label at the region's first base, and end at its last base, along the run: the same for a feature span and a coordinate span, with or without a display start, and on wrapped rows on the row where that base is drawn.
+  - The gradient fill of a region runs from the start of its run to its end, by position along the record, as for any region of several segments: on a region of three or more segments across the origin, the part over the origin takes the start of the scale, and its other segments the rest.
+  - Lane room: where a lane's label, at its place along its region, would cross a mark in another lane on the label's side (the next lane or one further on), the gap just before the lane of that mark is widened until the label clears it: by the room the label takes (its letters and its label offset), less the lanes and rooms already between the label's mark and that lane. The label stays beside its own mark, and the lanes between its lane and the lane of that mark keep their spacing beside it. Lanes whose labels cross nothing keep their spacing. A track whose lanes get room grows by that room (Linear: the slot grows taller; Circular: the slot grows wider). Both modes.
+  - Circular, a slot inside the axis whose width is not set: a room that would carry its lanes past the centre of the circle is not added. The labels that needed it are drawn across the mark they meet, as in 0.14.5, and a warning in the form of RGN-ROOM-WARN says how many region labels were left without room before the centre. The figure is drawn; no error.
+  - Circular: a region label stands at its centred place whatever its label_position, as now.
+Rationale: 領域ラベルが自分の印のそばに、どの表示でも同じ規則で立つようにする。原点をまたぐ領域は原点をまたぐ部分から始まるので、始まり・終わり・中点・グラデーションを 1 つの並び（run）で決める。start と end は領域の最初と最後の塩基を指し、注釈の種類（feature span、coordinate span）や表示の開始位置で意味を変えない。回転しない Linear で原点をまたぐ領域のラベルは、バーの端で半分はみ出さないよう、長いほうの部分の中央に置く。印が表示で切られた領域は、ラベルが印の上に収まる最長の部分の中央に置く（今のまま）。隣のレーンの印にラベルが重なるときだけ、そのレーンとの間にラベルの分の間を空け、重ならない図の高さは変えない。ラベルの文字が隣より先のレーンの印に届くときも、その印のレーンの手前に間を空け、間にあるレーンはラベルのレーンのそばから動かさない。Circular の内側スロットで間を空けると円の中心を越えるときは、その間は空けず 0.14.5 と同じく重ねて描き、警告で知らせる（0.14.5 で描けた図をエラーにしない）。
+Must preserve: 表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。0.14.5 で描けた図が描けること（内側スロットで間が取れなくてもエラーにしない）。
+May retire: 回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。2 つ以上先のレーンの印に重なって描かれるラベル（OV-2661）。Circular の内側スロットで、空けた間が円の中心を越えてレーンが潰れたり中心の反対側に描かれたりすること（OV-2665、OV-2666）。
+Accepted residual risk: 原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。Circular の内側スロットで中心までに間が取れないラベルは、出会う印に重なって描かれる（警告は出る）。
+Owner: satoshikawato
+Decision date: 2026-11-07
+```
+
+```json
+{
+  "concern": "product.region-label-place",
+  "scenarioRevision": 2,
+  "choice": "LBL-LANE-ROOM ; LBL-ROOM-BEFORE-MET-LANE ; LBL-ROOM-STOP-AT-CENTRE-WARN ; LBL-ORIGIN-LONGER ; LBL-CUT-LONGEST ; LBL-START-FIRST-BASE ; RUN-FROM-ORIGIN-STRETCH. Where a region annotation's label stands, and the order in which a region runs.\n  - The run of a region: a region runs along its segments in ascending order on the record. A region across the origin of a circular record runs first over the origin, from its segment that ends at the record's end into its segment that starts at 0, and then along its other segments in ascending order. The run follows the record, not the region's strand.\n  - The centred label (label_position center) stands halfway along the run. Where the display leaves every part of the drawn mark whole (no display start, display cut or row boundary inside it), it stands there as the display shows it.\n  - Linear without a display start: the mark of a region across the origin is drawn as two parts, at the two ends of the record's bar (on wrapped rows, at the start of the first row and the end of the last). When only the origin cuts the region, its centred label stands on the centre of the longer part; when the two parts are equally long, on the part where the region starts (the part at the bar's right end, or on the last row).\n  - Linear, a region that a display start, the display cut or a row boundary cuts: its centred label stands on the centre of its longest drawn part. On a tie, the part on the earlier row, then the one further left (as now).\n  - label_position start puts the label at the region's first base, and end at its last base, along the run: the same for a feature span and a coordinate span, with or without a display start, and on wrapped rows on the row where that base is drawn.\n  - The gradient fill of a region runs from the start of its run to its end, by position along the record, as for any region of several segments: on a region of three or more segments across the origin, the part over the origin takes the start of the scale, and its other segments the rest.\n  - Lane room: where a lane's label, at its place along its region, would cross a mark in another lane on the label's side (the next lane or one further on), the gap just before the lane of that mark is widened until the label clears it: by the room the label takes (its letters and its label offset), less the lanes and rooms already between the label's mark and that lane. The label stays beside its own mark, and the lanes between its lane and the lane of that mark keep their spacing beside it. Lanes whose labels cross nothing keep their spacing. A track whose lanes get room grows by that room (Linear: the slot grows taller; Circular: the slot grows wider). Both modes.\n  - Circular, a slot inside the axis whose width is not set: a room that would carry its lanes past the centre of the circle is not added. The labels that needed it are drawn across the mark they meet, as in 0.14.5, and a warning in the form of RGN-ROOM-WARN says how many region labels were left without room before the centre. The figure is drawn; no error.\n  - Circular: a region label stands at its centred place whatever its label_position, as now.",
+  "rationale": "領域ラベルが自分の印のそばに、どの表示でも同じ規則で立つようにする。原点をまたぐ領域は原点をまたぐ部分から始まるので、始まり・終わり・中点・グラデーションを 1 つの並び（run）で決める。start と end は領域の最初と最後の塩基を指し、注釈の種類（feature span、coordinate span）や表示の開始位置で意味を変えない。回転しない Linear で原点をまたぐ領域のラベルは、バーの端で半分はみ出さないよう、長いほうの部分の中央に置く。印が表示で切られた領域は、ラベルが印の上に収まる最長の部分の中央に置く（今のまま）。隣のレーンの印にラベルが重なるときだけ、そのレーンとの間にラベルの分の間を空け、重ならない図の高さは変えない。ラベルの文字が隣より先のレーンの印に届くときも、その印のレーンの手前に間を空け、間にあるレーンはラベルのレーンのそばから動かさない。Circular の内側スロットで間を空けると円の中心を越えるときは、その間は空けず 0.14.5 と同じく重ねて描き、警告で知らせる（0.14.5 で描けた図をエラーにしない）。",
+  "mustPreserve": "表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。0.14.5 で描けた図が描けること（内側スロットで間が取れなくてもエラーにしない）。",
+  "mayRetire": "回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。2 つ以上先のレーンの印に重なって描かれるラベル（OV-2661）。Circular の内側スロットで、空けた間が円の中心を越えてレーンが潰れたり中心の反対側に描かれたりすること（OV-2665、OV-2666）。",
+  "acceptedResidualRisk": "原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。Circular の内側スロットで中心までに間が取れないラベルは、出会う印に重なって描かれる（警告は出る）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
 }

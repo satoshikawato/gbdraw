@@ -24,7 +24,7 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation
+from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_span_px, lane_width_px
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -155,12 +155,14 @@ def _record_lanes(
     params: AnnotationTrackParams,
 ) -> tuple[list[PlacedRegionAnnotation], float]:
     """The record's placements and the width of one lane: the lanes share the band less its padding and the slot's
-    label room (``ResolvedAnnotationTrack.lane_room_px``)."""
+    label room (``lane_width_px``)."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
     lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px - track.lane_room_px)
-    return placements, 14.0 if track.clipped else usable / max(1, lane_count)
+    width = lane_width_px(
+        outer_radius_px - inner_radius_px, padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
+    )
+    return placements, 14.0 if track.clipped else width
 
 
 def _lane_radii(
@@ -174,15 +176,16 @@ def _lane_radii(
     params: AnnotationTrackParams,
 ) -> tuple[float, float]:
     """The inner and outer radius of a placement's lane: ``inside`` slots stack their lanes inward, each past the
-    label room of the gaps before it (``ResolvedAnnotationTrack.room_before``)."""
+    label room of the gaps before it (``ResolvedAnnotationTrack.room_before``). A lane stacked past the centre (a
+    clipped slot of set width) stops at it: a negative radius would draw the mark through the centre, on the far
+    side of the circle (OV-2666)."""
 
     # A circle draws its record on one row.
     room = track.room_before(placement.annotation.record_index, 0, placement.lane)
+    near, far = lane_span_px(placement.lane, lane_width, padding_px=params.padding_px, room_before_px=room)
     if side == "inside":
-        lane_outer = outer_radius_px - params.padding_px - placement.lane * lane_width - room
-        return lane_outer - lane_width, lane_outer
-    lane_inner = inner_radius_px + params.padding_px + placement.lane * lane_width + room
-    return lane_inner, lane_inner + lane_width
+        return max(0.0, outer_radius_px - far), max(0.0, outer_radius_px - near)
+    return inner_radius_px + near, inner_radius_px + far
 
 
 StrandBands: TypeAlias = Mapping[Literal["+", "-"], RadialBand]

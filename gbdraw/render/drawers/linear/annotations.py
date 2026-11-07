@@ -24,7 +24,13 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
     mark_parts,
 )
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation
+from gbdraw.annotations.layout import (
+    LabelExtent,
+    PlacedRegionAnnotation,
+    lane_middle_px,
+    lane_span_px,
+    lane_width_px,
+)
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
@@ -144,7 +150,8 @@ def _lane_top(
     """The slot-local y of the top of a placement's lane on ``row``: lanes stack down from the slot's padding,
     each past the label room of the gaps above it on that row (``ResolvedAnnotationTrack.room_before``)."""
 
-    return padding_px + placement.lane * lane_height + _room_before(track, placement, row)
+    room = _room_before(track, placement, row)
+    return lane_span_px(placement.lane, lane_height, padding_px=padding_px, room_before_px=room)[0]
 
 
 def _lane_center(
@@ -152,7 +159,8 @@ def _lane_center(
 ) -> float:
     """The slot-local y of the middle of a placement's lane on ``row`` (``_lane_top``)."""
 
-    return padding_px + (placement.lane + 0.5) * lane_height + _room_before(track, placement, row)
+    room = _room_before(track, placement, row)
+    return lane_middle_px(placement.lane, lane_height, padding_px=padding_px, room_before_px=room)
 
 
 def _band_rect(mark: str, lane_center: float, lane_height: float, x1: float, x2: float) -> tuple[float, float, float, float]:
@@ -249,11 +257,16 @@ def _lane_height(
     params: AnnotationTrackParams,
 ) -> float:
     """The height of one lane of the record's ``placements`` in a slot ``height_px`` high: the lanes share it less
-    its padding and the slot's label room (``ResolvedAnnotationTrack.lane_room_px``)."""
+    its padding and the slot's label room (``lane_width_px``)."""
 
     lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px - track.lane_room_px)
-    return 14.0 if track.clipped else usable_height / max(1, lane_count)
+    return (
+        14.0
+        if track.clipped
+        else lane_width_px(
+            float(height_px), padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
+        )
+    )
 
 
 def _mark_lane(

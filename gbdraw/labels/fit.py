@@ -154,11 +154,13 @@ class LabelFit:
     Linear region labels over other labels or lines (``region_overlaps``: pairs of a
     region label and what it covers, LP-D68), Circular region labels cut to fit
     their circle (``region_cuts``, LP-D87), Circular region labels whose letters
-    lie on another track's band (``region_track_overlaps``, LP-D86), and lines of a
+    lie on another track's band (``region_track_overlaps``, LP-D86), Circular region
+    labels drawn across another lane's mark for want of room before the centre
+    (``region_rooms_past_centre``, LBL-ROOM-STOP-AT-CENTRE-WARN), and lines of a
     Circular record's centre definition text that meet what a track paints, its
     ink (``definition_track_overlaps``, D-12).
 
-    The labels fit when all seven are 0.
+    The labels fit when all eight are 0.
     """
 
     overlap_pairs: int
@@ -168,6 +170,7 @@ class LabelFit:
     region_cuts: int = 0
     region_track_overlaps: int = 0
     definition_track_overlaps: int = 0
+    region_rooms_past_centre: int = 0
 
     @property
     def fits(self) -> bool:
@@ -179,6 +182,7 @@ class LabelFit:
             and self.region_cuts == 0
             and self.region_track_overlaps == 0
             and self.definition_track_overlaps == 0
+            and self.region_rooms_past_centre == 0
         )
 
     def __add__(self, other: LabelFit) -> LabelFit:
@@ -190,6 +194,7 @@ class LabelFit:
             self.region_cuts + other.region_cuts,
             self.region_track_overlaps + other.region_track_overlaps,
             self.definition_track_overlaps + other.definition_track_overlaps,
+            self.region_rooms_past_centre + other.region_rooms_past_centre,
         )
 
 
@@ -539,6 +544,10 @@ class LabelFitReport:
         return sum(record.fit.definition_track_overlaps for record in self.records)
 
     @property
+    def region_rooms_past_centre(self) -> int:
+        return sum(record.fit.region_rooms_past_centre for record in self.records)
+
+    @property
     def room_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
         """The ways to make room, in the order offered: for the records that were not placed (CAPACITY-STOP), else,
         when no row has a value, for the outer and inner Circular labels (NO-ROW-WAYS, OV-2180). A row not computed
@@ -625,10 +634,14 @@ def _counted(count: int, singular: str, plural: str) -> str:
 
 def fit_counts(fit: LabelFit) -> str:
     counts: list[str] = []
-    # Region labels (LP-D68, LP-D87, LP-D86) and the definition text over a track (D-12) are counted on their own
-    # record, which has no other counts.
+    # Region labels (LP-D68, LP-D87, LP-D86, LBL-ROOM-STOP-AT-CENTRE-WARN) and the definition text over a track
+    # (D-12) are counted on their own record, which has no other counts.
     if fit.overlap_pairs or fit.crossing_pairs or not (
-        fit.region_overlaps or fit.region_cuts or fit.region_track_overlaps or fit.definition_track_overlaps
+        fit.region_overlaps
+        or fit.region_cuts
+        or fit.region_track_overlaps
+        or fit.region_rooms_past_centre
+        or fit.definition_track_overlaps
     ):
         counts.append(_counted(fit.overlap_pairs, "label pair overlaps", "label pairs overlap"))
         counts.append(_counted(fit.crossing_pairs, "leader pair crosses", "leader pairs cross"))
@@ -640,6 +653,10 @@ def fit_counts(fit: LabelFit) -> str:
         counts.append(_counted(fit.region_cuts, "region label cut", "region labels cut"))
     if fit.region_track_overlaps:
         counts.append(_counted(fit.region_track_overlaps, "region label on another track", "region labels on other tracks"))
+    if fit.region_rooms_past_centre:
+        counts.append(
+            _counted(fit.region_rooms_past_centre, "region label", "region labels") + " without room before the centre"
+        )
     if fit.definition_track_overlaps:
         counts.append(_counted(fit.definition_track_overlaps, "line overlaps a track", "lines overlap a track"))
     return ", ".join(counts)
@@ -685,6 +702,11 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
     if report.region_track_overlaps:
         sentences.append(
             f"Region labels lie on other tracks: the set track radii leave them no room ({report.region_track_overlaps})."
+        )
+    if report.region_rooms_past_centre:
+        sentences.append(
+            "Region labels cross other region marks: there is no room for them before the centre "
+            f"({report.region_rooms_past_centre})."
         )
     if report.definition_track_overlaps:
         sentences.append(
