@@ -12,7 +12,9 @@ and row; records and rows that share the slot and need less keep their lanes whe
 from __future__ import annotations
 
 import math
+import random
 import re
+from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
@@ -39,6 +41,7 @@ _OFFSET = RegionAnnotationStyle().label_offset
 # The letters keep the label offset from the painted edge of their mark, half its stroke past the band.
 _PAINT = RegionAnnotationStyle().stroke_width / 2
 _EDGE = _OFFSET + _PAINT
+_HMMT = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
 
 
 def _record(name: str = "r1") -> SeqRecord:
@@ -287,6 +290,63 @@ def test_an_outside_slot_the_plan_places_away_from_the_axis_is_measured_where_it
     assert _radii(items["b"])[0] == pytest.approx(_radii(items["a"])[1])
     _without_room(monkeypatch)
     assert gbdraw.draw_circular(_record(), options=options)._drawing.tostring() == drawn
+
+
+def test_radial_labels_that_grow_the_circle_measure_an_outside_slot_where_it_is_drawn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Radial feature labels grow the circle, which moves the outside slot out by about 20 px. Where it is drawn,
+    # a's letters at its middle span bp 7968-8604 (OV-2663), short of b (from 8624) in the next lane; where the slot
+    # was before the growth they would reach past it.
+    record = gbdraw.read_genbank(str(_HMMT))[0]
+    regions = (_region("a", 7456, 9112, "Alpha region label"), _region("b", 8624, 9224, ""))
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "regions:annotations@side=outside,set_id=regions")),
+        config_overrides={"labels.circular.placement": "radial", "labels.circular.scope": "both"},
+    )
+    drawn = gbdraw.draw_circular(record, options=options)._drawing.tostring()
+    items = _groups(drawn)
+
+    assert _radii(items["b"])[0] == pytest.approx(_radii(items["a"])[1])
+    _without_room(monkeypatch)
+    assert gbdraw.draw_circular(record, options=options)._drawing.tostring() == drawn
+
+
+def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 150 labelled regions on an inside slot need lane rooms that carry the slot over the centre definition, so the
+    # label fit check scans smaller definition fonts, each laying the tracks out again (OV-2664). A slot's label room
+    # is measured once for each band, axis and side it is asked for, however often the layouts ask.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    record = gbdraw.read_genbank(str(_HMMT))[0]
+    length = len(record.seq)
+    rng = random.Random(1)
+    for _ in range(600):  # The regions of the review's probe (its third set).
+        rng.randint(1, 2)
+    regions = tuple(
+        RegionAnnotation(f"q{index}", CoordinateSpan(None, start, start + rng.randint(50, 400)), label=f"q{index}")
+        for index in range(150)
+        for start in (rng.randint(1, length - 400),)
+    )
+    measured: list[tuple[object, ...]] = []
+    original = assemble_module.circular_annotation_label_room
+
+    def counting(track: object, **kwargs: object) -> float:
+        # The track itself is kept, so no other track takes its id while the drawing runs.
+        measured.append((track, kwargs["band"], kwargs["side"], tuple(kwargs["rings"]), kwargs["params"], kwargs["covers_slots"]))
+        return original(track, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "circular_annotation_label_room", counting)
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("i1", regions),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "i1:annotations@side=inside,set_id=i1")),
+    )
+    with pytest.warns(UserWarning, match="definition lines do not fit"):
+        gbdraw.draw_circular(record, options=options)
+
+    distinct = {(id(track), *rest) for track, *rest in measured}
+    assert distinct and len(measured) == len(distinct)
 
 
 def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -> None:
