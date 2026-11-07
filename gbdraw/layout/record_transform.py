@@ -63,4 +63,3 @@ def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform)
     and no region was applied to it (a crop has no origin, even one that keeps every base)."""
 
     return transform.is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
-
