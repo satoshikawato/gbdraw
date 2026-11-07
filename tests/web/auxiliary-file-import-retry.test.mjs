@@ -121,7 +121,7 @@ test('Remove on a card takes back only the shown drawing\'s rows and binding', a
   owner.removal = async () => true;
 });
 
-// The drawing switch as the composition root runs it (`showDrawingNow`): the
+// The drawing switch as app/drawing-switch.js runs it (`showDrawingNow`): the
 // arrival hook reads the departing drawing's message before the switch clears
 // it (OV-372), and the arriving drawing's card failure is shown again.
 const showDrawing = (drawing) => {

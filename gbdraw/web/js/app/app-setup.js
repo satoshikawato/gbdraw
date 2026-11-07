@@ -6,9 +6,6 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
-/** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
-/** @import { DrawingInputSite } from './drawing-list.js' */
-/** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
@@ -17,7 +14,7 @@
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
-/** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -65,6 +62,9 @@ import {
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
+import { createDrawingSwitch } from './drawing-switch.js';
+import { createInputReplacementPorts } from './input-replacement-ports.js';
+import { createDrawingReset, createResetSettings } from './reset-settings.js';
 import { createRegionDrawing } from './region-drawing.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords } from '../services/region-axis.js';
@@ -138,7 +138,7 @@ import { captureSvgExport, serializeCleanSvg } from '../services/svg-serializati
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
-import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from '../services/reset.js';
+import { withNewDrawingDefaults } from '../services/reset.js';
 import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
@@ -158,7 +158,7 @@ import { createFeatureEditor } from './feature-editor.js';
 import { COLLINEAR_COLOR_MODE_TEXT } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
-import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
+import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
@@ -178,9 +178,7 @@ import { createLinearRecordLabels, definitionLineStyleRows } from './linear-reco
 import {
   createCircularConservationComparisonFiles, createCircularConservationSeriesPanel, createCircularConservationSources
 } from './circular-conservation.js';
-import {
-  buildDefaultCircularRecordPositions, createCircularRecordOrder, createCircularRecordPresentation
-} from './circular-record-panel.js';
+import { createCircularRecordOrder, createCircularRecordPresentation } from './circular-record-panel.js';
 import {
   createClickedFeatureCopy, createImportedComparisonChoice, createMissingBlastTsvChoice, createResultExport, createRunInfoCopy
 } from './result-actions.js';
@@ -225,7 +223,7 @@ import { createPreservedConfigOverrides } from './preserved-config-overrides.js'
 import { createSessionStatus } from './session-status.js';
 import { createFeatureChoiceReaders, createScaleStyleAvailability, createShownDrawingMembers } from './shown-drawing-settings.js';
 import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits } from './circular-record-controls.js';
-import { createDrawingRecordCatalog } from './drawing-record-catalog.js';
+import { createAnnotationRecordRebind, createDrawingRecordCatalog } from './drawing-record-catalog.js';
 import { createRecordDiscoveryRequests, createRecordDiscoveryRuns } from './record-discovery-requests.js';
 import { createRecordSettingsSources, createRecordSettingsTransitions } from './record-settings.js';
 import { createShownDrawingReaders } from './shown-drawing-readers.js';
@@ -252,11 +250,10 @@ import { addAnnotationSet as addSearchSetToDrawing } from '../services/drawing/a
 import { createSequenceSearch } from './sequence-search.js';
 import { resultRecordBinding } from '../services/sequence-search.js';
 import { createRecordSelection } from './record-selection.js';
-import { normalizeFileList } from '../services/conservation-series.js';
 import {
   comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd
 } from '../mode-profiles.js';
-import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
+import { joinSentences, msg, t, tm, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -265,7 +262,6 @@ import {
 import {
   activeDepthTrackIndices,
   compactDepthFileSlots,
-  depthFileSlotsFromValue,
   depthSlotTrackIndex,
   isDefaultManagedDepthSlot,
   representativeDepthFiles,
@@ -432,8 +428,6 @@ const shownResultFeatures = (recordKey) => {
   });
 };
 
-const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
-const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
 export const createAppSetup = () => {
   provide(SETTING_NOTE_APPLIES, committedSettingNotePredicate);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -733,26 +727,9 @@ export const createAppSetup = () => {
     state, readInputRecords, linearRecordCatalogStateFor: linearRecordSelector.catalogStateFor,
     linearRecordErrorModelFor: linearRecordSelector.errorModelFor, refreshLinearRecords: linearRecordSelector.refresh
   });
-  // R10 (D-15-46): each transition that changes the annotation record catalog
-  // (a discovery that ends, a mode switch, record selection, a Linear source
-  // edit, a record selector, Multi-Record Canvas) rebinds the shown drawing's
-  // annotations to the records the catalog resolves, in that transition's
-  // History step. Load and its rollback are busy and end in a discovery; a
-  // History restore installs the bindings it captured; Generate rebinds in
-  // `validateAnnotationTargets`. A transition that leaves the catalog's
-  // status and records as the last rebind saw them rebinds nothing (a refresh
-  // after Save or at the end of Load), as the former catalog watcher did.
-  let reboundCatalog = '';
-  const rebindAnnotationRecords = () => {
-    const drawing = state.activeDrawing();
-    const catalog = getAnnotationRecordCatalog(drawing);
-    const seen = `${catalog.status}:${catalog.signature}`;
-    if (seen === reboundCatalog) return;
-    reboundCatalog = seen;
-    if (catalog.status === 'ready' && !sessionOperationAvailability()) {
-      reconcileAnnotationRecordBindings(drawing, catalog);
-    }
-  };
+  const { rebindAnnotationRecords } = createAnnotationRecordRebind({
+    state, getAnnotationRecordCatalog, sessionOperationAvailability
+  });
   const { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords } = createRecordDiscoveryRuns({
     pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
     refreshLinearRecords: linearRecordSelector.refresh
@@ -2516,108 +2493,23 @@ export const createAppSetup = () => {
     afterReady
   });
 
-  // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
-  // the departing drawing's slot and installs the arriving slot, or an empty
-  // one. The Legend owner
-  // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
-  // and the binder adopts it when the Result is displayed, as for a batch
-  // Result.
-  /** @param {Readonly<ArtifactSlot>} slot An installed slot. */
-  const rememberShownResultInventory = (slot) => {
-    const shown = results.value[Number(selectedResultIndex.value) || 0];
-    if (shown) legendActions.rememberResultInventory(previewRuntime.getResultIdentity(shown), [...slot.legendInventory]);
-  };
-  /**
-   * The displayed artifact is kept under the drawing it belongs to, which is
-   * the arriving drawing when the shown drawing displayed the arriving one's.
-   * @param {DrawingIdentity} arrivingDrawing
-   * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the drawing has no artifact yet).
-   */
-  const swapArtifactSlots = (arrivingDrawing) => {
-    previewRuntime.clearActiveRuntime();
-    const arriving = artifactSlots.swap(historySnapshots.captureArtifactSlot(), arrivingDrawing.id);
-    historySnapshots.installArtifactSlot(arriving, { drawing: arrivingDrawing });
-    if (arriving) rememberShownResultInventory(arriving);
-    return arriving;
-  };
-
-  // PD-OI-090 (R10, R15): the one switch between the drawings, in one task.
-  // It writes no setting and records no History step: each drawing has its
-  // own History, and Undo and Redo walk the shown drawing's steps. No watcher
-  // writes state on a switch. Steps, each one call:
-  //   1. Settle the departing drawing: its open History step ends here, in its
-  //      own History; pending rule-pattern work; the feature selection; and the
-  //      displayed Result's projection state (it followed every live edit).
-  //   2. Swap the artifact slots (`swapArtifactSlots`).
-  //   3. Show the arriving drawing (`installShownDrawing`); the template now
-  //      binds it. Its History takes the shared selections in its intent
-  //      that changed while it was not shown.
-  //   4. Reset the departing drawing's transient UI; the Preview search is
-  //      kept per drawing. The feature panel tab it resets is no Session
-  //      change (D-15-53).
-  //   5. Show the arriving Result as a selection.
-  // A switch waits for Generate, a label rerender, Save and Load, so each
-  // Result lands in its own drawing's slot (OIPC-C07), and for a History
-  // restore or an open History transaction.
-  // OIC-030: also while a color rule table edit is matched, so that edit is
-  // one step of its drawing.
-  const drawingSwitchBusy = () => sessionOperationAvailability('history')
-    || history.historyAvailability()
-    || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null)
-    || (featureActions.ruleWritePending() ? RULE_WRITE_BUSY : null);
-  const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
-  // The drawing an operation error names (PD-OI-079 `context.drawingId`), if
-  // any: read by the switch, the drawing removal, and E1's Generate. Its
-  // producers write a `DrawingId`; the normalizer, a leaf, keeps it as text.
-  const errorDrawingId = () => /** @type {DrawingId | undefined} */ (normalizeUserFacingError(errorLog.value)?.context.drawingId);
-  // The switch work, steps 1-5, without the gate: `selectDrawing` and a step
-  // of the drawing list (`app/drawing-list.js`, which shows a drawing inside
-  // its project step, R16-2) call it. Showing the shown drawing does nothing.
-  /** @param {DrawingId} drawingId */
-  const showDrawingNow = (drawingId) => {
-    const arriving = state.drawingOf(drawingId);
-    const departing = state.activeDrawing();
-    if (arriving === departing) return;
-    // 1. Settle the departing drawing; its capture runs in this call.
-    void history.settlePendingIntent();
-    // A card's failed import is its drawing's card state (D-15-126): read
-    // before the departing drawing's message is cleared below.
-    const arrivingCardFailure = auxiliaryImportFailureOnArrival(departing, arriving);
-    featureActions.suspendSpecificRulePatternDrafts();
-    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-    rememberDepartingResultProjection(departing);
-    // 2. Artifact slots.
-    swapArtifactSlots(arriving);
-    // 3. The shown drawing.
-    installShownDrawing(arriving.id);
-    void history.refreshCurrentIntent();
-    // 4. Transient UI. "Showing the last successful result" named the
-    // departing drawing's Result, and the notice the departing drawing's work.
-    history.adoptSessionReset(resetModeTransientUi);
-    noticeBanner.dismiss();
-    previewFeatureSearch.switchDrawingSearch(departing.id, arriving.id);
-    failedGeneratePreservedResult.value = false;
-    // OV-372: an operation error belongs to the drawing it was raised in,
-    // except one that names the arriving drawing's Result (PD-OI-079).
-    if (errorLog.value && errorDrawingId() !== arriving.id) errorLog.value = null;
-    if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
-    // The arriving drawing's annotations, over its mode's record catalog.
-    rebindAnnotationRecords();
-    // 5. Presentation: the arriving Result is shown as a selection.
-    previewRuntime.presentSelectedResult({ modeArrival: true });
-  };
-  // `false` when the drawing is already shown, the busy reason when a switch
-  // waits, else `{ status: 'ok' }`. An unknown ID throws (`state.drawingOf`):
-  // the tabs and the drawing menu offer only existing drawings (OV-2151).
-  /** @param {DrawingId} drawingId */
-  const selectDrawing = (drawingId) => {
-    const arriving = state.drawingOf(drawingId);
-    if (arriving === state.activeDrawing()) return false;
-    const busy = drawingSwitchBusy();
-    if (busy) return busy;
-    showDrawingNow(arriving.id);
-    return { status: 'ok' };
-  };
+  const {
+    rememberShownResultInventory, drawingSwitchBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+  } = createDrawingSwitch({
+    state, results, selectedResultIndex, errorLog, failedGeneratePreservedResult, sessionOperationAvailability,
+    historyAvailability: history.historyAvailability, historyRestoring: () => history.restoring.value,
+    traversalPending: history.traversalPending, settlePendingIntent: history.settlePendingIntent,
+    refreshCurrentIntent: history.refreshCurrentIntent, adoptSessionReset: history.adoptSessionReset,
+    ruleWritePending: featureActions.ruleWritePending,
+    suspendSpecificRulePatternDrafts: featureActions.suspendSpecificRulePatternDrafts,
+    clearFeatureSelection: featureSelection.clearFeatureSelection, rememberDepartingResultProjection,
+    auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice: noticeBanner.dismiss,
+    switchDrawingSearch: previewFeatureSearch.switchDrawingSearch, rebindAnnotationRecords,
+    clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
+    presentSelectedResult: previewRuntime.presentSelectedResult,
+    rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
+    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
+  });
   // The operations on the drawing list, each one project step (R11, R16-2).
   const drawingList = createDrawingList({
     drawingTabs: () => state.drawingTabs.value,
@@ -3011,161 +2903,6 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
-  // Reset Settings asks first (PD-OI-090 〔Reset〕): Reset this drawing resets
-  // the shown drawing as its step, Reset all drawings every drawing and the
-  // one-per-Session values as one project step (R17-5), and Cancel changes
-  // nothing and records no step. The body is D-04's two lines and one line
-  // for the one-per-Session values only Reset all drawings resets (D-15-191).
-  // `resetShownDrawing` and `resetSettings` do not ask.
-  const requestResetSettings = async () => {
-    const sessionBusy = sessionOperationAvailability('not-during-run');
-    if (sessionBusy) return sessionBusy;
-    const choice = await askChoice({
-      title: t('Reset settings?'),
-      lines: [
-        { icon: 'ph-warning', text: t('Your edits are removed too') },
-        { icon: 'ph-arrow-counter-clockwise', text: t('Undo restores them') },
-        { icon: 'ph-stack', text: t('Reset all drawings also resets the settings every drawing shares') }
-      ],
-      actions: [
-        { id: 'reset-drawing', label: t('Reset this drawing'), tone: 'danger' },
-        { id: 'reset', label: t('Reset all drawings'), tone: 'danger' }
-      ]
-    });
-    if (choice === 'reset-drawing') return resetShownDrawing();
-    if (choice === 'reset') return resetSettings();
-    return false;
-  };
-  // What a drawing's reset changes beyond its slices, by its mode.
-  /** @type {Readonly<Record<DiagramMode, (drawing: DrawingState) => void>>} */
-  const RESET_FOLLOW_UPS = Object.freeze({
-    circular: (drawing) => {
-      // The track menu's new-track choice is one per mode; it returns to a
-      // new drawing's with the drawing.
-      circularTrackNewRenderer.value = 'dinucleotide_skew';
-      // OV-1249: the loaded Circular records keep a Record Order row each, at
-      // their defaults; Reset resets settings, not the records.
-      drawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(drawing));
-      // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
-      // kept ring files, as a new drawing with those files uploaded has them.
-      reconcileCircularConservation(drawing);
-    },
-    linear: (drawing) => {
-      linearTrackNewRenderer.value = 'dinucleotide_skew';
-      // Linear records return to their File defaults and inferred
-      // definitions; Files, record selections, File defaults, and depth stay.
-      // The mutation also clears the alignment plan (D-15).
-      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((sequence) => ({
-        ...sequence,
-        definition: '',
-        record_subtitle: '',
-        region_start: null,
-        region_end: null,
-        region_reverse: false
-      })), { alignmentMutation: msg('settings reset.') });
-      invalidateLinearComparisonArtifacts(drawing);
-    }
-  });
-  // One drawing returns to a new drawing's settings of its mode; the
-  // one-per-Session values stay (R17-5). OV-1168, OV-1195: its artifact takes
-  // the default palette applied, and a drawing not shown loses its alignment
-  // Reset receipt (the shown one's plan is cleared by its follow-up).
-  /** @param {DrawingState} drawing */
-  const resetDrawing = (drawing) => {
-    const artifact = resetDrawingSettings(state, drawing);
-    historySnapshots.writeArtifactValues(drawing.id, drawing.id === state.activeDrawingId.value
-      ? artifact
-      : { ...artifact, similarityAlignmentResetReceipt: null });
-    RESET_FOLLOW_UPS[drawing.mode](drawing);
-    // The reset Depth series fit the kept Depth files (OV-1164).
-    ensureDepthTrackConfigCount(drawing);
-  };
-  // Both Reset buttons reset the shown drawing: `resetDrawings` resets it (and
-  // for Reset all drawings, every other drawing and the Session values) inside
-  // the step `runStep` opens, and the shown Result shows the reset draft.
-  /**
-   * @param {(reset: () => Promise<boolean>) => unknown} runStep The History step
-   * @param {() => void} resetDrawings
-   */
-  const runReset = (runStep, resetDrawings) => {
-    const sessionBusy = sessionOperationAvailability('not-during-run');
-    if (sessionBusy) return sessionBusy;
-    // A notice (a loaded Session's warnings, a table import) described the
-    // settings the reset replaces. Generate keeps it: it describes the Session.
-    noticeBanner.dismiss();
-    settingsPaneActions.closeSettingsPopup();
-
-    // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
-    // reset draft as the next Generate draws it. One projection of the editor
-    // intent shows the fills, Legend colors, visibility and labels, and the
-    // executor shows the strokes and the Legend rows the reset intent leaves
-    // (a deleted row Python drew returns, and one the Result's bytes lack asks
-    // for the rerender, O-2; a row added in the editor and deleted stays
-    // gone); the rule owner follows the removed rules (a
-    // changed Legend source asks for the rerender, as their Undo does), and
-    // the Legend list follows the Result. The reset itself runs at once, so a
-    // caller reads the reset settings right after resetSettings(). One
-    // rerender follows the step: the rerender requests wait until it ends
-    // (OV-1076).
-    return holdAutomaticRerender(() => runStep(() => followRuleEdits(state.activeDrawing(), async () => {
-      featureActions.clearSpecificRulePatternDrafts();
-      const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
-      const palette = { ...appliedPaletteColors.value };
-      // The deleted rows Generate drew return (a row added in the editor and
-      // deleted stays gone).
-      const returning = state.activeDrawing().deletedLegendEntries.value
-        .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
-        .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
-      resetDrawings();
-      if (shown) {
-        // A Reset that changes the palette leaves the fills to the palette watcher.
-        await projectMountedEditorIntent({
-          colors: paletteColorsEqual(appliedPaletteColors.value, palette),
-          visibility: true,
-          rerender: true,
-          labels: true,
-          domains: [...STROKE_DOMAINS, ...LIVE_EDIT_DOMAINS.legendRows]
-        });
-        drawReturningLegendRows(returning);
-        legendActions.extractLegendEntries();
-      }
-      return true;
-    })));
-  };
-  // Reset all drawings is one project step (D-15-51): one Undo restores every
-  // drawing and the Session values. OV-1166 (Q-DR-6 A): every drawing's
-  // multi-record layout takes a new drawing's defaults (its sides unset),
-  // whatever the canvas was before.
-  const resetSettings = () => runReset((reset) => history.runProjectStep(msg('Reset settings'), reset), () => {
-    resetProject(state);
-    state.drawingList().forEach((drawing) => resetDrawing(drawing));
-    // As 0.14.0 Reset settings did; Reset this drawing keeps the shown
-    // Result's match sequences with the Result (OV-2203).
-    matchSequenceRegistry.reset();
-  });
-  // Reset this drawing is a step of the shown drawing (R17-5): the other
-  // drawings, their Histories, and the Session values stay.
-  const resetShownDrawing = () => runReset((reset) => history.runUndoable(msg('Reset this drawing'), reset),
-    () => resetDrawing(state.activeDrawing()));
-
-  // OV-1160 (Owner R15-23 Q-DR-5 A): turned on, the Instant Preview toggle
-  // applies every drawing's queued palette, so it is one project step whose
-  // parts hold each drawing's palette (D-15-51); turned off, it changes the
-  // Session-level flag alone.
-  /** @param {boolean} enabled */
-  const setPaletteInstantPreview = (enabled) => (enabled
-    ? history.runProjectStep('Change setting', () => resultsManager.setPaletteInstantPreview(true))
-    : history.runUndoable('Change setting', () => resultsManager.setPaletteInstantPreview(false)));
-
-  const resetLayout = () => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
-    resetAllPositions();
-    resetCanvasPadding();
-    resetLayoutState(state);
-    resetPreviewViewport({ resetZoom: true });
-  };
-
   // Reset Layout has something to reset once an element moved, the
   // canvas padding changed, or the view was panned or zoomed.
   const layoutResetAvailable = computed(() => (
@@ -3415,6 +3152,24 @@ export const createAppSetup = () => {
     retainAlignmentForStableReorder: similarityAlignmentActions.retainForStableReorder,
     clearAlignmentForMutation: similarityAlignmentActions.clearForMutation, rebindAnnotationRecords, discoverDrawingRecords
   });
+  // Reset Settings and Reset Layout: created once the Linear File edits exist (a Linear
+  // drawing's reset applies `applyLinearSeqMutation`); only the return reads them.
+  const { resetDrawing } = createDrawingReset({
+    state, circularTrackNewRenderer, linearTrackNewRenderer, reconcileCircularConservation, applyLinearSeqMutation,
+    invalidateLinearComparisonArtifacts, writeArtifactValues: historySnapshots.writeArtifactValues
+  });
+  const {
+    requestResetSettings, resetSettings, resetShownDrawing, setPaletteInstantPreview, resetLayout
+  } = createResetSettings({
+    state, sessionOperationAvailability, askChoice, resetDrawing, holdAutomaticRerender, followRuleEdits,
+    svgContainer, appliedPaletteColors, originalLegendOrder, projectMountedEditorIntent, drawReturningLegendRows,
+    STROKE_DOMAINS, resetAllPositions, resetCanvasPadding, resetPreviewViewport, dismissNotice: noticeBanner.dismiss,
+    closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
+    clearSpecificRulePatternDrafts: featureActions.clearSpecificRulePatternDrafts,
+    extractLegendEntries: legendActions.extractLegendEntries, runProjectStep: history.runProjectStep,
+    runUndoable: history.runUndoable, resetMatchSequences: matchSequenceRegistry.reset,
+    storePaletteInstantPreview: resultsManager.setPaletteInstantPreview
+  });
   const {
     cancelLinearSourceRemoval, applyLinearSourceRemoval, requestLinearSourceRemoval, removeLastLinearSeq
   } = createLinearSourceRemovalDialog({
@@ -3424,36 +3179,9 @@ export const createAppSetup = () => {
   const { replaceLinearSourceFile, setLinearSeqPrimaryFile } = createLinearSourceFileReplacement({
     state, shownAction, pendingDiscoveryOf, applyLinearSeqMutation, askLinearFileRemoval, sourceReplacementRetiresPresentation
   });
-  /** @param {readonly (InputFileRef | null)[]} slots @param {string} fileId @returns {number[]} */
-  const slotIndexesOfFile = (slots, fileId) => slots.flatMap((ref, idx) => (ref && ref.fileId === fileId ? [idx] : []));
-  /**
-   * The writer of each slot an input file replacement names: every
-   * `ReplaceableInputSlot` has one (a missing one fails the type check), and
-   * each is the body the shown drawing's control of that slot runs.
-   * @type {Readonly<Record<ReplaceableInputSlot, (drawing: DrawingState, site: DrawingInputSite, fileId: string, file: InputFileCandidate | InputFileRef) => void>>}
-   */
-  const INPUT_REPLACEMENT_WRITERS = Object.freeze({
-    c_gb: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gb', file),
-    c_gff: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gff', file),
-    c_fasta: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_fasta', file),
-    c_depth: (drawing, _site, fileId, file) => {
-      const indexes = new Set(circularDepthRows(drawing).flatMap((row) => slotIndexesOfFile(row, fileId)));
-      indexes.forEach((idx) => replaceCircularDepthFile(drawing, idx, file));
-    },
-    c_conservation_blasts: (drawing, _site, fileId, file) => {
-      const ref = state.inputFiles.registerFile(file);
-      replaceCircularConservationBlasts(drawing, normalizeFileList(drawing.files.c_conservation_blasts)
-        .map((entry) => (entry.fileId === fileId ? ref : entry)));
-    },
-    'row.gb': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gb', file),
-    'row.gff': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gff', file),
-    'row.fasta': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'fasta', file),
-    'row.depth': (drawing, site, fileId, file) => {
-      const seq = drawing.linearSeqs.find((entry) => entry.uid === site.rowUid);
-      if (!seq) return;
-      slotIndexesOfFile(depthFileSlotsFromValue(seq.depth), fileId).forEach((idx) => setLinearDepthFiles(drawing, [seq], idx, file));
-    },
-    edge: (drawing, site, _fileId, file) => swapLinearComparisonFile(drawing, String(site.edgeId), file)
+  const { applyInputReplacementToDrawings, askScope } = createInputReplacementPorts({
+    state, replaceCircularSource, replaceCircularDepthFile, replaceCircularConservationBlasts, replaceLinearSourceFile,
+    setLinearDepthFiles, swapLinearComparisonFile, barTabs: drawingBar.tabs, askChoice
   });
   // The replacement of an input file for the shown drawing or every drawing
   // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`,
@@ -3465,25 +3193,8 @@ export const createAppSetup = () => {
     drawingOf: state.drawingOf,
     runProjectStep: history.runProjectStep,
     runDrawingStep: history.runUndoable,
-    applyInputReplacementToDrawings: (sites, fileId, file) => sites.forEach((site) => {
-      INPUT_REPLACEMENT_WRITERS[site.slot](state.drawingOf(site.drawingId), site, fileId, file);
-    }),
-    askScope: async (previous, otherDrawingIds) => {
-      // Named as their tabs show them: a default name in the UI language.
-      const others = drawingBar.tabs().flatMap((tab) => (
-        tab.kind === 'drawing' && otherDrawingIds.includes(tab.id) ? [tab.label] : []));
-      const choice = await askChoice({
-        title: t('Replace input file?'),
-        description: tn(others.length, '{name} is also used in {drawings}.', '{name} is also used in {count} drawings: {drawings}.', {
-          name: previous.name, drawings: listText(others)
-        }),
-        actions: [
-          { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },
-          { id: 'all', label: t('Every drawing that uses this file'), tone: 'primary' }
-        ]
-      });
-      return choice === 'drawing' || choice === 'all' ? choice : null;
-    },
+    applyInputReplacementToDrawings,
+    askScope,
     // The busy outcome has no control to disable: the notice banner words the
     // drawing list's own busy reason, as the tabs' title does (R15).
     onBusy: (busy) => showNotice({ text: tm(busy.reason), tone: 'warning' })

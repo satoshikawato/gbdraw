@@ -39,6 +39,7 @@ const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.
 const sliceWriterCalls = (source) => sliceHandleCalls(source, Object.keys(DRAWING_SLICES))
   .filter(({ callee }) => !SLICE_READERS.includes(callee)).map(({ callee }) => callee);
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+const DRAWING_SWITCH = readFileSync(new URL('../../gbdraw/web/js/app/drawing-switch.js', import.meta.url), 'utf8');
 const DEPTH_TRACKS = readFileSync(new URL('../../gbdraw/web/js/app/depth-tracks.js', import.meta.url), 'utf8');
 const WATCHERS = readFileSync(new URL('../../gbdraw/web/js/app/watchers.js', import.meta.url), 'utf8');
 
@@ -192,12 +193,14 @@ test('the drawing-write scan sees each receiver form (A2 review-I2, Low 2)', () 
 });
 
 test('the drawing switch writes no drawing member and commits no Result edit', () => {
-  const body = functionBody('selectDrawing');
+  const body = functionBody('selectDrawing', DRAWING_SWITCH);
   assert.equal(writesDrawing(body), false);
   assert.doesNotMatch(body, /commitActiveResultEdit|recordHistory|history\.(record|commit)/);
-  // The removed steps stay removed: the Show Depth repair and the profile transition.
-  assert.ok(!/modeProfileStateManager|\.transition\(drawing\.adv/.test(APP_SETUP),
-    'app-setup.js runs no profile transition on a switch');
+  // The removed steps stay removed: the Show Depth repair and the profile
+  // transition, in app-setup.js and in the switch module (app/drawing-switch.js).
+  for (const [file, source] of [['app-setup.js', APP_SETUP], ['drawing-switch.js', DRAWING_SWITCH]]) {
+    assert.ok(!/modeProfileStateManager|\.transition\(drawing\.adv/.test(source), `${file} runs no profile transition on a switch`);
+  }
 });
 
 // The text of every `watch(...)` call in a module (balanced parentheses).
