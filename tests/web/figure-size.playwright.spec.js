@@ -408,3 +408,81 @@ test('a Generate after a refused refit leaves no refit owed: the next file impor
   expect(await renders(), 'the figure before the import is drawn: no Python run').toBe(0);
 });
 
+
+// OV-2677: the Restore and merge of a Legend rename onto a deleted row is one checkpoint step, fitted by the rerender
+// that follows it. The rename dialog gives the focus back to the text field that held it as it closes, which opens
+// that field's History step before the rerender ends; a step that changed nothing leaves the merge's state, so History
+// still keeps the fitted figure as the step's: Undo and Redo show the recorded figures with no Python run (D-48), and
+// the size line never says the figure is being fitted.
+test('a Restore and merge onto a deleted Legend row keeps its fitted figure: its Undo and Redo run no Python', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await openLayout(page);
+  await setSide(page, 'width', 280, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const MM_280_PX = 280 * 96 / 25.4;
+  const addRule = (rule) => evaluateWithRetainedPromise(page, (fields) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, fields);
+    return app.addSpecificRule();
+  }, rule).then(() => settle(page));
+  await addRule({ feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' });
+  await addRule({ feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'beta'));
+  });
+  await settle(page);
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__holdRender = null;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async (...args) => {
+        window.__renders += 1;
+        if (window.__holdRender) await window.__holdRender;
+        return render?.(...args);
+      }
+    };
+  });
+  const renders = () => page.evaluate(() => window.__renders);
+  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
+  const listed = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+  const focusedField = () => page.evaluate(() => document.activeElement?.id ?? null);
+
+  await page.locator('#figure-width').focus();
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'alpha'), 'beta');
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect.poll(focusedField, 'the dialog takes the focus from the field').not.toBe('figure-width');
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('merge'); });
+  await settle(page);
+  await expect.poll(fittingLine).toBe(null);
+  await settle(page);
+  const merged = await listed();
+  expect(await focusedField(), 'the dialog gave the focus back to the field').toBe('figure-width');
+  expect(merged.filter((caption) => caption === 'beta')).toHaveLength(1);
+  expect(merged).not.toContain('alpha');
+  expect(px((await sizeState(page)).root.width), 'the merge is fitted').toBeCloseTo(MM_280_PX, 2);
+
+  // The Undo and the Redo are held: a Python run would show the fitting line while it waits.
+  await page.evaluate(() => { window.__renders = 0; window.__holdRender = new Promise((resolve) => { window.__releaseRender = resolve; }); });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await listed(), 'the Undo returns alpha').toContain('alpha');
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  const redoneLine = await fittingLine();
+  const redoneRenders = await renders();
+  await page.evaluate(() => { window.__holdRender = null; window.__releaseRender(); });
+  await settle(page);
+  expect(await listed(), 'the Redo merges again').toEqual(merged);
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+  expect(redoneLine, 'the Redo shows the fitted figure History kept').toBe(null);
+  expect(redoneRenders, 'the Undo and Redo of a fitted step run no Python').toBe(0);
+});
