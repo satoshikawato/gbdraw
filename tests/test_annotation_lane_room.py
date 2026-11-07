@@ -272,8 +272,10 @@ def test_an_inside_circular_label_is_measured_on_the_slots_side_and_radius(orien
 
 
 def test_a_record_whose_labels_cross_nothing_keeps_its_lanes_beside_one_that_needs_room() -> None:
-    # r1: b's label (lane 1, above) crosses a's mark, so r1's lanes part. r2 shares the slot: d's label stands past
-    # c's mark, and r2's lanes stay where they are, the slot's extra room left empty below them.
+    # r1: b's label (lane 1, above) crosses a's mark, so r1's lanes part and the slot grows toward the axis by the
+    # room (b moves down by it). r2 shares the slot: d's label stands past c's mark, so r2's lanes keep their
+    # spacing and their places beside the axis (they move down with the slot's lower edge), the room left empty
+    # above them on the labels' side.
     def drawn(beta: str) -> dict[str, ElementTree.Element]:
         regions = (
             _region("a", 1000, 5000, "Alpha", record="r1"),
@@ -284,16 +286,19 @@ def test_a_record_whose_labels_cross_nothing_keeps_its_lanes_beside_one_that_nee
         return _groups(_svg("linear", regions, records=(_record("r1"), _record("r2"))))
 
     parted, plain = drawn("Beta"), drawn("")
+    room = _band(parted["b"])[0] - _band(plain["b"])[0]
 
-    assert _band(parted["b"])[0] > _band(plain["b"])[0]
+    assert room > 0.0
+    assert _band(parted["a"]) == _band(plain["a"])
     assert [y for key in ("1:c", "1:d") for y in _band(parted[key])] == pytest.approx(
-        [y for key in ("1:c", "1:d") for y in _band(plain[key])], abs=1e-9
+        [y + room for key in ("1:c", "1:d") for y in _band(plain[key])], abs=1e-9
     )
 
 
 def test_a_row_whose_labels_cross_nothing_keeps_its_lanes_beside_one_that_needs_room() -> None:
-    # Rows of 4 kb. Row 0: b's label (lane 1, above) crosses a's mark, so the lanes part there. Row 1: d (lane 1)
-    # has no label and c's stands above lane 0, so its lanes stay where they are.
+    # Rows of 4 kb. Row 0: b's label (lane 1, above) crosses a's mark, so the lanes part there and the slot grows
+    # toward the axis on every row. Row 1: d (lane 1) has no label and c's stands above lane 0, so its lanes keep
+    # their spacing and their places beside the axis.
     def drawn(beta: str) -> dict[str, ElementTree.Element]:
         regions = (
             _region("a", 1000, 3500, "Alpha"),
@@ -304,10 +309,11 @@ def test_a_row_whose_labels_cross_nothing_keeps_its_lanes_beside_one_that_needs_
         return _groups(_svg("linear", regions, overrides={"canvas.linear.wrap_length": 4000}))
 
     parted, plain = drawn("Beta"), drawn("")
+    room = _rows(parted["b"])["0"][0] - _rows(plain["b"])["0"][0]
 
-    assert _rows(parted["b"])["0"][0] > _rows(plain["b"])["0"][0]
+    assert room > 0.0
     assert [y for key in "cd" for y in _rows(parted[key])["1"]] == pytest.approx(
-        [y for key in "cd" for y in _rows(plain[key])["1"]], abs=1e-9
+        [y + room for key in "cd" for y in _rows(plain[key])["1"]], abs=1e-9
     )
 
 

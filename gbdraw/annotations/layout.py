@@ -87,22 +87,26 @@ class ResolvedAnnotationTrack:
     lane_gap_px: float = 3.0
     # The room between lanes for labels that would cross the next lane's mark (``LaneRoom``).
     lane_rooms: tuple[LaneRoom, ...] = ()
+    # Whether the labels stand toward lane 0 (``LabelSizing.labels_above``).
+    labels_above: bool = False
 
     def room_before(self, record_index: int, row: int, lane: int) -> float:
-        """The label room between the lanes of the record's ``row`` from lane 0 up to ``lane``: how far ``lane``
-        moves on there."""
+        """How far ``lane`` of the record's ``row`` moves on from where it stands without label room: the rooms of
+        the gaps before it there and, where the labels stand toward lane 0, the slot's room the row does not take
+        (``lane_room_px``).
 
-        return sum(
-            room.px
-            for room in self.lane_rooms
-            if room.record_index == record_index and room.row == row and room.gap < lane
-        )
+        Labels stand away from the axis, so a row that takes less room than the slot keeps its lanes where they
+        stand beside the axis, and leaves the rest empty on the labels' side."""
+
+        rooms = [room for room in self.lane_rooms if room.record_index == record_index and room.row == row]
+        before = sum(room.px for room in rooms if room.gap < lane)
+        if not self.labels_above:
+            return before
+        return before + (self.lane_room_px - sum(room.px for room in rooms))
 
     @property
     def lane_room_px(self) -> float:
-        """The room the slot keeps for its labels between lanes: the largest a record's row takes. The rows and
-        records that share the slot's size and take less keep their lanes where they are, and leave the rest of
-        it empty past their last lane."""
+        """The room the slot keeps for its labels between lanes: the largest a record's row takes."""
 
         return _largest_room(self.lane_rooms)
 
@@ -531,6 +535,7 @@ def layout_annotation_track(
         clipped=clipped,
         lane_gap_px=lane_gap,
         lane_rooms=lane_rooms,
+        labels_above=labels.labels_above,
     )
 
 
