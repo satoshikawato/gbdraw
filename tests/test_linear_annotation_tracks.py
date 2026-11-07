@@ -2554,4 +2554,21 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
         for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
     }
 
-    assert slots["annotations_1"]["heightPx"] == pytest.approx(35.0)
+    # Two lanes (35 px), and room between them for the right label, which stands above lane 1 over the left
+    # region's mark in lane 0 (PD-OI-119): its letters, its label offset and its mark's stroke.
+    from gbdraw.render.drawers.annotation_marks import label_ink_offsets
+
+    root = ElementTree.fromstring(drawing.tostring())
+    (text,) = (
+        element
+        for group in root.iter("{http://www.w3.org/2000/svg}g")
+        if group.get("data-gbdraw-annotation-id") == "right"
+        for element in group.iter("{http://www.w3.org/2000/svg}text")
+    )
+    _left, _right, top, bottom = label_ink_offsets(
+        "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
+    )
+    style = RegionAnnotationStyle()
+    assert slots["annotations_1"]["heightPx"] == pytest.approx(
+        35.0 + bottom - top + style.label_offset + style.stroke_width
+    )

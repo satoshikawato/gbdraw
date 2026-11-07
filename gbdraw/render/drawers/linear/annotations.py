@@ -324,8 +324,8 @@ def _label_rows(
         )
         if covers_slots:
             # Beyond the slot edge, or beyond the mark's paint where it passes that edge.
-            top = _lane_top(track, placement, lane_height, params.padding_px)
-            inset = top if above else float(height_px) - top - lane_height
+            lane_top = _lane_top(track, placement, lane_height, params.padding_px)
+            inset = lane_top if above else float(height_px) - lane_top - lane_height
             near = past_span_edge(reach, inset) + float(style.label_offset)
             y = -near - bottom if above else float(height_px) + near - top
         else:
