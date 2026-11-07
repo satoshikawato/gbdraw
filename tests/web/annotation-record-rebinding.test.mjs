@@ -1,10 +1,10 @@
 // Annotation record rebinding at the Linear discovery end (R10, D-15-46): the
-// composition root (app/app-setup.js) rebinds the shown drawing's annotations
-// to the records the catalog resolves in each transition that changes the
-// catalog. A discovery that expands a multi-record file gives records 2..n
-// new card keys, so the rebind runs after the expansion; a refresh that
-// leaves the catalog as it was (after Save, at the end of Load) rebinds
-// nothing, as the former catalog watcher did.
+// rebind (`rebindAnnotationRecords` in app/drawing-record-catalog.js) rebinds
+// the shown drawing's annotations to the records the catalog resolves in each
+// transition that changes the catalog. A discovery that expands a
+// multi-record file gives records 2..n new card keys, so the rebind runs
+// after the expansion; a refresh that leaves the catalog as it was (after
+// Save, at the end of Load) rebinds nothing, as the former catalog watcher did.
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import test from 'node:test';

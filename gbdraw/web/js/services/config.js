@@ -5472,7 +5472,7 @@ const restoreSessionImportSnapshot = async (snapshot, restoreHistoryMembers) => 
 
 // The one writer of the shown drawing (`state.activeDrawingId`); the shown
 // mode follows it. Each caller installs the drawing where it shows another
-// one: the mode transition (app/app-setup.js), a new Session's baseline,
+// one: the mode transition (app/drawing-switch.js), a new Session's baseline,
 // Session Load and its rollback. The caller installs the drawing's artifact.
 /**
  * @param {DrawingId} id
