@@ -116,14 +116,14 @@ GRADIENT_MAX_STEPS = 48
 def _gradient_share(annotation: ResolvedRegionAnnotation, record_length: int) -> Callable[[float], float]:
     """Where a record-local position lies along the region, from 0 at its start to 1 at its end.
 
-    The region runs as ``region_run`` orders it: across a circular record's origin (``crosses_origin``), from the
-    start of its segment that ends at the record's end on over the origin.
+    The region runs as ``region_run`` orders it. Across a circular record's origin (``crosses_origin``) the scale
+    spans its stretch across the origin; other segments of such a span take the end of the scale (OV-2656).
     """
 
     length = max(1, int(record_length))
     crosses_origin = annotation.crosses_origin
     run = region_run(annotation.segments, length, crosses_origin=crosses_origin)
-    low, high = float(run[0][0]), float(run[-1][1])
+    low, high = float(run[0][0]), float(run[0 if crosses_origin else -1][1])
     span = max(1e-9, high - low)
 
     def share(position: float) -> float:

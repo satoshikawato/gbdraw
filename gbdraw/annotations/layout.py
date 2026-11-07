@@ -33,6 +33,9 @@ class ResolvedAnnotationTrack:
     occupied_bounds: tuple[tuple[float, float], ...]
     # The feature label font size of the drawing: the size of a label whose style sets none.
     label_font_size: float
+    # Whether the drawing closes into a circle (Circular), so the two sides of a span across the origin always
+    # meet (``mark_parts``): the packer placed the labels by it, and the drawers draw the marks and labels by it.
+    join_origin: bool
     clipped: bool = False
     lane_gap_px: float = 3.0
 
@@ -282,6 +285,7 @@ def layout_annotation_track(
         required_extent_px=float(required),
         occupied_bounds=occupied,
         label_font_size=float(label_font_size),
+        join_origin=join_origin,
         clipped=clipped,
         lane_gap_px=lane_gap,
     )

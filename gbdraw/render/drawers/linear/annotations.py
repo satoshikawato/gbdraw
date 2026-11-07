@@ -293,7 +293,7 @@ def _label_rows(
     rows = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label or (wrap_row is not None and annotation.label_row(join_origin=False) != wrap_row):
+        if not annotation.label or (wrap_row is not None and annotation.label_row(join_origin=track.join_origin) != wrap_row):
             continue
         style = effective_annotation_style(annotation, params)
         size = annotation_label_font_size(style, track.label_font_size)
@@ -412,20 +412,25 @@ def linear_annotation_labels(
     )
     for (placement, style, row_y, (left, right, top, bottom)), shift_y in candidates:
         annotation = placement.annotation
-        row = annotation.label_row(join_origin=False)
+        row = annotation.label_row(join_origin=track.join_origin)
         y = row_y + shift_y
         lane_height = _lane_height(
             track, placements, row_frames[row].height_px if row_frames else height_px, params
         )
-        segments = annotation.row_segments(row)
+        # The parts the mark draws on the label's row, in mark order: a start label stands where the first starts,
+        # an end label where the last ends.
+        segments = tuple(
+            (part.start, part.end)
+            for part in mark_parts(annotation, join_origin=track.join_origin)
+            if part.row == row
+        )
         anchor = _label_anchor(style)
-        # The row's parts lie in the order of the region's segments, which a display start can turn round.
         if anchor == "start":
-            label_bp = float(min(start for start, _end in segments))
+            label_bp = float(segments[0][0])
         elif anchor == "end":
-            label_bp = float(max(end for _start, end in segments))
+            label_bp = float(segments[-1][1])
         else:
-            label_bp = annotation.label_midpoint_bp(join_origin=False)
+            label_bp = annotation.label_midpoint_bp(join_origin=track.join_origin)
         x = label_bp * scale
         labels.append(
             LinearAnnotationLabel(
@@ -535,7 +540,7 @@ def linear_annotation_track_content(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        parts = mark_parts(annotation, join_origin=False)
+        parts = mark_parts(annotation, join_origin=track.join_origin)
         part_count = len(parts)
         row_targets: dict[int, Group] = {}
         for part_index, part in enumerate(parts, start=1):

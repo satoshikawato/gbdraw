@@ -272,16 +272,15 @@ def region_run(
     segments: Sequence[tuple[int, int]], record_length: int, *, crosses_origin: bool
 ) -> tuple[tuple[int, int], ...]:
     """A span's segments in the order the region runs: ascending, or, across the origin
-    (``segments_cross_origin``), from the start of its segment that ends at the record's end on over the origin,
-    each segment that starts before that start moved one record length on."""
+    (``segments_cross_origin``), first its two sides at the origin as one stretch, from the start of its segment
+    that ends at the record's end to the end of its segment that starts at 0 (one record length on), then its
+    other segments, each moved one record length on."""
 
     ordered = sorted(segments)
     if not crosses_origin:
         return tuple(ordered)
-    low = next(start for start, end in ordered if end == record_length)
-    return tuple(sorted(
-        (start + record_length, end + record_length) if start < low else (start, end) for start, end in ordered
-    ))
+    (_zero, after_end), *middle, (low, _end) = ordered
+    return ((low, after_end + record_length), *((start + record_length, end + record_length) for start, end in middle))
 
 
 def annotation_midpoint(
@@ -290,15 +289,19 @@ def annotation_midpoint(
     *,
     crosses_origin: bool,
 ) -> float:
-    """Halfway along a span as the region runs (``region_run``), on its record."""
+    """Halfway along a span, on its record: along its stretch across the origin (``region_run``), else along its
+    segments in ascending order."""
 
     run = region_run(segments, record_length, crosses_origin=crosses_origin)
-    cursor = sum(end - start for start, end in run) / 2.0
-    for start, end in run:
+    # A span of three or more segments across the origin keeps the ascending walk until its order is chosen
+    # (OV-2656).
+    walk = sorted(segments) if len(run) > 1 and crosses_origin else run
+    cursor = sum(end - start for start, end in walk) / 2.0
+    for start, end in walk:
         if cursor <= end - start:
             return (start + cursor) % max(1, record_length)
         cursor -= end - start
-    return float(run[-1][1]) % max(1, record_length)
+    return float(walk[-1][1]) % max(1, record_length)
 
 
 def resolve_annotation_set(

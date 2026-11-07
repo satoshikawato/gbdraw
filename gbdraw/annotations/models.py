@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, TypeAlias, cast
+from typing import Literal, Mapping, NamedTuple, TypeAlias, cast
 
 from pandas import DataFrame
 
@@ -574,30 +574,43 @@ class ResolvedRegionAnnotation:
             return self.segments
         return tuple((part.display_start, part.display_end) for part in self.display_parts)
 
-    def label_part(self, *, join_origin: bool) -> MarkPart:
-        """The drawn part a label stands on: of the parts ``mark_parts`` draws, the longest, ties to the earlier
-        row, then the earlier start."""
-        return min(
-            mark_parts(self, join_origin=join_origin), key=lambda part: (part.start - part.end, part.row, part.start)
+    def label_place(self, *, join_origin: bool) -> LabelPlace:
+        """Where the label of a region with display parts stands, and the drawn part it stands on.
+
+        When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
+        row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
+        as the display shows it. Else it stands on the centre of its longest part, ties to the earlier row, then
+        the earlier start.
+        """
+        assert self.display_parts is not None
+        parts = mark_parts(self, join_origin=join_origin)
+        longest = min(parts, key=lambda part: (part.start - part.end, part.row, part.start))
+        midpoint = self.midpoint_bp
+        fragment = next(
+            (part for part in self.display_parts if part.local_start <= midpoint <= part.local_end), None
         )
+        if fragment is not None and all(part.capped_start and part.capped_end for part in parts):
+            # A display fragment runs the same way as its record-local span.
+            bp = fragment.display_start + (midpoint - fragment.local_start)
+            on = next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
+            return LabelPlace(bp, on)
+        return LabelPlace((longest.start + longest.end) / 2.0, longest)
 
     def label_midpoint_bp(self, *, join_origin: bool) -> float:
-        """Where the label stands: halfway along the region, or with display parts the centre of its
-        ``label_part``."""
+        """Where the label stands: halfway along the region, or with display parts its ``label_place``."""
         if self.display_parts is None:
             return self.midpoint_bp
-        part = self.label_part(join_origin=join_origin)
-        return (part.start + part.end) / 2.0
+        return self.label_place(join_origin=join_origin).bp
 
     def label_row(self, *, join_origin: bool) -> int:
         """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
-        return 0 if self.display_parts is None else self.label_part(join_origin=join_origin).row
+        return 0 if self.display_parts is None else self.label_place(join_origin=join_origin).part.row
 
     def label_room_bp(self, *, join_origin: bool) -> int:
         """What the annotation's label can stand over: its span, or on several rows the part it stands on."""
         if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
             return self.span_bp
-        part = self.label_part(join_origin=join_origin)
+        part = self.label_place(join_origin=join_origin).part
         return part.end - part.start
 
     @property
@@ -630,6 +643,13 @@ class MarkPart:
     capped_end: bool
     local_start: int
     row: int = 0
+
+
+class LabelPlace(NamedTuple):
+    """Where a region's label stands (display bp) and the drawn part it stands on."""
+
+    bp: float
+    part: MarkPart
 
 
 def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
@@ -724,6 +744,7 @@ __all__ = [
     "FeatureSelector",
     "FeatureSpan",
     "HatchStyle",
+    "LabelPlace",
     "MarkPart",
     "RegionAnnotation",
     "RegionAnnotationStyle",
