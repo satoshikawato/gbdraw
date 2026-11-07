@@ -938,13 +938,15 @@ export const createHistoryManager = ({
   };
   // Records no step and leaves Redo and an open transaction as they are.
   const markChangeOutsideHistory = () => { changedOutsideHistory = true; };
+  // Whether the open step changed the intent it began with: a text control begins on focus; focus alone changes nothing.
+  const openStepChanged = async () => {
+    const open = openTransaction();
+    return open !== null && (await captureIntent()).signature !== open.beforeSignature;
+  };
   const hasChangesSinceSavePoint = async () => {
     if (changedOutsideHistory) return true;
     if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
-    const open = openTransaction();
-    if (!open) return false;
-    // A text control begins on focus; focus alone changes nothing.
-    return (await captureIntent()).signature !== open.beforeSignature;
+    return openStepChanged();
   };
 
   // OV-1169: the newest step the limit or the budget dropped from Undo.
@@ -1425,16 +1427,14 @@ export const createHistoryManager = ({
       : execute(transaction);
   };
 
-  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36).
-  // While the last step is a checkpoint and nothing is open, the state is the
-  // one its after side holds, so a side not yet drawn keeps the figure the
-  // rerender drew: Redo then shows it without another Python run.
-  // A rerender a checkpoint step's listener asked for after its commit (the
-  // fit of a figure drawn to a requested size, PD-OI-114 rev 2) makes the
-  // step's figure one its state does not draw: History then keeps the
-  // rerender's figure as the step's (`keepRedrawnResult`), and a restore of the
-  // figure before that names it undrawn. A last step that is not a
-  // checkpoint restores its intent, which the Result shows again; no mark.
+  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36). While the last step is a checkpoint and
+  // no open step changed the state (a control's step opened by focus, which a closing dialog gives back, OV-2677;
+  // an action's open step may write the Result before its intent), the state is the one its after side holds, so a
+  // side not yet drawn keeps the figure the rerender drew: Redo then shows it without another Python run. A rerender
+  // a checkpoint step's listener asked for after its commit (the fit of a figure drawn to a requested size, PD-OI-114
+  // rev 2) makes the step's figure one its state does not draw, so History keeps the rerender's figure as the step's
+  // and a restore of the figure before it names it undrawn. A last step that is not a checkpoint restores its
+  // intent, which the Result shows again; no mark.
   const markLastStepUndrawn = () => {
     const entry = topEntry(undoStack);
     if (entry?.type === 'checkpoint' && !openTransaction()) entry.after.drawn = false;
@@ -1442,11 +1442,11 @@ export const createHistoryManager = ({
   const keepRedrawnResult = async () => {
     const entry = topEntry(undoStack);
     if (entry?.type !== 'checkpoint') return false;
-    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false
-      && !openTransaction() && !activeCheckpoint && !activeReplacement && !restoring.value && !capturing.value;
+    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false && !activeCheckpoint
+      && !intentCommitOwnedByAction() && !activeReplacement && !restoring.value && !capturing.value;
     if (!keeps()) return false;
     const after = await captureCheckpoint();
-    if (!keeps()) return false;
+    if (!keeps() || await openStepChanged() || !keeps()) return false;
     after.drawn = true;
     removeEntryBytes(entry);
     entry.after = after;

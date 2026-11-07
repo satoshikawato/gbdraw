@@ -107,6 +107,10 @@ write-up of a release.
   the requested size, and the line under Figure size said the edit could not be
   fitted. The figure now shows at once and is then fitted again; a step whose
   fitted figure was shown still returns to it with no redraw.
+- Fixed (Web app): on a figure with a Figure size, the Redo of a Legend rename
+  answered with Restore and merge drew the figure again and showed "Fitting the
+  figure to the requested size." for a moment, although the fitted figure had
+  already been shown. Its Undo and Redo now show the fitted figures at once.
 - Performance: a per-base depth file takes much less memory on the command
   line, in the Python API and in the Web app. Each reference's depths are held
   as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a

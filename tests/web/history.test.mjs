@@ -3256,6 +3256,59 @@ for (const previousSuppressed of [false, true]) {
   console.log('history redrawn result tests passed');
 }
 
+// OV-2677: a control's step that opened after a checkpoint step ended (the
+// focus of a text field, which a closing dialog gives back) leaves that step's
+// state as long as it changed nothing, so the rerender's figure is still kept
+// as the step's. One that changed the intent, or an action's open step, keeps
+// nothing.
+{
+  let rules = 0;
+  let setting = 0;
+  let figure = 'drawn-0';
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules, setting }),
+    applyIntent: (intent) => { ({ rules, setting } = intent); },
+    buildCheckpoint: () => ({ rules, setting, figure }),
+    applyCheckpoint: (checkpoint) => { ({ rules, setting, figure } = checkpoint); },
+    figureDrawn: () => true
+  });
+  await history.captureBaseline('initial');
+  const field = Symbol('field');
+  const checkpointStep = (value) => history.runUndoableCheckpoint('Rename legend item', () => {
+    rules = value;
+    figure = `shown-${value}`;
+  }, { drawn: { change: false } });
+
+  await checkpointStep(1);
+  const focused = await history.begin('Edit setting', { owner: field });
+  figure = 'fitted-1';
+  assert.equal(await history.keepRedrawnResult(), true, 'a focused field that changed nothing keeps the fitted figure');
+  assert.equal(focused.closed, false, 'the field\'s step stays open');
+  await history.commit(focused);
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Rename legend item', 'focus alone records no step');
+  await history.undo();
+  await history.redo();
+  assert.deepEqual({ rules, figure }, { rules: 1, figure: 'fitted-1' }, 'Redo shows the kept figure');
+
+  await checkpointStep(2);
+  const typed = await history.begin('Edit setting', { owner: field });
+  setting = 1;
+  figure = 'fitted-2';
+  assert.equal(await history.keepRedrawnResult(), false, 'a field that changed the intent keeps nothing');
+  await history.commit(typed);
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Edit setting');
+
+  await checkpointStep(3);
+  let release;
+  const action = history.runUndoable('Edit label', () => new Promise((resolve) => { release = resolve; }));
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  figure = 'fitted-3';
+  assert.equal(await history.keepRedrawnResult(), false, 'an action\'s open step keeps nothing');
+  release();
+  await action;
+  console.log('history redrawn result with a focused field tests passed');
+}
+
 // OV-872: what a shown rerender writes (the Legend rows Python drew) while an
 // action's step is open, waiting for that rerender, is no change of a step:
 // the action stays one step, its own writes stay in it, and its Undo keeps
