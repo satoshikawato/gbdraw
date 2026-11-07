@@ -410,8 +410,12 @@ test('a warm Generate sanitizes only the children texts the page does not hold',
   assert.equal(metricTotal(metrics, 'svgSanitizedPieceCount'), 1);
   assert.equal(metricTotal(metrics, 'svgMemoHitCount'), 1);
   assert.equal(warm.content, fake.sanitize(joinedDocument(retitled)));
-  // The unchanged segment is the same object in both Results; the old title's is gone.
-  assert.equal(warm[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])), cold[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])));
+  // The unchanged segment keeps its sanitized text, now read from the warm Result's
+  // own content (each segment is a slice of its Result's content); the old title's is gone.
+  assert.deepEqual(warm[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])), cold[SEGMENTS].get(revisionOf(COLD_CHILDREN[0])));
+  for (const segment of [...cold[SEGMENTS].values(), ...warm[SEGMENTS].values()]) {
+    assert.equal(cold.content.includes(segment.sanitized) || warm.content.includes(segment.sanitized), true);
+  }
   assert.deepEqual([...warm[SEGMENTS].keys()], retitled.map(revisionOf));
 
   // A start-tag-only edit (a moved group) holds every children text.

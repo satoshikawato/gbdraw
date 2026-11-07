@@ -120,6 +120,54 @@ const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
   });
 };
 
+/**
+ * A Python bytes object handed to JavaScript for one call: Pyodide destroys
+ * the proxy when the call returns.
+ * @typedef {{ getBuffer(type: 'u8'): { data: Uint8Array, release(): void } }} PythonBytesChunk
+ */
+
+/**
+ * A reply buffer Python writes (gbdraw/web_support/reply_buffers.py).
+ * @typedef {object} ReplyBuffer
+ * @property {(chunk: PythonBytesChunk) => void} write Copy one chunk out of the Python heap.
+ * @property {() => ArrayBuffer} finish The chunks written, in order, as one exact-length buffer.
+ */
+
+/**
+ * Make a reply buffer: Python writes the metadata and feature catalog JSON
+ * and each Result's children texts in chunks of about 1 MiB, so the Python
+ * heap never holds a whole text or its whole bytes. `finish` joins the chunks
+ * once into the buffer the reply transfers.
+ * @returns {ReplyBuffer}
+ */
+export const createReplyBuffer = () => {
+  /** @type {Uint8Array<ArrayBuffer>[]} */
+  let chunks = [];
+  let byteLength = 0;
+  return {
+    write(chunk) {
+      const view = chunk.getBuffer('u8');
+      try {
+        const copy = view.data.slice();
+        chunks.push(copy);
+        byteLength += copy.byteLength;
+      } finally {
+        view.release();
+      }
+    },
+    finish() {
+      const bytes = new Uint8Array(byteLength);
+      let offset = 0;
+      for (const copy of chunks) {
+        bytes.set(copy, offset);
+        offset += copy.byteLength;
+      }
+      chunks = [];
+      return bytes.buffer;
+    }
+  };
+};
+
 export const collectGenerationResultTransferList = (payload) => {
   const buffers = new Set();
   const addBuffer = (value) => {
@@ -1322,7 +1370,8 @@ const runGeneration = async ({
       // the page words it while the render goes on. Pyodide passes the function as a JsProxy for the call.
       (/** @type {unknown} */ notice) => {
         self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
-      }
+      },
+      createReplyBuffer
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

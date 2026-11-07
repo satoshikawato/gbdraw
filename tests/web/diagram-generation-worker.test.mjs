@@ -9,6 +9,7 @@ const {
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
+  createReplyBuffer,
   resolveGeneratedFeatureCatalog,
   resolveGenerationCleanupOutcome,
   serializeError
@@ -97,6 +98,29 @@ const resultOf = (heldIndexes = [], { name = 'out.svg', head = '<svg>' } = {}) =
   return { name, document: { head, tail: '</svg>', pieces }, ...(sent.length ? { segments } : {}) };
 };
 const fullDocument = `<svg><defs />${CHILDREN.map((text, index) => `<g id="g${index}">${text}</g>`).join('')}</svg>`;
+
+// Python writes a reply buffer in chunks (borrowed bytes proxies); the buffer
+// copies each chunk out before the proxy's view is released, and joins them once.
+{
+  const heap = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
+  const released = [];
+  const chunk = (start, end) => ({
+    getBuffer: (type) => {
+      assert.equal(type, 'u8');
+      return { data: heap.subarray(start, end), release: () => released.push([start, end]) };
+    }
+  });
+  const buffer = createReplyBuffer();
+  buffer.write(chunk(0, 3));
+  buffer.write(chunk(3, 3));
+  buffer.write(chunk(3, 7));
+  heap.fill(0);
+  const joined = buffer.finish();
+  assert.ok(joined instanceof ArrayBuffer);
+  assert.deepEqual([...new Uint8Array(joined)], [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(released, [[0, 3], [3, 3], [3, 7]]);
+  assert.equal(createReplyBuffer().finish().byteLength, 0);
+}
 
 // The feature catalog and each Result's segments are their own transferred buffers.
 const coldResult = resultOf();
@@ -411,9 +435,11 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
             helperCalls.push(name);
             return helperReply(name, ...args);
           },
-          // CAPACITY-WARN: Python calls its last argument with each sentence while it renders.
+          // CAPACITY-WARN: Python calls its notice argument (the one before the reply buffer
+          // factory) with each sentence while it renders.
           run_canonical_request_wrapper: (...args) => {
-            if (wrapperNotice) args.at(-1)(wrapperNotice);
+            assert.equal(args.at(-1), createReplyBuffer);
+            if (wrapperNotice) args.at(-2)(wrapperNotice);
             return { error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } };
           }
         })[name]

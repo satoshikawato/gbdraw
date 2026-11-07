@@ -72,6 +72,22 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
     return payload["features"]
 
 
+class _ReplyBuffer:
+    """The Worker's reply buffer (createReplyBuffer) in Python: the chunks it was written."""
+
+    made: list[_ReplyBuffer] = []
+
+    def __init__(self) -> None:
+        self.chunks: list[bytes] = []
+        _ReplyBuffer.made.append(self)
+
+    def write(self, chunk: bytes) -> None:
+        self.chunks.append(bytes(chunk))
+
+    def finish(self) -> bytes:
+        return b"".join(self.chunks)
+
+
 class JsNull:
     pass
 
@@ -116,7 +132,10 @@ def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
 ) -> None:
-    """Metadata, catalog and children texts travel as UTF-8 bytes; Results carry no content (step 3b S)."""
+    """Metadata, catalog and children texts travel as UTF-8 reply buffers; Results carry no content (step 3b S).
+
+    Python writes each buffer into one the Worker makes (`new_reply_buffer`), in chunks.
+    """
 
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
     original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
@@ -148,18 +167,21 @@ def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
         }
 
     python_helpers_namespace["render_staged_canonical_web_request"] = renderer
+    buffers = {"new_reply_buffer": _ReplyBuffer}
+    _ReplyBuffer.made.clear()
     try:
-        sent = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
-        sent_null = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "null")  # type: ignore[operator]
+        sent = wrapper("{}", "{}", str(tmp_path / "render"), **buffers)  # type: ignore[operator]
+        sent_buffers = list(_ReplyBuffer.made)
+        sent_null = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "null", **buffers)  # type: ignore[operator]
         unchanged = wrapper(  # type: ignore[operator]
-            "{}", "{}", str(tmp_path / "render"), True, None, "e:1", json.dumps([held_revision])
+            "{}", "{}", str(tmp_path / "render"), True, None, "e:1", json.dumps([held_revision]), **buffers
         )
         malformed = wrapper(  # type: ignore[operator]
-            "{}", "{}", str(tmp_path / "render"), False, None, None, json.dumps([1])
+            "{}", "{}", str(tmp_path / "render"), False, None, None, json.dumps([1]), **buffers
         )
         retained = wrapper(  # type: ignore[operator]
             "{}", "{}", str(tmp_path / "render"), False, "{}", None, None,
-            json.dumps({"drawing": "linear", "resourceTokens": [held_revision]}),
+            json.dumps({"drawing": "linear", "resourceTokens": [held_revision]}), **buffers
         )
     finally:
         python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
@@ -187,6 +209,10 @@ def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
         "featureCatalog": '{"schema":1,"items":["µ"]}'.encode(),
         "featureCatalogRevision": "e:1",
     }
+    # One buffer each for the segments, the metadata and the catalog; the two texts are two chunks.
+    assert [buffer.chunks for buffer in sent_buffers] == [
+        [children, children], [b"{}"], ['{"schema":1,"items":["µ"]}'.encode()],
+    ]
     assert sent_null["featureCatalog"] == sent["featureCatalog"]
     assert sent_null["_diagnostics"]["metrics"]["featureCatalogSerializationCount"] == 1
     assert unchanged["featureCatalog"] is None

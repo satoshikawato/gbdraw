@@ -82,11 +82,18 @@ the request or the Session.
 
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
-sanitizes each children text once per revision, keeps the sanitized text on the
-Result it commits, and joins the sanitized pieces in order. For the pieces
+sanitizes each children text once per revision, joins the sanitized pieces in
+order, and keeps each sanitized text on the Result it commits as a slice of
+that joined content. For the pieces
 Python writes, which are whole SVG elements with escaped text and no comments,
 CDATA or processing instructions, the joined text equals the sanitization of
 the whole document; tests verify it.
+
+The reply's byte buffers (the metadata JSON, the feature catalog JSON, and each
+Result's sent children texts) are written by Python in chunks of about 1 MiB
+into buffers the Worker makes (`gbdraw/web_support/reply_buffers.py`,
+`createReplyBuffer` in the Worker), so the Python heap never holds a whole text
+or its bytes. The page detaches each buffer as it decodes it.
 
 Every Generate leaves the page holding a complete feature catalog equal to the
 one a Generate with an empty cache returns. The reply carries that catalog
