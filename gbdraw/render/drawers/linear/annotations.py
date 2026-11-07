@@ -24,7 +24,7 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
     mark_parts,
 )
-from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
@@ -134,22 +134,25 @@ def _band_height_factor(mark: str) -> float:
     return 1.0 if mark == "highlight" else 0.84
 
 
-def _lane_top(
-    track: ResolvedAnnotationTrack, placement: PlacedRegionAnnotation, lane_height: float, padding_px: float
-) -> float:
-    """The slot-local y of the top of a placement's lane: lanes stack down from the slot's padding, each past the
-    label room of the gaps above it (``ResolvedAnnotationTrack.room_before``)."""
+def _room_before(track: ResolvedAnnotationTrack, placement: PlacedRegionAnnotation, row: int) -> float:
+    return track.room_before(placement.annotation.record_index, row, placement.lane)
 
-    record_index = placement.annotation.record_index
-    return padding_px + placement.lane * lane_height + track.room_before(record_index, placement.lane)
+
+def _lane_top(
+    track: ResolvedAnnotationTrack, placement: PlacedRegionAnnotation, row: int, lane_height: float, padding_px: float
+) -> float:
+    """The slot-local y of the top of a placement's lane on ``row``: lanes stack down from the slot's padding,
+    each past the label room of the gaps above it on that row (``ResolvedAnnotationTrack.room_before``)."""
+
+    return padding_px + placement.lane * lane_height + _room_before(track, placement, row)
 
 
 def _lane_center(
-    track: ResolvedAnnotationTrack, placement: PlacedRegionAnnotation, lane_height: float, padding_px: float
+    track: ResolvedAnnotationTrack, placement: PlacedRegionAnnotation, row: int, lane_height: float, padding_px: float
 ) -> float:
-    """The slot-local y of the middle of a placement's lane."""
+    """The slot-local y of the middle of a placement's lane on ``row`` (``_lane_top``)."""
 
-    return _lane_top(track, placement, lane_height, padding_px) + 0.5 * lane_height
+    return padding_px + (placement.lane + 0.5) * lane_height + _room_before(track, placement, row)
 
 
 def _band_rect(mark: str, lane_center: float, lane_height: float, x1: float, x2: float) -> tuple[float, float, float, float]:
@@ -202,6 +205,7 @@ def _label_boxes(
     placement: PlacedRegionAnnotation,
     style: RegionAnnotationStyle,
     *,
+    row: int,
     lane_height: float,
     padding_px: float,
     scale: float,
@@ -213,7 +217,7 @@ def _label_boxes(
     annotation = placement.annotation
     if annotation.mark not in {"band", "highlight"} or style.hatch or _solid_fill(annotation, style) == "none":
         return ()
-    lane_center = _lane_center(track, placement, lane_height, padding_px)
+    lane_center = _lane_center(track, placement, row, lane_height, padding_px)
     boxes: list[Aabb] = []
     for start, end in segments:
         x, y, width, height = _band_rect(annotation.mark, lane_center, lane_height, float(start) * scale, float(end) * scale)
@@ -235,21 +239,20 @@ def _record_lanes(
     """The record's placements and the height of one lane."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
-    return placements, _lane_height(track, record_index, placements, height_px, params)
+    return placements, _lane_height(track, placements, height_px, params)
 
 
 def _lane_height(
     track: ResolvedAnnotationTrack,
-    record_index: int,
     placements: Sequence[PlacedRegionAnnotation],
     height_px: float,
     params: AnnotationTrackParams,
 ) -> float:
     """The height of one lane of the record's ``placements`` in a slot ``height_px`` high: the lanes share it less
-    its padding and the label room between them (``ResolvedAnnotationTrack.record_room``)."""
+    its padding and the slot's label room (``ResolvedAnnotationTrack.lane_room_px``)."""
 
     lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px - track.record_room(record_index))
+    usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px - track.lane_room_px)
     return 14.0 if track.clipped else usable_height / max(1, lane_count)
 
 
@@ -258,20 +261,22 @@ def _mark_lane(
     placement: PlacedRegionAnnotation,
     placements: Sequence[PlacedRegionAnnotation],
     *,
+    row: int,
     y_offset_px: float,
     frame: AnnotationSlotFrame,
     lane_height: float,
     params: AnnotationTrackParams,
 ) -> tuple[float, float]:
-    """The middle y of a placement's lane and the lane's height: in its strand's lane of ``frame.strand_bands`` (a
-    slot that covers a feature track that separates the strands), else in the slot's band."""
+    """The middle y of a placement's lane on ``row`` and the lane's height: in its strand's lane of
+    ``frame.strand_bands`` (a slot that covers a feature track that separates the strands), else in the slot's
+    band."""
 
     strand = placement.annotation.display_strand
     band = frame.strand_bands.get(strand) if strand is not None else None
     if band is not None:
         y_offset_px = float(y_offset_px) + band.top_y
-        lane_height = _lane_height(track, placement.annotation.record_index, placements, band.height, params)
-    return float(y_offset_px) + _lane_center(track, placement, lane_height, params.padding_px), lane_height
+        lane_height = _lane_height(track, placements, band.height, params)
+    return float(y_offset_px) + _lane_center(track, placement, row, lane_height, params.padding_px), lane_height
 
 
 def _label_rows(
@@ -311,9 +316,8 @@ def _label_rows(
         if not annotation.label:
             continue
         style = effective_annotation_style(annotation, params)
-        if wrap_row is not None and annotation.label_anchor(
-            style.label_position, join_origin=track.join_origin
-        ).part.row != wrap_row:
+        row = annotation.label_anchor(style.label_position, join_origin=track.join_origin).part.row
+        if wrap_row is not None and row != wrap_row:
             continue
         size = annotation_label_font_size(style, track.label_font_size)
         offsets = label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
@@ -324,12 +328,12 @@ def _label_rows(
         )
         if covers_slots:
             # Beyond the slot edge, or beyond the mark's paint where it passes that edge.
-            lane_top = _lane_top(track, placement, lane_height, params.padding_px)
+            lane_top = _lane_top(track, placement, row, lane_height, params.padding_px)
             inset = lane_top if above else float(height_px) - lane_top - lane_height
             near = past_span_edge(reach, inset) + float(style.label_offset)
             y = -near - bottom if above else float(height_px) + near - top
         else:
-            lane_center = _lane_center(track, placement, lane_height, params.padding_px)
+            lane_center = _lane_center(track, placement, row, lane_height, params.padding_px)
             near = reach.from_centre + float(style.label_offset)
             y = lane_center - near - bottom if above else lane_center + near - top
         rows.append((placement, style, y, offsets))
@@ -371,14 +375,23 @@ def linear_annotation_label_room(
     return room
 
 
-def linear_annotation_label_depth(
-    text: str, _style: RegionAnnotationStyle, font_size: float, _place_bp: float, *, font_family: str
-) -> float:
-    """The height a region label's letters take (``label_ink_offsets``, as ``_label_rows`` places them): the lane
-    packer's room for it (``LabelSizing.depth_px``)."""
+def linear_annotation_label_extent(
+    annotation: ResolvedRegionAnnotation,
+    style: RegionAnnotationStyle,
+    font_size: float,
+    _place_bp: float,
+    _mark_offset_px: float,
+    *,
+    font_family: str,
+    bp_per_px: Mapping[int, float],
+) -> LabelExtent:
+    """A region label's letters as ``linear_annotation_labels`` draws them at its place (``label_ink_offsets`` at
+    its anchor): the bp they reach on each side of the place, at the record's ``bp_per_px``, and the height they
+    take. The lane packer's measure (``LabelSizing.extent``); a Linear label's letters do not depend on its lane."""
 
-    _left, _right, top, bottom = label_ink_offsets(text, font_family, font_size, "middle")
-    return bottom - top
+    left, right, top, bottom = label_ink_offsets(annotation.label, font_family, font_size, _label_anchor(style))
+    scale = float(bp_per_px.get(annotation.record_index, 1.0))
+    return LabelExtent(left * scale, right * scale, bottom - top)
 
 
 def linear_annotation_labels(
@@ -441,9 +454,7 @@ def linear_annotation_labels(
         place = annotation.label_anchor(style.label_position, join_origin=track.join_origin)
         row = place.part.row
         y = row_y + shift_y
-        lane_height = _lane_height(
-            track, record_index, placements, row_frames[row].height_px if row_frames else height_px, params
-        )
+        lane_height = _lane_height(track, placements, row_frames[row].height_px if row_frames else height_px, params)
         # The parts the mark draws on the label's row, which the label may sit inside.
         segments = tuple(
             (part.start, part.end)
@@ -470,7 +481,14 @@ def linear_annotation_labels(
                 else tuple(
                     box.translated(0.0, shift_y)
                     for box in _label_boxes(
-                        track, placement, style, lane_height=lane_height, padding_px=params.padding_px, scale=scale, segments=segments
+                        track,
+                        placement,
+                        style,
+                        row=row,
+                        lane_height=lane_height,
+                        padding_px=params.padding_px,
+                        scale=scale,
+                        segments=segments,
                     )
                 ),
             )
@@ -539,7 +557,7 @@ def linear_annotation_track_content(
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
         lane = partial(_mark_lane, track, placement, placements, y_offset_px=y_offset_px, frame=frame, params=params)
-        lane_center, lane_height = lane(lane_height=slot_lane_height)
+        lane_center, lane_height = lane(row=annotation.geometry_rows[0], lane_height=slot_lane_height)
         item_id = annotation_dom_id(
             record_index=record_index,
             slot_id=track.slot_id,
@@ -573,7 +591,7 @@ def linear_annotation_track_content(
                 if part.row not in row_targets:
                     row_targets[part.row] = part_target
                     item_group.add(part_target)
-                lane_center, lane_height = lane(lane_height=_lane_height(track, record_index, placements, row.height_px, params))
+                lane_center, lane_height = lane(row=part.row, lane_height=_lane_height(track, placements, row.height_px, params))
             if annotation.mark in {"band", "highlight"}:
                 height_factor = _band_height_factor(annotation.mark)
                 rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)
@@ -702,7 +720,7 @@ __all__ = [
     "AnnotationRowFrame",
     "AnnotationSlotFrame",
     "LinearAnnotationLabel",
-    "linear_annotation_label_depth",
+    "linear_annotation_label_extent",
     "linear_annotation_label_room",
     "linear_annotation_labels",
     "linear_annotation_track_content",

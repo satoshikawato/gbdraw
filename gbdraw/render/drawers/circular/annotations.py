@@ -24,7 +24,7 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -154,12 +154,12 @@ def _record_lanes(
     outer_radius_px: float,
     params: AnnotationTrackParams,
 ) -> tuple[list[PlacedRegionAnnotation], float]:
-    """The record's placements and the width of one lane: the lanes share the band less its padding and the
-    label room between them (``ResolvedAnnotationTrack.record_room``)."""
+    """The record's placements and the width of one lane: the lanes share the band less its padding and the slot's
+    label room (``ResolvedAnnotationTrack.lane_room_px``)."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
     lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px - track.record_room(record_index))
+    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px - track.lane_room_px)
     return placements, 14.0 if track.clipped else usable / max(1, lane_count)
 
 
@@ -176,13 +176,12 @@ def _lane_radii(
     """The inner and outer radius of a placement's lane: ``inside`` slots stack their lanes inward, each past the
     label room of the gaps before it (``ResolvedAnnotationTrack.room_before``)."""
 
-    offset = params.padding_px + placement.lane * lane_width + track.room_before(
-        placement.annotation.record_index, placement.lane
-    )
+    # A circle draws its record on one row.
+    room = track.room_before(placement.annotation.record_index, 0, placement.lane)
     if side == "inside":
-        lane_outer = outer_radius_px - offset
+        lane_outer = outer_radius_px - params.padding_px - placement.lane * lane_width - room
         return lane_outer - lane_width, lane_outer
-    lane_inner = inner_radius_px + offset
+    lane_inner = inner_radius_px + params.padding_px + placement.lane * lane_width + room
     return lane_inner, lane_inner + lane_width
 
 
@@ -519,34 +518,47 @@ def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk
     )
 
 
-def circular_annotation_label_depth(
-    text: str,
+def circular_annotation_label_extent(
+    annotation: ResolvedRegionAnnotation,
     style: RegionAnnotationStyle,
     font_size: float,
     place_bp: float,
+    mark_offset_px: float,
     *,
     font_family: str,
     record_length: int,
-    radius_px: float,
-) -> float:
-    """How far a region label's letters reach across the lanes when it stands at ``place_bp`` beside a mark whose
-    edge is at ``radius_px`` (``_label_at``): the lane packer's room for it (``LabelSizing.depth_px``)."""
+    lanes_from_px: float,
+    outward: bool,
+) -> LabelExtent:
+    """A region label's letters as ``circular_annotation_labels`` draws them at ``place_bp`` (``_label_at``),
+    beside a mark whose edge lies ``mark_offset_px`` from ``lanes_from_px``, the radius the slot's lanes stack
+    from: away from the centre, or toward it when not ``outward`` (an ``inside`` slot). The bp the letters reach
+    along the circle on each side of the place, and how far they reach across the lanes: the lane packer's measure
+    (``LabelSizing.extent``)."""
 
-    near, far = _label_at(
+    edge = lanes_from_px + mark_offset_px if outward else lanes_from_px - mark_offset_px
+    label = _label_at(
         place_bp,
         annotation_id="",
-        text=text,
+        text=annotation.label,
         record_length=record_length,
-        mark_edge=float(radius_px),
-        outward=True,
-        gap=0.0,
+        mark_edge=max(1.0, edge),
+        outward=outward,
+        gap=float(style.label_offset),
         font_size=font_size,
         color="",
         orientation=style.label_orientation,
         ink=_label_ink(font_family, font_size, style.label_orientation),
         rings=(),
-    ).ink_radii
-    return far - near
+    )
+    centre = 360.0 * place_bp / max(1, record_length) - 90.0
+    # Each corner's turn from the place, in degrees clockwise.
+    turns = [
+        (math.degrees(math.atan2(y, x)) - centre + 180.0) % 360.0 - 180.0 for part in label.parts for x, y in part
+    ]
+    bp_per_degree = record_length / 360.0
+    near, far = label.ink_radii
+    return LabelExtent(min(turns) * bp_per_degree, max(turns) * bp_per_degree, far - near)
 
 
 # A curved label's text path stays just short of a whole circle (one SVG arc command); the text keeps one em clear of
@@ -1059,7 +1071,7 @@ __all__ = [
     "CircularLabelArc",
     "CircularLabelObstacles",
     "LeaderSegment",
-    "circular_annotation_label_depth",
+    "circular_annotation_label_extent",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

@@ -2,6 +2,7 @@
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .layout import (
+    LabelExtent,
     LabelSizing,
     LaneRoom,
     PlacedRegionAnnotation,
@@ -88,6 +89,7 @@ __all__ = [
     "feature_underlay_slot_id",
     "assign_annotation_lanes",
     "layout_annotation_track",
+    "LabelExtent",
     "LabelSizing",
     "LaneRoom",
     "is_auto_feature_underlay",

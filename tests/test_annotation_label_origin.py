@@ -418,7 +418,7 @@ def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes:
     # A's label is 60 bp wide (10 letters of 6 px at 1 bp per px), wider than its 10 bp region. Centred on bp 105
     # it ends at bp 135, before B at bp 150; standing at A's first base (bp 100) it reaches bp 160, so B takes the
     # next lane (OV-2659).
-    from gbdraw.annotations import LabelSizing, layout_annotation_track
+    from gbdraw.annotations import LabelExtent, LabelSizing, layout_annotation_track
 
     style = RegionAnnotationStyle(label_position=position)
     annotations = tuple(
@@ -429,7 +429,7 @@ def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes:
         for identity, segment, label in (("a", (100, 110), "X" * 10), ("b", (150, 160), ""))
     )
     track = layout_annotation_track(
-        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(font_size=10.0, depth_px=lambda *_: 10.0),
+        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
         join_origin=False
     )
 
@@ -441,7 +441,7 @@ def _packed_lanes(
 ) -> dict[str, int]:
     """The lanes of ``labelled`` (its label 25 letters, 150 bp at 1 bp per px) and an unlabelled ``neighbour``."""
 
-    from gbdraw.annotations import LabelSizing, layout_annotation_track
+    from gbdraw.annotations import LabelExtent, LabelSizing, layout_annotation_track
 
     other = ResolvedRegionAnnotation(
         id="n", set_id="s", record_index=0, segments=(neighbour,), midpoint_bp=sum(neighbour) / 2,
@@ -450,7 +450,7 @@ def _packed_lanes(
     )
     track = layout_annotation_track(
         "regions", "s", (labelled, other), record_lengths={0: row_length or length},
-        labels=LabelSizing(font_size=10.0, depth_px=lambda *_: 10.0), join_origin=False,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=False,
     )
     return {placement.annotation.id: placement.lane for placement in track.placements}
 

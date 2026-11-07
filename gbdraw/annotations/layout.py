@@ -29,12 +29,29 @@ class PlacedRegionAnnotation:
 
 
 class LaneRoom(NamedTuple):
-    """Room between lane ``gap`` and lane ``gap + 1`` of one record for the labels that would cross the next
-    lane's mark (PD-OI-119, lane room): their letters, their ``label_offset`` and their mark's stroke."""
+    """Room between lane ``gap`` and lane ``gap + 1`` on one row of one record for the labels that would cross
+    the next lane's mark (PD-OI-119, lane room): their letters, their ``label_offset`` and half of each of the two
+    marks' strokes."""
 
     record_index: int
+    row: int
     gap: int
     px: float
+
+
+class LabelExtent(NamedTuple):
+    """A label's painted letters at its place, as the drawer measures and draws them: the bp they reach along the
+    region from the place (``low_bp`` before it, ``high_bp`` after it, both offsets from the place) and the pixels
+    they take across the lanes."""
+
+    low_bp: float
+    high_bp: float
+    depth_px: float
+
+
+# A label's letters (``LabelExtent``) from its annotation, its effective style, its font size, the bp it stands at
+# and how far its mark's edge lies from the edge the slot's lanes stack from.
+LabelMeasure = Callable[[ResolvedRegionAnnotation, RegionAnnotationStyle, float, float, float], LabelExtent]
 
 
 @dataclass(frozen=True)
@@ -42,14 +59,14 @@ class LabelSizing:
     """How the packer measures a track's labels.
 
     ``font_size`` is the font size of the drawing's feature labels, which a label whose style sets none takes;
-    ``bp_per_px`` the bases one pixel spans on each record (1 when not given). ``depth_px`` gives the pixels a
-    label's letters take across the lanes: from its text, its effective style, its font size and the bp it stands
-    at. ``labels_above`` says that the labels stand toward lane - 1 (Linear labels above their marks); else they
-    stand toward lane + 1 (Linear labels below, and Circular, away from the axis on either side).
+    ``bp_per_px`` the bases one pixel spans on each record (1 when not given). ``extent`` is the drawer's own
+    measure of a label's letters at its place (``LabelMeasure``). ``labels_above`` says that the labels stand
+    toward lane - 1 (Linear labels above their marks); else they stand toward lane + 1 (Linear labels below, and
+    Circular, away from the axis on either side).
     """
 
     font_size: float
-    depth_px: Callable[[str, RegionAnnotationStyle, float, float], float]
+    extent: LabelMeasure
     bp_per_px: Mapping[int, float] = field(default_factory=dict)
     labels_above: bool = False
 
@@ -71,19 +88,50 @@ class ResolvedAnnotationTrack:
     # The room between lanes for labels that would cross the next lane's mark (``LaneRoom``).
     lane_rooms: tuple[LaneRoom, ...] = ()
 
-    def room_before(self, record_index: int, lane: int) -> float:
-        """The label room between the record's lanes from lane 0 up to ``lane``: how far ``lane`` moves on."""
+    def room_before(self, record_index: int, row: int, lane: int) -> float:
+        """The label room between the lanes of the record's ``row`` from lane 0 up to ``lane``: how far ``lane``
+        moves on there."""
 
-        return sum(room.px for room in self.lane_rooms if room.record_index == record_index and room.gap < lane)
+        return sum(
+            room.px
+            for room in self.lane_rooms
+            if room.record_index == record_index and room.row == row and room.gap < lane
+        )
 
-    def record_room(self, record_index: int) -> float:
-        """All the label room between the record's lanes: the slot's lanes share what is left."""
+    @property
+    def lane_room_px(self) -> float:
+        """The room the slot keeps for its labels between lanes: the largest a record's row takes. The rows and
+        records that share the slot's size and take less keep their lanes where they are, and leave the rest of
+        it empty past their last lane."""
 
-        return _record_room(self.lane_rooms, record_index)
+        return _largest_room(self.lane_rooms)
 
 
-def _record_room(lane_rooms: Sequence[LaneRoom], record_index: int) -> float:
-    return sum(room.px for room in lane_rooms if room.record_index == record_index)
+def _largest_room(lane_rooms: Sequence[LaneRoom]) -> float:
+    totals: dict[tuple[int, int], float] = {}
+    for room in lane_rooms:
+        totals[(room.record_index, room.row)] = totals.get((room.record_index, room.row), 0.0) + room.px
+    return max(totals.values(), default=0.0)
+
+
+def _letters_at(
+    place_bp: float, low_bp: float, high_bp: float, *, record_length: int, join_origin: bool
+) -> tuple[tuple[float, float], ...]:
+    """The bp a label's letters cover on its row, ``low_bp`` before its place to ``high_bp`` after it.
+
+    On a circle (``join_origin``) the letters go on across the origin; a Linear record cuts them at its ends (on a
+    wrapped row, letters past the row's end lie where the row draws nothing).
+    """
+
+    start, end = place_bp + low_bp, place_bp + high_bp
+    if not join_origin:
+        return ((max(0.0, start), min(float(record_length), end)),)
+    # A part joined across the origin runs on past the record's end.
+    turns = math.floor(start / record_length)
+    start, end = start - turns * record_length, end - turns * record_length
+    if end > record_length:
+        return ((start, float(record_length)), (0.0, end - record_length))
+    return ((start, end),)
 
 
 class _LabelLetters(NamedTuple):
@@ -103,24 +151,18 @@ def _label_letters(
     join_origin: bool,
     label_position: LabelPosition,
 ) -> _LabelLetters:
-    """Where an annotation's label stands and what its letters cover (``join_origin`` as in ``mark_parts``).
+    """Where an annotation's label stands and what the lane reservation keeps for its letters (``join_origin`` as
+    in ``mark_parts``), from their estimated width ``label_width_bp``: the lane is chosen before the drawer can
+    measure them at its place.
 
-    A start label runs right from its place, an end label left, a centred one both ways. On a circle the letters
-    go on across the origin; a Linear row stops them at its ends.
+    A start label runs right from its place, an end label left, a centred one both ways (``_letters_at``).
     """
 
     place, (low, high) = annotation.label_stretch(label_position, join_origin=join_origin)
     lead = {"start": 0.0, "end": 1.0}.get(label_position, 0.5) * label_width_bp
     start, end = place.bp - lead, place.bp - lead + label_width_bp
-    leaves = start < low or end > high
-    if not join_origin:
-        return _LabelLetters(place, ((max(0.0, start), min(float(record_length), end)),), leaves)
-    # A part joined across the origin runs on past the record's end.
-    turns = math.floor(start / record_length)
-    start, end = start - turns * record_length, end - turns * record_length
-    if end > record_length:
-        return _LabelLetters(place, ((start, float(record_length)), (0.0, end - record_length)), leaves)
-    return _LabelLetters(place, ((start, end),), leaves)
+    letters = _letters_at(place.bp, -lead, label_width_bp - lead, record_length=record_length, join_origin=join_origin)
+    return _LabelLetters(place, letters, start < low or end > high)
 
 
 def _expanded_intervals(
@@ -273,44 +315,74 @@ def _lane_rooms(
     placements: Sequence[PlacedRegionAnnotation],
     *,
     record_lengths: Mapping[int, int],
-    label_width_bp: Callable[[ResolvedRegionAnnotation], float],
-    label_room_px: Callable[[ResolvedRegionAnnotation, float], float],
+    style_of: Callable[[ResolvedRegionAnnotation], RegionAnnotationStyle],
+    extent_at: Callable[[ResolvedRegionAnnotation, float, float], LabelExtent],
+    mark_offset_px: Callable[[PlacedRegionAnnotation, float], float],
     labels_above: bool,
     join_origin: bool,
     label_position: Callable[[ResolvedRegionAnnotation], LabelPosition],
 ) -> tuple[LaneRoom, ...]:
-    """The room between lanes for the labels that would cross a mark of the next lane on their side (PD-OI-119, lane room).
+    """The room between lanes for the labels that would cross a mark of the next lane on their side (PD-OI-119,
+    lane room), per record and row.
 
-    A label would cross where its letters' bp at its place (``_label_letters``) meet a mark of the next lane on
-    the label's row. The room between two lanes is the largest ``label_room_px`` (at the label's place) of those
-    labels.
+    ``extent_at`` measures a labelled annotation's letters at its place (``label_anchor``) as the drawer does,
+    given how far its mark's painted edge lies from where the lanes start (``mark_offset_px`` of its placement and
+    the rooms of the gaps before its own). A label would cross where those letters meet a mark of the next lane on the label's
+    row. The room between two lanes is the largest of their crossing labels' rooms: the letters' depth, the
+    label's ``label_offset`` and half of each of the two strokes (the label's mark and the widest mark it would
+    cross), so the letters clear the next mark's paint as they clear their own.
     """
 
-    marks: dict[tuple[int, int, int], list[tuple[float, float]]] = {}
+    marks: dict[tuple[int, int, int], list[tuple[float, float, float]]] = {}
     for placement in placements:
         annotation = placement.annotation
+        stroke = float(style_of(annotation).stroke_width)
         for row in annotation.geometry_rows:
             marks.setdefault((annotation.record_index, row, placement.lane), []).extend(
-                (float(start), float(end)) for start, end in annotation.row_segments(row)
+                (float(start), float(end), stroke) for start, end in annotation.row_segments(row)
             )
-    rooms: dict[tuple[int, int], float] = {}
-    for placement in placements:
+    step = -1 if labels_above else 1
+    labelled = sorted(
+        (
+            (
+                annotation.record_index,
+                place.part.row,
+                min(placement.lane, placement.lane + step),
+                placement,
+                place,
+            )
+            for placement in placements
+            if (annotation := placement.annotation).label and placement.lane + step >= 0
+            for place in (annotation.label_anchor(label_position(annotation), join_origin=join_origin),)
+        ),
+        key=lambda item: item[:3],
+    )
+    rooms: dict[tuple[int, int, int], float] = {}
+    for record_index, row, gap, placement, place in labelled:
         annotation = placement.annotation
-        width = max(0.0, float(label_width_bp(annotation)))
-        next_lane = placement.lane - 1 if labels_above else placement.lane + 1
-        if width <= 0.0 or next_lane < 0:
-            continue
-        letters = _label_letters(
-            annotation,
-            record_length=int(record_lengths[annotation.record_index]),
-            label_width_bp=width,
-            join_origin=join_origin,
-            label_position=label_position(annotation),
+        before = sum(
+            px
+            for (record, room_row, room_gap), px in rooms.items()
+            if record == record_index and room_row == row and room_gap < gap
         )
-        if _overlaps(letters.intervals, marks.get((annotation.record_index, letters.place.part.row, next_lane), ())):
-            key = (annotation.record_index, min(placement.lane, next_lane))
-            rooms[key] = max(rooms.get(key, 0.0), float(label_room_px(annotation, letters.place.bp)))
-    return tuple(LaneRoom(record, gap, px) for (record, gap), px in sorted(rooms.items()))
+        extent = extent_at(annotation, place.bp, mark_offset_px(placement, before))
+        letters = _letters_at(
+            place.bp,
+            extent.low_bp,
+            extent.high_bp,
+            record_length=int(record_lengths[record_index]),
+            join_origin=join_origin,
+        )
+        crossed = [
+            stroke
+            for start, end, stroke in marks.get((record_index, row, placement.lane + step), ())
+            if _overlaps(letters, ((start, end),))
+        ]
+        if crossed:
+            style = style_of(annotation)
+            room = extent.depth_px + float(style.label_offset) + 0.5 * (float(style.stroke_width) + max(crossed))
+            rooms[(record_index, row, gap)] = max(rooms.get((record_index, row, gap), 0.0), room)
+    return tuple(LaneRoom(record, row, gap, px) for (record, row, gap), px in sorted(rooms.items()))
 
 
 def layout_annotation_track(
@@ -329,8 +401,10 @@ def layout_annotation_track(
 
     ``labels`` measures the labels (``LabelSizing``). ``join_origin`` is True for a Circular drawing
     (``mark_parts``). Two lanes part by the room of a label that would cross the next lane's mark
-    (``_lane_rooms``), and the track's required extent grows by the largest room of a record; a span over other
-    slots (``to_slot``, ``cover_anchor``) puts its labels outside them and gets none."""
+    (``_lane_rooms``), and the track's required extent grows by the largest room a record's row takes
+    (``ResolvedAnnotationTrack.lane_room_px``). A span over other slots (``to_slot``, ``cover_anchor``) gets none:
+    where it covers a slot its labels stand outside the slots it covers, and whether it covers one on a record is
+    known only after the lanes are packed."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -352,12 +426,24 @@ def layout_annotation_track(
         scale = float(labels.bp_per_px.get(annotation.record_index, 1.0))
         return width_px * scale
 
-    def label_room(annotation: ResolvedRegionAnnotation, place_bp: float) -> float:
-        # The letters keep label_offset from their mark's paint, half its stroke past the lane; the next mark's
-        # paint reaches about as far into the room.
-        style = effective_annotation_style(annotation, track_params)
-        depth = labels.depth_px(annotation.label, style, annotation_label_font_size(style, labels.font_size), place_bp)
-        return float(depth) + float(style.label_offset) + float(style.stroke_width)
+    def style_of(annotation: ResolvedRegionAnnotation) -> RegionAnnotationStyle:
+        return effective_annotation_style(annotation, track_params)
+
+    def extent_at(annotation: ResolvedRegionAnnotation, place_bp: float, mark_offset: float) -> LabelExtent:
+        style = style_of(annotation)
+        size = annotation_label_font_size(style, labels.font_size)
+        return labels.extent(annotation, style, size, place_bp, mark_offset)
+
+    def mark_offset(placement: PlacedRegionAnnotation, room_before: float) -> float:
+        # The painted edge of the placement's mark on its label's side, from the edge the lanes stack from, with the
+        # rooms before its lane: its lane's edge where a slot sized by its lanes draws it (the lane gaps shared out
+        # among the lanes, as the drawers do), and half its stroke past it.
+        lanes = max((item.lane for item in placements), default=0) + 1
+        width = float(lane_extent_px) + float(track_params.lane_gap_px) * (lanes - 1) / lanes
+        half_stroke = 0.5 * float(style_of(placement.annotation).stroke_width)
+        if labels.labels_above:
+            return float(track_params.padding_px) + placement.lane * width + room_before - half_stroke
+        return float(track_params.padding_px) + (placement.lane + 1) * width + room_before + half_stroke
 
     def padding(annotation: ResolvedRegionAnnotation) -> float:
         scale = float(labels.bp_per_px.get(annotation.record_index, 1.0))
@@ -384,18 +470,19 @@ def layout_annotation_track(
     spans_slots = track_params.to_slot is not None or track_params.cover_anchor
     lane_rooms = (
         ()
-        if spans_slots
+        if spans_slots or not track_params.show_labels
         else _lane_rooms(
             placements,
             record_lengths=record_lengths,
-            label_width_bp=label_width,
-            label_room_px=label_room,
+            style_of=style_of,
+            extent_at=extent_at,
+            mark_offset_px=mark_offset,
             labels_above=labels.labels_above,
             join_origin=join_origin,
             label_position=label_position,
         )
     )
-    room = max((_record_room(lane_rooms, index) for index in record_lengths), default=0.0)
+    room = _largest_room(lane_rooms)
     lane_count = max((item.lane for item in placements), default=-1) + 1
     lane_gap = float(track_params.lane_gap_px)
     required = (
@@ -448,6 +535,8 @@ def layout_annotation_track(
 
 
 __all__ = [
+    "LabelExtent",
+    "LabelMeasure",
     "LabelSizing",
     "LaneRoom",
     "PlacedRegionAnnotation",

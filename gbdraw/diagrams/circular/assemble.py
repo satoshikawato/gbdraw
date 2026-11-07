@@ -126,9 +126,11 @@ from ...legend.sources import (
 from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
+    NormalizedCircularTrackSlot,
     ScalarSpec,
     default_circular_track_slots,
     normalize_circular_track_slots,
+    normalize_circular_track_slots_with_axis,
     parse_nonnegative_integer,
 )
 from ...annotations import (
@@ -136,6 +138,7 @@ from ...annotations import (
     LabelSizing,
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
+    ResolvedRegionAnnotation,
     annotation_track_params_from_mapping,
     feature_underlay_anchor_slot_id,
     feature_underlay_slot_id,
@@ -154,7 +157,7 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
     CircularLabelObstacles,
     LeaderSegment,
-    circular_annotation_label_depth,
+    circular_annotation_label_extent,
     circular_annotation_label_room,
     circular_annotation_labels,
     circular_annotation_track_content,
@@ -327,7 +330,15 @@ def _prepare_circular_annotation_tracks(
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
     updated, layouts = _layout_circular_annotation_tracks(
-        gb_record, slots, bundle, canvas_config=canvas_config, record_index=record_index
+        gb_record,
+        slots,
+        bundle,
+        canvas_config=canvas_config,
+        record_index=record_index,
+        # Where each slot is drawn: its side and the radius it asks for.
+        normalized_slots={
+            slot.id: slot for slot in normalize_circular_track_slots_with_axis(slots, tracks.circular_track_axis_index)
+        },
     )
     return CircularPlannedTracks(updated, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
@@ -339,39 +350,34 @@ def _layout_circular_annotation_tracks(
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
+    normalized_slots: Mapping[str, NormalizedCircularTrackSlot],
 ) -> tuple[list[CircularTrackSlot], dict[str, ResolvedAnnotationTrack]]:
-    """Resolve the lanes of each annotation slot; a slot without a width takes its required extent."""
+    """Resolve the lanes of each annotation slot; a slot without a width takes its required extent.
+
+    The packer measures a slot's labels on the slot's side (``normalized_slots``) beside its marks
+    (``_circular_annotation_track``)."""
 
     relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
-    record_lengths = {record_index: len(gb_record.seq)}
-    labels = LabelSizing(
-        font_size=circular_label_font_size(canvas_config.profile.config, len(gb_record.seq)),
-        # The letters' depth across the lanes beside a mark at the circle's radius.
-        depth_px=partial(
-            circular_annotation_label_depth,
-            font_family=str(canvas_config.profile.config.objects.text.font_family),
-            record_length=len(gb_record.seq),
-            radius_px=float(canvas_config.radius),
-        ),
-        bp_per_px={record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))},
-    )
+    axis_radius = float(canvas_config.radius)
     updated: list[CircularTrackSlot] = []
     layouts: dict[str, ResolvedAnnotationTrack] = {}
     for slot in slots:
         if str(slot.renderer).strip().lower() != "annotations":
             updated.append(slot)
             continue
-        params = annotation_track_params_from_mapping(slot.params)
-        available = slot.width.resolve(float(canvas_config.radius)) if slot.width is not None else None
-        layout = layout_annotation_track(
-            slot.id,
-            params.set_id,
+        normalized = normalized_slots.get(slot.id)
+        layout = _circular_annotation_track(
+            gb_record,
+            slot,
             relevant,
-            record_lengths=record_lengths,
-            params=params,
-            available_extent_px=available,
-            labels=labels,
-            join_origin=True,
+            canvas_config=canvas_config,
+            record_index=record_index,
+            inside=normalized is not None and normalized.side == "inside",
+            centre_px=(
+                normalized.radius.resolve(axis_radius)
+                if normalized is not None and normalized.radius is not None
+                else None
+            ),
         )
         layouts[slot.id] = layout
         updated.append(
@@ -380,6 +386,74 @@ def _layout_circular_annotation_tracks(
             else replace(slot, width=ScalarSpec(layout.required_extent_px, "px"))
         )
     return updated, layouts
+
+
+# How often a slot at a radius repacks while its lanes' edge moves, and the move under which it has settled.
+_LANE_EDGE_PASSES = 4
+_LANE_EDGE_SETTLED_PX = 0.01
+
+
+def _circular_annotation_track(
+    gb_record: SeqRecord,
+    slot: CircularTrackSlot,
+    annotations: Sequence[ResolvedRegionAnnotation],
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    record_index: int,
+    inside: bool,
+    centre_px: float | None,
+) -> ResolvedAnnotationTrack:
+    """Pack one annotation slot, its labels measured beside their marks on the slot's side
+    (``circular_annotation_label_extent``).
+
+    The lanes stack from the slot's edge nearest the axis side it starts from. A slot placed at a radius
+    (``centre_px``) is centred on it, so that edge lies half the slot's width away, and the width grows with the
+    room its labels take: the packing repeats until the edge settles. A slot the plan places gets its radii only
+    later; its labels are measured from the axis circle.
+    """
+
+    axis_radius = float(canvas_config.radius)
+    params = annotation_track_params_from_mapping(slot.params)
+    available = slot.width.resolve(axis_radius) if slot.width is not None else None
+    length = len(gb_record.seq)
+
+    def pack(lanes_from_px: float) -> ResolvedAnnotationTrack:
+        return layout_annotation_track(
+            slot.id,
+            params.set_id,
+            annotations,
+            record_lengths={record_index: length},
+            params=params,
+            available_extent_px=available,
+            labels=LabelSizing(
+                font_size=circular_label_font_size(canvas_config.profile.config, length),
+                extent=partial(
+                    circular_annotation_label_extent,
+                    font_family=str(canvas_config.profile.config.objects.text.font_family),
+                    record_length=length,
+                    lanes_from_px=lanes_from_px,
+                    outward=not inside,
+                ),
+                bp_per_px={record_index: length / max(1.0, 2.0 * math.pi * axis_radius)},
+            ),
+            join_origin=True,
+        )
+
+    if centre_px is None:
+        return pack(axis_radius)
+
+    def lanes_from(width: float) -> float:
+        return centre_px + 0.5 * width if inside else centre_px - 0.5 * width
+
+    edge = lanes_from(available or 0.0)
+    layout = pack(edge)
+    for _ in range(_LANE_EDGE_PASSES):
+        settled = lanes_from(available or layout.required_extent_px)
+        if abs(settled - edge) <= _LANE_EDGE_SETTLED_PX:
+            break
+        edge = settled
+        layout = pack(edge)
+    return layout
 
 
 def _add_circular_feature_underlays(
@@ -424,8 +498,9 @@ def _add_circular_feature_underlays(
         },
     )
     # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
+    # The underlay draws no labels.
     sized_underlay, underlay_layouts = _layout_circular_annotation_tracks(
-        gb_record, [underlay_slot], merged, canvas_config=canvas_config, record_index=record_index
+        gb_record, [underlay_slot], merged, canvas_config=canvas_config, record_index=record_index, normalized_slots={}
     )
     return [*sized_underlay, *slots], merged, {**underlay_layouts, **layouts}
 

@@ -1230,7 +1230,7 @@ def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
 
 
 def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_conflicts() -> None:
-    from gbdraw.annotations import LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
     from gbdraw.layout.text_geometry import convex_polygons_intersect
     from gbdraw.layout.text_geometry import grown_convex_polygon
     from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, circular_annotation_labels
@@ -1241,7 +1241,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
         "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
-        labels=LabelSizing(font_size=10.0, depth_px=lambda *_: 10.0), join_origin=True,
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
     )
 
     def labels(*polygons):
