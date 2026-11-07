@@ -835,6 +835,26 @@
           "kind": "py-set"
         }
       ]
+    },
+    {
+      "id": "SCENARIO-DECLARATION",
+      "heading": "Scenario declarations",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_scenario_declarations.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_scenario_declarations.py",
+          "symbol": "UNDECLARED_CLI_OPTIONS",
+          "kind": "py-set"
+        }
+      ]
     }
   ]
 }
