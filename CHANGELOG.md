@@ -72,6 +72,10 @@ write-up of a release.
   rows. A 21 Mbp depth file is held in 20 MiB instead of 340 MiB; `gbdraw
   circular` with it peaks at 450 MiB instead of 2.6 GiB, and the Web app at
   1.9 GB instead of 3.8 GB. Drawings do not change.
+- Performance: binning a depth track no longer builds an 8-byte running sum for
+  every base of the record; the sums are taken in pieces and kept only at the
+  window edges. `gbdraw circular` with a 64 Mbp depth file peaks at 396 MiB
+  instead of 780 MiB. Drawings do not change.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.
