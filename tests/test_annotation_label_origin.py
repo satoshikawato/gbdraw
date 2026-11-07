@@ -304,26 +304,26 @@ def test_wrapped_start_and_end_labels_stand_at_the_first_and_last_base() -> None
     assert places["start"][1] < places["end"][1] == places["center"][1]
 
 
-@pytest.mark.parametrize(("start", "expected"), ((None, (1800.0, 1100.0, 100.0)), (5001, (800.0, 100.0, 1050.0))))
+@pytest.mark.parametrize(("start", "expected"), ((None, (1800.0, 1100.0, 1900.0)), (5001, (800.0, 100.0, 1050.0))))
 def test_three_segments_across_the_origin_start_end_and_centre_follow_the_run(
     start: int | None, expected: tuple[float, float, float]
 ) -> None:
     # The region runs 9000-10000, 0-1000, 5000-5500 (D-62 Q5): it starts at bp 9000 and ends at bp 5500 (Q4).
-    # Without a display start the record's ends cut it, so the centred label stands on the centre of the longer
-    # side, 0-1000 (Q2, ties to the earlier start); from display start 5001 every part is whole and the centred
+    # Without a display start the record's ends cut it, so the centred label stands on the centre of the longest
+    # part; 0-1000 and 9000-10000 tie, and it takes 9000-10000, where the region starts (Q2). From display start 5001 every part is whole and the centred
     # label stands at its midpoint, bp 250 (x 1050).
     places = _linear_labels(("locus_tag=ENDS", "locus_tag=MIDDLE"), ("start", "end", "center"), start=start)
 
     assert tuple(places[position][0] for position in ("start", "end", "center")) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize(("kind", "expected"), (("feature", 100.0), ("coordinate", 100.0), ("unequal", 200.0)))
+@pytest.mark.parametrize(("kind", "expected"), (("feature", 1900.0), ("coordinate", 1900.0), ("unequal", 200.0)))
 @pytest.mark.parametrize("start", (None, 1))
 def test_centred_label_of_a_span_cut_at_the_origin_stands_on_its_longer_part(
     kind: str, start: int | None, expected: float
 ) -> None:
     # D-62 Q2 LBL-ORIGIN-LONGER: the bar's ends cut the span at the origin; the label stands on the centre of the
-    # longer part (equal sides: the earlier start, 0-1000).
+    # longer part, and of two equal parts on the one where the region starts, 9000-10000 at the bar's right end.
     assert _text_x(_label_item("linear", start, kind=kind)) == pytest.approx(expected)
 
 
@@ -358,3 +358,43 @@ def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes:
     )
 
     assert {placement.annotation.id: placement.lane for placement in track.placements} == lanes
+
+
+def test_wrapped_rows_without_a_display_start_tie_to_the_part_where_the_region_starts() -> None:
+    # Rows of 4000 bp: 0-1000 on the first row, 9000-10000 at the end of the last; equal parts, so the label takes
+    # the last row's part, where the region starts (D-62 Q2).
+    annotation = _origin_annotation(_fragments(None, 4000))
+    place = annotation.label_place(join_origin=False)
+
+    assert (place.part.row, place.bp) == (2, 1500.0)
+
+
+def test_a_display_seam_ties_to_the_earlier_row_then_further_left() -> None:
+    # Region 7000-9000 from display start 8001: two equal parts, 9000-10000 and 0-1000 on the display; the
+    # display cut makes them, so the label takes the one further left (D-62 Q3 tie, as before).
+    fragments = _fragments(8001, None, ((7000, 9000),))
+    annotation = ResolvedRegionAnnotation(
+        id="a", set_id="s", record_index=0, segments=((7000, 9000),), midpoint_bp=8000.0, span_bp=2000, label="A",
+        mark="band", lane=None, style=RegionAnnotationStyle(), display_parts=fragments,
+    )
+
+    assert annotation.label_midpoint_bp(join_origin=False) == 500.0
+
+
+def test_the_run_follows_the_record_not_the_strand() -> None:
+    # A minus-strand region across the origin starts at bp 9000 and ends at bp 1000 like a plus-strand one.
+    for strand in ("+", "-"):
+        annotation = ResolvedRegionAnnotation(
+            id="a", set_id="s", record_index=0, segments=((0, 1000), (9000, _LENGTH)), midpoint_bp=0.0, span_bp=2000,
+            label="A", mark="band", lane=None, style=RegionAnnotationStyle(), crosses_origin=True, strand=strand,
+        )
+        assert annotation.label_anchor("start", join_origin=False).bp == 9000.0
+        assert annotation.label_anchor("end", join_origin=False).bp == 1000.0
+
+
+@pytest.mark.parametrize("position", ("start", "end"))
+def test_circular_labels_stand_centred_whatever_their_position(position: str) -> None:
+    (text,) = _label_item("circular", 5001, position).iter(f"{_SVG}text")
+    x, y = float(text.get("x", "nan")), float(text.get("y", "nan"))
+
+    assert math.degrees(math.atan2(x, -y)) % 360.0 == pytest.approx(180.0, abs=0.5)

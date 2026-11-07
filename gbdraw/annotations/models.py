@@ -579,12 +579,19 @@ class ResolvedRegionAnnotation:
 
         When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
         row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
-        as the display shows it. Else it stands on the centre of its longest part (D-62 Q2, Q3).
+        as the display shows it. Else it stands on the centre of its longest part (D-62 Q2, Q3): where only the
+        origin cuts it (no display seam), two equal parts go to the one where the region starts.
         """
         parts = mark_parts(self, join_origin=join_origin)
-        longest = _longest_part(parts)
         if not all(part.capped_start and part.capped_end for part in parts):
+            seamless = self.display_parts is None or not any(
+                part.artificial_start or part.artificial_end for part in self.display_parts
+            )
+            longest = _longest_part(
+                parts, prefer=self.label_anchor("start", join_origin=join_origin).part if seamless else None
+            )
             return LabelPlace((longest.start + longest.end) / 2.0, longest)
+        longest = _longest_part(parts)
         midpoint = self.midpoint_bp
         if self.display_parts is None:
             return LabelPlace(midpoint, next((part for part in parts if part.start <= midpoint <= part.end), longest))
@@ -666,10 +673,10 @@ class LabelPlace(NamedTuple):
     part: MarkPart
 
 
-def _longest_part(parts: Sequence[MarkPart]) -> MarkPart:
-    """The longest drawn part, ties to the earlier row, then the earlier start."""
+def _longest_part(parts: Sequence[MarkPart], *, prefer: MarkPart | None = None) -> MarkPart:
+    """The longest drawn part; ties to ``prefer``, then to the earlier row, then the earlier start."""
 
-    return min(parts, key=lambda part: (part.start - part.end, part.row, part.start))
+    return min(parts, key=lambda part: (part.start - part.end, part != prefer, part.row, part.start))
 
 
 def origin_sides(bounds: Sequence[tuple[int, int]]) -> tuple[int, int]:
