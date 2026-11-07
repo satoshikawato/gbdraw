@@ -51,7 +51,8 @@ by contributor voting or consensus. The maintainer decides:
 - scientific and technical terminology;
 - public API, CLI, session, and file-format contracts;
 - architecture and dependency changes;
-- compatibility and deprecation policy;
+- compatibility and deprecation policy (the current one is in
+  [Compatibility and deprecation](./docs/REFERENCE/compatibility-and-deprecation.md));
 - release contents and timing; and
 - whether a change is maintainable enough to merge.
 

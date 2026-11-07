@@ -36,6 +36,7 @@ options, schemas, APIs, compatibility rules, formats, and SVG hooks. Common entr
 - [Comparison programs, thresholds, and results](./REFERENCE/comparison-programs-thresholds-and-results.md)
 - [Palettes, feature rules, labels, shapes, and tracks](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
 - [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)
+- [Compatibility and deprecation](./REFERENCE/compatibility-and-deprecation.md)
 - [Output formats and export](./REFERENCE/output-formats-and-export.md)
 - [Recipes](./RECIPES.md)
 - [Interactive SVG and semantic hooks](./REFERENCE/interactive-svg-and-semantic-hooks.md)

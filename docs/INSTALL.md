@@ -139,7 +139,10 @@ libraries. On Ubuntu, the tested system packages are `libcairo2-dev` and
 
 ## Supported and verified environments
 
-The supported Python versions are 3.10, 3.11, 3.12, 3.13, and 3.14. Continuous
+The supported Python versions are 3.10, 3.11, 3.12, 3.13, and 3.14. Python 3.10
+is deprecated: gbdraw 0.16.0 will need Python 3.11 or later
+([Compatibility and deprecation](./REFERENCE/compatibility-and-deprecation.md#python-versions)).
+Continuous
 integration runs the test suite on Linux with each of them, and the web app's
 browser tests use Chromium. Each release also installs its wheel into a clean
 Linux environment, then draws a diagram and replays its Session with the

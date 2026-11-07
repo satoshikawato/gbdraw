@@ -7,7 +7,10 @@
 | 0.14.x | Yes |
 | Older | No |
 
-A version line appears here when its first release is tagged.
+A version line appears here when its first release is tagged. Only the newest
+line receives fixes; [Compatibility and deprecation](docs/REFERENCE/compatibility-and-deprecation.md)
+says how long old options, Python API names, Sessions, and Python versions keep
+working.
 
 ## Reporting a vulnerability
 
