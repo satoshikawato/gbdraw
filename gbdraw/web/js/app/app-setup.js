@@ -31,7 +31,6 @@
 /** @import { RegionSourceFeature } from './region-drawing.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { CircularRecordsDiscovered } from './run-analysis.js' */
-/** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
@@ -133,9 +132,6 @@ import {
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
-  ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
-} from '../services/alignment-review-view.js';
-import {
   setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
@@ -179,7 +175,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { appliedFeatureColors, COMPARISON_COLOR_KEYS, normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { COLLINEAR_COLOR_MODE_TEXT, groupCountText } from './pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
@@ -229,8 +225,7 @@ import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
 import {
-  createOrthogroupEditor,
-  resolveUniqueOrthogroupMemberForFeature
+  createOrthogroupEditor
 } from './orthogroups.js';
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
@@ -251,13 +246,10 @@ import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
 import { createFigureSizeField } from './figure-size-field.js';
-import {
-  figureGrowth, requestFigureSizeLeaves, requestedLengthText, shownFigureSize
-} from '../services/figure-size-form.js';
-import { getSvgDimensions } from '../services/svg-dimensions.js';
+import { createFigureSizeReaders } from './figure-size-readers.js';
+import { createOrthogroupPopup } from './orthogroup-popup.js';
+import { createSimilarityAlignmentReview, createSimilarityAlignmentTakeover } from './similarity-alignment-review.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
-import { draftFeatureSlot } from './feature-editor/placement-actions.js';
-import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
@@ -282,7 +274,6 @@ import {
   circularRecordDrawKey,
   circularRecordRequestKeys,
   linearCardHasSettings,
-  movesARecordSideways,
   recordsWithEdits,
   removeRecordEdits
 } from '../services/record-draw-selection.js';
@@ -3965,366 +3956,75 @@ export const createAppSetup = () => {
     projectPlacement: projectCommittedSimilarityAlignment,
     onError: (error) => { errorLog.value = error; }
   });
-  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. The comparison blocker reads the comparison
-  // inputs only; a drawn record moved sideways is read from the translations the request carries, whatever wrote them
-  // (Align at feature counts only through the records its Apply moved), and a Similarity alignment plan counts as
-  // moved records, also when its comparison inputs were removed (Q5 A).
-  // Figure size (issue #1427): the line under the field reads the shown Result's root (px) after each change of it,
-  // and its committed request's sides; none while the drawing shows no Result of its own.
-  // A root drawn to a requested size also names its requested canvas and the canvas before Web-only additions grew it.
-  // While the automatic rerender runs on such a root (the shown drawing: a switch waits for it), the line says the
-  // figure is being fitted (PD-OI-114 rev 2): a Legend edit or Canvas padding shows at once, then Python fits it.
-  /** @type {{ value: { px: { width: number, height: number }, sized: ReturnType<typeof requestedCanvasOf> } | null }} */
-  const shownFigureRoot = shallowRef(null);
-  watch(() => [svgContent.value, resultEditRevision.value, mountedResultRevision.value, state.activeDrawingId.value], () => {
-    const root = svgContainer.value?.querySelector?.('svg') ?? null;
-    const px = getSvgDimensions(root);
-    shownFigureRoot.value = root && px ? { px, sized: requestedCanvasOf(root) } : null;
-  }, { flush: 'post' });
+  const { shownSize, blockerInputs } = createFigureSizeReaders({
+    state, resultEditRevision, mountedResultRevision, shownCommittedRequest, decorationsMoved, linearLabelHasSharedRow
+  });
   const figureSizeField = createFigureSizeField({
     state,
     watch,
-    shownSize: () => {
-      const drawing = state.activeDrawing();
-      const request = shownCommittedRequest(drawing);
-      const root = shownFigureRoot.value;
-      if (!request || !root) return null;
-      const requested = requestFigureSizeLeaves(request);
-      const growth = root.sized && figureGrowth({
-        shown: root.px, base: root.sized.base, requested: root.sized.requested,
-        padded: root.sized.addsPadding(drawing.canvasPadding), moved: decorationsMoved()
-      });
-      return {
-        ...shownFigureSize({ widthPx: root.px.width, heightPx: root.px.height, requested }),
-        fitting: Boolean(root.sized) && labelReflowProcessing.value,
-        larger: growth ? {
-          sides: growth.sides.map((side) => ({ side, length: requestedLengthText(requested[side]) ?? `${Math.round(root.px[side])} px` })),
-          causes: growth.causes
-        } : null
-      };
-    }
+    shownSize
   });
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
     shownWrap: () => shownLinearWrapReading.value,
-    blockerInputs: () => {
-      const drawing = state.activeDrawing();
-      return {
-        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent,
-        sharedRecordRow: linearLabelHasSharedRow.value,
-        movedRecords: movesARecordSideways(state.linearRecordTranslations.value, drawing.drawnLinearSeqs.value),
-        alignmentPlan: state.similarityAlignmentPlan.value !== null,
-        featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
-          && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
-      };
-    },
+    blockerInputs,
     watch
   });
   const { missingBlastTsvDialog, missingBlastTsvRows, resolveMissingBlastTsv } = createMissingBlastTsvChoice({
     state, withHistory: dialogChoice.withHistory, closeAfterChoice: dialogChoice.closeAfterChoice, choicePending: dialogChoice.pending,
     omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis
   });
-  // The Review alignment panel, docked in the Result workspace. The figure overlay and the
-  // panel's strips show one draft: the root passes the draft to the preview's owner, which
-  // returns the figure geometry the strips are laid out from.
-  const similarityAlignmentCanvasHover = ref(/** @type {{ recordKey: string, candidateKey: string } | null} */ (null));
-  const similarityAlignmentGeometry = shallowRef(/** @type {AlignmentFigureGeometry | null} */ (null));
-  // The takeover ends with the review (Cancel, the close button, Escape, Apply). The pan/zoom
-  // owner holds the view from before the fit, so a Session saved or a Result checkpointed
-  // meanwhile keeps that view. While Apply runs, the ending waits for its outcome, and its new
-  // Result is the review's own.
-  let similarityAlignmentApplying = false;
-  // The identity of the selected Result of the review's drawing, shown or kept in its slot.
-  /** @param {DrawingId} reviewDrawingId */
-  const reviewDrawingFigure = (reviewDrawingId) => previewRuntime.getResultIdentity(artifactSlots.readOfDrawing(reviewDrawingId,
-    state.activeDrawingId.value, () => results.value[Number(selectedResultIndex.value) || 0],
-    (slot) => slot.values.results[slot.values.selectedResultIndex]));
-  // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
-  // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
-  // that change's, and the review gives neither back. A mode switch brings no view: the review's
-  // own Result, kept in its slot or shown again, leaves the hold, so the end gives the view back.
-  const dropSimilarityAlignmentView = () => {
-    const takeover = similarityAlignmentTakeover.value;
-    if (!takeover || similarityAlignmentApplying || reviewDrawingFigure(takeover.drawingId) === takeover.figure) return;
-    takeover.drawerOpen = false;
-    releasePreviewViewport({ restore: false });
-  };
-  similarityAlignmentPorts.refreshCanvas = () => {
-    similarityAlignmentCanvasHover.value = null;
-    const current = similarityAlignmentActions.draft.value;
-    if (!similarityAlignmentActions.dialogOpen.value) {
-      featureActions.clearAlignmentOverlay();
-      similarityAlignmentGeometry.value = null;
-      return;
-    }
-    if (similarityAlignmentActions.status.value !== 'reviewing') {
-      // While Apply runs, the strips keep the figure they were measured from.
-      featureActions.clearAlignmentOverlay();
-      return;
-    }
-    if (!similarityAlignmentActions.isDraftArtifactCurrent()) {
-      featureActions.clearAlignmentOverlay();
-      similarityAlignmentGeometry.value = null;
-      dropSimilarityAlignmentView();
-      return;
-    }
-    // A live rerender of the draft's records draws a new Result of the same figure (PD-OI-102).
-    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewDrawingFigure(similarityAlignmentTakeover.value.drawingId);
-    // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
-    // geometry of the same Result.
-    similarityAlignmentGeometry.value = featureActions.showAlignmentOverlay({
-      reference: { key: ALIGNMENT_REFERENCE_KEY, recordKey: current.reference.recordKey,
-        anchor: current.response.reference, name: current.reference.name },
-      records: alignmentOverlayRecords(current.rows),
-      onSelect: similarityAlignmentActions.selectCandidate,
-      onHover: (recordKey, candidateKey) => {
-        similarityAlignmentCanvasHover.value = recordKey ? { recordKey, candidateKey } : null;
-      }
-    }) ?? similarityAlignmentGeometry.value;
-  };
-  watch([
-    similarityAlignmentActions.dialogOpen,
-    () => similarityAlignmentActions.draft.value?.rows,
-    similarityAlignmentActions.status
-  ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
-  // The preview is shown again after this flush's watchers have run: measure on the next tick.
-  watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
-  // An edit of the shown root (a drag, Reset Layout, an Undo of a record move)
-  // leaves the Result object in place (R1), so the review measures again on it.
-  watch(resultEditRevision, similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
-  const similarityAlignmentReview = computed(() => {
-    const draft = similarityAlignmentActions.draft.value;
-    const directions = similarityAlignmentActions.directionPreview.value?.records;
-    return draft && directions ? buildAlignmentReviewView({
-      rows: draft.rows, directions, geometry: similarityAlignmentGeometry.value,
-      openedWithoutChoice: draft.openedWithoutChoice
-    }) : null;
+  const {
+    reviewDrawingFigure, dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
+    rememberSimilarityAlignmentInvoker, restoreSimilarityAlignmentFocus, focusSimilarityAlignmentDialog,
+    applySimilarityAlignmentDialog
+  } = createSimilarityAlignmentTakeover({
+    state, similarityAlignmentTakeover, similarityAlignmentHoldShown, releasePreviewViewport, fitPreviewToViewport,
+    getResultIdentity: previewRuntime.getResultIdentity, readOfDrawing: artifactSlots.readOfDrawing,
+    openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
+    showFeaturePopupAtFeature: featureActions.showFeaturePopupAtFeature,
+    alignmentDialogOpen: similarityAlignmentActions.dialogOpen, applyAlignmentReset: similarityAlignmentActions.applyReset,
+    applyAlignmentDraft: similarityAlignmentActions.applyDraft
   });
-  /** @type {HTMLElement | null} */
-  let similarityAlignmentReturnFocus = null;
-  const similarityAlignmentEditorDisabledReason = computed(() => (
-    similarityAlignmentActions.dialogOpen.value ? t('Finish or cancel alignment review before opening Editor.') : ''
-  ));
+  const {
+    similarityAlignmentCanvasHover, refreshSimilarityAlignmentCanvas, similarityAlignmentReview,
+    similarityAlignmentEditorDisabledReason, openSimilarityAlignmentReset, finishSimilarityAlignmentStart,
+    startSimilarityAlignmentFromDrawer, cancelSimilarityAlignmentDialog
+  } = createSimilarityAlignmentReview({
+    state, resultEditRevision, similarityAlignmentTakeover, holdPreviewViewport,
+    clearAlignmentOverlay: featureActions.clearAlignmentOverlay, showAlignmentOverlay: featureActions.showAlignmentOverlay,
+    closeRightDrawer: rightDrawerActions.closeRightDrawer, closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
+    alignmentDialogOpen: similarityAlignmentActions.dialogOpen, alignmentDraft: similarityAlignmentActions.draft,
+    alignmentStatus: similarityAlignmentActions.status,
+    isDraftArtifactCurrent: similarityAlignmentActions.isDraftArtifactCurrent,
+    selectAlignmentCandidate: similarityAlignmentActions.selectCandidate,
+    alignmentDirectionPreview: similarityAlignmentActions.directionPreview,
+    alignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
+    openAlignmentReset: similarityAlignmentActions.openReset, alignmentError: similarityAlignmentActions.error,
+    startAlignmentFromDrawer: similarityAlignmentActions.startFromDrawer, cancelAlignment: similarityAlignmentActions.cancel,
+    reviewDrawingFigure, dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
+    rememberSimilarityAlignmentInvoker, restoreSimilarityAlignmentFocus, focusSimilarityAlignmentDialog
+  });
+  similarityAlignmentPorts.refreshCanvas = refreshSimilarityAlignmentCanvas;
   similarityAlignmentPorts.editorDisabledReason = () => similarityAlignmentEditorDisabledReason.value;
-  // The figure is fitted to the room the docked panel leaves, once the panel is in the page. The
-  // pan/zoom owner fits it again when that room changes, for as long as it holds the view.
-  const fitPreviewForSimilarityAlignment = () => {
-    if (similarityAlignmentActions.dialogOpen.value) fitPreviewToViewport();
-  };
-  watch(similarityAlignmentActions.dialogOpen, fitPreviewForSimilarityAlignment, { flush: 'post' });
-  const endSimilarityAlignmentTakeover = () => {
-    const takeover = similarityAlignmentTakeover.value;
-    if (!takeover || similarityAlignmentApplying) return;
-    // The held view is the review's mode's: ended while the other mode is shown, the review
-    // does not write it onto that mode's figure (OV-1089).
-    const restore = similarityAlignmentHoldShown();
-    similarityAlignmentTakeover.value = null;
-    if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(takeover.drawerTab);
-    // The drawer narrows the visible frame, so the view returns after it.
-    releasePreviewViewport({ restore });
-    // Open in the feature search row retargeted the hidden popup for the fitted view.
-    if (clickedFeature.value && clickedFeature.value !== takeover.popup) void featureActions.showFeaturePopupAtFeature();
-  };
-  watch(similarityAlignmentActions.dialogOpen, (/** @type {boolean} */ open) => {
-    if (!open) {
-      endSimilarityAlignmentTakeover();
-      return;
-    }
-    // A review shown again while an Apply is pending keeps what the first one took.
-    const reviewDrawingId = state.activeDrawingId.value;
-    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
-      drawingId: reviewDrawingId, figure: reviewDrawingFigure(reviewDrawingId) };
-    // The figure is fitted again only while it shows the draft.
-    holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
-    rightDrawerActions.closeRightDrawer();
-    settingsPaneActions.closeSettingsPopup();
-  }, { flush: 'sync' });
-  /** @param {Event | null | undefined} event */
-  const rememberSimilarityAlignmentInvoker = (event) => {
-    // `currentTarget` is the element the handler is bound to; the declared type of the variable already holds the focused element.
-    similarityAlignmentReturnFocus = /** @type {HTMLElement | null} */ (event?.currentTarget || document.activeElement || null);
-  };
-  const restoreSimilarityAlignmentFocus = async () => {
-    await nextTick();
-    const target = similarityAlignmentReturnFocus;
-    if (!target) return;
-    similarityAlignmentReturnFocus = null;
-    const hiddenEditorInvoker = target?.closest?.('.right-drawer') && !showRightDrawer.value;
-    if (!hiddenEditorInvoker && target?.isConnected && target.getClientRects().length && typeof target.focus === 'function') {
-      target.focus();
-      return;
-    }
-    /** @type {HTMLElement | null} */ (document.querySelector('.drawer-toggle'))?.focus();
-  };
-  const focusSimilarityAlignmentDialog = async () => {
-    await nextTick();
-    document.getElementById('similarity-alignment-dialog-title')?.focus();
-  };
-  /** @param {KeyboardEvent} event */
-  const handleSimilarityAlignmentEscape = (event) => {
-    if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
-    // The target of a key press is the focused element.
-    if (document.querySelector('[data-linear-source-removal-dialog]')
-      || /** @type {Element | null} */ (event.target)?.closest?.('.fixed.inset-0')) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    void cancelSimilarityAlignmentDialog();
-  };
-  /** @param {Event | null | undefined} event */
-  const openSimilarityAlignmentReset = (event) => {
-    rememberSimilarityAlignmentInvoker(event);
-    similarityAlignmentActions.openReset();
-  };
-  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async (/** @type {[unknown, unknown]} */ [open, resetOpen]) => {
-    if (resetOpen) {
-      await nextTick();
-      document.getElementById('similarity-alignment-reset-title')?.focus();
-      return;
-    }
-    // After Apply the focus returns once the outcome has given the drawer back.
-    if (open || similarityAlignmentTakeover.value) return;
-    void restoreSimilarityAlignmentFocus();
+  const {
+    canUseClickedOrthogroupActions, clickedOrthogroupDetail, alignByClickedOrthogroup, highlightClickedOrthogroup,
+    clearOrthogroupHighlight, openOrthogroupInDrawer, reselectSimilarityAlignmentReference, openClickedOrthogroupInEditor
+  } = createOrthogroupPopup({
+    state, displayedLinearDrawing, getOrthogroupById: orthogroupActions.getOrthogroupById,
+    getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    groupOrthogroupMembersByRecord: orthogroupActions.groupOrthogroupMembersByRecord,
+    resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
+    getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
+    orthogroupScope: orthogroupActions.orthogroupScope, orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
+    highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
+    removeOrthogroupHighlight: orthogroupActions.clearOrthogroupHighlight, selectOrthogroup: orthogroupActions.selectOrthogroup,
+    startAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
+    setAlignmentDrawerReference: similarityAlignmentActions.setDrawerReference,
+    alignmentRepair: similarityAlignmentActions.repair, openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
+    rememberSimilarityAlignmentInvoker, finishSimilarityAlignmentStart
   });
-  onMounted(() => {
-    document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
-  });
-  onUnmounted(() => {
-    document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
-  });
-  /** @template T @param {T} outcome @returns {Promise<T>} */
-  const finishSimilarityAlignmentStart = async (outcome) => {
-    if (similarityAlignmentActions.dialogOpen.value) {
-      if (similarityAlignmentActions.error.value) {
-        await nextTick();
-        /** @type {HTMLElement | null} */ (document.querySelector('[data-similarity-alignment-error]'))?.focus();
-      } else await focusSimilarityAlignmentDialog();
-    } else await restoreSimilarityAlignmentFocus();
-    return outcome;
-  };
-  /** @param {string} groupId @param {Event | null} [event] @param {string} [mode] */
-  const startSimilarityAlignmentFromDrawer = async (groupId, event = null, mode = 'align') => {
-    rememberSimilarityAlignmentInvoker(event);
-    return finishSimilarityAlignmentStart(
-      await similarityAlignmentActions.startFromDrawer({ groupId, mode })
-    );
-  };
-  const cancelSimilarityAlignmentDialog = async () => {
-    similarityAlignmentActions.cancel();
-  };
-  const applySimilarityAlignmentDialog = async (reset = false) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!reset) similarityAlignmentApplying = true;
-    let outcome;
-    try {
-      outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
-    } finally {
-      if (!reset) similarityAlignmentApplying = false;
-    }
-    if (!reset) {
-      if (!similarityAlignmentActions.dialogOpen.value) {
-        endSimilarityAlignmentTakeover();
-        void restoreSimilarityAlignmentFocus();
-      } else if (outcome.status === 'error' || outcome.status === 'canceled') {
-        // The failed run put the Result and its saved view back; the review goes on fitted.
-        await nextTick();
-        fitPreviewForSimilarityAlignment();
-      }
-    }
-    if (outcome.status === 'error' || outcome.status === 'reviewing') {
-      await nextTick();
-      /** @type {HTMLElement | null} */ (document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]'))?.focus();
-    }
-    return outcome;
-  };
-  const canUseClickedOrthogroupActions = computed(() => {
-    const drawing = state.activeDrawing();
-    const cf = clickedFeature.value;
-    return Boolean(
-      cf &&
-      mode.value === 'linear' &&
-      drawing.hasActiveLinearLosatIntent.value &&
-      drawing.linearComparisonResolution.value.valid &&
-      drawing.losatProgram.value === 'blastp' &&
-      drawing.losat.blastp?.mode === 'orthogroup' &&
-      drawing.inputType.value === 'gb' &&
-      cf.feat?.type === 'CDS' &&
-      cf.orthogroupId
-    );
-  });
-
-  const clickedOrthogroupDetail = computed(() => {
-    const cf = clickedFeature.value;
-    const orthogroupId = String(cf?.orthogroupId || '').trim();
-    if (!orthogroupId) return null;
-    const group = orthogroupActions.getOrthogroupById(orthogroupId);
-    if (!group) return null;
-    const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
-    const currentMember = resolveUniqueOrthogroupMemberForFeature(cf?.feat, members);
-    const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
-    const memberCount = Number(group.member_count || members.length || 0);
-    const recordCoverage = Number(group.record_coverage_count || membersByRecord.length || 0);
-    return {
-      id: orthogroupId,
-      displayName: orthogroupActions.resolveOrthogroupName(group, displayedLinearDrawing()),
-      memberCount,
-      recordCoverage,
-      countText: groupCountText(memberCount, recordCoverage),
-      genesText: groupCountText(memberCount, 0),
-      ntSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'nt'),
-      aaSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'aa'),
-      currentMember,
-      membersByRecord,
-      scopeLabel: orthogroupActions.orthogroupScope(group) === 'global'
-        ? ''
-        : orthogroupActions.orthogroupScopeLabel(group)
-    };
-  });
-
-  const alignByClickedOrthogroup = async (event = null, mode = 'align') => {
-    const detail = clickedOrthogroupDetail.value;
-    if (!detail?.id) return { status: 'rejected' };
-    rememberSimilarityAlignmentInvoker(event);
-    const outcome = await similarityAlignmentActions.startFromPopup({
-      groupId: detail.id,
-      reference: detail.currentMember,
-      mode
-    });
-    return finishSimilarityAlignmentStart(outcome);
-  };
-
-  const highlightClickedOrthogroup = () => {
-    const cf = clickedFeature.value;
-    const orthogroupId = String(cf?.orthogroupId || '').trim();
-    if (!orthogroupId) return;
-    orthogroupActions.highlightOrthogroupById(orthogroupId);
-  };
-
-  const clearOrthogroupHighlight = () => {
-    orthogroupActions.clearOrthogroupHighlight();
-  };
-
-  /** @param {string} orthogroupId */
-  const openOrthogroupInDrawer = (orthogroupId) => {
-    if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
-    rightDrawerActions.openRightDrawerTab('orthogroups');
-    return true;
-  };
-
-  const reselectSimilarityAlignmentReference = () => {
-    const groupId = similarityAlignmentActions.repair.value?.groupId
-      || state.similarityAlignmentPlan.value?.groupId
-      || '';
-    similarityAlignmentActions.setDrawerReference(groupId, '');
-    return openOrthogroupInDrawer(groupId);
-  };
-
-  const openClickedOrthogroupInEditor = () => {
-    const orthogroupId = String(clickedFeature.value?.orthogroupId || '').trim();
-    if (!openOrthogroupInDrawer(orthogroupId)) return;
-    clickedFeature.value = null;
-  };
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
