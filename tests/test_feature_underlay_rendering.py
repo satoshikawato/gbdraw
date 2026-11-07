@@ -553,7 +553,7 @@ def test_linear_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest
 
 
 @pytest.mark.circular
-def test_circular_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_circular_underlay_is_laid_out_once_and_each_annotation_track_twice(monkeypatch: pytest.MonkeyPatch) -> None:
     """Circular twin of the Linear case: the underlay pass lays out only the underlay slot and keeps the
     layouts of the annotation tracks laid out before it. Each of those is packed once more where the radial
     layout draws it (its labels measured there), and the underlay, which covers its anchor, is not."""
