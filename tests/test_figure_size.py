@@ -945,6 +945,11 @@ def test_no_fitting_row_at_a_requested_size_offers_a_larger_figure_without_an_es
         ]
     # The requested sides, with no estimate: a side left auto stays None.
     assert sized(RequestedFigureSize(width)).larger_figure == LargerFigure(True, None)
+    # The sides are all estimated or none, and at least one is requested (as the Web reader requires).
+    for width_side, height_side in ((True, "240.3 mm"), ("240.3 mm", True), (None, None)):
+        with pytest.raises(ValueError):
+            LargerFigure(width_side, height_side)
+    assert LargerFigure(True, True).height is True and LargerFigure("1 mm", "2 mm").width == "1 mm"
     # A row that fits leaves no ways, so no larger figure either.
     fitting = LabelFitReport(
         records=(record,),

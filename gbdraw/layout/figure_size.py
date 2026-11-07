@@ -440,6 +440,11 @@ class LargerFigure:
     width: LargerSide | None
     height: LargerSide | None
 
+    def __post_init__(self) -> None:
+        sides = [side for side in (self.width, self.height) if side is not None]
+        if not sides or len({side is True for side in sides}) > 1:
+            raise ValueError("a larger figure names a requested side and estimates every requested side or none")
+
 
 def larger_figure(plan: CompositionPlan, size: RequestedFigureSize, ratio: float | None) -> LargerFigure:
     """The requested sides to make larger, from the drawn figure ``plan`` and the room the labels need as a multiple

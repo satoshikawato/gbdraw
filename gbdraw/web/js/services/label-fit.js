@@ -82,7 +82,9 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
  *   placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS; the dialog lists them once every row is known
  *   not to fit).
- * @property {LargerFigure | null} largerFigure The size the `figure_size` remedy names; null unless it is offered.
+ * @property {LargerFigure | null} largerFigure The requested sides the `figure_size` remedy names, each with Python's
+ *   estimate (CAPACITY-STOP) or without one (true, NO-ROW-WAYS), a side left Auto null; null unless the remedy is
+ *   offered.
  */
 /**
  * A requested side of a figure to make larger: about how long it must be, as Python's message writes it (`829 mm`),
