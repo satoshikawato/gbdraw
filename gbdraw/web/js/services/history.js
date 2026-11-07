@@ -444,6 +444,14 @@ const checkpointSvgBytes = (checkpoint) => (
  *   automatic rerender asked for in the drawing is still owed, pending or refused (D-36); undefined when unknown.
  *   Each side of every checkpoint step reads it as History captures that side, so the restore of a side that was
  *   not drawn tells the listener (`undrawn`), which fits a figure drawn to a requested size again (PD-OI-114).
+ * @property {CheckpointHold} [checkpointHold]
+ *   Runs a checkpoint step, from its first write to the end of its commit and listener (OV-2678).
+ */
+/**
+ * The composition root's hold over the work a checkpoint step asks for while it runs (the automatic rerender): that
+ * work starts once, after the step ends, from the state the step ended with, so the step's own request and its
+ * listener's request draw one figure (OV-2678, as Reset Settings' hold does, OV-1076).
+ * @typedef {<T>(run: () => T) => Promise<Awaited<T>>} CheckpointHold
  */
 
 /**
@@ -552,6 +560,12 @@ const afterSideDrawn = (drawn, options) => {
   return drawn === true && options.drawn ? options.drawn.change : undefined;
 };
 
+/**
+ * The hold of a History whose composition root registered none: the step runs as it is.
+ * @template T @param {() => T} run @returns {Promise<Awaited<T>>}
+ */
+const holdNothing = async (run) => await run();
+
 /** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
   buildIntent,
@@ -577,7 +591,8 @@ export const createHistoryManager = ({
   stepOpened = () => null,
   stepEnded = () => null,
   applySessionPart = () => {},
-  figureDrawn = () => undefined
+  figureDrawn = () => undefined,
+  checkpointHold = holdNothing
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -1393,7 +1408,7 @@ export const createHistoryManager = ({
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
     /** @param {HistoryTransaction | null} tx */
-    const execute = async (tx) => {
+    const execute = (tx) => checkpointHold(async () => {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
       activeCheckpoint = tx;
@@ -1420,7 +1435,7 @@ export const createHistoryManager = ({
         activeCheckpoint = null;
         touchTransaction();
       }
-    };
+    });
     const transaction = beginCheckpoint(label, options);
     return isPromiseLike(transaction)
       ? Promise.resolve(transaction).then(execute)
@@ -2337,11 +2352,9 @@ export const createHistoryRouter = ({
     budget.enforce(entry);
     touchProject();
   };
-  // The Session-level values a step changed. A step that changed a drawing
-  // value (`mark` null) takes every change since the last step ended, so it
-  // keeps one made outside any step (D-15-53 2). A step that changed none
-  // takes only the changes since it opened (`mark`); an earlier one stays
-  // for the next step.
+  // The Session-level values a step changed. A step that changed a drawing value (`mark` null) takes every change
+  // since the last step ended, so it keeps one made outside any step (D-15-53 2). A step that changed none takes only
+  // the changes since it opened (`mark`); an earlier one stays for the next step.
   /** @param {string} label @param {SessionMark | null} [mark] @returns {IntentEntry | null} */
   const sessionStep = (label, mark = null) => {
     const after = sessionRecord();
@@ -2407,6 +2420,7 @@ export const createHistoryRouter = ({
     applySessionPart: (part, direction) => applySession(part, direction, { asLeft: true }),
     // Read at each capture, so the reader the composition root registers later reaches every member.
     figureDrawn: () => (figureDrawnReader ? figureDrawnReader(drawingId) : undefined),
+    checkpointHold: (run) => (checkpointHold ?? holdNothing)(run),
     budget: {
       ...budget,
       join: (member) => joinBudget(drawingId, member),
@@ -2430,6 +2444,7 @@ export const createHistoryRouter = ({
   let settingsStepListener = null;
   /** @type {((drawingId: DrawingId) => boolean) | null} The composition root's figure reader, by drawing. */
   let figureDrawnReader = null;
+  /** @type {CheckpointHold | null} The composition root's hold over the rerender a checkpoint step asks for. */ let checkpointHold = null;
   /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
   const installMember = (drawingId) => {
     const manager = memberHistory(drawingId);
@@ -2832,6 +2847,7 @@ export const createHistoryRouter = ({
     },
     /** @param {(drawingId: DrawingId) => boolean} reader Whether a drawing's figure is the one its state draws. */
     setFigureDrawnReader: (reader) => { figureDrawnReader = reader; },
+    setCheckpointHold: (/** @type {CheckpointHold} */ hold) => { checkpointHold = hold; },
     /** @param {DrawingId} drawingId A new drawing: its History starts empty (R11). */
     addMember: (drawingId) => {
       if (managers.has(drawingId)) throw membershipError('addMember', 'DUPLICATE_DRAWING', drawingId);

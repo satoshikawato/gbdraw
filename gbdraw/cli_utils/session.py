@@ -782,8 +782,8 @@ def render_session_drawings_cli(
     with a committed render. ``-o`` splits into the output directory and
     prefix; several drawings get ``<prefix>_<ID>``. ``dpi`` (``--dpi``) sets
     the PNG resolution of every drawing; without it a PNG is drawn at the PNG
-    DPI the Session saved (``ui.downloadDpi``, D-93), and only ``--dpi`` is
-    noted when no PNG is written. With a re-save, the
+    DPI the Session saved (``ui.downloadDpi``, D-93), else at the default
+    (300), and only ``--dpi`` is noted when no PNG is written. With a re-save, the
     document, validated when it was loaded, is brought to the current version
     before any render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without

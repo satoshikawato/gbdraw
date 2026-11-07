@@ -167,6 +167,8 @@ def test_session_and_export_recipes_make_overwrite_and_formats_explicit() -> Non
     assert session_recipe.count("--overwrite") == 1
     assert export_recipe.count("gbdraw circular") == 1
     assert "-f svg,interactive_svg,png,pdf,eps,ps" in export_recipe
+    # The tracked PNG has one pixel per SVG pixel; the default DPI is 300.
+    assert "--dpi 96" in export_recipe
     assert SCENARIOS["H-CLI-13"] == [
         "cli_export.svg",
         "cli_export.interactive.svg",

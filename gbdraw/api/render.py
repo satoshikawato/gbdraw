@@ -109,8 +109,9 @@ def save_figure_to(
     the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
     PS draw a font whose license forbids embedding it in the nearest
     Liberation font (``gbdraw.render.font_embedding``).
-    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel (``None``: one) and
-    is the resolution in its pHYs chunk (``None``: 96);
+    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel and is the
+    resolution in its pHYs chunk (``None``: the default, 300; ``96`` is one
+    pixel per SVG pixel);
     a figure drawn to a requested size states it in the SVG and PDF.
     """
 
@@ -169,7 +170,7 @@ def save_figure_to(
             del interactive_svg
 
         if cairosvg_module is not None:
-            svg_bytes = document.body.encode("utf-8")
+            sources = _export.cairosvg_sources(canvas, classification.cairosvg, document)
             # Nothing reads the text again: CairoSVG holds the bytes and its own tree.
             del document
             for fmt in classification.cairosvg:
@@ -178,7 +179,7 @@ def save_figure_to(
                 try:
                     with open(staged[Path(out_file)], "wb") as output_file:
                         _export.convert_svg_with_cairosvg(
-                            svg_bytes,
+                            sources[fmt],
                             fmt,
                             write_to=output_file,
                             cairosvg_module=cairosvg_module,
@@ -205,7 +206,7 @@ def render_to_bytes(
 
     ``embed_fonts`` and ``dpi`` as in :func:`save_figure_to`: SVG and
     interactive SVG carry the custom fonts they use, and a PNG scales by ``dpi``
-    and states it in its pHYs chunk.
+    (``None``: the default, 300) and states it in its pHYs chunk.
     """
 
     dpi = checked_png_dpi(dpi)
@@ -222,10 +223,10 @@ def render_to_bytes(
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")
 
     cairosvg_module = _export.require_cairosvg((fmt_norm,))
-    svg_string = write_svg_document(canvas).body.encode("utf-8")
+    source = _export.cairosvg_sources(canvas, (fmt_norm,))[fmt_norm]
     try:
         rendered = _export.convert_svg_with_cairosvg(
-            svg_string,
+            source,
             fmt_norm,
             cairosvg_module=cairosvg_module,
             dpi=dpi,

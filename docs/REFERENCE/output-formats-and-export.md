@@ -108,25 +108,29 @@ Result drawn at Auto exports as before.
 `--dpi` on the command line (also with `--session` and on `gbdraw render`)
 and `dpi` on `save_figure_to()`, `render_to_bytes()`, `Diagram.to_bytes()`,
 `Diagram.save()`, and `RenderOutputRequest` scale a PNG to `dpi / 96` pixels
-per SVG pixel (default 96: one pixel per SVG pixel). Other formats ignore it,
+per SVG pixel. The default is 300, as in the web app, so a PNG is about three
+times as wide and tall as its SVG in px; `--dpi 96` (`dpi=96`) draws one pixel
+per SVG pixel. Other formats ignore it,
 and the command line warns when `--dpi` is given without PNG output. The DPI
 is the caller's export choice, like `--font_file`: a Session saved by the
 command line does not record `--dpi`. Without `--dpi`, `--session` and
 `gbdraw render` draw a PNG at the **PNG DPI** a web app Session saved (72, 96,
 150, 300, or 600), as do `render_session()` and `render_session_drawings()` in
-Python without `dpi=`; a Session without one draws at 96, and another stored
-value is noted and not used. When that DPI makes a PNG too large, the message
-says so, and `--dpi` or `dpi=` draws it at another. Saving the Session again
-keeps its PNG DPI. Every PNG
-that the command line or Python writes carries a pHYs chunk with that DPI (the
-default, 96, when none is given) in pixels per metre, as the web
-app's PNG does.
+Python without `dpi=`; a Session without one draws at the default, 300, and
+another stored value is noted and drawn at 300, as the web app reads it. When
+the DPI makes a PNG too large, the message names the DPI, says whether it is
+the default or the Session's, and names a lower DPI that fits; `--dpi` or
+`dpi=` draws it at another. Saving the Session again keeps its PNG DPI. Every
+PNG that the command line or Python writes carries a pHYs chunk with that DPI
+(the default, 300, when none is given) in pixels per metre, as the web app's
+PNG does.
 
 ## PNG and PDF size limits
 
 On the command line and in Python, a PNG side cannot exceed 32,767 px, and a
 wrapped figure's PDF page side cannot exceed 14,400 pt. A PNG there has
-`dpi / 96` pixels per SVG pixel (one at the default 96 DPI) and a PDF page has
+`dpi / 96` pixels per SVG pixel (3.125 at the default 300 DPI, so a side over
+10,485 SVG px needs a lower `--dpi`) and a PDF page has
 0.75 pt per SVG pixel, so 14,400 pt is 19,200 SVG px. A figure over a limit stops before anything is written, as a failed
 conversion does. For a [wrapped figure](command-line.md#wrap-one-record-over-several-rows)
 the error names the next longer 1-2-5 row length that should fit, or says that

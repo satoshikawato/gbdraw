@@ -42,7 +42,7 @@ from gbdraw.api import (
 from gbdraw.circular import circular_main
 from gbdraw.cli import main as cli_main
 from gbdraw.cli_utils.session import render_main
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.session import (
     read_session_png_dpi,
@@ -1182,9 +1182,9 @@ def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_draw
 def _png_at_dpi(
     run: Any, tmp_path: Path, dpi: int = 300
 ) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int, int] | None]:
-    """The PNG a Session command writes at 96 dpi and with ``--dpi``: both sizes and the second one's pHYs."""
+    """The PNG a Session command writes with ``--dpi 96`` and with ``--dpi``: both sizes and the second one's pHYs."""
 
-    run("-o", str(tmp_path / "plain"), "-f", "png")
+    run("-o", str(tmp_path / "plain"), "-f", "png", "--dpi", "96")
     run("-o", str(tmp_path / "dense"), "-f", "png", "--dpi", str(dpi))
     plain = (tmp_path / "plain.png").read_bytes()
     dense = (tmp_path / "dense.png").read_bytes()
@@ -1213,6 +1213,10 @@ def test_a_session_command_draws_its_png_at_the_dpi_it_is_given(
     assert dense[0] == pytest.approx(plain[0] * 300 / 96, abs=4)
     assert dense[1] == pytest.approx(plain[1] * 300 / 96, abs=4)
     assert phys == (11811, 11811, 1)
+    # A Session without ui.downloadDpi and a call without --dpi: the default, 300 dpi.
+    run("-o", str(tmp_path / "default"), "-f", "png")
+    default = (tmp_path / "default.png").read_bytes()
+    assert (png_size(default), png_phys(default)) == (dense, phys)
 
 
 def test_a_session_27_30_replay_draws_its_png_at_the_dpi_it_is_given(tmp_path: Path) -> None:
@@ -1256,10 +1260,11 @@ def test_a_cli_session_records_no_dpi_and_a_replay_ignores_a_stored_one(tmp_path
     document = saved.read_text(encoding="utf-8")
     assert '"-f","png"' in document.replace(" ", "")  # the arguments are recorded; --dpi is not
     assert "--dpi" not in document
-    # A Session 27-30 whose stored arguments hold --dpi (no released one does) still draws at 96 dpi.
-    legacy = _legacy_session_27_30(tmp_path, "--dpi", "200")
-    render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "png"])
-    assert png_phys((tmp_path / "legacy.png").read_bytes()) == (3780, 3780, 1)
+    # A Session 27-30 whose stored arguments hold --dpi (no released one does) draws at the default: its
+    # 25,000 px figure is refused at 300 dpi, where the stored 50 dpi would have fit.
+    legacy = _legacy_session_27_30(tmp_path, "--dpi", "50")
+    with pytest.raises(ExportError, match=r"at 300 dpi \(the default PNG DPI\)"):
+        render_main(["--session", str(legacy), "-o", str(tmp_path / "legacy"), "-f", "png"])
 
 
 def _session_with_png_dpi(tmp_path: Path, stored: object) -> Path:
@@ -1342,16 +1347,19 @@ def test_a_session_command_draws_its_png_at_the_dpi_the_web_saved(
     assert png_size(saved)[1] == pytest.approx(png_size(plain)[1] * 150 / 96, abs=4)
 
 
-def test_a_session_png_dpi_the_replay_cannot_use_is_noted_and_left_out(
+def test_a_session_png_dpi_the_replay_cannot_use_is_noted_and_drawn_at_the_default(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """As Web Load reads it: another stored value draws at the default, 300 dpi, with a notice naming it."""
+
     pytest.importorskip("cairosvg")
     path = _session_with_png_dpi(tmp_path, 1200)
 
     render_main(["--session", str(path), "--drawing", "circular", "-o", str(tmp_path / "out"), "-f", "png"])
 
-    assert png_phys((tmp_path / "out.png").read_bytes()) == (3780, 3780, 1)
+    assert png_phys((tmp_path / "out.png").read_bytes()) == (11811, 11811, 1)
     assert "1200" in caplog.text and "ui.downloadDpi" in caplog.text
+    assert "the default PNG DPI (300)" in caplog.text
     # The caller's --dpi does not read the stored value at all.
     caplog.clear()
     render_main(["--session", str(path), "--drawing", "circular", "-o", str(tmp_path / "b"), "-f", "png", "--dpi", "72"])
@@ -1453,3 +1461,26 @@ def test_a_png_too_large_at_the_session_dpi_names_that_dpi_and_its_override(tmp_
     with materialize_session(load_session_document(canonical), output_directory=tmp_path) as materialized:
         render_session_drawings(materialized, output_prefix="followed", formats="png", dpi=96)
     assert png_phys((tmp_path / "followed.png").read_bytes()) == (3780, 3780, 1)
+
+
+def test_a_png_too_large_at_the_default_dpi_names_the_default_and_a_lower_dpi(tmp_path: Path) -> None:
+    """The 8 bp figure is 25,000 px wide: a Session without ui.downloadDpi draws its PNG at 300 dpi, over the limit."""
+
+    pytest.importorskip("cairosvg")
+    canonical = tmp_path / "canonical.gbdraw-session.json"
+    _legacy_session_27_30(tmp_path)
+    linear_main(
+        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
+         "--session_output", str(canonical)]
+    )
+    assert "downloadDpi" not in canonical.read_text(encoding="utf-8")
+
+    with pytest.raises(Exception) as refused:
+        render_main(["--session", str(canonical), "-o", str(tmp_path / "too-large"), "-f", "png"])
+    message = str(refused.value)
+    assert "at 300 dpi (the default PNG DPI)" in message
+    assert re.search(r"A DPI of \d+ or lower would fit; --dpi on the command line or dpi= in Python sets it\.", message)
+    assert "ui.downloadDpi" not in message
+    # --dpi 96 keeps the size a PNG had before 300 became the default: one pixel per SVG pixel.
+    render_main(["--session", str(canonical), "-o", str(tmp_path / "old-size"), "-f", "png", "--dpi", "96"])
+    assert png_phys((tmp_path / "old-size.png").read_bytes()) == (3780, 3780, 1)

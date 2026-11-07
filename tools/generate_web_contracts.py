@@ -105,6 +105,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("PALETTE_NAME_ALIASES", "gbdraw.io.colors", "PALETTE_NAME_ALIASES"),
     # The PNG DPI choices a Session's ui.downloadDpi names; the Web keeps their labels.
     ("SESSION_PNG_DPI_CHOICES", "gbdraw.session", "SESSION_PNG_DPI_CHOICES"),
+    # The DPI of a PNG without one: the Web's DPI menu starts there, and the CLI and Python draw at it.
+    ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

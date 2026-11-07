@@ -1,5 +1,5 @@
 {
-  "description": "The PNG DPI a Session saved (ui.downloadDpi), read by gbdraw/session.py read_session_png_dpi and by readDownloadDpi in gbdraw/web/js/services/config-field-readers.js (tools/twins.json). reading: choice (both read dpi), unset (Python: no DPI, no notice; Web: its default, no Load row), other (Python: no DPI with a notice; Web: its default with a Load row).",
+  "description": "The PNG DPI a Session saved (ui.downloadDpi), read by gbdraw/session.py read_session_png_dpi and by readDownloadDpi in gbdraw/web/js/services/config-field-readers.js (tools/twins.json). reading: choice (both read dpi), unset (Python: no DPI, so the default PNG DPI, no notice; Web: the default, no Load row), other (Python: no DPI, so the default, with a notice; Web: the default with a Load row). Both defaults are DEFAULT_PNG_DPI of gbdraw/render/export_limits.py.",
   "cases": [
     { "stored": 300, "reading": "choice", "dpi": 300 },
     { "stored": "150", "reading": "choice", "dpi": 150 },

@@ -182,6 +182,9 @@ export const PALETTE_NAME_ALIASES = Object.freeze({
 /** @type {readonly number[]} */
 export const SESSION_PNG_DPI_CHOICES = Object.freeze([72, 96, 150, 300, 600]);
 
+// gbdraw/render/export_limits.py: DEFAULT_PNG_DPI
+export const DEFAULT_PNG_DPI = 300;
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
