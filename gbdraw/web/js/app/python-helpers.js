@@ -28,7 +28,7 @@ from gbdraw.web_support.comparison_sequences import read_comparison_sequence_jso
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
-from gbdraw.web_support.reply_buffers import json_utf8_chunks, write_reply_buffer
+from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
@@ -139,7 +139,8 @@ def _web_held_segments(held_segments_json):
 def _web_result_transport(item, new_reply_buffer):
     # One Result for the Worker: the pieces, and the children texts it sends
     # as one UTF-8 reply buffer that each sent piece addresses by offset and
-    # length. Each text is written as it is encoded; its piece is placed then.
+    # length. Each text is written in chunks as it is encoded; its piece is
+    # placed once its length is known.
     document = item["document"]
     pieces = []
 
@@ -150,13 +151,15 @@ def _web_result_transport(item, new_reply_buffer):
             if children is None:
                 pieces.append(piece)
                 continue
-            data = children.encode("utf-8")
+            length = 0
+            for data in text_utf8_chunks(children):
+                length += len(data)
+                yield data
             sent = {key: value for key, value in piece.items() if key != "children"}
             sent["offset"] = offset
-            sent["length"] = len(data)
-            offset += len(data)
+            sent["length"] = length
+            offset += length
             pieces.append(sent)
-            yield data
 
     transported = {"name": item["name"]}
     if any(piece.get("children") is not None for piece in document["pieces"]):

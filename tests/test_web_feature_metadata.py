@@ -84,8 +84,12 @@ class _ReplyBuffer:
     def write(self, chunk: bytes) -> None:
         self.chunks.append(bytes(chunk))
 
-    def finish(self) -> bytes:
-        return b"".join(self.chunks)
+    # As finishReplyBuffers joins it: equal to the bytes of its chunks in order.
+    def __eq__(self, other: object) -> bool:
+        joined = other.chunks if isinstance(other, _ReplyBuffer) else [other]
+        return b"".join(self.chunks) == b"".join(joined)  # type: ignore[arg-type]
+
+    __hash__ = None  # type: ignore[assignment]
 
 
 class JsNull:

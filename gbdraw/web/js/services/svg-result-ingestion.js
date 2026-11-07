@@ -468,51 +468,36 @@ const withoutSuffix = (text, suffix) => {
  * @returns {{ content: string, segments: Map<string, Readonly<HeldSegment>> }}
  */
 const sanitizeDocumentPieces = (document, held, sanitizer, { phase, resultIndex }) => {
-  /** Each revision's sanitized text and where it first starts in the content. */
-  /** @type {Map<string, { bytes: number, sanitized: string, at: number }>} */
-  const placed = new Map();
-  /** @type {string[]} */
-  const parts = [];
-  let length = 0;
-  /** @param {string} text */
-  const append = (text) => {
-    parts.push(text);
-    length += text.length;
-  };
-  append(withoutSuffix(sanitizeText(`${document.head}</svg>`, sanitizer), '</svg>'));
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const segments = new Map();
+  const parts = [withoutSuffix(sanitizeText(`${document.head}</svg>`, sanitizer), '</svg>')];
   let sanitizedPieces = 0;
   let memoHits = 0;
   for (const piece of document.pieces) {
     if (piece.kind === 'raw') {
-      append(sanitizeFragment(piece.text, sanitizer));
+      parts.push(sanitizeFragment(piece.text, sanitizer));
       continue;
     }
-    append(withoutSuffix(sanitizeFragment(`${piece.start}</g>`, sanitizer), '</g>'));
-    const known = placed.get(piece.revision) ?? held.get(piece.revision);
-    let sanitized;
-    if (known) {
+    parts.push(withoutSuffix(sanitizeFragment(`${piece.start}</g>`, sanitizer), '</g>'));
+    let segment = segments.get(piece.revision) ?? held.get(piece.revision);
+    if (segment) {
       memoHits += 1;
-      sanitized = known.sanitized;
     } else {
       if (typeof piece.children !== 'string') throw invalidResult();
-      sanitized = sanitizeFragment(piece.children, sanitizer);
+      segment = Object.freeze({
+        revision: piece.revision,
+        bytes: piece.bytes,
+        sanitized: sanitizeFragment(piece.children, sanitizer)
+      });
       sanitizedPieces += 1;
     }
-    if (!placed.has(piece.revision)) placed.set(piece.revision, { bytes: piece.bytes, sanitized, at: length });
-    append(sanitized);
-    append('</g>');
+    segments.set(piece.revision, segment);
+    parts.push(segment.sanitized, '</g>');
   }
-  append('</svg>');
+  parts.push('</svg>');
   recordStructuralMetric('svgSanitizedPieceCount', sanitizedPieces, { phase, resultIndex });
   recordStructuralMetric('svgMemoHitCount', memoHits, { phase, resultIndex });
-  const content = parts.join('');
-  // Each segment's text is a slice of the content, not a second copy of it.
-  /** @type {Map<string, Readonly<HeldSegment>>} */
-  const segments = new Map();
-  placed.forEach(({ bytes, sanitized, at }, revision) => {
-    segments.set(revision, Object.freeze({ revision, bytes, sanitized: content.slice(at, at + sanitized.length) }));
-  });
-  return { content, segments };
+  return { content: parts.join(''), segments };
 };
 
 /**

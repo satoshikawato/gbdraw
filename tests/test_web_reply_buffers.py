@@ -11,6 +11,7 @@ import pytest
 from gbdraw.web_support.reply_buffers import (
     REPLY_CHUNK_CHARACTERS,
     json_utf8_chunks,
+    text_utf8_chunks,
     write_reply_buffer,
 )
 
@@ -23,9 +24,6 @@ class _Buffer:
 
     def write(self, chunk: bytes) -> None:
         self.chunks.append(bytes(chunk))
-
-    def finish(self) -> bytes:
-        return b"".join(self.chunks)
 
 
 def _dumped(value: object) -> bytes:
@@ -78,9 +76,9 @@ def test_a_large_catalog_is_written_in_chunks_of_about_one_mebibyte() -> None:
     catalog = _catalog(4000)
     buffer = _Buffer()
 
-    joined = write_reply_buffer(lambda: buffer, json_utf8_chunks(catalog))
+    assert write_reply_buffer(lambda: buffer, json_utf8_chunks(catalog)) is buffer
 
-    assert joined == _dumped(catalog)
+    assert b"".join(buffer.chunks) == _dumped(catalog)
     assert len(buffer.chunks) > 4
     # A chunk closes once it passes the size; one slice of features is the overshoot.
     assert max(len(chunk) for chunk in buffer.chunks) < 2 * REPLY_CHUNK_CHARACTERS
@@ -94,9 +92,6 @@ def test_writing_a_catalog_never_holds_its_whole_text_in_the_python_heap() -> No
         def write(self, chunk: bytes) -> None:
             pass
 
-        def finish(self) -> None:
-            return None
-
     tracemalloc.start()
     try:
         write_reply_buffer(_Discard, json_utf8_chunks(catalog))
@@ -108,3 +103,23 @@ def test_writing_a_catalog_never_holds_its_whole_text_in_the_python_heap() -> No
     # the size. The chunks hold a few chunks' worth, whatever the size.
     assert size > 24 * REPLY_CHUNK_CHARACTERS
     assert peak < 12 * REPLY_CHUNK_CHARACTERS
+
+
+def test_a_long_text_is_cut_by_code_point_and_never_splits_a_character() -> None:
+    # Characters of one to four UTF-8 bytes; a slice boundary falls inside the run.
+    text = ("a" + "µ" + "日" + "\U0001F9EC") * (REPLY_CHUNK_CHARACTERS // 2 + 3)
+    chunks = list(text_utf8_chunks(text))
+
+    assert len(chunks) == 3
+    assert b"".join(chunks) == text.encode("utf-8")
+    assert all(chunk.decode("utf-8") for chunk in chunks)
+    assert max(len(chunk.decode("utf-8")) for chunk in chunks) == REPLY_CHUNK_CHARACTERS
+    assert list(text_utf8_chunks("")) == []
+
+
+def test_a_json_string_longer_than_a_chunk_is_cut_too() -> None:
+    value = {"items": [{"features": [{"nucleotide_sequence": "ACGT" * REPLY_CHUNK_CHARACTERS}]}]}
+    chunks = list(json_utf8_chunks(value))
+
+    assert b"".join(chunks) == _dumped(value)
+    assert max(len(chunk) for chunk in chunks) <= 2 * REPLY_CHUNK_CHARACTERS

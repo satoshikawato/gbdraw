@@ -127,45 +127,77 @@ const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
  */
 
 /**
- * A reply buffer Python writes (gbdraw/web_support/reply_buffers.py).
- * @typedef {object} ReplyBuffer
- * @property {(chunk: PythonBytesChunk) => void} write Copy one chunk out of the Python heap.
- * @property {() => ArrayBuffer} finish The chunks written, in order, as one exact-length buffer.
+ * A reply buffer Python writes (gbdraw/web_support/reply_buffers.py): the
+ * metadata or feature catalog JSON, or a Result's children texts, in UTF-8
+ * chunks of about 1 MiB. Each `write` copies one chunk out of the Python heap
+ * before Pyodide releases it. Python returns the buffer itself; the Worker
+ * joins its chunks after Python returns (`finishReplyBuffers`), so the reply
+ * briefly takes about twice its size here: the chunk copies and the joined
+ * buffer.
  */
+export class ReplyBuffer {
+  /** @type {Uint8Array<ArrayBuffer>[]} */
+  #chunks = [];
+  #byteLength = 0;
+
+  /** @param {PythonBytesChunk} chunk */
+  write(chunk) {
+    const view = chunk.getBuffer('u8');
+    try {
+      const copy = view.data.slice();
+      this.#chunks.push(copy);
+      this.#byteLength += copy.byteLength;
+    } finally {
+      view.release();
+    }
+  }
+
+  /** The chunks, in order, as one exact-length buffer; the chunk copies are dropped. */
+  finish() {
+    const bytes = new Uint8Array(this.#byteLength);
+    let offset = 0;
+    for (const copy of this.#chunks) {
+      bytes.set(copy, offset);
+      offset += copy.byteLength;
+    }
+    this.#chunks = [];
+    return bytes.buffer;
+  }
+}
+
+/** The factory Python calls for each reply buffer. */
+export const createReplyBuffer = () => new ReplyBuffer();
 
 /**
- * Make a reply buffer: Python writes the metadata and feature catalog JSON
- * and each Result's children texts in chunks of about 1 MiB, so the Python
- * heap never holds a whole text or its whole bytes. `finish` joins the chunks
- * once into the buffer the reply transfers.
- * @returns {ReplyBuffer}
+ * Join the reply buffers of a converted Generate result in place: its
+ * `metadata`, its `featureCatalog` and each Result's `segments`. Called at
+ * result admission, where a buffer too large to allocate fails as the
+ * conversion of Python's bytes did before.
+ * @param {unknown} result
  */
-export const createReplyBuffer = () => {
-  /** @type {Uint8Array<ArrayBuffer>[]} */
-  let chunks = [];
-  let byteLength = 0;
-  return {
-    write(chunk) {
-      const view = chunk.getBuffer('u8');
-      try {
-        const copy = view.data.slice();
-        chunks.push(copy);
-        byteLength += copy.byteLength;
-      } finally {
-        view.release();
-      }
-    },
-    finish() {
-      const bytes = new Uint8Array(byteLength);
-      let offset = 0;
-      for (const copy of chunks) {
-        bytes.set(copy, offset);
-        offset += copy.byteLength;
-      }
-      chunks = [];
-      return bytes.buffer;
+export const finishReplyBuffers = (result) => {
+  if (!result || typeof result !== 'object') return;
+  const { results } = /** @type {{ results?: unknown }} */ (result);
+  for (const holder of [result, ...(Array.isArray(results) ? results : [])]) {
+    if (!holder || typeof holder !== 'object') continue;
+    const fields = /** @type {Record<string, unknown>} */ (holder);
+    for (const key of ['metadata', 'featureCatalog', 'segments']) {
+      const value = fields[key];
+      if (value instanceof ReplyBuffer) fields[key] = value.finish();
     }
-  };
+  }
+};
+
+/**
+ * Python's Generate result as JavaScript values, with its reply buffers joined.
+ * @param {{ toJs?: (options: { dict_converter: typeof Object.fromEntries }) => unknown } | null | undefined} resultHandle
+ */
+const convertGenerationResult = (resultHandle) => {
+  const result = typeof resultHandle?.toJs === 'function'
+    ? resultHandle.toJs({ dict_converter: Object.fromEntries })
+    : resultHandle;
+  finishReplyBuffers(result);
+  return result;
 };
 
 export const collectGenerationResultTransferList = (payload) => {
@@ -1377,9 +1409,7 @@ const runGeneration = async ({
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');
     failureStage = 'result-admission';
-    result = typeof resultHandle?.toJs === 'function'
-      ? resultHandle.toJs({ dict_converter: Object.fromEntries })
-      : resultHandle;
+    result = convertGenerationResult(resultHandle);
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-end');
     const pythonDiagnostics = (
       result?._diagnostics

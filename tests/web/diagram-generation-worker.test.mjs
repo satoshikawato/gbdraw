@@ -419,6 +419,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     let interruptBuffer = null;
     let helperReply = () => 'null';
     let wrapperNotice = null;
+    let wrapperReply = null;
     const fs = new Proxy({ analyzePath: () => ({ exists: false }), readdir: () => [] }, {
       get: (target, name) => target[name] ?? (() => {})
     });
@@ -440,6 +441,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
           run_canonical_request_wrapper: (...args) => {
             assert.equal(args.at(-1), createReplyBuffer);
             if (wrapperNotice) args.at(-2)(wrapperNotice);
+            if (wrapperReply) return wrapperReply(args.at(-1));
             return { error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } };
           }
         })[name]
@@ -475,6 +477,36 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
       ['run', 13, undefined, undefined]
     ]);
     wrapperNotice = null;
+    // The reply buffers Python wrote are joined after it returns, at result admission:
+    // the run carries exact-length buffers, and a buffer too large to allocate fails
+    // there, as the conversion of Python's bytes did.
+    const pythonBytes = (text) => {
+      const data = new TextEncoder().encode(text);
+      return { getBuffer: () => ({ data, release: () => {} }) };
+    };
+    replies.length = 0;
+    wrapperReply = (newReplyBuffer) => {
+      const metadata = newReplyBuffer();
+      metadata.write(pythonBytes('{"a":'));
+      metadata.write(pythonBytes('1}'));
+      return { results: [], metadata };
+    };
+    run(14);
+    await settle();
+    const joinedRun = replies.find(({ type }) => type === 'run');
+    assert.equal(joinedRun.ok, true);
+    assert.equal(new TextDecoder().decode(joinedRun.results.metadata), '{"a":1}');
+    replies.length = 0;
+    wrapperReply = (newReplyBuffer) => {
+      const metadata = newReplyBuffer();
+      metadata.finish = () => { throw new RangeError('Array buffer allocation failed'); };
+      return { results: [], metadata };
+    };
+    run(15);
+    await settle();
+    const failedRun = replies.find(({ type }) => type === 'run');
+    assert.deepEqual([failedRun.ok, failedRun.error.code, failedRun.error.stage], [false, 'UNKNOWN', 'result-admission']);
+    wrapperReply = null;
     replies.length = 0;
     run(11);
     booted[0] = 2;
