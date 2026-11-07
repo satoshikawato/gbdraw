@@ -113,6 +113,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `core-pr` | `core` | never |
 | [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [COVERAGE-FLOOR](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#line-coverage) | `tests/test_coverage_floor.py` | `core-pr` | `core` | never |
+| [SVG11-VOCABULARY](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#svg-11-vocabulary) | `tests/test_reference_svg_vocabulary.py` | `core-pr` | `core` | never |
 
 ### Allowlists
 
@@ -145,6 +146,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `FUNCTION_LINES` | count-map |
 | [WEB-FUNCTION-SIZE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size) | `tests/web/function-size-ratchet.test.mjs` | `MAX_FUNCTION_LINES` | count |
 | [COVERAGE-FLOOR](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#line-coverage) | `tests/test_coverage_floor.py` | `MAX_UNCOVERED_PERCENT` | py-count |
+| [SVG11-VOCABULARY](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#svg-11-vocabulary) | `tests/test_reference_svg_vocabulary.py` | `SVG11_EXTENSIONS` | py-set |
 
 ## Product Contract records and the tests that cite them
 

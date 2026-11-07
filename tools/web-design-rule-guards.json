@@ -815,6 +815,26 @@
           "kind": "py-count"
         }
       ]
+    },
+    {
+      "id": "SVG11-VOCABULARY",
+      "heading": "SVG 1.1 vocabulary",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_reference_svg_vocabulary.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_reference_svg_vocabulary.py",
+          "symbol": "SVG11_EXTENSIONS",
+          "kind": "py-set"
+        }
+      ]
     }
   ]
 }
