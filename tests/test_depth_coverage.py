@@ -7,6 +7,7 @@ randomized cases compare against value for value.
 
 from __future__ import annotations
 
+import tracemalloc
 from pathlib import Path
 
 import numpy as np
@@ -179,11 +180,12 @@ def _binning(rng: np.random.Generator) -> dict[str, object]:
 
 @pytest.mark.parametrize("seed", range(10))
 def test_binned_depth_equals_the_row_table_algorithm(seed: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parsed files and API tables bin exactly as the row table did, also across chunk boundaries."""
+    """Parsed files and API tables bin exactly as the row table did, also across read and sum chunk boundaries."""
 
     rng = np.random.default_rng(seed)
     for case in range(30):
         monkeypatch.setattr(depth_module, "_CHUNK_ROWS", int(rng.choice([11, 97, 1 << 20])))
+        monkeypatch.setattr(depth_module, "_SUM_CHUNK_BASES", (1, 5, 1 << 20)[case % 3])
         path = tmp_path / f"depth-{case}.tsv"
         text = _depth_text(rng)
         path.write_text(text, encoding="utf-8")
@@ -269,3 +271,90 @@ def test_read_depth_tsv_returns_the_rows_of_the_file(tmp_path: Path, monkeypatch
     expected["reference_name"] = expected["reference_name"].astype("string")
 
     pd.testing.assert_frame_equal(read_depth_tsv(str(path)), expected)
+
+
+def _previous_record_prefix_sums(record: SeqRecord, depths: np.ndarray, record_len: int) -> np.ndarray:
+    """The per-base running sums that ``depth_df`` built before it kept them only at window bounds."""
+
+    base, coord_step = _read_coord_map(record)
+    source_start = base if coord_step == 1 else base - record_len + 1
+    prefix = np.zeros(record_len + 1, dtype=np.float64)
+    first = max(source_start, 1)
+    last = min(source_start + record_len - 1, int(depths.size))
+    if first > last:
+        return prefix
+    shown = depths[first - 1 : last]
+    if coord_step > 0:
+        low = first - source_start
+    else:
+        shown = shown[::-1]
+        low = source_start + record_len - 1 - last
+    high = low + int(shown.size)
+    sums = prefix[low + 1 : high + 1]
+    sums[:] = shown
+    np.cumsum(sums, out=sums)
+    prefix[high + 1 :] = prefix[high]
+    return prefix
+
+
+def _random_depths(rng: np.random.Generator, kind: str, size: int) -> np.ndarray:
+    if kind == "float":
+        values = rng.random(size) * rng.choice([1e-3, 1.0, 1e6])
+        values[rng.random(size) < 0.05] = -0.0
+        values[rng.random(size) < 0.05] = 1e-300
+    else:
+        values = rng.integers(0, np.iinfo(kind).max, size=size, endpoint=True).astype(kind)
+    values.flags.writeable = False
+    return values
+
+
+# Records whose drawn range starts at 1, past 1, before 1, or runs past the parsed positions, on either strand.
+_RANGES = [(1, 1), (1, -1), (37, 1), (37, -1), (-25, 1), (-25, -1), (900, 1), (900, -1), (1300, 1), (1300, -1)]
+
+
+@pytest.mark.parametrize("kind", ["float", "uint8", "uint16", "uint32"])
+@pytest.mark.parametrize(("base", "coord_step"), _RANGES)
+def test_window_sums_equal_the_per_base_running_sums(
+    kind: str, base: int, coord_step: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every window mean is bit for bit what the per-base running sums gave, at any chunk size."""
+
+    rng = np.random.default_rng([base & 0xFFFF, coord_step + 1, len(kind)])
+    depths = _random_depths(rng, kind, 1000)
+    coverage = DepthCoverage(depths={"chr": depths})
+    for chunk in (1, 7, 64, 1 << 20):
+        monkeypatch.setattr(depth_module, "_SUM_CHUNK_BASES", chunk)
+        for record_len, window, step in ((1, 1, 1), (999, 10, 3), (1200, 97, 97), (640, 1000, 50)):
+            record = SeqRecord(Seq(None, length=record_len), id="chr")
+            _write_coord_map(record, base=base if coord_step == 1 else base + record_len - 1, step=coord_step)
+            prefix = _previous_record_prefix_sums(record, depths, record_len)
+            starts = np.arange(0, record_len, step, dtype=np.int64)
+            ends = np.minimum(starts + window, record_len)
+            expected = (prefix[ends] - prefix[starts]) / np.maximum(ends - starts, 1)
+
+            actual = depth_df(record, coverage, window, step)["depth"].to_numpy()
+
+            assert actual.dtype == expected.dtype
+            assert np.array_equal(actual, expected)
+            assert np.array_equal(np.signbit(actual), np.signbit(expected))
+
+
+def test_binning_a_record_holds_no_per_base_float_array() -> None:
+    """The window step keeps running sums only at window bounds, not one float64 per base."""
+
+    length = 16_000_000
+    depths = np.ones(length, dtype=np.uint8)
+    depths.flags.writeable = False
+    record = SeqRecord(Seq(None, length=length), id="chr")
+    coverage = DepthCoverage(depths={"chr": depths})
+
+    tracemalloc.start()
+    try:
+        binned = depth_df(record, coverage, 100_000, 100_000)
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert binned["depth"].tolist() == [1.0] * 160
+    # The stored depths take 1 byte per base; a per-base float64 array would take 8.
+    assert peak < length

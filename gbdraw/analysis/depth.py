@@ -25,6 +25,8 @@ DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 _DEPTH_TSV_CACHE_MAXSIZE = 8
 # Rows per chunk read: a chunk's transient columns stay small beside the stored depths.
 _CHUNK_ROWS = 1 << 20
+# Bases summed per chunk when binning: the running sums stay small beside the stored depths.
+_SUM_CHUNK_BASES = 1 << 20
 _EMPTY_DEPTH_DTYPES = {"reference_name": "category", "position": "int64", "depth": "float64"}
 # Whole depths take the first of these that holds the largest; others are float64.
 _WHOLE_DEPTH_DTYPES = (np.dtype(np.uint8), np.dtype(np.uint16), np.dtype(np.uint32))
@@ -399,35 +401,54 @@ def _select_record_depths(record: SeqRecord, coverage: DepthCoverage) -> DepthAr
     )
 
 
-def _record_prefix_sums(record: SeqRecord, depths: DepthArray, record_len: int) -> NDArray[np.float64]:
-    """Running sums of the depth at each local base of the record, after a leading 0.
+def _record_window_sums(
+    record: SeqRecord,
+    depths: DepthArray,
+    record_len: int,
+    starts: NDArray[np.int64],
+    ends: NDArray[np.int64],
+) -> NDArray[np.float64]:
+    """The depth summed over each window ``starts[i] .. ends[i] - 1`` of the record's local bases.
 
     The record shows source positions ``start .. start + record_len - 1``,
-    read backwards for a reverse complement. The sums are those of the
-    record's per-base float64 depths, without holding that array: bases
-    outside the parsed positions add 0.
+    read backwards for a reverse complement; bases outside the parsed
+    positions add 0. Each sum is ``prefix[end] - prefix[start]`` of the
+    running float64 sums of the per-base depths after a leading 0. The
+    running sums are kept only at window bounds: the bases are summed one
+    chunk of ``_SUM_CHUNK_BASES`` at a time, each chunk carrying on from the
+    last sum of the one before, so every sum is the same chain of additions
+    as one pass over the whole record.
     """
 
+    bounds, bound_of = np.unique(np.concatenate((starts, ends)), return_inverse=True)
+    prefix = np.zeros(bounds.size, dtype=np.float64)
     source_start = _record_source_start(record)
     _coord_base, coord_step = _read_coord_map(record)
-    prefix = np.zeros(record_len + 1, dtype=np.float64)
     first = max(source_start, 1)
     last = min(source_start + record_len - 1, int(depths.size))
-    if first > last:
-        return prefix
-    shown = depths[first - 1 : last]
-    if coord_step > 0:
-        low = first - source_start
-    else:
-        shown = shown[::-1]
-        low = source_start + record_len - 1 - last
-    high = low + int(shown.size)
-    # Depths are cast in place and summed in place: no second per-base array.
-    sums = prefix[low + 1 : high + 1]
-    sums[:] = shown
-    np.cumsum(sums, out=sums)
-    prefix[high + 1 :] = prefix[high]
-    return prefix
+    if first <= last:
+        shown = depths[first - 1 : last]
+        if coord_step > 0:
+            low = first - source_start
+        else:
+            shown = shown[::-1]
+            low = source_start + record_len - 1 - last
+        # prefix[low + 1 + i] is the running sum up to shown[i]; prefix[.. low] is 0.
+        buffer = np.empty(min(_SUM_CHUNK_BASES, int(shown.size)), dtype=np.float64)
+        carry = np.float64(0.0)
+        for offset in range(0, int(shown.size), buffer.size):
+            sums = buffer[: min(buffer.size, int(shown.size) - offset)]
+            sums[:] = shown[offset : offset + sums.size]
+            if offset:
+                sums[0] += carry
+            np.cumsum(sums, out=sums)
+            carry = sums[-1]
+            chunk_first = low + 1 + offset
+            inside = slice(*np.searchsorted(bounds, (chunk_first, chunk_first + sums.size)))
+            prefix[inside] = sums[bounds[inside] - chunk_first]
+        # Past the last shown base the running sum stays at its total.
+        prefix[np.searchsorted(bounds, low + int(shown.size), side="right") :] = carry
+    return prefix[bound_of[starts.size :]] - prefix[bound_of[: starts.size]]
 
 
 def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> None:
@@ -469,11 +490,11 @@ def depth_df(
     if record_len <= 0:
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
-    prefix = _record_prefix_sums(record, _select_record_depths(record, coverage_source), record_len)
     starts = np.arange(0, record_len, int(step), dtype=np.int64)
     ends = np.minimum(starts + int(window), record_len)
     bin_lengths = np.maximum(ends - starts, 1)
-    means = (prefix[ends] - prefix[starts]) / bin_lengths
+    depths = _select_record_depths(record, coverage_source)
+    means = _record_window_sums(record, depths, record_len, starts, ends) / bin_lengths
 
     if min_depth is not None or max_depth is not None:
         lower = float(min_depth) if min_depth is not None else None
