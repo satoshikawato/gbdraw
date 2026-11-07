@@ -45,7 +45,7 @@ const savedSession = async (...args) => {
   return { ...built, resources: await encodeSessionResources(built.resources) };
 };
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
-const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { holdReadBytes, takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -59,8 +59,10 @@ test('Save binds a File Generate described with no hash or decode and encodes it
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request describes the File and stages its bytes (the transfer releases the byte cache).
   const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
+  const releaseReads = holdReadBytes();
   const described = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
   await takeFileBytesForTransfer(file);
+  releaseReads();
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA, mode: 'circular',
@@ -73,6 +75,7 @@ test('Save binds a File Generate described with no hash or decode and encodes it
   });
   assert.equal(reads, 1);
   assert.equal(count('base64EncodeCount'), 0);
+  // Each Save reads the File once: the page keeps no input bytes between Saves.
   for (const save of [1, 2]) {
     metrics.length = 0;
     const saved = await savedSession(sourceState, committed, bindingDrawings(sourceState));
@@ -82,7 +85,7 @@ test('Save binds a File Generate described with no hash or decode and encodes it
       decodes: count('base64DecodeCount'),
       byteReads: count('resourceByteReadCount'),
       encodes: count('base64EncodeCount')
-    }, { reads: 2, hashes: 0, decodes: 0, byteReads: 0, encodes: 1 }, `Save ${save}`);
+    }, { reads: 1 + save, hashes: 0, decodes: 0, byteReads: 0, encodes: 1 }, `Save ${save}`);
     assert.deepEqual(Object.keys(saved.resources), ['src']);
     assert.equal(saved.resources.src.data, Buffer.from(text).toString('base64'));
     assert.equal(saved.webFiles.bindings.c_gb.resourceId, 'src');

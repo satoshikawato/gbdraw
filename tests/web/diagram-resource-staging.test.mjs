@@ -116,10 +116,11 @@ test('unacknowledged preparation, replacement, and reset never publish stale own
 const genbankRequest = (...resourceIds) => ({
   records: resourceIds.map((resourceId) => ({ source: { kind: 'genbank', resourceId } }))
 });
-const sha256Hex = (text) => createHash('sha256').update(text).digest('hex');
+// The content token of bytes below one 16 MiB piece: the SHA-256 of the SHA-256 of the piece.
+const contentToken = (text) => createHash('sha256').update(createHash('sha256').update(text).digest()).digest('hex');
 const stagedTokens = (prepared) => prepared.stagedResources.map(({ cacheToken }) => cacheToken);
 
-// A4 (IN-A): the Worker keeps the resources of every drawing's committed request, named by the sha256 of their bytes.
+// A4 (IN-A): the Worker keeps the resources of every drawing's committed request, named by the content token of their bytes.
 test('alternating drawings reuse the resources every drawing committed', async () => {
   const committed = [];
   const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
@@ -130,20 +131,20 @@ test('alternating drawings reuse the resources every drawing committed', async (
   };
 
   const first = await transport.prepare(circular);
-  assert.deepEqual(stagedTokens(first), [sha256Hex('CIRCULAR')]);
+  assert.deepEqual(stagedTokens(first), [contentToken('CIRCULAR')]);
   assert.equal(first.commit(), true);
   committed.push(circular);
 
   const second = await transport.prepare(linear);
-  assert.deepEqual(stagedTokens(second), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')]);
-  assert.deepEqual(second.retainedResourceTokens, [sha256Hex('CIRCULAR')], 'the Circular drawing keeps its resource');
+  assert.deepEqual(stagedTokens(second), [contentToken('LINEAR A'), contentToken('LINEAR B')]);
+  assert.deepEqual(second.retainedResourceTokens, [contentToken('CIRCULAR')], 'the Circular drawing keeps its resource');
   assert.equal(second.commit(), true);
   committed.push(linear);
 
   const third = await transport.prepare(circular);
   assert.deepEqual(third.stagedResources, [], 'Circular again transfers nothing');
-  assert.deepEqual(third.resourceManifest.map(({ cacheToken }) => cacheToken), [sha256Hex('CIRCULAR')]);
-  assert.deepEqual([...third.retainedResourceTokens].sort(), [sha256Hex('LINEAR A'), sha256Hex('LINEAR B')].sort());
+  assert.deepEqual(third.resourceManifest.map(({ cacheToken }) => cacheToken), [contentToken('CIRCULAR')]);
+  assert.deepEqual([...third.retainedResourceTokens].sort(), [contentToken('LINEAR A'), contentToken('LINEAR B')].sort());
   assert.equal(third.commit(), true);
 
   const fourth = await transport.prepare(linear);
@@ -163,9 +164,9 @@ test('equal bytes under two resource IDs share one token and one transfer', asyn
   });
   assert.deepEqual(
     prepared.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]),
-    [['first-copy', sha256Hex(text)], ['second-copy', sha256Hex(text)]]
+    [['first-copy', contentToken(text)], ['second-copy', contentToken(text)]]
   );
-  assert.deepEqual(stagedTokens(prepared), [sha256Hex(text)]);
+  assert.deepEqual(stagedTokens(prepared), [contentToken(text)]);
 });
 
 test('a resource no committed drawing names is released', async () => {
@@ -182,7 +183,7 @@ test('a resource no committed drawing names is released', async () => {
   const next = await transport.prepare(linear);
   assert.deepEqual(next.retainedResourceTokens, [], 'the old Circular bytes are not retained');
   assert.equal(next.commit(), true);
-  assert.deepEqual(stagedTokens(await transport.prepare(circular)), [sha256Hex('OLD CIRCULAR')]);
+  assert.deepEqual(stagedTokens(await transport.prepare(circular)), [contentToken('OLD CIRCULAR')]);
 });
 
 test('staging decodes base64 with the one shared decoder (OV-1560)', async () => {
@@ -299,7 +300,7 @@ test('staging names payloads by inline text or by the payload owner identity', a
   const again = await transport.prepare({ request, resources: resources(views[1]) });
   assert.deepEqual(again.stagedResources, []);
   assert.deepEqual(again.resourceManifest.map(({ cacheToken }) => cacheToken), first.resourceManifest.map(({ cacheToken }) => cacheToken));
-  assert.deepEqual(first.resourceManifest.map(({ cacheToken }) => cacheToken), [fileText, 'LOCUS inline\nORIGIN\n//\n', 'LOCUS view\nORIGIN\n//\n'].map(sha256Hex));
+  assert.deepEqual(first.resourceManifest.map(({ cacheToken }) => cacheToken), [fileText, 'LOCUS inline\nORIGIN\n//\n', 'LOCUS view\nORIGIN\n//\n'].map(contentToken));
   assert.equal(again.commit(), true);
 });
 
@@ -307,7 +308,7 @@ test('staging names payloads by inline text or by the payload owner identity', a
 // (gbdraw/web/CLAUDE.md, Runtime data flow). The Worker keeps its bytes while a drawing's
 // draft holds it now, and only that drawing's renders name it as held.
 const depthText = 'record-1\t1\t5\nrecord-1\t2\t7\n';
-const depthToken = sha256Hex(depthText);
+const depthToken = contentToken(depthText);
 const depthDescriptor = () => ({ ...descriptor(depthText, 'reads.depth.tsv'), kind: 'depth-track-file' });
 const shownDepth = (depth = depthDescriptor()) => ({
   request: {
@@ -388,7 +389,7 @@ test('another drawing\'s renders keep a file a draft holds and release it once t
   (await transport.prepare({ ...hidden, drawingId: 'drawing-a' })).commit();
   committed[0] = hidden;
   const linear = { request: genbankRequest('linear-genbank'), resources: { 'linear-genbank': descriptor('LINEAR') } };
-  const circularToken = sha256Hex('LOCUS depth\nORIGIN\n//\n');
+  const circularToken = contentToken('LOCUS depth\nORIGIN\n//\n');
 
   // Drawing A's draft still holds its hidden Depth file: drawing B's renders keep it, and never name it as held.
   for (let render = 0; render < 2; render += 1) {

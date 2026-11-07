@@ -12,6 +12,7 @@ import {
   bytesToText,
   cloneFileBytesForTransfer,
   getSessionResourceSource,
+  holdReadBytes,
   readFileBytes
 } from './file-content-cache.js';
 
@@ -727,7 +728,9 @@ export const readOncePerFile = (files, key, read, limit = Infinity) => {
     const sameKind = [...reads.keys()].filter((readKey) => readKey.startsWith(kind));
     if (sameKind.length >= limit) reads.delete(sameKind[0]);
   }
-  const started = read();
+  // The reads of one reading share the files' bytes, which the page drops when it ends (`holdReadBytes`).
+  const releaseReads = holdReadBytes();
+  const started = (async () => read())().finally(releaseReads);
   reads.set(key, started);
   started.catch(() => { if (reads.get(key) === started) reads.delete(key); });
   return started;

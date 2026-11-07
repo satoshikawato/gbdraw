@@ -28,7 +28,7 @@ const {
 const { adoptCurrentSessionResources, createSessionResourceFileView, fileBackedDescriptor } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
 );
-const { readFileText } = await import(
+const { holdReadBytes, readFileText } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'file-content-cache.js'))
 );
 const { setResourcePayloadOwner } = await import(
@@ -372,6 +372,8 @@ test('source recipe counts survive transfer and follow same-name source replacem
         };
         try {
           assert.equal(await readFileText(file), text);
+          // Generate holds its reads: the record count and the transfer share one read of the File.
+          const releaseReads = holdReadBytes();
           assert.deepEqual(await readRecipe(), expected);
           const first = await transport.prepare({ request: session.renderRequest, resources: session.resources });
           const sourceTransfer = first.stagedResources.find(({ resourceId }) => resourceId === 'source');
@@ -382,6 +384,7 @@ test('source recipe counts survive transfer and follow same-name source replacem
           assert.equal(sourceTransfer.bytes.byteLength, 0);
           assert.equal(new TextDecoder().decode(transferred), text);
           first.commit();
+          releaseReads();
           for (let run = 0; run < 2; run += 1) {
             // Canonical projection creates a fresh descriptor for the same payload owner.
             session.resources.source = setResourcePayloadOwner({ ...descriptor }, file);
@@ -391,12 +394,13 @@ test('source recipe counts survive transfer and follow same-name source replacem
             assert.equal(warm.resourceManifest.find(({ resourceId }) => resourceId === 'source').cacheToken, previousToken);
             warm.commit();
           }
-          assert.equal(reads, input === 'native' ? 1 : 0);
+          // A File is read once to discover it and once more by the first Generate; a Worker cache hit reads nothing.
+          assert.equal(reads, input === 'native' ? 2 : 0);
           assert.equal(decodes, input === 'lazy' ? 1 : 0);
           // Discovery may refill released content; recipe construction must not do so.
           assert.equal(await readFileText(file), text);
           assert.deepEqual(await readRecipe(), expected);
-          assert.equal(reads, input === 'native' ? 2 : 0);
+          assert.equal(reads, input === 'native' ? 3 : 0);
           assert.equal(decodes, input === 'lazy' ? 2 : 0);
         } finally {
           delete globalThis.__GBDRAW_TEST_HOOKS__;

@@ -359,3 +359,19 @@ assert.ok(downloadedBlob instanceof Blob);
     drafts.splice(0, drafts.length);
   }
 }
+
+// The page keeps no input bytes after Save (memory plan P2): the next read of
+// the input reads the File again.
+{
+  const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const file = state.inputFiles.fileOf(circularFiles.c_gb);
+  URL.createObjectURL = () => 'blob:p2-session';
+  try {
+    assert.equal((await exportSession('p2-release')).status, 'saved');
+  } finally {
+    URL.createObjectURL = originalCreateObjectUrl;
+  }
+  const readsAfterSave = inputReads;
+  await readFileBytes(file);
+  assert.equal(inputReads, readsAfterSave + 1, 'Save gave the input bytes back');
+}

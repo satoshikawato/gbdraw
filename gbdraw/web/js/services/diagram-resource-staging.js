@@ -3,7 +3,7 @@ import { base64ToBytesInTasks } from './byte-utils.js';
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js';
 import {
-  readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
+  contentTokenOfBytes, holdReadBytes, readFileContentFacts, releaseFileContentCache, takeFileBytesForTransfer
 } from './file-content-cache.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
 import { fileBackedReaderOf } from './session-resource-backing.js';
@@ -184,7 +184,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
    *   retain?: boolean
    * }} [payload]
    */
-  const prepare = async ({ request, resources, drawingId = null, retain = false } = {}) => {
+  const stage = async ({ request, resources, drawingId = null, retain = false } = {}) => {
     const previousHeldTokens = heldTokens;
     const preparedEpoch = workerEpoch;
     const retained = committedHeldTokens();
@@ -216,14 +216,11 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       let cacheToken = knownTokens.get(identity);
       let hashedFile = false;
       if (!cacheToken) {
-        if (owner && owner !== descriptor) {
-          hashedFile = true;
-          // The File's digest, cached on it: its bytes stay cached until the transfer below takes them.
-          cacheToken = await readFileContentToken(/** @type {FileLike} */ (owner));
-        } else {
-          bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
-          cacheToken = await resourceContentToken(new Uint8Array(bytes));
-        }
+        // A File's token is known from its first read, or comes from a read the transfer below shares.
+        hashedFile = Boolean(owner && owner !== descriptor);
+        if (!hashedFile) bytes = await descriptorTransferBuffer(resourceId, descriptor, owner);
+        cacheToken = hashedFile ? (await readFileContentFacts(/** @type {FileLike} */ (owner))).token
+          : await contentTokenOfBytes(new Uint8Array(/** @type {ArrayBuffer} */ (bytes)));
         knownTokens.set(identity, cacheToken);
       }
       referencedDeclaredBytes += descriptor.size;
@@ -258,12 +255,8 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       recordStructuralMetric('transferredResourceBytes', bytes.byteLength, { resourceId });
       stagedResources.push({ resourceId, cacheToken, bytes });
     }
-    recordSessionLifecycleEvent('resource-stage-end', {
-      referencedResourceCount: referencedIds.length,
-      referencedDeclaredBytes,
-      bytesTransferred,
-      materializationCount
-    });
+    recordSessionLifecycleEvent('resource-stage-end', { referencedResourceCount: referencedIds.length,
+      referencedDeclaredBytes, bytesTransferred, materializationCount });
 
     return {
       resourceManifest,
@@ -284,6 +277,13 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
         return true;
       }
     };
+  };
+
+  // A File read for its token shares that read with its transfer (`holdReadBytes`).
+  /** @param {Parameters<typeof stage>[0]} [payload] */
+  const prepare = (payload) => {
+    const releaseReads = holdReadBytes();
+    return stage(payload).finally(releaseReads);
   };
 
   return { prepare, reset };

@@ -25,6 +25,7 @@ const {
   validateWebFileBindings
 } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const {
+  holdReadBytes,
   readFileBytes,
   readFileText
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -255,9 +256,14 @@ test('ordinary uploaded File objects keep the native read behavior', async () =>
     return nativeArrayBuffer();
   };
 
+  // Reads under one hold share one read; once the hold ends, the page drops the bytes.
+  const releaseReads = holdReadBytes();
   assert.equal(await readFileText(file), 'native upload');
   assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
   assert.equal(reads, 1);
+  releaseReads();
+  assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
+  assert.equal(reads, 2);
 });
 
 test('adopted export reuses descriptors and encodes only a replacement', async () => {
