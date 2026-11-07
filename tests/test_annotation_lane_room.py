@@ -721,3 +721,32 @@ def test_a_clipped_inside_slot_stops_its_lanes_at_the_centre() -> None:
     assert bands[-1] == (0.0, 0.0)
     ((path,),) = [list(items["r4"].iter(f"{_SVG}path"))]
     assert "nan" not in path.get("d", "").lower()
+
+
+def test_an_inside_slot_measures_its_letters_no_deeper_than_where_they_end_before_the_centre() -> None:
+    # Two stacks of six regions half a circle apart need six lanes each. Six lanes of 14 px pass the 60 px the slot
+    # has before the centre, and letters past the centre would cover the whole circle (as the drawer's measure does
+    # when the mark's edge is floored at 1 px). Measured there, each deep lane's labels would keep the other stack
+    # out of it, so the slot would grow lanes of its own for each label; measured where its letters still end
+    # before the centre, the two stacks share their six lanes (OV-2668).
+    limit = 60.0
+
+    def letters(_annotation, _style, _font_size, _place_bp, mark_offset):
+        reach = 50.0 if mark_offset + _OFFSET + 10.0 <= limit - 2.0 else 4_900.0
+        return LabelExtent(-reach, reach, 10.0)
+
+    annotations = tuple(
+        ResolvedRegionAnnotation(
+            id=f"{stack}{index}", set_id="s", record_index=0, segments=((start + index, start + 100),),
+            midpoint_bp=start + 50.0, span_bp=100 - index, label=f"{stack}{index}", mark="band", lane=None,
+            style=RegionAnnotationStyle(),
+        )
+        for stack, start in (("a", 100), ("b", 5_100))
+        for index in range(6)
+    )
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: 10_000}, params=AnnotationTrackParams(set_id="s"),
+        labels=LabelSizing(font_size=10.0, extent=letters), join_origin=True, room_bounds=packer.RoomBounds(limit_px=limit),
+    )
+
+    assert max(item.lane for item in track.placements) + 1 == 6

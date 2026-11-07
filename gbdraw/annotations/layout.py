@@ -528,11 +528,21 @@ def layout_annotation_track(
             return float(track_params.padding_px) + lane * lane_pitch(lane_count) + room_before - half_stroke
         return float(track_params.padding_px) + (lane + 1) * lane_pitch(lane_count) + room_before + half_stroke
 
+    depths: dict[tuple[int, str], float] = {}
+
     def letters_in_lane(annotation: ResolvedRegionAnnotation, place_bp: float, lane: int) -> LabelExtent | None:
-        # The letters beside the mark in a lane the packer tries, of a slot with as many lanes as that one needs.
+        # The letters beside the mark in a lane the packer tries, of a slot with as many lanes as that one needs. Within
+        # a room limit no lane is drawn past it, so no deeper than where letters as deep as in the first lane still end
+        # within it: nearer the centre the measure has no room to draw them (OV-2668).
         if not track_params.show_labels or not annotation.label:
             return None
-        return extent_at(annotation, place_bp, mark_offset(annotation, lane, lane + 1, 0.0))
+        offset, key = mark_offset(annotation, lane, lane + 1, 0.0), (annotation.record_index, annotation.id)
+        if room_bounds.limit_px is not None:
+            if key not in depths:
+                depths[key] = extent_at(annotation, place_bp, mark_offset(annotation, 0, 1, 0.0)).depth_px
+            reach = track_params.padding_px + style_of(annotation).label_offset + depths[key]
+            offset = min(offset, max(0.0, room_bounds.limit_px - reach))
+        return extent_at(annotation, place_bp, offset)
 
     def padding(annotation: ResolvedRegionAnnotation) -> float:
         scale = float(labels.bp_per_px.get(annotation.record_index, 1.0))
@@ -565,17 +575,12 @@ def layout_annotation_track(
         if spans_slots or not track_params.show_labels
         else _rooms_within(
             _lane_rooms(
-                placements,
-                record_lengths=record_lengths,
-                style_of=style_of,
-                extent_at=extent_at,
+                placements, record_lengths=record_lengths, style_of=style_of, extent_at=extent_at,
                 mark_offset_px=lambda placement, room_before: mark_offset(
                     placement.annotation, placement.lane, max(1, lane_count), room_before
                 ),
                 lane_pitch_px=lane_pitch(max(1, lane_count)),
-                labels_above=labels.labels_above,
-                join_origin=join_origin,
-                label_position=label_position,
+                labels_above=labels.labels_above, join_origin=join_origin, label_position=label_position,
                 at_least=room_bounds.at_least,
             ),
             bare_extent_px=bare,
@@ -586,11 +591,7 @@ def layout_annotation_track(
     required = bare + room
     clipped = False
     # A to_slot span takes its extent from the two slots, not from the slot's own size.
-    if (
-        track_params.to_slot is None
-        and available_extent_px is not None
-        and required > float(available_extent_px)
-    ):
+    if track_params.to_slot is None and available_extent_px is not None and required > float(available_extent_px):
         if track_params.overflow == "error":
             raise ValidationError(
                 f"Annotation slot {slot_id!r} requires {required:.2f}px but only "

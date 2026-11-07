@@ -467,8 +467,10 @@ needed a room the slot did not add is drawn across the mark it meets and
 counts as one region label without room before the centre (`1 region label
 without room before the centre`). This only warns: the Web app shows "Region
 labels cross other region marks: there is no room for them before the centre
-(N)." over the figure, with no **Choose a fix** button. Fewer labels or a
-slot outside the axis (`side=outside`) make room.
+(N)." over the figure, with no **Choose a fix** button. When such a slot
+shares its lanes among labels, it reads a label in a deep lane no nearer the
+centre than where its letters still end before it. Fewer labels or a slot
+outside the axis (`side=outside`) make room.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its
