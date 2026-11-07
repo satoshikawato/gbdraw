@@ -25,6 +25,34 @@
 // it is passed to (`forEach()`, `new Promise()`), and any other function is
 // `(anonymous)`. Functions with one name in one module count as the longest
 // of them.
+//
+// Logic in composition roots. A composition root of the Web owner graph
+// (WEB_OWNER_GRAPH_DEFAULTS.compositionRoots in
+// tools/web-owner-graph-detectors.mjs) should hold wiring: it creates the
+// owners, passes them to each other as ports and returns what the app uses.
+// Its root function is the function at the top level of the module that calls
+// a `create*` factory imported by name from another module (an owner
+// creation); each composition root has exactly one. The logic written in the
+// root is every function of two or more lines whose nearest enclosing function
+// is the root function: a `const f = () => {...}` statement, a function passed
+// inline to a factory as a port, a method of an object literal built in the
+// root, a computed getter, a watch callback. Each counts with its whole span,
+// as above, so the functions nested in it count once, in it. A one-line
+// function written directly in the root function, such as the port
+// `drawingTabs: () => state.drawingTabs.value`, is wiring and does not count;
+// a one-line function inside a counted one counts with its span. Statements
+// written directly in the root body and the other top-level functions of the
+// module are not counted here; the root's whole size stays bounded by
+// MAX_FUNCTION_LINES and FUNCTION_LINES.
+// COMPOSITION_ROOT_LOGIC_LINES records the total lines of that logic per
+// `<path>::<root function>`. A total may shrink but not grow, and every
+// composition root has an entry. When it fails, move the new logic into a
+// module factory and pass it to the root as a port, or shrink other logic in
+// the same root. Adding or raising an entry (a new composition root, a renamed
+// root function, more logic) needs the Owner's approval. An entry whose key
+// names no root function now (the module is no longer a composition root, or
+// its root function took another name) is reported as removable, whatever its
+// value.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,6 +60,7 @@ import { dirname, join, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
 import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
 
 const MAX_FUNCTION_LINES = 150;
@@ -123,12 +152,20 @@ const FUNCTION_LINES = {
   'workers/losat-threaded-worker.js::runThreadedLosat': 191
 };
 
+const COMPOSITION_ROOT_LOGIC_LINES = {
+  'app/app-setup.js::createAppSetup': 1114,
+  'app/feature-editor.js::createFeatureEditor': 3,
+  'app/legend-layout.js::createLegendLayout': 74,
+  'app/legend.js::createLegendManager': 19
+};
+
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WEB_JS = join(REPOSITORY_ROOT, 'gbdraw', 'web', 'js');
 const TSCONFIG = join(REPOSITORY_ROOT, 'tests', 'web', 'types', 'tsconfig.json');
 
-// The functions of one parsed source file: [{ name, line, lines }], `line`
-// being the first line of the function.
+// The functions of one parsed source file: [{ name, line, lines, parent }],
+// `line` being the first line of the function and `parent` the nearest
+// function around it (null at the top level of the module).
 const functionsOf = (source, SyntaxKind) => {
   const FUNCTIONS = new Set([
     SyntaxKind.FunctionDeclaration, SyntaxKind.FunctionExpression, SyntaxKind.ArrowFunction,
@@ -191,26 +228,28 @@ const functionsOf = (source, SyntaxKind) => {
     return call ?? (node.kind === SyntaxKind.ObjectLiteralExpression ? null : '(anonymous)');
   };
   const found = [];
-  const visit = (node, scope) => {
+  const visit = (node, scope, enclosing) => {
     let inner = scope;
+    let innerEnclosing = enclosing;
     if (NAMED_SCOPES.has(node.kind)) {
       const name = nameOf(node);
       if (name !== null) inner = [...scope, name];
       if (FUNCTIONS.has(node.kind)) {
         const line = lineOf(node.getStart(source));
-        found.push({ name: inner.join('.'), line, lines: lineOf(node.end) - line + 1 });
+        innerEnclosing = { name: inner.join('.'), line, lines: lineOf(node.end) - line + 1, parent: enclosing };
+        found.push(innerEnclosing);
       }
     }
-    node.forEachChild((child) => visit(child, inner));
+    node.forEachChild((child) => visit(child, inner, innerEnclosing));
   };
-  visit(source, []);
+  visit(source, [], null);
   return found;
 };
 
 // Parses `files` (absolute paths) with the pinned TypeScript; the modules of
 // the R14 config in its project, any other file in an inferred one.
-// Map(file -> functionsOf).
-const measure = async (files) => {
+// Map(file -> read(source, SyntaxKind)), `read` being functionsOf by default.
+const measure = async (files, read = functionsOf) => {
   const { API, ast: { SyntaxKind } } = await typescriptApi();
   const api = new API({ cwd: REPOSITORY_ROOT });
   try {
@@ -218,12 +257,51 @@ const measure = async (files) => {
     return new Map(files.map((file) => {
       const source = snapshot.getDefaultProjectForFile(file)?.program.getSourceFile(file);
       assert.ok(source, `the TypeScript API returned no source file for ${file}`);
-      return [file, functionsOf(source, SyntaxKind)];
+      return [file, read(source, SyntaxKind)];
     }));
   } finally {
     api.close();
   }
 };
+
+// The root functions of one parsed composition root module and the logic
+// written in it: { roots, logic, oneLine }, `roots` and `logic` as functionsOf
+// entries. A root function is a top-level function that calls a `create*`
+// factory the module imports by name. `logic` lists the functions of two or
+// more lines whose parent is the only root function, and `oneLine` counts its
+// one-line ones, which are wiring.
+const compositionRootOf = (source, SyntaxKind) => {
+  const functions = functionsOf(source, SyntaxKind);
+  const factories = new Set(source.statements
+    .filter((statement) => statement.kind === SyntaxKind.ImportDeclaration && statement.importClause
+      && statement.importClause.namedBindings && statement.importClause.namedBindings.kind === SyntaxKind.NamedImports)
+    .flatMap((statement) => statement.importClause.namedBindings.elements.map((element) => element.name.text))
+    .filter((name) => /^create[A-Z]/.test(name)));
+  const creationLines = [];
+  const visit = (node) => {
+    if (node.kind === SyntaxKind.CallExpression && node.expression.kind === SyntaxKind.Identifier
+      && factories.has(node.expression.text)) {
+      creationLines.push(source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1);
+    }
+    node.forEachChild(visit);
+  };
+  visit(source);
+  const roots = functions.filter(({ parent, line, lines }) => parent === null
+    && creationLines.some((creation) => creation >= line && creation < line + lines));
+  const written = roots.length === 1 ? functions.filter(({ parent }) => parent === roots[0]) : [];
+  return {
+    roots,
+    logic: written.filter(({ lines }) => lines > 1),
+    oneLine: written.filter(({ lines }) => lines === 1).length
+  };
+};
+
+// Why a composition root module at `path` (under gbdraw/web/js/) has no single
+// root function, or null when `roots` (compositionRootOf) holds exactly one.
+const rootFunctionProblem = (path, roots) => (roots.length === 1 ? null
+  : `gbdraw/web/js/${path}: ${roots.length} top-level functions create owners`
+    + `${roots.length ? ` (${roots.map(({ name, line }) => `${name} at line ${line}`).join(', ')})` : ''}; `
+    + 'a composition root creates its owners in one root function');
 
 test('a function is measured from its first token to its last and named by its binding', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'web-function-size-'));
@@ -315,4 +393,135 @@ test('no Web function is longer than MAX_FUNCTION_LINES or its FUNCTION_LINES en
   assert.deepEqual(failures, [], `functions above ${MAX_FUNCTION_LINES} lines, or above their FUNCTION_LINES entry. `
     + 'Split them at an owner boundary (gbdraw/web/CLAUDE.md "Module ownership"); adding or raising an entry '
     + `in FUNCTION_LINES needs the Owner's approval.\n  ${failures.join('\n  ')}`);
+});
+
+test('the logic of a composition root is every function of two or more lines written directly in its root function', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'web-root-logic-'));
+  const file = join(directory, 'fixture.js');
+  writeFileSync(file, [
+    "import { createOwner } from './owner.js';",
+    "import * as helpers from './helpers.js';",
+    'const createLocal = () => ({});',
+    'const local = () => createLocal() && helpers.createOther();',
+    'export const createState = () => ({ value: 0 });',
+    'export const createRoot = ({ watch }) => {',
+    '  const owner = createOwner({',
+    '    onPick: (item) => {',
+    '      return item;',
+    '    },',
+    '    getValue: () => 0,',
+    '    getNext: () =>',
+    '      1',
+    '  });',
+    '  const run = () => {',
+    '    const nested = () => 1;',
+    '    return nested();',
+    '  };',
+    '  watch(() => owner.value, () => {',
+    '    run();',
+    '  });',
+    '  const steps = { first() { return 1; } };',
+    '  return { owner, run, steps, get size() { return 0; } };',
+    '};',
+    ''
+  ].join('\n'));
+  try {
+    const { roots, logic, oneLine } = (await measure([file], compositionRootOf)).get(file);
+    assert.deepEqual(roots.map(({ name, line, lines }) => `${line}+${lines} ${name}`), ['6+19 createRoot']);
+    assert.deepEqual(logic.map(({ name, line, lines }) => `${line}+${lines} ${name}`), [
+      '8+3 createRoot.owner.onPick',
+      '12+2 createRoot.owner.getNext',
+      '15+4 createRoot.run',
+      '19+3 createRoot.watch()'
+    ]);
+    // getValue, the getter of watch(), steps.first and size.
+    assert.equal(oneLine, 4);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a composition root module without exactly one root function fails by name', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'web-root-function-'));
+  const none = join(directory, 'none.js');
+  const two = join(directory, 'two.js');
+  writeFileSync(none, [
+    "import { createOwner } from './owner.js';",
+    'const createLocal = () => ({});',
+    'export const createRoot = () => createLocal();',
+    'export const owner = createOwner;',
+    ''
+  ].join('\n'));
+  writeFileSync(two, [
+    "import { createOwner, createOther } from './owner.js';",
+    'export const createFirst = () => createOwner();',
+    'export const createSecond = () => {',
+    '  return createOther();',
+    '};',
+    ''
+  ].join('\n'));
+  try {
+    const measured = await measure([none, two], compositionRootOf);
+    assert.equal(rootFunctionProblem('app/none.js', measured.get(none).roots),
+      'gbdraw/web/js/app/none.js: 0 top-level functions create owners; '
+      + 'a composition root creates its owners in one root function');
+    assert.equal(rootFunctionProblem('app/two.js', measured.get(two).roots),
+      'gbdraw/web/js/app/two.js: 2 top-level functions create owners (createFirst at line 2, createSecond at line 3); '
+      + 'a composition root creates its owners in one root function');
+    assert.deepEqual(measured.get(two).logic, []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the logic written in each composition root does not grow beyond COMPOSITION_ROOT_LOGIC_LINES', async (t) => {
+  const recorded = COMPOSITION_ROOT_LOGIC_LINES;
+  assert.deepEqual(Object.keys(recorded), Object.keys(recorded).sort(), 'keep COMPOSITION_ROOT_LOGIC_LINES sorted by key');
+  Object.entries(recorded).forEach(([key, lines]) => {
+    assert.ok(Number.isInteger(lines) && lines >= 0, `COMPOSITION_ROOT_LOGIC_LINES['${key}'] must be an integer of 0 or more`);
+  });
+  const paths = [...WEB_OWNER_GRAPH_DEFAULTS.compositionRoots].sort();
+  const measured = await measure(paths.map((path) => join(WEB_JS, path)), compositionRootOf);
+  const observed = {};
+  const rows = new Map();
+  const rootProblems = paths.flatMap((path) => {
+    const { roots, logic, oneLine } = measured.get(join(WEB_JS, path));
+    const problem = rootFunctionProblem(path, roots);
+    if (problem !== null) return [problem];
+    const key = `${path}::${roots[0].name}`;
+    observed[key] = logic.reduce((sum, { lines }) => sum + lines, 0);
+    rows.set(key, { path, root: roots[0], functions: logic.length, oneLine });
+    return [];
+  });
+  assert.deepEqual(rootProblems, [], rootProblems.join('\n'));
+  rows.forEach(({ root, functions, oneLine }, key) => t.diagnostic(`${key}: ${observed[key]} lines in ${functions} `
+    + `functions of two or more lines; ${oneLine} one-line functions not counted (the root function has ${root.lines} lines)`));
+  // An entry whose key is no root function now, whatever its value (0 too).
+  const stale = Object.keys(recorded).filter((key) => !Object.hasOwn(observed, key));
+  const rootFunctionOf = new Map([...rows.values()].map(({ path, root }) => [path, root.name]));
+  const { above, lowerable } = compareCountBaseline(observed, recorded);
+  reportLowerable(t, 'COMPOSITION_ROOT_LOGIC_LINES', [
+    ...lowerable.filter((entry) => !stale.some((key) => entry.startsWith(`${key} `))),
+    ...stale.map((key) => {
+      const path = key.slice(0, key.indexOf('::'));
+      return `${key} ${recorded[key]} -> removed (${rootFunctionOf.has(path)
+        ? `the root function of ${path} is now ${rootFunctionOf.get(path)}` : `${path} is no longer a composition root`})`;
+    })
+  ]);
+  const failures = [
+    ...Object.keys(observed).filter((key) => !Object.hasOwn(recorded, key)).map((key) => {
+      const { path, root } = rows.get(key);
+      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${observed[key]} lines of logic in a composition root `
+        + 'without a COMPOSITION_ROOT_LOGIC_LINES entry (a new composition root or a renamed root function)';
+    }),
+    ...above.filter(({ key }) => Object.hasOwn(recorded, key)).map(({ key, observed: lines, recorded: entry }) => {
+      const { path, root, functions } = rows.get(key);
+      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${lines} lines of logic in ${functions} functions `
+        + `of two or more lines (COMPOSITION_ROOT_LOGIC_LINES ${entry})`;
+    })
+  ];
+  assert.deepEqual(failures, [], 'the logic written in a composition root grew. Move the new logic into a module '
+    + 'factory and pass it to the root as a port, or shrink other logic in the same root '
+    + '(docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md "Web function size"); adding or raising an entry in '
+    + `COMPOSITION_ROOT_LOGIC_LINES needs the Owner's approval.\n  ${failures.join('\n  ')}`);
 });
