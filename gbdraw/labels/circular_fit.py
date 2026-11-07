@@ -785,7 +785,7 @@ def check_circular_label_fit(
     verify: CircularLabelFitVerifier,
     *,
     warn_search_seconds: float = WARN_SEARCH_SECONDS,
-    larger_figure: Callable[[float], LargerFigure] | None = None,
+    larger_figure: Callable[[float | None], LargerFigure] | None = None,
 ) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
     """Raise, warn, or pass for a drawn figure's records.
 
@@ -802,7 +802,9 @@ def check_circular_label_fit(
     much more room than the map has (CAPACITY-STOP) raises at once: the report
     lists every failing record, has no rows, and no row is searched. With a
     requested figure size, ``larger_figure`` gives the size those records need
-    from the largest room they need (the ratio the message states).
+    from the largest room they need (the ratio the message states); any other
+    report names the requested sides without an estimate (None), offered when
+    no row fits (NO-ROW-WAYS).
     """
 
     outcome = circular_label_outcome(layouts)
@@ -827,7 +829,10 @@ def check_circular_label_fit(
     )
     deadline = None if search_seconds is None else time.monotonic() + search_seconds
     report = LabelFitReport(
-        records=_fit_records(failing), rows=search.rows(deadline=deadline), drawn=drawn
+        records=_fit_records(failing),
+        rows=search.rows(deadline=deadline),
+        drawn=drawn,
+        larger_figure=None if larger_figure is None else larger_figure(None),
     )
     raise_or_warn(report, row_search=search, search_seconds=search_seconds)
     return report, search

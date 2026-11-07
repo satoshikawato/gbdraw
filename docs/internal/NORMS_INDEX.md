@@ -271,7 +271,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open) | Partial feature ends drawn open | ACCEPTED | features.partial-ends-open | 1 | — | 0 |
 | [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
-| [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 2 | scenario revision 1 | 8 |
+| [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 3 | scenario revision 2 | 12 |
 | [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 7 |
 | [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
 | [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 7 |
@@ -705,11 +705,15 @@ are listed under "Cited ids without a record".
   - `tests/web/session-request.test.mjs`
   - `tests/web/session50-load-resave.test.mjs`
 - [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size)
+  - `tests/test_circular_label_fit.py`
+  - `tests/test_figure_size.py`
+  - `tests/test_web_label_fit.py`
   - `tests/web/drawing-context.test.mjs`
   - `tests/web/drawing-list.test.mjs`
   - `tests/web/figure-size-form.test.mjs`
   - `tests/web/figure-size.playwright.spec.js`
   - `tests/web/helpers/live-work-allowlist.mjs`
+  - `tests/web/label-fit.test.mjs`
   - `tests/web/legend-edit-leaves.test.mjs`
   - `tests/web/legend-edit-refit.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`

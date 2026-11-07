@@ -197,6 +197,41 @@ def test_overlaps_raise_with_six_verified_rows() -> None:
     assert not raised.value.report.drawn
 
 
+def test_a_requested_size_reaches_the_report_with_or_without_an_estimate() -> None:
+    """At a requested size the callback names the requested sides: without a ratio for the report after the row search,
+    which offers a larger figure when no row fits (NO-ROW-WAYS, PD-OI-114 r3), and with the ratio the message states
+    when labels were not placed (CAPACITY-STOP, D-14)."""
+
+    from gbdraw.labels.fit import LabelCapacityRecord
+    from gbdraw.layout.figure_size import LargerFigure
+
+    ratios: list[float | None] = []
+
+    def larger(ratio: float | None) -> LargerFigure:
+        ratios.append(ratio)
+        return LargerFigure(True if ratio is None else "240.3 mm", None)
+
+    def never(x: float, y: float, font: float, spacing: float) -> bool:
+        return False
+
+    verify, _calls = _verifier(never)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([_layout("P1", never)], verify, larger_figure=larger)
+    report = raised.value.report
+    assert all(row.values is None for row in report.rows)
+    assert ratios == [None] and report.larger_figure == LargerFigure(True, None)
+    assert "figure_size" in report.room_remedies
+
+    ratios.clear()
+    capacity = LabelCapacityRecord(562, 8.0, 2.49, ("filter", "label_text", "font", "linear"))
+    over = dataclasses.replace(_layout("A.1", never), capacity={"circular_outer": capacity})
+    with pytest.raises(LabelsDoNotFitError) as stopped:
+        check_circular_label_fit([over], verify, larger_figure=larger)
+    assert ratios == [2.5] and isinstance(ratios[0], float)
+    assert stopped.value.report.larger_figure == LargerFigure("240.3 mm", None)
+    assert "figure_size" in stopped.value.report.room_remedies
+
+
 def test_row_steps_stronger_until_the_full_assembly_fits() -> None:
     def full_needs_more(x: float, y: float, font: float, spacing: float) -> bool:
         return y >= 1.2 - 1e-9 or font <= 11.0

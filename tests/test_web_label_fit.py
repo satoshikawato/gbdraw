@@ -174,9 +174,17 @@ def test_a_report_with_no_fitting_row_lists_the_ways_to_make_room() -> None:
     assert "To make room:" not in format_label_fit_report(pending)
     # Only the labels the capacity check reads (outer and inner Circular labels) have these ways.
     assert report(6.0, kind="linear").room_remedies == ()
-    # A larger figure is a way only for records not placed (CAPACITY-STOP) at a requested size (D-14).
-    larger = LargerFigure("240.3 mm", None)
-    assert replace(at_floor, larger_figure=larger).room_remedies == ("filter", "label_text", "linear")
+    # At a requested size a larger figure is also a way here, named without an estimate (PD-OI-114 r3): the Web gets
+    # the requested sides, and an Auto report keeps its payload and words (above).
+    sized = replace(at_floor, larger_figure=LargerFigure(True, None))
+    assert sized.room_remedies == ("filter", "label_text", "figure_size", "linear")
+    payload = label_fit_report_payload(sized, "circular")
+    assert payload["remedies"] == ["filter", "label_text", "figure_size", "linear"]
+    assert payload["largerFigure"] == {"width": True, "height": None}
+    assert "largerFigure" not in label_fit_report_payload(at_floor, "circular")
+    assert "  - make the figure larger: increase --figure_width;" in format_label_fit_report(sized).splitlines()
+    # No ways without a horizontal label kind, so none of them is a larger figure either.
+    assert replace(report(6.0, kind="linear"), larger_figure=LargerFigure(True, None)).room_remedies == ()
 
 
 def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> None:

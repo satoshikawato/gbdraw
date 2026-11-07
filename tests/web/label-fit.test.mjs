@@ -68,6 +68,20 @@ test('a report reads Python\'s larger-figure estimate only with the figure_size 
   assert.throws(() => normalizeReport(sized({ width: '240.3 mm', height: null }, ['filter'])), undefined, 'no estimate without the remedy');
 });
 
+// After the row search finds no row that fits (NO-ROW-WAYS), Python names the requested sides without an estimate
+// (true), since the room the labels need is not known (PD-OI-114 r3).
+test('a report reads the requested sides of a larger figure that Python cannot estimate', () => {
+  const sized = (largerFigure) => ({ ...report([]), remedies: ['filter', 'figure_size', 'linear'], largerFigure });
+  assert.deepEqual(normalizeReport(sized({ width: true, height: null })).largerFigure, { width: true, height: null });
+  assert.deepEqual(normalizeReport(sized({ width: null, height: true })).largerFigure, { width: null, height: true });
+  assert.deepEqual(normalizeReport(sized({ width: true, height: true })).largerFigure, { width: true, height: true });
+  // A side is an estimate, true, or null: never false, and never an estimate on one side and none on the other.
+  for (const bad of [{ width: false, height: null }, { width: true, height: false }, { width: true, height: '9.5 in' },
+    { width: '240.3 mm', height: true }, { width: 'true', height: null }, { width: 1, height: null }]) {
+    assert.throws(() => normalizeReport(sized(bad)), undefined, JSON.stringify(bad));
+  }
+});
+
 test('the failure reader keeps Python\'s rows in order, the record counts, and the row token', () => {
   const rows = [foundRow('outward_vertical', 1.15), row('tighter_rows', 'not_found', { reason: 'No fit' }),
     row('combination', 'not_computed'),

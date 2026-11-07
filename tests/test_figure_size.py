@@ -899,6 +899,67 @@ def test_labels_not_placed_at_a_requested_size_offer_a_larger_figure() -> None:
     assert about > 150 * 3.0
 
 
+def test_no_fitting_row_at_a_requested_size_offers_a_larger_figure_without_an_estimate() -> None:
+    """NO-ROW-WAYS at a requested size (PD-OI-114 r3): after the row search, when no row fits, the ways to make room
+    also name the requested size options, without a value, since the room the labels need is not known. Without a
+    requested size the words stay as they were, byte for byte."""
+
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport, LabelFitRow, format_label_fit_report
+    from gbdraw.layout.figure_size import LargerFigure, larger_figure
+
+    plan = plan_composition(CompositionRequest(primary=CompositionItem("primary", Aabb(0.0, 0.0, 300.0, 200.0))))
+    width, height = FigureLength(180.0, "mm"), FigureLength(6.0, "in")
+    record = LabelFitRecord("AP027078.1", "circular_outer", 562, 6.0, LabelFit(30, 2))
+    rows = (
+        LabelFitRow("outward_both", "not_found", reason="Does not fit up to 2 Outer X and Y Offset"),
+        LabelFitRow("smaller_font", "not_found", reason="Does not fit down to 6 pt"),
+    )
+    auto = LabelFitReport(records=(record,), rows=rows, drawn=False)
+    assert format_label_fit_report(auto) == "\n".join([
+        "AP027078.1: 562 outer labels do not fit at 6 pt (30 label pairs overlap, 2 leader pairs cross). "
+        "Nothing was drawn.",
+        "No single change of the label settings fits this map.",
+        "To make room:",
+        "  - label fewer features with --label_blacklist or --label_whitelist;",
+        "  - shorten the label text with --qualifier_priority (for example gene names only);",
+        "  - or draw a Linear map (gbdraw linear).",
+    ])
+
+    def sized(size: RequestedFigureSize) -> LabelFitReport:
+        return LabelFitReport(records=(record,), rows=rows, drawn=False, larger_figure=larger_figure(plan, size, None))
+
+    for size, words in (
+        (RequestedFigureSize(width), "--figure_width"),
+        (RequestedFigureSize(None, height), "--figure_height"),
+        (RequestedFigureSize(width, height), "--figure_width and --figure_height"),
+    ):
+        report = sized(size)
+        assert report.room_remedies == ("filter", "label_text", "figure_size", "linear")
+        assert format_label_fit_report(report).splitlines()[2:] == [
+            "To make room:",
+            "  - label fewer features with --label_blacklist or --label_whitelist;",
+            "  - shorten the label text with --qualifier_priority (for example gene names only);",
+            f"  - make the figure larger: increase {words};",
+            "  - or draw a Linear map (gbdraw linear).",
+        ]
+    # The requested sides, with no estimate: a side left auto stays None.
+    assert sized(RequestedFigureSize(width)).larger_figure == LargerFigure(True, None)
+    # The sides are all estimated or none, and at least one is requested (as the Web reader requires).
+    for width_side, height_side in ((True, "240.3 mm"), ("240.3 mm", True), (None, None)):
+        with pytest.raises(ValueError):
+            LargerFigure(width_side, height_side)
+    assert LargerFigure(True, True).height is True and LargerFigure("1 mm", "2 mm").width == "1 mm"
+    # A row that fits leaves no ways, so no larger figure either.
+    fitting = LabelFitReport(
+        records=(record,),
+        rows=(*rows, LabelFitRow("outward_vertical", "found", {"labels.unified_adjustment.outer_labels.y_radius_offset": 1.5}, (1.0, 1.0))),
+        drawn=False,
+        larger_figure=larger_figure(plan, RequestedFigureSize(width), None),
+    )
+    assert fitting.room_remedies == () and "make the figure larger" not in format_label_fit_report(fitting)
+
+
 def test_the_fit_steps_with_the_radii_whose_labels_were_placed(monkeypatch: pytest.MonkeyPatch) -> None:
     """120 labels at 10 pt are placed at the configured radius and not placed below about 128 px (CAPACITY-STOP). A
     radius drawn without them is marked as leaving them out, so the walk stops after two radii with labels instead of

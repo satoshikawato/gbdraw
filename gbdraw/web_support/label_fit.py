@@ -54,6 +54,7 @@ from gbdraw.labels.fit import (
     shown_capacity_ratio,
     split_row_option_values,
 )
+from gbdraw.layout.figure_size import LargerSide
 
 LABEL_FIT_PAYLOAD_SCHEMA: Literal[1] = 1
 # How long the Web searches one row on demand (LP-D60): Apply and Cancel wait
@@ -157,11 +158,12 @@ class LabelCapacityNoticePayload(TypedDict):
 
 
 class LargerFigurePayload(TypedDict):
-    """About how large a requested figure must be for the labels not placed (``LargerFigure``): each requested side as
-    Python's message writes it (``829 mm``), null for a side left auto."""
+    """The requested sides of a figure to make larger (``LargerFigure``): each requested side about as long as
+    Python's message writes it (``829 mm``) for labels not placed (CAPACITY-STOP), or true when no row fits and the
+    size is not estimated (NO-ROW-WAYS); null for a side left auto."""
 
-    width: str | None
-    height: str | None
+    width: LargerSide | None
+    height: LargerSide | None
 
 
 class _LabelFitReportFields(TypedDict):

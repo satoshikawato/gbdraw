@@ -500,9 +500,9 @@ class LabelFitReport:
     """Failing records and the rows that apply to them, in the dialog order.
 
     ``drawn`` is True when the figure was drawn anyway (crossing leaders or
-    covered definition text only). ``larger_figure`` is the size a requested
-    figure needs for the records not placed (CAPACITY-STOP); None without a
-    requested size.
+    covered definition text only). ``larger_figure`` names the requested sides
+    of the figure: with the size they need for the records not placed
+    (CAPACITY-STOP), else without an estimate; None without a requested size.
     """
 
     records: tuple[LabelFitRecord, ...]
@@ -542,12 +542,11 @@ class LabelFitReport:
     def room_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
         """The ways to make room, in the order offered: for the records that were not placed (CAPACITY-STOP), else,
         when no row has a value, for the outer and inner Circular labels (NO-ROW-WAYS, OV-2180). A row not computed
-        may still fit, so a surface lists the second only once every row is known not to fit."""
+        may still fit, so a surface lists the second only once every row is known not to fit. Either way a
+        requested figure size adds a larger figure (D-14, PD-OI-114 r3)."""
 
         if any(record.capacity for record in self.records):
             offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
-            if self.larger_figure is not None:
-                offered.add("figure_size")
         elif self.rows and all(row.values is None for row in self.rows):
             offered = {
                 remedy
@@ -557,6 +556,8 @@ class LabelFitReport:
             }
         else:
             return ()
+        if offered and self.larger_figure is not None:
+            offered.add("figure_size")
         return tuple(remedy for remedy in get_args(LabelCapacityRemedy) if remedy in offered)
 
 
@@ -917,11 +918,13 @@ def _room_line(report: LabelFitReport, remedy: LabelCapacityRemedy) -> str:
     larger = report.larger_figure
     if remedy != "figure_size" or larger is None:
         return words
-    sides = (("width", larger.width), ("height", larger.height))
+    sides = [(f"--figure_{side}", value) for side, value in (("width", larger.width), ("height", larger.height))]
+    estimates = [(option, value) for option, value in sides if isinstance(value, str)]
+    if not estimates:
+        # No estimate (NO-ROW-WAYS): the requested options only.
+        return words.format(sizes="increase " + " and ".join(option for option, value in sides if value is True))
     # The message's value ("240.3 mm") written as an argument ("240.3mm").
-    return words.format(
-        sizes=" ".join(f"--figure_{side} about {value.replace(' ', '')}" for side, value in sides if value is not None)
-    )
+    return words.format(sizes=" ".join(f"{option} about {value.replace(' ', '')}" for option, value in estimates))
 
 
 def _room_lines(report: LabelFitReport) -> list[str]:

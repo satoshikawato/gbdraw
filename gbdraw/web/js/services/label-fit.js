@@ -6,7 +6,7 @@
 // and the reasons (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
 // The exceptions are the Web's own words for labels that need much more room
-// than the map has: the ways to make room (CAPACITY-STOP), which Python names
+// than the map has: the ways to make room (CAPACITY-STOP, NO-ROW-WAYS), which Python names
 // by id while the Web names its controls, and the room such labels need
 // (CAPACITY-STOP, CAPACITY-WARN), which Python sends as values (OV-2179).
 // A row's title and the names and option words of its settings are English
@@ -82,12 +82,19 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
  *   placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS; the dialog lists them once every row is known
  *   not to fit).
- * @property {LargerFigure | null} largerFigure The size the `figure_size` remedy names; null unless it is offered.
+ * @property {LargerFigure | null} largerFigure The requested sides the `figure_size` remedy names, each with Python's
+ *   estimate (CAPACITY-STOP) or without one (true, NO-ROW-WAYS), a side left Auto null; null unless the remedy is
+ *   offered.
  */
 /**
- * About how large a requested figure must be for the labels not placed (Python's `LargerFigurePayload`): each
- * requested side as Python's message writes it (`829 mm`), null for a side left Auto; at least one side.
- * @typedef {{ width: string | null, height: string | null }} LargerFigure
+ * A requested side of a figure to make larger: about how long it must be, as Python's message writes it (`829 mm`),
+ * for labels not placed (CAPACITY-STOP); true when no row fits and Python cannot estimate it (NO-ROW-WAYS).
+ * @typedef {string | true} LargerSide
+ */
+/**
+ * The requested sides of a figure to make larger (Python's `LargerFigurePayload`): null for a side left Auto; at
+ * least one side, and both requested sides have an estimate or neither has.
+ * @typedef {{ width: LargerSide | null, height: LargerSide | null }} LargerFigure
  */
 /**
  * @typedef {object} ResultLabelFit The report of one drawn Result.
@@ -122,12 +129,19 @@ const LARGER_FIGURE_WORDS = Object.freeze({
   height: msg('Make the figure larger: Figure height about {height} (Figure size in Layout).'),
   both: msg('Make the figure larger: Figure width about {width}, Figure height about {height} (Figure size in Layout).')
 });
+// The `figure_size` remedy without an estimate (NO-ROW-WAYS), by the sides it names (PD-OI-114 r3).
+const LARGER_FIGURE_FIELD_WORDS = Object.freeze({
+  width: msg('Make the figure larger: increase Figure width (Figure size in Layout).'),
+  height: msg('Make the figure larger: increase Figure height (Figure size in Layout).'),
+  both: msg('Make the figure larger: increase Figure width and Figure height (Figure size in Layout).')
+});
 /**
  * A way to make room as the dialog shows it: a catalog key and its values.
  * @typedef {{ text: string, params: Readonly<Record<string, string>> }} LabelCapacityRemedyText
  */
 /**
- * The words of a way to make room; the `figure_size` remedy names Python's estimate for each requested side.
+ * The words of a way to make room; the `figure_size` remedy names each requested side, with Python's estimate when
+ * it has one.
  * @param {LabelCapacityRemedy} remedy
  * @param {LargerFigure | null} largerFigure
  * @returns {LabelCapacityRemedyText}
@@ -136,10 +150,11 @@ export const labelCapacityRemedyText = (remedy, largerFigure) => {
   if (remedy !== 'figure_size' || largerFigure === null) return { text: LABEL_CAPACITY_REMEDY_WORDS[remedy], params: {} };
   const { width, height } = largerFigure;
   const sides = width !== null && height !== null ? 'both' : width !== null ? 'width' : 'height';
+  if (width === true || height === true) return { text: LARGER_FIGURE_FIELD_WORDS[sides], params: {} };
   return { text: LARGER_FIGURE_WORDS[sides], params: { ...(width !== null ? { width } : {}), ...(height !== null ? { height } : {}) } };
 };
-/** A side of the estimate: null, or a length as Python's message writes it. @param {unknown} value @returns {value is string | null} */
-const isSideLength = (value) => value === null || isFigureLengthText(value);
+/** A side: null, true, or a length as Python's message writes it. @param {unknown} value @returns {value is LargerSide | null} */
+const isLargerSide = (value) => value === null || value === true || isFigureLengthText(value);
 /**
  * A report's `largerFigure`, absent (null) unless the `figure_size` remedy is offered.
  * @param {Record<string, unknown>} parsed
@@ -148,8 +163,10 @@ const isSideLength = (value) => value === null || isFigureLengthText(value);
 const normalizeLargerFigure = (parsed) => {
   if (!Object.hasOwn(parsed, 'largerFigure')) return null;
   const value = parsed.largerFigure;
-  if (!isObject(value) || Object.keys(value).sort().join(',') !== 'height,width' || !isSideLength(value.width)
-    || !isSideLength(value.height) || (value.width === null && value.height === null)
+  if (!isObject(value) || Object.keys(value).sort().join(',') !== 'height,width' || !isLargerSide(value.width)
+    || !isLargerSide(value.height) || (value.width === null && value.height === null)
+    // Python estimates both requested sides or neither.
+    || (value.width !== null && value.height !== null && (value.width === true) !== (value.height === true))
     || !Array.isArray(parsed.remedies) || !parsed.remedies.includes('figure_size')) throw invalid();
   return Object.freeze({ width: value.width, height: value.height });
 };
