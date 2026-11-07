@@ -1253,6 +1253,21 @@
       "reason": "the Web disables New drawing from region live, during the drag and before Python is asked, when the source span it reads from the axis starts after its end (wrapsOrigin); Python refuses the same span with StartAfterEndRegion (ORIGIN_CROSSING) for the CLI, the Python API and the Web dialog",
       "retireWhen": "the Web asks Python whether a selected span can be drawn, or Python writes that with the selection",
       "source": "region-select-seq-search-20261104 REVIEW-2 N1 (D-32 f, D-34)"
+    },
+    {
+      "id": "vector:tests/fixtures/png_dpi_reading_vectors.json",
+      "concern": "The PNG DPI a Session saved (ui.downloadDpi): which stored values read as one of the DPI menu's choices",
+      "pythonOwner": [
+        "gbdraw/session.py:read_session_png_dpi"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config-field-readers.js:readDownloadDpi"
+      ],
+      "vector": "tests/fixtures/png_dpi_reading_vectors.json",
+      "reason": "Web Load reads the stored PNG DPI in JavaScript (another value is a Load dialog row) and a command-line or Python Session render reads it in Python (D-93); the choices reach the Web generated, and the vectors pin which stored values each side reads as a choice, as unset, or as another value",
+      "retireWhen": "Web Load reads ui.downloadDpi through the Python owner instead of its own reader",
+      "source": "figure-size-1427 session 12 (D-93, D-104)",
+      "pending": true
     }
   ]
 }
