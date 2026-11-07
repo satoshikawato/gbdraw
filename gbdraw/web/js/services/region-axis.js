@@ -240,7 +240,8 @@ export const linearRowPosition = (axis, row, x) => {
 
 /**
  * Whether a span may pass display index 0, the record's origin: on a circular record drawn whole (Select region's
- * drag, the search's origin window).
+ * drag; Python's `may_pass_origin` in gbdraw/layout/record_transform.py decides a search's origin window by the same
+ * rule).
  * @param {AxisSourceMap} source
  */
 export const mayPassOrigin = (source) => source.isCircular && source.drawnLength === source.sourceLength;

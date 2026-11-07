@@ -8,10 +8,8 @@
 // sequence and decides no hit itself.
 import { diagnosticError } from '../utils/error-normalization.js';
 import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.js';
-import { mayPassOrigin, sourceSpanOf } from './region-axis.js';
 
-/** @import { RegionAxisRecord } from './region-axis.js' */
-/** @import { RecordSpanInput, RecordSpanRead, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
+/** @import { DrawnRecordInput, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 /** @import { LosatJob } from './losat.js' */
 /** @import { HistoryIntentChange } from './history.js' */
@@ -156,27 +154,14 @@ export const panelQueries = (read, previous = []) => read.map((query, index) => 
 }));
 
 /**
- * The spans a search reads: each record the shown drawing draws (every Result's), once, over the bases it draws, on
- * its source strand (a whole record from 1); then the origin window of each record a span may cross the origin of
- * (`mayPassOrigin`), which Python places from the longest query's length (`origin_window_span`), so a hit across the
- * origin is found whole (OV-2571).
- * @param {readonly RegionAxisRecord[]} records
+ * What a search reads: each record the shown drawing draws (every Result's), by its key. Python reads each once over
+ * the bases it draws, on its source strand, and then the origin window of each record a span may pass the origin of,
+ * placed from the longest query's length, so a hit across the origin is found whole (OV-2571).
+ * @param {readonly { recordKey: string }[]} records
  * @param {number} longestQuery The length of the longest query.
- * @returns {RecordSpanRead[]}
+ * @returns {DrawnRecordInput[]}
  */
-export const searchSpans = (records, longestQuery) => {
-  /** @type {Map<string, RecordSpanInput>} */
-  const spans = new Map();
-  /** @type {RecordSpanRead[]} */
-  const windows = [];
-  for (const { recordKey, axis } of records) {
-    if (spans.has(recordKey)) continue;
-    const { start, end } = sourceSpanOf(axis.source, { start: 0, length: axis.source.drawnLength });
-    spans.set(recordKey, { recordKey, start, end });
-    if (mayPassOrigin(axis.source)) windows.push({ recordKey, originWindow: longestQuery });
-  }
-  return [...spans.values(), ...windows];
-};
+export const searchSpans = (records, longestQuery) => records.map(({ recordKey }) => ({ recordKey, originWindow: longestQuery }));
 
 /**
  * The selector of the Result record `recordKey` in the committed request; a span of a record the Result does not draw

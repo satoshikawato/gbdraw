@@ -73,3 +73,13 @@ test('the clipboard write starts before the text is ready, and a failed read is 
     Object.defineProperty(globalThis, 'navigator', { value: restore.navigator, configurable: true });
   }
 });
+
+test('a read of drawn records may give each two spans, and must read every record asked and no other', () => {
+  const asked = [{ recordKey: 'record-1', originWindow: 600 }, { recordKey: 'record-2', originWindow: 600 }];
+  const span = (recordKey, originWindow) => ({ ...reply.spans[0], recordKey, originWindow });
+  const read = { fasta: '', spans: [span('record-1', false), span('record-2', false), span('record-1', true)] };
+  assert.equal(readRecordSpanSequencesReply(read, asked), read);
+  for (const spans of [[span('record-1', false)], [...read.spans, span('record-3', false)]]) {
+    assert.throws(() => readRecordSpanSequencesReply({ ...read, spans }, asked), (error) => error.code === 'RESULT_INVALID');
+  }
+});

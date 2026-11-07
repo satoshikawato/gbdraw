@@ -18,15 +18,18 @@ const isSpanSequence = (value) => isRecord(value)
   && typeof value.wrapsOrigin === 'boolean' && typeof value.originWindow === 'boolean';
 
 /**
- * The helper's result, checked against `RecordSpanSequencesReply`.
+ * The helper's result, checked against `RecordSpanSequencesReply`: it reads every record asked and no other (a drawn
+ * record may give two spans, its drawn bases and its origin window).
  * @param {unknown} result
- * @param {readonly RecordSpanRead[]} spans The spans asked, which the reply names in order.
+ * @param {readonly RecordSpanRead[]} spans The spans asked.
  * @returns {RecordSpanSequencesReply}
  */
 export const readRecordSpanSequencesReply = (result, spans) => {
+  const asked = new Set(spans.map(({ recordKey }) => recordKey));
   if (!isRecord(result) || typeof result.fasta !== 'string' || !Array.isArray(result.spans)
-    || result.spans.length !== spans.length || !result.spans.every(isSpanSequence)
-    || result.spans.some((span, index) => span.recordKey !== spans[index].recordKey)) {
+    || !result.spans.every(isSpanSequence)
+    || new Set(result.spans.map(({ recordKey }) => recordKey)).size !== asked.size
+    || result.spans.some(({ recordKey }) => !asked.has(recordKey))) {
     throw diagnosticError('RESULT_INVALID', {}, FAILURE);
   }
   return /** @type {RecordSpanSequencesReply} */ (/** @type {unknown} */ (result));

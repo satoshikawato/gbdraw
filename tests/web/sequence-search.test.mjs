@@ -154,7 +154,7 @@ test('a History step names the sets a search added: its own step, Undo and Redo;
   assert.equal(search.nextSearchSetId(['Search 1', 'Search 3']), 'Search 2');
 });
 
-test('the search reads each drawn record once over the bases it draws, and names its record as the Result draws it', () => {
+test('the search names each drawn record by key alone, and names its record as the Result draws it', () => {
   const axis = (drawnLength, recordBase = 1, step = 1) => ({
     kind: 'linear', rows: [], source: { anchorBase: recordBase, recordBase, step, sourceLength: 100, drawnLength, isCircular: false }
   });
@@ -163,7 +163,11 @@ test('the search reads each drawn record once over the bases it draws, and names
     { resultIndex: 1, recordIndex: 0, recordKey: 'a', recordId: 'X', axis: axis(100) },
     { resultIndex: 0, recordIndex: 1, recordKey: 'b', recordId: 'X', axis: axis(30, 41) }
   ];
-  assert.deepEqual(search.searchSpans(records, 600), [{ recordKey: 'a', start: 1, end: 100 }, { recordKey: 'b', start: 41, end: 70 }]);
+  // Python reads the bases each record draws, each record once, and its origin window when it has one
+  // (read_record_span_sequences, DrawnRecordInput): the page sends no source coordinates.
+  assert.deepEqual(search.searchSpans(records, 600), [
+    { recordKey: 'a', originWindow: 600 }, { recordKey: 'a', originWindow: 600 }, { recordKey: 'b', originWindow: 600 }
+  ]);
   const read = { fasta: '', spans: [
     { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:1-100', sequence: '' },
     { recordKey: 'b', recordId: 'X', start: 41, end: 70, length: 30, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:41-70', sequence: '' }
@@ -179,9 +183,9 @@ test('the search reads each drawn record once over the bases it draws, and names
 });
 
 // OV-2571, D-52: a record that a span may cross the origin of (circular, drawn whole), in either mode, is also read
-// over its origin window, which Python places (origin_window_span); both subjects name the record by its catalog
-// record, and the window is marked as one.
-test('the search also reads the origin window of each record drawn whole across its origin', () => {
+// over its origin window, which Python decides and places (may_pass_origin, origin_window_span); both subjects name
+// the record by its catalog record, and the window is marked as one.
+test('the subjects of a record read with its origin window name the record, and the window is marked', () => {
   const axis = (kind, drawnLength, isCircular) => ({
     kind, rows: [], source: { anchorBase: 1, recordBase: 1, step: 1, sourceLength: 100, drawnLength, isCircular }
   });
@@ -190,10 +194,6 @@ test('the search also reads the origin window of each record drawn whole across 
     { resultIndex: 0, recordIndex: 1, recordKey: 'l', recordId: 'L', axis: axis('linear', 100, true) },
     { resultIndex: 0, recordIndex: 2, recordKey: 'n', recordId: 'N', axis: axis('circular', 100, false) }
   ];
-  assert.deepEqual(search.searchSpans(records, 30), [
-    { recordKey: 'c', start: 1, end: 100 }, { recordKey: 'l', start: 1, end: 100 }, { recordKey: 'n', start: 1, end: 100 },
-    { recordKey: 'c', originWindow: 30 }, { recordKey: 'l', originWindow: 30 }
-  ]);
   const read = { fasta: '', spans: [
     { recordKey: 'c', recordId: 'C', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'C:1-100', sequence: '' },
     { recordKey: 'c', recordId: 'C', start: 71, end: 30, length: 60, wrapsOrigin: true, originWindow: true, recordLength: 100, header: 'C:71-30', sequence: '' }
