@@ -554,6 +554,23 @@ This is the rule `SVG11-VOCABULARY` of `tools/web-design-rule-guards.json`.
 - Adding an entry is an authority-only change that needs the Owner's approval.
   Removing one is optional.
 
+## Scenario declarations
+
+This is the rule `SCENARIO-DECLARATION` of `tools/web-design-rule-guards.json`.
+
+- Every long option of `gbdraw circular`, `gbdraw linear` and `gbdraw render`
+  (their `--help`) belongs to a capability of `docs/scenarios/manifest.json`:
+  `CLI_OPTION_CAPABILITIES` in `tests/test_scenario_declarations.py` places it
+  in the capability whose public owner page documents it.
+- A new option is placed there, or, when no capability fits, goes with a new
+  capability that has its scenario and public owner in the manifest
+  ([Changing documentation](../../CONTRIBUTING.md#changing-documentation)).
+- `UNDECLARED_CLI_OPTIONS` in the same test lists the options that no
+  capability covers today. Adding an option to it is an authority-only change
+  that needs the Owner's approval; moving one to `CLI_OPTION_CAPABILITIES` is
+  optional. The test fails when an entry names an option that no longer
+  exists.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
