@@ -33,7 +33,7 @@ import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
   'app/annotations/record-catalog.js': 2,
-  'app/app-setup.js': 8,
+  'app/app-setup.js': 7,
   'app/candidate-render.js': 1,
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 21,

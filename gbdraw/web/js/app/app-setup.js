@@ -3,17 +3,14 @@
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
-/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
-/** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { NoticeLink } from './app-messages.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingInputSite } from './drawing-list.js' */
 /** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
-/** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 /** @import { LegendRowColorOf } from './candidate-render.js' */
@@ -21,25 +18,23 @@
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
-/** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
 /** @import { RegionSourceFeature } from './region-drawing.js' */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
+import { displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
+import { createDeclinedPaintDisplay, createDepartedResultIntent, createDisplayedResultProjection, createEditorIntentShow, createMountedEditorIntentProjection } from './editor-intent.js';
+import { createMountedLegendBinding, createMountedResultReadiness } from './mounted-result-binder.js';
+import { createResultPaintRecord, visibilityPaintState } from './result-paint-record.js';
 import {
-  displayedLegendRowContext, featureDrawnContext,
-  requestFeatureVisibilityRules
+  displayedLegendRowContext, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
-import { admitFeatureCatalog, biologicalFeatureKey, catalogNameIndex, resultCatalogFeatures } from '../services/feature-catalog.js';
+import { catalogNameIndex } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
-import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES } from '../services/session-active-config-contract.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import {
@@ -156,11 +151,9 @@ import { createFontSettings } from './font-settings.js';
 import { customFontSaveWarnings } from '../services/session-fonts.js';
 import { requestFontFamily, webFontFamilyNames } from '../services/font-store.js';
 import {
-  recordSessionLifecycleEvent,
-  recordStructuralMetric
+  recordSessionLifecycleEvent
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { appliedFeatureColors, normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { COLLINEAR_COLOR_MODE_TEXT } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -283,14 +276,12 @@ import {
 /** @import { HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { OrthogroupGroup } from './orthogroups.js' */
 /** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
-/** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive } = window.Vue;
 
@@ -1718,198 +1709,9 @@ export const createAppSetup = () => {
     legendLayout.releaseCompositionDeltas(new Set([...liveResultIdentities(), ...history.heldIdentities()]));
     return legendLayout.captureCompositionIntent(resultIdentitiesOf(drawingId));
   });
-  /** @param {DrawingState} drawing */
-  const shouldSyncMountedLabelEditor = (drawing) => (
-    isFeatureDrawerMounted.value
-    || Boolean(clickedFeature.value)
-    || labelTextScopeDialog.show
-    || Object.values(drawing.featureOverrides).some((row) => row.labelText !== null || row.labelVisibility !== null)
-    || Object.keys(drawing.labelTextBulkOverrides).length > 0
-  );
-  // A legacy imported SVG without composition metadata stays unbound: it has
-  // no composition to capture and no canvas to pad.
-  // Mounted Results whose Legend `adoptLegend` laid out; the commit waits for
-  // the later binding steps (`initializeStrokeAndCanvas`).
-  /** @type {WeakSet<Element>} */
-  const mountedLegendLayouts = new WeakSet();
-  /** @param {MountedResultContext} context */
-  const shouldBindComposition = (context) => (
-    context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
-    || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-    || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
-  );
   // Each Result's bytes reflect the editor state it was committed or last
   // shown with (`createResultPaintRecord`); the binder below reads it (R13).
   const resultPaintRecord = createResultPaintRecord();
-  previewRuntime.configureMountedResultBinder({
-    async adoptLegend(context) {
-      const drawing = state.activeDrawing();
-      // The Legend layout port (zero shift) reads the bundled-font metrics;
-      // they load with the first Result that has a Legend, so the Legend
-      // edits, which lay the Legend out synchronously, find them loaded.
-      // Once loaded, the binder does not wait: an edit waiting for this
-      // binding (a rule commit after a rerender) reads its Legend unchanged.
-      if (context.root.getElementById?.('legend') && !legendActions.isLegendLayoutReady()) {
-        await legendActions.prepareLegendLayout().catch((error) => {
-          console.error('The Legend layout could not load its font metrics.', normalizeUserFacingError(error));
-        });
-      }
-      // OV-47: each Result has its own default Legend order. A Result being
-      // displayed is read before its editor intent is projected; it then shows
-      // its own inventory, so a Generate or rerender made while another Result
-      // was displayed does not replace it.
-      // A Result shown again by a drawing switch is a selection in its own
-      // drawing, whose Legend edits it was last shown with (PD-OI-090).
-      const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
-      if (selecting) {
-        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
-          resultIdentity: context.resultIdentity,
-          liveResultIdentities: liveResultIdentities()
-        });
-        // A Result shown again by a mode switch arrives in its own drawing,
-        // whose Legend edits name that Result's inventory: the inventory is
-        // adopted first, so the departing mode's order is never compared with
-        // the arriving drawing's rows. A batch Result of the same drawing is
-        // compared with the order shown until now (B20, OV-47).
-        const arriving = Boolean(context.bindingOptions.modeArrival);
-        if (arriving) legendActions.adoptResultInventory(context.resultIdentity);
-        await projectEditorIntentOnDisplay(drawing, context, resultLegendOrder);
-        if (!arriving) legendActions.adoptResultInventory(context.resultIdentity);
-      } else {
-        rememberCommittedEditorState(drawing, context);
-      }
-      if (context.bindingOptions.trustedRestore) {
-        legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
-        return;
-      }
-      // A Result the renderer drew: generated, newly displayed, or drawn again
-      // by an automatic rerender. An incremental edit, a History restore, and
-      // a loaded Session show bytes already laid out.
-      const drawn = !context.bindingOptions.isIncrementalEdit
-        || Boolean(context.bindingOptions.replaceGeneratedLegend);
-      const adopt = () => {
-        // It shows the Legend editor's edits laid out as Python lays the edited
-        // rows out, before its entries are read (zero shift; OV-122, OV-124,
-        // OV-126, OV-127): a Result whose records show a Legend structure edit.
-        if (
-          drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-          && legendStructureEdited(context.root)
-        ) {
-          legendActions.onLegendGeometryChanged({ commit: false });
-          mountedLegendLayouts.add(context.root);
-        }
-        if (context.bindingOptions.skipLegendExtraction) return;
-        recordStructuralMetric('legendDomFullScanCount', 1, {
-          phase: context.phase,
-          rootGeneration: context.rootGeneration
-        });
-        // A draw that replays an edited Legend order replays it on the displayed
-        // mode's Results only.
-        legendActions.extractLegendEntries({
-          replaceGeneratedInventory: !selecting && drawn,
-          liveRedraw: context.bindingOptions.liveRedrawLegend ?? null,
-          liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
-        });
-      };
-      // OV-872: the Legend a label rerender draws is no edit of a step begun
-      // after it was requested (an action waiting for it, D-40).
-      const { historyRequestedAt } = context.bindingOptions;
-      if (historyRequestedAt === undefined) adopt();
-      else history.adoptDrawnWrite(adopt, { requestedAt: historyRequestedAt });
-    },
-    bindComposition(context) {
-      if (context.bindingOptions.trustedRestore) return;
-      if (shouldBindComposition(context)) legendLayout.captureBaseConfig();
-    },
-    setupDragAffordances(context) {
-      legendActions.setupLegendDrag();
-      legendLayout.setupDiagramDrag(Boolean(context.bindingOptions.isIncrementalEdit));
-    },
-    installDelegatedInteractions(context) {
-      cancelPreviewTransformInteraction({ reconcile: false });
-      featureActions.attachSvgFeatureHandlers({
-        root: context.root,
-        phase: context.phase,
-        rootGeneration: context.rootGeneration
-      });
-      similarityAlignmentPorts.refreshCanvas();
-      featureActions.preparePairwiseInteractionAffordances({
-        root: context.root,
-        phase: context.phase,
-        rootGeneration: context.rootGeneration
-      });
-      featureActions.preparePreviewItemAffordances({ root: context.root });
-    },
-    synchronizeLabelEditor(context) {
-      const drawing = state.activeDrawing();
-      const labelsChanged = labelProjectionResultIdentity === context.resultIdentity;
-      labelProjectionResultIdentity = '';
-      if (!context.bindingOptions.trustedRestore && (labelsChanged || shouldSyncMountedLabelEditor(drawing))) {
-        featureActions.syncLabelEditor({
-          requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
-          optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds,
-          reportedLabelBinding: context.bindingOptions.reportedLabelBinding
-        });
-      }
-    },
-    initializeStrokeAndCanvas(context) {
-      const legendLaidOut = mountedLegendLayouts.delete(context.root);
-      if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
-        // The block stroke Python drew on the shown Result: the Result's
-        // block-stroke default, which the Session format keeps as
-        // `originalSvgStroke`.
-        const blockStroke = drawnBlockStroke(context.root);
-        if (blockStroke) state.originalSvgStroke.value = { ...blockStroke, color: normalizeOptionalHexColor(blockStroke.color) };
-        // Generate already padded its candidates; another batch Result shows
-        // the current canvas padding when it is displayed (D-09).
-        if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
-      }
-      // The Legend laid out at mount is committed with the bindings the
-      // steps since added, so the Result's content is its mounted SVG (R1).
-      if (legendLaidOut) previewRuntime.commitActiveResultEdit('legend-position');
-    },
-    reconcileSelection(context) {
-      if (
-        !context.bindingOptions.trustedRestore
-        && !context.bindingOptions.isIncrementalEdit
-      ) {
-        featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-      }
-    },
-    afterReady(context) {
-      mountedResultRevision.value += 1;
-      // OV-1280: a Result a mode switch shows again, whose drawing changed its
-      // rules while it was not shown (a file card's Remove, an Undo or Redo
-      // there), is drawn again when its Legend cannot show them, as after a
-      // History restore of the rules. OV-2293: any Result displayed is drawn
-      // again when its bytes hold a label edit that left its drawing while it
-      // was not shown (a Reset Settings, an Undo). The display records what it
-      // shows, so a failed rerender does not repeat here.
-      const display = displayAsks;
-      displayAsks = null;
-      if (display?.identity === context.resultIdentity) {
-        if (context.bindingOptions.modeArrival && display.rules) featureActions.followRestoredSpecificRules(display.rules);
-        if (display.labelIntentGone) featureActions.requestAutomaticRerender();
-      }
-      // D-36: a label rerender pays the redraw its drawing owes when, as its
-      // Result is ready, no later rerender runs and its figure shows the
-      // drawing's current paint, also after an edit made since its paint was
-      // committed (read before that edit is shown on it, OV-346).
-      // Its drawing is the shown one: a mode switch waits for a rerender
-      // (`drawingSwitchBusy`). D-24 (OV-731): History keeps the figure
-      // as the last step's.
-      const drawing = state.activeDrawing();
-      const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
-        && resultPaintRecord.drewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
-      previewFeatureSearch.handleMountedResultReady();
-      showEditsMadeWhileDrawn(context);
-      if (!drewCurrent) return;
-      featureActions.redrawShown(drawing);
-      history.keepRedrawnResult().catch((error) => {
-        console.error('History could not keep the redrawn figure.', normalizeUserFacingError(error));
-      });
-    }
-  });
   // DESIGN A4: the record discovery owner's lists, by mode; a Linear card
   // whose list is still deferred after a Load is read here. Callers read them
   // through the runner's `readDrawingRecordIdentities`, which reads a deferred
@@ -2538,71 +2340,38 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  // One projection of the canonical editor intent onto the mounted Result,
-  // shared by History apply, the display of another batch Result, and Load
-  // Feature Edits TSV (D-07, R3). A History step of the Legend rows and a newly
-  // displayed Result show the Legend operations Generate applies (`domains`).
-  // A loaded table (`reflow`) also places the
-  // labels, as a visibility edit does. The palette and the rules (`colors`)
-  // and the visibility prepare their matches through their projections; the
-  // fills, the visibility, and the other paint `domains` of the step then show
-  // in one compile through `showEditorIntent`, or in the caller's (`show:
-  // false`). Resolves to the domains shown, or false when the palette and
-  // rules did not project (rules changed meanwhile, or a Session operation).
-  /**
-   * @param {{
-   *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
-   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean, saving?: boolean
-   * }} [options]
-   * @returns {Promise<string[] | false>}
-   */
-  const projectMountedEditorIntent = async ({
-    colors = false,
-    prepareRules = colors,
-    visibility = false,
-    rerender = false,
-    reflow = false,
-    labels = false,
-    domains = [],
-    show = true,
-    saving = false
-  } = {}) => {
-    if (colors && !await projectPaletteAndRules({ prepareRules, show: false, saving })) return false;
-    // The visibility projection follows with the labels, so one edit queues
-    // one label request.
-    if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
-    if (labels && !visibility) reconcileLabelOverrides();
-    const shown = [...new Set([...(colors ? fillDomainsOf(state.activeDrawing()) : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
-    if (show && shown.length > 0) showEditorIntent({ domains: shown });
-    return shown;
-  };
-
-  // O-2 (D-15-6 (5)): a Result saved before the executor kept a deleted row
-  // lacks Python's row, so a Restore or Reset that returns the row asks Python
-  // to draw it again. A Result Python drew in this session lacks only a row
-  // Python did not draw there (its Legend row facts; U3a review M2); a loaded
-  // Result has no facts.
-  /** @param {string[]} keys The Python keys of the returning rows. */
-  const drawReturningLegendRows = (keys) => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    const drawn = state.displayedResultMetadata()?.legendRowFacts?.drawn;
-    if (keys.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
-      featureActions.requestAutomaticRerender();
-    }
-  };
-
-  // OV-154: a Restore is one History step of the Legend intent, shown with the
-  // rows' fills and strokes (OV-293) through the port.
-  /** @param {() => unknown} restore Returns the Python keys of the restored rows, as `restoreDeletedLegendEntries` does. */
-  const restoreLegendRows = (restore) => {
-    const restored = restore();
-    if (!Array.isArray(restored)) return restored;
-    showEditorIntent({ domains: LIVE_EDIT_DOMAINS.deletedRows });
-    drawReturningLegendRows(restored);
-    return true;
-  };
-  /** @param {string} label @param {() => unknown} restore */
-  const restoreLegendItems = (label, restore) => history.runUndoable(label, () => restoreLegendRows(restore));
+  const {
+    compileDisplayedResultOperations, showEditorIntent, STROKE_DOMAINS, LEGEND_FILL_DOMAINS, VISIBILITY_DOMAINS,
+    editEditorIntent, showingEditorIntent, LEGEND_STRUCTURE_DOMAINS
+  } = createEditorIntentShow({
+    state,
+    results,
+    extractedFeatures,
+    originalLegendOrder,
+    svgContainer,
+    selectedResultIndex,
+    readDrawnTracks,
+    getCommittedCanonicalRenderRequest,
+    getActiveRuntime: previewRuntime.getActiveRuntime,
+    applyEditorOperations: previewRuntime.applyEditorOperations,
+    readLegendRowNames: legendActions.readLegendRowNames,
+    onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
+    runUndoable: history.runUndoable
+  });
+  const {
+    projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems
+  } = createMountedEditorIntentProjection({
+    state,
+    svgContainer,
+    projectPaletteAndRules,
+    projectFeatureVisibility,
+    reconcileLabelOverrides,
+    fillDomainsOf,
+    VISIBILITY_DOMAINS,
+    showEditorIntent,
+    requestAutomaticRerender: featureActions.requestAutomaticRerender,
+    runUndoable: history.runUndoable
+  });
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
@@ -2641,329 +2410,111 @@ export const createAppSetup = () => {
     await nextTick();
   });
 
-  // A displayed Result whose label intent changed since it was last shown
-  // receives the label projection in the binder's label step, also when no
-  // label intent remains (an undone or replaced Label TSV import).
-  let labelProjectionResultIdentity = '';
-  /** @param {DrawingState} drawing @returns {EditorPaintState} */
-  const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
-  /** @param {DrawingState} drawing @param {MountedResultContext} context */
-  const rememberCommittedEditorState = (drawing, context) => {
-    const identities = liveResultIdentities();
-    const current = currentEditorProjectionState(drawing);
-    // A label rerender's Results show the editor state it drew from; the
-    // edits made while it ran are shown on the displayed Result once it is
-    // bound (`afterReady`, OV-346), and on another Result when displayed.
-    const drawn = context.bindingOptions.drawnPaint || current;
-    if (drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
-    // A loaded Session and a History restore keep each Result's bytes as
-    // they were saved or kept, a batch Result not displayed since the last
-    // edits without them (also a Session older than 40, whose strokes
-    // reached only the mounted Result).
-    resultPaintRecord.commit(identities, context.resultIdentity, current, {
-      restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore),
-      drawn,
-      drawingStateOf: (identity) => {
-        const holder = state.drawingList().find(({ id }) => resultIdentitiesOf(id).includes(identity));
-        return holder ? currentEditorProjectionState(holder) : current;
-      }
-    });
-    [...departedResultIntent.keys()].forEach((identity) => {
-      if (!identities.includes(identity)) departedResultIntent.delete(identity);
-    });
-  };
-  // E1: the Result shown until a mode switch followed every live edit. When
-  // it is shown again with the same editor intent, nothing is projected and
-  // its bytes stay; otherwise the edits made since are projected onto it.
-  /** @type {Map<string, string>} */
-  const departedResultIntent = new Map();
-  /** @param {DrawingState} drawing */
-  const displayedIntentSignature = (drawing) => JSON.stringify([
-    currentEditorProjectionState(drawing),
-    drawing.deletedLegendEntries.value.map((/** @type {KeptLegendRow} */ entry) => entry.originalCaption || entry.caption),
-    [...(drawing.addedLegendCaptions.value || [])],
-    drawing.legendEntries.value.filter((/** @type {LegendRow} */ entry) => /** @type {string} */ (entry.caption) !== entry.originalCaption)
-      .map((/** @type {LegendRow} */ entry) => [entry.originalCaption, entry.caption]),
-    // The direct additions, which no Result's inventory lists.
-    drawing.legendEntries.value.filter((/** @type {LegendRow} */ entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
-      .map((/** @type {LegendRow} */ entry) => entry.caption)
-  ]);
-  /** @param {DrawingState} drawing */
-  const rememberDepartingResultProjection = (drawing) => {
-    const departed = resultPaintRecord.depart(currentEditorProjectionState(drawing));
-    if (departed) departedResultIntent.set(departed, displayedIntentSignature(drawing));
-  };
-  // What the live compile reads of the displayed Result's Legend state.
-  /** @param {DisplayedLegendRowContext} context */
-  const legendRowsOf = ({ pythonRows, features, sharedLegendKeys }) => ({ pythonRows, features, sharedLegendKeys });
-  /**
-   * @param {DrawingState} drawing
-   * @param {number} resultIndex
-   * @param {{
-   *   replayDefaultLegendOrder?: string[] | null, domains?: readonly string[] | null,
-   *   ruleRows?: import('./candidate-render.js').RuleLegendRows | null
-   * }} [options]
-   *   The operation domains the displayed Result shows, previewed live and compiled alone; null
-   *   compiles the edits Python does not draw, as Generate does. `ruleRows`: a rule commit's rows.
-   * @returns {SvgMutationOperations | null}
-   */
-  const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null, ruleRows = null } = {}) => {
-    const catalog = toRaw(state.featureCatalog.value);
-    const svg = svgContainer.value?.querySelector?.('svg') || null;
-    // A Result without a catalog (a Session older than 40) is reached through
-    // the features read from it and the fills it draws.
-    const plan = compileDirectEditorMutationPlan({
-      catalogAdmission: catalog
-        ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: drawing.mode })
-        : displayedFeatureAddressing(
-          toRaw(extractedFeatures.value) || [], results.value.map((/** @type {{ name?: unknown } | null | undefined} */ result) => result?.name), resultIndex, svg
-        ),
-      featureColorOverrides: drawing.featureColorOverrides,
-      featureStrokeOverrides: drawing.featureStrokeOverrides,
-      featureOverrides: drawing.featureOverrides,
-      legendEntries: drawing.legendEntries.value,
-      deletedLegendEntries: drawing.deletedLegendEntries.value,
-      dormantLegendEntries: drawing.dormantLegendEntries.value,
-      originalLegendOrder: originalLegendOrder.value,
-      addedLegendCaptions: drawing.addedLegendCaptions.value,
-      legendColorOverrides: drawing.legendColorOverrides,
-      legendStrokeOverrides: drawing.legendStrokeOverrides,
-      manualSpecificRules: drawing.manualSpecificRules,
-      replayDefaultLegendOrder,
-      livePreview: domains ? {
-        domains,
-        paletteColors: appliedFeatureColors(state),
-        drawnTracks: readDrawnTracks(),
-        ...legendRowsOf(displayedLegendRowContext(state, drawing)),
-        drawnContext: domains.includes('featureVisibility')
-          // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
-          ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
-          : null,
-        ruleRows
-      } : null
-    });
-    return plan.operationsByResult[resultIndex] || null;
-  };
-  // The port of the editor intent onto the displayed Result (design §5.4):
-  // the operations of `domains` Generate compiles from the active drawing
-  // (the compile runs only the stages they need) unless given, reconciled by
-  // the executor Generate uses, which returns each attribute of `domains` no
-  // operation sets to Python's value; then one commit of the Result. Live
-  // edits, History, and the display of a batch Result call it. The Legend is
-  // laid out once when the reconcile changed its rows (zero shift).
-  /**
-   * @param {{
-   *   domains: readonly string[],
-   *   operations?: SvgMutationOperations | null,
-   *   ruleRows?: import('./candidate-render.js').RuleLegendRows | null
-   * }} options
-   */
-  const showEditorIntent = ({ domains, operations = undefined, ruleRows = null }) => {
-    let shown = operations;
-    if (shown === undefined) {
-      const resultIndex = previewRuntime.getActiveRuntime()?.resultIndex ?? (Number(selectedResultIndex.value) || 0);
-      try {
-        shown = compileDisplayedResultOperations(state.activeDrawing(), resultIndex, { domains, ruleRows });
-      } catch (error) {
-        console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
-        return false;
-      }
-    }
-    return previewRuntime.applyEditorOperations(shown, {
-      domains,
-      // The Legend is laid out without its own commit: the display commits
-      // the Result once (S4).
-      afterApply: (_svg, reconciled) => {
-        if (!reconciled) return;
-        legendActions.readLegendRowNames();
-        legendActions.onLegendGeometryChanged({ commit: false });
-      }
-    });
-  };
-  // The paint domains each edit kind shows, live and on Undo and Redo.
   const {
-    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
-  } = LIVE_EDIT_DOMAINS;
-  /**
-   * The one transition of a live edit of the paint intent (design §5.8): the
-   * action writes the active drawing's intent and returns true when it
-   * changed, the displayed Result shows it, and both are one History step (a
-   * control's open step is joined).
-   * @template {unknown[]} A
-   * @param {string} label
-   * @param {(...args: A) => unknown} mutate
-   * @param {{ domains?: readonly string[] }} [options]
-   * @returns {(...args: A) => Promise<unknown>}
-   */
-  const editEditorIntent = (label, mutate, { domains = STROKE_DOMAINS } = {}) => (
-    ...args
-  ) => history.runUndoable(label, () => showingEditorIntent(mutate, domains)(...args));
-  /**
-   * The action that writes the intent and, when it changed, shows `domains`.
-   * @template {unknown[]} A
-   * @param {(...args: A) => unknown} mutate
-   * @param {readonly string[]} domains
-   * @returns {(...args: A) => Promise<unknown>}
-   */
-  const showingEditorIntent = (mutate, domains) => async (...args) => {
-    const changed = await mutate(...args);
-    if (changed === true) showEditorIntent({ domains });
-    return changed;
-  };
-  // A displayed Result shows the Legend structure edits and the paint domains
-  // whose intent changed since it was last shown; each paint domain it shows
-  // returns to Python's values where no operation sets it (OV-144).
-  const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
-  // What a displayed Result asks of the rerender, read once it is ready
-  // (`afterReady`): `rules`, the rule table it was last shown with, or the one
-  // it was drawn with when that is unknown (a restored Result), for OV-1280;
-  // `labelIntentGone`, whether its bytes hold a label edit that left its drawing
-  // since it was last shown (OV-2293).
-  /** @type {{ identity: string, rules: SpecificColorRule[] | null, labelIntentGone: boolean } | null} */
-  let displayAsks = null;
-  // Whether a Result draws a feature; an unknown catalog answers yes.
-  /** @param {DrawingState} drawing @param {number} resultIndex @returns {(recordKey: string, featureId: string) => boolean} */
-  const resultDrawsFeature = (drawing, resultIndex) => {
-    const rendered = resultCatalogFeatures(state, drawing.mode, resultIndex)?.renderedByIdentity;
-    return (recordKey, featureId) => !rendered || rendered.has(biologicalFeatureKey(recordKey, featureId));
-  };
-  // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
-  // Legend, and label edits when it is displayed. Labels follow in the
-  // binder's label step.
-  /**
-   * @param {DrawingState} drawing
-   * @param {any} context
-   * @param {string[]} resultLegendOrder
-   */
-  const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
-    const identity = context.resultIdentity;
-    const current = currentEditorProjectionState(drawing);
-    displayAsks = null;
-    const departedIntent = departedResultIntent.get(identity);
-    departedResultIntent.delete(identity);
-    if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
-      resultPaintRecord.rebind(identity);
-      labelProjectionResultIdentity = '';
-      recordStructuralMetric('displayedResultEditorProjectionCount', 0, {
+    currentEditorProjectionState, departedResultIntent, displayedIntentSignature, rememberDepartingResultProjection,
+    resultDrawsFeature
+  } = createDepartedResultIntent({ state, originalLegendOrder, resultPaintDepart: resultPaintRecord.depart });
+  const { displayBlocked, showDeclinedPaint, showEditsMadeWhileDrawn } = createDeclinedPaintDisplay({
+    state,
+    sessionBlocks,
+    ruleMatchingPending,
+    currentEditorProjectionState,
+    projectMountedEditorIntent,
+    resultPaintLacking: resultPaintRecord.lacking,
+    resultPaintShown: resultPaintRecord.shown
+  });
+  const {
+    rememberCommittedEditorState, projectEditorIntentOnDisplay, takeLabelProjectionResultIdentity, takeDisplayAsks
+  } = createDisplayedResultProjection({
+    state,
+    liveResultIdentities,
+    resultIdentitiesOf,
+    currentEditorProjectionState,
+    departedResultIntent,
+    displayedIntentSignature,
+    resultDrawsFeature,
+    compileDisplayedResultOperations,
+    projectMountedEditorIntent,
+    showEditorIntent,
+    displayBlocked,
+    showDeclinedPaint,
+    LEGEND_STRUCTURE_DOMAINS,
+    STROKE_DOMAINS,
+    resultPaintCommit: resultPaintRecord.commit,
+    resultPaintRebind: resultPaintRecord.rebind,
+    resultPaintDisplay: resultPaintRecord.display,
+    resultPaintDrawn: resultPaintRecord.drawn,
+    resultPaintShown: resultPaintRecord.shown
+  });
+  // The Result binder's steps call the editor intent above. No Result mounts
+  // during setup: the preview runtime reads the steps only when a mounted
+  // Result binds or is released, so they are configured here.
+  const {
+    adoptLegend, bindComposition, setupDragAffordances, initializeStrokeAndCanvas
+  } = createMountedLegendBinding({
+    state,
+    results,
+    liveResultIdentities,
+    projectEditorIntentOnDisplay,
+    rememberCommittedEditorState,
+    isLegendLayoutReady: legendActions.isLegendLayoutReady,
+    prepareLegendLayout: legendActions.prepareLegendLayout,
+    captureResultInventory: legendActions.captureResultInventory,
+    adoptResultInventory: legendActions.adoptResultInventory,
+    onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
+    extractLegendEntries: legendActions.extractLegendEntries,
+    setupLegendDrag: legendActions.setupLegendDrag,
+    getResultIdentity: previewRuntime.getResultIdentity,
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    adoptDrawnWrite: history.adoptDrawnWrite,
+    captureBaseConfig: legendLayout.captureBaseConfig,
+    setupDiagramDrag: legendLayout.setupDiagramDrag,
+    applyCanvasPadding: legendLayout.applyCanvasPadding
+  });
+  const { synchronizeLabelEditor, reconcileSelection, afterReady } = createMountedResultReadiness({
+    state,
+    isFeatureDrawerMounted,
+    clickedFeature,
+    labelTextScopeDialog,
+    labelReflowProcessing,
+    mountedResultRevision,
+    takeLabelProjectionResultIdentity,
+    takeDisplayAsks,
+    currentEditorProjectionState,
+    showEditsMadeWhileDrawn,
+    syncLabelEditor: featureActions.syncLabelEditor,
+    followRestoredSpecificRules: featureActions.followRestoredSpecificRules,
+    requestAutomaticRerender: featureActions.requestAutomaticRerender,
+    redrawShown: featureActions.redrawShown,
+    clearFeatureSelection: featureSelection.clearFeatureSelection,
+    resultPaintDrewPaint: resultPaintRecord.drewPaint,
+    handleMountedResultReady: previewFeatureSearch.handleMountedResultReady,
+    keepRedrawnResult: history.keepRedrawnResult
+  });
+  previewRuntime.configureMountedResultBinder({
+    adoptLegend,
+    bindComposition,
+    setupDragAffordances,
+    installDelegatedInteractions(context) {
+      cancelPreviewTransformInteraction({ reconcile: false });
+      featureActions.attachSvgFeatureHandlers({
+        root: context.root,
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
-      return;
-    }
-    const previous = resultPaintRecord.display(identity, current);
-    const drawn = resultPaintRecord.drawn(identity) ?? current;
-    displayAsks = {
-      identity,
-      rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
-      labelIntentGone: drawn.labels !== current.labels && drawnLabelIntentGone(
-        drawn.labels, previous.labels, current.labels, resultDrawsFeature(drawing, context.resultIndex)
-      )
-    };
-    const colors = !sameColors(previous.colors, current.colors);
-    const visibility = previous.visibility !== current.visibility;
-    const strokes = previous.strokes !== current.strokes;
-    labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
-    // B20: a Result last shown with another Legend order receives the current
-    // order, also the default order, which is its own generated order (OV-47).
-    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder
-      ? resultLegendOrder : null;
-    /** @type {ReturnType<typeof compileDisplayedResultOperations>} */
-    let operations = null;
-    /** @type {string[]} */
-    let domains = [...LEGEND_STRUCTURE_DOMAINS];
-    // The palette and rules declined (rules changed meanwhile, or a Session
-    // operation): the Result keeps the fills and visibility it shows until
-    // the blocker clears. A failed projection or compile showed none.
-    let declined = false;
-    let failed = false;
-    try {
-      // The palette, rules, and visibility prepare their matches when their
-      // intent changed (`colors`, `visibility`); then one compile of the
-      // domains the Result shows.
-      // OV-2293: a Result whose bytes were drawn with other visibility, or
-      // restored and not known to show any (a Reset before a Save and Load), asks
-      // for the rerender when they lack a feature.
-      const preparation = {
-        colors, visibility, rerender: previous.visibility === '' || drawn.visibility !== current.visibility, show: false
-      };
-      let prepared = await projectMountedEditorIntent(preparation);
-      // Declined with nothing blocking (the rules changed meanwhile): prepared
-      // once more here, so the display still compiles once (R14-3).
-      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent(preparation);
-      declined = prepared === false;
-      domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
-      operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
-    } catch (error) {
-      failed = true;
-      console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
-    }
-    const shown = operations;
-    const hasOperations = shown !== null
-      && domains.some((domain) => shown[/** @type {keyof SvgMutationOperations} */ (domain)].length > 0);
-    // A Result that shows a Legend structure edit no operation keeps returns
-    // to Python's rows (the reconcile's reverse).
-    const projects = colors || visibility || strokes || hasOperations || legendStructureEdited(context.root);
-    recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
-      phase: context.phase,
-      rootGeneration: context.rootGeneration
-    });
-    if (projects) {
-      try {
-        showEditorIntent({ domains, operations });
-      } catch (error) {
-        failed = true;
-        console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
-      }
-    }
-    resultPaintRecord.shown(identity, current, previous, { declined, failed });
-    if (declined && !failed && displayBlocked()) await showDeclinedPaint(identity);
-  };
-  // A display that a Session operation or the rule preparation declined shows
-  // the fills and visibility once the blocker clears, while its Result stays
-  // displayed, so the next display reads the Result with them. A Save shows
-  // them before it writes the Result (`saving`: the Save does not block). A
-  // projection declined again without a blocker waits for the next display.
-  const displayBlocked = (saving = false) => sessionBlocks(saving) || ruleMatchingPending.value;
-  /** @type {(() => void) | null} */
-  let stopDeclinedPaintWait = null;
-  /**
-   * @param {string} identity
-   * @param {{ saving?: boolean }} [options]
-   */
-  const showDeclinedPaint = async (identity, { saving = false } = {}) => {
-    stopDeclinedPaintWait?.();
-    stopDeclinedPaintWait = null;
-    if (displayBlocked(saving)) {
-      stopDeclinedPaintWait = watch(() => displayBlocked(), (/** @type {unknown} */ blocked) => { if (!blocked) void showDeclinedPaint(identity); });
-      return;
-    }
-    const lacking = resultPaintRecord.lacking(identity);
-    if (!lacking?.colors || lacking.visibility === undefined) return;
-    const current = currentEditorProjectionState(state.activeDrawing());
-    try {
-      const shown = await projectMountedEditorIntent({
-        colors: !sameColors(lacking.colors, current.colors),
-        visibility: lacking.visibility !== current.visibility,
-        saving
+      similarityAlignmentPorts.refreshCanvas();
+      featureActions.preparePairwiseInteractionAffordances({
+        root: context.root,
+        phase: context.phase,
+        rootGeneration: context.rootGeneration
       });
-      if (shown === false) {
-        if (displayBlocked()) void showDeclinedPaint(identity);
-        return;
-      }
-      if (resultPaintRecord.lacking(identity) === lacking) resultPaintRecord.shown(identity, current, current);
-    } catch (error) {
-      console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
-    }
-  };
-
-  // A label rerender's displayed Result, once bound, shows the fills and
-  // visibility of the edits made while it ran (OV-346).
-  /** @param {{ resultIdentity: string, bindingOptions: Readonly<import('./preview-runtime.js').PreviewBindingOptions> }} context */
-  const showEditsMadeWhileDrawn = (context) => {
-    if (context.bindingOptions.drawnPaint && resultPaintRecord.lacking(context.resultIdentity)) {
-      void showDeclinedPaint(context.resultIdentity);
-    }
-  };
+      featureActions.preparePreviewItemAffordances({ root: context.root });
+    },
+    synchronizeLabelEditor,
+    initializeStrokeAndCanvas,
+    reconcileSelection,
+    afterReady
+  });
 
   // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
   // the departing drawing's slot and installs the arriving slot, or an empty

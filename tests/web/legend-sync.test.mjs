@@ -72,6 +72,9 @@ const entryActionsSource = await readFile(
 const sortActionsSource = await readFile(join(tempRoot, 'app', 'legend', 'sort-actions.js'), 'utf8');
 const colorActionsSource = await readFile(join(tempRoot, 'app', 'feature-editor', 'color-actions.js'), 'utf8');
 const appSetupSource = await readFile(join(tempRoot, 'app', 'app-setup.js'), 'utf8');
+// The editor intent and the Result binder steps the root wires.
+const editorIntentSource = await readFile(join(tempRoot, 'app', 'editor-intent.js'), 'utf8');
+const resultBinderSource = await readFile(join(tempRoot, 'app', 'mounted-result-binder.js'), 'utf8');
 const watchersSource = await readFile(join(tempRoot, 'app', 'watchers.js'), 'utf8');
 const configSource = await readFile(join(tempRoot, 'services', 'config.js'), 'utf8');
 assert.match(svgStylesSource, /querySelectorAll\(PAIRWISE_LEGEND_SELECTOR\)/);
@@ -93,19 +96,21 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
     `${name} writes no Legend row`
   ));
 assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\(msg\('Delete legend item'\), deleteLegendEntry, \{ domains: \[\.\.\.LEGEND_STRUCTURE_DOMAINS, \.\.\.STROKE_DOMAINS\] \}\)/);
-assert.match(appSetupSource, /const restoreLegendItems = \(label, restore\) => history\.runUndoable\(label,/);
-assert.doesNotMatch(appSetupSource, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/);
+assert.match(editorIntentSource, /const restoreLegendItems = \(label, restore\) => runUndoable\(label,/);
+[appSetupSource, editorIntentSource, resultBinderSource].forEach((source) => assert.doesNotMatch(
+  source, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/
+));
 assert.match(
   appSetupSource,
   /setLegendGeometryChangedHandler\(legendLayout\.refreshLegendGeometry\)/
 );
 assert.match(
-  appSetupSource,
+  resultBinderSource,
   /bindComposition\(context\)[\s\S]+captureBaseConfig\(\)/
 );
 assert.doesNotMatch(watchersSource, /captureBaseConfig/);
 assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsData/);
-const sessionLegendSyncSource = appSetupSource.match(
+const sessionLegendSyncSource = resultBinderSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
 assert.match(
@@ -113,7 +118,7 @@ assert.match(
   /const drawn = !context\.bindingOptions\.isIncrementalEdit\s*\|\| Boolean\(context\.bindingOptions\.replaceGeneratedLegend\);[\s\S]+extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && drawn,/
 );
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
-assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
+[appSetupSource, editorIntentSource, resultBinderSource].forEach((source) => assert.doesNotMatch(source, /restoreLoadedSessionLegendEntries/));
 assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries, 'entries', legendLoad\)/);
 assert.match(configSource, /entries: entries\.filter\(\(entry\) => entry\.dormant !== true\)/);
 assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries, 'deletedEntries', legendLoad\)/);

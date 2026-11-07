@@ -11,7 +11,7 @@ import { featureVisibilityRows } from '../services/feature-visibility.js';
 // displayed again receives a domain only when that state changed since it
 // was last shown, so a Result without new edits gets no projection work and
 // an Undo reaches a Result that is displayed again. The displayed Result
-// follows every live edit; app-setup records the states, and a label
+// follows every live edit; app/editor-intent.js records the states, and a label
 // rerender names the state it drew from (`editorPaintState`).
 
 /**

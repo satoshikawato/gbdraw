@@ -1421,9 +1421,9 @@ export const createFeatureColorActions = ({
     clearFeatureStyleScopeDialog();
   };
 
-  // The stroke edits write the editor intent only. The composition root shows
+  // The stroke edits write the editor intent only. The editor intent shows
   // them on the Result through the executor as one History step
-  // (`editEditorIntent` in app/app-setup.js), which records Python's strokes.
+  // (`editEditorIntent` in app/editor-intent.js), which records Python's strokes.
   /** @param {DrawingState} drawing @param {string | null | undefined} strokeColor @param {unknown} strokeWidth */
   const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
