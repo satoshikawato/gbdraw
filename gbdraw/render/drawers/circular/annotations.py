@@ -154,16 +154,18 @@ def _record_lanes(
     outer_radius_px: float,
     params: AnnotationTrackParams,
 ) -> tuple[list[PlacedRegionAnnotation], float]:
-    """The record's placements and the width of one lane."""
+    """The record's placements and the width of one lane: the lanes share the band less its padding and the
+    label room between them (``ResolvedAnnotationTrack.record_room``)."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
     lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px)
+    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px - track.record_room(record_index))
     return placements, 14.0 if track.clipped else usable / max(1, lane_count)
 
 
 def _lane_radii(
-    lane: int,
+    track: ResolvedAnnotationTrack,
+    placement: PlacedRegionAnnotation,
     lane_width: float,
     *,
     side: str,
@@ -171,12 +173,16 @@ def _lane_radii(
     outer_radius_px: float,
     params: AnnotationTrackParams,
 ) -> tuple[float, float]:
-    """The inner and outer radius of a lane: ``inside`` slots stack their lanes inward."""
+    """The inner and outer radius of a placement's lane: ``inside`` slots stack their lanes inward, each past the
+    label room of the gaps before it (``ResolvedAnnotationTrack.room_before``)."""
 
+    offset = params.padding_px + placement.lane * lane_width + track.room_before(
+        placement.annotation.record_index, placement.lane
+    )
     if side == "inside":
-        lane_outer = outer_radius_px - params.padding_px - lane * lane_width
+        lane_outer = outer_radius_px - offset
         return lane_outer - lane_width, lane_outer
-    lane_inner = inner_radius_px + params.padding_px + lane * lane_width
+    lane_inner = inner_radius_px + offset
     return lane_inner, lane_inner + lane_width
 
 
@@ -210,6 +216,7 @@ def _strand_lanes(
 
 
 def _mark_lane(
+    track: ResolvedAnnotationTrack,
     placement: PlacedRegionAnnotation,
     lane_width: float,
     strand_lanes: Mapping[Literal["+", "-"], tuple[RadialBand, float]],
@@ -226,7 +233,7 @@ def _mark_lane(
         band, lane_width = strand_lanes[strand]
         inner_radius_px, outer_radius_px = band.inner_px, band.outer_px
     lane_inner, lane_outer = _lane_radii(
-        placement.lane, lane_width, side=ring.side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
+        track, placement, lane_width, side=ring.side, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px,
         params=params,
     )
     return lane_inner, lane_outer, lane_width
@@ -442,7 +449,8 @@ def circular_annotation_labels(
             continue
         style = effective_annotation_style(annotation, params)
         lane_inner, lane_outer = _lane_radii(
-            placement.lane,
+            track,
+            placement,
             lane_width,
             side=side,
             inner_radius_px=inner_radius_px,
@@ -473,13 +481,7 @@ def circular_annotation_labels(
                     font_size=size,
                     color=style.label_color,
                     orientation=style.label_orientation,
-                    ink=partial(
-                        label_ink_offsets,
-                        font_family=font_family,
-                        font_size=size,
-                        anchor="middle",
-                        baseline="alphabetic" if style.label_orientation in CURVED_LABEL_ORIENTATIONS else "central",
-                    ),
+                    ink=_label_ink(font_family, size, style.label_orientation),
                     rings=rings,
                 ),
             )
@@ -503,6 +505,48 @@ def circular_annotation_labels(
             )
         )
     return tuple(placed)
+
+
+def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk:
+    """How a label's ink box is measured around its anchor (``_label_at``)."""
+
+    return partial(
+        label_ink_offsets,
+        font_family=font_family,
+        font_size=font_size,
+        anchor="middle",
+        baseline="alphabetic" if orientation in CURVED_LABEL_ORIENTATIONS else "central",
+    )
+
+
+def circular_annotation_label_depth(
+    text: str,
+    style: RegionAnnotationStyle,
+    font_size: float,
+    place_bp: float,
+    *,
+    font_family: str,
+    record_length: int,
+    radius_px: float,
+) -> float:
+    """How far a region label's letters reach across the lanes when it stands at ``place_bp`` beside a mark whose
+    edge is at ``radius_px`` (``_label_at``): the lane packer's room for it (``LabelSizing.depth_px``)."""
+
+    near, far = _label_at(
+        place_bp,
+        annotation_id="",
+        text=text,
+        record_length=record_length,
+        mark_edge=float(radius_px),
+        outward=True,
+        gap=0.0,
+        font_size=font_size,
+        color="",
+        orientation=style.label_orientation,
+        ink=_label_ink(font_family, font_size, style.label_orientation),
+        rings=(),
+    ).ink_radii
+    return far - near
 
 
 # A curved label's text path stays just short of a whole circle (one SVG arc command); the text keeps one em clear of
@@ -812,7 +856,7 @@ def circular_annotation_track_ink(
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer, lane_width = _mark_lane(placement, slot_lane_width, strand_lanes, ring=ring, params=params)
+        lane_inner, lane_outer, lane_width = _mark_lane(track, placement, slot_lane_width, strand_lanes, ring=ring, params=params)
         radius = 0.5 * (lane_inner + lane_outer)
         pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
         for part in mark_parts(annotation, join_origin=track.join_origin):
@@ -898,7 +942,7 @@ def circular_annotation_track_content(
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer, lane_width = _mark_lane(placement, slot_lane_width, strand_lanes, ring=ring, params=params)
+        lane_inner, lane_outer, lane_width = _mark_lane(track, placement, slot_lane_width, strand_lanes, ring=ring, params=params)
         radius = 0.5 * (lane_inner + lane_outer)
         item_group = Group(
             id=annotation_dom_id(
@@ -1015,6 +1059,7 @@ __all__ = [
     "CircularLabelArc",
     "CircularLabelObstacles",
     "LeaderSegment",
+    "circular_annotation_label_depth",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

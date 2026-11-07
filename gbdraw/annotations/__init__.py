@@ -2,6 +2,8 @@
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .layout import (
+    LabelSizing,
+    LaneRoom,
     PlacedRegionAnnotation,
     ResolvedAnnotationTrack,
     assign_annotation_lanes,
@@ -86,6 +88,8 @@ __all__ = [
     "feature_underlay_slot_id",
     "assign_annotation_lanes",
     "layout_annotation_track",
+    "LabelSizing",
+    "LaneRoom",
     "is_auto_feature_underlay",
     "mark_parts",
     "merge_annotation_segments",

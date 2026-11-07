@@ -44,6 +44,9 @@ COLOR_NAME_TEXT_PATTERN = r"^\s*(?:{})\s*$".format(
 )
 BLANK_TEXT_PATTERN = r"^\s*$"
 
+# Where a Linear region label stands along its region (``ResolvedRegionAnnotation.label_anchor``).
+LabelPosition: TypeAlias = Literal["center", "start", "end"]
+
 
 def _color(value: object | None, name: str, *, optional: bool = False) -> str | None:
     if value is None and optional:
@@ -273,7 +276,7 @@ class RegionAnnotationStyle:
     # None: the font size of the feature labels of the drawing (annotation_label_font_size).
     label_font_size: float | None = None
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
-    label_position: Literal["center", "start", "end"] = "center"
+    label_position: LabelPosition = "center"
     label_offset: float = 4.0
     # A fill along the region in place of ``fill`` (band and highlight marks).
     gradient: AnnotationGradient | None = None
@@ -579,7 +582,7 @@ class ResolvedRegionAnnotation:
 
         When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
         row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
-        as the display shows it. Else it stands on the centre of its longest part (D-62 Q2, Q3): where only the
+        as the display shows it. Else it stands on the centre of its longest part (PD-OI-119): where only the
         origin cuts it (no display seam), two equal parts go to the one where the region starts.
         """
         parts = mark_parts(self, join_origin=join_origin)
@@ -606,12 +609,10 @@ class ResolvedRegionAnnotation:
         """Where the region's centred label stands (``label_place``)."""
         return self.label_place(join_origin=join_origin).bp
 
-    def label_anchor(
-        self, position: Literal["center", "start", "end"], *, join_origin: bool
-    ) -> LabelPlace:
+    def label_anchor(self, position: LabelPosition, *, join_origin: bool) -> LabelPlace:
         """Where a Linear label at ``position`` stands and the drawn part it stands on: centred at
         ``label_place``; at the start, the region's first base, at the end its last, as the region runs
-        (``region_run``) and as the display shows them (D-62 Q4)."""
+        (``region_run``) and as the display shows them (PD-OI-119)."""
 
         if position == "center":
             return self.label_place(join_origin=join_origin)
@@ -627,12 +628,16 @@ class ResolvedRegionAnnotation:
         parts = mark_parts(self, join_origin=join_origin)
         return LabelPlace(bp, next(part for part in parts if part.row == row and part.start <= bp <= part.end))
 
-    def label_room_bp(self, *, join_origin: bool) -> int:
-        """What the annotation's label can stand over: its span, or on several rows the part it stands on."""
-        if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
-            return self.span_bp
-        part = self.label_place(join_origin=join_origin).part
-        return part.end - part.start
+    def label_stretch(self, position: LabelPosition, *, join_origin: bool) -> tuple[LabelPlace, tuple[int, int]]:
+        """Where a label at ``position`` stands (``label_anchor``) and the stretch of its row it may cover without
+        leaving its mark: the region's drawn extent on that row where the mark draws every part whole, else the
+        part it stands on."""
+        place = self.label_anchor(position, join_origin=join_origin)
+        parts = mark_parts(self, join_origin=join_origin)
+        if all(part.capped_start and part.capped_end for part in parts):
+            row = [part for part in parts if part.row == place.part.row]
+            return place, (min(part.start for part in row), max(part.end for part in row))
+        return place, (place.part.start, place.part.end)
 
     @property
     def geometry_rows(self) -> tuple[int, ...]:
@@ -691,7 +696,7 @@ def origin_sides(bounds: Sequence[tuple[int, int]]) -> tuple[int, int]:
 
 
 def region_run(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> tuple[tuple[int, int], ...]:
-    """A span's segments in the order the region runs (D-62 Q5): ascending, or across the origin from its side
+    """A span's segments in the order the region runs (PD-OI-119): ascending, or across the origin from its side
     that ends at the record's end over the origin into its side that starts at 0 (``origin_sides``), then its
     other segments in ascending order. Its midpoint, its gradient and its start and end labels read this run."""
 

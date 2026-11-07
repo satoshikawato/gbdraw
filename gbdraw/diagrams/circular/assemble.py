@@ -133,6 +133,7 @@ from ...tracks import (
 )
 from ...annotations import (
     AnnotationOptions,
+    LabelSizing,
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
@@ -153,6 +154,7 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
     CircularLabelObstacles,
     LeaderSegment,
+    circular_annotation_label_depth,
     circular_annotation_label_room,
     circular_annotation_labels,
     circular_annotation_track_content,
@@ -342,9 +344,17 @@ def _layout_circular_annotation_tracks(
 
     relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
     record_lengths = {record_index: len(gb_record.seq)}
-    bp_per_px = {
-        record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))
-    }
+    labels = LabelSizing(
+        font_size=circular_label_font_size(canvas_config.profile.config, len(gb_record.seq)),
+        # The letters' depth across the lanes beside a mark at the circle's radius.
+        depth_px=partial(
+            circular_annotation_label_depth,
+            font_family=str(canvas_config.profile.config.objects.text.font_family),
+            record_length=len(gb_record.seq),
+            radius_px=float(canvas_config.radius),
+        ),
+        bp_per_px={record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))},
+    )
     updated: list[CircularTrackSlot] = []
     layouts: dict[str, ResolvedAnnotationTrack] = {}
     for slot in slots:
@@ -360,8 +370,7 @@ def _layout_circular_annotation_tracks(
             record_lengths=record_lengths,
             params=params,
             available_extent_px=available,
-            bp_per_px=bp_per_px,
-            label_font_size=circular_label_font_size(canvas_config.profile.config, len(gb_record.seq)),
+            labels=labels,
             join_origin=True,
         )
         layouts[slot.id] = layout
