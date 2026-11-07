@@ -140,6 +140,7 @@ from ...annotations import (
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
+    RoomBounds,
     annotation_track_params_from_mapping,
     feature_underlay_anchor_slot_id,
     feature_underlay_slot_id,
@@ -381,7 +382,9 @@ class _CircularAnnotationPacking:
     ) -> ResolvedAnnotationTrack:
         """Pack one annotation slot, its labels measured beside their marks on the slot's side
         (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest
-        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``."""
+        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``. An inside slot
+        without a set width adds no room that would carry its lanes past the centre (LBL-ROOM-STOP-AT-CENTRE-WARN):
+        ``lanes_from_px`` is all the room it has."""
 
         params = annotation_track_params_from_mapping(slot.params)
         return layout_annotation_track(
@@ -403,7 +406,7 @@ class _CircularAnnotationPacking:
                 bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
             ),
             join_origin=True,
-            rooms_at_least=rooms_at_least,
+            room_bounds=RoomBounds(tuple(rooms_at_least), float(lanes_from_px) if inside and slot.width is None else None),
         )
 
 
@@ -2568,15 +2571,17 @@ def _record_label_layout(
     radial_refused: bool,
     capacity: Sequence[CircularLabelCapacity] = (),
     region_labels: Sequence[CircularAnnotationLabel] = (),
-    region_track_overlaps: int = 0,
+    region_warnings: LabelFit = FITS,
     definition_track_overlaps: int = 0,
     definition_probe: CircularDefinitionFitProbe | None = None,
     definition_narrow_radius_px: float = 0.0,
 ) -> CircularLabelLayout | None:
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
-    Region labels cut to fit their circle (LP-D87) or lying on another track
-    (LP-D86) are a ``circular_region`` kind that only warns, and so are the
+    Region labels cut to fit their circle (LP-D87), and those the layout
+    counts in ``region_warnings`` (lying on another track, LP-D86; left
+    without lane room before the centre, LBL-ROOM-STOP-AT-CENTRE-WARN), are a
+    ``circular_region`` kind that only warns, and so are the
     lines of the centre definition text that reach into a track (D-12,
     ``circular_definition``). ``capacity`` names the sides whose labels need
     much more room than the map has and were not placed (CAPACITY-STOP).
@@ -2595,7 +2600,8 @@ def _record_label_layout(
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
     cuts = sum(label.cut for label in region_labels)
-    if not placed and not cuts and not region_track_overlaps and not definition_track_overlaps and not capacity:
+    region_counts = replace(region_warnings, region_cuts=cuts)
+    if not placed and region_counts.fits and not definition_track_overlaps and not capacity:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
@@ -2618,9 +2624,9 @@ def _record_label_layout(
     counts: dict[LabelKind, int] = dict(label_counts) if placed else {}
     counts.update((side.label_kind, side.record.label_count) for side in capacity)
     kind_fits = circular_label_fits(drawn_labels, total_length, definition_text=definition_text) if placed else {}
-    if cuts or region_track_overlaps:
+    if not region_counts.fits:
         counts["circular_region"] = len(region_labels)
-        kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts, region_track_overlaps=region_track_overlaps)
+        kind_fits["circular_region"] = region_counts
     if definition_track_overlaps:
         counts["circular_definition"] = definition_track_overlaps
         kind_fits["circular_definition"] = LabelFit(0, 0, definition_track_overlaps=definition_track_overlaps)
@@ -3607,7 +3613,12 @@ def add_record_on_circular_canvas(
         radial_refused=radial_refused,
         capacity=label_capacity,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
-        region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
+        region_warnings=LabelFit(
+            0,
+            0,
+            region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
+            region_rooms_past_centre=sum(track.labels_without_room for track in annotation_track_layouts.values()),
+        ),
         definition_track_overlaps=(
             definition_lines_on_tracks(radial_layout, definition_ink, annotation_labels) if definition_ink else 0
         ),

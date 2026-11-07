@@ -596,7 +596,13 @@ def test_lane_packing_measures_a_label_in_the_slot_style_font() -> None:
             bundle.annotations,
             record_lengths={0: 100},
             params=AnnotationTrackParams(set_id="s", style_override=style_override),
-            labels=LabelSizing(font_size=1.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
+            # A stand-in for the drawer's measure: centred letters 0.6 em wide each, at 1 bp per px.
+            labels=LabelSizing(
+                font_size=1.0,
+                extent=lambda annotation, _style, size, _bp, _offset: LabelExtent(
+                    -0.3 * len(annotation.label) * size, 0.3 * len(annotation.label) * size, 10.0
+                ),
+            ),
             join_origin=False,
         )
         return {placement.lane for placement in track.placements}

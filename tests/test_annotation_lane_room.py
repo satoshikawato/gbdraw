@@ -14,6 +14,8 @@ from __future__ import annotations
 import math
 import random
 import re
+import warnings
+from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -236,7 +238,7 @@ def test_circular_label_gets_room_from_the_lane_it_would_cross(slot: str | None)
 def _without_room(monkeypatch: pytest.MonkeyPatch) -> None:
     """Draw as if no label asked for room."""
 
-    monkeypatch.setattr(packer, "_lane_rooms", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(packer, "_lane_rooms", lambda *_args, **_kwargs: packer._LaneRooms((), {}))
 
 
 @pytest.mark.parametrize("mode", ("linear", "circular"))
@@ -258,8 +260,8 @@ def test_a_circular_label_whose_letters_cross_nothing_parts_no_lanes(
     orientation: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # a's label stands at bp 2500, at 3 o'clock: a horizontal or radial label spans only its letters' height along
-    # the circle there, short of b's mark (2700-3000) in the next lane.
-    regions = (_region("a", 2400, 2600, "LONGLABELNAME", orientation), _region("b", 2700, 3000, ""))
+    # the circle there, short of b's mark (2550-3000) in the next lane.
+    regions = (_region("a", 2400, 2600, "LONGLABELNAME", orientation), _region("b", 2550, 3000, ""))
     drawn = _svg("circular", regions)
     items = _groups(drawn)
 
@@ -585,3 +587,137 @@ def test_the_slot_grows_by_the_largest_room_of_a_record_not_their_sum() -> None:
     assert track.lane_room_px == pytest.approx(_ROOM)
     assert track.required_extent_px == pytest.approx(_BASE + _ROOM)
     assert (track.room_before(0, 0, 1), track.room_before(1, 0, 1)) == (_ROOM, 0.0)
+
+
+def _signed_radii(item: ElementTree.Element) -> tuple[float, float]:
+    """The inner and outer radius of a Circular band, as its arcs give them (a negative one draws through the
+    centre)."""
+
+    (path,) = item.iter(f"{_SVG}path")
+    radii = [float(value) for value in re.findall(r"A (-?[\d.]+),", path.get("d", ""))]
+    return min(radii), max(radii)
+
+
+def test_a_linear_label_gets_room_before_the_lane_further_on_whose_mark_it_would_cross() -> None:
+    # LBL-ROOM-BEFORE-MET-LANE (OV-2661): c (lane 2) labels above at bp 4000. b (lane 1) ends at 2500, short of the
+    # letters, which reach a's mark in lane 0. The room goes between a and b: b keeps its place beside c.
+    regions = (_region("a", 1001, 5000, ""), _region("b", 1501, 2500, ""), _region("c", 2001, 6000, "Gamma"))
+    items, bare = _groups(_svg("linear", regions)), _groups(_svg("linear", tuple(replace(r, label="") for r in regions)))
+    _left, _right, top, bottom = _ink(items["c"])
+    c_top, _c_bottom = _band(items["c"])
+    moved = c_top - _band(bare["c"])[0]
+
+    assert top >= _band(items["a"])[1] + _PAINT
+    assert bottom == pytest.approx(c_top - _EDGE, abs=0.01)
+    assert _band(items["a"]) == _band(bare["a"])
+    assert moved > 0.0
+    assert _band(items["b"]) == pytest.approx(tuple(y + moved for y in _band(bare["b"])), abs=1e-9)
+
+
+def test_a_circular_label_gets_room_before_the_lane_further_on_whose_mark_it_would_cross() -> None:
+    # LBL-ROOM-BEFORE-MET-LANE (OV-2661): c (lane 0) labels outward at bp 2500, where a horizontal label's width runs
+    # across the lanes. b (lane 1) spans only 1901-2100 along the circle, clear of the letters, which reach a's mark
+    # in lane 2. The room goes between b and a: b keeps its place beside c.
+    regions = (
+        _region("c", 1801, 3200, "Gamma region"),
+        _region("b", 1901, 2100, ""),
+        _region("a", 2001, 3000, ""),
+    )
+    items = _groups(_svg("circular", regions))
+    a_inner, a_outer = _radii(items["a"])
+    _b_inner, b_outer = _radii(items["b"])
+
+    assert _radii(items["b"])[0] == pytest.approx(_radii(items["c"])[1])
+    assert a_inner > b_outer
+    assert not [
+        (radius, bp)
+        for radius, bp in _ink_polar(items["c"])
+        if a_inner - _PAINT < radius < a_outer + _PAINT and 2001 <= bp <= 3000
+    ]
+
+
+def _nested_inside(count: int) -> tuple[dict[str, ElementTree.Element], list[warnings.WarningMessage], object]:
+    """``count`` nested bands inside the axis around 3 o'clock, each labelled horizontally, so that each label would
+    cross the next lane's mark (``followups2/questions/qrender.py q7-<count>``)."""
+
+    regions = tuple(
+        _region(f"r{index}", 1501 + 100 * index, 3500 - 100 * index, f"Region {index + 1} label text")
+        for index in range(count)
+    )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "regions:annotations@side=inside,set_id=regions")),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        drawing = gbdraw.draw_circular(_record(), options=options)._drawing
+    return _groups(drawing.tostring()), caught, drawing
+
+
+@pytest.mark.parametrize(("count", "without_room"), ((4, 1), (5, 2)))
+def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, without_room: int) -> None:
+    # LBL-ROOM-STOP-AT-CENTRE-WARN (OV-2665, OV-2666): the rooms of four or five crossing labels would carry the
+    # lanes past the centre. The rooms that fit from the slot's outer edge are kept; the others are not added, every
+    # band keeps its width on its own side of the centre, and the warning counts the labels left without room.
+    from gbdraw.api.diagram import label_fit_report
+    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.web_support.label_fit import label_fit_report_payload
+
+    items, caught, drawing = _nested_inside(count)
+    bands = [_signed_radii(items[f"r{index}"]) for index in range(count)]
+    widths = {round(outer - inner, 6) for inner, outer in bands}
+
+    assert all(inner > 0.0 for inner, _outer in bands), bands
+    assert len(widths) == 1 and min(widths) > 10.0, bands
+    counted = "region label" if without_room == 1 else "region labels"
+    assert any(
+        f"{without_room} {counted} without room before the centre" in str(item.message) for item in caught
+    ), [str(item.message) for item in caught]
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn
+    sentence = f"Region labels cross other region marks: there is no room for them before the centre ({without_room})."
+    assert sentence in label_fit_notice(report)
+    # The Web shows the same sentence over the figure, and the region labels get no row to choose.
+    payload = label_fit_report_payload(report, "circular")
+    assert sentence in payload["notice"]
+    (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
+    assert region["counts"] == f"{without_room} {counted} without room before the centre"
+    assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
+
+
+@pytest.mark.parametrize(
+    ("mode", "regions", "shares_lane"),
+    (
+        # The letters (bp 1711-2390) reach over b's mark; 0.6 em would keep only bp 1834-2266.
+        ("linear", (("a", 2001, 2100, "WWWWWW", "horizontal"), ("b", 2301, 2600, "", "horizontal")), False),
+        # The letters (bp 1979-2122) end short of b; 0.6 em would keep up to bp 2266.
+        ("linear", (("a", 2001, 2100, "iiiiii", "horizontal"), ("b", 2201, 2500, "", "horizontal")), True),
+        ("circular", (("a", 2001, 2050, "WWWWWW", "tangent"), ("b", 2151, 2400, "", "tangent")), False),
+    ),
+    ids=("linear-wide", "linear-narrow", "circular-wide"),
+)
+def test_the_lane_packer_keeps_a_labels_letters_as_the_drawer_measures_them(
+    mode: str, regions: tuple[tuple[str, int, int, str, str], ...], shares_lane: bool
+) -> None:
+    # LBL-RESERVE-INK: a's label leaves its short mark; the lane keeps the bp its letters paint, so b shares a's lane
+    # only where the letters end short of b's mark.
+    items = _groups(_svg(mode, tuple(_region(*region) for region in regions)))
+    shape = _band if mode == "linear" else _radii
+
+    assert (shape(items["a"]) == shape(items["b"])) is shares_lane
+
+
+def test_a_clipped_inside_slot_stops_its_lanes_at_the_centre() -> None:
+    # OV-2666: an inside slot of set width with overflow=clip keeps the rooms its labels need, which carry the later
+    # lanes past the centre. They stop at it: no band is drawn at a negative radius, through the centre.
+    regions = tuple(
+        _region(f"r{index}", 1501 + 100 * index, 3500 - 100 * index, f"Region {index + 1} label text")
+        for index in range(5)
+    )
+    items = _groups(_svg("circular", regions, "regions:annotations@side=inside,set_id=regions,w=60px,overflow=clip"))
+    bands = [_signed_radii(items[f"r{index}"]) for index in range(5)]
+
+    assert all(inner >= 0.0 for inner, _outer in bands), bands
+    assert bands[-1] == (0.0, 0.0)
+    ((path,),) = [list(items["r4"].iter(f"{_SVG}path"))]
+    assert "nan" not in path.get("d", "").lower()
