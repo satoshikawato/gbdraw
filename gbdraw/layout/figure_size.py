@@ -25,11 +25,15 @@ Built = TypeVar("Built")
 _AIM_UNDER_PX = 2.0
 _ACCEPT_UNDER_PX = 3.0
 _MAX_PASSES = 8
-# A base too small to draw fails early (a Circular map's track layout, about 0.05 s), and a pass that left content
-# out skips its costly part (a Circular map whose labels were not placed, about 0.05 s), so such passes have their own
-# bound, after which the search stops: halving the distance between the largest of them below the smallest drawn base
-# and that base reaches 1 from a few thousand.
-_MAX_CHEAP_PASSES = 12
+# A base too small to draw fails early (a Circular map's track layout, about 0.05 s, where a drawn pass with labels
+# can take 4-20 s), and a pass that left content out skips its costly part (a Circular map whose labels were not
+# placed, about 0.05 s), so such passes have their own bound, after which the search stops: stepping a quarter of the
+# way from the largest of them below the smallest drawn base to that base reaches it from a few hundred.
+_MAX_CHEAP_PASSES = 24
+# Below every pass, where the size reaches the box only under the smallest base that can be drawn, the search tries
+# this fraction of the way up from the largest base too small to draw: a try that cannot be drawn is cheap, so the
+# smallest drawn pass, which a refusal states, is found with fewer costly passes than by halving.
+_CHEAP_SIDE_SPLIT = 4
 # The composed size grows with the base length, but labels past the ends can make a stretch nearly flat; a slope
 # measured there is raised to this so one step cannot jump far.
 _MIN_SLOPE = 0.25
@@ -38,6 +42,9 @@ _MIN_SLOPE = 0.25
 # out ends only when even this slope reaches the box at or below that pass. Content that jumps (a legend that moves to
 # another side) can shrink faster; the search can then end before a base that keeps the content and fits.
 _STEEPEST_SLOPE_FACTOR = 2.0
+# Before a refusal, a base between the smallest pass and the next one is measured, since a size that is not monotonic
+# may fit there; not when even this many times the steepest slope from either pass cannot reach the box there.
+_MIDDLE_DIP_FACTOR = 4.0
 # Two passes whose parts (``MeasuredBase.parts_px``) differ by no more than this have the same size. The parts that do
 # not shrink are added in another order at another base, so the same size can differ in its last digits (1e-13 px
 # measured).
@@ -147,6 +154,14 @@ def _flat_at_smallest(drawn: dict[int, _Pass[Built]]) -> bool:
     )
 
 
+def _dip_reaches_box(lower: BaseLengthFit[Built], upper: BaseLengthFit[Built], base: int, first_slope: float) -> bool:
+    """Whether a size that dips between two passes over the box could reach it at ``base``: from each pass, a line
+    ``_MIDDLE_DIP_FACTOR`` times as steep as the steepest assumed slope reaches 0 px at or before ``base``."""
+
+    steepest = _MIDDLE_DIP_FACTOR * _STEEPEST_SLOPE_FACTOR * first_slope
+    return max(lower.excess_px - steepest * (base - lower.base), upper.excess_px - steepest * (upper.base - base)) <= 0.0
+
+
 def _costly_passes(drawn: dict[int, _Pass[Built]]) -> int:
     """The drawn passes that kept their content, which count against ``_MAX_PASSES``."""
 
@@ -204,8 +219,8 @@ def _next_base(
     floor = max((base for base in undrawable if base < lowest), default=0)
     guess = max(1, min(guess, lowest - 1))
     if guess <= floor:
-        # Bases at or below the floor cannot be drawn: halve the way down to it instead.
-        guess = (floor + lowest) // 2
+        # Bases at or below the floor cannot be drawn: step a quarter of the way up from it instead.
+        guess = floor + max(1, (lowest - floor) // _CHEAP_SIDE_SPLIT)
     return None if guess <= floor or guess in drawn else guess
 
 
@@ -224,14 +239,16 @@ def fit_base_length(
     search ends once a line from the pass over twice as steep as ``slope`` (or the measured one, if steeper), the
     steepest the content is assumed to shrink, reaches the box only at or below the pass under. A base too small to draw above the widest pass under bounds the search
     as a pass over would (its midpoint is tried); below the smallest drawn pass, a base at or below the largest one
-    too small to draw is not tried: the step halves the way to it instead. After 8 drawn passes that kept their
-    content, or 12 that were too small to draw or left content out, the widest pass under is kept.
+    too small to draw is not tried: the step goes a quarter of the way up from it instead, since a base too small to
+    draw is cheap to try. After 8 drawn passes that kept their content, or 24 that were too small to draw or left
+    content out, the widest pass under is kept.
 
     With no pass under, the target is refused (``fits`` False) with the smallest drawn pass. The search then ends as
     soon as the two smallest drawn passes have the same parts (``parts_px``, within float rounding): the content
     stopped shrinking, so no smaller base fits, and the refusal states the sizes of the figure at its smallest. Otherwise, before
     refusing, the middle of the smallest pass and the next drawn pass above it is measured once, if not yet measured,
-    since a measure that is not monotonic may fit there. Only the kept pass's Python warnings reach the caller, once;
+    since a measure that is not monotonic may fit there, unless even a dip four times as steep as the steepest assumed
+    slope from either pass could not reach the box there. Only the kept pass's Python warnings reach the caller, once;
     a refusal emits none.
     """
 
@@ -267,6 +284,8 @@ def fit_base_length(
                 and middle is not None
                 and lowest < middle
                 and middle not in undrawable
+                and above is not None
+                and _dip_reaches_box(drawn[lowest].fit, drawn[above].fit, middle, slope)
             ):
                 checked_middle = True
                 base = middle

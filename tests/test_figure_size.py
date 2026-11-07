@@ -139,7 +139,7 @@ def _fit(size_of_base, target: float, *, first_base: int | None = None, slope: f
 
     def measure(base: int) -> MeasuredBase[int] | None:
         bases.append(base)
-        # The walk measures at most 8 costly and 12 cheap bases, the first, and one middle base.
+        # The walk measures at most 8 costly and 24 cheap bases, the first, and one middle base.
         assert len(bases) <= 40, f"the walk measured more than 40 bases: {bases[:12]} ..."
         size = size_of_base(base)
         if size is None:
@@ -231,12 +231,40 @@ def test_a_base_too_small_to_draw_above_a_pass_under_bounds_the_search() -> None
     assert len(set(bases)) == len(bases)
 
 
+def test_a_refusal_finds_the_smallest_drawable_base_with_few_drawn_passes() -> None:
+    """Every base is over the box and bases under 53 cannot be drawn (they fail early). Below every pass the walk tries
+    a quarter of the way up from the largest base too small to draw, so it reaches the smallest drawable base, which
+    the refusal states, after four drawn passes; halving the way drew eight, 390, 195, 98, 73, 61, 55, 53 and 54, as
+    HmmtDNA with labels out at 85 mm does, where a drawn pass takes 4 to 20 s. The middle check is skipped: no dip
+    four times as steep as the steepest slope reaches the box between 53 and the next pass."""
+
+    fit, bases = _fit(lambda base: None if base < 53 else 2.0 * base + 900.0, 680.0, first_base=390, slope=2.0)
+    assert not fit.fits and fit.base == 53
+    drawn = [base for base in bases if base >= 53]
+    assert drawn == [390, 98, 56, 53]
+    assert len(set(bases)) == len(bases) and len(bases) - len(drawn) <= 24
+
+
+def test_the_middle_check_runs_only_when_a_dip_from_both_passes_reaches_the_box() -> None:
+    """The size at a base between two passes over the box is at least what a line four times as steep as the
+    steepest assumed slope (16 px per px of radius for a Circular map) gives from each pass, so the middle can fit
+    only if both lines reach 0 px there."""
+
+    from gbdraw.layout.figure_size import BaseLengthFit, _dip_reaches_box
+
+    lowest = BaseLengthFit(53, 5.0, 53, fits=False)
+    # From 53, 5 - 16 = -11 px; from 56 at +100 px, 100 - 2 * 16 = 68 px: the middle cannot fit.
+    assert not _dip_reaches_box(lowest, BaseLengthFit(56, 100.0, 56, fits=False), 54, 2.0)
+    # From 56 at +20 px, 20 - 2 * 16 = -12 px: both lines reach the box, so the middle is measured.
+    assert _dip_reaches_box(lowest, BaseLengthFit(56, 20.0, 56, fits=False), 54, 2.0)
+
+
 def test_bases_too_small_to_draw_end_the_search_after_their_bound() -> None:
-    """Every base below the first cannot be drawn: the refusal keeps the first pass after at most 12 such passes."""
+    """Every base below the first cannot be drawn: the refusal keeps the first pass after at most 24 such passes."""
 
     fit, bases = _fit(lambda base: None if base < 390 else 2.0 * base + 180.0, 680.0, first_base=390, slope=2.0)
     assert not fit.fits and fit.base == 390
-    assert 1 < len(bases) <= 13 and len(set(bases)) == len(bases)
+    assert 1 < len(bases) <= 25 and len(set(bases)) == len(bases)
 
 
 # The MjeNMV map against a 120 mm box, measured per radius (CPython, 2026-11-06): the centre definition keeps the
@@ -253,7 +281,7 @@ def test_a_refusal_ends_once_the_two_smallest_passes_have_the_same_size() -> Non
 
     fit, bases = _fit(_mjenmv_without_labels, 0.0, first_base=390, slope=2.0)
     assert not fit.fits and fit.excess_px == 191.0 and fit.base > 49
-    assert bases == [390, 123, 1, 62]
+    assert bases == [390, 123, 1, 31, 54]
 
 
 def test_sizes_equal_up_to_float_rounding_are_flat() -> None:
@@ -266,7 +294,7 @@ def test_sizes_equal_up_to_float_rounding_are_flat() -> None:
         first_base=390,
         slope=2.0,
     )
-    assert not fit.fits and len(bases) == 4
+    assert not fit.fits and len(bases) == 5
 
 
 def test_a_refusal_goes_on_while_a_part_shrinks_under_the_same_excess() -> None:
@@ -796,21 +824,22 @@ def test_a_circular_height_below_the_smallest_map_is_refused_with_its_parts() ->
 
 
 @pytest.mark.parametrize(
-    ("options", "passes"),
+    ("options", "drawn_passes"),
     [
-        ({"figure_width": "60mm"}, 5),
+        ({"figure_width": "60mm"}, 3),
         # The legend beside the map is taller than the map, so the excess over 50 mm stays the same while the map
         # still shrinks: the walk goes on, and the refusal states the map at its smallest.
-        ({"figure_height": "50mm", "legend": "right", "config_overrides": {"objects.definition.circular.show": False}}, 8),
+        ({"figure_height": "50mm", "legend": "right", "config_overrides": {"objects.definition.circular.show": False}}, 4),
     ],
 )
 def test_a_circular_refusal_ends_where_the_map_stops_shrinking(
-    monkeypatch: pytest.MonkeyPatch, options: dict, passes: int
+    monkeypatch: pytest.MonkeyPatch, options: dict, drawn_passes: int
 ) -> None:
     """Below about radius 100 the centre definition keeps the tracks of the mitochondrial map out, so the map has the
-    same size down to the smallest radius whose tracks can be drawn. The walk ends at the second pass of that size, in
-    5 passes instead of 11, and states the same sizes as the smallest drawable map. Without the definition the map
-    shrinks down to that radius, and the walk goes there as before."""
+    same size down to the smallest radius whose tracks can be drawn. The walk ends at the second pass of that size,
+    after three drawn radii, and states the same sizes as the smallest drawable map. Without the definition the map
+    shrinks down to that radius, and the walk goes there as before, in four drawn radii: below every pass it tries
+    radii a quarter of the way up from the largest one too small to draw, which fail early."""
 
     import gbdraw.api.diagram as diagram
     from gbdraw.layout.figure_size import BaseLengthFit
@@ -820,8 +849,10 @@ def test_a_circular_refusal_ends_where_the_map_stops_shrinking(
 
     def counted(measure, **kwargs):
         def measured_base(base: int):
-            measured.append(base)
-            return measure(base)
+            result = measure(base)
+            if result is not None:
+                measured.append(base)
+            return result
 
         return fit_base_length(measured_base, **kwargs)
 
@@ -839,7 +870,7 @@ def test_a_circular_refusal_ends_where_the_map_stops_shrinking(
             _draw_mito_circular(**options)
         refusals.append((str(caught.value), caught.value.diagnostic))
     assert refusals[0] == refusals[1]
-    assert len(measured) == passes
+    assert len(measured) == drawn_passes
 
 
 def test_tracks_that_do_not_fit_the_configured_radius_raise_as_before() -> None:
@@ -990,7 +1021,7 @@ def test_the_fit_steps_with_the_radii_whose_labels_were_placed(monkeypatch: pyte
         )
     assert caught.value.report.larger_figure is not None
     assert all(left_out != drawn_labels for left_out, drawn_labels in passes)
-    assert [left_out for left_out, _drawn_labels in passes] == [False, False, True]
+    assert len(passes) == 3 and [left_out for left_out, _drawn_labels in passes].count(False) == 2
 
 
 def test_the_larger_figure_estimate_adds_the_missing_room_to_each_requested_side() -> None:
