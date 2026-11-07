@@ -100,6 +100,13 @@ write-up of a release.
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was
   written in that unit (#1662).
+- Fixed (Web app): an Undo or Redo back to a figure with a Figure size whose
+  fit was still running or had been refused showed the figure unfitted and did
+  not fit it again. For example, the Undo of a Default colors file loaded while
+  a Canvas padding change was being fitted showed the padded figure larger than
+  the requested size, and the line under Figure size said the edit could not be
+  fitted. The figure now shows at once and is then fitted again; a step whose
+  fitted figure was shown still returns to it with no redraw.
 - Performance: a per-base depth file takes much less memory on the command
   line, in the Python API and in the Web app. Each reference's depths are held
   as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a

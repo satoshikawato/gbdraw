@@ -11,6 +11,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { open: openParityFixture } = require('./helpers/live-generate-parity-steps.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
 const MM_180_PX = 180 * 96 / 25.4;
@@ -280,3 +281,130 @@ test('a Legend rename and Canvas padding on a sized figure are fitted again by t
   expect(px(padded.root.width)).toBeCloseTo(MM_160_PX, 2);
   expect(padded.larger).toBe(null);
 });
+
+// #1634 residual (OV-2560): a checkpoint step that starts while the refit of the step before it is still pending
+// captures the figure Python has not fitted yet. Its Undo shows that figure at once, says it is being fitted, and asks
+// the automatic rerender to fit it, as a Redo of a refused refit does (D-49); its Redo shows the fitted figure History
+// kept for it (D-48). The step here is a Default colors file import, made while a Canvas padding refit is held.
+test('an Undo back to a sized figure whose refit was still pending fits it again', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await openLayout(page);
+  await setSide(page, 'width', 280, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const MM_280_PX = 280 * 96 / 25.4;
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__holdRender = null;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async (...args) => {
+        window.__renders += 1;
+        if (window.__holdRender) await window.__holdRender;
+        return render?.(...args);
+      }
+    };
+  });
+  const hold = () => page.evaluate(() => { window.__holdRender = new Promise((resolve) => { window.__releaseRender = resolve; }); });
+  const release = () => page.evaluate(() => { window.__holdRender = null; window.__releaseRender(); });
+  const renders = () => page.evaluate(() => window.__renders);
+  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
+  const cdsColor = () => page.evaluate(() => window.__GBDRAW_APP__.currentColors.CDS);
+
+  // The padding's refit is held: the padded figure the Web drew at once is larger than 280 mm.
+  await hold();
+  await page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; });
+  const left = page.locator('#canvas-padding-left');
+  await left.fill('60');
+  await left.press('Tab');
+  await expect.poll(fittingLine).toBe('Fitting the figure to the requested size.');
+  const padded = px((await sizeState(page)).root.width);
+  expect(padded, 'the padding shows at once').toBeGreaterThan(MM_280_PX + 1);
+
+  // The import is one checkpoint step; it starts while the padding's refit is pending.
+  const before = await cdsColor();
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\t#123456\n')
+  });
+  await page.evaluate(() => { window.__importing = window.__GBDRAW_APP__.waitForAuxiliaryFileImport(window.__GBDRAW_APP__.files.d_color); });
+  await expect.poll(cdsColor).toBe('#123456');
+  await release();
+  await page.evaluate(() => window.__importing);
+  await settle(page);
+  expect(px((await sizeState(page)).root.width), 'the padding is fitted').toBeCloseTo(MM_280_PX, 2);
+
+  // The import's Undo shows the padded figure at once and says it is being fitted; the rerender then fits it.
+  await page.evaluate(() => { window.__renders = 0; });
+  await hold();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  expect(await cdsColor()).toBe(before);
+  expect(px((await sizeState(page)).root.width), 'the figure before the import shows at once').toBeCloseTo(padded, 2);
+  await expect.poll(fittingLine, { timeout: 30_000 }).toBe('Fitting the figure to the requested size.');
+  await release();
+  await settle(page);
+  const undone = await sizeState(page);
+  console.log(`figure-size pending refit undone: renders=${await renders()} width=${undone.root.width} larger=${JSON.stringify(undone.larger)}`);
+  expect(await renders(), 'the Undo asks Python to fit the figure').toBeGreaterThan(0);
+  expect(px(undone.root.width)).toBeCloseTo(MM_280_PX, 2);
+  expect(undone.larger).toBe(null);
+
+  // Redo shows the fitted figure History kept for the import, with no Python run (D-48).
+  await page.evaluate(() => { window.__renders = 0; });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await cdsColor()).toBe('#123456');
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+  expect(await renders(), 'the Redo of a fitted step runs no Python').toBe(0);
+});
+
+// A Generate whose Result shows the drawing's current paint pays the refit a refused one left owed (D-36), as a shown
+// rerender does: the next checkpoint step then records its figure as drawn, and its Undo runs no Python.
+test('a Generate after a refused refit leaves no refit owed: the next file import\'s Undo runs no Python', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openWithGenBank(page, path.join(root, HMMT));
+  await openLayout(page);
+  await setSide(page, 'width', 160, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: (...args) => { window.__renders += 1; return render?.(...args); }
+    };
+  });
+  const renders = () => page.evaluate(() => window.__renders);
+  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), 'Protein-coding genes of the mitochondrion');
+  });
+  await expect.poll(renders).toBe(1);
+  await settle(page);
+  expect((await sizeState(page)).larger, 'the refit is refused').toContain('could not be fitted');
+
+  // The note's remedy: a larger figure and Generate.
+  await setSide(page, 'width', 260, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(260 * 96 / 25.4, 2);
+
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\t#123456\n')
+  });
+  await evaluateWithRetainedPromise(page, async () => { const app = window.__GBDRAW_APP__; await app.waitForAuxiliaryFileImport(app.files.d_color); });
+  await settle(page);
+  await page.evaluate(() => { window.__renders = 0; });
+  await undo(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentColors.CDS)).not.toBe('#123456');
+  expect(await fittingLine()).toBe(null);
+  expect(await renders(), 'the figure before the import is drawn: no Python run').toBe(0);
+});
+

@@ -257,8 +257,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * What one History step captures about the intent: the intent, its signature, and the files it names.
  * @typedef {{ intent: HistoryIntent, signature: string, fileIds: Set<string> }} IntentRecord
  * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string>, drawn?: boolean }} CheckpointRecord
- *   `drawn`: the step's caller said whether the figure is the one its state
- *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
+ *   `drawn`: whether the figure is the one its state draws, so that restoring it needs no automatic rerender
+ *   (D-24 (OV-731)): read from the drawing's figure as the side is captured (`figureDrawn`), and unset when no
+ *   reader is registered.
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
  * @typedef {ControlDescription} HistoryStepDetail
@@ -314,15 +315,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
  *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
- *   drawn?: { before: () => boolean, change: boolean },
+ *   drawn?: { change: boolean },
  *   takeEntry?: (entry: HistoryEntry | null) => void
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
  *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
- *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`):
- *   `before()` as the before side is captured, and `change`, whether the step's own change shows
- *   as its state draws it, so that the after side is drawn when the before side is. `takeEntry`:
+ *   reads `drawn.change`: whether the step's own change shows as its state draws it, so that the
+ *   after side is drawn when the figure is as the step ends (`CheckpointRecord`); without it, an
+ *   after side is only known undrawn. `takeEntry`:
  *   the router's project step takes the step's entry (or `null`) in place of this History's Undo stack.
  *   `detail`: read as an intent step that the call opened ends, while it keeps the label it opened with.
  */
@@ -438,6 +439,11 @@ const checkpointSvgBytes = (checkpoint) => (
  *   the entry's step also changed (D-15-53).
  * @property {(part: IntentEntry, direction: 'undo' | 'redo') => unknown} [applySessionPart]
  *   Restores an entry's `session` part, where still as its step left it.
+ * @property {() => boolean | undefined} [figureDrawn]
+ *   The one reader of whether the drawing's figure is the one its state draws (D-24 (OV-731)): not while an
+ *   automatic rerender asked for in the drawing is still owed, pending or refused (D-36); undefined when unknown.
+ *   Each side of every checkpoint step reads it as History captures that side, so the restore of a side that was
+ *   not drawn tells the listener (`undrawn`), which fits a figure drawn to a requested size again (PD-OI-114).
  */
 
 /**
@@ -528,6 +534,24 @@ export const createHistoryBudget = ({
   };
 };
 
+/**
+ * A checkpoint side with `drawn` set when it is known (`CheckpointRecord`).
+ * @param {CheckpointRecord} record @param {boolean | undefined} drawn @returns {CheckpointRecord}
+ */
+const withDrawn = (record, drawn) => {
+  if (drawn !== undefined) record.drawn = drawn;
+  return record;
+};
+/**
+ * Whether a checkpoint step's after side is drawn, from its drawing's figure as the step ends (`drawn`): not while a
+ * rerender is owed; drawn only when the caller says the step's own change shows as its state draws it; else unknown.
+ * @param {boolean | undefined} drawn @param {HistoryStepBase} options @returns {boolean | undefined}
+ */
+const afterSideDrawn = (drawn, options) => {
+  if (drawn === false) return false;
+  return drawn === true && options.drawn ? options.drawn.change : undefined;
+};
+
 /** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
   buildIntent,
@@ -552,7 +576,8 @@ export const createHistoryManager = ({
   editedPartOf = (_path, value) => value,
   stepOpened = () => null,
   stepEnded = () => null,
-  applySessionPart = () => {}
+  applySessionPart = () => {},
+  figureDrawn = () => undefined
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -1257,11 +1282,9 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value) return null;
     /**
      * @param {CheckpointRecord} before
-     * @param {boolean | undefined} drawn
      * @returns {HistoryTransaction}
      */
-    const createTransaction = (before, drawn) => {
-      if (drawn !== undefined) before.drawn = drawn;
+    const createTransaction = (before) => {
       if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
@@ -1278,7 +1301,7 @@ export const createHistoryManager = ({
     const captureBefore = () => {
       notifyCheckpointCapture(options, 'before-start');
       // Read as the capture starts; the snapshot service takes the figure at once.
-      const drawn = options.drawn?.before();
+      const drawn = figureDrawn();
       const before = captureCheckpoint();
       // A project step's part keeps the intent values it changes (D-15-51),
       // so it reads the intent as it begins.
@@ -1286,7 +1309,7 @@ export const createHistoryManager = ({
       /** @param {CheckpointRecord} record @param {IntentRecord | null} intentRecord */
       const open = (record, intentRecord) => {
         if (intentRecord) setCurrentIntent(intentRecord);
-        const transaction = createTransaction(record, drawn);
+        const transaction = createTransaction(withDrawn(record, drawn));
         notifyCheckpointCapture(options, 'before-end');
         return transaction;
       };
@@ -1306,8 +1329,8 @@ export const createHistoryManager = ({
   const commitCheckpoint = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
-    const after = await captureCheckpoint();
-    if (options.drawn) after.drawn = transaction.before.drawn === true && options.drawn.change;
+    const drawn = figureDrawn();
+    const after = withDrawn(await captureCheckpoint(), afterSideDrawn(drawn, options));
     const intent = await captureIntent();
     transaction.closed = true;
     setCurrentCheckpoint(after);
@@ -2232,6 +2255,20 @@ const PROJECT_STREAM = Symbol('project stream');
 // bytes, and its files until the step is evicted (a step that is not recorded
 // gives it back); `replaceMembers` (a Load) clears the project stream and
 // every History, then installs the new list.
+/**
+ * The composition root's listener of the settings a step records, commits, or restores (`setSettingsStepListener`).
+ * @typedef {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} SettingsStepListener
+ */
+/**
+ * Connects the settings-step listener to one drawing's History: it hears that drawing's steps only while it is shown.
+ * @param {{ setSettingsStepListener: (listener: SettingsStepListener) => void }} manager
+ * @param {DrawingId} drawingId @param {() => DrawingId} activeDrawingId @param {SettingsStepListener | null} listener
+ */
+const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
+  if (!listener) return;
+  manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
+};
+
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
@@ -2368,6 +2405,8 @@ export const createHistoryRouter = ({
     stepOpened: sessionRecord,
     stepEnded,
     applySessionPart: (part, direction) => applySession(part, direction, { asLeft: true }),
+    // Read at each capture, so the reader the composition root registers later reaches every member.
+    figureDrawn: () => (figureDrawnReader ? figureDrawnReader(drawingId) : undefined),
     budget: {
       ...budget,
       join: (member) => joinBudget(drawingId, member),
@@ -2387,19 +2426,14 @@ export const createHistoryRouter = ({
   const managers = new Map();
   /** @type {WeakMap<ProjectEntry, HeldHistory[]>} The Histories each project step holds. */
   const heldBy = new WeakMap();
-  /** @type {Parameters<DrawingHistory['setSettingsStepListener']>[0] | null} */
+  /** @type {SettingsStepListener | null} */
   let settingsStepListener = null;
-  /** @param {DrawingId} drawingId @param {DrawingHistory} manager */
-  const listenToSettingsSteps = (drawingId, manager) => {
-    const listener = settingsStepListener;
-    if (listener) {
-      manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
-    }
-  };
+  /** @type {((drawingId: DrawingId) => boolean) | null} The composition root's figure reader, by drawing. */
+  let figureDrawnReader = null;
   /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
   const installMember = (drawingId) => {
     const manager = memberHistory(drawingId);
-    listenToSettingsSteps(drawingId, manager);
+    listenToShownSteps(manager, drawingId, activeDrawingId, settingsStepListener);
     managers.set(drawingId, manager);
   };
   /** @param {readonly DrawingId[]} drawingIds @param {string} operation Refuses a repeated ID. */
@@ -2794,8 +2828,10 @@ export const createHistoryRouter = ({
     /** @param {Parameters<DrawingHistory['setSettingsStepListener']>[0]} listener */
     setSettingsStepListener: (listener) => {
       settingsStepListener = listener;
-      managers.forEach((manager, drawingId) => listenToSettingsSteps(drawingId, manager));
+      managers.forEach((manager, drawingId) => listenToShownSteps(manager, drawingId, activeDrawingId, listener));
     },
+    /** @param {(drawingId: DrawingId) => boolean} reader Whether a drawing's figure is the one its state draws. */
+    setFigureDrawnReader: (reader) => { figureDrawnReader = reader; },
     /** @param {DrawingId} drawingId A new drawing: its History starts empty (R11). */
     addMember: (drawingId) => {
       if (managers.has(drawingId)) throw membershipError('addMember', 'DUPLICATE_DRAWING', drawingId);

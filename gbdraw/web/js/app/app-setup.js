@@ -1200,6 +1200,8 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
   specificRuleRestorePorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
   specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
+  // D-24 (OV-731): History's one reader of a figure not drawn yet (OV-2560).
+  history.setFigureDrawnReader((drawingId) => !featureActions.isRedrawOwed(state.drawingOf(drawingId)));
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch, computed,
@@ -1858,14 +1860,11 @@ export const createAppSetup = () => {
   // preset), and their Undo and Redo that change live setting rows of the
   // shown drawing ask the automatic rerender to apply them (the router passes
   // the shown drawing's steps only).
-  // Figure size (PD-OI-114 rev 2, Q-D1 A): a step that changes what Python
-  // draws of the shown drawing's Legend rows or its Canvas padding (its
-  // commit, Undo, or Redo) shows at once, and a figure drawn to a requested
-  // size is then fitted again by the automatic rerender, which draws them
-  // (`projectCommittedEditorIntent`). An Auto figure is not redrawn. A
-  // committed checkpoint step's figure is then not the one its state draws,
-  // so History keeps the rerender's figure as the step's, and the restore of a
-  // checkpoint figure History knows is not drawn fits it again (D-24).
+  // Figure size (PD-OI-114 rev 2, Q-D1 A): a step that changes what Python draws of the shown drawing's Legend rows or
+  // its Canvas padding (its commit, Undo, or Redo) shows at once, and a figure drawn to a requested size is then fitted
+  // again by the automatic rerender, which draws them (`projectCommittedEditorIntent`). An Auto figure is not redrawn.
+  // History marks a checkpoint side undrawn while that fit is owed and keeps the rerender's figure as the last step's;
+  // a restore of an undrawn side fits it again (D-24).
   /**
    * @param {readonly HistoryChangeLike[] | null} changes
    * @param {'undo' | 'redo' | undefined} direction
@@ -2488,6 +2487,7 @@ export const createAppSetup = () => {
     redrawShown: featureActions.redrawShown,
     clearFeatureSelection: featureSelection.clearFeatureSelection,
     resultPaintDrewPaint: resultPaintRecord.drewPaint,
+    resultPaintDrawn: resultPaintRecord.drawn,
     handleMountedResultReady: previewFeatureSearch.handleMountedResultReady,
     keepRedrawnResult: history.keepRedrawnResult
   });

@@ -182,7 +182,8 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
     buildIntent: () => ({ rows }),
     applyIntent: (intent) => { rows = intent.rows; },
     buildCheckpoint: () => ({ rows, figure }),
-    applyCheckpoint: (checkpoint) => { rows = checkpoint.rows; figure = checkpoint.figure; }
+    applyCheckpoint: (checkpoint) => { rows = checkpoint.rows; figure = checkpoint.figure; },
+    figureDrawn: () => true
   });
   history.setSettingsStepListener((changes, direction, undrawn) => {
     heard.push([changes === null ? null : 'changes', direction, undrawn]);
@@ -191,7 +192,7 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
   await history.captureBaseline('initial');
   // The rename's step was drawn as far as its caller knew; the refit it asked for makes it undrawn until shown.
   await history.runUndoableCheckpoint('Rename legend item', () => { rows = 'Genes'; figure = 'live-1'; },
-    { drawn: { before: () => true, change: true } });
+    { drawn: { change: true } });
   figure = 'fitted-1';
   assert.equal(await history.keepRedrawnResult(), true, 'the fitted figure is the step\'s');
   await history.undo();
@@ -201,7 +202,7 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
   assert.deepEqual(heard.slice(-2), [[null, undefined, false], [null, undefined, false]]);
   // A refit that never came (refused): the step keeps the live figure, and its Redo says it is undrawn.
   await history.runUndoableCheckpoint('Rename legend item', () => { rows = 'Long name'; figure = 'live-2'; },
-    { drawn: { before: () => true, change: true } });
+    { drawn: { change: true } });
   await history.undo();
   assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure before it is drawn');
   await history.redo();
@@ -209,10 +210,73 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
   assert.deepEqual(heard.at(-1), [null, undefined, true], 'the listener refits it again');
   // A commit whose caller asks for the automatic rerender itself says so: the listener asks for no second one.
   await history.runUndoableCheckpoint('Add color rule', () => { rows = 'Alpha'; figure = 'live-3'; },
-    { drawn: { before: () => true, change: false } });
+    { drawn: { change: false } });
   assert.deepEqual(heard.at(-1), ['changes', undefined, true]);
   // An intent step has no figure to mark.
   await history.runUndoable('Edit', () => { rows = 'Other'; });
   history.markLastStepUndrawn();
   assert.equal(history.stackEntries('undo').at(-1)?.type, 'intent');
+});
+
+// OV-2560 (#1634 residual): each side of every checkpoint step reads the drawing's one reader of whether its figure is
+// the one its state draws, as History captures that side. A step whose caller says nothing of its figure (a file
+// import, the Merge of a Legend rename onto a deleted row) that starts while the refit of the step before it is
+// pending captures a figure Python has not fitted: its Undo shows that figure at once and tells the listener it is
+// undrawn, so the automatic rerender fits it. A refit shown while the step is the last one is kept as its figure, so
+// its Redo runs no Python (D-48). The reader is scoped to the History's own drawing.
+test('a checkpoint step captured while its drawing owes a refit restores undrawn, whoever runs it', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a', figure: 'fitted-0' }, other: { colors: 'x', figure: 'fitted-x' } };
+  let shown = 'circular';
+  /** @type {Set<string>} */
+  const owed = new Set();
+  /** @type {unknown[][]} */
+  const heard = [];
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => shown,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  history.setSettingsStepListener((changes, direction, undrawn) => heard.push([changes === null ? null : 'changes', direction, undrawn]));
+  history.setFigureDrawnReader((drawingId) => !owed.has(drawingId));
+  await history.captureBaseline('initial');
+  // A Canvas padding refit is pending: the figure shows the padding as the Web drew it.
+  owed.add('circular');
+  values.circular.figure = 'padded-live';
+  await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'b'; });
+  // The refit is shown while the import is the last step: History keeps it as the step's figure.
+  owed.delete('circular');
+  values.circular.figure = 'fitted-1';
+  assert.equal(await history.keepRedrawnResult(), true, 'the fitted figure is the step\'s');
+  await history.undo();
+  assert.deepEqual(values.circular, { colors: 'a', figure: 'padded-live' }, 'Undo shows the figure before the step at once');
+  assert.deepEqual(heard.at(-1), [null, undefined, true], 'and asks the listener to fit it');
+  await history.redo();
+  assert.deepEqual(values.circular, { colors: 'b', figure: 'fitted-1' });
+  assert.deepEqual(heard.at(-1), [null, undefined, false], 'Redo shows the kept fitted figure with no Python run');
+  // A refit owed by another drawing does not mark this drawing's figure: the step ends in the History that opened
+  // it, which reads its own drawing, also when the other drawing is shown by then.
+  owed.add('other');
+  await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'c'; shown = 'other'; });
+  shown = 'circular';
+  await history.undo();
+  assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure before the step is drawn');
+  await history.redo();
+  assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure as the step ended is not marked undrawn');
+  await history.undo();
+  // A refit that never came (refused) leaves the step's figure undrawn: its Redo asks again (D-49).
+  owed.delete('other');
+  owed.add('circular');
+  values.circular.figure = 'refused-live';
+  await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'd'; });
+  await history.undo();
+  assert.deepEqual(heard.at(-1), [null, undefined, true]);
+  await history.redo();
+  assert.deepEqual(heard.at(-1), [null, undefined, true], 'the Redo asks for the refit again');
 });

@@ -204,6 +204,21 @@ export const createMountedLegendBinding = ({
   };
 };
 
+// D-36: a label rerender or a Generate pays the redraw its drawing owes when,
+// as its Result is ready, no later rerender runs and its figure shows the
+// drawing's current paint, also after an edit made since its paint was
+// committed (read before that edit is shown on it, OV-346). A Generate that
+// names no drawn paint drew the paint the record holds for its Result
+// (`rememberCommittedEditorState`). Its drawing is the shown one: a mode
+// switch waits for a rerender (`drawingSwitchBusy`). D-24 (OV-731): History
+// keeps a rerender's figure as the last step's; a Generate is a History step
+// of its own.
+/** @param {string} phase The phase of a Result that is ready. @returns {'rerender' | 'generate' | null} */
+const redrawPayer = (phase) => {
+  if (phase === 'label-reflow') return 'rerender';
+  return phase === 'generate' || phase === 'target-record-transform' ? 'generate' : null;
+};
+
 /**
  * @typedef {object} MountedResultReadinessPorts
  * @property {WebState} state
@@ -225,6 +240,8 @@ export const createMountedLegendBinding = ({
  * @property {(options?: { clearStatus?: boolean, syncDom?: boolean }) => unknown} clearFeatureSelection The feature selection's clear.
  * @property {(drawn: EditorPaintState | null | undefined, current: EditorPaintState) => boolean} resultPaintDrewPaint
  *   Whether a label rerender shows the current paint (Result paint record).
+ * @property {(identity: string) => EditorPaintState | undefined} resultPaintDrawn
+ *   The paint a Result was drawn with (Result paint record).
  * @property {() => unknown} handleMountedResultReady The preview feature search's reader of a ready Result.
  * @property {() => Promise<unknown>} keepRedrawnResult History keeps the redrawn figure.
  */
@@ -238,7 +255,7 @@ export const createMountedResultReadiness = ({
   state, isFeatureDrawerMounted, clickedFeature, labelTextScopeDialog, labelReflowProcessing, mountedResultRevision,
   takeLabelProjectionResultIdentity, takeDisplayAsks, currentEditorProjectionState, showEditsMadeWhileDrawn,
   syncLabelEditor, followRestoredSpecificRules, requestAutomaticRerender, redrawShown, clearFeatureSelection,
-  resultPaintDrewPaint, handleMountedResultReady, keepRedrawnResult
+  resultPaintDrewPaint, resultPaintDrawn, handleMountedResultReady, keepRedrawnResult
 }) => {
   /** @param {DrawingState} drawing */
   const shouldSyncMountedLabelEditor = (drawing) => (
@@ -285,20 +302,16 @@ export const createMountedResultReadiness = ({
         if (context.bindingOptions.modeArrival && display.rules) followRestoredSpecificRules(display.rules);
         if (display.labelIntentGone) requestAutomaticRerender();
       }
-      // D-36: a label rerender pays the redraw its drawing owes when, as its
-      // Result is ready, no later rerender runs and its figure shows the
-      // drawing's current paint, also after an edit made since its paint was
-      // committed (read before that edit is shown on it, OV-346).
-      // Its drawing is the shown one: a mode switch waits for a rerender
-      // (`drawingSwitchBusy`). D-24 (OV-731): History keeps the figure
-      // as the last step's.
+      // D-36: the redraw a drawing owes is paid here (`redrawPayer`).
       const drawing = state.activeDrawing();
-      const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
-        && resultPaintDrewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
+      const payer = redrawPayer(context.phase);
+      const drewCurrent = payer !== null && !labelReflowProcessing.value && resultPaintDrewPaint(
+        context.bindingOptions.drawnPaint ?? resultPaintDrawn(context.resultIdentity), currentEditorProjectionState(drawing));
       handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
       if (!drewCurrent) return;
       redrawShown(drawing);
+      if (payer !== 'rerender') return;
       keepRedrawnResult().catch((error) => {
         console.error('History could not keep the redrawn figure.', normalizeUserFacingError(error));
       });
