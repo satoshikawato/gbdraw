@@ -34,6 +34,7 @@ from .models import (
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
     ResolutionWarning,
+    region_walk,
 )
 
 if TYPE_CHECKING:
@@ -268,34 +269,15 @@ def segments_cross_origin(segments: Sequence[tuple[int, int]], record_length: in
     )
 
 
-def region_run(
-    segments: Sequence[tuple[int, int]], record_length: int, *, crosses_origin: bool
-) -> tuple[tuple[int, int], ...]:
-    """A span's segments in the order the region runs: ascending, or, across the origin
-    (``segments_cross_origin``), first its two sides at the origin as one stretch, from the start of its segment
-    that ends at the record's end to the end of its segment that starts at 0 (one record length on), then its
-    other segments, each moved one record length on."""
-
-    ordered = sorted(segments)
-    if not crosses_origin:
-        return tuple(ordered)
-    (_zero, after_end), *middle, (low, _end) = ordered
-    return ((low, after_end + record_length), *((start + record_length, end + record_length) for start, end in middle))
-
-
 def annotation_midpoint(
     segments: Sequence[tuple[int, int]],
     record_length: int,
     *,
     crosses_origin: bool,
 ) -> float:
-    """Halfway along a span, on its record: along its stretch across the origin (``region_run``), else along its
-    segments in ascending order."""
+    """Halfway along a span's segments in the order its label walks them (``region_walk``), on its record."""
 
-    run = region_run(segments, record_length, crosses_origin=crosses_origin)
-    # A span of three or more segments across the origin keeps the ascending walk until its order is chosen
-    # (OV-2656).
-    walk = sorted(segments) if len(run) > 1 and crosses_origin else run
+    walk = region_walk(segments, crosses_origin=crosses_origin)
     cursor = sum(end - start for start, end in walk) / 2.0
     for start, end in walk:
         if cursor <= end - start:
@@ -491,7 +473,6 @@ __all__ = [
     "annotation_midpoint",
     "merge_annotation_segments",
     "read_annotation_options",
-    "region_run",
     "resolve_annotation_set",
     "resolve_annotations",
 ]

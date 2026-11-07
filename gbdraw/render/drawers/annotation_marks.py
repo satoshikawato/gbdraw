@@ -19,7 +19,7 @@ from gbdraw.annotations import (
     ResolvedRegionAnnotation,
     is_auto_feature_underlay,
     mark_parts,
-    region_run,
+    origin_sides,
 )
 from gbdraw.core.color import interpolate_color
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
@@ -116,14 +116,19 @@ GRADIENT_MAX_STEPS = 48
 def _gradient_share(annotation: ResolvedRegionAnnotation, record_length: int) -> Callable[[float], float]:
     """Where a record-local position lies along the region, from 0 at its start to 1 at its end.
 
-    The region runs as ``region_run`` orders it. Across a circular record's origin (``crosses_origin``) the scale
-    spans its stretch across the origin; other segments of such a span take the end of the scale (OV-2656).
+    The scale spans the region's segments, or across a circular record's origin (``crosses_origin``) its stretch
+    across the origin, from its side that ends at the record's end into its side that starts at 0
+    (``origin_sides``); other segments of such a span take the end of the scale (OV-2656).
     """
 
     length = max(1, int(record_length))
     crosses_origin = annotation.crosses_origin
-    run = region_run(annotation.segments, length, crosses_origin=crosses_origin)
-    low, high = float(run[0][0]), float(run[0 if crosses_origin else -1][1])
+    segments = annotation.segments
+    if crosses_origin:
+        before, after = origin_sides(segments)
+        low, high = float(segments[before][0]), float(segments[after][1] + length)
+    else:
+        low, high = float(min(start for start, _end in segments)), float(max(end for _start, end in segments))
     span = max(1e-9, high - low)
 
     def share(position: float) -> float:

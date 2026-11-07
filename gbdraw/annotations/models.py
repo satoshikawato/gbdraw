@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, NamedTuple, TypeAlias, cast
+from typing import Literal, Mapping, NamedTuple, Sequence, TypeAlias, cast
 
 from pandas import DataFrame
 
@@ -584,7 +584,7 @@ class ResolvedRegionAnnotation:
         """
         assert self.display_parts is not None
         parts = mark_parts(self, join_origin=join_origin)
-        longest = min(parts, key=lambda part: (part.start - part.end, part.row, part.start))
+        longest = _longest_part(parts)
         midpoint = self.midpoint_bp
         fragment = next(
             (part for part in self.display_parts if part.local_start <= midpoint <= part.local_end), None
@@ -601,6 +601,42 @@ class ResolvedRegionAnnotation:
         if self.display_parts is None:
             return self.midpoint_bp
         return self.label_place(join_origin=join_origin).bp
+
+    def label_anchor(
+        self, position: Literal["center", "start", "end"], *, join_origin: bool
+    ) -> LabelPlace:
+        """Where a Linear label at ``position`` stands and the drawn part it stands on.
+
+        A centred label stands at ``label_place``. A start or end label stands where the region starts or ends
+        along its walk (``region_walk``, the midpoint's order): without display parts, where the first segment
+        starts or the last ends; with display parts, on the row of the longest part, where its first or last
+        fragment on that row starts or ends.
+        """
+
+        if position == "center" and self.display_parts is not None:
+            return self.label_place(join_origin=join_origin)
+        parts = mark_parts(self, join_origin=join_origin)
+        if self.display_parts is None:
+            if position == "end":
+                return LabelPlace(float(parts[-1].end), parts[-1])
+            return LabelPlace(self.midpoint_bp if position == "center" else float(parts[0].start), parts[0])
+        row = _longest_part(parts).row
+        walk = region_walk(self.segments, crosses_origin=self.crosses_origin)
+        on_row = sorted(
+            (fragment for fragment in self.display_parts if fragment.row == row),
+            key=lambda fragment: (
+                next(
+                    index
+                    for index, (start, end) in enumerate(walk)
+                    if start <= fragment.local_start and fragment.local_end <= end
+                ),
+                fragment.local_start,
+            ),
+        )
+        bp = on_row[0].display_start if position == "start" else on_row[-1].display_end
+        return LabelPlace(
+            float(bp), next(part for part in parts if part.row == row and part.start <= bp <= part.end)
+        )
 
     def label_row(self, *, join_origin: bool) -> int:
         """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
@@ -652,6 +688,32 @@ class LabelPlace(NamedTuple):
     part: MarkPart
 
 
+def _longest_part(parts: Sequence[MarkPart]) -> MarkPart:
+    """The longest drawn part, ties to the earlier row, then the earlier start."""
+
+    return min(parts, key=lambda part: (part.start - part.end, part.row, part.start))
+
+
+def origin_sides(bounds: Sequence[tuple[int, int]]) -> tuple[int, int]:
+    """The two sides at the origin of a span across it (``crosses_origin``), as indices into its record-local
+    ``bounds``: the one that ends at the record's end, then the one that starts at 0."""
+
+    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
+    record_end = max(end for _start, end in bounds)
+    before = next(index for index, (_start, end) in enumerate(bounds) if end == record_end)
+    after = next(index for index, (start, _end) in enumerate(bounds) if start == 0)
+    return before, after
+
+
+def region_walk(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> tuple[tuple[int, int], ...]:
+    """A span's segments in the order its label walks them: ascending, or for a span of two segments across the
+    origin, from the side that ends at the record's end into the side that starts at 0. A span of three or more
+    segments across the origin walks in ascending order until its order is chosen (OV-2656)."""
+
+    ordered = tuple(sorted(segments))
+    return ordered[::-1] if crosses_origin and len(ordered) == 2 else ordered
+
+
 def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
     """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut, which
     its drawing and its label read.
@@ -675,13 +737,9 @@ def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tu
     ]
     if not annotation.crosses_origin:
         return tuple(parts)
-    local_bounds = (
+    before, after = origin_sides(
         annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
     )
-    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
-    record_end = max(end for _start, end in local_bounds)
-    before = next(index for index, (_start, end) in enumerate(local_bounds) if end == record_end)
-    after = next(index for index, (start, _end) in enumerate(local_bounds) if start == 0)
     if join_origin or (parts[before].row == parts[after].row and parts[before].end == parts[after].start):
         joined = parts[after]
         parts[before] = replace(
@@ -757,5 +815,7 @@ __all__ = [
     "effective_annotation_style",
     "linear_annotation_labels_above",
     "mark_parts",
+    "origin_sides",
     "parse_feature_selector",
+    "region_walk",
 ]

@@ -293,9 +293,13 @@ def _label_rows(
     rows = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label or (wrap_row is not None and annotation.label_row(join_origin=track.join_origin) != wrap_row):
+        if not annotation.label:
             continue
         style = effective_annotation_style(annotation, params)
+        if wrap_row is not None and annotation.label_anchor(
+            style.label_position, join_origin=track.join_origin
+        ).part.row != wrap_row:
+            continue
         size = annotation_label_font_size(style, track.label_font_size)
         offsets = label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
@@ -412,26 +416,20 @@ def linear_annotation_labels(
     )
     for (placement, style, row_y, (left, right, top, bottom)), shift_y in candidates:
         annotation = placement.annotation
-        row = annotation.label_row(join_origin=track.join_origin)
+        place = annotation.label_anchor(style.label_position, join_origin=track.join_origin)
+        row = place.part.row
         y = row_y + shift_y
         lane_height = _lane_height(
             track, placements, row_frames[row].height_px if row_frames else height_px, params
         )
-        # The parts the mark draws on the label's row, in mark order: a start label stands where the first starts,
-        # an end label where the last ends.
+        # The parts the mark draws on the label's row, which the label may sit inside.
         segments = tuple(
             (part.start, part.end)
             for part in mark_parts(annotation, join_origin=track.join_origin)
             if part.row == row
         )
         anchor = _label_anchor(style)
-        if anchor == "start":
-            label_bp = float(segments[0][0])
-        elif anchor == "end":
-            label_bp = float(segments[-1][1])
-        else:
-            label_bp = annotation.label_midpoint_bp(join_origin=track.join_origin)
-        x = label_bp * scale
+        x = place.bp * scale
         labels.append(
             LinearAnnotationLabel(
                 annotation_id=annotation.id,

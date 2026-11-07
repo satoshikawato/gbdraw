@@ -41,13 +41,14 @@ from .models import (
     effective_annotation_style,
     linear_annotation_labels_above,
     mark_parts,
+    origin_sides,
     parse_feature_selector,
+    region_walk,
 )
 from .resolve import (
     annotation_midpoint,
     merge_annotation_segments,
     read_annotation_options,
-    region_run,
     resolve_annotation_set,
     resolve_annotations,
 )
@@ -90,9 +91,10 @@ __all__ = [
     "mark_parts",
     "merge_annotation_segments",
     "merge_feature_underlays",
+    "origin_sides",
     "parse_feature_selector",
     "read_annotation_options",
-    "region_run",
+    "region_walk",
     "read_annotation_table",
     "resolve_annotation_set",
     "resolve_annotations",

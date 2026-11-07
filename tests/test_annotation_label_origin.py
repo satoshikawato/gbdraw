@@ -1,7 +1,7 @@
 """A region label stands on the centre of the mark as it is drawn, also across the origin (OV-2577, OV-2578).
 
 One rule decides whether a span crosses the origin (``segments_cross_origin``): the midpoint walks the span's
-stretch across the origin (``region_run``). With display parts the label stands halfway along the region where the
+segments in ``region_walk`` order, over the origin from one side into the other. With display parts the label stands halfway along the region where the
 display leaves its parts whole, else on the longest part ``mark_parts`` draws.
 """
 
@@ -233,3 +233,87 @@ def test_linear_label_at_the_start_or_end_stands_at_that_end_of_the_mark(
     start: int | None, feature: bool, position: str, expected: float
 ) -> None:
     assert _text_x(_label_item("linear", start, position, feature=feature)) == pytest.approx(expected)
+
+
+def _anchor_record() -> SeqRecord:
+    record = _record()
+    record.features.append(
+        SeqFeature(
+            CompoundLocation(
+                [FeatureLocation(1000, 3000, strand=1), FeatureLocation(4100, 5600, strand=1), FeatureLocation(5700, 7200, strand=1)]
+            ),
+            type="CDS",
+            qualifiers={"locus_tag": ["EXONS"]},
+        )
+    )
+    return record
+
+
+def _linear_labels(
+    selectors: tuple[str, ...], positions: tuple[str, ...], *, start: int | None = None, wrap: int | None = None
+) -> dict[str, tuple[float, float]]:
+    """The x and track-local y of the label of a band over ``selectors`` at each label position."""
+
+    places = {}
+    for position in positions:
+        annotation = RegionAnnotation(
+            "x",
+            FeatureSpan(None, selectors, envelope="segments"),
+            label="X",
+            mark="band",
+            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation="horizontal", label_position=position),
+        )
+        diagram = gbdraw.draw_linear(
+            _anchor_record(),
+            options=gbdraw.LinearOptions(
+                annotations=AnnotationOptions(sets=(AnnotationSet("regions", (annotation,)),)),
+                config_overrides={"canvas.linear.wrap_length": wrap} if wrap is not None else {},
+            ),
+            record_displays=[RecordDisplayOptions(start_coordinate=start)],
+        )
+        root = ElementTree.fromstring(diagram._drawing.tostring())
+        (item,) = [group for group in root.iter(f"{_SVG}g") if group.get("data-gbdraw-annotation-id") == "x"]
+        (text,) = item.iter(f"{_SVG}text")
+        places[position] = (float(text.get("x", "nan")), float(text.get("y", "nan")))
+    return places
+
+
+def test_wrapped_start_and_end_labels_stand_on_the_row_of_the_longest_part() -> None:
+    # Rows of 4000 bp: 1000-3000 on row 0 (the longest part), 4100-5600 and 5700-7200 on row 1, where the
+    # midpoint (bp 4600) puts the centred label. The start and end labels stay where they stood before the
+    # midpoint moved the centred label: at the ends of the longest part, row 0 x 500 and 1500 (OV-2657).
+    places = _linear_labels(("locus_tag=EXONS",), ("start", "end", "center"), wrap=4000)
+
+    assert places["start"][0] == pytest.approx(500.0)
+    assert places["end"][0] == pytest.approx(1500.0)
+    assert places["center"][0] == pytest.approx(300.0)
+    assert places["start"][1] == places["end"][1] < places["center"][1]
+
+
+@pytest.mark.parametrize(("start", "expected"), ((None, (0.0, 2000.0, 1050.0)), (5001, (1000.0, 1000.0, 50.0))))
+def test_three_segments_across_the_origin_keep_the_ascending_order_for_start_and_end(
+    start: int | None, expected: tuple[float, float, float]
+) -> None:
+    # Segments 0-1000, 5000-5500 and 9000-10000 run in ascending order until OV-2656 chooses one: the start label
+    # stands where 0-1000 starts and the end label where 9000-10000 ends, and the centred label at bp 5250. From
+    # display start 5001 the first two stand at the origin, x 1000, and the centred label at x 50 (OV-2658).
+    places = _linear_labels(("locus_tag=ENDS", "locus_tag=MIDDLE"), ("start", "end", "center"), start=start)
+
+    assert tuple(places[position][0] for position in ("start", "end", "center")) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("feature", (True, False))
+def test_centred_label_of_an_unrotated_span_across_the_origin_stands_at_the_bar_start(feature: bool) -> None:
+    # Without a display start the midpoint of 9000-10000 and 0-1000 is the origin, the bar's left end, for both
+    # kinds of span (OV-2652 asks whether it should stand on one of the two parts).
+    assert _text_x(_label_item("linear", None, feature=feature)) == pytest.approx(0.0)
+
+
+def test_joined_arc_gradient_of_three_segments_across_the_origin_spans_the_stretch_over_the_origin() -> None:
+    resolved = _resolved(_record(), "locus_tag=ENDS", "locus_tag=MIDDLE")
+    gradient = AnnotationGradient("#0000ff", "#ff0000")
+    joined = MarkPart(9000, 11_000, True, True, 9000)
+
+    # The scale runs from blue at bp 9000 over the origin to red at bp 1000 (OV-2656 keeps this extent).
+    steps = gradient_steps(resolved, gradient, joined, 9000, 11_000, record_length=_LENGTH, length_px=400.0)
+    assert [steps[0][1], dict(steps)[10_000.0], steps[-1][1]] == ["#0200fc", "#82007c", "#fc0002"]
