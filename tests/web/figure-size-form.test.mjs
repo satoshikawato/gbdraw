@@ -252,6 +252,16 @@ test('the larger-figure remedy names Python\'s estimate for each requested side'
   assert.deepEqual(labelCapacityRemedyText('filter', { width: '240.3 mm', height: null }).params, {});
 });
 
+test('the larger-figure remedy without an estimate names the requested size fields only (NO-ROW-WAYS)', () => {
+  assert.deepEqual(labelCapacityRemedyText('figure_size', { width: true, height: null }),
+    { text: 'Make the figure larger: increase Figure width (Figure size in Layout).', params: {} });
+  assert.deepEqual(labelCapacityRemedyText('figure_size', { width: null, height: true }),
+    { text: 'Make the figure larger: increase Figure height (Figure size in Layout).', params: {} });
+  assert.deepEqual(labelCapacityRemedyText('figure_size', { width: true, height: true }),
+    { text: 'Make the figure larger: increase Figure width and Figure height (Figure size in Layout).', params: {} });
+  assert.deepEqual(labelCapacityRemedyText('filter', { width: true, height: null }).params, {});
+});
+
 // D-24: the plain SVG of a Result drawn to a requested size states the root size Python's `export_root_size` gives
 // for the shown root's px size, on the export copy only; a Result drawn at Auto (no port) exports its root as shown.
 test('a sized Result exports its SVG root in the requested unit, and the page root stays px', async () => {

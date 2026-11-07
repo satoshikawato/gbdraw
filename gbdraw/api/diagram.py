@@ -3696,7 +3696,8 @@ def _checked_circular_drawing(
     (``_fitted_circular_pass``), and that pass is the drawn figure; label fit rows draw at the same radius.
     Overlapping labels (or radial labels without room) raise ``LabelsDoNotFitError``; crossing leaders or labels
     over the definition text alone keep the drawing, warn, and attach the report and its search (rows searched for
-    ``warn_search_seconds``). Labels not placed for lack of room at a requested size offer a larger figure.
+    ``warn_search_seconds``). At a requested size, labels not placed for lack of room offer a larger figure of an
+    estimated size, and labels no row of the label settings fits offer one without an estimate (PD-OI-114 r3).
     """
 
     size = cfg.canvas.figure_size
@@ -3723,12 +3724,12 @@ def _checked_circular_drawing(
             fit=sum((layout.fit for layout in layouts), FITS),
         )
 
-    larger: Callable[[float], LargerFigure] | None = None
+    larger: Callable[[float | None], LargerFigure] | None = None
     if size.requested:
         bind_export_size(drawing, size)
         plan = applied_composition_plan(drawing)
 
-        def larger(ratio: float) -> LargerFigure:
+        def larger(ratio: float | None) -> LargerFigure:
             return larger_figure(plan, size, ratio)
 
     checked = check_circular_label_fit(

@@ -122,7 +122,7 @@ export const createLabelFitDialog = ({
   let runningRow = null;
   /** @type {readonly LabelCapacityRemedy[]} The ways to make room the report names. */
   let reportRemedies = [];
-  /** @type {LargerFigure | null} The size the report's `figure_size` remedy names. */
+  /** @type {LargerFigure | null} The requested sides the report's `figure_size` remedy names. */
   let reportLargerFigure = null;
 
   const close = () => { dialog.show = false; openCount += 1; };

@@ -426,23 +426,32 @@ def figure_size_refusal(
     return figure_too_short(plan, size.height, size.width, primary=primary)
 
 
+# A requested side of a larger figure: about how long it must be, as a message writes it (``240.3 mm``), when the room
+# the labels need is known (CAPACITY-STOP); True when it is not (NO-ROW-WAYS, PD-OI-114 r3).
+LargerSide: TypeAlias = str | Literal[True]
+
+
 @dataclass(frozen=True)
 class LargerFigure:
-    """About how large a requested figure must be for labels that were not placed for lack of room (CAPACITY-STOP):
-    each requested side as a message writes it (``240.3 mm``), None for a side left auto; the CLI writes it as an
-    argument without the space (``240.3mm``)."""
+    """The sides of a requested figure to make larger for labels that do not fit: each requested side as a
+    ``LargerSide``, None for a side left auto. The CLI writes an estimate as an argument without the space
+    (``240.3mm``). Both requested sides have an estimate, or neither has."""
 
-    width: str | None
-    height: str | None
+    width: LargerSide | None
+    height: LargerSide | None
 
 
-def larger_figure(plan: CompositionPlan, size: RequestedFigureSize, ratio: float) -> LargerFigure:
-    """The size the labels need, from the drawn figure ``plan`` and the room the labels need as a multiple of the
-    room around the map (``ratio``): each requested side grows by ``ratio - 1`` times the map's side, rounded up."""
+def larger_figure(plan: CompositionPlan, size: RequestedFigureSize, ratio: float | None) -> LargerFigure:
+    """The requested sides to make larger, from the drawn figure ``plan`` and the room the labels need as a multiple
+    of the room around the map (``ratio``): each requested side grows by ``ratio - 1`` times the map's side, rounded
+    up. Without a ratio (no row of the label settings fits, so the room is not known) each requested side has no
+    estimate."""
 
-    def side(length: FigureLength | None, content: float, primary: float) -> str | None:
+    def side(length: FigureLength | None, content: float, primary: float) -> LargerSide | None:
         if length is None:
             return None
+        if ratio is None:
+            return True
         return length.message_text(content + (ratio - 1.0) * primary, round_up=True)
 
     content, primary = plan.content_bounds, plan.primary_bounds
@@ -517,6 +526,7 @@ __all__ = [
     "BaseLengthFit",
     "FigurePrimaryItem",
     "LargerFigure",
+    "LargerSide",
     "MeasuredBase",
     "check_figure_height",
     "figure_size_excess",
