@@ -502,6 +502,8 @@ const materializeBytes = (backing) => {
       try {
         bytes = await decodedResourceBytes(backing);
       } catch (error) {
+        // A File's read keeps its own error (a refused read is INPUT_UNREADABLE, PD-OI-120).
+        if (fileBackedReaderOf(backing.descriptor)) throw error;
         throw new Error(
           `Session resource ${backing.resourceId} (${backing.name}) contains invalid encoded data.`,
           { cause: error }

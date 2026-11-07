@@ -53,7 +53,7 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
 const RENDER_RESOURCE_CACHE = '/gbdraw-web-render-resource-cache';
 const RENDER_WORKSPACE_MARKER = '.gbdraw-worker-render-workspace';
 const RENDER_RESOURCE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-// A resource's token is the sha256 hex of its bytes (services/file-content-cache.js).
+// A resource's token names its bytes (`contentTokenOfBytes` in services/file-content-cache.js).
 const RENDER_RESOURCE_TOKEN_RE = /^[0-9a-f]{64}$/;
 // The resources the Worker holds, by token: the current request's and those
 // the page's drawings have committed (`retainedResourceTokens`).

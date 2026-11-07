@@ -359,3 +359,46 @@ assert.ok(downloadedBlob instanceof Blob);
     drafts.splice(0, drafts.length);
   }
 }
+
+// The page keeps no input bytes after Save (memory plan P2): the next read of
+// the input reads the File again.
+{
+  const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const file = state.inputFiles.fileOf(circularFiles.c_gb);
+  URL.createObjectURL = () => 'blob:p2-session';
+  try {
+    assert.equal((await exportSession('p2-release')).status, 'saved');
+  } finally {
+    URL.createObjectURL = originalCreateObjectUrl;
+  }
+  const readsAfterSave = inputReads;
+  await readFileBytes(file);
+  assert.equal(inputReads, readsAfterSave + 1, 'Save gave the input bytes back');
+}
+
+// PD-OI-120: an input the browser refuses to read again (it changed on disk after
+// it was chosen) ends Save with INPUT_UNREADABLE and its text, and no download starts.
+{
+  const file = state.inputFiles.fileOf(circularFiles.c_gb);
+  const { arrayBuffer } = file;
+  let downloads = 0;
+  URL.createObjectURL = () => {
+    downloads += 1;
+    return 'blob:refused-session';
+  };
+  file.arrayBuffer = async () => { throw new DOMException('changed on disk', 'NotReadableError'); };
+  /** @type {unknown[]} */
+  const shown = [];
+  try {
+    const result = await exportSession('refused-read', { onError: (error) => shown.push(error) });
+    assert.equal(result.status, 'error');
+    assert.equal(result.error.code, 'INPUT_UNREADABLE');
+    assert.equal(result.error.operation, 'session-save');
+    assert.equal(result.error.summary, 'An input could not be read. Replace or reselect it.');
+    assert.deepEqual(shown, [result.error]);
+    assert.equal(downloads, 0, 'a refused Save starts no download');
+  } finally {
+    file.arrayBuffer = arrayBuffer;
+    URL.createObjectURL = originalCreateObjectUrl;
+  }
+}

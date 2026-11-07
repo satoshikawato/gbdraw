@@ -191,7 +191,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
+import { cloneFileBytesForTransfer, holdReadBytes } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
 } from '../services/feature-catalog.js';
@@ -5514,6 +5514,7 @@ export const createRunAnalysis = ({
     processingStatus.value = t('Preparing input files...');
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
+    const releaseReads = holdReadBytes(); // Record counts, LOSAT and staging share one read of each input File.
     try {
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
       await nextTick();
@@ -5643,13 +5644,12 @@ export const createRunAnalysis = ({
           : historyRecovery || (!beforeHandle && results.value === initialResults && initialResults.length ? 'preserved' : null) });
       return outcome;
     } finally {
+      releaseReads();
       if (isCurrentOperation()) {
         if (outcome?.status !== 'canceled') processingStatus.value = '';
         generationCancelRequested.value = false;
         processing.value = false;
-        recordSessionLifecycleEvent('generate.processing-cleared', {
-          status: outcome?.status || 'error'
-        });
+        recordSessionLifecycleEvent('generate.processing-cleared', { status: outcome?.status || 'error' });
         replayDeferredLabelReflow();
       }
     }

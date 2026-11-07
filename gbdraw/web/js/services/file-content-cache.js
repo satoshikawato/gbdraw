@@ -12,6 +12,7 @@ import {
   bytesToBase64,
   bytesToText,
   expandGzipBytes,
+  sha256Digest,
   sha256Hex,
   textToBase64,
   textToBytes
@@ -32,16 +33,27 @@ export {
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 /**
- * The sha256 hex of a resource's bytes: the Worker's cache key for them, so
- * equal bytes share one token whatever resource IDs name them.
+ * A resource's content token: the Worker's cache key for its bytes, so equal
+ * bytes share one token whatever resource IDs name them (`contentTokenOfBytes`).
+ * Only the page and the Worker compare tokens: Python checks their form, and no
+ * Session holds one.
  * @typedef {string & { readonly __brand: 'ResourceContentToken' }} ResourceContentToken
+ */
+/**
+ * What the page knows of a File's content from its first read: its token and
+ * its byte length (gzip expanded). A File's bytes never change, so these
+ * outlive the release of its bytes.
+ * @typedef {{ token: ResourceContentToken, byteLength: number }} FileContentFacts
  */
 
 /** @type {WeakMap<object, Promise<Uint8Array>>} */
 const fileByteCache = new WeakMap();
-// A File's bytes never change, so its token outlives the release of its bytes.
-/** @type {WeakMap<object, Promise<ResourceContentToken>>} */
-const fileContentTokenCache = new WeakMap();
+/** @type {WeakMap<object, Promise<FileContentFacts>>} */
+const fileContentFacts = new WeakMap();
+// The Files whose cached bytes a gzip file expanded to. They stay until a
+// transfer takes them: expanding again would be slower than keeping them.
+/** @type {WeakSet<object>} */
+const expandedFiles = new WeakSet();
 /**
  * The descriptor Generate made of each File (`fileBackedDescriptor`), keyed by that File. A
  * File never changes its bytes, so the File object is the key.
@@ -69,6 +81,74 @@ const refusedReadError = (error) => (
 );
 
 const MIB = 1024 * 1024;
+const TOKEN_PIECE_BYTES = 16 * MIB;
+
+/**
+ * The content token of `bytes`, one scheme for every size: the SHA-256 hex of
+ * the SHA-256 digests of their 16 MiB pieces in order (one piece when empty).
+ * One piece is hashed at a time, so hashing copies at most one piece.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<ResourceContentToken>}
+ */
+export const contentTokenOfBytes = async (bytes) => {
+  const pieceCount = Math.max(1, Math.ceil(bytes.byteLength / TOKEN_PIECE_BYTES));
+  const digests = new Uint8Array(pieceCount * 32);
+  for (let index = 0; index < pieceCount; index += 1) {
+    const start = index * TOKEN_PIECE_BYTES;
+    digests.set(new Uint8Array(await sha256Digest(bytes.subarray(start, start + TOKEN_PIECE_BYTES))), index * 32);
+  }
+  return /** @type {ResourceContentToken} */ (await sha256Hex(digests));
+};
+
+/**
+ * The facts of `key`, started from `bytes` unless an earlier read started them.
+ * @param {object} key @param {Promise<Uint8Array>} bytes
+ * @returns {Promise<FileContentFacts>}
+ */
+const startContentFacts = (key, bytes) => {
+  let facts = fileContentFacts.get(key);
+  if (!facts) {
+    facts = bytes.then(async (read) => ({ token: await contentTokenOfBytes(read), byteLength: read.byteLength }));
+    fileContentFacts.set(key, facts);
+    facts.catch(() => {
+      if (fileContentFacts.get(key) === facts) fileContentFacts.delete(key);
+    });
+  }
+  return facts;
+};
+
+// A File's bytes are kept while a hold covers its read (a Generate, a Save, a
+// once-per-File read): the reads it covers share them. When the last hold ends,
+// or a read settles with no hold, the page drops every settled plain read; the
+// next read reads the File again.
+let readHolds = 0;
+/** @type {Map<object, Promise<Uint8Array>>} */
+const sharedReads = new Map();
+/** @type {WeakSet<Promise<Uint8Array>>} */
+const settledReads = new WeakSet();
+const dropSharedReads = () => {
+  if (readHolds) return;
+  for (const [key, pending] of sharedReads) {
+    if (!settledReads.has(pending)) continue;
+    sharedReads.delete(key);
+    if (fileByteCache.get(key) === pending && !expandedFiles.has(key)) fileByteCache.delete(key);
+  }
+};
+
+/**
+ * Keeps the bytes of the Files read until the returned release is called.
+ * @returns {() => void} Releases this hold; a second call does nothing.
+ */
+export const holdReadBytes = () => {
+  readHolds += 1;
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    readHolds -= 1;
+    dropSharedReads();
+  };
+};
 /**
  * The plain bytes of a File's bytes: a gzip file expands to at most Python's
  * `MAX_EXPANDED_INPUT_BYTES`, and past it rejects with `INPUT_UNREADABLE`
@@ -80,6 +160,36 @@ const expandInputBytes = (name, bytes) => {
   const maxBytes = testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
   return expandGzipBytes(bytes, maxBytes, () => diagnosticError('INPUT_UNREADABLE',
     { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' }));
+};
+
+/**
+ * Reads `file` (cached under `key`), starts its content facts, and shares the
+ * bytes with the reads the current holds cover (`holdReadBytes`).
+ * @param {object} key
+ * @param {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} file
+ * @returns {Promise<Uint8Array>}
+ */
+const startFileRead = (key, file) => {
+  const pending = Promise.resolve()
+    .then(() => file.arrayBuffer())
+    .then(asBytes, (error) => { throw refusedReadError(error); })
+    .then(async (bytes) => {
+      const plain = await expandInputBytes(String(file.name ?? ''), bytes);
+      if (plain !== bytes) expandedFiles.add(key);
+      return plain;
+    });
+  fileByteCache.set(key, pending);
+  sharedReads.set(key, pending);
+  startContentFacts(key, pending);
+  const settle = () => {
+    settledReads.add(pending);
+    dropSharedReads();
+  };
+  pending.then(settle, () => {
+    if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
+    settle();
+  });
+  return pending;
 };
 
 /**
@@ -105,20 +215,9 @@ export const readFileBytes = (file) => {
         'A File-like object with arrayBuffer() is required.'
       ));
     }
-    let pending = fileByteCache.get(key);
-    if (!pending) {
-      // The `typeof` check above holds here; narrowing does not reach the closures.
-      const readable = /** @type {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} */ (file);
-      pending = Promise.resolve()
-        .then(() => readable.arrayBuffer())
-        .then(asBytes, (error) => { throw refusedReadError(error); })
-        .then((bytes) => expandInputBytes(String(readable.name ?? ''), bytes));
-      fileByteCache.set(key, pending);
-      pending.catch(() => {
-        if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
-      });
-    }
-    return pending;
+    // The `typeof` check above holds its `arrayBuffer()`.
+    return fileByteCache.get(key)
+      ?? startFileRead(key, /** @type {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} */ (file));
   } catch (error) {
     return Promise.reject(error);
   }
@@ -145,26 +244,15 @@ export const readFileText = async (file) => {
 };
 
 /**
- * @param {Uint8Array | ArrayBuffer} bytes
- * @returns {Promise<ResourceContentToken>}
- */
-export const resourceContentToken = async (bytes) => /** @type {ResourceContentToken} */ (await sha256Hex(bytes));
-
-/**
- * The content token of a File or Session resource view, hashed once per object.
+ * The content facts of a File or Session resource view, computed once per
+ * object from its first read; known facts read nothing.
  * @param {FileLike} file
- * @returns {Promise<ResourceContentToken>}
+ * @returns {Promise<FileContentFacts>}
  */
-export const readFileContentToken = (file) => {
-  let pending = fileContentTokenCache.get(file);
-  if (!pending) {
-    pending = readFileBytes(file).then(resourceContentToken);
-    fileContentTokenCache.set(file, pending);
-    pending.catch(() => {
-      if (fileContentTokenCache.get(file) === pending) fileContentTokenCache.delete(file);
-    });
-  }
-  return pending;
+export const readFileContentFacts = (file) => {
+  const key = asCacheKey(file);
+  if (!key) return Promise.reject(new TypeError('A File-like object is required.'));
+  return fileContentFacts.get(key) ?? startContentFacts(key, readFileBytes(file));
 };
 
 /** @param {unknown} file */
@@ -194,6 +282,7 @@ export const fileDescriptorOf = (file) => {
 export const releaseFileContentCache = (file) => {
   const key = asCacheKey(file);
   if (!key) return false;
+  sharedReads.delete(key);
   const deleted = fileByteCache.delete(key);
   return releaseSessionResourceContent(file) || deleted;
 };

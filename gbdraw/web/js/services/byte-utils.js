@@ -172,15 +172,23 @@ export const bytesToText = (value, options) => (
 export const textToBase64 = (value) => bytesToBase64(textToBytes(value));
 
 /**
+ * The SHA-256 digest of `bytes`; Web Crypto copies them before it hashes.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<ArrayBuffer>}
+ */
+export const sha256Digest = async (bytes) => {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('SHA-256 file identity requires Web Crypto.');
+  }
+  return globalThis.crypto.subtle.digest('SHA-256', /** @type {Uint8Array<ArrayBuffer>} */ (bytes));
+};
+
+/**
  * @param {Uint8Array<ArrayBuffer> | ArrayLike<number> | ArrayBuffer | null | undefined} value
  * @returns {Promise<string>}
  */
 export const sha256Hex = async (value) => {
-  if (!globalThis.crypto?.subtle) {
-    throw new Error('SHA-256 file identity requires Web Crypto.');
-  }
-  const bytes = asBytes(value);
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const digest = await sha256Digest(asBytes(value));
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');

@@ -8,6 +8,7 @@ const {
   bytesToBase64,
   bytesToText,
   cloneFileBytesForTransfer,
+  holdReadBytes,
   readFileBytes,
   readFileText,
   takeFileBytesForTransfer,
@@ -92,11 +93,13 @@ for (const owner of [rowA, makeCountingFile('LOCUS concurrent')]) {
   structuredClone(second, { transfer: [second] });
 }
 
-// A single take hands out the cached buffer itself, with no copy.
+// A single take hands out the bytes a read under the same hold cached, with no copy.
 {
   const single = makeCountingFile('LOCUS single');
+  const releaseReads = holdReadBytes();
   const cached = await readFileBytes(single);
   assert.equal(await takeFileBytesForTransfer(single), cached.buffer, 'the common take copies nothing');
+  releaseReads();
 }
 // The retake is bounded: a FileLike that returns one stored buffer on every
 // read gives the second take a copy instead of reading forever.

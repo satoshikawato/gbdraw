@@ -25,6 +25,7 @@ const {
   validateWebFileBindings
 } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const {
+  holdReadBytes,
   readFileBytes,
   readFileText
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -246,6 +247,25 @@ test('lazy resource failures identify the resource and remain cached', async () 
   }
 });
 
+// PD-OI-120 (OV-2619): a file-backed resource whose File the browser refuses to read (it changed
+// on disk after it was chosen) fails Save with INPUT_UNREADABLE and the approved text, not with
+// an "invalid encoded data" error that reads as UNKNOWN.
+test('a refused read of a file-backed resource keeps its INPUT_UNREADABLE error', async () => {
+  const { diagnosticError, normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const { fileBackedDescriptor } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  const refused = diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' });
+  const descriptor = fileBackedDescriptor(
+    { name: 'chosen.gb', type: '', size: 4, lastModified: 0 },
+    () => Promise.reject(refused)
+  );
+  const table = adoptCurrentSessionResources({ 'record-1-genbank': descriptor });
+  const view = createSessionResourceFileView(table, 'record-1-genbank');
+  await assert.rejects(readSessionResourceBytes(view), (error) => error === refused);
+  const model = normalizeUserFacingError(refused, { operation: 'session-save' });
+  assert.equal(model.code, 'INPUT_UNREADABLE');
+  assert.equal(model.summary, 'An input could not be read. Replace or reselect it.');
+});
+
 test('ordinary uploaded File objects keep the native read behavior', async () => {
   const file = new File(['native upload'], 'native.txt', { type: 'text/plain' });
   let reads = 0;
@@ -255,9 +275,14 @@ test('ordinary uploaded File objects keep the native read behavior', async () =>
     return nativeArrayBuffer();
   };
 
+  // Reads under one hold share one read; once the hold ends, the page drops the bytes.
+  const releaseReads = holdReadBytes();
   assert.equal(await readFileText(file), 'native upload');
   assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
   assert.equal(reads, 1);
+  releaseReads();
+  assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
+  assert.equal(reads, 2);
 });
 
 test('adopted export reuses descriptors and encodes only a replacement', async () => {
