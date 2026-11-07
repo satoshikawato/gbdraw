@@ -6,6 +6,7 @@
     "tests/web/annotation-resolution.playwright.spec.js": 0.8,
     "tests/web/annotation-style-integration.playwright.spec.js": 2.23,
     "tests/web/auxiliary-file-history.playwright.spec.js": 0.27,
+    "tests/web/axe-accessibility.playwright.spec.js": 1.5,
     "tests/web/chloroplast-placement.playwright.spec.js": 0.73,
     "tests/web/circular-multi-record-default.playwright.spec.js": 0.37,
     "tests/web/circular-record-presentation.playwright.spec.js": 0.74,
@@ -167,7 +168,8 @@
       "tests/web/linear-auto-orientation.playwright.spec.js",
       "tests/web/align-at-feature.playwright.spec.js",
       "tests/web/linear-wrap.playwright.spec.js",
-      "tests/web/sequence-search.playwright.spec.js"
+      "tests/web/sequence-search.playwright.spec.js",
+      "tests/web/axe-accessibility.playwright.spec.js"
     ],
     [
       "tests/web/annotation-style-integration.playwright.spec.js",
