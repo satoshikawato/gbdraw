@@ -174,6 +174,59 @@ test('an unclassified render failure offers Save Session and no Retry Generate',
   await inspectSafeDetails(page, alert, failed.error);
 });
 
+// PD-OI-118 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md: the Worker drew the diagram, but the page
+// cannot receive its reply (the run's `messageerror`, raised here on the real Worker after its reply). The panel
+// shows the approved text and Save Session, no Retry Generate; the Result, the committed request, the draft and
+// History stay.
+test('a reply too large for the page offers Save Session and no Retry Generate, and keeps the Result', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await loadSession(page, 'tobacco-chloroplast');
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const slot = app.adv.circular_track_slots.find(row => row.id === 'gc_content');
+    await window.__GBDRAW_HISTORY__.runUndoable('Pending width', () =>
+      app.updateCircularTrackSlotMeasure(slot, 'width', { value: '0.09', unit: 'factor' }));
+  });
+  const snapshot = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const a = window.__GBDRAW_APP__, h = window.__GBDRAW_HISTORY__;
+    return { results: JSON.stringify(a.currentResults()), session: JSON.stringify(getCommittedCanonicalSession()),
+      width: JSON.stringify(state.activeDrawing().adv.circular_track_slots.find(row => row.id === 'gc_content').width),
+      undo: h.getUndoCount(), redo: h.getRedoCount() };
+  });
+  const before = await snapshot();
+  expect(JSON.parse(before.width)).toMatchObject({ value: '0.09' });
+  await page.evaluate(() => {
+    const send = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message.type === 'run') {
+        Worker.prototype.postMessage = send;
+        window.__REPLY_WORKER__ = this;
+      }
+      return send.call(this, message, ...args);
+    };
+    window.__GBDRAW_TEST_HOOKS__ = window.__GBDRAW_TEST_HOOKS__ || {};
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+      delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+      window.__REPLY_WORKER__.dispatchEvent(new MessageEvent('messageerror'));
+    };
+  });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'RESULT_INVALID',
+    operation: 'generate', stage: 'result-admission', context: { reason: 'REPLY_TOO_LARGE' }, actions: ['save-session'] } });
+  expect(await snapshot()).toEqual(before);
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('The diagram was drawn, but it is too large for this browser page to receive.'
+    + ' Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line'
+    + ' (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).');
+  await expect(alert).not.toContainText('could not be accepted');
+  await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
+  await inspectSafeDetails(page, alert, failed.error);
+});
+
 // OV-130 (R6): a preserved setting of the other diagram mode (OV-106) fails the
 // engine's request decoding. The panel names the setting, the mode it belongs to
 // and the two ways out, instead of the unclassified input-validation text.
