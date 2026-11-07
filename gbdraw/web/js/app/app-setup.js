@@ -14,12 +14,9 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
-/** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 /** @import { LegendRowColorOf } from './candidate-render.js' */
-/** @import { UserFacingError } from '../utils/error-normalization.js' */
-/** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
@@ -44,12 +41,10 @@ import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
 import { admitFeatureCatalog, biologicalFeatureKey, catalogNameIndex, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
-import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES } from '../services/session-active-config-contract.js';
-import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import {
   createLinearComparisonFocus, createLinearComparisonTimeline, createLinearComparisonView, createLinearLayoutReaders,
@@ -137,7 +132,7 @@ import {
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import { bindDrawingInputFile, bindDrawingInputFileTree, createLinearSeq, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
+import { bindDrawingInputFileTree, createLinearSeq, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
 import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
@@ -234,9 +229,7 @@ import { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } fr
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
-  annotationRecordKeysOf,
-  annotationSourceKey,
-  buildAnnotationRecordCatalog
+  annotationRecordKeysOf
 } from './annotations/record-catalog.js';
 import {
   reconcileAnnotationRecordBindings, resultRecordBindings
@@ -244,23 +237,21 @@ import {
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
+import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits } from './circular-record-controls.js';
+import { createDrawingRecordCatalog } from './drawing-record-catalog.js';
+import { createShownDrawingReaders } from './shown-drawing-readers.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
 import { createFigureSizeField } from './figure-size-field.js';
 import { createFigureSizeReaders } from './figure-size-readers.js';
 import { createOrthogroupPopup } from './orthogroup-popup.js';
 import { createSimilarityAlignmentReview, createSimilarityAlignmentTakeover } from './similarity-alignment-review.js';
-import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
-  circularDrawingRecordSet,
-  circularDrawingRegionNote,
   circularEstimateLengths,
   circularRequestDiagrams,
   formatRecordLength,
-  regionClampNote,
-  linearCardRegion,
   resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import {
@@ -278,14 +269,12 @@ import {
   removeRecordEdits
 } from '../services/record-draw-selection.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
-import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
 import { resultRecordBinding } from '../services/sequence-search.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
-  circularDiscoveryForInput,
   discoverInputRecords
 } from '../services/record-discovery.js';
 import { normalizeFileList } from '../services/conservation-series.js';
@@ -311,7 +300,6 @@ import {
 } from '../services/depth-track-state.js';
 /** @import { HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
-/** @import { AnnotationRecordCatalog } from './annotations/record-catalog.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { MountedResultContext } from './preview-runtime.js' */
 /** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
@@ -508,7 +496,6 @@ export const createAppSetup = () => {
     featureEditRemovalCount,
     comparisonWarnings,
     labelFitReports,
-    inputSummaries,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
@@ -845,66 +832,13 @@ export const createAppSetup = () => {
     onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => readInputRecords(inputType, primaryFile, pairedFile)
   });
-  /** @param {DrawingState} drawing */
-  const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(drawing);
-  /** @param {DrawingState} drawing */
-  const circularAnnotationSourceKey = (drawing) => annotationSourceKey({
-    scope: 'circular',
-    inputType: drawing.inputType.value,
-    ...inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))
+  const {
+    getCircularRecordDiscoveryState, circularAnnotationSourceKey, linearAnnotationSource, getAnnotationRecordCatalog,
+    recordCatalogError, prepareLinearRecordCatalog
+  } = createDrawingRecordCatalog({
+    state, readInputRecords, linearRecordCatalogStateFor: linearRecordSelector.catalogStateFor,
+    linearRecordErrorModelFor: linearRecordSelector.errorModelFor, refreshLinearRecords: linearRecordSelector.refresh
   });
-  /**
-   * A Linear record card as the annotation record catalog reads it.
-   * @param {DrawingState} drawing the drawing that holds the card
-   * @param {LinearSeq} seq
-   * @param {boolean} drawn
-   * @returns {AnnotationCatalogSource}
-   */
-  const linearAnnotationSource = (drawing, seq, drawn) => {
-    const inputType = drawing.inputType.value;
-    const { primaryFile, pairedFile, complete } = inputSourceFiles(inputType, seq);
-    return {
-      sourceKey: annotationSourceKey({
-        scope: 'linear',
-        uid: seq.uid,
-        inputType,
-        primaryFile,
-        pairedFile
-      }),
-      selector: seq.region_record_id,
-      drawn,
-      hasInput: complete,
-      ...linearRecordSelector.catalogStateFor(drawing, seq)
-    };
-  };
-  /**
-   * The records one drawing's annotations can name: a Circular drawing's
-   * record set, or a Linear drawing's drawn cards (`linearSourcesOverride`
-   * replaces the cards a Linear drawing reads).
-   * @param {DrawingState} drawing
-   * @param {AnnotationCatalogSource[] | null} [linearSourcesOverride]
-   */
-  const getAnnotationRecordCatalog = (drawing, linearSourcesOverride = null) => {
-    const circularSource = () => {
-      const circularDiscovery = getCircularRecordDiscoveryState(drawing);
-      const circularRecordSet = circularDrawingRecordSet(circularDiscovery.records, drawing);
-      return {
-        sourceKey: circularAnnotationSourceKey(drawing),
-        hasInput: circularDiscovery.hasInput,
-        status: circularDiscovery.status,
-        error: circularDiscovery.error,
-        records: circularRecordSet.records,
-        omittedRecords: circularRecordSet.omittedRecords
-      };
-    };
-    const linearSources = () => {
-      const recordsOff = new Set(drawing.recordsOff);
-      return linearSourcesOverride || drawing.linearSeqs.map((seq) => linearAnnotationSource(drawing, seq, !recordsOff.has(seq.uid)));
-    };
-    return buildAnnotationRecordCatalog(drawing.mode === 'linear'
-      ? { mode: 'linear', linearSources: linearSources() }
-      : { mode: 'circular', circularSource: circularSource() });
-  };
   // R10 (D-15-46): each transition that changes the annotation record catalog
   // (a discovery that ends, a mode switch, record selection, a Linear source
   // edit, a record selector, Multi-Record Canvas) rebinds the shown drawing's
@@ -925,21 +859,7 @@ export const createAppSetup = () => {
       reconcileAnnotationRecordBindings(drawing, catalog);
     }
   };
-  // A Circular drawing whose Multi-Record Canvas is on and has no multi-record
-  // sides stored gets the toggle's smart defaults. Load, its rollback, and a
-  // History restore install the sides they read or captured (R11, D-15-48).
-  /** @param {DrawingState} drawing */
-  const storeCircularMultiRecordDefaults = (drawing) => {
-    const defaults = drawing.mode === 'circular' && drawing.form.multi_record_canvas
-      ? circularMultiRecordDefaults(drawing.layoutPreferences) : null;
-    if (defaults) updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true, defaults);
-  };
-  // The Multi-Record Canvas checkbox, after its `v-model` wrote the shown
-  // drawing: in the control's History step.
-  const changeCircularMultiRecordCanvas = () => {
-    storeCircularMultiRecordDefaults(state.activeDrawing());
-    rebindAnnotationRecords();
-  };
+  const { changeCircularMultiRecordCanvas } = createCircularMultiRecordCanvas({ state, rebindAnnotationRecords });
   // Bumped by each edit of the displayed Result's root (R1).
   const resultEditRevision = shallowRef(0);
   // Counts the Result roots the binder made ready: a History restore can mount a root whose content equals the
@@ -1617,105 +1537,14 @@ export const createAppSetup = () => {
     });
   };
   const losatSettings = createLosatSettings({ state });
-  /**
-   * The record a Linear entry draws, once its records are read: the one its
-   * selector names, or the only record of its file.
-   * @param {DrawingState} drawing the drawing that holds the card
-   * @param {LinearSeq} seq
-   */
-  const linearSeqRecord = (drawing, seq) => {
-    const records = linearRecordSelector.recordsFor(drawing, seq);
-    const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
-    return selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
-  };
-  // The note beside a Linear entry's Region fields (`regionClampNote`). The
-  // request draws the larger coordinate as the region's end (reverse when typed first).
-  /** @param {LinearSeq} seq a card of the shown drawing */
-  const linearRegionNote = (seq) => {
-    const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
-    return region && !('error' in region) ? regionClampNote(region.drawn) : '';
-  };
-  const circularRegionNote = computed(() => {
-    const drawing = shownDrawingOfMode('circular');
-    return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
-  });
-  // The input summary of the shown Result: its warnings in the status area, its lines in Run info, its
-  // wrapped rows.
-  const shownInputSummary = computed(() => inputSummaryOf(
-    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
-  ));
-  // The records the next Linear Generate draws, as their cards ask for them:
-  // each source record's length and the region its card states. Known once
-  // every drawn record is read and every region can be drawn, else none.
-  /** @param {DrawingState | null | undefined} drawing @returns {LinearDraftRecord[]} */
-  const linearDraftRecordsOf = (drawing) => {
-    if (!drawing || drawing.mode !== 'linear') return [];
-    const records = drawing.drawnLinearSeqs.value.map((seq, index) => {
-      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
-      const region = linearCardRegion(seq, index + 1);
-      if (!(sourceLength > 0) || (region !== null && 'error' in region)) return null;
-      return { sourceLength,
-        region: region === null ? null : { start: Math.min(region.start, region.end), end: Math.max(region.start, region.end) } };
-    });
-    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
-  };
-  // Their lengths, while none is cropped: the Web predicts no cropped length.
-  /** @param {DrawingState | null | undefined} drawing @returns {number[]} */
-  const linearRecordLengthsOf = (drawing) => {
-    const records = linearDraftRecordsOf(drawing);
-    return records.every((record) => record.region === null) ? records.map((record) => record.sourceLength) : [];
-  };
-  const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
-  // The records a shown Result without an input summary (a loaded one) drew:
-  // each committed record's region as its request asked for it, with the
-  // length of the source record its card reads, matched by record key, so a
-  // card edited since Load changes neither (D-73). [] while a record has no
-  // card that still draws it, or its length is unknown.
-  /** @param {DrawingState} drawing @returns {LinearDraftRecord[]} */
-  const committedLinearRecordsOf = (drawing) => {
-    const records = (committedLinearRecordCards(drawing) ?? []).map(({ record, seq }) => {
-      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
-      const { region } = record;
-      return sourceLength > 0 ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
-    });
-    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
-  };
-  // A Linear card whose record list is still deferred after a Load is read
-  // now, through the record selector, as Generate reads it (DESIGN A4).
-  /** @param {DrawingState} drawing */
-  const awaitLinearRecordDiscovery = async (drawing) => {
-    if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(drawing, seq) === 'deferred')) {
-      const outcome = linearRecordSelector.refresh(drawing);
-      if (outcome instanceof Promise) await outcome;
-    }
-  };
-  // Web-only changes of the shown canvas: a moved diagram, Legend, title, or scale, and Canvas padding.
-  const decorationsMoved = () => [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset]
-    .some((offset) => Boolean(Number(offset.x) || Number(offset.y)));
-  /** @param {{ canvasPadding: Record<string, unknown> }} drawing */
-  const canvasPadded = (drawing) => (/** @type {const} */ (['top', 'right', 'bottom', 'left'])).some((side) => Number(drawing.canvasPadding[side]));
-  // The committed request of the Result a drawing shows; null while it shows no Result of its own.
-  /** @param {{ id: string }} drawing */
-  const shownCommittedRequest = (drawing) => (
-    state.generatedDrawingId.value === drawing.id && results.value.length > 0 ? getCommittedCanonicalRenderRequest() : null
-  );
-  // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
-  // summary and the committed request of the drawing whose Result is shown:
-  // the field's Auto text and the Auto hints of sizes and ticks read it.
-  /** @param {DrawingState} drawing The committed request's stored wrap leaf while this drawing's Result is shown. */
-  const shownLinearWrapLeaf = (drawing) => {
-    const request = drawing.mode === 'linear' ? shownCommittedRequest(drawing) : null;
-    return request?.mode === 'linear' ? requestLinearWrapLeaf(request) : undefined;
-  };
-  const shownLinearWrapReading = computed(() => {
-    const drawing = state.activeDrawing();
-    const leaf = shownLinearWrapLeaf(drawing);
-    return shownLinearWrap({
-      value: drawing.form.linear_wrap_length,
-      requested: leaf === undefined ? undefined : wrapFormValue(leaf).value,
-      summary: shownInputSummary.value ?? undefined,
-      records: linearDraftRecordsOf(drawing)
-    });
+  const {
+    linearRegionNote, circularRegionNote, shownInputSummary, drawnLinearRecordLengths, committedLinearRecordsOf,
+    awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
+    shownLinearWrapReading
+  } = createShownDrawingReaders({
+    state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
+    linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest
   });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
@@ -3701,66 +3530,6 @@ export const createAppSetup = () => {
     copyRunCommand, copyExactReplayCommand
   } = createRunInfoCopy({ lastRunInfo });
 
-  /** @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog */
-  const catalogIssueError = (catalog) => {
-    const issue = catalog.issues[0];
-    return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
-  };
-  /**
-   * Why a drawing's record catalog is not ready, as its record list says it: for Linear, the first drawn card's own
-   * read error (its record select's), else the catalog's first issue. Generate and Add to annotation set read it here.
-   * @param {DrawingState} drawing
-   * @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog
-   */
-  const recordCatalogError = (drawing, catalog) => (drawing.mode === 'linear'
-    // A stored '' (no error) has no `code`: the read is undefined, as for null.
-    && drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code))
-    || catalogIssueError(catalog);
-  async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
-    const drawing = state.activeDrawing();
-    if (drawing.mode !== 'linear') return { catalog: null, error: '' };
-    const hasAutomaticSequence = drawing.linearSeqs.some((sequence) => {
-      if (String(sequence?.region_record_id || '').trim()) return false;
-      return inputSourceFiles(drawing.inputType.value, sequence).complete;
-    });
-    const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
-      Array.isArray(set?.annotations) && set.annotations.length > 0
-    ));
-    if (!hasAutomaticSequence && !hasRegionAnnotations) {
-      return { catalog: null, error: '' };
-    }
-    if (privateCandidate) {
-      const linearRecordsOff = new Set(drawing.recordsOff);
-      const sources = await Promise.all(drawing.linearSeqs.map(async (seq) => {
-        const drawn = !linearRecordsOff.has(seq.uid);
-        const inputType = drawing.inputType.value;
-        const { primaryFile, pairedFile } = inputSourceFiles(inputType, seq);
-        const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
-        try {
-          const records = await readInputRecords(inputType, primaryFile, pairedFile);
-          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'ready', records };
-        } catch (error) {
-          /** @type {UserFacingError | ''} The model the card's record select would store for this failure. */
-          const model = normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) || '';
-          return { sourceKey, selector: seq.region_record_id, drawn, hasInput: Boolean(primaryFile), status: 'error', error: model, records: [] };
-        }
-      }));
-      const catalog = getAnnotationRecordCatalog(drawing, sources);
-      return catalog.status === 'ready' ? { catalog, error: '' }
-        : { catalog: null, error: catalogIssueError(catalog) };
-    }
-    let catalog = getAnnotationRecordCatalog(drawing);
-    if (catalog.status !== 'ready') {
-      try {
-        await linearRecordSelector.refresh(drawing);
-      } catch (error) {
-        return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
-      }
-      catalog = getAnnotationRecordCatalog(drawing);
-    }
-    return catalog.status === 'ready' ? { catalog, error: '' } : { catalog: null, error: recordCatalogError(drawing, catalog) };
-  }
-
   const runAnalysis = () => {
     const drawing = state.activeDrawing();
     // The phone layout shows the Preview, where the run's progress, Result or error appears; a new
@@ -4451,143 +4220,18 @@ export const createAppSetup = () => {
     return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, drawing: historySnapshots.displayedArtifactDrawing() });
   };
 
-  const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
-    && mode.value === 'circular'
-    && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
-  // CI-03: the per-record presentation a source file carries in each mode.
-  // Replacing or removing the file resets it in the replacement's History step.
-  // The OFF records name records of the old file too (record selection).
-  /** @param {DrawingState} drawing */
-  const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
-    form.circular_record_selector = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_selector;
-    if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
-    if (recordsOff.length) recordsOff.splice(0);
-  };
-  // The whole record presentation: the record form fields return to their
-  // defaults (the one list a style copy leaves out too). Each field is written
-  // by name, so the track-layout writer guard reads no whole-form write; a
-  // node case pins that every field of the list is written.
-  /** @param {DrawingState} drawing */
-  const retireCircularRecordPresentation = (drawing) => {
-    const { form } = drawing;
-    retireCircularRecordSelector(drawing);
-    form.circular_region_start = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_start;
-    form.circular_region_end = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_end;
-    form.circular_reverse = CIRCULAR_RECORD_FORM_DEFAULTS.circular_reverse;
-    form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
-    form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
-  };
-  // D-32: one record replacing one record (a new version of the same genome)
-  // keeps its crop and titles; a removed file or a replaced multi-record file
-  // retires them. The record selector names a record of the old file, so any
-  // replacement retires it.
-  /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
-  const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
-  /**
-   * A Circular drawing's source file (upload, replace, Remove), with the
-   * drawing's reactions to its new source: the shown drawing's controls and
-   * the replacement for every drawing that uses a file write through it.
-   * @param {DrawingState} drawing
-   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
-   * @param {InputFileCandidate | InputFileRef} value
-   */
-  const replaceCircularSource = (drawing, field, value) => {
-    const nextValue = value ?? null;
-    const previous = drawing.files[field];
-    const nextRef = state.inputFiles.registerFile(nextValue);
-    if (previous === nextRef) return;
-    const previousRecordCount = drawing.circularRecordList.value.length;
-    changeRecordSources(drawing, () => { bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, field, nextValue); });
-    if (nextRef) pendingDiscoveryOf(drawing).circularUpload = nextRef;
-    void discoverDrawingRecords(drawing);
-    // An upload into an empty slot starts reading another input (after an
-    // Input switch), whose records the OFF list does not name.
-    if (!previous) {
-      if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
-      return;
-    }
-    if (sourceReplacementRetiresPresentation({
-      removed: !nextValue, previousRecordCount
-    })) retireCircularRecordPresentation(drawing);
-    else retireCircularRecordSelector(drawing);
-  };
-  /**
-   * The Circular source file controls of the shown drawing.
-   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
-   * @param {File | null} value
-   */
-  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => replaceCircularSource(drawing, field, value));
-  /** @param {unknown} value */
-  const setCircularRecordPresentationSelector = (value) => {
-    const busy = sessionOperationAvailability();
-    if (busy) return busy;
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return { status: 'unavailable' };
-    if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
-    const normalized = String(value || '').trim();
-    drawing.form.circular_record_selector = normalized;
-    drawing.adv.circular_grouping_intent = normalized ? 'single' : 'auto';
-    rebindAnnotationRecords();
-    return { status: 'ok' };
-  };
-  const showCircularCanvasSetting = async () => {
-    const drawing = shownDrawingOfMode('circular');
-    const control = /** @type {HTMLElement | null} */ (document.querySelector('[data-circular-canvas-setting]'));
-    if (!control || !drawing || !drawing.form.multi_record_canvas) {
-      return { status: 'unavailable' };
-    }
-    await settingsPaneActions.revealSetting(control);
-    return { status: 'ok' };
-  };
-  // With Custom Track Slots on, a Ticks row owns the coordinate scale: the link beside Show Coordinate Scale
-  // reveals that row (the first enabled one, else the first), or the Custom Track Slots panel when the stack
-  // has none. It changes no setting.
-  const showCircularTicksSlot = async () => {
-    const drawing = state.activeDrawing();
-    if (mode.value !== 'circular' || !drawing.adv.circular_track_slots_enabled) return { status: 'unavailable' };
-    circularTrackSlotsPanelOpen.value = true;
-    await nextTick();
-    /** @type {CircularTrackSlot[]} */
-    const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
-    const ticks = slots.filter((slot) => slot.renderer === 'ticks');
-    const slot = ticks.find((candidate) => candidate.enabled) || ticks[0];
-    const row = slot ? document.querySelector(`[data-capture="circular-track-slot-${CSS.escape(slot.id)}"]`) : null;
-    const panel = document.getElementById('circular-custom-track-slots-panel');
-    const toggle = /** @type {HTMLElement | null} */ (document.querySelector('[data-track-slots-toggle]'));
-    const control = /** @type {HTMLElement | null} */ (row?.querySelector('input, select, button') ?? null);
-    if (row instanceof HTMLElement && control) {
-      await settingsPaneActions.revealSetting(row, { focus: control });
-    } else if (panel && toggle) {
-      await settingsPaneActions.revealSetting(panel, { align: 'start', focus: toggle });
-    } else {
-      return { status: 'unavailable' };
-    }
-    return { status: 'ok' };
-  };
-  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
-    circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
-    state.activeDrawing().form.circular_record_selector], async (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
-    if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
-    const origin = document.activeElement;
-    const pane = document.querySelector('.settings-scroll');
-    const scrollOwner = pane ? settingsScrollOwner(pane) : document.scrollingElement;
-    const anchored = origin && pane?.contains(origin) && origin.getClientRects().length;
-    const top = anchored ? origin.getBoundingClientRect().top : null;
-    const scrollTop = scrollOwner?.scrollTop;
-    await nextTick();
-    if (!circularSingleRecordPresentationEnabled.value
-      || circularRecordDiscoveryState.value.primaryFile !== current[2]
-      || circularRecordDiscoveryState.value.pairedFile !== current[3]) return;
-    if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
-    await afterPaint();
-    if (scrollOwner && document.activeElement === origin) {
-      // `top` is a number whenever `anchored` is truthy; `scrollTop` was read from
-      // the same non-null `scrollOwner`.
-      scrollOwner.scrollTop = anchored && origin.isConnected
-        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - /** @type {number} */ (top)
-        : /** @type {number} */ (scrollTop);
-    }
-  }, { flush: 'sync' });
+  const {
+    circularRecordSelectionEnabled, setCircularRecordPresentationSelector, showCircularCanvasSetting,
+    showCircularTicksSlot
+  } = createCircularRecordDisplay({
+    state, semanticMutationAvailable, circularRecordDiscoveryState, circularSingleRecordPresentationEnabled,
+    sessionOperationAvailability, shownDrawingOfMode, rebindAnnotationRecords,
+    revealSetting: settingsPaneActions.revealSetting, circularTrackSlotsPanelOpen, circularRecordPresentationPanel,
+    afterPaint
+  });
+  const { sourceReplacementRetiresPresentation, replaceCircularSource, setCircularSourceFile } = createCircularSourceEdits({
+    state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction
+  });
 
   const {
     getCircularRecordRow, getCircularRecordRowOptions, setCircularRecordRow, canMoveCircularRecordOrderUp,
