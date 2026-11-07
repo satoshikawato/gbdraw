@@ -1801,19 +1801,17 @@ export const createAppSetup = () => {
     searchRecordSelector: (bindingKey) => shownResultRecordBindings().selectorOfBinding(bindingKey),
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
-  // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the
-  // record editor, and the file watcher) act for the shown drawing; this
-  // binding resolves it once per action and the runner reads the one it is given.
+  // OV-2678: the rerender a checkpoint step asks for, its own and its listener's, starts once the step ends.
+  history.setCheckpointHold(holdAutomaticRerender);
+  // D-15-89: the panel actions (the template, `window.__GBDRAW_APP__`, the record editor, and the file watcher) act
+  // for the shown drawing; this binding resolves it once per action and the runner reads the one it is given.
   /** @param {{ suppress?: boolean, automatic?: boolean } | undefined} [options] */
   const refreshCircularRecordOrder = (options) => refreshRecordOrderOfDrawing(options, state.activeDrawing());
-  // R10: the record discovery of one drawing. Each transition that changes
-  // the drawing's discovery inputs calls it for that drawing: a source file,
-  // the input type, the Linear cards, the end of a Load or a Save, and a
-  // History restore of inputs. A drawing switch calls nothing. It is the one
-  // admission of a discovery: none starts while a Load rolls back or a Load
-  // or History restore installs (the semantic file watchers are suppressed);
-  // a Save or Load still pending makes the owners return busy, and its end
-  // calls the discovery again. It writes only `drawing`.
+  // R10: the record discovery of one drawing. Each transition that changes the drawing's discovery inputs calls it
+  // for that drawing: a source file, the input type, the Linear cards, the end of a Load or a Save, and a History
+  // restore of inputs. A drawing switch calls nothing. It is the one admission of a discovery: none starts while a
+  // Load rolls back or a Load or History restore installs (the semantic file watchers are suppressed); a Save or Load
+  // still pending makes the owners return busy, and its end calls the discovery again. It writes only `drawing`.
   /** @param {DrawingState} drawing */
   const discoverDrawingRecords = (drawing) => {
     if (state.sessionImportRollbackInProgress.value || state.semanticFileWatchersSuppressed.value) return undefined;
