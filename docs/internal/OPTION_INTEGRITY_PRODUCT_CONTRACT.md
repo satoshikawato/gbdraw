@@ -4648,7 +4648,8 @@ Status: active Product authority
   Product Decision Owner `satoshikawato`'s replies in the Claude Code sessions
   of the campaign `region-select-seq-search-20261104` (`DECISIONS.md` `D-62`,
   `D-63`). The receipt names no ID of its own and is recorded byte for
-  byte. Each reply is quoted as written.
+  byte. A typed reply is quoted as written; a choice in the question dialog
+  is named by its option.
   - D-62 (`2026-11-07`). The session asked five questions (Q1 to Q5), each
     with options and a Before and After image per option, after the Owner's
     「Q1〜Q5を質問して」. The Owner chose the recommended option of each:

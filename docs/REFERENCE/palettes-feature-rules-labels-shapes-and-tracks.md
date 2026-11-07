@@ -156,8 +156,9 @@ extent. For line, bracket, and band slots, it also rejects explicit-lane
 collisions. A highlight-only slot ignores explicit lanes, flattens its marks
 into lane 0, and keeps overlaps during lane assignment. `overflow=compress`
 permits explicit-lane collisions and, only for an overfull multi-lane track,
-reduces the gaps between lanes; it still fails when the fixed lane bands and
-padding cannot fit. `overflow=clip` permits explicit-lane collisions and clips
+reduces the gaps between lanes; it still fails when the fixed lane bands,
+padding, and label room cannot fit. A track needs room between two lanes where a
+label would cross a mark in the next lane on its side. `overflow=clip` permits explicit-lane collisions and clips
 an overfull track. Increase the slot extent or reduce padding and label offset
 when the content must remain fully visible.
 
