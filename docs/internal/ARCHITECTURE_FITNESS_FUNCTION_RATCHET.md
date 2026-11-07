@@ -535,6 +535,25 @@ This is the rule `COVERAGE-FLOOR` of `tools/web-design-rule-guards.json`.
   is optional. Raising `MAX_UNCOVERED_PERCENT`, which lowers the floor, is an
   authority-only change that needs the Owner's approval.
 
+## SVG 1.1 vocabulary
+
+This is the rule `SVG11-VOCABULARY` of `tools/web-design-rule-guards.json`.
+
+- Every SVG in `tests/reference_outputs/` is well-formed XML with an SVG `svg`
+  root. Each element is an SVG 1.1 element that its parent's content model
+  allows, and each attribute, namespace declarations included, is one the
+  SVG 1.1 DTD declares for that element.
+- `tests/test_reference_svg_vocabulary.py` reads the W3C DTD
+  `tests/fixtures/svg11-flat-20110816.dtd`, kept unchanged with its notice and
+  pinned by its SHA-256, with the Python standard library.
+- `SVG11_EXTENSIONS` in the same test lists, as `fnmatch` patterns with a
+  reason each, the names outside SVG 1.1 that gbdraw writes on purpose: the
+  `data-*` attributes of the interactive metadata, `aria-hidden`, and the
+  `xmlns:ev` declaration that svgwrite writes. The test fails when an entry is
+  no longer used.
+- Adding an entry is an authority-only change that needs the Owner's approval.
+  Removing one is optional.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
