@@ -88,6 +88,15 @@ Python writes, which are whole SVG elements with escaped text and no comments,
 CDATA or processing instructions, the joined text equals the sanitization of
 the whole document; tests verify it.
 
+Python writes the reply's byte buffers (the metadata JSON, the feature catalog
+JSON, and each Result's sent children texts) as UTF-8 chunks of about 1 MiB
+(`gbdraw/web_support/reply_buffers.py`) into buffers the Worker makes
+(`createReplyBuffer`). The Python heap holds about one chunk at a time, never a
+whole text's bytes; a children text is still a whole Python string, as the
+render made it. The Worker joins each buffer's chunks right after converting
+Python's result, at result admission, so a reply too large to allocate fails
+there as before. The page detaches each buffer as it decodes it.
+
 Every Generate leaves the page holding a complete feature catalog equal to the
 one a Generate with an empty cache returns. The reply carries that catalog
 unless the request names the catalog revision the page holds for the drawing
