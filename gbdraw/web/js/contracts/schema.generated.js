@@ -178,6 +178,10 @@ export const PALETTE_NAME_ALIASES = Object.freeze({
   hearbal_garden: 'herbal_garden'
 });
 
+// gbdraw/session.py: SESSION_PNG_DPI_CHOICES
+/** @type {readonly number[]} */
+export const SESSION_PNG_DPI_CHOICES = Object.freeze([72, 96, 150, 300, 600]);
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

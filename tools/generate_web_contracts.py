@@ -103,6 +103,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_SVG_ATTRIBUTE_RENAMES", "gbdraw.render.interactive_svg", "LEGACY_SVG_ATTRIBUTE_RENAMES"),
     # A former palette name reads as the current one (Session Load).
     ("PALETTE_NAME_ALIASES", "gbdraw.io.colors", "PALETTE_NAME_ALIASES"),
+    # The PNG DPI choices a Session's ui.downloadDpi names; the Web keeps their labels.
+    ("SESSION_PNG_DPI_CHOICES", "gbdraw.session", "SESSION_PNG_DPI_CHOICES"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

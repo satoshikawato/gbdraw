@@ -110,6 +110,7 @@ from .cli_utils.session import (
     SessionCliRequest,
     RenderedSvg,
     add_session_args,
+    legacy_replay_png_dpi,
     diagram_request_rendered_svgs,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -122,7 +123,7 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
-from .session import SessionDocument, load_session_document
+from .session import SessionDocument, load_session_document, noting_session_png_dpi
 from .session_io import session_to_cli_args
 
 # Setup for the logging system
@@ -840,7 +841,8 @@ def replay_legacy_session(
             args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
-        args.dpi = session_request.dpi
+        png = legacy_replay_png_dpi(document, session_request, args.format)
+        args.dpi = png.dpi
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._allow_legacy_track_transport = True
@@ -848,7 +850,8 @@ def replay_legacy_session(
             session_request.save_session
             or session_request.session_output
         )
-        run_result = run_circular_from_namespace(args)
+        with noting_session_png_dpi(png):
+            run_result = run_circular_from_namespace(args)
         save_session_sidecar_if_requested(
             save_session=session_request.save_session,
             session_output=session_request.session_output,

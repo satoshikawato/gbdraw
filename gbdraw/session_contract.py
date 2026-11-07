@@ -256,6 +256,7 @@ class SessionProjectUi(TypedDict, total=False):
 
     activeDrawingId: str
     losatExecution: LosatExecutionJson
+    # The Web's PNG DPI, as stored; gbdraw.session.read_session_png_dpi reads it.
     downloadDpi: object
     autoLabelReflow: object
     paletteInstantPreviewEnabled: object

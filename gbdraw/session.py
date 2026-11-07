@@ -8,6 +8,7 @@ temporary and are valid only while the materialization context is active.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import tempfile
 from contextlib import AbstractContextManager, contextmanager
@@ -16,7 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, Sequence, cast
 
-from gbdraw.exceptions import ValidationError
+from gbdraw.core.numeric import JS_WHITESPACE
+from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession51, SessionResult
 from gbdraw.io.table_text import legacy_table_rows
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
@@ -74,6 +76,79 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# The PNG DPI choices of the Web app's DPI menu, which a Session's
+# ``ui.downloadDpi`` names. The Web reads them generated
+# (``SESSION_PNG_DPI_CHOICES``) and keeps their labels and its default.
+SESSION_PNG_DPI_CHOICES: frozenset[int] = frozenset({72, 96, 150, 300, 600})
+
+
+def read_session_png_dpi(session: Mapping[str, object]) -> int | None:
+    """The PNG DPI a Session saved (``ui.downloadDpi``), or ``None`` without one.
+
+    The one reader of the stored value, as the Web's ``readDownloadDpi``
+    reads it: one of :data:`SESSION_PNG_DPI_CHOICES`, as a number or as text
+    with outer spaces; unset (missing, null or empty) is ``None``. Any other
+    value is ``None`` with a notice; the Web reads it as its default (300)
+    with a Load dialog row. Every Session version keeps the value in the
+    top-level ``ui`` (Session 51: the project's).
+    """
+
+    ui = session.get("ui")
+    stored = ui.get("downloadDpi") if isinstance(ui, Mapping) else None
+    if stored is None or stored == "":
+        return None
+    if isinstance(stored, str):
+        text = stored.strip(JS_WHITESPACE)
+        dpi = next((choice for choice in SESSION_PNG_DPI_CHOICES if text == str(choice)), None)
+    elif isinstance(stored, (int, float)) and not isinstance(stored, bool) and stored in SESSION_PNG_DPI_CHOICES:
+        dpi = int(stored)
+    else:
+        dpi = None
+    if dpi is None:
+        logger.warning(
+            "WARNING: Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; it is not used.",
+            json.dumps(stored, ensure_ascii=False),
+            ", ".join(str(choice) for choice in sorted(SESSION_PNG_DPI_CHOICES)),
+        )
+    return dpi
+
+
+@dataclass(frozen=True)
+class SessionPngDpi:
+    """The PNG DPI of a Session render, and whether it is the one the Session saved."""
+
+    dpi: float | None
+    from_session: bool
+
+
+def session_png_dpi(session: Mapping[str, object], dpi: float | None) -> SessionPngDpi:
+    """The caller's ``dpi`` (``--dpi``, ``dpi=``), else the PNG DPI the Session saved (D-93, D-94).
+
+    The stored value is read only when the caller gives none.
+    """
+
+    if dpi is not None:
+        return SessionPngDpi(dpi, from_session=False)
+    saved = read_session_png_dpi(session)
+    return SessionPngDpi(saved, from_session=saved is not None)
+
+
+@contextmanager
+def noting_session_png_dpi(png: SessionPngDpi) -> Iterator[None]:
+    """A PNG size refusal at the Session's PNG DPI names that source and its override."""
+
+    try:
+        yield
+    except ExportError as exc:
+        if not png.from_session or (exc.diagnostic or {}).get("reason") != "PNG_SIZE":
+            raise
+        raise ExportError(
+            f"{exc} The DPI ({png.dpi:g}) is the PNG DPI the Session saved (ui.downloadDpi); "
+            "--dpi on the command line or dpi= in Python overrides it.",
+            diagnostic=exc.diagnostic,
+        ) from exc
+
 
 _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
@@ -650,6 +725,7 @@ class _SessionDrawingRender:
 
     drawing: SessionDrawingParts
     request: DiagramRequest
+    png_dpi: SessionPngDpi = SessionPngDpi(None, from_session=False)
 
 
 def _drawing_output_request(
@@ -704,11 +780,13 @@ def _plan_session_drawings(
 
     Without selectors every drawing with a committed render is selected and
     the others are skipped with a notice; a named drawing without one is an
-    error. The plan keeps document order.
+    error. The plan keeps document order. A PNG is drawn at ``dpi``, else at
+    the PNG DPI the Session saved (:func:`read_session_png_dpi`).
     """
 
     _active_materialization(materialized)
     document = materialized.document
+    png = session_png_dpi(document._data, dpi)
     if selectors is None:
         selected = [drawing for drawing in document._drawings if drawing.request is not None]
         for drawing in document._drawings:
@@ -756,8 +834,9 @@ def _plan_session_drawings(
                 formats=formats,
                 overwrite=overwrite,
                 embed_fonts=embed_fonts,
-                dpi=dpi,
+                dpi=png.dpi,
             ),
+            png_dpi=png,
         )
         for drawing in selected
     )
@@ -830,11 +909,12 @@ def _render_session_drawing_plans(
     results: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
     try:
         for plan in plans:
-            results[plan.drawing.id] = render_session_compatible_request(
-                plan.request,
-                plan.drawing.artifacts,
-                include_feature_catalog=include_feature_catalog,
-            )
+            with noting_session_png_dpi(plan.png_dpi):
+                results[plan.drawing.id] = render_session_compatible_request(
+                    plan.request,
+                    plan.drawing.artifacts,
+                    include_feature_catalog=include_feature_catalog,
+                )
     except SessionError:
         raise
     except Exception as exc:
@@ -846,16 +926,23 @@ def render_session(
     materialized: MaterializedSession,
     *,
     drawing: str | None = None,
+    dpi: float | None = None,
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Decode and render a canonical session while its resources are active.
 
     ``drawing`` selects a drawing by ID or name; without it the Session must
-    have one drawing.
+    have one drawing. A PNG is drawn at ``dpi``, else at the PNG DPI the
+    Session saved (:func:`read_session_png_dpi`).
     """
 
     with _session_parse_cache(materialized):
         selected = materialized.document._drawing_parts(drawing)
-        plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
+        png = session_png_dpi(materialized.document._data, dpi)
+        plan = _SessionDrawingRender(
+            selected,
+            with_request_output(_decode_drawing(materialized, selected), dpi=png.dpi),
+            png_dpi=png,
+        )
         return _render_session_drawing_plans(materialized, (plan,))[selected.id]
 
 
@@ -866,6 +953,7 @@ def render_session_drawings(
     output_prefix: str | None = None,
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
+    dpi: float | None = None,
 ) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
     """Render several drawings of a materialized Session together.
 
@@ -879,7 +967,8 @@ def render_session_drawings(
     own prefix; a Circular batch inside still appends ``_<n>``. Every output
     path of every selected drawing is checked before the first file is
     written, and each resource is parsed once for all drawings. The results
-    are keyed by drawing ID in document order.
+    are keyed by drawing ID in document order. A PNG is drawn at ``dpi``,
+    else at the PNG DPI the Session saved (:func:`read_session_png_dpi`).
     """
 
     from gbdraw.api.request_render import preflight_diagram_request_outputs
@@ -891,6 +980,7 @@ def render_session_drawings(
             output_prefix=output_prefix,
             formats=formats,
             overwrite=overwrite,
+            dpi=dpi,
         )
         try:
             preflight_diagram_request_outputs(tuple(plan.request for plan in plans))

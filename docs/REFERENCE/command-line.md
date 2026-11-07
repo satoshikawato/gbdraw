@@ -375,7 +375,8 @@ selection are unsupported.
 `--session_output PATH` selects a `.json` or `.json.gz` path and implies save.
 With `--session`, only output and format overrides, session-output options,
 `--font_file`, `--no_font_embedding`, `--dpi`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
-persisted and new settings.
+persisted and new settings. Without `--dpi`, a PNG is drawn at the PNG DPI a web app Session saved
+([Figure size and PNG DPI](output-formats-and-export.md#figure-size-and-png-dpi)).
 
 A Session holds one or more drawings, one per diagram. Session 51 lists them in
 `drawings`, each with an ID from its mode (`circular`, `linear`, `linear-2`, …)

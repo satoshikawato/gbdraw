@@ -1,0 +1,20 @@
+{
+  "description": "The PNG DPI a Session saved (ui.downloadDpi), read by gbdraw/session.py read_session_png_dpi and by readDownloadDpi in gbdraw/web/js/services/config-field-readers.js (tools/twins.json). reading: choice (both read dpi), unset (Python: no DPI, no notice; Web: its default, no Load row), other (Python: no DPI with a notice; Web: its default with a Load row).",
+  "cases": [
+    { "stored": 300, "reading": "choice", "dpi": 300 },
+    { "stored": "150", "reading": "choice", "dpi": 150 },
+    { "stored": " 600\n", "reading": "choice", "dpi": 600 },
+    { "stored": 72.0, "reading": "choice", "dpi": 72 },
+    { "stored": " 96", "reading": "choice", "dpi": 96 },
+    { "stored": "﻿300", "reading": "choice", "dpi": 300 },
+    { "stored": null, "reading": "unset", "dpi": null },
+    { "stored": "", "reading": "unset", "dpi": null },
+    { "stored": 1200, "reading": "other", "dpi": null },
+    { "stored": "300.0", "reading": "other", "dpi": null },
+    { "stored": true, "reading": "other", "dpi": null },
+    { "stored": { "dpi": 300 }, "reading": "other", "dpi": null },
+    { "stored": [300], "reading": "other", "dpi": null },
+    { "stored": "  ", "reading": "other", "dpi": null },
+    { "stored": "print", "reading": "other", "dpi": null }
+  ]
+}

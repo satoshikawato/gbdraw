@@ -1266,8 +1266,7 @@
       "vector": "tests/fixtures/png_dpi_reading_vectors.json",
       "reason": "Web Load reads the stored PNG DPI in JavaScript (another value is a Load dialog row) and a command-line or Python Session render reads it in Python (D-93); the choices reach the Web generated, and the vectors pin which stored values each side reads as a choice, as unset, or as another value",
       "retireWhen": "Web Load reads ui.downloadDpi through the Python owner instead of its own reader",
-      "source": "figure-size-1427 session 12 (D-93, D-104)",
-      "pending": true
+      "source": "figure-size-1427 session 12 (D-93, D-104)"
     },
     {
       "id": "vector:tests/fixtures/png_phys_vectors.json",

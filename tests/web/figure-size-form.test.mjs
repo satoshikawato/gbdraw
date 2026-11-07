@@ -5,6 +5,7 @@
 // session-request, mode-scoped-session and run-info.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -13,10 +14,13 @@ import {
 } from '../../gbdraw/web/js/services/figure-size-form.js';
 import { createFigureSizeField } from '../../gbdraw/web/js/app/figure-size-field.js';
 import { getSvgDimensions } from '../../gbdraw/web/js/services/svg-dimensions.js';
-import { createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
+import {
+  DEFAULT_PNG_DPI, PNG_DPI_CHOICES, PNG_DPI_CHOICE_WORDS, createDefaultForm
+} from '../../gbdraw/web/js/services/session-active-config-contract.js';
+import { SESSION_PNG_DPI_CHOICES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { labelCapacityRemedyText } from '../../gbdraw/web/js/services/label-fit.js';
-import { defaultSettingsContainers, installStoredSettings } from '../../gbdraw/web/js/services/config-field-readers.js';
+import { defaultSettingsContainers, installStoredSettings, readDownloadDpi } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { SETTINGS_SLICE } from '../../gbdraw/web/js/services/drawing/settings.js';
 import { loadPageVue } from './helpers/vue-runtime.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
@@ -377,5 +381,23 @@ test('replacing the drawing map around the shown drawing keeps the picked and th
     assert.deepEqual(units(), ['px', 'px'], 'a drawing switch to an Auto side');
   } finally {
     delete globalThis.window;
+  }
+});
+
+test('the PNG DPI menu lists Python\'s choices, each with a word, and the default is one of them', () => {
+  assert.deepEqual(PNG_DPI_CHOICES.map((choice) => Number(choice.value)), [...SESSION_PNG_DPI_CHOICES]);
+  assert.deepEqual(Object.keys(PNG_DPI_CHOICE_WORDS).map(Number), [...SESSION_PNG_DPI_CHOICES], 'a word for each choice, no other');
+  assert.ok(PNG_DPI_CHOICES.every((choice) => choice.label === `${choice.value} (${PNG_DPI_CHOICE_WORDS[Number(choice.value)]})`));
+  assert.ok(SESSION_PNG_DPI_CHOICES.includes(DEFAULT_PNG_DPI));
+});
+
+test('Web Load reads a stored PNG DPI as the command line replay reads it (tools/twins.json, D-93)', () => {
+  /** @type {{ cases: { stored: unknown, reading: 'choice' | 'unset' | 'other', dpi: number | null }[] }} */
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/png_dpi_reading_vectors.json', import.meta.url), 'utf8'));
+  for (const { stored, reading, dpi } of vectors.cases) {
+    const web = readDownloadDpi(stored);
+    // Unset and another value read as the Web's default; only another value is a Load row.
+    assert.equal(web.lost, reading === 'other', JSON.stringify(stored));
+    assert.equal(Number(String(web.value).trim()), reading === 'choice' ? dpi : DEFAULT_PNG_DPI, JSON.stringify(stored));
   }
 });
