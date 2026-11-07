@@ -34,7 +34,7 @@ from .models import (
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
     ResolutionWarning,
-    region_walk,
+    region_run,
 )
 
 if TYPE_CHECKING:
@@ -275,9 +275,9 @@ def annotation_midpoint(
     *,
     crosses_origin: bool,
 ) -> float:
-    """Halfway along a span's segments in the order its label walks them (``region_walk``), on its record."""
+    """Halfway along a span's segments in the order the region runs (``region_run``), on its record."""
 
-    walk = region_walk(segments, crosses_origin=crosses_origin)
+    walk = region_run(segments, crosses_origin=crosses_origin)
     cursor = sum(end - start for start, end in walk) / 2.0
     for start, end in walk:
         if cursor <= end - start:

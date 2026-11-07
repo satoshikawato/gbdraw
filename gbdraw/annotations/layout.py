@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
 
@@ -13,6 +13,9 @@ from .models import (
     annotation_label_font_size,
     effective_annotation_style,
 )
+
+
+LabelPosition = Literal["center", "start", "end"]
 
 
 @dataclass(frozen=True)
@@ -48,19 +51,21 @@ def _expanded_intervals(
     label_width_bp: float,
     padding_bp: float,
     join_origin: bool,
+    label_position: LabelPosition,
 ) -> tuple[tuple[float, float], ...]:
-    """What an annotation occupies on one row, with its label on the row that holds it (``join_origin`` as in
-    ``mark_parts``)."""
+    """What an annotation occupies on one row, with its label where it stands (``label_anchor``; ``join_origin``
+    as in ``mark_parts``)."""
 
     intervals = [(float(start), float(end)) for start, end in annotation.row_segments(row)]
+    place = annotation.label_anchor(label_position, join_origin=join_origin)
     if (
         annotation.label
-        and row == annotation.label_row(join_origin=join_origin)
+        and row == place.part.row
         and label_width_bp > annotation.label_room_bp(join_origin=join_origin)
     ):
-        half = label_width_bp / 2.0
-        center = annotation.label_midpoint_bp(join_origin=join_origin)
-        start, end = center - half, center + half
+        # A start label runs right from its place, an end label left, a centred one both ways.
+        lead = {"start": 0.0, "end": 1.0}.get(label_position, 0.5) * label_width_bp
+        start, end = place.bp - lead, place.bp - lead + label_width_bp
         if start < 0:
             intervals.extend(((0.0, end), (record_length + start, float(record_length))))
         elif end > record_length:
@@ -97,10 +102,12 @@ def assign_annotation_lanes(
     padding_bp: Callable[[ResolvedRegionAnnotation], float] | float = 0.0,
     overflow: str = "error",
     join_origin: bool,
+    label_position: Callable[[ResolvedRegionAnnotation], LabelPosition] | None = None,
 ) -> tuple[PlacedRegionAnnotation, ...]:
     """Assign stable lanes using greedy interval coloring, row by row on a wrapped record.
 
-    ``join_origin`` says whether the drawing closes into a circle (``mark_parts``): where a label stands.
+    ``join_origin`` says whether the drawing closes into a circle (``mark_parts``) and ``label_position`` where
+    each label stands on it (centred when not given): the lane keeps room for the label there.
 
     An annotation keeps one lane on every row it draws on; only annotations on the same row meet.
     Explicit lanes remain fixed. A collision in an explicit lane is rejected by
@@ -123,6 +130,7 @@ def assign_annotation_lanes(
                 label_width_bp=max(0.0, float(width_func(annotation))),
                 padding_bp=max(0.0, float(annotation_padding)),
                 join_origin=join_origin,
+                label_position="center" if label_position is None else label_position(annotation),
             )
             for row in annotation.geometry_rows
         }
@@ -231,6 +239,10 @@ def layout_annotation_track(
         cap = stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
         return (track_params.padding_px + cap) * scale
 
+    def label_position(annotation: ResolvedRegionAnnotation) -> LabelPosition:
+        # A circle draws every label centred (``circular_annotation_labels``).
+        return "center" if join_origin else effective_annotation_style(annotation, track_params).label_position
+
     highlight_track = track_params.marks == ("highlight",)
     placements = assign_annotation_lanes(
         selected,
@@ -239,6 +251,7 @@ def layout_annotation_track(
         padding_bp=padding,
         overflow="compress" if highlight_track else track_params.overflow,
         join_origin=join_origin,
+        label_position=label_position,
     )
     if highlight_track:
         placements = tuple(replace(item, lane=0) for item in placements)

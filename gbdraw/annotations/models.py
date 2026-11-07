@@ -575,72 +575,50 @@ class ResolvedRegionAnnotation:
         return tuple((part.display_start, part.display_end) for part in self.display_parts)
 
     def label_place(self, *, join_origin: bool) -> LabelPlace:
-        """Where the label of a region with display parts stands, and the drawn part it stands on.
+        """Where the region's centred label stands (display bp), and the drawn part it stands on.
 
         When its mark draws every part whole (``mark_parts``: each part capped at both ends, so no display cut,
         row boundary or unjoined origin cuts it), the label stands halfway along the region (``midpoint_bp``)
-        as the display shows it. Else it stands on the centre of its longest part, ties to the earlier row, then
-        the earlier start.
+        as the display shows it. Else it stands on the centre of its longest part (D-62 Q2, Q3).
         """
-        assert self.display_parts is not None
         parts = mark_parts(self, join_origin=join_origin)
         longest = _longest_part(parts)
+        if not all(part.capped_start and part.capped_end for part in parts):
+            return LabelPlace((longest.start + longest.end) / 2.0, longest)
         midpoint = self.midpoint_bp
-        fragment = next(
-            (part for part in self.display_parts if part.local_start <= midpoint <= part.local_end), None
+        if self.display_parts is None:
+            return LabelPlace(midpoint, next((part for part in parts if part.start <= midpoint <= part.end), longest))
+        fragment = next(part for part in self.display_parts if part.local_start <= midpoint <= part.local_end)
+        # A display fragment runs the same way as its record-local span.
+        bp = fragment.display_start + (midpoint - fragment.local_start)
+        return LabelPlace(
+            bp, next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
         )
-        if fragment is not None and all(part.capped_start and part.capped_end for part in parts):
-            # A display fragment runs the same way as its record-local span.
-            bp = fragment.display_start + (midpoint - fragment.local_start)
-            on = next((part for part in parts if part.row == fragment.row and part.start <= bp <= part.end), longest)
-            return LabelPlace(bp, on)
-        return LabelPlace((longest.start + longest.end) / 2.0, longest)
 
     def label_midpoint_bp(self, *, join_origin: bool) -> float:
-        """Where the label stands: halfway along the region, or with display parts its ``label_place``."""
-        if self.display_parts is None:
-            return self.midpoint_bp
+        """Where the region's centred label stands (``label_place``)."""
         return self.label_place(join_origin=join_origin).bp
 
     def label_anchor(
         self, position: Literal["center", "start", "end"], *, join_origin: bool
     ) -> LabelPlace:
-        """Where a Linear label at ``position`` stands and the drawn part it stands on.
+        """Where a Linear label at ``position`` stands and the drawn part it stands on: centred at
+        ``label_place``; at the start, the region's first base, at the end its last, as the region runs
+        (``region_run``) and as the display shows them (D-62 Q4)."""
 
-        A centred label stands at ``label_place``. A start or end label stands where the region starts or ends
-        along its walk (``region_walk``, the midpoint's order): without display parts, where the first segment
-        starts or the last ends; with display parts, on the row of the longest part, where its first or last
-        fragment on that row starts or ends.
-        """
-
-        if position == "center" and self.display_parts is not None:
+        if position == "center":
             return self.label_place(join_origin=join_origin)
+        run = region_run(self.segments, crosses_origin=self.crosses_origin)
+        first = position == "start"
+        local = run[0][0] if first else run[-1][1]
+        bp, row = float(local), 0
+        if self.display_parts is not None:
+            fragment = next(
+                part for part in self.display_parts if (part.local_start if first else part.local_end) == local
+            )
+            bp, row = float(fragment.display_start if first else fragment.display_end), fragment.row
         parts = mark_parts(self, join_origin=join_origin)
-        if self.display_parts is None:
-            if position == "end":
-                return LabelPlace(float(parts[-1].end), parts[-1])
-            return LabelPlace(self.midpoint_bp if position == "center" else float(parts[0].start), parts[0])
-        row = _longest_part(parts).row
-        walk = region_walk(self.segments, crosses_origin=self.crosses_origin)
-        on_row = sorted(
-            (fragment for fragment in self.display_parts if fragment.row == row),
-            key=lambda fragment: (
-                next(
-                    index
-                    for index, (start, end) in enumerate(walk)
-                    if start <= fragment.local_start and fragment.local_end <= end
-                ),
-                fragment.local_start,
-            ),
-        )
-        bp = on_row[0].display_start if position == "start" else on_row[-1].display_end
-        return LabelPlace(
-            float(bp), next(part for part in parts if part.row == row and part.start <= bp <= part.end)
-        )
-
-    def label_row(self, *, join_origin: bool) -> int:
-        """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
-        return 0 if self.display_parts is None else self.label_place(join_origin=join_origin).part.row
+        return LabelPlace(bp, next(part for part in parts if part.row == row and part.start <= bp <= part.end))
 
     def label_room_bp(self, *, join_origin: bool) -> int:
         """What the annotation's label can stand over: its span, or on several rows the part it stands on."""
@@ -705,13 +683,16 @@ def origin_sides(bounds: Sequence[tuple[int, int]]) -> tuple[int, int]:
     return before, after
 
 
-def region_walk(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> tuple[tuple[int, int], ...]:
-    """A span's segments in the order its label walks them: ascending, or for a span of two segments across the
-    origin, from the side that ends at the record's end into the side that starts at 0. A span of three or more
-    segments across the origin walks in ascending order until its order is chosen (OV-2656)."""
+def region_run(segments: Sequence[tuple[int, int]], *, crosses_origin: bool) -> tuple[tuple[int, int], ...]:
+    """A span's segments in the order the region runs (D-62 Q5): ascending, or across the origin from its side
+    that ends at the record's end over the origin into its side that starts at 0 (``origin_sides``), then its
+    other segments in ascending order. Its midpoint, its gradient and its start and end labels read this run."""
 
     ordered = tuple(sorted(segments))
-    return ordered[::-1] if crosses_origin and len(ordered) == 2 else ordered
+    if not crosses_origin:
+        return ordered
+    before, after = origin_sides(ordered)
+    return (ordered[before], ordered[after], *(item for index, item in enumerate(ordered) if index not in {before, after}))
 
 
 def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
@@ -817,5 +798,5 @@ __all__ = [
     "mark_parts",
     "origin_sides",
     "parse_feature_selector",
-    "region_walk",
+    "region_run",
 ]

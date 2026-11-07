@@ -1,7 +1,7 @@
 """A region label stands on the centre of the mark as it is drawn, also across the origin (OV-2577, OV-2578).
 
 One rule decides whether a span crosses the origin (``segments_cross_origin``): the midpoint walks the span's
-segments in ``region_walk`` order, over the origin from one side into the other. With display parts the label stands halfway along the region where the
+segments in ``region_run`` order, over the origin from one side into the other. With display parts the label stands halfway along the region where the
 display leaves its parts whole, else on the longest part ``mark_parts`` draws.
 """
 
@@ -69,17 +69,18 @@ def test_midpoint_of_segments_at_both_ends_of_a_record_without_an_origin_walks_t
     assert resolved.midpoint_bp == 1000.0
 
 
-def test_three_segments_across_the_origin_keep_the_ascending_walk_and_gradient_extent() -> None:
+def test_three_segments_across_the_origin_run_from_the_stretch_over_the_origin() -> None:
     resolved = _resolved(_record(), "locus_tag=ENDS", "locus_tag=MIDDLE")
     gradient = AnnotationGradient("#0000ff", "#ff0000")
     middle = MarkPart(5000, 5500, True, True, 5000)
 
-    # Which way such a span runs is open (OV-2656): its midpoint stays halfway along 0-1000, 5000-5500 and
-    # 9000-10000 in ascending order, and its gradient scale spans only its stretch across the origin.
+    # D-62 Q5 RUN-FROM-ORIGIN-STRETCH: the region runs 9000-10000, over the origin 0-1000, then 5000-5500. Its
+    # midpoint is 1250 bp along that run, bp 250, and its gradient spans the run from bp 9000 to bp 5500 (one record
+    # length on), so 5000-5500 takes the last part of the scale.
     assert resolved.crosses_origin
-    assert resolved.midpoint_bp == 5250.0
+    assert resolved.midpoint_bp == 250.0
     steps = gradient_steps(resolved, gradient, middle, 5000, 5500, record_length=_LENGTH, length_px=10.0)
-    assert {color for _start, color in steps} == {"#ff0000"}
+    assert [steps[0][1], steps[-1][1]] == ["#ed0011", "#fd0001"]
 
 
 def _fragments(start: int | None, wrap: int | None = None, segments=((0, 1000), (9000, _LENGTH))) -> tuple[DisplayFragment, ...]:
@@ -155,8 +156,7 @@ def test_label_of_a_region_the_display_does_not_cut_stands_at_its_midpoint(
 
     # The display start (bp 9000 at the left end) or the rows of 4000 bp leave every segment whole: the label
     # stands halfway along the region as without them, not on the centre of the longest segment (OV-2653).
-    assert annotation.label_midpoint_bp(join_origin=False) == expected
-    assert annotation.label_row(join_origin=False) == 0
+    assert annotation.label_place(join_origin=False) == (expected, mark_parts(annotation, join_origin=False)[0])
 
 
 def test_label_of_a_region_the_display_cut_cuts_stands_on_its_longest_part() -> None:
@@ -167,14 +167,21 @@ def test_label_of_a_region_the_display_cut_cuts_stands_on_its_longest_part() -> 
     assert annotation.label_midpoint_bp(join_origin=True) == 750.0
 
 
+_TARGETS = {
+    # A feature span whose envelope wraps the origin: segments 9000-10000 then 0-1000.
+    "feature": FeatureSpan(None, ("locus_tag=ENDS",)),
+    # The same feature's segments: 0-1000 and 9000-10000.
+    "segments": FeatureSpan(None, ("locus_tag=ENDS",), envelope="segments"),
+    "coordinate": CoordinateSpan(None, 9001, 1000, wraps_origin=True),
+    # Unequal sides: 9500-10000 and 0-2000.
+    "unequal": CoordinateSpan(None, 9501, 2000, wraps_origin=True),
+}
+
+
 def _label_item(
-    mode: str, start: int | None, position: str = "center", *, feature: bool = False
+    mode: str, start: int | None, position: str = "center", *, feature: bool = False, kind: str | None = None
 ) -> ElementTree.Element:
-    target = (
-        FeatureSpan(None, ("locus_tag=ENDS",))
-        if feature
-        else CoordinateSpan(None, 9001, 1000, wraps_origin=True)
-    )
+    target = _TARGETS[kind or ("feature" if feature else "coordinate")]
     annotation = RegionAnnotation(
         "origin",
         target,
@@ -212,27 +219,35 @@ def test_linear_label_with_a_display_start_stands_on_the_centre_of_the_mark() ->
     assert _text_x(_label_item("linear", 5001)) == pytest.approx(1000.0)
 
 
-# The Linear x of a start or an end label, for each kind of span (OV-2651, OV-2655). Without a display start the
-# record's ends cut the region: a feature span's segments run 9000-10000 then 0-1000, so its start stands at x 1800
-# and its end at x 200; a coordinate span's segments are ascending, so at x 0 and 2000. From display start 5001 the
-# mark is one stretch from x 800 to 1200.
+# D-62 Q4 LBL-START-FIRST-BASE: a start label stands at the region's first base and an end label at its last, for
+# every kind of span, with and without a display start. A span across the origin starts at bp 9000 (x 1800 of
+# 2000) and ends at bp 1000 (x 200); from display start 5001 the mark is one stretch from x 800 to 1200; from
+# display start 9501 the region starts at x 1900 and ends at x 300.
+@pytest.mark.parametrize("kind", ("feature", "segments", "coordinate"))
 @pytest.mark.parametrize(
-    ("start", "feature", "position", "expected"),
+    ("start", "position", "expected"),
     (
-        (None, True, "start", 1800.0),
-        (None, True, "end", 200.0),
-        (None, False, "start", 0.0),
-        (None, False, "end", 2000.0),
-        (5001, True, "start", 800.0),
-        (5001, True, "end", 1200.0),
-        (5001, False, "start", 800.0),
-        (5001, False, "end", 1200.0),
+        (None, "start", 1800.0),
+        (None, "end", 200.0),
+        (1, "start", 1800.0),
+        (1, "end", 200.0),
+        (5001, "start", 800.0),
+        (5001, "end", 1200.0),
+        (9501, "start", 1900.0),
+        (9501, "end", 300.0),
     ),
 )
-def test_linear_label_at_the_start_or_end_stands_at_that_end_of_the_mark(
-    start: int | None, feature: bool, position: str, expected: float
+def test_linear_label_at_the_start_or_end_stands_at_the_first_or_last_base(
+    kind: str, start: int | None, position: str, expected: float
 ) -> None:
-    assert _text_x(_label_item("linear", start, position, feature=feature)) == pytest.approx(expected)
+    assert _text_x(_label_item("linear", start, position, kind=kind)) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("start", (None, 1))
+def test_unequal_sides_start_and_end_at_the_first_and_last_base(start: int | None) -> None:
+    # Region 9501-2000: its first base is bp 9500 (x 1900) and its last bp 2000 (x 400).
+    assert _text_x(_label_item("linear", start, "start", kind="unequal")) == pytest.approx(1900.0)
+    assert _text_x(_label_item("linear", start, "end", kind="unequal")) == pytest.approx(400.0)
 
 
 def _anchor_record() -> SeqRecord:
@@ -278,42 +293,68 @@ def _linear_labels(
     return places
 
 
-def test_wrapped_start_and_end_labels_stand_on_the_row_of_the_longest_part() -> None:
-    # Rows of 4000 bp: 1000-3000 on row 0 (the longest part), 4100-5600 and 5700-7200 on row 1, where the
-    # midpoint (bp 4600) puts the centred label. The start and end labels stay where they stood before the
-    # midpoint moved the centred label: at the ends of the longest part, row 0 x 500 and 1500 (OV-2657).
+def test_wrapped_start_and_end_labels_stand_at_the_first_and_last_base() -> None:
+    # Rows of 4000 bp: 1000-3000 on row 0, 4100-5600 and 5700-7200 on row 1, where the midpoint (bp 4600) puts
+    # the centred label. The region's first base is on row 0 (x 500) and its last on row 1 (x 1600; D-62 Q4).
     places = _linear_labels(("locus_tag=EXONS",), ("start", "end", "center"), wrap=4000)
 
     assert places["start"][0] == pytest.approx(500.0)
-    assert places["end"][0] == pytest.approx(1500.0)
+    assert places["end"][0] == pytest.approx(1600.0)
     assert places["center"][0] == pytest.approx(300.0)
-    assert places["start"][1] == places["end"][1] < places["center"][1]
+    assert places["start"][1] < places["end"][1] == places["center"][1]
 
 
-@pytest.mark.parametrize(("start", "expected"), ((None, (0.0, 2000.0, 1050.0)), (5001, (1000.0, 1000.0, 50.0))))
-def test_three_segments_across_the_origin_keep_the_ascending_order_for_start_and_end(
+@pytest.mark.parametrize(("start", "expected"), ((None, (1800.0, 1100.0, 100.0)), (5001, (800.0, 100.0, 1050.0))))
+def test_three_segments_across_the_origin_start_end_and_centre_follow_the_run(
     start: int | None, expected: tuple[float, float, float]
 ) -> None:
-    # Segments 0-1000, 5000-5500 and 9000-10000 run in ascending order until OV-2656 chooses one: the start label
-    # stands where 0-1000 starts and the end label where 9000-10000 ends, and the centred label at bp 5250. From
-    # display start 5001 the first two stand at the origin, x 1000, and the centred label at x 50 (OV-2658).
+    # The region runs 9000-10000, 0-1000, 5000-5500 (D-62 Q5): it starts at bp 9000 and ends at bp 5500 (Q4).
+    # Without a display start the record's ends cut it, so the centred label stands on the centre of the longer
+    # side, 0-1000 (Q2, ties to the earlier start); from display start 5001 every part is whole and the centred
+    # label stands at its midpoint, bp 250 (x 1050).
     places = _linear_labels(("locus_tag=ENDS", "locus_tag=MIDDLE"), ("start", "end", "center"), start=start)
 
     assert tuple(places[position][0] for position in ("start", "end", "center")) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("feature", (True, False))
-def test_centred_label_of_an_unrotated_span_across_the_origin_stands_at_the_bar_start(feature: bool) -> None:
-    # Without a display start the midpoint of 9000-10000 and 0-1000 is the origin, the bar's left end, for both
-    # kinds of span (OV-2652 asks whether it should stand on one of the two parts).
-    assert _text_x(_label_item("linear", None, feature=feature)) == pytest.approx(0.0)
+@pytest.mark.parametrize(("kind", "expected"), (("feature", 100.0), ("coordinate", 100.0), ("unequal", 200.0)))
+@pytest.mark.parametrize("start", (None, 1))
+def test_centred_label_of_a_span_cut_at_the_origin_stands_on_its_longer_part(
+    kind: str, start: int | None, expected: float
+) -> None:
+    # D-62 Q2 LBL-ORIGIN-LONGER: the bar's ends cut the span at the origin; the label stands on the centre of the
+    # longer part (equal sides: the earlier start, 0-1000).
+    assert _text_x(_label_item("linear", start, kind=kind)) == pytest.approx(expected)
 
 
-def test_joined_arc_gradient_of_three_segments_across_the_origin_spans_the_stretch_over_the_origin() -> None:
+def test_joined_arc_gradient_of_three_segments_across_the_origin_takes_the_first_part_of_the_run() -> None:
     resolved = _resolved(_record(), "locus_tag=ENDS", "locus_tag=MIDDLE")
     gradient = AnnotationGradient("#0000ff", "#ff0000")
     joined = MarkPart(9000, 11_000, True, True, 9000)
 
-    # The scale runs from blue at bp 9000 over the origin to red at bp 1000 (OV-2656 keeps this extent).
+    # The scale runs from blue at bp 9000 to red at bp 5500 one record length on (D-62 Q5): the arc over the origin
+    # takes its first part.
     steps = gradient_steps(resolved, gradient, joined, 9000, 11_000, record_length=_LENGTH, length_px=400.0)
-    assert [steps[0][1], dict(steps)[10_000.0], steps[-1][1]] == ["#0200fc", "#82007c", "#fc0002"]
+    assert [steps[0][1], dict(steps)[10_000.0], steps[-1][1]] == ["#0000fe", "#2800d6", "#4d00b1"]
+
+
+@pytest.mark.parametrize(("position", "lanes"), (("center", {"a": 0, "b": 0}), ("start", {"a": 0, "b": 1})))
+def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes: dict[str, int]) -> None:
+    # A's label is 60 bp wide (10 letters of 6 px at 1 bp per px), wider than its 10 bp region. Centred on bp 105
+    # it ends at bp 135, before B at bp 150; standing at A's first base (bp 100) it reaches bp 160, so B takes the
+    # next lane (OV-2659).
+    from gbdraw.annotations import layout_annotation_track
+
+    style = RegionAnnotationStyle(label_position=position)
+    annotations = tuple(
+        ResolvedRegionAnnotation(
+            id=identity, set_id="s", record_index=0, segments=(segment,), midpoint_bp=(segment[0] + segment[1]) / 2,
+            span_bp=segment[1] - segment[0], label=label, mark="band", lane=None, style=style,
+        )
+        for identity, segment, label in (("a", (100, 110), "X" * 10), ("b", (150, 160), ""))
+    )
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: 1000}, label_font_size=10.0, join_origin=False
+    )
+
+    assert {placement.annotation.id: placement.lane for placement in track.placements} == lanes
