@@ -529,15 +529,19 @@ or reused on its own, and it can grow back as wiring leaves the root.
 - The root function of a composition root is its top-level function that
   calls a `create*` factory imported from another module; each composition
   root has exactly one.
-- The logic of a root is every function whose nearest enclosing function is
-  the root function: a `const f = () => {...}` statement, a function passed
-  inline to a factory as a port, a method of an object literal built in the
-  root, a computed getter, and a watch callback alike. Each counts with its
-  whole span, measured as above, so a function nested in it counts once, in
-  it. A one-line port such as `getMode: () => mode.value` counts one line.
+- The logic of a root is every function of two or more lines whose nearest
+  enclosing function is the root function: a `const f = () => {...}`
+  statement, a function passed inline to a factory as a port, a method of an
+  object literal built in the root, a computed getter, and a watch callback
+  alike. Each counts with its whole span, measured as above, so a function
+  nested in it counts once, in it.
+- A one-line function there, such as the port `getMode: () => mode.value`, is
+  wiring and does not count: adding a port is what a composition root is for.
+  A port of two or more lines counts, so logic does not leave the count by
+  moving into an inline port.
 - `COMPOSITION_ROOT_LOGIC_LINES` records the total lines of that logic per
   `<path>::<root function>`; the test also reports how many functions make up
-  each total. A total may shrink but not grow, and a composition root without
+  each total and how many one-line functions it left out. A total may shrink but not grow, and a composition root without
   an entry fails. There is no limit per function.
 - When the test fails, move the new logic into a module factory and pass it to
   the root as a port, or shrink other logic in the same root by the same
