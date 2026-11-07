@@ -1302,7 +1302,7 @@ test('a popup recolor of a rule and its rule write are one History step under th
   const popup=popupFor(s);
   Object.assign(s.state.featureStyleScopeDialog,{show:true,feat:s.state.extractedFeatures.value[1],color:'#000000',
     matchingRule:s.state.manualSpecificRules[0]});
-  // app/history-inputs.js: the control begins the step. app-setup.js: the action runs on it.
+  // app/history-inputs.js: the control begins the step. app/history-wrappers.js: the action runs on it.
   await s.history.begin('Change color',{source:'input-adapter',owner:{tagName:'INPUT'}});
   const [recolored,release]=await held(s.history.runUndoable('Change feature color',()=>popup.handleColorScopeChoice('rule')));
   assert.equal(s.history.mutationPending(),true,'the step is open while the rule write is prepared');
