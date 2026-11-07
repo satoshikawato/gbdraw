@@ -1,6 +1,7 @@
 // The content token of an input and how long the page keeps the input's bytes
 // (memory plan P2): one token scheme for every size, computed from the read the
-// page already does, and the bytes dropped once no reader holds them.
+// page already does, and the bytes dropped once no reader holds them. A File
+// changed on disk after its bytes were dropped is refused at its next read (PD-OI-120).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, webcrypto } from 'node:crypto';
@@ -85,6 +86,16 @@ const fileRequest = { records: [{ source: { kind: 'genbank', resourceId: 'source
 const fileResources = (file, size) => ({
   source: setResourcePayloadOwner({ kind: 'genbank', name: file.name, type: 'text/plain', size, lastModified: 1,
     encoding: 'base64', data: null }, file)
+});
+
+test('a File the browser refuses after its bytes were dropped fails its next read with INPUT_UNREADABLE', async () => {
+  const bytes = new TextEncoder().encode('LOCUS c\n//\n');
+  const file = countingFile(bytes);
+  await readFileBytes(file);
+  // The file changed on disk: Chrome refuses every later read of this File.
+  file.arrayBuffer = async () => { throw new DOMException('changed', 'NotReadableError'); };
+  await assert.rejects(readFileBytes(file), (error) => error.code === 'INPUT_UNREADABLE' && error.stage === 'read');
+  assert.equal((await readFileContentFacts(file)).byteLength, bytes.byteLength, 'the facts from the first read stay');
 });
 
 test('Generate after the bytes were dropped reads the File again and sends the same bytes', async () => {

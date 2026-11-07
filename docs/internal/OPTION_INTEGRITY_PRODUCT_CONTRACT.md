@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `123`
+- Contract revision: `124`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -44,7 +44,7 @@ Status: active Product authority
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
-  `PD-OI-118`, and `PD-OI-119`
+  `PD-OI-118`, `PD-OI-119`, and `PD-OI-120`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4595,6 +4595,10 @@ Status: active Product authority
     the Owner approved the complete receipt below as it was shown:
     「承認（全文このまま）」. The session drafted the Rationale and the other
     fields from the decision pack; the Owner approved them as written.
+  - A label reflow shows the approved text inside its live-edit note, which
+    has no buttons for any error, so it offers no Save Session button there;
+    Save Session stays in the toolbar. Asked on `2026-11-07` whether to keep
+    this, the Owner replied 「このままにする」.
   - The receipt and JSON reproduce the approved fields without translation or
     additional terms.
   - New receipt SHA-256: `PD-OI-118` scenario revision `1`
@@ -4661,6 +4665,38 @@ Status: active Product authority
     session's drafts. Reply: 「全文で承認」.
   - New receipt SHA-256: `PD-OI-119` scenario revision `1` `0629ef33724358dd1422a80113c4ebc2deefee9b1100744cadab7385c0fdec92`.
   - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 124 changes: `PD-OI-120` is added (concern
+  `input.file-changed-after-choosing`, scenario revision `1`; the outcome
+  `A REFUSE-CHANGED-FILE`). The page no longer keeps a chosen input file's
+  contents after it has read them. When the file was changed, moved, renamed,
+  or deleted on disk after it was chosen, or only its modification time
+  changed, the next Generate or Save Session that reads it stops with
+  `INPUT_UNREADABLE`, stage `read`, and the approved text, instead of
+  continuing with the contents as chosen. Generate offers Retry Generate, and
+  the previous Result, draft, and History stay; Save Session writes no file.
+  Choosing the file again continues with its current contents. gzip inputs and
+  inputs read from a Session are unchanged.
+  - The Product Decision Owner `satoshikawato` answered question Q1 of the
+    browser memory plan of the campaign `large-inputs-20261106` on
+    `2026-11-07` with 「Q1:止まる形」 (the recommendation: refuse with the
+    reason). On the same day the complete receipt below was shown and the
+    Owner approved it: 「承認（全文このまま）」. The session drafted the
+    receipt's fields from the plan and from a probe of the current behavior;
+    the Owner approved them as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-120` scenario revision `1`
+    `e2817f46e9a25b315f5f92985d7258a67d8831cb94d089621fe925abc85b9f81`.
+  - The Revision 121 entry gains the note that a label reflow shows the
+    `PD-OI-118` text in its live-edit note without a Save Session button, and
+    the Owner's answer of `2026-11-07` 「このままにする」. The note missed the
+    pull request that added `PD-OI-118`. The `PD-OI-118` receipt, JSON, and
+    outcome do not change.
+  - No other record is amended or retired. `PD-OI-016`, `PD-OI-046`, and
+    `PD-OI-055` stay.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -12028,6 +12064,61 @@ Decision date: 2026-11-07
   "mustPreserve": "表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。",
   "mayRetire": "回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。",
   "acceptedResidualRisk": "原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-07"
+}
+```
+
+### PD-OI-120: Input file changed after choosing
+
+- Concern key: `input.file-changed-after-choosing`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed what Generate and Save Session do
+  with an input file that changed on disk after it was chosen. `PD-OI-016`
+  (the previous Result, draft, and History stay after a failure, and the
+  person can correct and retry), `PD-OI-046` (Details and Copy diagnostics),
+  and `PD-OI-055` (a drawing uses only the chosen file's contents) stay.
+- Status: `ACCEPTED`
+- Selected outcome: `A REFUSE-CHANGED-FILE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-07` described in the Revision 124 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `e2817f46e9a25b315f5f92985d7258a67d8831cb94d089621fe925abc85b9f81`.
+
+```text
+PRODUCT_DECISION
+Concern: input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）
+Scenario revision: 1
+Choice: A REFUSE-CHANGED-FILE
+  - ページは、選んだ入力ファイルの中身を、読み終えた後に持ち続けない。選んだ後にそのファイルがディスク上で変更・移動・改名・削除されたとき、または内容が同じでも更新日時だけが変わったときは、次にそのファイルを読む操作（Generate、Save Session）でブラウザが読み込みを拒む。その操作は、選んだ時点の中身で続けずに止まる。
+  - Generate は INPUT_UNREADABLE（段階 read）で止まり、"An input could not be read. Replace or reselect it." を表示する。ボタンは、今の INPUT_UNREADABLE と同じ Retry Generate。直前の Result、draft、History はそのまま残る。
+  - Save Session も同じ文で止まり、Session ファイルは書かない。
+  - ファイルを選び直せば、同じ名前のファイルでも、Generate も Save Session もそのときの中身で続けられる。
+  - 一度 Generate した後で、設定だけを変えて Generate し直すときは、Worker が中身を持っているのでファイルを読まず、ファイルが変わっていても今と同じように描ける。
+  - gzip 入力（展開した中身をページが持つ）と、Session から読んだ入力は今と同じ。選んだ時点では読まない表（depth の表など）は、今も同じ文で止まっている。
+Rationale: 選んだ時点の中身をページが持ち続けると、そのぶんのメモリを使い続ける（1.12 GiB の depth の表なら 1.12 GiB）。また、ファイルを直したのに、黙って直す前の中身で描くより、変わったことを知らせて選び直してもらうほうが、図と手元のファイルが食い違わない。今でも、選んだ時点では読まない表、Worker が再起動した後の Generate、一度 Generate した後の Save Session は、ファイルが変わると同じ文で止まるので、それに揃える。
+Must preserve: 失敗しても直前の Result、draft、History を保ち、選び直して Generate し直せること（PD-OI-016）。選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。Details と Copy diagnostics（PD-OI-046）。変わっていないファイルでの Generate と Save Session の動作。gzip 入力と Session から読んだ入力の扱い。
+May retire: 選んだ後にディスク上で変わったファイルを、選んだ時点の中身で描くこと、また Session に書くこと。
+Accepted residual risk: 内容が同じでも、更新日時が変わるだけでブラウザは読み込みを拒む（エディタで保存し直した、同期ツールがファイルに触れた、など）。そのときも、ファイルを選び直す必要がある。Retry Generate を押しても、ファイルを選び直すまでは同じ文が出る。確かめたのは Chrome だけで、Firefox と Safari は確かめていない。
+Owner: satoshikawato
+Decision date: 2026-11-07
+```
+
+```json
+{
+  "concern": "input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）",
+  "scenarioRevision": 1,
+  "choice": "A REFUSE-CHANGED-FILE\n  - ページは、選んだ入力ファイルの中身を、読み終えた後に持ち続けない。選んだ後にそのファイルがディスク上で変更・移動・改名・削除されたとき、または内容が同じでも更新日時だけが変わったときは、次にそのファイルを読む操作（Generate、Save Session）でブラウザが読み込みを拒む。その操作は、選んだ時点の中身で続けずに止まる。\n  - Generate は INPUT_UNREADABLE（段階 read）で止まり、\"An input could not be read. Replace or reselect it.\" を表示する。ボタンは、今の INPUT_UNREADABLE と同じ Retry Generate。直前の Result、draft、History はそのまま残る。\n  - Save Session も同じ文で止まり、Session ファイルは書かない。\n  - ファイルを選び直せば、同じ名前のファイルでも、Generate も Save Session もそのときの中身で続けられる。\n  - 一度 Generate した後で、設定だけを変えて Generate し直すときは、Worker が中身を持っているのでファイルを読まず、ファイルが変わっていても今と同じように描ける。\n  - gzip 入力（展開した中身をページが持つ）と、Session から読んだ入力は今と同じ。選んだ時点では読まない表（depth の表など）は、今も同じ文で止まっている。",
+  "rationale": "選んだ時点の中身をページが持ち続けると、そのぶんのメモリを使い続ける（1.12 GiB の depth の表なら 1.12 GiB）。また、ファイルを直したのに、黙って直す前の中身で描くより、変わったことを知らせて選び直してもらうほうが、図と手元のファイルが食い違わない。今でも、選んだ時点では読まない表、Worker が再起動した後の Generate、一度 Generate した後の Save Session は、ファイルが変わると同じ文で止まるので、それに揃える。",
+  "mustPreserve": "失敗しても直前の Result、draft、History を保ち、選び直して Generate し直せること（PD-OI-016）。選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。Details と Copy diagnostics（PD-OI-046）。変わっていないファイルでの Generate と Save Session の動作。gzip 入力と Session から読んだ入力の扱い。",
+  "mayRetire": "選んだ後にディスク上で変わったファイルを、選んだ時点の中身で描くこと、また Session に書くこと。",
+  "acceptedResidualRisk": "内容が同じでも、更新日時が変わるだけでブラウザは読み込みを拒む（エディタで保存し直した、同期ツールがファイルに触れた、など）。そのときも、ファイルを選び直す必要がある。Retry Generate を押しても、ファイルを選び直すまでは同じ文が出る。確かめたのは Chrome だけで、Firefox と Safari は確かめていない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
 }
