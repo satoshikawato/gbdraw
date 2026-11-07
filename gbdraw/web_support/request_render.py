@@ -102,7 +102,8 @@ def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
     return "linear" if isinstance(request, LinearDiagramRequest) else "circular"
 
 
-# The sha256 hex of the resource bytes (gbdraw/web/js/services/file-content-cache.js).
+# A resource's content token: 64 hex characters, opaque here and used only as a cache key
+# (`contentTokenOfBytes` in gbdraw/web/js/services/file-content-cache.js).
 _RESOURCE_CACHE_TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
 _STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"

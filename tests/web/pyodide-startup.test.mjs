@@ -183,7 +183,7 @@ await assert.rejects(
 disposeDiagramGenerationWorker();
 FakeWorker.failRuns = false;
 
-const { cloneFileBytesForTransfer } = await import(
+const { cloneFileBytesForTransfer, holdReadBytes } = await import(
   '../../gbdraw/web/js/services/file-content-cache.js'
 );
 let fileReads = 0;
@@ -193,6 +193,8 @@ const cachedFile = {
     return new Uint8Array([1, 2, 3, 4]).buffer;
   }
 };
+// The clones of one helper reading share one read of the File.
+const releaseReads = holdReadBytes();
 const transferredClone = await cloneFileBytesForTransfer(cachedFile);
 structuredClone(transferredClone, { transfer: [transferredClone] });
 assert.equal(transferredClone.byteLength, 0);
@@ -201,6 +203,7 @@ assert.deepEqual(
   [1, 2, 3, 4]
 );
 assert.equal(fileReads, 1);
+releaseReads();
 
 const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.js');
 const ref = (value) => ({ value });

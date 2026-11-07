@@ -124,7 +124,9 @@ import {
   base64ToBytes,
   fileDescriptorOf,
   getSessionResourceSource,
+  holdReadBytes,
   readFileBytes,
+  readFileContentFacts,
   rememberFileDescriptor
 } from './file-content-cache.js';
 import {
@@ -3522,7 +3524,7 @@ const sessionViewDescriptor = (file) => {
 
 /**
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
- *   (a list included) is rejected by `readFileBytes`.
+ *   (a list included) is rejected by `readFileContentFacts`.
  * @returns {Promise<RawSessionResourceDescriptor | null>}
  */
 const serializeFile = async (file) => {
@@ -3533,8 +3535,9 @@ const serializeFile = async (file) => {
   if (viewDescriptor) return viewDescriptor;
   const cached = fileDescriptorOf(file);
   if (cached) return cached;
-  const bytes = await readFileBytes(file);
-  // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
+  // Known from the File's first read, so a File read before reads nothing here.
+  const { byteLength } = await readFileContentFacts(/** @type {FileLike} */ (file));
+  // `readFileContentFacts` resolves only for an object (or a function) with `arrayBuffer()`.
   const owner = /** @type {object} */ (file);
   const shared = fileDescriptorOf(owner);
   if (shared) return shared;
@@ -3546,7 +3549,7 @@ const serializeFile = async (file) => {
   const descriptor = fileBackedDescriptor({
     name: String(view?.name || 'file'),
     type: String(view?.type || ''),
-    size: bytes.byteLength,
+    size: byteLength,
     lastModified: Number(view?.lastModified ?? Date.now())
   }, sessionResourceViewReader(file) ?? (() => readFileBytes(file)));
   return cacheSerializedFileDescriptor(owner, descriptor);
@@ -8498,6 +8501,8 @@ export const exportSession = (titleOverride = null, options) => {
   const operation = { canceled: false, promise: null };
   const previousAlert = state.errorLog.value;
   const isCurrent = () => sessionSaveInFlight === operation && !operation.canceled;
+  // Save's reads of an input File share one read, and the page drops the bytes after Save (`holdReadBytes`).
+  const releaseReads = holdReadBytes();
   operation.promise = Promise.resolve().then(async () => {
     const busy = availability('save');
     if (busy) return busy;
@@ -8594,6 +8599,7 @@ export const exportSession = (titleOverride = null, options) => {
     options.onError(model);
     return { status: 'error', error: model };
   }).finally(() => {
+    releaseReads();
     if (sessionSaveInFlight === operation) {
       state.sessionSavePending.value = false;
       sessionSaveInFlight = null;

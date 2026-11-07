@@ -214,7 +214,11 @@ const state = boundState({
   }
 }, inputFiles);
 
+// Save holds its reads (`exportSession`), so the roles of one File share one read.
+const { holdReadBytes } = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'file-content-cache.js')));
+const releaseSaveReads = holdReadBytes();
 const built = await buildSessionResources(state, committed, bindingDrawings(state));
+releaseSaveReads();
 const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');

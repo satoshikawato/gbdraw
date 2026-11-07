@@ -1487,6 +1487,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
+  // Discovery reads the source once and then drops its bytes.
+  expect(await page.evaluate(() => window.__GBDRAW_SOURCE_READS__)).toBe(1);
   await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
@@ -1529,7 +1531,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(generated).toEqual({
     result: { status: 'ok' },
     error: null,
-    sourceReads: 1,
+    // Generate reads the source once more, once for both records.
+    sourceReads: 2,
     cardCount: 2,
     selector: 'AutomaticA',
     grouping: 'single',
