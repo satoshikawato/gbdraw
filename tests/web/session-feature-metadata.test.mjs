@@ -223,25 +223,32 @@ const {
   // one UTF-8 buffer and are decoded once each.
   const { SEGMENTS } = await import(pathToFileURL(join(tempDir, 'services', 'current-worker-result-source.js')));
   const children = new TextEncoder().encode('<text>µ</text>');
+  const childrenBytes = children.byteLength;
   const revision = createHash('sha256').update(children).digest('hex');
-  const decoded = normalizeGenerationResponse({
+  const reply = {
     results: [{
       name: 'binary.svg',
       document: { head: '<svg>', tail: '</svg>', pieces: [
         { kind: 'raw', text: '<defs />' },
-        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, offset: 0, length: children.byteLength }
+        { kind: 'content', start: '<g>', revision, bytes: childrenBytes, offset: 0, length: childrenBytes }
       ] },
       segments: children
     }],
     metadata: new TextEncoder().encode(JSON.stringify(metadata)),
-    featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog))
-  });
+    featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog)).buffer
+  };
+  const decoded = normalizeGenerationResponse(reply);
+  // The reply lets go of each buffer as it is decoded: the buffers it holds are detached.
+  assert.deepEqual(
+    [reply.results[0].segments.buffer.byteLength, reply.metadata.buffer.byteLength, reply.featureCatalog.byteLength],
+    [0, 0, 0]
+  );
   assert.deepEqual(decoded, {
     results: [{
       name: 'binary.svg',
       document: { head: '<svg>', tail: '</svg>', pieces: [
         { kind: 'raw', text: '<defs />' },
-        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, children: '<text>µ</text>' }
+        { kind: 'content', start: '<g>', revision, bytes: childrenBytes, children: '<text>µ</text>' }
       ] },
       [SEGMENTS]: new Map()
     }],

@@ -127,14 +127,23 @@ export class DiagramGenerationCanceledError extends Error {
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
-/** @param {unknown} value */
-const viewBytes = (value) => (
-  value instanceof ArrayBuffer
-    ? new Uint8Array(value)
-    : ArrayBuffer.isView(value)
-      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
-      : null
-);
+/**
+ * Take the bytes of one reply buffer for its decode: the buffer is moved to
+ * the view returned (structured-clone transfer, no copy) and the reply's own
+ * buffer is left detached, so the bytes are freed once the caller drops the
+ * view, whoever still holds the reply.
+ * @param {unknown} value
+ * @returns {Uint8Array<ArrayBuffer> | null} Null for a value that is not bytes.
+ */
+const takeReplyBytes = (value) => {
+  const buffer = value instanceof ArrayBuffer
+    ? value
+    : ArrayBuffer.isView(value) && value.buffer instanceof ArrayBuffer ? value.buffer : null;
+  if (!buffer) return null;
+  // Read where the view lies before the transfer detaches it.
+  const { byteOffset, byteLength } = ArrayBuffer.isView(value) ? value : new Uint8Array(buffer);
+  return new Uint8Array(structuredClone(buffer, { transfer: [buffer] }), byteOffset, byteLength);
+};
 
 /**
  * Decode one Result of a Generate reply into its admission candidate: the
@@ -149,7 +158,7 @@ const viewBytes = (value) => (
 const decodeGenerationResult = (result, resultIndex, heldSegments) => {
   if (!result || typeof result !== 'object' || !Object.hasOwn(result, 'document')) return result;
   const { document, segments, ...rest } = result;
-  const buffer = segments === undefined ? new Uint8Array(0) : viewBytes(segments);
+  const buffer = segments === undefined ? new Uint8Array(0) : takeReplyBytes(segments);
   if (!buffer) throw invalidGenerationResult();
   const parts = readSvgDocumentParts(document, buffer.byteLength, invalidGenerationResult);
   const decoder = new TextDecoder();
@@ -209,21 +218,34 @@ const GENERATION_JSON_PARTS = Object.freeze({
 });
 
 /**
+ * The text of a JSON reply buffer. Its bytes live only in this call, so they
+ * can be freed while the caller parses the text.
+ * @param {unknown} value
+ * @param {string} event
+ * @returns {{ text: string, bytes: number } | null} Null for a value that is not bytes.
+ */
+const takeReplyText = (value, event) => {
+  const bytes = takeReplyBytes(value);
+  if (!bytes) return null;
+  recordSessionLifecycleEvent(`${event}-start`, {
+    bytes: bytes.byteLength
+  });
+  return { text: new TextDecoder().decode(bytes), bytes: bytes.byteLength };
+};
+
+/**
  * @param {unknown} value The Worker's value: an object, or its UTF-8 JSON bytes.
  * @param {GenerationJsonPart} part
  * @returns {unknown}
  */
 const decodeGenerationJson = (value, { event, countMetric, bytesMetric }) => {
-  const bytes = viewBytes(value);
-  if (!bytes) return value;
-  recordSessionLifecycleEvent(`${event}-start`, {
-    bytes: bytes.byteLength
-  });
-  const decoded = JSON.parse(new TextDecoder().decode(bytes));
+  const reply = takeReplyText(value, event);
+  if (!reply) return value;
+  const decoded = JSON.parse(reply.text);
   recordStructuralMetric(countMetric);
-  recordStructuralMetric(bytesMetric, bytes.byteLength);
+  recordStructuralMetric(bytesMetric, reply.bytes);
   recordSessionLifecycleEvent(`${event}-end`, {
-    bytes: bytes.byteLength
+    bytes: reply.bytes
   });
   return decoded;
 };

@@ -28,6 +28,7 @@ from gbdraw.web_support.comparison_sequences import read_comparison_sequence_jso
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
+from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
@@ -135,31 +136,37 @@ def _web_held_segments(held_segments_json):
         )
     return frozenset(revisions)
 
-def _web_result_transport(item):
+def _web_result_transport(item, new_reply_buffer):
     # One Result for the Worker: the pieces, and the children texts it sends
-    # as one UTF-8 buffer that each sent piece addresses by offset and length.
-    chunks = []
-    offset = 0
-    pieces = []
-    for piece in item["document"]["pieces"]:
-        children = piece.get("children")
-        if children is None:
-            pieces.append(piece)
-            continue
-        data = children.encode("utf-8")
-        sent = {key: value for key, value in piece.items() if key != "children"}
-        sent["offset"] = offset
-        sent["length"] = len(data)
-        offset += len(data)
-        chunks.append(data)
-        pieces.append(sent)
+    # as one UTF-8 reply buffer that each sent piece addresses by offset and
+    # length. Each text is written in chunks as it is encoded; its piece is
+    # placed once its length is known.
     document = item["document"]
-    transported = {
-        "name": item["name"],
-        "document": {"head": document["head"], "tail": document["tail"], "pieces": pieces},
-    }
-    if chunks:
-        transported["segments"] = b"".join(chunks)
+    pieces = []
+
+    def sent_children():
+        offset = 0
+        for piece in document["pieces"]:
+            children = piece.get("children")
+            if children is None:
+                pieces.append(piece)
+                continue
+            length = 0
+            for data in text_utf8_chunks(children):
+                length += len(data)
+                yield data
+            sent = {key: value for key, value in piece.items() if key != "children"}
+            sent["offset"] = offset
+            sent["length"] = length
+            offset += length
+            pieces.append(sent)
+
+    transported = {"name": item["name"]}
+    if any(piece.get("children") is not None for piece in document["pieces"]):
+        transported["segments"] = write_reply_buffer(new_reply_buffer, sent_children())
+    else:
+        pieces.extend(document["pieces"])
+    transported["document"] = {"head": document["head"], "tail": document["tail"], "pieces": pieces}
     return transported
 
 def _web_losatp_json_with_cache_stats(cached_payload, *, canonical_resource_path=None, **stats):
@@ -194,7 +201,10 @@ def run_canonical_request_wrapper(
     retention_json=None,
     resource_names_json=None,
     notice=None,
+    new_reply_buffer=None,
 ):
+    # new_reply_buffer: the Worker's factory of reply buffers (gbdraw.web_support.reply_buffers);
+    # the Worker always passes it.
     try:
         with web_error_stage("request-validation"):
             payload = json.loads(str(request_json))
@@ -272,23 +282,17 @@ def run_canonical_request_wrapper(
             ):
                 diagnostics["metrics"].setdefault(name, 0)
             result["_diagnostics"] = diagnostics
-        result["results"] = [_web_result_transport(item) for item in result.get("results", [])]
+        result["results"] = [
+            _web_result_transport(item, new_reply_buffer) for item in result.get("results", [])
+        ]
         metadata = result.get("metadata")
         if isinstance(metadata, dict):
-            result["metadata"] = json.dumps(
-                metadata,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        # The feature catalog travels as its own bytes; None when the page
+            result["metadata"] = write_reply_buffer(new_reply_buffer, json_utf8_chunks(metadata))
+        # The feature catalog travels as its own buffer; None when the page
         # keeps the catalog it holds for the same revision.
         catalog = result.get("featureCatalog")
         if catalog is not None:
-            result["featureCatalog"] = json.dumps(
-                catalog,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
+            result["featureCatalog"] = write_reply_buffer(new_reply_buffer, json_utf8_chunks(catalog))
             if diagnostics is not None:
                 diagnostics["metrics"]["featureCatalogSerializationCount"] = 1
         return result
