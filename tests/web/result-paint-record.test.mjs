@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { createResultPaintRecord, drawnLabelIntentGone, paintRuleTable } from '../../gbdraw/web/js/app/result-paint-record.js';
 
-// An editor paint state as app-setup reads it (`currentEditorProjectionState`).
+// An editor paint state as app/editor-intent.js reads it (`currentEditorProjectionState`).
 /** @param {string} step @returns {import('../../gbdraw/web/js/app/result-paint-record.js').EditorPaintState} */
 const paint = (step) => ({
   colors: [{ CDS: step }, `rules ${step}`],
@@ -69,7 +69,7 @@ test('a display whose palette and rules projection declined leaves the Result be
 });
 
 // U2BFIX2 review M3: the displayed Result a declined display left behind is
-// known while it stays displayed, so the composition root shows the declined
+// known while it stays displayed, so app/editor-intent.js shows the declined
 // domains once the blocker clears; a full display or another Result clears it.
 test('the domains a declined display left behind are known while the Result stays displayed', () => {
   const before = paint('before');
