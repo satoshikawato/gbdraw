@@ -398,6 +398,7 @@ def _layout_linear_annotation_tracks(
             available_extent_px=available,
             bp_per_px=bp_per_px,
             label_font_size=label_font_size,
+            join_origin=False,
         )
         layouts[slot.id] = layout
         updated_slots.append(

@@ -268,22 +268,37 @@ def segments_cross_origin(segments: Sequence[tuple[int, int]], record_length: in
     )
 
 
+def region_run(
+    segments: Sequence[tuple[int, int]], record_length: int, *, crosses_origin: bool
+) -> tuple[tuple[int, int], ...]:
+    """A span's segments in the order the region runs: ascending, or, across the origin
+    (``segments_cross_origin``), from the start of its segment that ends at the record's end on over the origin,
+    each segment that starts before that start moved one record length on."""
+
+    ordered = sorted(segments)
+    if not crosses_origin:
+        return tuple(ordered)
+    low = next(start for start, end in ordered if end == record_length)
+    return tuple(sorted(
+        (start + record_length, end + record_length) if start < low else (start, end) for start, end in ordered
+    ))
+
+
 def annotation_midpoint(
     segments: Sequence[tuple[int, int]],
     record_length: int,
+    *,
+    crosses_origin: bool,
 ) -> float:
-    if len(segments) == 2 and segments[0][0] == 0 and segments[-1][1] == record_length:
-        ordered = (segments[-1], segments[0])
-        span = sum(end - start for start, end in ordered)
-        return (ordered[0][0] + span / 2.0) % max(1, record_length)
-    total = sum(end - start for start, end in segments)
-    cursor = total / 2.0
-    for start, end in segments:
-        width = end - start
-        if cursor <= width:
-            return start + cursor
-        cursor -= width
-    return float(segments[-1][1])
+    """Halfway along a span as the region runs (``region_run``), on its record."""
+
+    run = region_run(segments, record_length, crosses_origin=crosses_origin)
+    cursor = sum(end - start for start, end in run) / 2.0
+    for start, end in run:
+        if cursor <= end - start:
+            return (start + cursor) % max(1, record_length)
+        cursor -= end - start
+    return float(run[-1][1]) % max(1, record_length)
 
 
 def resolve_annotation_set(
@@ -384,13 +399,14 @@ def resolve_annotation_set(
                 f"Annotation {annotation_set.id}/{annotation.id} uses line_cap=arrow without a directional feature target."
             )
         span_bp = sum(end - start for start, end in segments)
+        crosses_origin = segments_cross_origin(segments, len(record.seq), is_circular=is_circular)
         resolved.append(
             ResolvedRegionAnnotation(
                 id=annotation.id,
                 set_id=annotation_set.id,
                 record_index=record_index,
                 segments=tuple(segments),
-                midpoint_bp=annotation_midpoint(segments, len(record.seq)),
+                midpoint_bp=annotation_midpoint(segments, len(record.seq), crosses_origin=crosses_origin),
                 span_bp=span_bp,
                 label=annotation.label,
                 mark=annotation.mark,
@@ -399,7 +415,7 @@ def resolve_annotation_set(
                 style_is_annotation_override=annotation.style is not None,
                 legend_label=annotation.legend_label or annotation_set.legend_label,
                 metadata=annotation.metadata,
-                crosses_origin=segments_cross_origin(segments, len(record.seq), is_circular=is_circular),
+                crosses_origin=crosses_origin,
                 source_step=-1 if _read_coord_map(record)[1] < 0 else 1,
                 strand=annotation.strand,
             )
@@ -472,6 +488,7 @@ __all__ = [
     "annotation_midpoint",
     "merge_annotation_segments",
     "read_annotation_options",
+    "region_run",
     "resolve_annotation_set",
     "resolve_annotations",
 ]

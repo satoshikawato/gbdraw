@@ -1,6 +1,7 @@
 """A span across the origin is one region: no edge, cap or arrow head where it crosses (OV-2573).
 
-Circular draws it as one part; Linear draws the two parts at the record's ends and leaves those ends open.
+Circular draws it as one part; Linear draws the two parts at the record's ends and leaves those ends open, or, from
+a display start where the parts meet, one part (OV-2577).
 """
 
 from __future__ import annotations
@@ -110,15 +111,15 @@ def _number(text: str | None) -> float:
 
 
 def _expected_ends(spans: list[tuple[float, float]]) -> set[float]:
-    """The x of the span's two outer ends, from its two parts in drawing order.
+    """The x of the span's two outer ends, from its parts in drawing order.
 
-    Unrotated, the parts lie at the record's ends (from 0, and up to the end of the axis), so the record's ends
-    are cuts; rotated, the parts meet at the origin, so the edge they share is the cut.
+    Unrotated, the two parts lie at the record's ends (from 0, and up to the end of the axis), so the record's
+    ends are cuts; rotated, the parts meet at the origin and are drawn as one part.
     """
 
-    (first_start, first_end), (second_start, second_end) = spans
-    if first_end == second_start:
-        return {first_start, second_end}
+    if len(spans) == 1:
+        return set(spans[0])
+    (_first_start, first_end), (second_start, _second_end) = spans
     return {first_end, second_start}
 
 
@@ -129,10 +130,14 @@ def test_linear_leaves_the_ends_of_a_span_across_the_origin_open(mark: str, line
 
     if mark in {"band", "highlight"}:
         rects = list(item.iter(f"{_SVG}rect"))
-        assert len(rects) == 2
+        assert len(rects) == (2 if start is None else 1)
         spans = sorted(
             (_number(rect.get("x")), _number(float(rect.get("x", 0)) + float(rect.get("width", 0)))) for rect in rects
         )
+        if start is not None:
+            # One part, capped at both its ends: one rect with its own outline, no cut to leave open.
+            assert rects[0].get("stroke") == "#225588"
+            return
         # The rects carry no stroke of their own; their outlines draw only the span's two outer ends across the lane.
         assert {rect.get("stroke") for rect in rects} == {"none"}
         verticals = {
@@ -147,7 +152,7 @@ def test_linear_leaves_the_ends_of_a_span_across_the_origin_open(mark: str, line
     lines = list(item.iter(f"{_SVG}line"))
     bars = [line for line in lines if line.get("y1") == line.get("y2")]
     caps = [line for line in lines if line.get("x1") == line.get("x2")]
-    assert len(bars) == 2
+    assert len(bars) == (2 if start is None else 1)
     spans = sorted((_number(bar.get("x1")), _number(bar.get("x2"))) for bar in bars)
     expected = _expected_ends(spans)
     heads = [

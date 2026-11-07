@@ -378,7 +378,7 @@ def _along_region(
     """
 
     length = max(1, record_length)
-    centre = float(annotation.geometry_midpoint_bp)
+    centre = annotation.label_midpoint_bp(join_origin=True)
     step = max(1e-9, length / (2.0 * math.pi * max(1.0, math.hypot(default.x, default.y))))
     candidates: set[float] = set()
     for start, end in annotation.geometry_segments:
@@ -483,7 +483,7 @@ def circular_annotation_labels(
                 ),
             )
         )
-    defaults = [label_at(float(annotation.geometry_midpoint_bp)) for annotation, label_at in entries]
+    defaults = [label_at(annotation.label_midpoint_bp(join_origin=True)) for annotation, label_at in entries]
     if obstacles is None:
         return tuple(defaults)
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for label in defaults), default=0.0)

@@ -1239,7 +1239,8 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
-        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params, label_font_size=10.0
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params, label_font_size=10.0,
+        join_origin=True,
     )
 
     def labels(*polygons):

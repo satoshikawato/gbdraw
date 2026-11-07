@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from gbdraw.layout.record_coordinates import DisplayFragment
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias, cast
@@ -574,33 +574,31 @@ class ResolvedRegionAnnotation:
             return self.segments
         return tuple((part.display_start, part.display_end) for part in self.display_parts)
 
-    @property
-    def _label_part(self) -> DisplayFragment:
-        """The display part a label stands on: the longest, ties to the earlier row, then the earlier start."""
-        assert self.display_parts is not None
+    def label_part(self, *, join_origin: bool) -> MarkPart:
+        """The drawn part a label stands on: of the parts ``mark_parts`` draws, the longest, ties to the earlier
+        row, then the earlier start."""
         return min(
-            self.display_parts,
-            key=lambda part: (part.display_start - part.display_end, part.row, part.display_start),
+            mark_parts(self, join_origin=join_origin), key=lambda part: (part.start - part.end, part.row, part.start)
         )
 
-    @property
-    def geometry_midpoint_bp(self) -> float:
+    def label_midpoint_bp(self, *, join_origin: bool) -> float:
+        """Where the label stands: halfway along the region, or with display parts the centre of its
+        ``label_part``."""
         if self.display_parts is None:
             return self.midpoint_bp
-        part = self._label_part
-        return (part.display_start + part.display_end) / 2.0
+        part = self.label_part(join_origin=join_origin)
+        return (part.start + part.end) / 2.0
 
-    @property
-    def label_row(self) -> int:
+    def label_row(self, *, join_origin: bool) -> int:
         """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
-        return 0 if self.display_parts is None else self._label_part.row
+        return 0 if self.display_parts is None else self.label_part(join_origin=join_origin).row
 
-    @property
-    def label_room_bp(self) -> int:
-        """What the annotation's label can stand over: its span, or on several rows the fragment it stands on."""
+    def label_room_bp(self, *, join_origin: bool) -> int:
+        """What the annotation's label can stand over: its span, or on several rows the part it stands on."""
         if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
             return self.span_bp
-        return self._label_part.display_end - self._label_part.display_start
+        part = self.label_part(join_origin=join_origin)
+        return part.end - part.start
 
     @property
     def geometry_rows(self) -> tuple[int, ...]:
@@ -614,6 +612,68 @@ class ResolvedRegionAnnotation:
         if self.display_parts is None:
             return self.segments
         return tuple((part.display_start, part.display_end) for part in self.display_parts if part.row == row)
+
+
+@dataclass(frozen=True)
+class MarkPart:
+    """One drawn part of a mark, in display bp on its ``row``, and whether it draws each of its ends.
+
+    An end it does not draw is a cut, where the region goes on: the display cut, a row boundary, or the origin of
+    a span across it. A cut gets no edge stroke, cap or arrow head. A part joined across the origin ends past the
+    record's length. ``local_start`` is where the part starts on its record (record-local bp); the part runs on
+    from there as it runs on the display, past the record's end when it is joined across the origin.
+    """
+
+    start: int
+    end: int
+    capped_start: bool
+    capped_end: bool
+    local_start: int
+    row: int = 0
+
+
+def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
+    """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut, which
+    its drawing and its label read.
+
+    A span across the origin (``crosses_origin``) has two sides there: its part that ends at the record's end and
+    its part that starts at 0. They become one part where they meet in the drawing: always with ``join_origin``
+    (a circle drawn whole), else where one ends on the row where the other starts (a Linear record drawn from a
+    display start). Where they do not meet, they leave those ends open.
+    """
+
+    fragments = annotation.display_parts
+    parts = [
+        MarkPart(start, end, True, True, start)
+        for start, end in annotation.segments
+    ] if fragments is None else [
+        MarkPart(
+            part.display_start, part.display_end, not part.artificial_start, not part.artificial_end, part.local_start,
+            part.row,
+        )
+        for part in fragments
+    ]
+    if not annotation.crosses_origin:
+        return tuple(parts)
+    local_bounds = (
+        annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
+    )
+    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
+    record_end = max(end for _start, end in local_bounds)
+    before = next(index for index, (_start, end) in enumerate(local_bounds) if end == record_end)
+    after = next(index for index, (start, _end) in enumerate(local_bounds) if start == 0)
+    if join_origin or (parts[before].row == parts[after].row and parts[before].end == parts[after].start):
+        joined = parts[after]
+        parts[before] = replace(
+            parts[before],
+            end=parts[before].end + joined.end - joined.start,
+            capped_end=joined.capped_end,
+        )
+        del parts[after]
+        return tuple(parts)
+    parts[before] = replace(parts[before], capped_end=False)
+    parts[after] = replace(parts[after], capped_start=False)
+    return tuple(parts)
 
 
 @dataclass(frozen=True)
@@ -664,6 +724,7 @@ __all__ = [
     "FeatureSelector",
     "FeatureSpan",
     "HatchStyle",
+    "MarkPart",
     "RegionAnnotation",
     "RegionAnnotationStyle",
     "RegionTarget",
@@ -674,5 +735,6 @@ __all__ = [
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
     "linear_annotation_labels_above",
+    "mark_parts",
     "parse_feature_selector",
 ]

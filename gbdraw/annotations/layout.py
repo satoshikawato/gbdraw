@@ -44,13 +44,19 @@ def _expanded_intervals(
     record_length: int,
     label_width_bp: float,
     padding_bp: float,
+    join_origin: bool,
 ) -> tuple[tuple[float, float], ...]:
-    """What an annotation occupies on one row, with its label on the row that holds it."""
+    """What an annotation occupies on one row, with its label on the row that holds it (``join_origin`` as in
+    ``mark_parts``)."""
 
     intervals = [(float(start), float(end)) for start, end in annotation.row_segments(row)]
-    if annotation.label and row == annotation.label_row and label_width_bp > annotation.label_room_bp:
+    if (
+        annotation.label
+        and row == annotation.label_row(join_origin=join_origin)
+        and label_width_bp > annotation.label_room_bp(join_origin=join_origin)
+    ):
         half = label_width_bp / 2.0
-        center = float(annotation.geometry_midpoint_bp)
+        center = annotation.label_midpoint_bp(join_origin=join_origin)
         start, end = center - half, center + half
         if start < 0:
             intervals.extend(((0.0, end), (record_length + start, float(record_length))))
@@ -87,8 +93,11 @@ def assign_annotation_lanes(
     label_width_bp: Callable[[ResolvedRegionAnnotation], float] | None = None,
     padding_bp: Callable[[ResolvedRegionAnnotation], float] | float = 0.0,
     overflow: str = "error",
+    join_origin: bool,
 ) -> tuple[PlacedRegionAnnotation, ...]:
     """Assign stable lanes using greedy interval coloring, row by row on a wrapped record.
+
+    ``join_origin`` says whether the drawing closes into a circle (``mark_parts``): where a label stands.
 
     An annotation keeps one lane on every row it draws on; only annotations on the same row meet.
     Explicit lanes remain fixed. A collision in an explicit lane is rejected by
@@ -110,6 +119,7 @@ def assign_annotation_lanes(
                 record_length=length,
                 label_width_bp=max(0.0, float(width_func(annotation))),
                 padding_bp=max(0.0, float(annotation_padding)),
+                join_origin=join_origin,
             )
             for row in annotation.geometry_rows
         }
@@ -184,11 +194,13 @@ def layout_annotation_track(
     lane_extent_px: float = 14.0,
     bp_per_px: Mapping[int, float] | None = None,
     label_font_size: float,
+    join_origin: bool,
 ) -> ResolvedAnnotationTrack:
     """Pack one set and calculate its radial/vertical required extent.
 
     ``label_font_size`` is the font size the feature labels of the drawing use;
-    a label whose style sets no font size takes it."""
+    a label whose style sets no font size takes it. ``join_origin`` is True for
+    a Circular drawing (``mark_parts``)."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -223,6 +235,7 @@ def layout_annotation_track(
         label_width_bp=label_width,
         padding_bp=padding,
         overflow="compress" if highlight_track else track_params.overflow,
+        join_origin=join_origin,
     )
     if highlight_track:
         placements = tuple(replace(item, lane=0) for item in placements)
