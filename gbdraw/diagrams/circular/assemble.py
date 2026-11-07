@@ -1192,8 +1192,9 @@ def _feature_label_obstacles(
 
 class _AnnotationLabelRoom:
     """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
-    own owner once for each band, axis ring, side, parameters and span it is asked for: the layouts of one drawing,
-    the definition font scan's among them, ask for the same ones again and again (OV-2664). It is no stage input:
+    own owner once for each band, axis ring, side, parameters and ``covers_slots`` flag it is asked for: the layouts
+    of one drawing, the definition font scan's among them, ask for the same ones again and again (OV-2664). The
+    memo lives for one drawing and is reused while a slot's lanes are the same object. It is no stage input:
     a stage takes the tracks (``_AnnotationTracks``) and makes its own rooms."""
 
     __slots__ = ("track", "_record_index", "_record_length", "_font_family", "_measured")

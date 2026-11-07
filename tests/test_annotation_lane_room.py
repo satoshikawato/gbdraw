@@ -35,7 +35,8 @@ from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionA
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.render.drawers.annotation_marks import label_ink_offsets
-from gbdraw.render.drawers.circular.annotations import circular_annotation_label_extent
+from gbdraw.layout.text_geometry import SECTOR_PART_DEG
+from gbdraw.render.drawers.circular.annotations import _label_at, _label_ink
 
 _SVG = "{http://www.w3.org/2000/svg}"
 _OFFSET = RegionAnnotationStyle().label_offset
@@ -323,7 +324,7 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
     record = gbdraw.read_genbank(str(_HMMT))[0]
     length = len(record.seq)
     rng = random.Random(1)
-    for _ in range(600):  # The regions of the review's probe (its third set).
+    for _ in range(600):  # Seeded random regions: 150 labelled ones inside the slot.
         rng.randint(1, 2)
     regions = tuple(
         RegionAnnotation(f"q{index}", CoordinateSpan(None, start, start + rng.randint(50, 400)), label=f"q{index}")
@@ -353,17 +354,25 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
 def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> None:
     # Lane rooms can carry an inside lane's mark edge past the centre (OV-2665). There a curved label is cut to its
     # ellipsis, whose letters stand on the baseline, so its radius nears zero; its letters still cover at most one
-    # turn of the circle.
-    annotation = ResolvedRegionAnnotation(
-        id="a", set_id="s", record_index=0, segments=((0, 100),), midpoint_bp=0.0, span_bp=100,
-        label="ace", mark="band", lane=None, style=RegionAnnotationStyle(),
-    )
-    extent = circular_annotation_label_extent(
-        annotation, RegionAnnotationStyle(), 12.0, 0.0, 50.0,
-        font_family="Arial", record_length=10_000, lanes_from_px=5.0, outward=False,
+    # turn of the circle, so its sector is cut into at most one turn of parts. (The extent folds angles into one turn
+    # either way, so the parts count is what a missing limit shows.)
+    style = RegionAnnotationStyle()
+    label = _label_at(
+        0.0,
+        annotation_id="",
+        text="ace",
+        record_length=10_000,
+        mark_edge=1.0,
+        outward=False,
+        gap=float(style.label_offset),
+        font_size=12.0,
+        color="",
+        orientation=style.label_orientation,
+        ink=_label_ink("Arial", 12.0, style.label_orientation),
+        rings=(),
     )
 
-    assert -10_000 <= extent.low_bp <= extent.high_bp <= 10_000
+    assert len(label.parts) <= math.ceil(360.0 / SECTOR_PART_DEG)
 
 
 def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -> None:
