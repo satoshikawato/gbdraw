@@ -4,7 +4,7 @@
 - Status: withdrawn on 2026-11-05. The hosted pages keep loading GA4 as `README.md`, `docs/FAQ.md` and `docs/REFERENCE/web-app.md` disclose; this plan is not carried out.
 - Baseline: `docs_renovation` / `1a1780d3a9a7` と文書作成時点の inventoried working tree
 - Source: [`gbdraw_v0.14.0_codex_roadmap.md`](./gbdraw_v0.14.0_codex_roadmap.md) の Work package I
-- Target release: `v0.14.0`
+- Target release: none (withdrawn; see Status)
 - Prerequisites: A0 baseline、H1 hosted-artifact topology、I2については Work package E の accepted-Result owner と export owner の凍結
 
 Related contracts:

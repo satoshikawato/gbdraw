@@ -155,18 +155,45 @@ platform-specific package names.
 
 Input files of 2 MiB or more under `tests/test_inputs/` and `examples/` are
 not in git. They are assets of a test-data GitHub Release, listed with their
-sha256 in `tests/test_data.json`. pytest places them at the start of a run,
-from your cache (`~/.cache/gbdraw/test-data`), from git history, or from the
-Release. Tools that read them outside pytest need one run of:
+size and sha256 in `tests/test_data.json`. pytest places them at the start of
+a run, from your cache (`~/.cache/gbdraw/test-data`, or the folder that
+`GBDRAW_TEST_DATA_CACHE` names), from git history, or from the Release. Tools
+that read them outside pytest need one run of:
 
 ```bash
 python tools/test_data.py fetch
 ```
 
+When an input cannot be placed, a pytest run in CI (where the `CI`
+environment variable is set) stops before any test runs and names the missing
+files. A local run continues but skips each test module whose source names a
+missing file; a test that reaches a missing file in another way fails.
+`python tools/test_data.py fetch --require` exits with status 1 while an input
+is missing.
+
 To add or change such an input, put it at its path and run
 `python tools/test_data.py add <path>` (it uploads to the Release, so it
 needs write access), then commit `tests/test_data.json` and `.gitignore`.
-Generated figures and Sessions stay in git.
+If you do not have write access, say in the issue where the file can be
+downloaded; the maintainer uploads it. Generated figures and Sessions stay in
+git.
+
+The test-data Release follows these rules:
+
+- `tests/test_data.json` is the authority. A copy from the cache, git history,
+  or a download is used only when its size and sha256 match the manifest.
+- The bytes of an asset never change. An asset's name starts with the first 12
+  hexadecimal digits of its sha256, so `add` uploads a changed input as a new
+  asset, and older commits still fetch the asset their manifest names.
+- Never delete a test-data Release, or one of its assets, that
+  `tests/test_data.json` names in a commit of `dev` or `main`.
+- Only the maintainer creates a test-data Release. Its tag is
+  `test-data-YYYY-MM`, the year and month it was created (for example
+  `test-data-2026-11`), and `RELEASE_TAG` in `tools/test_data.py` names the
+  Release that `add` uploads to. The tag points at a commit that holds no
+  workflow files, because publishing a Release starts the release workflow of
+  the tagged commit. The Release is a prerelease and is not marked as the
+  latest release, so the newest gbdraw release stays the latest.
 
 ## Running the checks CI runs
 
