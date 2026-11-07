@@ -1253,6 +1253,35 @@
       "reason": "the Web disables New drawing from region live, during the drag and before Python is asked, when the source span it reads from the axis starts after its end (wrapsOrigin); Python refuses the same span with StartAfterEndRegion (ORIGIN_CROSSING) for the CLI, the Python API and the Web dialog",
       "retireWhen": "the Web asks Python whether a selected span can be drawn, or Python writes that with the selection",
       "source": "region-select-seq-search-20261104 REVIEW-2 N1 (D-32 f, D-34)"
+    },
+    {
+      "id": "vector:tests/fixtures/png_dpi_reading_vectors.json",
+      "concern": "The PNG DPI a Session saved (ui.downloadDpi): which stored values read as one of the DPI menu's choices",
+      "pythonOwner": [
+        "gbdraw/session.py:read_session_png_dpi"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/config-field-readers.js:readDownloadDpi"
+      ],
+      "vector": "tests/fixtures/png_dpi_reading_vectors.json",
+      "reason": "Web Load reads the stored PNG DPI in JavaScript (another value is a Load dialog row) and a command-line or Python Session render reads it in Python (D-93); the choices reach the Web generated, and the vectors pin which stored values each side reads as a choice, as unset, or as another value",
+      "retireWhen": "Web Load reads ui.downloadDpi through the Python owner instead of its own reader",
+      "source": "figure-size-1427 session 12 (D-93, D-104)",
+      "pending": true
+    },
+    {
+      "id": "vector:tests/fixtures/png_phys_vectors.json",
+      "concern": "The pHYs chunk a PNG gets for a DPI: pixels per metre (rounded half up) and where the chunk goes",
+      "pythonOwner": [
+        "gbdraw/render/export.py:png_with_resolution"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/utils/png.js:setDpiInPng"
+      ],
+      "vector": "tests/fixtures/png_phys_vectors.json",
+      "reason": "the web app writes the chunk into a browser canvas PNG and cannot call Python, while every PNG the command line or Python writes gets it from png_with_resolution (#1663); the vectors pin the pixels per metre, the half-up rounding (D-84) and the chunk bytes to each other",
+      "retireWhen": "the web app's PNG export is written by Python (Worker) instead of setDpiInPng",
+      "source": "figure-size-1427 session 11 (D-84, D-87), registered in session 12"
     }
   ]
 }

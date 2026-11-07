@@ -3,6 +3,7 @@ canvas, the Linear width fit, its refusals, and export units and DPI."""
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import struct
@@ -25,7 +26,7 @@ from gbdraw.layout.figure_size import MeasuredBase, fit_base_length
 from gbdraw.layout.composition import CompositionItem, CompositionRequest, LegendPlacement, plan_composition
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.composition import applied_composition_plan
-from tests.utils.png_chunks import PNG_SIGNATURE, png_chunks, png_phys
+from tests.utils.png_chunks import png_chunks, png_phys
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 MM_180_PX = 180 * 96 / 25.4
@@ -1136,27 +1137,24 @@ def test_every_python_png_writer_carries_the_resolution(tmp_path) -> None:
     assert png_phys((tmp_path / "diagram.png").read_bytes()) == (3780, 3780, 1)
 
 
-def _bare_png(*chunks: tuple[bytes, bytes]) -> bytes:
-    body = b"".join(
-        struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-        for kind, data in chunks
-    )
-    return PNG_SIGNATURE + body
+# The pHYs writer and its Web twin, setDpiInPng, read the same vectors (tools/twins.json).
+PNG_PHYS_VECTORS = json.loads((Path(__file__).parent / "fixtures" / "png_phys_vectors.json").read_text(encoding="utf-8"))
 
 
-def test_png_resolution_replaces_a_pHYs_chunk_and_inserts_one_before_the_first_idat() -> None:
+def test_png_resolution_writes_the_chunk_the_web_writes() -> None:
+    """Pixels per metre round half up (D-84); a pHYs chunk is replaced, else inserted before the first IDAT."""
+
     from gbdraw.render.export import png_with_resolution
 
-    header = (b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
-    idat = (b"IDAT", zlib.compress(b"\x00" * 14))
-    end = (b"IEND", b"")
-    inserted = png_with_resolution(_bare_png(header, idat, idat, end), 300)
+    bare = bytes.fromhex(PNG_PHYS_VECTORS["chunks"][0]["png"])
+    for case in PNG_PHYS_VECTORS["pixelsPerMetre"]:
+        per_metre = case["pixelsPerMetre"]
+        assert png_phys(png_with_resolution(bare, case["dpi"])) == (per_metre, per_metre, 1), case
+    for case in PNG_PHYS_VECTORS["chunks"]:
+        assert png_with_resolution(bytes.fromhex(case["png"]), case["dpi"]).hex() == case["expected"], case["case"]
+    inserted, replaced = (bytes.fromhex(case["expected"]) for case in PNG_PHYS_VECTORS["chunks"])
     assert [kind for kind, _data in png_chunks(inserted)] == [b"IHDR", b"pHYs", b"IDAT", b"IDAT", b"IEND"]
-    assert png_phys(inserted) == (11811, 11811, 1)
-    old = (b"pHYs", struct.pack(">IIB", 1, 2, 0))
-    replaced = png_with_resolution(_bare_png(header, old, idat, end), 96)
     assert [kind for kind, _data in png_chunks(replaced)] == [b"IHDR", b"pHYs", b"IDAT", b"IEND"]
-    assert png_phys(replaced) == (3780, 3780, 1)
 
 
 def test_pdf_page_has_the_requested_width() -> None:

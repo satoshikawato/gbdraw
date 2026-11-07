@@ -1,0 +1,30 @@
+{
+  "description": "The pHYs chunk a PNG gets for a DPI: gbdraw/render/export.py png_with_resolution and setDpiInPng in gbdraw/web/js/utils/png.js (tools/twins.json). pixelsPerMetre: floor(dpi / 0.0254 + 0.5), the Web's Math.round (D-84); 0.0127, 0.0635 and 299.9867 are half-way values that Python round() would round down. chunks: a chunk inserted before the first IDAT, and an existing pHYs chunk replaced (PNG bytes in hex).",
+  "pixelsPerMetre": [
+    { "dpi": 72, "pixelsPerMetre": 2835 },
+    { "dpi": 96, "pixelsPerMetre": 3780 },
+    { "dpi": 150, "pixelsPerMetre": 5906 },
+    { "dpi": 300, "pixelsPerMetre": 11811 },
+    { "dpi": 600, "pixelsPerMetre": 23622 },
+    { "dpi": 72.5, "pixelsPerMetre": 2854 },
+    { "dpi": 192, "pixelsPerMetre": 7559 },
+    { "dpi": 0.0127, "pixelsPerMetre": 1 },
+    { "dpi": 0.0635, "pixelsPerMetre": 3 },
+    { "dpi": 299.9867, "pixelsPerMetre": 11811 },
+    { "dpi": 71.99629999999999, "pixelsPerMetre": 2834 }
+  ],
+  "chunks": [
+    {
+      "case": "insert before the first IDAT",
+      "dpi": 300,
+      "png": "89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000000b49444154789c6360400600000e0001a99173b10000000b49444154789c6360400600000e0001a99173b10000000049454e44ae426082",
+      "expected": "89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a73000000097048597300002e2300002e230178a53f760000000b49444154789c6360400600000e0001a99173b10000000b49444154789c6360400600000e0001a99173b10000000049454e44ae426082"
+    },
+    {
+      "case": "replace a pHYs chunk",
+      "dpi": 96,
+      "png": "89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000000970485973000000010000000200640897150000000b49444154789c6360400600000e0001a99173b10000000049454e44ae426082",
+      "expected": "89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a73000000097048597300000ec400000ec401952b0e1b0000000b49444154789c6360400600000e0001a99173b10000000049454e44ae426082"
+    }
+  ]
+}
