@@ -280,3 +280,47 @@ test('a checkpoint step captured while its drawing owes a refit restores undrawn
   await history.redo();
   assert.deepEqual(heard.at(-1), [null, undefined, true], 'the Redo asks for the refit again');
 });
+
+// OV-2678: a checkpoint step runs inside the composition root's hold over the automatic rerender, from its first write
+// to its listener, so the rerender its own change asks for (the Merge's rule commit) and the one its listener asks for
+// (the fit of a sized figure) start once, after the step ends, from the state the step ended with. A step the joined
+// one holds is held once; a refused, failed, or project step releases the hold too; an Undo or a Redo is not held.
+test('a checkpoint step runs inside the hold over the rerender, from its first write to its listener', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a' }, other: { colors: 'x' } };
+  /** @type {string[]} */
+  const events = [];
+  let held = 0;
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  history.setSettingsStepListener((changes) => events.push(`listener ${changes === null ? 'restore' : 'commit'} held=${held}`));
+  history.setCheckpointHold(async (run) => {
+    held += 1;
+    try { return await run(); } finally { held -= 1; events.push(`released held=${held}`); }
+  });
+  await history.captureBaseline('initial');
+  const step = (colors) => history.runUndoableCheckpoint('Rename legend item', async () => {
+    // The Merge: the Restore, then the rule commit joins the open checkpoint and asks for the rerender.
+    values.circular.colors = `${colors}-restored`;
+    await history.runUndoableCheckpoint('Change color rules', () => { values.circular.colors = colors; events.push(`request held=${held}`); });
+    return colors;
+  });
+  assert.equal(await step('b'), 'b');
+  assert.deepEqual(events.splice(0), ['request held=1', 'listener commit held=1', 'released held=0']);
+  await history.undo();
+  await history.redo();
+  assert.deepEqual(events.splice(0), ['listener restore held=0', 'listener restore held=0'], 'a restore is not held');
+  await history.runUndoableCheckpoint('Change uploaded file', () => false, { shouldCommit: (result) => result !== false });
+  await assert.rejects(history.runUndoableCheckpoint('Change uploaded file', () => { throw new Error('refused'); }), /refused/);
+  await history.runProjectStep('Reset settings', () => { values.circular.colors = 'c'; values.other.colors = 'y'; });
+  assert.deepEqual(events.splice(0), ['released held=0', 'released held=0', 'listener commit held=1', 'released held=0']);
+});

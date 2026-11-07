@@ -15,6 +15,7 @@ const { open: openParityFixture } = require('./helpers/live-generate-parity-step
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
 const MM_180_PX = 180 * 96 / 25.4;
+const MM_280_PX = 280 * 96 / 25.4;
 
 const openLayout = async (page) => {
   const details = page.locator('[data-setting="layout"] > details');
@@ -293,7 +294,6 @@ test('an Undo back to a sized figure whose refit was still pending fits it again
   await setSide(page, 'width', 280, 'mm');
   await generateAndWaitForResult(page);
   await settle(page);
-  const MM_280_PX = 280 * 96 / 25.4;
   expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
 
   await page.evaluate(() => {
@@ -409,19 +409,14 @@ test('a Generate after a refused refit leaves no refit owed: the next file impor
 });
 
 
-// OV-2677: the Restore and merge of a Legend rename onto a deleted row is one checkpoint step, fitted by the rerender
-// that follows it. The rename dialog gives the focus back to the text field that held it as it closes, which opens
-// that field's History step before the rerender ends; a step that changed nothing leaves the merge's state, so History
-// still keeps the fitted figure as the step's: Undo and Redo show the recorded figures with no Python run (D-48), and
-// the size line never says the figure is being fitted.
-test('a Restore and merge onto a deleted Legend row keeps its fitted figure: its Undo and Redo run no Python', async ({ page }) => {
-  test.setTimeout(420_000);
+// A sized Circular figure with color rules alpha (FL1) and beta (FL2), Legend row beta deleted, and the Python runs
+// counted from here on; `__holdRender` holds each run's Worker reply while it is set.
+const openSizedFigureWithDeletedRow = async (page) => {
   await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'on' });
   await openLayout(page);
   await setSide(page, 'width', 280, 'mm');
   await generateAndWaitForResult(page);
   await settle(page);
-  const MM_280_PX = 280 * 96 / 25.4;
   const addRule = (rule) => evaluateWithRetainedPromise(page, (fields) => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, fields);
@@ -448,20 +443,36 @@ test('a Restore and merge onto a deleted Legend row keeps its fitted figure: its
       }
     };
   });
-  const renders = () => page.evaluate(() => window.__renders);
-  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
-  const listed = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
   const focusedField = () => page.evaluate(() => document.activeElement?.id ?? null);
+  return {
+    renders: () => page.evaluate(() => window.__renders),
+    fittingLine: () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null),
+    listed: () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption)),
+    focusedField,
+    // Rename alpha to the deleted row's caption with the focus on the Figure width field, and answer Restore and merge.
+    merge: async () => {
+      await page.locator('#figure-width').focus();
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'alpha'), 'beta');
+      });
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+      await expect.poll(focusedField, 'the dialog takes the focus from the field').not.toBe('figure-width');
+      await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('merge'); });
+      await settle(page);
+    }
+  };
+};
 
-  await page.locator('#figure-width').focus();
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'alpha'), 'beta');
-  });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
-  await expect.poll(focusedField, 'the dialog takes the focus from the field').not.toBe('figure-width');
-  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.handleLegendRenameChoice('merge'); });
-  await settle(page);
+// OV-2677: the Restore and merge of a Legend rename onto a deleted row is one checkpoint step, fitted by the rerender
+// that follows it. The rename dialog gives the focus back to the text field that held it as it closes, which opens
+// that field's History step before the rerender ends; a step that changed nothing leaves the merge's state, so History
+// still keeps the fitted figure as the step's: Undo and Redo show the recorded figures with no Python run (D-48), and
+// the size line never says the figure is being fitted.
+test('a Restore and merge onto a deleted Legend row keeps its fitted figure: its Undo and Redo run no Python', async ({ page }) => {
+  test.setTimeout(420_000);
+  const { renders, fittingLine, listed, focusedField, merge } = await openSizedFigureWithDeletedRow(page);
+  await merge();
   await expect.poll(fittingLine).toBe(null);
   await settle(page);
   const merged = await listed();
@@ -485,4 +496,19 @@ test('a Restore and merge onto a deleted Legend row keeps its fitted figure: its
   expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
   expect(redoneLine, 'the Redo shows the fitted figure History kept').toBe(null);
   expect(redoneRenders, 'the Undo and Redo of a fitted step run no Python').toBe(0);
+});
+
+// OV-2678: the Merge's rule commit asks for the rerender inside the checkpoint, and the checkpoint's commit asks the
+// sized figure's fit; the rerender waits for the step to end, so one Python run draws the merged state and fits it.
+test('a Restore and merge onto a deleted Legend row on a sized figure is fitted by one Python run', async ({ page }) => {
+  test.setTimeout(420_000);
+  const { renders, fittingLine, listed, merge } = await openSizedFigureWithDeletedRow(page);
+  await merge();
+  await expect.poll(fittingLine).toBe(null);
+  await settle(page);
+  const merged = await listed();
+  expect(merged.filter((caption) => caption === 'beta')).toHaveLength(1);
+  expect(merged).not.toContain('alpha');
+  expect(px((await sizeState(page)).root.width), 'the merge is fitted').toBeCloseTo(MM_280_PX, 2);
+  expect(await renders(), 'one Python run fits the merged figure').toBe(1);
 });

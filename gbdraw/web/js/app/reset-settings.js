@@ -19,6 +19,7 @@ import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings }
 import { msg, t } from '../utils/i18n.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { CheckpointHold } from '../services/history.js' */
 /** @import { AskChoice } from './app-messages.js' */
 /** @import { ApplyLinearSeqMutation } from './linear-source-edits.js' */
 
@@ -98,7 +99,7 @@ export const createDrawingReset = ({
  * @property {(operation?: string) => SessionBusy | null} sessionOperationAvailability
  * @property {AskChoice} askChoice
  * @property {(drawing: DrawingState) => void} resetDrawing One drawing's reset (`createDrawingReset`).
- * @property {<T>(run: () => T) => Promise<Awaited<T>>} holdAutomaticRerender
+ * @property {CheckpointHold} holdAutomaticRerender
  *   Holds the automatic rerender requests until `run` ends; one rerender follows.
  * @property {<T>(drawing: DrawingState, write: () => Promise<T>) => Promise<T>} followRuleEdits
  *   Runs `write`; the rule owner follows the rules it changed.
