@@ -249,6 +249,20 @@ def write_svg_document(drawing: Drawing) -> SvgDocument:
     return SvgDocument(prolog=parts.prolog, body=parts.body())
 
 
+def raster_svg_body(drawing: Drawing, written: SvgDocument | None = None) -> str:
+    """The text a PNG of ``drawing`` is drawn from: the root element with the drawing's own px size.
+
+    ``written`` (``write_svg_document`` of ``drawing``) is that text when no requested size changed its root. A
+    drawing fitted to a requested size writes its root in the requested unit, rounded (``export_root_size``), which
+    can move a PNG side one pixel off ``png_pixel_size`` of the drawn px, the size the export check and the Web PNG
+    take; its PNG is drawn from the px root instead. The viewBox and the content are the same text.
+    """
+
+    if written is not None and _export_root_size(drawing) is None:
+        return written.body
+    return document_parts(drawing).body()
+
+
 __all__ = [
     "ContentPiece",
     "DocumentParts",
@@ -258,6 +272,7 @@ __all__ = [
     "bind_export_size",
     "document_parts",
     "export_root_size",
+    "raster_svg_body",
     "write_svg_document",
     "write_text",
 ]

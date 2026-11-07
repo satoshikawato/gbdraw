@@ -219,3 +219,94 @@ def test_a_pdf_check_names_no_pixel_size() -> None:
     reply = check_web_export_limit_json(json.dumps(
         {"format": "pdf", "width": 1_237.0, "height": 101.0, "dpi": None, "linearWrap": None}))
     assert json.loads(reply) == {"ok": True, "pixels": None}
+
+
+# A Linear figure fitted to 180 mm wide whose height is converted to mm: its written root states 626.5757mm
+# (export_root_size rounds to 4 decimals), 7,400.5004 px at 300 dpi, while the drawn 2,368.159945801535 px is
+# 7,400.4998 px (OV-2683).
+_SIZED_HEIGHT_PX = 2_368.159945801535
+
+
+def _sized_drawing(tmp_path: Path) -> Drawing:
+    from gbdraw.core.figure_length import RequestedFigureSize, parse_figure_length
+    from gbdraw.render.document import bind_export_size
+
+    width = parse_figure_length("180mm")
+    drawing = Drawing(filename=str(tmp_path / "sized.svg"), size=(f"{width.px}px", f"{_SIZED_HEIGHT_PX}px"),
+                      viewBox=f"0 0 {width.px} {_SIZED_HEIGHT_PX}")
+    drawing.add(drawing.rect((10, 10), (100, 100), fill="#54bcf8"))
+    bind_export_size(drawing, RequestedFigureSize(width, None))
+    return drawing
+
+
+def _ihdr(png: bytes) -> tuple[int, int]:
+    return struct.unpack(">II", png[16:24])
+
+
+def test_a_sized_png_has_the_pixel_size_of_the_drawn_px_on_every_python_path(tmp_path: Path) -> None:
+    # OV-2683: the PNG is drawn from the drawing's px root, not from the root written in mm for the vector formats,
+    # so its size is png_pixel_size of the drawn px (the size the check and the Web PNG take); the SVG keeps its mm.
+    pytest.importorskip("cairosvg")
+    drawing = _sized_drawing(tmp_path)
+    width_px = float(drawing.attribs["width"].removesuffix("px"))
+    expected = export_limits.png_pixel_size(width_px, _SIZED_HEIGHT_PX, None)
+    assert expected[1] == 7_400
+    assert _ihdr(render_to_bytes(drawing, "png")) == expected
+    paths = save_figure_to(drawing, ["png"], output_prefix=str(tmp_path / "figure"))
+    png = next(Path(path) for path in paths if path.endswith(".png"))
+    assert _ihdr(png.read_bytes()) == expected
+    assert 'height="626.5757mm"' in (tmp_path / "figure.svg").read_text(encoding="utf-8")
+    (tmp_path / "deprecated_dir").mkdir()
+    with pytest.warns(DeprecationWarning):
+        render.export.save_figure(_sized_drawing(tmp_path / "deprecated_dir"), ["png"])
+    assert _ihdr((tmp_path / "deprecated_dir" / "sized.png").read_bytes()) == expected
+
+
+def test_vector_formats_convert_the_written_root_and_an_unsized_png_the_same_text(tmp_path: Path, monkeypatch) -> None:
+    # The PDF, EPS and PS convert the written document (a requested size in its unit), as before; an unsized PNG
+    # converts that same text, so its bytes do not change.
+    from gbdraw.render.document import write_svg_document
+
+    sized = _sized_drawing(tmp_path)
+    unsized = _drawing(tmp_path, 1_237, 101)
+    sources: list[tuple[str, bytes]] = []
+
+    def recording(svg_source, fmt, *, write_to=None, **_options):
+        sources.append((fmt, bytes(svg_source)))
+        if write_to is not None:
+            write_to.write(b"")
+        return b""
+
+    monkeypatch.setattr(render.export, "convert_svg_with_cairosvg", recording)
+    monkeypatch.setattr(render.export, "get_cairosvg", lambda: object())
+    monkeypatch.setattr(render.export, "require_cairosvg", lambda formats: object())
+    for drawing, name in ((sized, "sized"), (unsized, "unsized")):
+        sources.clear()
+        written = write_svg_document(drawing).body.encode("utf-8")
+        save_figure_to(drawing, ["png", "pdf", "eps", "ps"], output_prefix=str(tmp_path / name), overwrite=True)
+        by_format = dict(sources)
+        assert [by_format[fmt] for fmt in ("pdf", "eps", "ps")] == [written] * 3, name
+        sources.clear()
+        render_to_bytes(drawing, "pdf")
+        assert sources == [("pdf", written)], name
+        sources.clear()
+        render_to_bytes(drawing, "png")
+        if name == "unsized":
+            assert by_format["png"] == written and sources == [("png", written)]
+        else:
+            assert b'height="626.5757mm"' in written
+            assert b"626.5757mm" not in by_format["png"] and sources == [("png", by_format["png"])]
+
+
+def test_an_unsized_png_is_the_png_of_the_written_document(tmp_path: Path) -> None:
+    # The bytes an unsized PNG had before OV-2683: CairoSVG of the written document.
+    pytest.importorskip("cairosvg")
+    from gbdraw.render.document import write_svg_document
+
+    built = plan_request(
+        LinearDiagramRequest(records=(RecordInput(GenBankInputSource(str(LAMBDA)), record_key="r0"),))
+    ).build()
+    before = convert_svg_with_cairosvg(write_svg_document(built.drawing).body.encode("utf-8"), "png")
+    assert render_to_bytes(built.drawing, "png") == before
+    paths = save_figure_to(built.drawing, ["png"], output_prefix=str(tmp_path / "lambda"))
+    assert next(Path(path) for path in paths if path.endswith(".png")).read_bytes() == before

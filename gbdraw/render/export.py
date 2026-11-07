@@ -23,7 +23,7 @@ from svgwrite import Drawing
 from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
-from gbdraw.render.document import write_svg_document, write_text
+from gbdraw.render.document import SvgDocument, raster_svg_body, write_svg_document, write_text
 from gbdraw.render.export_limits import check_drawing_export_limits, checked_png_dpi, png_export_dpi
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
@@ -347,6 +347,33 @@ def convert_svg_with_cairosvg(
     return None
 
 
+def cairosvg_sources(
+    drawing: Drawing, formats: Sequence[str], written: SvgDocument | None = None
+) -> dict[str, bytes]:
+    """The bytes CairoSVG converts for each of ``formats`` (lower case) of ``drawing``.
+
+    PDF, EPS and PS convert the written document (``written``, else written here), which states a requested size in
+    its unit; a PNG converts the drawing with its px root (:func:`gbdraw.render.document.raster_svg_body`), so its
+    size is ``png_pixel_size`` of the drawn px on every path. Formats that convert the same text share one bytes object.
+    """
+
+    texts: dict[str, str] = {}
+    for fmt in formats:
+        if fmt == "png":
+            texts[fmt] = raster_svg_body(drawing, written)
+        else:
+            if written is None:
+                written = write_svg_document(drawing)
+            texts[fmt] = written.body
+    encoded: dict[int, bytes] = {}
+    sources: dict[str, bytes] = {}
+    for fmt, text in texts.items():
+        if id(text) not in encoded:
+            encoded[id(text)] = text.encode("utf-8")
+        sources[fmt] = encoded[id(text)]
+    return sources
+
+
 def parse_formats(out_formats: str) -> list[str]:
     return parse_format_string(out_formats, logger=logger)
 
@@ -427,7 +454,7 @@ def save_figure(
         logger.warning("%s; skipped.", _cairosvg_missing_message(formats_to_process))
         return
 
-    svg_bytes = svg_source.encode("utf-8")
+    sources = cairosvg_sources(canvas, formats_to_process, document)
     for fmt in formats_to_process:
         out_file = resolve_format_output_path(base_filename, fmt)
         try:
@@ -436,7 +463,7 @@ def save_figure(
                 # formats keep what this deprecated function wrote before (a wrapped PDF over the page limit too).
                 check_drawing_export_limits(canvas, [fmt], dpi=dpi)
             convert_svg_with_cairosvg(
-                svg_bytes,
+                sources[fmt],
                 fmt,
                 write_to=out_file,
                 cairosvg_module=cairosvg_module,
@@ -452,6 +479,7 @@ def save_figure(
 
 
 __all__ = [
+    "cairosvg_sources",
     "convert_svg_with_cairosvg",
     "get_cairosvg",
     "has_cairosvg",

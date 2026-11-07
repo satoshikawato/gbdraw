@@ -24,7 +24,9 @@ write-up of a release.
 - Fixed (Web app): a PNG could be one pixel narrower or shorter than the PNG
   of the same figure at the same DPI from the command line or Python. The Web
   app now rounds its size as the command line does (a figure 1,237 px wide is
-  3,866 px wide at 300 dpi, not 3,865 px).
+  3,866 px wide at 300 dpi, not 3,865 px). A figure drawn to a requested size
+  gets the same PNG size on both too: the command line and Python draw its PNG
+  from its size in px, not from the size in mm or inches its SVG states.
 - Changed: a Circular figure size that no map size fits is refused sooner. To
   find the smallest map it can draw, which the message states, the fit now
   tries the radii too small to draw first, since those fail at once, and skips
