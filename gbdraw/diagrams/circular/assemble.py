@@ -491,15 +491,13 @@ class _AnnotationTracks:
     layouts: Mapping[str, ResolvedAnnotationTrack]
     packed_at: Mapping[str, float]
 
-    def label_rooms(self, kept: Mapping[str, _AnnotationLabelRoom]) -> dict[str, _AnnotationLabelRoom]:
-        """The room each annotation slot's labels need beyond its band; a slot whose lanes are those of a room in
-        ``kept`` keeps that room, with what it measured."""
+    def label_rooms(self) -> dict[str, _AnnotationLabelRoom]:
+        """The room each annotation slot's labels need beyond its band: one room, with what it measured, for each
+        slot lanes equal to those of an earlier packing while annotation measures are kept (``CircularAnnotationMeasures``)."""
 
         packing = self.packing
         return {
-            slot_id: room
-            if (room := kept.get(slot_id)) is not None and room.track is track
-            else _kept_measure(
+            slot_id: _kept_measure(
                 lambda measures: measures.rooms,
                 (packing.record_index, packing.record_length, packing.font_family),
                 track,
@@ -567,11 +565,10 @@ def _place_annotation_tracks_where_drawn(
 
     packed_at = dict(tracks.packed_at)
     packed_here: set[str] = set()
-    rooms: dict[str, _AnnotationLabelRoom] = {}
     passes = 0
     while True:
         sized = _sized_annotation_slots(slots, tracks)
-        rooms = tracks.label_rooms(rooms)
+        rooms = tracks.label_rooms()
         fit = place(sized, rooms)
         repacked = (
             _annotation_tracks_packed_where_drawn(tracks, fit.layout, packed_at, packed_here)
@@ -1285,8 +1282,8 @@ class _AnnotationLabelRoom:
     """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
     own owner once for each band, axis ring, side, parameters and ``covers_slots`` flag it is asked for: the layouts
     of one drawing, the definition font scan's among them, ask for the same ones again and again (OV-2664). The
-    memo is reused while a slot's lanes are the same object, and across the assemblies of one figure for equal lanes
-    (``CircularAnnotationMeasures``). It is no stage input: a stage takes the tracks (``_AnnotationTracks``) and
+    memo is reused for equal lanes while annotation measures are kept (``CircularAnnotationMeasures``): within one
+    assembly and across the assemblies of one figure. It is no stage input: a stage takes the tracks (``_AnnotationTracks``) and
     makes its own rooms."""
 
     __slots__ = ("track", "_record_index", "_record_length", "_font_family", "_measured")
@@ -3456,7 +3453,7 @@ def add_record_on_circular_canvas(
         feature_slot = placement.feature_slot
         annotation_tracks = placement.annotation_tracks
         annotation_track_layouts = dict(annotation_tracks.layouts)
-        annotation_label_rooms = annotation_tracks.label_rooms(annotation_label_rooms)
+        annotation_label_rooms = annotation_tracks.label_rooms()
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override
@@ -3916,8 +3913,24 @@ def _assemble_circular_diagram_result(
 ) -> CircularAssemblyResult:
     """Assemble and compose one Circular record: plan its annotation tracks, build its legend, draw it, compose it.
 
-    Returns the composed canvas and its authoritative geometry.
+    Returns the composed canvas and its authoritative geometry. The assembly shares the annotation measures its
+    figure keeps (``kept_annotation_measures``), or keeps its own while it runs.
     """
+
+    if _KEPT_MEASURES.get() is None:
+        with kept_annotation_measures(CircularAnnotationMeasures()):
+            return _assemble_circular_record(canvas_config, configurators, record, tracks, presentation, composition)
+    return _assemble_circular_record(canvas_config, configurators, record, tracks, presentation, composition)
+
+
+def _assemble_circular_record(
+    canvas_config: CircularCanvasConfigurator,
+    configurators: DiagramConfigurators,
+    record: CircularRecordData,
+    tracks: CircularTrackInputs,
+    presentation: CircularPresentationInputs,
+    composition: CompositionInputs,
+) -> CircularAssemblyResult:
 
     profile = canvas_config.profile
     cfg = profile.config
