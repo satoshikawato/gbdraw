@@ -83,3 +83,8 @@ test('a read of drawn records may give each two spans, and must read every recor
     assert.throws(() => readRecordSpanSequencesReply({ ...read, spans }, asked), (error) => error.code === 'RESULT_INVALID');
   }
 });
+
+test('a read of spans by coordinates gets one span per span asked, in order (Use as search query reads one)', () => {
+  assert.throws(() => readRecordSpanSequencesReply({ ...reply, spans: [reply.spans[0], reply.spans[0]] }, spans),
+    (error) => error.code === 'RESULT_INVALID');
+});

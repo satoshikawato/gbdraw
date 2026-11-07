@@ -64,15 +64,3 @@ def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform)
 
     return transform.is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
 
-
-def drawn_source_span(record: SeqRecord, transform: RecordDisplayTransform) -> tuple[int, int]:
-    """The source bases the drawn ``record`` shows, 1-based, inclusive and ascending on the source strand: 1 to the
-    source length when it draws every base, else from its first to its last drawn base (the display indexes 0 and
-    ``len(record) - 1`` of the axis source map, read in source order)."""
-
-    drawn = len(record.seq)
-    if drawn >= transform.length:
-        return 1, transform.length
-    first = transform.display_index_to_source_base(0)
-    last = transform.display_index_to_source_base(drawn - 1)
-    return (first, last) if transform.source_step == 1 else (last, first)

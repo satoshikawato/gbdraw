@@ -211,7 +211,10 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} originWindow
  */
 
-/** What to read: a span by its coordinates, or a drawn record. @typedef {RecordSpanInput | DrawnRecordInput} RecordSpanRead */
+/**
+ * What to read: a span by its coordinates, or a drawn record; one read asks for one kind.
+ * @typedef {RecordSpanInput | DrawnRecordInput} RecordSpanRead
+ */
 
 /**
  * The payload of `readRecordSpanSequences`: the request the shown Result was made from (the committed request),
@@ -239,7 +242,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The `readRecordSpanSequences` reply (`RecordSpanSequencesReply`): the spans in the order asked, and their FASTA text.
+ * The `readRecordSpanSequences` reply (`RecordSpanSequencesReply`): one span per span asked by coordinates, in order;
+ * or, for drawn records, one span per record in the order first asked, then the origin windows; and their FASTA text.
  * @typedef {object} RecordSpanSequencesReply
  * @property {readonly RecordSpanSequence[]} spans
  * @property {string} fasta

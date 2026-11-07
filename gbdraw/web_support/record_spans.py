@@ -29,7 +29,8 @@ from gbdraw.annotations.search_hits import origin_window_span
 from gbdraw.api.request_render import load_render_source_records, resolve_request_records
 from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.record_transform import drawn_source_span, spans_may_cross_origin
+from gbdraw.core.record_metadata import _record_source_start
+from gbdraw.layout.record_transform import spans_may_cross_origin
 from gbdraw.session_request_codec import decode_canonical_request
 
 
@@ -44,7 +45,8 @@ class RecordSpanInput(TypedDict):
 
 @final
 class DrawnRecordInput(TypedDict):
-    """A record the request draws, read over the bases it draws (``drawn_source_span``); and, when a span of it may
+    """A record the request draws, read over the bases it draws (from ``_record_source_start``, the source base of
+    its first base on the source strand that a crop records, for as many bases as it has); and, when a span of it may
     cross its origin (``spans_may_cross_origin``, the axis source map's ``isCircular``), over its origin window
     (``origin_window_span``): its last and first bases, as many as ``originWindow`` (a sequence search's longest
     query) and at most half the record each. A record asked twice is read once; the origin windows follow every
@@ -88,12 +90,15 @@ def _span_inputs(value: object) -> list[RecordSpanInput | DrawnRecordInput]:
     for item in value:
         if not (isinstance(item, Mapping) and isinstance(item.get("recordKey"), str)):
             raise _protocol_error("A span needs a record key.")
-        if set(item) == {"recordKey", "originWindow"} and type(item["originWindow"]) is int:
+        if set(item) == {"recordKey", "originWindow"} and type(item["originWindow"]) is int and item["originWindow"] >= 1:
             spans.append({"recordKey": item["recordKey"], "originWindow": item["originWindow"]})
         elif all(type(item.get(key)) is int for key in ("start", "end")):
             spans.append({"recordKey": item["recordKey"], "start": item["start"], "end": item["end"]})
         else:
             raise _protocol_error("A span needs a start and an end, or, for a drawn record, the reach of its origin window.")
+    # One read is spans by coordinates (Select region) or drawn records (a search), so the page can check its reply.
+    if len({"originWindow" in span for span in spans}) > 1:
+        raise _protocol_error("A record span read asks for spans by coordinates or for drawn records, not both.")
     return spans
 
 
@@ -131,7 +136,8 @@ def read_record_span_sequences(
                 continue
             drawn.add(span["recordKey"])
             record, transform = collection.records[index], collection.transforms[index]
-            reads.append((index, *drawn_source_span(record, transform), False))
+            start = _record_source_start(record)
+            reads.append((index, start, start + len(record.seq) - 1, False))
             if spans_may_cross_origin(record, transform):
                 windows.append((index, span["originWindow"]))
         else:

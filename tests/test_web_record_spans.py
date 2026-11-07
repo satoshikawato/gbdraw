@@ -21,10 +21,12 @@ from gbdraw.api import (
     RecordPresentation,
     resolve_request,
 )
+from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import parse_region_spec
-from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.render.track_slot_metadata import RecordAxisInput
+from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.web_support.record_spans import read_record_span_sequences
 
 _INPUTS = Path(__file__).resolve().parent / "test_inputs"
@@ -132,8 +134,9 @@ def _spans(reply) -> list[tuple[str, int, int, bool]]:
 
 
 # A sequence search asks for the records the shown drawing draws by key alone: Python reads the bases each draws, in
-# source coordinates, from the transform the record is drawn by (the one the axis source map is written from), and
-# adds the origin window of a record a span may pass the origin of (circular, no region, drawn whole; OV-2571, D-52).
+# source coordinates (the crop start a crop records, ``_record_source_start``, for as many bases as the record has),
+# and adds the origin window of a record a span may cross the origin of (``spans_may_cross_origin``, the axis source
+# map's ``isCircular``; OV-2571, D-52).
 @pytest.mark.parametrize(("reach", "width"), [(600, 600), (20000, 16569 // 2)])
 def test_a_drawn_circular_record_reads_whole_then_its_origin_window(tmp_path: Path, reach: int, width: int) -> None:
     request = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_MITO), record_key="mito")])
@@ -147,30 +150,53 @@ def test_a_drawn_circular_record_reads_whole_then_its_origin_window(tmp_path: Pa
     assert window["sequence"] == _BASES[start - 1:] + _BASES[:width]
 
 
-def test_a_drawn_record_with_a_display_start_reads_whole_with_its_origin_window(tmp_path: Path) -> None:
-    request = CircularDiagramRequest(records=[RecordInput(
-        GenBankInputSource(_MITO), record_key="mito", display=RecordDisplayOptions(start_coordinate=16000),
-    )])
-    assert _spans(_read_drawn(request, tmp_path, "mito")) == [("mito", 1, 16569, False), ("mito", 15970, 600, True)]
+def _drawn_mito(mode: str, **record: object) -> DiagramRequest:
+    item = RecordInput(GenBankInputSource(_MITO), record_key="mito", **record)  # type: ignore[arg-type]
+    return CircularDiagramRequest(records=[item]) if mode == "circular" else LinearDiagramRequest(records=(item,))
 
 
-def test_a_reverse_complemented_drawn_record_reads_the_whole_source_strand(tmp_path: Path) -> None:
-    request = CircularDiagramRequest(records=[RecordInput(
-        GenBankInputSource(_MITO), record_key="mito", presentation=RecordPresentation(reverse_complement=True),
-    )])
+_RC = {"presentation": RecordPresentation(reverse_complement=True)}
+_START = {"display": RecordDisplayOptions(start_coordinate=16000)}
+
+
+@pytest.mark.parametrize(
+    ("mode", "record", "span", "window"),
+    [
+        ("circular", _START, (1, 16569), True),
+        ("circular", _RC, (1, 16569), True),
+        ("circular", {**_RC, "display": RecordDisplayOptions(start_coordinate=500)}, (1, 16569), True),
+        ("circular", {"region": parse_region_spec("#1:1001-9000")}, (1001, 9000), False),
+        ("circular", {"region": parse_region_spec("#1:1001-9000:rc")}, (1001, 9000), False),
+        ("circular", {"region": parse_region_spec("#1:1001-9000"), **_RC}, (1001, 9000), False),
+        ("linear", {}, (1, 16569), True),
+        ("linear", {"region": parse_region_spec("#1:1001-9000")}, (1001, 9000), False),
+        ("linear", {"region": parse_region_spec("#1:1001-9000:rc")}, (1001, 9000), False),
+        ("linear", {"display": RecordDisplayOptions(is_circular=False)}, (1, 16569), False),
+    ],
+    ids=[
+        "display-start", "rc", "rc-display-start", "crop", "crop-rc", "crop-then-rc",
+        "linear", "linear-crop", "linear-crop-rc", "linear-forced-linear",
+    ],
+)
+def test_a_drawn_record_reads_the_span_and_window_its_axis_source_map_shows(
+    tmp_path: Path, mode: str, record: dict[str, object], span: tuple[int, int], window: bool,
+) -> None:
+    request = _drawn_mito(mode, **record)
     reply = _read_drawn(request, tmp_path, "mito")
-    assert _spans(reply) == [("mito", 1, 16569, False), ("mito", 15970, 600, True)]
-    assert reply["spans"][0]["sequence"] == _BASES
-
-
-@pytest.mark.parametrize("spec", ["#1:1001-9000", "#1:1001-9000:rc"])
-def test_a_drawn_crop_reads_the_bases_it_draws_and_has_no_origin_window(tmp_path: Path, spec: str) -> None:
-    request = CircularDiagramRequest(records=[
-        RecordInput(GenBankInputSource(_MITO), record_key="mito", region=parse_region_spec(spec)),
-    ])
-    reply = _read_drawn(request, tmp_path, "mito")
-    assert _spans(reply) == [("mito", 1001, 9000, False)]
-    assert reply["spans"][0]["sequence"] == _BASES[1000:9000]
+    start, end = span
+    assert _spans(reply)[0] == ("mito", start, end, False)
+    assert reply["spans"][0]["sequence"] == _BASES[start - 1:end]
+    assert [item["originWindow"] for item in reply["spans"][1:]] == ([True] if window else [])
+    # The same record's axis source map, which Select region reads (``sourceSpanOf`` over the whole drawn span):
+    # display indexes 0 and drawnLength - 1 show the two ends, or the record is drawn whole; isCircular decides the window.
+    payload, paths = _committed(request, tmp_path / "axis")
+    collection = resolve_request_records(decode_canonical_request(payload, resource_paths=paths, output_directory=str(tmp_path)))
+    source = RecordAxisInput(collection.records[0], "mito", collection.transforms[0]).source()
+    shown = [(source["anchorBase"] - 1 + source["step"] * index) % source["sourceLength"] + 1
+             for index in (0, source["drawnLength"] - 1)]
+    whole = source["drawnLength"] == source["sourceLength"]
+    assert (start, end) == ((1, source["sourceLength"]) if whole else (min(shown), max(shown)))
+    assert source["isCircular"] is window
 
 
 def test_a_drawn_linear_record_has_no_origin_window(tmp_path: Path) -> None:
@@ -215,3 +241,19 @@ def test_spans_with_one_header_name_their_record_keys_and_map_back_to_their_reco
         "program": "blastn", "queries": [{"name": "q", "length": 100}], "colorMode": "query", "queryColors": {},
     })
     assert [(hit["recordKey"], hit["start"]) for hit in search["hits"]] == [("a", 1001), ("b", 2001)]
+
+
+@pytest.mark.parametrize(
+    "spans",
+    [
+        [{"recordKey": "mito", "originWindow": 0}],
+        [{"recordKey": "mito", "originWindow": -5}],
+        [{"recordKey": "mito", "originWindow": 600}, {"recordKey": "mito", "start": 1, "end": 10}],
+    ],
+    ids=["window-0", "window-negative", "mixed-kinds"],
+)
+def test_a_read_with_a_window_below_one_or_both_kinds_is_a_protocol_error(tmp_path: Path, spans) -> None:
+    payload, paths = _committed(CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_MITO), record_key="mito")]), tmp_path)
+    with pytest.raises(ValidationError) as raised:
+        read_record_span_sequences(payload, paths, str(tmp_path / "out"), spans)
+    assert raised.value.diagnostic["code"] == "HELPER_PROTOCOL"

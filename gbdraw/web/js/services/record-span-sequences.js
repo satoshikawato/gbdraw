@@ -18,18 +18,29 @@ const isSpanSequence = (value) => isRecord(value)
   && typeof value.wrapsOrigin === 'boolean' && typeof value.originWindow === 'boolean';
 
 /**
- * The helper's result, checked against `RecordSpanSequencesReply`: it reads every record asked and no other (a drawn
- * record may give two spans, its drawn bases and its origin window).
+ * Whether a reply reads what was asked: one span per span asked by coordinates, in order (Copy FASTA, Use as search
+ * query); for drawn records (a search), every record asked and no other, since a record may give two spans, its drawn
+ * bases and its origin window.
+ * @param {readonly RecordSpanSequence[]} read
+ * @param {readonly RecordSpanRead[]} spans
+ */
+const readsAsked = (read, spans) => {
+  if (spans.every((span) => 'start' in span)) {
+    return read.length === spans.length && read.every((span, index) => span.recordKey === spans[index].recordKey);
+  }
+  const asked = new Set(spans.map(({ recordKey }) => recordKey));
+  return new Set(read.map(({ recordKey }) => recordKey)).size === asked.size && read.every(({ recordKey }) => asked.has(recordKey));
+};
+
+/**
+ * The helper's result, checked against `RecordSpanSequencesReply` (`readsAsked`).
  * @param {unknown} result
  * @param {readonly RecordSpanRead[]} spans The spans asked.
  * @returns {RecordSpanSequencesReply}
  */
 export const readRecordSpanSequencesReply = (result, spans) => {
-  const asked = new Set(spans.map(({ recordKey }) => recordKey));
   if (!isRecord(result) || typeof result.fasta !== 'string' || !Array.isArray(result.spans)
-    || !result.spans.every(isSpanSequence)
-    || new Set(result.spans.map(({ recordKey }) => recordKey)).size !== asked.size
-    || result.spans.some(({ recordKey }) => !asked.has(recordKey))) {
+    || !result.spans.every(isSpanSequence) || !readsAsked(result.spans, spans)) {
     throw diagnosticError('RESULT_INVALID', {}, FAILURE);
   }
   return /** @type {RecordSpanSequencesReply} */ (/** @type {unknown} */ (result));
