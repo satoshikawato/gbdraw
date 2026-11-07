@@ -12,7 +12,7 @@ sequence and header and the FASTA text of all of them. It renders nothing.
 A sequence search reads its subjects here as well, naming the drawn records by
 key alone (``DrawnRecordInput``): Python reads the bases each record draws,
 from the transform it is drawn by, and the origin window of each record a span
-may pass the origin of.
+may cross the origin of.
 The headers of one read are its LOSAT subject IDs, so they are unique: spans
 that would share a header (two records of one ID and length) name their record
 keys in it.
@@ -29,7 +29,7 @@ from gbdraw.annotations.search_hits import origin_window_span
 from gbdraw.api.request_render import load_render_source_records, resolve_request_records
 from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.record_transform import drawn_source_span, may_pass_origin
+from gbdraw.layout.record_transform import drawn_source_span, spans_may_cross_origin
 from gbdraw.session_request_codec import decode_canonical_request
 
 
@@ -45,9 +45,10 @@ class RecordSpanInput(TypedDict):
 @final
 class DrawnRecordInput(TypedDict):
     """A record the request draws, read over the bases it draws (``drawn_source_span``); and, when a span of it may
-    pass its origin (``may_pass_origin``), over its origin window (``origin_window_span``): its last and first bases,
-    as many as ``originWindow`` (a sequence search's longest query) and at most half the record each. A record asked
-    twice is read once; the origin windows follow every drawn span."""
+    cross its origin (``spans_may_cross_origin``, the axis source map's ``isCircular``), over its origin window
+    (``origin_window_span``): its last and first bases, as many as ``originWindow`` (a sequence search's longest
+    query) and at most half the record each. A record asked twice is read once; the origin windows follow every
+    drawn span."""
 
     recordKey: str
     originWindow: int
@@ -131,7 +132,7 @@ def read_record_span_sequences(
             drawn.add(span["recordKey"])
             record, transform = collection.records[index], collection.transforms[index]
             reads.append((index, *drawn_source_span(record, transform), False))
-            if may_pass_origin(record, transform):
+            if spans_may_cross_origin(record, transform):
                 windows.append((index, span["originWindow"]))
         else:
             reads.append((index, span["start"], span["end"], False))

@@ -203,8 +203,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * A record the request draws (`DrawnRecordInput`): Python reads the bases it draws and, when a span of it may pass its
- * origin, its origin window (its last and first bases, as many as `originWindow`, a sequence search's longest query,
+ * A record the request draws (`DrawnRecordInput`): Python reads the bases it draws and, when a span of it may cross
+ * its origin, its origin window (its last and first bases, as many as `originWindow`, a sequence search's longest query,
  * and at most half the record each); a record asked twice is read once, and the windows follow every drawn span.
  * @typedef {object} DrawnRecordInput
  * @property {string} recordKey

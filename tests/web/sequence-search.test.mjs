@@ -183,7 +183,7 @@ test('the search names each drawn record by key alone, and names its record as t
 });
 
 // OV-2571, D-52: a record that a span may cross the origin of (circular, drawn whole), in either mode, is also read
-// over its origin window, which Python decides and places (may_pass_origin, origin_window_span); both subjects name
+// over its origin window, which Python decides and places (spans_may_cross_origin, origin_window_span); both subjects name
 // the record by its catalog record, and the window is marked as one.
 test('the subjects of a record read with its origin window name the record, and the window is marked', () => {
   const axis = (kind, drawnLength, isCircular) => ({

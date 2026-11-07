@@ -65,14 +65,6 @@ def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform)
     return transform.is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
 
 
-def may_pass_origin(record: SeqRecord, transform: RecordDisplayTransform) -> bool:
-    """Whether a span of the drawn record may pass its origin: a span may cross it (``spans_may_cross_origin``) and
-    the record draws every base of its source (the axis source map's ``isCircular`` with ``drawnLength`` equal to
-    ``sourceLength``)."""
-
-    return spans_may_cross_origin(record, transform) and len(record.seq) >= transform.length
-
-
 def drawn_source_span(record: SeqRecord, transform: RecordDisplayTransform) -> tuple[int, int]:
     """The source bases the drawn ``record`` shows, 1-based, inclusive and ascending on the source strand: 1 to the
     source length when it draws every base, else from its first to its last drawn base (the display indexes 0 and

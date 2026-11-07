@@ -13,7 +13,7 @@ import { t } from '../utils/i18n.js';
  * `(anchorBase - 1 + step * i) mod sourceLength + 1`; the record's own base `k` (its feature coordinates, 0-based)
  * is source base `(recordBase - 1 + step * k) mod sourceLength + 1`. `isCircular` says whether a span may cross the
  * record's origin (Python's `spans_may_cross_origin`: a circular record with no region applied, the annotation
- * resolver's rule); a drag crosses display index 0 only there and only when the record is drawn whole.
+ * resolver's rule; such a record draws every base); a drag crosses display index 0 only there.
  * @typedef {object} AxisSourceMap
  * @property {number} anchorBase
  * @property {number} recordBase
@@ -239,17 +239,9 @@ export const linearRowPosition = (axis, row, x) => {
 };
 
 /**
- * Whether a span may pass display index 0, the record's origin: on a circular record drawn whole (Select region's
- * drag; Python's `may_pass_origin` in gbdraw/layout/record_transform.py decides a search's origin window by the same
- * rule).
- * @param {AxisSourceMap} source
- */
-export const mayPassOrigin = (source) => source.isCircular && source.drawnLength === source.sourceLength;
-
-/**
  * The span of a Circular drag that started at `start` and has turned `sweep` bases (negative counter-clockwise).
- * It crosses display index 0 only on a circular record drawn whole; on any other record it stops at the record's
- * ends. A whole turn or more is the whole record.
+ * It crosses display index 0 only where Python says a span may cross the origin (`isCircular`); on any other record
+ * it stops at the record's ends. A whole turn or more is the whole record.
  * @param {CircularAxisGeometry} axis
  * @param {number} start
  * @param {number} sweep
@@ -260,7 +252,7 @@ export const circularDragSpan = (axis, start, sweep) => {
   const from = Math.floor(start);
   if (Math.abs(sweep) >= drawnLength) return { start: 0, length: drawnLength };
   const to = Math.floor(start + sweep);
-  if (!mayPassOrigin(axis.source)) {
+  if (!axis.source.isCircular) {
     const low = Math.max(0, Math.min(from, to));
     const high = Math.min(drawnLength - 1, Math.max(from, to));
     return { start: low, length: high - low + 1 };
