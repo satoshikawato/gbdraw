@@ -273,6 +273,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 7 |
 | [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
 | [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 7 |
+| [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page) | Diagram reply too large for the page | ACCEPTED | diagram-generation.reply-too-large-for-page | 1 | — | 3 |
 
 ### Test files that cite each record
 
@@ -730,6 +731,10 @@ are listed under "Cited ids without a record".
   - `tests/web/region-select.playwright.spec.js`
   - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/sequence-search.test.mjs`
+- [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page)
+  - `tests/web/diagram-reply-too-large.test.mjs`
+  - `tests/web/error-boundary.playwright.spec.js`
+  - `tests/web/error-normalization.test.mjs`
 
 ### Cited ids without a record
 

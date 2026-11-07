@@ -1006,8 +1006,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
         failWorker(deserializeWorkerError({ code: 'UNKNOWN', operation: 'generate', stage: 'unknown' }));
       }
 
-      function handleMessageError() {
-        failWorker(deserializeWorkerError({ code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission' }));
+      function handleMessageError() { // The Worker drew the diagram, but the page cannot receive its reply (PD-OI-118).
+        failWorker(deserializeWorkerError({ code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission', context: { reason: 'REPLY_TOO_LARGE' } }));
       }
 
       request.cleanup = cleanup;

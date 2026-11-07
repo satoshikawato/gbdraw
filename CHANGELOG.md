@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: when the Web app draws a diagram that is too large for the browser
+  page to receive, the error now says so ("The diagram was drawn, but it is too
+  large for this browser page to receive. ...") and names what works: a smaller
+  region, fewer tracks or labels, or the command line from a saved Session
+  (`gbdraw circular --session`, `gbdraw linear --session`). It offers Save
+  Session and no longer offers Retry, which failed the same way. Every other
+  "could not be accepted" error keeps its text and Retry.
 - Added: **Sequence search** in the Web app searches the records of the shown
   drawing for one or more query sequences with LOSAT blastn and draws the hits
   at once, without Generate, as a new annotation set ("Search 1", ...) in front

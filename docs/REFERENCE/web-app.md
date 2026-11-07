@@ -421,7 +421,11 @@ correction, and no **Save Session** when Save itself failed. For an unknown fail
 happened, and it does not guess a cause. A failure in the diagram engine's drawing stage
 that no validation classifies names the Python exception class (for example
 `ValueError`) and offers **Save Session** instead of **Retry Generate**, because
-the same inputs fail the same way. Original patterns, sequences, file or record
+the same inputs fail the same way. A diagram that was drawn but is too large for
+the browser page to receive also offers **Save Session** and no **Retry
+Generate**: draw a smaller region, turn off tracks or labels you do not need, or
+draw it from the saved Session with `gbdraw circular --session` or
+`gbdraw linear --session`. Original patterns, sequences, file or record
 names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
 private inputs, so share one only deliberately.

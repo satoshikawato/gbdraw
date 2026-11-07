@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `120`
+- Contract revision: `121`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -43,7 +43,7 @@ Status: active Product authority
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
-  `PD-OI-116`, and `PD-OI-117`
+  `PD-OI-116`, `PD-OI-117`, and `PD-OI-118`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4577,6 +4577,29 @@ Status: active Product authority
     `dc50ad9b1832a1b0d046aa43c7bb72b44ef65e7067cb203f0ac52d2d6d9005ca`; `PD-OI-093` scenario revision `5`
     `6f31923564c8723d0d95fb9ca463fec059d5f193b92fd6ecaf1ee963a87e2cc0`.
   - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 121 changes: `PD-OI-118` is added (concern
+  `diagram-generation.reply-too-large-for-page`, scenario revision `1`; the
+  outcome `A REPLY-TOO-LARGE-NO-RETRY`). When the Worker drew the diagram but
+  the page cannot receive its reply, Generate, a committed live redraw, and a
+  label reflow fail with `RESULT_INVALID`, reason `REPLY_TOO_LARGE`, stage
+  `result-admission`. The error shows the approved text and offers Save
+  Session only, with no Retry. The previous Result, request, draft, and
+  History stay. Every other `RESULT_INVALID` cause keeps its text and Retry.
+  - The Product Decision Owner `satoshikawato` replied 「A」 on `2026-11-07`
+    to a decision pack with three options (A: Save Session only, with no
+    Retry; B: the same text with Retry kept; C: no change). On the same day
+    the Owner approved the complete receipt below as it was shown:
+    「承認（全文このまま）」. The session drafted the Rationale and the other
+    fields from the decision pack; the Owner approved them as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-118` scenario revision `1`
+    `f9709767fca89be5a91d37a691221b1d9afaf638c6dded840385d0f470c6d031`.
+  - No other record is amended or retired. `PD-OI-016` and `PD-OI-046` stay;
+    Retry is retired only for this failure, as the receipt's May retire says.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -11791,6 +11814,59 @@ Decision date: 2026-11-06
   "acceptedResidualRisk": "最初の Generate の前は検索できない。Session の形式が変わる（注釈のスタイルにグラデーションの 1 項目、注釈セットに重ねて描く印の 1 項目、注釈の行に strand の 1 項目）。グラデーションは注釈 TSV に出ない（TSV では終わりの色 1 色の行になり、読み込み直すと単色で描かれる）。tblastn がアプリの LOSAT のすべての実行方法で使えるようになるまで、タンパク質の query は理由つきで検索できない。dc-megablast は Pairwise Comparisons と同じく threaded LOSAT が要る。検索のすぐ後の再描画は、大きな Session では数秒かかることがある。クエリの切り替えは図からほかのクエリのヒットを外さない（1 つのクエリだけの図には、そのクエリだけで検索し直すか、ほかの行を消す）。ヒットは feature の手前に重ねて描くので、ヒットの下の feature とその色は見えにくくなる（塗りの不透明度は 0.85）。ヒットは各 strand の 1 段目のレーンだけを覆うので、Resolve overlaps で 2 段目以降に移った feature は覆われない。strand を分けていても、その record にヒットの strand の feature が 1 つもなくそのレーンが描かれないときは、ヒットはトラック全体（もう一方の strand のレーン）を覆う。strand は注釈 TSV に出ない（TSV から読み込み直したヒットはトラック全体を覆う）。独自のトラック構成（Use custom stack）でも検索のセットは構成の一覧に出ずに描かれ、構成から外して隠すことはできない（隠すにはセットを消す）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-06"
+}
+```
+
+### PD-OI-118: Diagram reply too large for the page
+
+- Concern key: `diagram-generation.reply-too-large-for-page`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed the error of a drawn diagram whose
+  reply the page cannot receive. `PD-OI-016` (the previous Result, request,
+  draft, and History stay after a failure) and `PD-OI-046` (Details, Copy
+  diagnostics, and the diagnostics shown) stay. Retry is retired only for this
+  failure, as the receipt's May retire says.
+- Status: `ACCEPTED`
+- Selected outcome: `A REPLY-TOO-LARGE-NO-RETRY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-07` described in the Revision 121 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f9709767fca89be5a91d37a691221b1d9afaf638c6dded840385d0f470c6d031`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.reply-too-large-for-page（ページが受け取れないほど大きな描画結果）
+Scenario revision: 1
+Choice: A REPLY-TOO-LARGE-NO-RETRY
+  - Worker が図を描き終えたのに、ページがその結果を受け取れないとき（ブラウザがメッセージを読めず messageerror になったとき）は、エラーの種別を RESULT_INVALID、理由を REPLY_TOO_LARGE、段階を result-admission とする。Generate、すぐ反映される設定による再描画、ラベルの再配置は同じ受け取りの経路を通るので、どれも同じ扱いにする。
+  - 表示する文は "The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`)." とする。英語が原文で、ほかの 10 言語は翻訳の一括作業で訳す。
+  - 出すボタンは Save Session だけ。この失敗には Retry を出さない。
+  - 直前の Result、request、draft、History はそのまま残る。設定を変えて Generate し直すことはできる。
+Rationale: 同じ入力のまま Retry しても、同じだけ時間をかけて同じように失敗する（251.6 MiB の GenBank で、195 秒後に同じ失敗になることを確かめた）。効かないボタンは出さず、文で原因と、実際に効く手段（範囲を小さくする、トラックやラベルを減らす、コマンドラインで描く）を示す。描画エンジンの失敗（RENDER_FAILED）、Session の上限を超える Save、展開後の上限を超える gzip 入力でも、すでに Retry を出していない。
+Must preserve: 失敗しても直前の Result、canonical request、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics、表示する診断の範囲（PD-OI-046）。Save Session の動作と、Session の上限と形式。
+May retire: この失敗（ページが描画結果を受け取れない）で Retry ボタンを出すこと。ほかの失敗の Retry は残す。
+Accepted residual risk: ページが受け取れる大きさは、ブラウザと PC の空きメモリによって変わる。一時的なメモリ不足で失敗した場合も Retry は出ないので、Generate をもう一度押す。ブラウザがほかの理由でメッセージを読めなかった場合も、この文が出る。入力が Session の上限を超えると Save Session は理由を示して断られるので、そのときは入力ファイルを直接コマンドラインに渡す。コマンドラインで描けることは、251.6 MiB（103 Mbp）の GenBank を直接渡して確かめた。Session から描くこと（--session）と、それより大きな入力は確かめていない。
+Owner: satoshikawato
+Decision date: 2026-11-07
+```
+
+```json
+{
+  "concern": "diagram-generation.reply-too-large-for-page（ページが受け取れないほど大きな描画結果）",
+  "scenarioRevision": 1,
+  "choice": "A REPLY-TOO-LARGE-NO-RETRY\n  - Worker が図を描き終えたのに、ページがその結果を受け取れないとき（ブラウザがメッセージを読めず messageerror になったとき）は、エラーの種別を RESULT_INVALID、理由を REPLY_TOO_LARGE、段階を result-admission とする。Generate、すぐ反映される設定による再描画、ラベルの再配置は同じ受け取りの経路を通るので、どれも同じ扱いにする。\n  - 表示する文は \"The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).\" とする。英語が原文で、ほかの 10 言語は翻訳の一括作業で訳す。\n  - 出すボタンは Save Session だけ。この失敗には Retry を出さない。\n  - 直前の Result、request、draft、History はそのまま残る。設定を変えて Generate し直すことはできる。",
+  "rationale": "同じ入力のまま Retry しても、同じだけ時間をかけて同じように失敗する（251.6 MiB の GenBank で、195 秒後に同じ失敗になることを確かめた）。効かないボタンは出さず、文で原因と、実際に効く手段（範囲を小さくする、トラックやラベルを減らす、コマンドラインで描く）を示す。描画エンジンの失敗（RENDER_FAILED）、Session の上限を超える Save、展開後の上限を超える gzip 入力でも、すでに Retry を出していない。",
+  "mustPreserve": "失敗しても直前の Result、canonical request、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics、表示する診断の範囲（PD-OI-046）。Save Session の動作と、Session の上限と形式。",
+  "mayRetire": "この失敗（ページが描画結果を受け取れない）で Retry ボタンを出すこと。ほかの失敗の Retry は残す。",
+  "acceptedResidualRisk": "ページが受け取れる大きさは、ブラウザと PC の空きメモリによって変わる。一時的なメモリ不足で失敗した場合も Retry は出ないので、Generate をもう一度押す。ブラウザがほかの理由でメッセージを読めなかった場合も、この文が出る。入力が Session の上限を超えると Save Session は理由を示して断られるので、そのときは入力ファイルを直接コマンドラインに渡す。コマンドラインで描けることは、251.6 MiB（103 Mbp）の GenBank を直接渡して確かめた。Session から描くこと（--session）と、それより大きな入力は確かめていない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-07"
 }
 ```
 

@@ -189,6 +189,9 @@ const REASONS = Object.freeze({
   GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
   // A gzip input that expands past its cap (gbdraw/io/input_text.py MAX_EXPANDED_INPUT_BYTES); the cap is PHRASES.gzipLimit.
   GZIP_EXPANDED_SIZE: 'Decompress the gzip file and choose the plain file.',
+  // A drawn diagram whose Worker reply the page cannot receive (a `messageerror` of the run in
+  // services/diagram-generation.js, PD-OI-118). It states the whole failure, so the code's message is not shown.
+  REPLY_TOO_LARGE: 'The diagram was drawn, but it is too large for this browser page to receive. Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).',
   SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
   GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
   FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
@@ -202,6 +205,10 @@ const REASONS = Object.freeze({
   // LABEL_LAYOUT of labels not placed for lack of room (CAPACITY-STOP): no fix to choose; Python's counts follow.
   LABEL_CAPACITY: 'Label fewer features, use a smaller Label Font Size, or draw a Linear map.'
 });
+// The actions of a reason in place of its code's, where Retry would fail the same way: a refused gzip file is
+// replaced by its plain file, and a reply too large for the page is drawn from a saved Session (PD-OI-118).
+/** @type {Readonly<Record<string, readonly string[]>>} */
+const REASON_ACTIONS = Object.freeze({ GZIP_EXPANDED_SIZE: ['select-input'], REPLY_TOO_LARGE: ['save-session'] });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.
 // A key of its own (OV-1415): the label table's notice shows it with `tm`.
@@ -980,7 +987,7 @@ export const normalizeUserFacingError = (value, {
   const pieces = [
     saveOverCap
       ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
-      : { text: message },
+      : reason !== 'REPLY_TOO_LARGE' && { text: message },
     saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
     saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
@@ -1036,9 +1043,9 @@ export const normalizeUserFacingError = (value, {
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
-  // A table stored in a Session is corrected in the Session file, not in this page; a refused
-  // gzip file is replaced by its plain file.
-  result.actions = sessionTable !== undefined || saveOverCap || reason === 'GZIP_EXPANDED_SIZE' ? ['select-input'] : [...actions];
+  // A table stored in a Session is corrected in the Session file, not in this page.
+  result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
+    : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };
 

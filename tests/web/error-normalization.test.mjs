@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
-import { diagnosticError, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { MODE_PROFILE_DATA } from '../../gbdraw/web/js/mode-profiles.generated.js';
 globalThis.self = {};
@@ -78,6 +78,24 @@ assert.deepEqual(gzipTooLarge.actions, ['select-input']);
 assert.equal(normalizeUserFacingError({ code: 'INPUT_UNREADABLE', stage: 'render', context: { reason: 'GZIP_EXPANDED_SIZE', limit: 512 } }).summary,
   'An input could not be read. Replace or reselect it. gbdraw reads gzip files that expand to at most 512 MiB. '
   + 'Decompress the gzip file and choose the plain file.');
+// PD-OI-118 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md: a drawn diagram whose reply the page cannot
+// receive shows the approved text alone and offers Save Session only; Retry would fail the same way. Every other
+// RESULT_INVALID keeps its text and Retry. A live edit shows the same text and no Retry of the edit.
+const replyTooLargeText = 'The diagram was drawn, but it is too large for this browser page to receive. '
+  + 'Draw a smaller region, or turn off tracks or labels you do not need, or draw it with the gbdraw command line '
+  + '(Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).';
+const replyTooLarge = normalizeUserFacingError({ code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission',
+  context: { reason: 'REPLY_TOO_LARGE' } });
+assert.equal(replyTooLarge.summary, replyTooLargeText);
+assert.deepEqual(replyTooLarge.actions, ['save-session']);
+assert.equal(liveEditFailure(replyTooLarge).note,
+  `Live edit failed: direct edits already applied are kept; geometry may still need updating. ${replyTooLargeText} `
+  + 'Change the edit, or change the settings and use Generate.');
+for (const context of [{}, { reason: 'DRAWING_MISMATCH' }]) {
+  const invalid = normalizeUserFacingError({ code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission', context });
+  assert.equal(invalid.summary, 'The generated result could not be accepted. Retry the operation.');
+  assert.deepEqual(invalid.actions, ['retry', 'save-session']);
+}
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
