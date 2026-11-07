@@ -5601,7 +5601,7 @@ export const duplicateDrawingState = (source, copyId) => {
  * their defaults: the record selector, the crop, the reverse, and the record
  * label and subtitle. A style copy leaves them at the new drawing's
  * (D-15-182), and a source replacement that retires the record presentation
- * (D-32, app-setup.js) writes these values.
+ * (D-32, app/circular-record-controls.js) writes these values.
  * @typedef {{ circular_record_selector: string, circular_region_start: number | null,
  *   circular_region_end: number | null, circular_reverse: boolean, circular_record_label: string,
  *   circular_record_subtitle: string }} CircularRecordForm
