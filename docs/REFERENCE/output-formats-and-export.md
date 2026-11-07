@@ -114,8 +114,10 @@ is the caller's export choice, like `--font_file`: a Session saved by the
 command line does not record `--dpi`. Without `--dpi`, `--session` and
 `gbdraw render` draw a PNG at the **PNG DPI** a web app Session saved (72, 96,
 150, 300, or 600), as do `render_session()` and `render_session_drawings()` in
-Python; a Session without one draws at 96, and another stored value is noted
-and not used. Saving the Session again keeps its PNG DPI. Every PNG
+Python without `dpi=`; a Session without one draws at 96, and another stored
+value is noted and not used. When that DPI makes a PNG too large, the message
+says so, and `--dpi` or `dpi=` draws it at another. Saving the Session again
+keeps its PNG DPI. Every PNG
 that the command line or Python writes carries a pHYs chunk with that DPI (the
 default, 96, when none is given) in pixels per metre, as the web
 app's PNG does.

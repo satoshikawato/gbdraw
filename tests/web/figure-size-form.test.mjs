@@ -5,6 +5,7 @@
 // session-request, mode-scoped-session and run-info.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -390,19 +391,13 @@ test('the PNG DPI menu lists Python\'s choices, each with a word, and the defaul
   assert.ok(SESSION_PNG_DPI_CHOICES.includes(DEFAULT_PNG_DPI));
 });
 
-test('a stored PNG DPI is a choice for Web Load exactly when it is one for the command line replay (D-93)', () => {
-  const stored = [300, '150', ' 600\n', 72.0, '\u00a096', '\ufeff300', 1200, '300.0', true, { dpi: 300 }, [300], '  ', 'print', null, ''];
-  const python = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
-import json, logging, sys
-from gbdraw.session import read_session_png_dpi
-logging.disable(logging.CRITICAL)
-print(json.dumps([read_session_png_dpi({"ui": {"downloadDpi": value}}) for value in json.load(sys.stdin)]))
-`], { input: JSON.stringify(stored), encoding: 'utf8' }));
-  stored.forEach((value, index) => {
-    const web = readDownloadDpi(value);
-    const unset = value === null || value === '';
-    // The Web reads an unset or other value as its default (300); only another one is a Load row.
-    assert.equal(web.lost, !unset && python[index] === null, JSON.stringify(value));
-    if (python[index] !== null) assert.equal(Number(String(web.value).trim()), python[index], JSON.stringify(value));
-  });
+test('Web Load reads a stored PNG DPI as the command line replay reads it (tools/twins.json, D-93)', () => {
+  /** @type {{ cases: { stored: unknown, reading: 'choice' | 'unset' | 'other', dpi: number | null }[] }} */
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/png_dpi_reading_vectors.json', import.meta.url), 'utf8'));
+  for (const { stored, reading, dpi } of vectors.cases) {
+    const web = readDownloadDpi(stored);
+    // Unset and another value read as the Web's default; only another value is a Load row.
+    assert.equal(web.lost, reading === 'other', JSON.stringify(stored));
+    assert.equal(Number(String(web.value).trim()), reading === 'choice' ? dpi : DEFAULT_PNG_DPI, JSON.stringify(stored));
+  }
 });

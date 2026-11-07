@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     )
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
-    from gbdraw.session import SessionDocument
+    from gbdraw.session import SessionDocument, SessionPngDpi
 
 
 logger = logging.getLogger(__name__)
@@ -906,7 +906,7 @@ def legacy_replay_png_dpi(
     document: SessionDocument,
     session_request: SessionCliRequest,
     formats: str,
-) -> int | None:
+) -> SessionPngDpi:
     """The PNG DPI of a Session 27-30 replay: ``--dpi``, else the PNG DPI the Session saved.
 
     The saved one is passed on only when the replay writes a PNG
@@ -914,12 +914,12 @@ def legacy_replay_png_dpi(
     the saved one is not the caller's choice.
     """
 
-    from gbdraw.session import read_session_png_dpi
+    from gbdraw.session import SessionPngDpi, session_png_dpi
 
-    if session_request.dpi is not None:
-        return session_request.dpi
-    saved = read_session_png_dpi(document._data)
-    return saved if "png" in parse_output_formats(formats) else None
+    png = session_png_dpi(document._data, session_request.dpi)
+    if png.from_session and "png" not in parse_output_formats(formats):
+        return SessionPngDpi(None, from_session=False)
+    return png
 
 
 def _legacy_session_replay(mode: str) -> Any:

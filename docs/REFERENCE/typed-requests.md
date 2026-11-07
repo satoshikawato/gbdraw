@@ -137,8 +137,9 @@ byte-reproducible; it does not make a replay universally reproducible.
 
 Materialized paths expire when the materialization context closes. `session_to_request()` followed by `render_request()` renders only the decoded typed request; use `render_session()` when saved comparison artifacts must also be replayed.
 
-`render_session()` and `render_session_drawings()` draw a PNG at the PNG DPI
-that a web app Session saved, as `gbdraw render --session` does (see
+`render_session()` and `render_session_drawings()` take `dpi=`; without it
+they draw a PNG at the PNG DPI that a web app Session saved, as
+`gbdraw render --session` does without `--dpi` (see
 [Figure size and PNG DPI](output-formats-and-export.md#figure-size-and-png-dpi)).
 `session_to_request()` returns the drawing's request without it; set `dpi`
 with `with_request_output()`.

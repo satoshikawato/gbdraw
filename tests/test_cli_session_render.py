@@ -1272,26 +1272,42 @@ def _session_with_png_dpi(tmp_path: Path, stored: object) -> Path:
     return path
 
 
-@pytest.mark.parametrize(
-    ("stored", "expected"),
-    [(300, 300), ("150", 150), (" 600\n", 600), (72.0, 72), ("\u00a096", 96)],
-)
-def test_a_session_png_dpi_is_one_of_the_web_menu_choices(stored: object, expected: int) -> None:
-    assert read_session_png_dpi({"ui": {"downloadDpi": stored}}) == expected
+# The stored values Web Load and a Python Session render read alike (tools/twins.json).
+PNG_DPI_READING_VECTORS = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "png_dpi_reading_vectors.json").read_text(encoding="utf-8")
+)["cases"]
 
 
-@pytest.mark.parametrize("session", [{}, {"ui": {}}, {"ui": {"downloadDpi": None}}, {"ui": {"downloadDpi": ""}}])
-def test_an_unset_session_png_dpi_is_none_without_a_notice(
+@pytest.mark.parametrize("case", PNG_DPI_READING_VECTORS, ids=lambda case: json.dumps(case["stored"]))
+def test_a_session_png_dpi_reads_as_web_load_reads_it(
+    case: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """A choice is its DPI; unset and another value are none, and only another value is noted."""
+
+    assert read_session_png_dpi({"ui": {"downloadDpi": case["stored"]}}) == case["dpi"]
+    assert ("ui.downloadDpi" in caplog.text) is (case["reading"] == "other")
+
+
+@pytest.mark.parametrize("session", [{}, {"ui": {}}, {"ui": None}])
+def test_a_session_without_a_png_dpi_is_none_without_a_notice(
     session: dict[str, Any], caplog: pytest.LogCaptureFixture
 ) -> None:
     assert read_session_png_dpi(session) is None
     assert caplog.text == ""
 
 
-@pytest.mark.parametrize("stored", [1200, "300.0", True, {"dpi": 300}, [300], "  ", "print"])
-def test_another_session_png_dpi_is_none_with_a_notice(stored: object, caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize(
+    ("stored", "shown"),
+    [(1200, "1200"), ("300.0", '"300.0"'), (True, "true"), ({"dpi": 300}, '{"dpi": 300}'), ([300], "[300]"),
+     ("  ", '"  "'), ("print", '"print"')],
+)
+def test_another_session_png_dpi_is_none_with_a_notice(
+    stored: object, shown: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The notice shows the stored value as the Session's JSON holds it."""
+
     assert read_session_png_dpi({"ui": {"downloadDpi": stored}}) is None
-    assert "ui.downloadDpi" in caplog.text
+    assert f"the PNG DPI {shown} (ui.downloadDpi)" in caplog.text
     assert "72, 96, 150, 300, 600" in caplog.text
 
 
@@ -1382,9 +1398,15 @@ def test_the_python_session_renders_draw_their_png_at_the_dpi_the_web_saved(tmp_
             materialized, drawings=("circular",), output_prefix="api", formats="png"
         )
         single = render_session(materialized, drawing="circular")
+        # A caller's dpi= wins, as --dpi does.
+        render_session_drawings(materialized, drawings=("circular",), output_prefix="given", formats="png", dpi=96)
+    with materialize_session(document, output_directory=tmp_path / "second") as materialized:
+        given = render_session(materialized, drawing="circular", dpi=72)
     assert rendered["circular"].request.output.dpi == 150  # type: ignore[union-attr]
     assert png_phys((tmp_path / "api.png").read_bytes()) == (5906, 5906, 1)
     assert single.request.output.dpi == 150  # type: ignore[union-attr]
+    assert png_phys((tmp_path / "given.png").read_bytes()) == (3780, 3780, 1)
+    assert given.request.output.dpi == 72  # type: ignore[union-attr]
 
 
 def test_a_resave_keeps_the_session_png_dpi_and_records_no_dpi(tmp_path: Path) -> None:
@@ -1402,3 +1424,32 @@ def test_a_resave_keeps_the_session_png_dpi_and_records_no_dpi(tmp_path: Path) -
     text = output.read_text(encoding="utf-8")
     assert "--dpi" not in text
     assert '"dpi"' not in text
+
+
+def test_a_png_too_large_at_the_session_dpi_names_that_dpi_and_its_override(tmp_path: Path) -> None:
+    """The 8 bp figure is 25,000 px wide: at the Session's 150 dpi its PNG is over the 32,767 px limit."""
+
+    pytest.importorskip("cairosvg")
+    legacy = _legacy_session_27_30(tmp_path)
+    canonical = tmp_path / "canonical.gbdraw-session.json"
+    linear_main(
+        ["--gbk", str(tmp_path / "legacy.gb"), "--no-gc", "--no-skew", "-o", str(tmp_path / "fresh"),
+         "--session_output", str(canonical)]
+    )
+    for path in (legacy, canonical):
+        session = json.loads(path.read_text(encoding="utf-8"))
+        session["ui"]["downloadDpi"] = "150"
+        path.write_text(json.dumps(session), encoding="utf-8")
+
+    for path in (legacy, canonical):
+        with pytest.raises(Exception, match=r"A DPI of \d+ or lower would fit\. .*The DPI \(150\) is the PNG DPI the "
+                           r"Session saved \(ui\.downloadDpi\); --dpi on the command line or dpi= in Python overrides it"):
+            render_main(["--session", str(path), "-o", str(tmp_path / "too-large"), "-f", "png"])
+    # A caller's DPI that is too large is not the Session's.
+    with pytest.raises(Exception, match="would fit") as refused:
+        render_main(["--session", str(canonical), "-o", str(tmp_path / "given"), "-f", "png", "--dpi", "150"])
+    assert "ui.downloadDpi" not in str(refused.value)
+    # The advice can be followed from Python too.
+    with materialize_session(load_session_document(canonical), output_directory=tmp_path) as materialized:
+        render_session_drawings(materialized, output_prefix="followed", formats="png", dpi=96)
+    assert png_phys((tmp_path / "followed.png").read_bytes()) == (3780, 3780, 1)

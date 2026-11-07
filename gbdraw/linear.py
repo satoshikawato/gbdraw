@@ -146,6 +146,7 @@ from .render.output_paths import preflight_output_paths
 from .session import (
     SessionDocument,
     load_session_document,
+    noting_session_png_dpi,
     require_search_frame_protein_results,
     session_drawing_artifacts,
 )
@@ -1201,13 +1202,15 @@ def replay_legacy_session(
             )
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
-        args.dpi = legacy_replay_png_dpi(document, session_request, args.format)
+        png = legacy_replay_png_dpi(document, session_request, args.format)
+        args.dpi = png.dpi
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._gbdraw_source_session = (
             session_drawing_artifacts(document) if document.drawings else None
         )
-        run_result = run_linear_from_namespace(args)
+        with noting_session_png_dpi(png):
+            run_result = run_linear_from_namespace(args)
         save_session_sidecar_if_requested(
             save_session=session_request.save_session,
             session_output=session_request.session_output,
