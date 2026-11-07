@@ -1737,12 +1737,12 @@ assert.deepEqual(downloadedFilenames, [
 assert.doesNotMatch(downloadedFilenames.join('\n'), /(?:h_[a-z2-7]{26}|f_[0-9a-f]{64})/);
 
 const indexSource = await readFile(join(repoRoot, 'gbdraw/web/index.html'), 'utf8');
-const appSetupSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/app-setup.js'), 'utf8');
+const orthogroupPopupSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/orthogroup-popup.js'), 'utf8');
 assert.match(
-  appSetupSource,
+  orthogroupPopupSource,
   /resolveUniqueOrthogroupMemberForFeature\(cf\?\.feat, members\)/
 );
-assert.doesNotMatch(appSetupSource, /const currentFeatureIds = new Set/);
+assert.doesNotMatch(orthogroupPopupSource, /const currentFeatureIds = new Set/);
 assert.doesNotMatch(
   indexSource,
   /member\.displayProteinId\s*\|\|\s*member\.(?:sourceProteinId|locusTag|label)/
