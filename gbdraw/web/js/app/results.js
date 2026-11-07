@@ -236,7 +236,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     return undefined;
   };
 
-  // A choice of the palette dialog; app-setup.js makes it one History step
+  // A choice of the palette dialog; app/history-wrappers.js makes it one History step
   // and answers Cancel with `closePaletteColorsDialog` (PD-OI-088).
   /** @param {string} choice */
   const handlePaletteColorsChoice = (choice) => {

@@ -1796,7 +1796,7 @@ export const createFeatureColorActions = ({
 
   return {
     // OV-161: Cancel of a scope dialog only closes it: no rule matching, no
-    // History step (app-setup.js answers Cancel outside `runUndoable`).
+    // History step (app/history-wrappers.js answers Cancel outside `runUndoable`).
     cancelFeatureStyleScope: clearFeatureStyleScopeDialog,
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
     cancelResetColor: closeResetColorDialog,

@@ -328,7 +328,7 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   });
 });
 
-// The popup's Apply as app-setup.js runs it, in a step of the real History
+// The popup's Apply as app/history-wrappers.js runs it, in a step of the real History
 // manager, up to the open Label Not Shown dialog.
 const applyInHistoryStep = async (options = {}) => {
   const harness = buildHarness(options);
@@ -340,7 +340,7 @@ const applyInHistoryStep = async (options = {}) => {
   });
   await history.initializeIntentBaseline();
   const step = { ended: false };
-  // app-setup.js: `undoableAction('Change label text', updateClickedFeatureLabelText)`.
+  // history-wrappers.js: `undoableAction('Change label text', updateClickedFeatureLabelText)`.
   step.done = history.runUndoable('Change label text', () => harness.actions.updateClickedFeatureLabelText())
     .then(() => { step.ended = true; });
   await new Promise((resolve) => setImmediate(resolve));
@@ -381,11 +381,11 @@ for (const [hidden, hide, options] of [
 }
 
 // The choice is a second `runUndoable` call on the step of the Apply. It joins
-// that step (`joinsOpenStep` in app-setup.js): one step, under the Apply's name.
+// that step (`joinsOpenStep` in app/history-wrappers.js): one step, under the Apply's name.
 test('the Label Not Shown choice and the Apply that opened the dialog are one History step under the Apply\'s name', async () => {
-  const wiring = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8')
+  const wiring = readFileSync(new URL('../../gbdraw/web/js/app/history-wrappers.js', import.meta.url), 'utf8')
     .match(/const handleHiddenLabelTextChoiceWithHistory = undoableAction\(msg\('([^']+)'\), handleHiddenLabelTextChoice(, \{ joinsOpenStep: true \})?\);/);
-  assert.ok(wiring, 'app-setup.js wires the choice through undoableAction');
+  assert.ok(wiring, 'history-wrappers.js wires the choice through undoableAction');
   const [, label, joins] = wiring;
   const { actions, state, history, step } = await applyInHistoryStep();
   await history.runUndoable(label, () => actions.handleHiddenLabelTextChoice('text_only'), joins ? { joinsOpenStep: true } : {});
