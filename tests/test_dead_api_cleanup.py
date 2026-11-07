@@ -130,6 +130,35 @@ def test_internal_save_figure_warns_before_compatibility_export(
     assert output.exists()
 
 
+def _wide_drawing(path: Path) -> Drawing:
+    drawing = Drawing(filename=str(path), size=("12000px", "50px"), viewBox="0 0 12000 50")
+    drawing.add(drawing.rect((0, 0), (12000, 50), fill="red"))
+    return drawing
+
+
+def test_internal_save_figure_skips_an_oversize_png_and_writes_the_rest(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    pytest.importorskip("cairosvg")
+    with caplog.at_level("WARNING", logger=render_export.logger.name), pytest.warns(DeprecationWarning):
+        render_export.save_figure(_wide_drawing(tmp_path / "wide.svg"), ["png", "pdf"])
+
+    assert (tmp_path / "wide.pdf").exists()
+    assert not (tmp_path / "wide.png").exists()
+    refusal = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "WARNING")
+    assert "300 dpi (the default PNG DPI)" in refusal
+    assert "dpi= in Python sets it" in refusal
+
+
+def test_internal_save_figure_dpi_96_writes_the_wide_png(tmp_path: Path) -> None:
+    pytest.importorskip("cairosvg")
+    with pytest.warns(DeprecationWarning):
+        render_export.save_figure(_wide_drawing(tmp_path / "wide.svg"), ["png", "pdf"], dpi=96)
+
+    assert (tmp_path / "wide.png").exists()
+    assert (tmp_path / "wide.pdf").exists()
+
+
 def test_dead_web_style_module_and_color_dialog_aliases_are_removed() -> None:
     web_root = Path(__file__).parents[1] / "gbdraw" / "web"
 

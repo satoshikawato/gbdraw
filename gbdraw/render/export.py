@@ -22,9 +22,9 @@ from svgwrite import Drawing
 
 from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
-from gbdraw.exceptions import GbdrawError, ValidationError
+from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render.document import write_svg_document, write_text
-from gbdraw.render.export_limits import png_export_dpi
+from gbdraw.render.export_limits import check_drawing_export_limits, checked_png_dpi, png_export_dpi
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
@@ -356,8 +356,13 @@ def save_figure(
     list_of_formats: List[str],
     *,
     interactive_context: InteractiveSvgContext | None = None,
+    dpi: float | None = None,
 ) -> None:
     """Save a figure using the deprecated warning-and-skip export contract.
+
+    ``dpi`` is the PNG's DPI (default 300, the default PNG DPI; ``dpi=96`` gives
+    one pixel per SVG pixel). A format that cannot be written, such as a PNG over
+    the size limit, is skipped with a warning and the others are still written.
 
     Use :func:`gbdraw.api.save_figure_to` for strict file export or
     :func:`gbdraw.api.render_to_bytes` for in-memory output.
@@ -369,6 +374,7 @@ def save_figure(
         DeprecationWarning,
         stacklevel=2,
     )
+    dpi = checked_png_dpi(dpi)
     base_filename = os.path.splitext(canvas.filename)[0]
     svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 
@@ -421,21 +427,25 @@ def save_figure(
         logger.warning("%s; skipped.", _cairosvg_missing_message(formats_to_process))
         return
 
-    try:
-        svg_bytes = svg_source.encode("utf-8")
-        for fmt in formats_to_process:
-            out_file = resolve_format_output_path(base_filename, fmt)
-
+    svg_bytes = svg_source.encode("utf-8")
+    for fmt in formats_to_process:
+        out_file = resolve_format_output_path(base_filename, fmt)
+        try:
+            check_drawing_export_limits(canvas, [fmt], dpi=dpi)
             convert_svg_with_cairosvg(
                 svg_bytes,
                 fmt,
                 write_to=out_file,
                 cairosvg_module=cairosvg_module,
+                dpi=dpi,
             )
-
-            logger.info(f"Generated {fmt.upper()}: {out_file}")
-    except Exception as e:
-        logger.error(f"Failed to generate images using CairoSVG: {e}")
+        except ExportError as e:
+            logger.warning("%s; skipped.", str(e).rstrip("."))
+            continue
+        except Exception as e:
+            logger.error(f"Failed to generate {fmt.upper()} using CairoSVG: {e}")
+            continue
+        logger.info(f"Generated {fmt.upper()}: {out_file}")
 
 
 __all__ = [
