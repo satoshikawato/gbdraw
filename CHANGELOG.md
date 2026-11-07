@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Deprecated: Python 3.10, whose support by the Python project ended in October
+  2026. gbdraw 0.16.0 will need Python 3.11 or later.
+- Added: the technical documentation page
+  [Compatibility and deprecation](./docs/REFERENCE/compatibility-and-deprecation.md)
+  says which releases receive fixes and how long old command-line options,
+  Python API names, Sessions, and Python versions keep working.
 - Changed: when the Web app draws a diagram that is too large for the browser
   page to receive, the error now says so ("The diagram was drawn, but it is too
   large for this browser page to receive. ...") and names what works: a smaller

@@ -21,6 +21,7 @@ then links back here.
 - [Comparison programs, thresholds, and result semantics](comparison-programs-thresholds-and-results.md)
 - [Palettes, feature rules, labels, shapes, tracks, and layout](palettes-feature-rules-labels-shapes-and-tracks.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
+- [Compatibility and deprecation](compatibility-and-deprecation.md)
 - [Session and request JSON Schema](schemas/README.md)
 - [Output formats and export](output-formats-and-export.md)
 - [Interactive SVG and semantic hooks](interactive-svg-and-semantic-hooks.md)
