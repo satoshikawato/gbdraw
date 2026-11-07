@@ -245,6 +245,32 @@ def test_a_circular_label_whose_letters_cross_nothing_parts_no_lanes(
     assert _svg("circular", regions) == drawn
 
 
+def test_an_outside_slot_the_plan_places_away_from_the_axis_is_measured_where_it_is_drawn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The plan places "regions" outside a 150 px slot, about 550 px from the centre. There a's label at bp 5000
+    # spans about 4967-5032 bp, short of b (from 5040) in the next lane; at the axis circle it would reach past it.
+    sets = (
+        AnnotationSet("first", (_region("f1", 1, 9999, ""),)),
+        AnnotationSet("regions", (_region("a", 4900, 5100, "iiiiiiii"), _region("b", 5040, 6000, ""))),
+    )
+    slots = (
+        "features:features",
+        "regions:annotations@side=outside,set_id=regions",
+        "first:annotations@side=outside,set_id=first,w=150px",
+    )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=sets), tracks=gbdraw.CircularTrackOptions(slots=slots)
+    )
+    drawn = gbdraw.draw_circular(_record(), options=options)._drawing.tostring()
+    items = _groups(drawn)
+
+    assert _radii(items["a"])[0] > 540.0
+    assert _radii(items["b"])[0] == pytest.approx(_radii(items["a"])[1])
+    _without_room(monkeypatch)
+    assert gbdraw.draw_circular(_record(), options=options)._drawing.tostring() == drawn
+
+
 def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -> None:
     # b (lane 1) labels above at bp 3350; its wide letters reach over c (to 3050) and a (from 3720) in lane 0.
     regions = (_region("c", 2000, 3050, ""), _region("b", 3000, 3700, "WWWWWWWW"), _region("a", 3720, 5000, ""))
@@ -257,11 +283,13 @@ def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -
     assert bottom == pytest.approx(b_top - _EDGE, abs=0.01)
 
 
+@pytest.mark.parametrize("radius", (",r=0.6", ""))
 @pytest.mark.parametrize("orientation", ("tangent", "horizontal"))
-def test_an_inside_circular_label_is_measured_on_the_slots_side_and_radius(orientation: str) -> None:
-    # On an inside slot at 0.6 of the radius, a (lane 0) labels inward at bp 3000 over b's mark in lane 1.
+def test_an_inside_circular_label_is_measured_on_the_slots_side_and_radius(orientation: str, radius: str) -> None:
+    # On an inside slot at 0.6 of the radius, or where the plan places it (about 330 px from the centre, well inside
+    # the axis circle), a (lane 0) labels inward at bp 3000 over b's mark in lane 1.
     regions = (_region("a", 1000, 5000, "A rather long region label text", orientation), _region("b", 2500, 3500, ""))
-    items = _groups(_svg("circular", regions, "regions:annotations@side=inside,set_id=regions,r=0.6"))
+    items = _groups(_svg("circular", regions, f"regions:annotations@side=inside,set_id=regions{radius}"))
     a_inner, _a_outer = _radii(items["a"])
     _b_inner, b_outer = _radii(items["b"])
     near, far = _ink_radii(items["a"])
