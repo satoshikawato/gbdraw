@@ -1,0 +1,152 @@
+// @ts-check
+// Readers of the shown drawing and of the Result it shows: the record a Linear
+// card draws and the notes beside the Region fields, the shown Result's input
+// summary, the records the next Linear Generate draws and those a loaded
+// Result drew, the wait for a deferred Linear record read, the Web-only moves
+// of the canvas, the committed request of the Result a drawing shows, and Wrap
+// Rows as that Result drew it. The composition root passes the state, the
+// shown drawing of a mode, the Linear record selector's members, and the
+// committed request and its Linear record cards as ports.
+import { inputSummaryOf } from '../services/input-summary.js';
+import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
+import {
+  circularDrawingRegionNote, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
+} from '../services/record-options.js';
+/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
+/** @import { SequenceRecord } from '../services/record-discovery.js' */
+/** @import { RecordSelectorStatus, RefreshOutcome } from './linear-record-selector.js' */
+
+const { computed } = window.Vue;
+
+/**
+ * @typedef {object} ShownDrawingReaderPorts
+ * @property {WebState} state
+ * @property {(drawingMode: DiagramMode) => DrawingState | null} shownDrawingOfMode The shown drawing when it is of that mode.
+ * @property {(drawing: DrawingState, seq: LinearSeq) => SequenceRecord[]} linearRecordsFor
+ *   The records the record selector read for a Linear card.
+ * @property {(drawing: DrawingState, seq: LinearSeq) => RecordSelectorStatus} linearRecordStatusFor
+ * @property {(drawing: DrawingState) => SessionBusy | Promise<RefreshOutcome>} refreshLinearRecords
+ *   Reads the records of the drawing's Linear cards.
+ * @property {(drawing: DrawingState) => { record: CanonicalRenderRequest['records'][number], seq: LinearSeq }[] | null} committedLinearRecordCards
+ *   Each record of the committed Linear request with the card of the drawing that still draws it.
+ * @property {() => CanonicalRenderRequest | null} getCommittedCanonicalRenderRequest
+ */
+
+/**
+ * Registers the three computeds (`circularRegionNote`, `shownInputSummary`,
+ * `shownLinearWrapReading`); the root calls it where they stood.
+ * @param {ShownDrawingReaderPorts} ports
+ */
+export const createShownDrawingReaders = ({
+  state, shownDrawingOfMode, linearRecordsFor, linearRecordStatusFor, refreshLinearRecords, committedLinearRecordCards,
+  getCommittedCanonicalRenderRequest
+}) => {
+  const { inputSummaries, selectedResultIndex, results } = state;
+  /**
+   * The record a Linear entry draws, once its records are read: the one its
+   * selector names, or the only record of its file.
+   * @param {DrawingState} drawing the drawing that holds the card
+   * @param {LinearSeq} seq
+   */
+  const linearSeqRecord = (drawing, seq) => {
+    const records = linearRecordsFor(drawing, seq);
+    const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
+    return selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+  };
+  // The note beside a Linear entry's Region fields (`regionClampNote`). The
+  // request draws the larger coordinate as the region's end (reverse when typed first).
+  /** @param {LinearSeq} seq a card of the shown drawing */
+  const linearRegionNote = (seq) => {
+    const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
+    return region && !('error' in region) ? regionClampNote(region.drawn) : '';
+  };
+  const circularRegionNote = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
+  });
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info, its
+  // wrapped rows.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
+  // The records the next Linear Generate draws, as their cards ask for them:
+  // each source record's length and the region its card states. Known once
+  // every drawn record is read and every region can be drawn, else none.
+  /** @param {DrawingState | null | undefined} drawing @returns {LinearDraftRecord[]} */
+  const linearDraftRecordsOf = (drawing) => {
+    if (!drawing || drawing.mode !== 'linear') return [];
+    const records = drawing.drawnLinearSeqs.value.map((seq, index) => {
+      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
+      const region = linearCardRegion(seq, index + 1);
+      if (!(sourceLength > 0) || (region !== null && 'error' in region)) return null;
+      return { sourceLength,
+        region: region === null ? null : { start: Math.min(region.start, region.end), end: Math.max(region.start, region.end) } };
+    });
+    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
+  };
+  // Their lengths, while none is cropped: the Web predicts no cropped length.
+  /** @param {DrawingState | null | undefined} drawing @returns {number[]} */
+  const linearRecordLengthsOf = (drawing) => {
+    const records = linearDraftRecordsOf(drawing);
+    return records.every((record) => record.region === null) ? records.map((record) => record.sourceLength) : [];
+  };
+  const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
+  // The records a shown Result without an input summary (a loaded one) drew:
+  // each committed record's region as its request asked for it, with the
+  // length of the source record its card reads, matched by record key, so a
+  // card edited since Load changes neither (D-73). [] while a record has no
+  // card that still draws it, or its length is unknown.
+  /** @param {DrawingState} drawing @returns {LinearDraftRecord[]} */
+  const committedLinearRecordsOf = (drawing) => {
+    const records = (committedLinearRecordCards(drawing) ?? []).map(({ record, seq }) => {
+      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
+      const { region } = record;
+      return sourceLength > 0 ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
+    });
+    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
+  };
+  // A Linear card whose record list is still deferred after a Load is read
+  // now, through the record selector, as Generate reads it (DESIGN A4).
+  /** @param {DrawingState} drawing */
+  const awaitLinearRecordDiscovery = async (drawing) => {
+    if (drawing.linearSeqs.some((seq) => linearRecordStatusFor(drawing, seq) === 'deferred')) {
+      const outcome = refreshLinearRecords(drawing);
+      if (outcome instanceof Promise) await outcome;
+    }
+  };
+  // Web-only changes of the shown canvas: a moved diagram, Legend, title, or scale, and Canvas padding.
+  const decorationsMoved = () => [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset]
+    .some((offset) => Boolean(Number(offset.x) || Number(offset.y)));
+  /** @param {{ canvasPadding: Record<string, unknown> }} drawing */
+  const canvasPadded = (drawing) => (/** @type {const} */ (['top', 'right', 'bottom', 'left'])).some((side) => Number(drawing.canvasPadding[side]));
+  // The committed request of the Result a drawing shows; null while it shows no Result of its own.
+  /** @param {{ id: string }} drawing */
+  const shownCommittedRequest = (drawing) => (
+    state.generatedDrawingId.value === drawing.id && results.value.length > 0 ? getCommittedCanonicalRenderRequest() : null
+  );
+  // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
+  // summary and the committed request of the drawing whose Result is shown:
+  // the field's Auto text and the Auto hints of sizes and ticks read it.
+  /** @param {DrawingState} drawing The committed request's stored wrap leaf while this drawing's Result is shown. */
+  const shownLinearWrapLeaf = (drawing) => {
+    const request = drawing.mode === 'linear' ? shownCommittedRequest(drawing) : null;
+    return request?.mode === 'linear' ? requestLinearWrapLeaf(request) : undefined;
+  };
+  const shownLinearWrapReading = computed(() => {
+    const drawing = state.activeDrawing();
+    const leaf = shownLinearWrapLeaf(drawing);
+    return shownLinearWrap({
+      value: drawing.form.linear_wrap_length,
+      requested: leaf === undefined ? undefined : wrapFormValue(leaf).value,
+      summary: shownInputSummary.value ?? undefined,
+      records: linearDraftRecordsOf(drawing)
+    });
+  });
+  return {
+    linearRegionNote, circularRegionNote, shownInputSummary, drawnLinearRecordLengths, committedLinearRecordsOf,
+    awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
+    shownLinearWrapReading
+  };
+};

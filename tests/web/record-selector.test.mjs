@@ -571,9 +571,9 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
 }
 
 // D-37 / OV-2563: a Linear card's annotation catalog source carries the error model its record select
-// stores (catalogStateFor, what app-setup's linearAnnotationSource spreads), so the catalog says what the
-// card says: a refused read is INPUT_UNREADABLE, a parse failure keeps its own code and reason, and the
-// text is the card's apart from the catalog's sequence locator.
+// stores (catalogStateFor, what linearAnnotationSource in app/drawing-record-catalog.js spreads), so the
+// catalog says what the card says: a refused read is INPUT_UNREADABLE, a parse failure keeps its own code
+// and reason, and the text is the card's apart from the catalog's sequence locator.
 {
   const { buildAnnotationRecordCatalog } = await import(pathToFileURL(join(sourceRoot, 'annotations', 'record-catalog.js')));
   const { readFileBytes } = await import(pathToFileURL(join(sourceRoot, '..', 'services', 'file-content-cache.js')));
