@@ -27,8 +27,7 @@ from gbdraw.annotations import (
 from gbdraw.annotations.layout import (
     LabelExtent,
     PlacedRegionAnnotation,
-    lane_middle_px,
-    lane_span_px,
+    lane_edge_px,
     lane_width_px,
 )
 from gbdraw.layout.linear import VerticalBand
@@ -151,7 +150,7 @@ def _lane_top(
     each past the label room of the gaps above it on that row (``ResolvedAnnotationTrack.room_before``)."""
 
     room = _room_before(track, placement, row)
-    return lane_span_px(placement.lane, lane_height, padding_px=padding_px, room_before_px=room)[0]
+    return lane_edge_px(placement.lane, lane_height, padding_px=padding_px, room_before_px=room)
 
 
 def _lane_center(
@@ -160,7 +159,7 @@ def _lane_center(
     """The slot-local y of the middle of a placement's lane on ``row`` (``_lane_top``)."""
 
     room = _room_before(track, placement, row)
-    return lane_middle_px(placement.lane, lane_height, padding_px=padding_px, room_before_px=room)
+    return lane_edge_px(placement.lane + 0.5, lane_height, padding_px=padding_px, room_before_px=room)
 
 
 def _band_rect(mark: str, lane_center: float, lane_height: float, x1: float, x2: float) -> tuple[float, float, float, float]:

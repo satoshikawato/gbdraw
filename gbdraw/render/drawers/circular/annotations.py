@@ -24,7 +24,7 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_span_px, lane_width_px
+from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_edge_px, lane_width_px
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -182,10 +182,15 @@ def _lane_radii(
 
     # A circle draws its record on one row.
     room = track.room_before(placement.annotation.record_index, 0, placement.lane)
-    near, far = lane_span_px(placement.lane, lane_width, padding_px=params.padding_px, room_before_px=room)
     if side == "inside":
-        return max(0.0, outer_radius_px - far), max(0.0, outer_radius_px - near)
-    return inner_radius_px + near, inner_radius_px + far
+        lane_outer = lane_edge_px(
+            placement.lane, lane_width, padding_px=params.padding_px, room_before_px=room, from_px=outer_radius_px, toward=-1
+        )
+        return max(0.0, lane_outer - lane_width), max(0.0, lane_outer)
+    lane_inner = lane_edge_px(
+        placement.lane, lane_width, padding_px=params.padding_px, room_before_px=room, from_px=inner_radius_px
+    )
+    return lane_inner, lane_inner + lane_width
 
 
 StrandBands: TypeAlias = Mapping[Literal["+", "-"], RadialBand]

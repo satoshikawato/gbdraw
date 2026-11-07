@@ -461,8 +461,9 @@ a plot overlay (such as `ov:dinucleotide_skew@side=overlay,r=0.6,w=10px`),
 keep no room, so their labels are not counted.
 
 An `inside` annotation slot without a width (`w=`) adds the room its labels
-need between lanes gap by gap from its outer edge, and leaves out each room
-that would carry its lanes past the centre of the circle; a later room that
+need between lanes gap by gap from its outer edge, and leaves out each
+label's room that would carry its lanes past the centre of the circle: a gap
+takes the largest of its labels' rooms that still fits, and a later room that
 still fits is added. Each label that needed a room the slot did not add is
 drawn across the mark it meets and
 counts as one region label without room before the centre (`1 region label

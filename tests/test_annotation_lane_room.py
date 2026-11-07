@@ -693,16 +693,16 @@ def test_a_circular_label_gets_room_before_the_lane_further_on_whose_mark_it_wou
 
 
 def _nested_inside(
-    count: int, labels: tuple[str, ...] | None = None
+    count: int, labels: tuple[str, ...] | None = None, extra: tuple[RegionAnnotation, ...] = ()
 ) -> tuple[dict[str, ElementTree.Element], list[warnings.WarningMessage], object]:
     """``count`` nested bands inside the axis around 3 o'clock, each labelled horizontally (``labels``, by default
     "Region N label text"), so that each label would cross the next lane's mark (``followups2/questions/qrender.py
-    q7-<count>``)."""
+    q7-<count>``), and the ``extra`` regions."""
 
     texts = labels or tuple(f"Region {index + 1} label text" for index in range(count))
     regions = tuple(
         _region(f"r{index}", 1501 + 100 * index, 3500 - 100 * index, texts[index]) for index in range(count)
-    )
+    ) + extra
     options = gbdraw.CircularOptions(
         annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
         tracks=gbdraw.CircularTrackOptions(slots=("features:features", "regions:annotations@side=inside,set_id=regions")),
@@ -775,3 +775,73 @@ def test_a_clipped_inside_slot_stops_its_lanes_at_the_centre() -> None:
     ((path,),) = [list(items["r4"].iter(f"{_SVG}path"))]
     assert "nan" not in path.get("d", "").lower()
 
+
+def test_an_inside_slot_keeps_the_room_of_a_label_that_fits_where_another_of_its_gap_does_not() -> None:
+    # LBL-ROOM-STOP-AT-CENTRE-WARN, each room on its own: two lane-0 labels would cross lane 1's marks. A needs
+    # 65.5 px, B 13.5 px; the lanes take 35 px of the 55 px before the centre. The gap takes B's room, and only A is
+    # left without room.
+    annotations = tuple(
+        ResolvedRegionAnnotation(
+            id=identity, set_id="s", record_index=0, segments=(segment,), midpoint_bp=(segment[0] + segment[1]) / 2,
+            span_bp=segment[1] - segment[0], label=label, mark="band", lane=lane, style=RegionAnnotationStyle(),
+        )
+        for identity, segment, label, lane in (
+            ("A", (100, 200), "LONG", 0), ("B", (600, 700), "x", 0), ("C", (100, 200), "", 1), ("D", (600, 700), "", 1)
+        )
+    )
+
+    def letters(annotation, _style, _font_size, _place_bp, _mark_offset):
+        return LabelExtent(-10.0, 10.0, 60.0 if annotation.label == "LONG" else 8.0)
+
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: 1000}, params=AnnotationTrackParams(set_id="s"),
+        labels=LabelSizing(font_size=10.0, extent=letters), join_origin=True,
+        room_bounds=packer.RoomBounds(limit_px=_BASE + 20.0),
+    )
+
+    assert track.lane_rooms == (LaneRoom(0, 0, 0, pytest.approx(8.0 + _OFFSET + RegionAnnotationStyle().stroke_width)),)
+    assert track.labels_without_room == 1
+
+
+def test_an_inside_slot_keeps_a_smaller_room_of_a_gap_whose_largest_room_does_not_fit() -> None:
+    # Five nested bands: the rooms of r0's and r1's labels fit, r2's would pass the centre. q2 shares r2's lane
+    # elsewhere on the circle, labelled "x", over q3's mark in r3's lane: the gap keeps q2's short room, and only r2's
+    # label is left without room.
+    labels = ("Region 1 label text", "Region 2 label text", "Region 3 label text", "", "")
+    extra = (replace(_region("q2", 6001, 6600, "x"), lane=2), replace(_region("q3", 6001, 6600, ""), lane=3))
+    items, caught, _drawing = _nested_inside(5, labels, extra)
+    q2, q3 = _signed_radii(items["q2"]), _signed_radii(items["q3"])
+
+    assert q2[0] - q3[1] > 10.0, (q2, q3)
+    assert any("1 region label without room before the centre" in str(item.message) for item in caught), [
+        str(item.message) for item in caught
+    ]
+
+
+def test_a_linear_label_is_measured_with_the_lanes_of_its_own_record() -> None:
+    # LBL-ROOM-BEFORE-MET-LANE: in one Linear slot, record 0 takes six lanes and record 1 three, so each of record
+    # 1's lanes is drawn twice as high (the drawers share the slot among a record's own lanes). c's letters (30 px
+    # deep) pass b's short mark in lane 1 and meet a's in lane 2. The room before lane 2 counts lane 1 at the height
+    # it is drawn, so the letters just clear a's mark.
+    from gbdraw.annotations.layout import lane_edge_px, lane_width_px
+
+    def annotation(identity: str, record: int, segment: tuple[int, int], label: str, lane: int) -> ResolvedRegionAnnotation:
+        return ResolvedRegionAnnotation(
+            id=identity, set_id="s", record_index=record, segments=(segment,), midpoint_bp=(segment[0] + segment[1]) / 2,
+            span_bp=segment[1] - segment[0], label=label, mark="band", lane=lane, style=RegionAnnotationStyle(),
+        )
+
+    annotations = tuple(annotation(f"z{lane}", 0, (100, 900), "", lane) for lane in range(6)) + (
+        annotation("c", 1, (100, 900), "Gamma", 0), annotation("b", 1, (100, 150), "", 1), annotation("a", 1, (400, 600), "", 2)
+    )
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: 1000, 1: 1000}, params=AnnotationTrackParams(set_id="s"),
+        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(-50.0, 50.0, 30.0)), join_origin=False,
+    )
+    padding, half_stroke = AnnotationTrackParams(set_id="s").padding_px, 0.5 * RegionAnnotationStyle().stroke_width
+    height = lane_width_px(track.required_extent_px, padding_px=padding, room_px=track.lane_room_px, lane_count=3)
+    letters_end = lane_edge_px(1, height, padding_px=padding, room_before_px=0.0) + half_stroke + _OFFSET + 30.0
+    a_paint = lane_edge_px(2, height, padding_px=padding, room_before_px=track.room_before(1, 0, 2)) - half_stroke
+
+    assert [(room.record_index, room.gap) for room in track.lane_rooms] == [(1, 1)]
+    assert a_paint - letters_end == pytest.approx(0.0, abs=1e-9)
