@@ -4594,6 +4594,10 @@ Status: active Product authority
     the Owner approved the complete receipt below as it was shown:
     「承認（全文このまま）」. The session drafted the Rationale and the other
     fields from the decision pack; the Owner approved them as written.
+  - A label reflow shows the approved text inside its live-edit note, which
+    has no buttons for any error, so it offers no Save Session button there;
+    Save Session stays in the toolbar. Asked on `2026-11-07` whether to keep
+    this, the Owner replied 「このままにする」.
   - The receipt and JSON reproduce the approved fields without translation or
     additional terms.
   - New receipt SHA-256: `PD-OI-118` scenario revision `1`
