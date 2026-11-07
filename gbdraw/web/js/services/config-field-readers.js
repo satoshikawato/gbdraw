@@ -984,7 +984,9 @@ export const readSessionUiMode = exactChoice(['circular', 'linear'], 'circular')
 export const readSessionInputType = exactChoice(SESSION_INPUT_TYPES, 'gb');
 /**
  * The PNG DPI: one of the choices the DPI menu lists, kept as stored, else
- * the default (OV-595).
+ * the default (OV-595). The command line's replay reads the same choices
+ * (`read_session_png_dpi` in gbdraw/session.py), with no DPI for an unset or
+ * other value.
  * @type {FieldReader<unknown>}
  */
 export const readDownloadDpi = (value) => {

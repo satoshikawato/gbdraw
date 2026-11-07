@@ -381,7 +381,8 @@ class RenderOutputRequest:
     resolve_prefix_from_first_record: bool = False
     embed_fonts: bool = True
     # PNG pixels per inch (dpi / 96 per SVG pixel); None is one per SVG pixel. Like ``overwrite``, it is the
-    # caller's: a CLI Session records no ``--dpi``, and a replay reads it from ``--dpi`` alone.
+    # caller's: a Session's request never stores it. A Session render sets it from ``--dpi``, else from the
+    # PNG DPI a Web Session saved (``read_session_png_dpi`` in gbdraw/session.py).
     dpi: float | None = None
 
     def __post_init__(self) -> None:

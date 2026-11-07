@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, Sequence, cast
 
+from gbdraw.core.numeric import JS_WHITESPACE
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession51, SessionResult
 from gbdraw.io.table_text import legacy_table_rows
@@ -74,6 +75,43 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# The PNG DPI choices of the Web app's DPI menu, which a Session's
+# ``ui.downloadDpi`` names. The Web reads them generated
+# (``SESSION_PNG_DPI_CHOICES``) and keeps their labels and its default.
+SESSION_PNG_DPI_CHOICES: frozenset[int] = frozenset({72, 96, 150, 300, 600})
+
+
+def read_session_png_dpi(session: Mapping[str, object]) -> int | None:
+    """The PNG DPI a Session saved (``ui.downloadDpi``), or ``None`` without one.
+
+    The one reader of the stored value, as the Web's ``readDownloadDpi``
+    reads it: one of :data:`SESSION_PNG_DPI_CHOICES`, as a number or as text
+    with outer spaces; unset (missing, null or empty) is ``None``. Any other
+    value is ``None`` with a notice; the Web reads it as its default (300)
+    with a Load dialog row. Every Session version keeps the value in the
+    top-level ``ui`` (Session 51: the project's).
+    """
+
+    ui = session.get("ui")
+    stored = ui.get("downloadDpi") if isinstance(ui, Mapping) else None
+    if stored is None or stored == "":
+        return None
+    if isinstance(stored, str):
+        text = stored.strip(JS_WHITESPACE)
+        dpi = next((choice for choice in SESSION_PNG_DPI_CHOICES if text == str(choice)), None)
+    elif isinstance(stored, (int, float)) and not isinstance(stored, bool) and stored in SESSION_PNG_DPI_CHOICES:
+        dpi = int(stored)
+    else:
+        dpi = None
+    if dpi is None:
+        logger.warning(
+            "WARNING: Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; it is not used.",
+            f'"{stored}"' if isinstance(stored, str) else repr(stored),
+            ", ".join(str(choice) for choice in sorted(SESSION_PNG_DPI_CHOICES)),
+        )
+    return dpi
+
 
 _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
@@ -704,11 +742,14 @@ def _plan_session_drawings(
 
     Without selectors every drawing with a committed render is selected and
     the others are skipped with a notice; a named drawing without one is an
-    error. The plan keeps document order.
+    error. The plan keeps document order. A PNG is drawn at ``dpi``, else at
+    the PNG DPI the Session saved (:func:`read_session_png_dpi`).
     """
 
     _active_materialization(materialized)
     document = materialized.document
+    if dpi is None:
+        dpi = read_session_png_dpi(document._data)
     if selectors is None:
         selected = [drawing for drawing in document._drawings if drawing.request is not None]
         for drawing in document._drawings:
@@ -850,12 +891,19 @@ def render_session(
     """Decode and render a canonical session while its resources are active.
 
     ``drawing`` selects a drawing by ID or name; without it the Session must
-    have one drawing.
+    have one drawing. A PNG is drawn at the PNG DPI the Session saved
+    (:func:`read_session_png_dpi`).
     """
 
     with _session_parse_cache(materialized):
         selected = materialized.document._drawing_parts(drawing)
-        plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
+        plan = _SessionDrawingRender(
+            selected,
+            with_request_output(
+                _decode_drawing(materialized, selected),
+                dpi=read_session_png_dpi(materialized.document._data),
+            ),
+        )
         return _render_session_drawing_plans(materialized, (plan,))[selected.id]
 
 
@@ -879,7 +927,8 @@ def render_session_drawings(
     own prefix; a Circular batch inside still appends ``_<n>``. Every output
     path of every selected drawing is checked before the first file is
     written, and each resource is parsed once for all drawings. The results
-    are keyed by drawing ID in document order.
+    are keyed by drawing ID in document order. A PNG is drawn at the PNG DPI
+    the Session saved (:func:`read_session_png_dpi`).
     """
 
     from gbdraw.api.request_render import preflight_diagram_request_outputs

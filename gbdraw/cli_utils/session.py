@@ -780,9 +780,10 @@ def render_session_drawings_cli(
 
     ``drawings`` selects drawings by ID or name; ``None`` renders every drawing
     with a committed render. ``-o`` splits into the output directory and
-    prefix; several drawings get ``<prefix>_<ID>``. ``dpi`` sets the PNG
-    resolution of every drawing; it comes from ``--dpi`` alone, not from a
-    Web Session's ``ui.downloadDpi``. With a re-save, the
+    prefix; several drawings get ``<prefix>_<ID>``. ``dpi`` (``--dpi``) sets
+    the PNG resolution of every drawing; without it a PNG is drawn at the PNG
+    DPI the Session saved (``ui.downloadDpi``, D-93), and only ``--dpi`` is
+    noted when no PNG is written. With a re-save, the
     document, validated when it was loaded, is brought to the current version
     before any render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without
@@ -899,6 +900,26 @@ def render_session_drawings_cli(
         )
         for plan in plans:
             _warn_custom_fonts_saved_by_name(plan.request)
+
+
+def legacy_replay_png_dpi(
+    document: SessionDocument,
+    session_request: SessionCliRequest,
+    formats: str,
+) -> int | None:
+    """The PNG DPI of a Session 27-30 replay: ``--dpi``, else the PNG DPI the Session saved.
+
+    The saved one is passed on only when the replay writes a PNG
+    (``formats``): the replay notes a DPI without a PNG (``png_dpi``), and
+    the saved one is not the caller's choice.
+    """
+
+    from gbdraw.session import read_session_png_dpi
+
+    if session_request.dpi is not None:
+        return session_request.dpi
+    saved = read_session_png_dpi(document._data)
+    return saved if "png" in parse_output_formats(formats) else None
 
 
 def _legacy_session_replay(mode: str) -> Any:

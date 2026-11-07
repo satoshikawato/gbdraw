@@ -13,10 +13,13 @@ import {
 } from '../../gbdraw/web/js/services/figure-size-form.js';
 import { createFigureSizeField } from '../../gbdraw/web/js/app/figure-size-field.js';
 import { getSvgDimensions } from '../../gbdraw/web/js/services/svg-dimensions.js';
-import { createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
+import {
+  DEFAULT_PNG_DPI, PNG_DPI_CHOICES, PNG_DPI_CHOICE_WORDS, createDefaultForm
+} from '../../gbdraw/web/js/services/session-active-config-contract.js';
+import { SESSION_PNG_DPI_CHOICES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { labelCapacityRemedyText } from '../../gbdraw/web/js/services/label-fit.js';
-import { defaultSettingsContainers, installStoredSettings } from '../../gbdraw/web/js/services/config-field-readers.js';
+import { defaultSettingsContainers, installStoredSettings, readDownloadDpi } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { SETTINGS_SLICE } from '../../gbdraw/web/js/services/drawing/settings.js';
 import { loadPageVue } from './helpers/vue-runtime.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
@@ -378,4 +381,28 @@ test('replacing the drawing map around the shown drawing keeps the picked and th
   } finally {
     delete globalThis.window;
   }
+});
+
+test('the PNG DPI menu lists Python\'s choices, each with a word, and the default is one of them', () => {
+  assert.deepEqual(PNG_DPI_CHOICES.map((choice) => Number(choice.value)), [...SESSION_PNG_DPI_CHOICES]);
+  assert.deepEqual(Object.keys(PNG_DPI_CHOICE_WORDS).map(Number), [...SESSION_PNG_DPI_CHOICES], 'a word for each choice, no other');
+  assert.ok(PNG_DPI_CHOICES.every((choice) => choice.label === `${choice.value} (${PNG_DPI_CHOICE_WORDS[Number(choice.value)]})`));
+  assert.ok(SESSION_PNG_DPI_CHOICES.includes(DEFAULT_PNG_DPI));
+});
+
+test('a stored PNG DPI is a choice for Web Load exactly when it is one for the command line replay (D-93)', () => {
+  const stored = [300, '150', ' 600\n', 72.0, '\u00a096', '\ufeff300', 1200, '300.0', true, { dpi: 300 }, [300], '  ', 'print', null, ''];
+  const python = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json, logging, sys
+from gbdraw.session import read_session_png_dpi
+logging.disable(logging.CRITICAL)
+print(json.dumps([read_session_png_dpi({"ui": {"downloadDpi": value}}) for value in json.load(sys.stdin)]))
+`], { input: JSON.stringify(stored), encoding: 'utf8' }));
+  stored.forEach((value, index) => {
+    const web = readDownloadDpi(value);
+    const unset = value === null || value === '';
+    // The Web reads an unset or other value as its default (300); only another one is a Load row.
+    assert.equal(web.lost, !unset && python[index] === null, JSON.stringify(value));
+    if (python[index] !== null) assert.equal(Number(String(web.value).trim()), python[index], JSON.stringify(value));
+  });
 });

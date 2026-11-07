@@ -130,6 +130,7 @@ from .cli_utils.session import (
     DiagramRunResult,
     SessionCliRequest,
     add_session_args,
+    legacy_replay_png_dpi,
     make_rendered_svg,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -1200,7 +1201,7 @@ def replay_legacy_session(
             )
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
-        args.dpi = session_request.dpi
+        args.dpi = legacy_replay_png_dpi(document, session_request, args.format)
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._gbdraw_source_session = (

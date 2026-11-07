@@ -23,7 +23,7 @@ import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION, SESSION_PNG_DPI_CHOICES } from '../contracts/schema.generated.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
@@ -170,16 +170,19 @@ export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.vers
 export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
 /** The input types of a Session's `ui.cInputType` and `ui.lInputType` (Save refuses another; Load reads it, OV-594). */
 export const SESSION_INPUT_TYPES = Object.freeze(/** @type {InputType[]} */ (Object.keys(INPUT_TYPES)));
-/** The PNG DPI the export uses unless the user picks another. */
+/** The PNG DPI the export uses unless the user picks another (the Web's; the command line has none). */
 export const DEFAULT_PNG_DPI = 300;
-/** The PNG DPI choices the DPI menu lists; Load reads a stored DPI among them (OV-595). */
-export const PNG_DPI_CHOICES = Object.freeze([
-  { value: '72', label: '72 (Web)' },
-  { value: '96', label: '96 (Screen)' },
-  { value: '150', label: '150 (Draft)' },
-  { value: '300', label: '300 (Print)' },
-  { value: '600', label: '600 (High)' }
-]);
+/** The word after each PNG DPI in the DPI menu; the DPIs are Python's (`SESSION_PNG_DPI_CHOICES`). */
+export const PNG_DPI_CHOICE_WORDS = Object.freeze(/** @type {Readonly<Record<number, string>>} */ ({
+  72: 'Web', 96: 'Screen', 150: 'Draft', 300: 'Print', 600: 'High'
+}));
+/**
+ * The PNG DPI choices the DPI menu lists; Load reads a stored DPI among them (OV-595), as the
+ * command line's replay does (`read_session_png_dpi` in gbdraw/session.py).
+ */
+export const PNG_DPI_CHOICES = Object.freeze(SESSION_PNG_DPI_CHOICES.map((dpi) => ({
+  value: String(dpi), label: `${dpi} (${PNG_DPI_CHOICE_WORDS[dpi]})`
+})));
 
 /**
  * Stored settings a gbdraw writer wrote and later retired or moved (E-OD03):

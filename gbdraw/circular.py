@@ -110,6 +110,7 @@ from .cli_utils.session import (
     SessionCliRequest,
     RenderedSvg,
     add_session_args,
+    legacy_replay_png_dpi,
     diagram_request_rendered_svgs,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -840,7 +841,7 @@ def replay_legacy_session(
             args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
         args.overwrite = session_request.overwrite
         args.embed_fonts = session_request.embed_fonts
-        args.dpi = session_request.dpi
+        args.dpi = legacy_replay_png_dpi(document, session_request, args.format)
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._allow_legacy_track_transport = True
