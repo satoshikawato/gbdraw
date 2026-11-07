@@ -535,10 +535,17 @@ or reused on its own, and it can grow back as wiring leaves the root.
   object literal built in the root, a computed getter, and a watch callback
   alike. Each counts with its whole span, measured as above, so a function
   nested in it counts once, in it.
-- A one-line function there, such as the port `getMode: () => mode.value`, is
-  wiring and does not count: adding a port is what a composition root is for.
-  A port of two or more lines counts, so logic does not leave the count by
-  moving into an inline port.
+- A one-line function written directly in the root function, such as the port
+  `drawingTabs: () => state.drawingTabs.value`, is wiring and does not count:
+  adding a port is what a composition root is for. A port of two or more lines
+  counts, so logic does not leave the count by moving into an inline port. A
+  one-line function inside a counted function counts with that function's
+  span, as the port object of a wrapper such as
+  `loadSessionFromFile = (event) => importSessionFromFile(event, {...})` does.
+- This check does not count statements written directly in the root body
+  (setup-time `if`, `for`, or `try` blocks) or the other top-level functions of
+  a root module. The root function's whole size stays bounded by
+  `MAX_FUNCTION_LINES` and its `FUNCTION_LINES` entry.
 - `COMPOSITION_ROOT_LOGIC_LINES` records the total lines of that logic per
   `<path>::<root function>`; the test also reports how many functions make up
   each total and how many one-line functions it left out. A total may shrink but not grow, and a composition root without
@@ -548,8 +555,9 @@ or reused on its own, and it can grow back as wiring leaves the root.
   number of lines.
 - Adding or raising an entry (a new composition root, a renamed root function,
   or more logic) is an authority-only change that needs the Owner's approval.
-  An entry for a module that is no longer a composition root is reported as
-  removable; lowering or removing an entry is optional.
+  An entry whose key names no root function now (the module is no longer a
+  composition root, or its root function took another name) is reported as
+  removable, whatever its value; lowering or removing an entry is optional.
 
 ## Line coverage
 
