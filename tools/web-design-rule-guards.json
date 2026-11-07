@@ -855,6 +855,26 @@
           "kind": "py-set"
         }
       ]
+    },
+    {
+      "id": "AXE-VIOLATIONS",
+      "heading": "axe violations",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/web/axe-accessibility.playwright.spec.js",
+          "rootCause": "new",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/axe-accessibility.playwright.spec.js",
+          "symbol": "AXE_VIOLATIONS",
+          "kind": "count-map"
+        }
+      ]
     }
   ]
 }

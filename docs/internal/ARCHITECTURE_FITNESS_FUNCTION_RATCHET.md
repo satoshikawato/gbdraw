@@ -571,6 +571,22 @@ This is the rule `SCENARIO-DECLARATION` of `tools/web-design-rule-guards.json`.
   optional. The test fails when an entry names an option that no longer
   exists.
 
+## axe violations
+
+This is the rule `AXE-VIOLATIONS` of `tools/web-design-rule-guards.json`.
+
+- `tests/web/axe-accessibility.playwright.spec.js` runs axe-core, pinned
+  exactly as a devDependency in `package.json`, with its default rules on the
+  Web app's start page and after one Circular and one Linear Generate, once
+  the finite CSS animations have finished.
+- `AXE_VIOLATIONS` in the same spec holds, per state and axe rule id, the
+  number of elements that violate the rule today. The test fails when a rule
+  finds more elements than its entry allows, or any element where it has no
+  entry, and it names the entries that could be lowered.
+- Adding or raising an entry is an authority-only change that needs the
+  Owner's approval, also when a newer axe-core finds more. Lowering or
+  removing one is optional.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
