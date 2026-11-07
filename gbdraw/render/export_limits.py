@@ -101,24 +101,28 @@ def check_export_limit(
     if fmt == "png":
         scale = png_dpi / CSS_PX_PER_INCH
         limit, unit = PNG_MAX_PIXELS, "px"
-        over = max(png_pixel_size(width_px, height_px, png_dpi)) > limit
+        # The PNG's own size: the test, the diagnostic and the message name it.
+        shown = png_pixel_size(width_px, height_px, png_dpi)
+        over = max(shown) > limit
     elif fmt == "pdf" and wrap is not None:
         scale = PDF_PT_PER_SVG_PX
         limit, unit = PDF_MAX_PAGE_PT, "pt"
         over = max(width_px, height_px) * scale > limit
+        shown = round(width_px * scale), round(height_px * scale)
     else:
         return
     if not over:
         return
+    # The advice estimates from the unrounded size.
     width, height = width_px * scale, height_px * scale
     diagnostic: dict[str, object] = {
         "code": "EXPORT_LIMIT",
         "reason": "PNG_SIZE" if fmt == "png" else "PDF_SIZE",
         "limit": limit,
-        "width": round(width),
-        "height": round(height),
+        "width": shown[0],
+        "height": shown[1],
     }
-    message = f"{fmt.upper()} is limited to {limit:,} {unit} per side, and this figure is {width:,.0f} x {height:,.0f} {unit}"
+    message = f"{fmt.upper()} is limited to {limit:,} {unit} per side, and this figure is {shown[0]:,} x {shown[1]:,} {unit}"
     if fmt == "png":
         message += f" at {png_dpi:g} dpi" + (" (the default PNG DPI)" if dpi is None else "")
     message += "."

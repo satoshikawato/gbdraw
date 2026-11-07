@@ -74,6 +74,13 @@ class ExportRootSize(TypedDict):
     height: str
 
 
+class SvgRootReply(TypedDict):
+    """The answer for an SVG of a Result drawn to a requested size: the root size its file states."""
+
+    ok: Literal[True]
+    root: ExportRootSize
+
+
 class PngPixelSize(TypedDict):
     """A PNG's width and height in pixels (``png_pixel_size``)."""
 
@@ -134,12 +141,13 @@ def _wrap(payload: _WrapPayload | None) -> LinearWrapSummary | None:
 def check_web_export_limit_json(request_json: str) -> str:
     """``ExportLimitReply`` when the figure fits its format; otherwise ``check_export_limit``'s ``ExportError``.
 
-    For an SVG, ``{"ok": true, "root": {"width", "height"}}``: the root size its file states.
+    For an SVG, ``SvgRootReply``: the root size its file states.
     """
 
     request: ExportLimitRequest = json.loads(str(request_json))
     if request["format"] == "svg":
-        return json.dumps({"ok": True, "root": _svg_root(request)})
+        svg_reply: SvgRootReply = {"ok": True, "root": _svg_root(request)}
+        return json.dumps(svg_reply)
     fmt = _FORMATS.get(str(request["format"]))
     if fmt is None:
         raise ValueError(f"Unknown export format: {request['format']}")
@@ -158,4 +166,4 @@ def check_web_export_limit_json(request_json: str) -> str:
     return json.dumps(reply)
 
 
-__all__ = ["ExportLimitReply", "ExportLimitRequest", "ExportRootSize", "PngPixelSize", "check_web_export_limit_json"]
+__all__ = ["ExportLimitReply", "ExportLimitRequest", "ExportRootSize", "PngPixelSize", "SvgRootReply", "check_web_export_limit_json"]

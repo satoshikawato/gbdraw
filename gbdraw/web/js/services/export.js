@@ -111,6 +111,8 @@ const loadPdfLibraries = () => {
  * Python's `export_root_size` (gbdraw/render/document.py), which the CLI
  * writes, asked through the export check with the root's px size.
  * @typedef {{ width: string, height: string }} ExportRootSize
+ * The check's answer for that SVG (`SvgRootReply` in gbdraw/web_support/export_limit.py).
+ * @typedef {{ ok: true, root: ExportRootSize }} SvgRootReply
  * @typedef {(size: { width: number, height: number }) => Promise<ExportRootSize>} SizedSvgRoot
  */
 

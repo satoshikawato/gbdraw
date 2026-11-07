@@ -25,7 +25,7 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ShowNotice } from './app-messages.js' */
-/** @import { ExportLimitReply, ExportRootSize, ExportSnapshot, FontEmbedding } from '../services/export.js' */
+/** @import { ExportLimitReply, ExportSnapshot, FontEmbedding, SvgRootReply } from '../services/export.js' */
 /** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 
 const { computed, reactive, ref } = window.Vue;
@@ -400,7 +400,7 @@ export const createResultExport = ({
         ).result),
         // A Result drawn to a requested size states it in its SVG as the CLI writes it (Python's
         // `export_root_size`, through the export check); a Result drawn at Auto exports its root as shown.
-        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => /** @type {{ root: ExportRootSize }} */ ((
+        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => /** @type {SvgRootReply} */ ((
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
             format: 'svg', width, height, dpi: null, linearWrap: null, figureSize: exportedFigureSize
           })
