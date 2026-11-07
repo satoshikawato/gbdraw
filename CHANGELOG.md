@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: a Circular figure size that no map size fits is refused sooner. To
+  find the smallest map it can draw, which the message states, the fit now
+  tries the radii too small to draw first, since those fail at once, and skips
+  a last check that cannot fit. It draws about half as many maps on the way
+  (HmmtDNA with labels outside at 85 mm: 4 maps instead of 8, 74 s to 33 s;
+  BGC0000711 at 150 mm: 22 s to 14 s). The message and its sizes
+  stay the same. When labels are not placed for lack of room, the fit can stop
+  at another small map, so the stated room and the larger size can change a
+  little (4.2 to 4.1 times the room). The figure sizes measured that fit took
+  the same passes and drew the same figures. A size reached only below every
+  map drawn so far can now be kept at another radius within the 3 px the fit
+  allows. A size that fits only at radii between larger and smaller radii that
+  do not fit is found less often, because fewer maps are drawn.
 - Changed: `gbdraw render --session` and `gbdraw circular`/`linear --session`
   draw a PNG at the PNG DPI a web app Session saved (72, 96, 150, 300, or 600),
   so a Session drawn again on the command line gives the PNG the web app
