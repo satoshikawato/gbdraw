@@ -13,6 +13,7 @@ from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
+    MarkPart,
     RegionAnnotationStyle,
     ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
@@ -21,6 +22,7 @@ from gbdraw.annotations import (
     effective_annotation_style,
     is_auto_feature_underlay,
     linear_annotation_labels_above,
+    mark_parts,
 )
 from gbdraw.annotations.layout import PlacedRegionAnnotation
 from gbdraw.layout.linear import VerticalBand
@@ -29,14 +31,12 @@ from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
     ANNOTATION_ID_ATTRIBUTE,
     ANNOTATION_SET_ID_ATTRIBUTE,
-    MarkPart,
     annotation_dom_id,
     cap_size,
     dom_token,
     gradient_fill_group,
     gradient_steps,
     label_ink_offsets,
-    mark_parts,
     mark_reach,
     past_span_edge,
 )
@@ -293,7 +293,7 @@ def _label_rows(
     rows = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label or (wrap_row is not None and annotation.label_row != wrap_row):
+        if not annotation.label or (wrap_row is not None and annotation.label_row(join_origin=track.join_origin) != wrap_row):
             continue
         style = effective_annotation_style(annotation, params)
         size = annotation_label_font_size(style, track.label_font_size)
@@ -412,19 +412,25 @@ def linear_annotation_labels(
     )
     for (placement, style, row_y, (left, right, top, bottom)), shift_y in candidates:
         annotation = placement.annotation
-        row = annotation.label_row
+        row = annotation.label_row(join_origin=track.join_origin)
         y = row_y + shift_y
         lane_height = _lane_height(
             track, placements, row_frames[row].height_px if row_frames else height_px, params
         )
-        segments = annotation.row_segments(row)
+        # The parts the mark draws on the label's row, in mark order: a start label stands where the first starts,
+        # an end label where the last ends.
+        segments = tuple(
+            (part.start, part.end)
+            for part in mark_parts(annotation, join_origin=track.join_origin)
+            if part.row == row
+        )
         anchor = _label_anchor(style)
         if anchor == "start":
             label_bp = float(segments[0][0])
         elif anchor == "end":
             label_bp = float(segments[-1][1])
         else:
-            label_bp = float(annotation.geometry_midpoint_bp)
+            label_bp = annotation.label_midpoint_bp(join_origin=track.join_origin)
         x = label_bp * scale
         labels.append(
             LinearAnnotationLabel(
@@ -534,7 +540,7 @@ def linear_annotation_track_content(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        parts = mark_parts(annotation, join_origin=False)
+        parts = mark_parts(annotation, join_origin=track.join_origin)
         part_count = len(parts)
         row_targets: dict[int, Group] = {}
         for part_index, part in enumerate(parts, start=1):

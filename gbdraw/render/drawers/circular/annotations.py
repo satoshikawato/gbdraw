@@ -15,11 +15,13 @@ from gbdraw.svg.elements import ClipPath, Group, Path, Text, TextPath
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
+    MarkPart,
     ResolvedAnnotationTrack,
     annotation_label_font_size,
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
+    mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.annotations.layout import PlacedRegionAnnotation
@@ -37,13 +39,11 @@ from gbdraw.layout.text_geometry import (
 from gbdraw.render.drawers.annotation_marks import (
     ANNOTATION_ID_ATTRIBUTE,
     ANNOTATION_SET_ID_ATTRIBUTE,
-    MarkPart,
     annotation_dom_id,
     cap_size,
     gradient_fill_group,
     gradient_steps,
     label_ink_offsets,
-    mark_parts,
     mark_reach,
     past_span_edge,
 )
@@ -368,6 +368,7 @@ def _along_region(
     record_length: int,
     fits: Callable[[CircularAnnotationLabel], bool],
     conflicts: Callable[[CircularAnnotationLabel], int],
+    join_origin: bool,
 ) -> CircularAnnotationLabel:
     """The label moved along its own region to the clear place nearest its default (OV-1173, the Linear rule).
 
@@ -378,7 +379,7 @@ def _along_region(
     """
 
     length = max(1, record_length)
-    centre = float(annotation.geometry_midpoint_bp)
+    centre = annotation.label_midpoint_bp(join_origin=join_origin)
     step = max(1e-9, length / (2.0 * math.pi * max(1.0, math.hypot(default.x, default.y))))
     candidates: set[float] = set()
     for start, end in annotation.geometry_segments:
@@ -483,7 +484,7 @@ def circular_annotation_labels(
                 ),
             )
         )
-    defaults = [label_at(float(annotation.geometry_midpoint_bp)) for annotation, label_at in entries]
+    defaults = [label_at(annotation.label_midpoint_bp(join_origin=track.join_origin)) for annotation, label_at in entries]
     if obstacles is None:
         return tuple(defaults)
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for label in defaults), default=0.0)
@@ -498,6 +499,7 @@ def circular_annotation_labels(
                 record_length=record_length,
                 fits=lambda label: _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
                 conflicts=index.conflicts,
+                join_origin=track.join_origin,
             )
         )
     return tuple(placed)
@@ -813,7 +815,7 @@ def circular_annotation_track_ink(
         lane_inner, lane_outer, lane_width = _mark_lane(placement, slot_lane_width, strand_lanes, ring=ring, params=params)
         radius = 0.5 * (lane_inner + lane_outer)
         pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
-        for part in mark_parts(annotation, join_origin=True):
+        for part in mark_parts(annotation, join_origin=track.join_origin):
             for start, end in _safe_segments(part.start, part.end, record_length):
                 start_turn, end_turn = _turn(start, record_length), _turn(end, record_length)
                 ends = _piece_ends(start, end, part)
@@ -919,7 +921,7 @@ def circular_annotation_track_content(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        parts = mark_parts(annotation, join_origin=True)
+        parts = mark_parts(annotation, join_origin=track.join_origin)
         part_count = sum(len(_safe_segments(part.start, part.end, record_length)) for part in parts)
         part_index = 0
         for part in parts:

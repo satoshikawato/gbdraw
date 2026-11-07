@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Literal
 
 from collections.abc import Callable
@@ -14,9 +14,12 @@ from svgwrite.base import BaseElement
 
 from gbdraw.annotations import (
     AnnotationGradient,
+    MarkPart,
     RegionAnnotationStyle,
     ResolvedRegionAnnotation,
     is_auto_feature_underlay,
+    mark_parts,
+    region_run,
 )
 from gbdraw.core.color import interpolate_color
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
@@ -50,65 +53,6 @@ def cap_size(lane_width: float) -> float:
     """Half the length of a bracket's end caps across its lane."""
 
     return min(5.0, 0.35 * lane_width)
-
-
-@dataclass(frozen=True)
-class MarkPart:
-    """One drawn part of a mark, in display bp on its ``row``, and whether it draws each of its ends.
-
-    An end it does not draw is a cut, where the region goes on: the display cut, a row boundary, or the origin of
-    a span across it. A cut gets no edge stroke, cap or arrow head. A part joined across the origin ends past the
-    record's length. ``local_start`` is where the part starts on its record (record-local bp); the part runs on
-    from there as it runs on the display, past the record's end when it is joined across the origin.
-    """
-
-    start: int
-    end: int
-    capped_start: bool
-    capped_end: bool
-    local_start: int
-    row: int = 0
-
-
-def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tuple[MarkPart, ...]:
-    """The parts a mark draws, in the order of its geometry segments: the one owner of where a mark is cut.
-
-    A span across the origin (``crosses_origin``) is cut there: its part that ends at the record's end and its
-    part that starts at 0 leave those ends open, or with ``join_origin`` (a circle drawn whole) become one part.
-    """
-
-    fragments = annotation.display_parts
-    parts = [
-        MarkPart(start, end, True, True, start)
-        for start, end in annotation.segments
-    ] if fragments is None else [
-        MarkPart(
-            part.display_start, part.display_end, not part.artificial_start, not part.artificial_end, part.local_start,
-            part.row,
-        )
-        for part in fragments
-    ]
-    if not annotation.crosses_origin:
-        return tuple(parts)
-    local_bounds = (
-        annotation.segments if fragments is None else [(part.local_start, part.local_end) for part in fragments]
-    )
-    # The resolver sets crosses_origin only when a segment starts at 0 and the last one ends at the record's end.
-    record_end = max(end for _start, end in local_bounds)
-    before = next(index for index, (_start, end) in enumerate(local_bounds) if end == record_end)
-    after = next(index for index, (start, _end) in enumerate(local_bounds) if start == 0)
-    if join_origin:
-        joined = parts[after]
-        parts[before] = replace(
-            parts[before],
-            end=parts[before].end + joined.end - joined.start,
-            capped_end=joined.capped_end,
-        )
-        del parts[after]
-        return tuple(parts)
-    parts[before] = replace(parts[before], capped_end=False)
-    parts[after] = replace(parts[after], capped_start=False)
-    return tuple(parts)
 
 
 def _half_stroke(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> float:
@@ -172,19 +116,14 @@ GRADIENT_MAX_STEPS = 48
 def _gradient_share(annotation: ResolvedRegionAnnotation, record_length: int) -> Callable[[float], float]:
     """Where a record-local position lies along the region, from 0 at its start to 1 at its end.
 
-    A region across a circular record's origin (``crosses_origin``) runs from the start of its segment that ends
-    at the record's end over the origin to the end of its segment that starts at 0.
+    The region runs as ``region_run`` orders it. Across a circular record's origin (``crosses_origin``) the scale
+    spans its stretch across the origin; other segments of such a span take the end of the scale (OV-2656).
     """
 
-    segments = annotation.segments
     length = max(1, int(record_length))
     crosses_origin = annotation.crosses_origin
-    if crosses_origin:
-        low = float(next(start for start, end in segments if end == length))
-        high = float(next(end for start, end in segments if start == 0) + length)
-    else:
-        low = float(min(start for start, _end in segments))
-        high = float(max(end for _start, end in segments))
+    run = region_run(annotation.segments, length, crosses_origin=crosses_origin)
+    low, high = float(run[0][0]), float(run[0 if crosses_origin else -1][1])
     span = max(1e-9, high - low)
 
     def share(position: float) -> float:
@@ -276,7 +215,6 @@ def label_ink_offsets(
 __all__ = [
     "GRADIENT_MAX_STEPS",
     "GRADIENT_STEP_PX",
-    "MarkPart",
     "MarkReach",
     "annotation_dom_id",
     "cap_size",
@@ -284,7 +222,6 @@ __all__ = [
     "gradient_fill_group",
     "gradient_steps",
     "label_ink_offsets",
-    "mark_parts",
     "mark_reach",
     "past_span_edge",
 ]

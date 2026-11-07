@@ -1,6 +1,7 @@
 """A span across the origin is one region: no edge, cap or arrow head where it crosses (OV-2573).
 
-Circular draws it as one part; Linear draws the two parts at the record's ends and leaves those ends open.
+Circular draws it as one part; Linear draws the two parts at the record's ends and leaves those ends open, or, from
+a display start where the parts meet, one part (OV-2577).
 """
 
 from __future__ import annotations
@@ -109,46 +110,73 @@ def _number(text: str | None) -> float:
     return round(float(text or 0.0), 3)
 
 
-def _expected_ends(spans: list[tuple[float, float]]) -> set[float]:
-    """The x of the span's two outer ends, from its two parts in drawing order.
+def _stretches(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The drawn x ranges merged where they touch."""
 
-    Unrotated, the parts lie at the record's ends (from 0, and up to the end of the axis), so the record's ends
-    are cuts; rotated, the parts meet at the origin, so the edge they share is the cut.
+    merged: list[tuple[float, float]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _expected_ends(spans: list[tuple[float, float]]) -> set[float]:
+    """The x of the span's two own ends.
+
+    Unrotated, the span is drawn as two stretches at the record's ends (from 0, and up to the end of the axis):
+    the record's ends are cuts, and the span's own ends are the inner ends. Rotated, its parts meet at the origin
+    and draw one stretch, whose two ends are the span's.
     """
 
-    (first_start, first_end), (second_start, second_end) = spans
-    if first_end == second_start:
-        return {first_start, second_end}
+    stretches = _stretches(spans)
+    if len(stretches) == 1:
+        return set(stretches[0])
+    (_first_start, first_end), (second_start, _second_end) = stretches
     return {first_end, second_start}
+
+
+def _vertical_edges(item: ElementTree.Element) -> set[float]:
+    """The x of every stroked edge across the lane: the vertical strokes of outline paths, and both sides of a
+    rect drawn with its own stroke."""
+
+    edges = {
+        _number(x1)
+        for path in item.iter(f"{_SVG}path")
+        for x1, x2 in re.findall(r"M ([-\d.]+),[-\d.]+ L ([-\d.]+),[-\d.]+", path.get("d", ""))
+        if _number(x1) == _number(x2)
+    }
+    for rect in item.iter(f"{_SVG}rect"):
+        if rect.get("stroke") not in {None, "none"}:
+            x = float(rect.get("x", 0))
+            edges.update({_number(x), _number(x + float(rect.get("width", 0)))})
+    return edges
 
 
 @pytest.mark.parametrize("start", _STARTS)
 @pytest.mark.parametrize(("mark", "line_cap"), _CASES)
 def test_linear_leaves_the_ends_of_a_span_across_the_origin_open(mark: str, line_cap: str, start: int | None) -> None:
     item = _item("linear", mark, line_cap, start)
+    # The span covers 2000 bp of 10000 on an axis of 2000 px: two stretches of 200 px at the record's ends, or,
+    # rotated, one stretch of 400 px.
+    expected_stretches = [(0.0, 200.0), (1800.0, 2000.0)] if start is None else [(800.0, 1200.0)]
 
     if mark in {"band", "highlight"}:
-        rects = list(item.iter(f"{_SVG}rect"))
-        assert len(rects) == 2
-        spans = sorted(
-            (_number(rect.get("x")), _number(float(rect.get("x", 0)) + float(rect.get("width", 0)))) for rect in rects
-        )
-        # The rects carry no stroke of their own; their outlines draw only the span's two outer ends across the lane.
-        assert {rect.get("stroke") for rect in rects} == {"none"}
-        verticals = {
-            _number(x1)
-            for path in item.iter(f"{_SVG}path")
-            for x1, x2 in re.findall(r"M ([-\d.]+),[-\d.]+ L ([-\d.]+),[-\d.]+", path.get("d", ""))
-            if _number(x1) == _number(x2)
-        }
-        assert verticals == _expected_ends(spans)
+        spans = [
+            (_number(rect.get("x")), _number(float(rect.get("x", 0)) + float(rect.get("width", 0))))
+            for rect in item.iter(f"{_SVG}rect")
+        ]
+        assert _stretches(spans) == expected_stretches
+        # Edges across the lane stand only at the span's own two ends, none at the origin or a record end.
+        assert _vertical_edges(item) == _expected_ends(spans)
         return
 
     lines = list(item.iter(f"{_SVG}line"))
     bars = [line for line in lines if line.get("y1") == line.get("y2")]
     caps = [line for line in lines if line.get("x1") == line.get("x2")]
-    assert len(bars) == 2
-    spans = sorted((_number(bar.get("x1")), _number(bar.get("x2"))) for bar in bars)
+    spans = [(_number(bar.get("x1")), _number(bar.get("x2"))) for bar in bars]
+    assert _stretches(spans) == expected_stretches
     expected = _expected_ends(spans)
     heads = [
         _number(match.group(1))
@@ -156,10 +184,10 @@ def test_linear_leaves_the_ends_of_a_span_across_the_origin_open(mark: str, line
         if (match := re.search(r"L ([-\d.]+),[-\d.]+ L", path.get("d", "")))
     ]
     if line_cap == "arrow":
-        # The feature runs forward: a cap where its first part starts, a head where its last part ends, nothing at
-        # the origin.
-        starts = {start for start, _end in spans}
-        cap_at, head_at = sorted(expected, key=lambda x: x not in starts)
+        # The feature runs forward: a cap where it starts, a head where it ends, nothing at the origin.
+        cap_at, head_at = (
+            sorted(expected, reverse=True) if start is None else sorted(expected)
+        )
         assert ({_number(cap.get("x1")) for cap in caps}, set(heads)) == ({cap_at}, {head_at})
     else:
         assert sorted(_number(cap.get("x1")) for cap in caps) == sorted(expected)

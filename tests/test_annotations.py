@@ -74,6 +74,7 @@ def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
         record_lengths={0: 100},
         params=params,
         label_font_size=10.0,
+        join_origin=False,
     )
 
     assert params.cover_anchor is True
@@ -118,6 +119,7 @@ def test_spanning_annotation_track_does_not_fit_lanes_to_its_own_extent() -> Non
             ),
             available_extent_px=14.0,
             label_font_size=10.0,
+            join_origin=False,
         )
 
     with pytest.raises(ValidationError, match="only 14.00px is available"):
@@ -146,6 +148,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
         record_lengths={0: 100},
         params=AnnotationTrackParams(set_id="s", marks=("line", "band")),
         label_font_size=10.0,
+        join_origin=False,
     )
     customized = layout_annotation_track(
         "custom",
@@ -159,6 +162,7 @@ def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() 
             padding_px=5,
         ),
         label_font_size=10.0,
+        join_origin=False,
     )
 
     assert {item.annotation.mark for item in defaults.placements} == {
@@ -301,7 +305,7 @@ def test_lane_assignment_is_deterministic_and_separates_overlap() -> None:
         RegionAnnotation("c", CoordinateSpan(None, 20, 25)),
     )
     bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
-    lanes = assign_annotation_lanes(bundle.annotations, record_lengths={0: 100})
+    lanes = assign_annotation_lanes(bundle.annotations, record_lengths={0: 100}, join_origin=False)
     assert {item.annotation.id: item.lane for item in lanes} == {"a": 0, "c": 0, "b": 1}
 
 
@@ -315,7 +319,7 @@ def test_explicit_lane_conflict_names_its_cause_to_the_web() -> None:
     )
     bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
     with pytest.raises(ValidationError, match="Annotation s/second conflicts in explicit lane 0.") as raised:
-        assign_annotation_lanes(bundle.annotations, record_lengths={0: 100})
+        assign_annotation_lanes(bundle.annotations, record_lengths={0: 100}, join_origin=False)
     payload = serialize_web_error(raised.value, operation="generate", stage="render")
     assert (payload["code"], payload["stage"], payload["context"]) == (
         "TRACK_INVALID",
@@ -591,6 +595,7 @@ def test_lane_packing_measures_a_label_in_the_slot_style_font() -> None:
             record_lengths={0: 100},
             params=AnnotationTrackParams(set_id="s", style_override=style_override),
             label_font_size=1.0,
+            join_origin=False,
         )
         return {placement.lane for placement in track.placements}
 
@@ -613,6 +618,7 @@ def test_lane_packing_pads_a_bracket_by_the_slot_style_stroke() -> None:
             record_lengths={0: 100},
             params=AnnotationTrackParams(set_id="s", padding_px=0.0, style_override=style_override),
             label_font_size=10.0,
+            join_origin=False,
         )
         return {placement.lane for placement in track.placements}
 

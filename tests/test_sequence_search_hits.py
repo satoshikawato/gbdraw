@@ -41,7 +41,8 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.render.drawers.annotation_marks import gradient_steps, mark_parts
+from gbdraw.annotations import mark_parts
+from gbdraw.render.drawers.annotation_marks import gradient_steps
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.web_support.sequence_search import sequence_search_annotation_set_json
 
