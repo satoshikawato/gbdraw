@@ -176,13 +176,15 @@ def _lane_radii(
     params: AnnotationTrackParams,
 ) -> tuple[float, float]:
     """The inner and outer radius of a placement's lane: ``inside`` slots stack their lanes inward, each past the
-    label room of the gaps before it (``ResolvedAnnotationTrack.room_before``)."""
+    label room of the gaps before it (``ResolvedAnnotationTrack.room_before``). A lane stacked past the centre (a
+    clipped slot of set width) stops at it: a negative radius would draw the mark through the centre, on the far
+    side of the circle (OV-2666)."""
 
     # A circle draws its record on one row.
     room = track.room_before(placement.annotation.record_index, 0, placement.lane)
     near, far = lane_span_px(placement.lane, lane_width, padding_px=params.padding_px, room_before_px=room)
     if side == "inside":
-        return outer_radius_px - far, outer_radius_px - near
+        return max(0.0, outer_radius_px - far), max(0.0, outer_radius_px - near)
     return inner_radius_px + near, inner_radius_px + far
 
 
