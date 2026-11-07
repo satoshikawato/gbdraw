@@ -24,15 +24,20 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { DrawingState, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
-/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { UnvalidatedFields } from '../services/session-authority.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 
 const { watch } = window.Vue;
+
+// The operations of one Result as the editor plan compiles them, the shape the
+// preview runtime's executor takes; derived here because the module that
+// declares it (services/svg-result-ingestion.js) is privileged.
+/** @typedef {NonNullable<ReturnType<typeof compileDirectEditorMutationPlan>['operationsByResult'][number]>} SvgMutationOperations */
+// The diagram options `featureDrawnContext` reads, unvalidated.
+/** @typedef {NonNullable<Parameters<typeof featureDrawnContext>[1]>['diagramOptions']} DrawnContextDiagramOptions */
 
 /**
  * What the editor intent reads of a mounted Result's binding context (the
@@ -119,7 +124,7 @@ export const createEditorIntentShow = ({
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')
           // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
-          ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
+          ? featureDrawnContext(drawing, { diagramOptions: /** @type {DrawnContextDiagramOptions} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
         ruleRows
       } : null
