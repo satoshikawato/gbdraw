@@ -71,7 +71,7 @@ test('the store writers keep drawingList() in tab order and refuse bad IDs', () 
 test('a reader of the shown drawing follows a store write that replaces it under its ID (OV-1778)', () => {
   const original = state.drawingList();
   const originalTabs = state.drawingTabs.value;
-  // What a setup member reads (app-setup.js `drawingMember`): a cached computed.
+  // What a setup member reads (shown-drawing-settings.js `drawingMember`): a cached computed.
   const shownAdv = Vue.computed(() => state.activeDrawing().adv);
   const linearOf = Vue.computed(() => state.drawingOf('linear'));
   try {

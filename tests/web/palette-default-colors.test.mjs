@@ -53,7 +53,7 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
     signatureFor: (value) => JSON.stringify(value),
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
-  // app-setup.js wires the dialog's choices the same way.
+  // app-setup.js creates the dialog choice the same way, and app/history-wrappers.js wires its choices.
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   const manager = createResultsManager({
     state, closeAfterDialogChoice: dialogChoice.closeAfterChoice, writeArtifactValues: () => { throw new Error('no hidden drawing'); }

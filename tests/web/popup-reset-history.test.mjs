@@ -90,7 +90,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
   });
   assert.equal(await preparation.prepare([savedRule, hashRule]), true);
   stages.length = 0;
-  // app-setup.js: `undoableAction('Reset feature color', resetClickedFeatureFillColor)`.
+  // history-wrappers.js: `undoableAction('Reset feature color', resetClickedFeatureFillColor)`.
   await history.runUndoable('Reset feature color', () => actions.resetClickedFeatureFillColor());
   assert.equal(resetColorDialog.show, false);
   assert.deepEqual(manualSpecificRules, [savedRule]);

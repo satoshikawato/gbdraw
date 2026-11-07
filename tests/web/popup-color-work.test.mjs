@@ -131,14 +131,14 @@ const setup = ({
       getLegendRowRules: () => []
     }
   });
-  // app-setup.js: `undoableAction(label, action)`.
+  // history-wrappers.js: `undoableAction(label, action)`.
   const pick = (color) => history.runUndoable('Change feature color', () => actions.updateClickedFeatureColor(color));
   const rename = (caption) => {
     state.clickedFeature.value.legendName = caption;
     return history.runUndoable('Rename legend item', () => actions.handleLegendNameCommit());
   };
   const reset = () => history.runUndoable('Reset feature color', () => actions.resetClickedFeatureFillColor());
-  // app-setup.js: `scopeChoiceWithHistory(label, choice, cancel)`.
+  // history-wrappers.js: `scopeChoiceWithHistory(label, choice, cancel)`.
   const choose = (label, handler, cancel) => dialogChoice.withHistory(() => label, handler, cancel);
   // app-setup.js: `dialogChoicePending`, what a dialog's `busy` reads.
   const busy = () => dialogChoice.pending.value;

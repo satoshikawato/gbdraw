@@ -32,17 +32,15 @@ import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
-  countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
+  displayedLegendRowContext, featureDrawnContext,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
-import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
 import { admitFeatureCatalog, biologicalFeatureKey, catalogNameIndex, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
-import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES } from '../services/session-active-config-contract.js';
 import { createSettingsPaneController } from './settings-pane.js';
@@ -65,7 +63,7 @@ import {
 } from './linear-source-edits.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
-import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
+import { legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -168,7 +166,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { appliedFeatureColors, COMPARISON_COLOR_KEYS, normalizeOptionalHexColor } from '../utils/color-utils.js';
+import { appliedFeatureColors, normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { COLLINEAR_COLOR_MODE_TEXT } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -237,6 +235,11 @@ import {
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
+import { trapDialogFocus } from './dialog-focus-trap.js';
+import { createFeatureEditHistory, createLegendEditHistory, createSelectedFeatureHistory } from './history-wrappers.js';
+import { createPreservedConfigOverrides } from './preserved-config-overrides.js';
+import { createSessionStatus } from './session-status.js';
+import { createFeatureChoiceReaders, createScaleStyleAvailability, createShownDrawingMembers } from './shown-drawing-settings.js';
 import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits } from './circular-record-controls.js';
 import { createDrawingRecordCatalog } from './drawing-record-catalog.js';
 import { createShownDrawingReaders } from './shown-drawing-readers.js';
@@ -279,7 +282,7 @@ import {
 } from '../services/record-discovery.js';
 import { normalizeFileList } from '../services/conservation-series.js';
 import {
-  comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd, linearAxisRulerApplies
+  comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd
 } from '../mode-profiles.js';
 import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
@@ -302,7 +305,6 @@ import {
 /** @import { RulePreparationOptions } from './rule-matching.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { MountedResultContext } from './preview-runtime.js' */
-/** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
 /** @import { OrthogroupGroup } from './orthogroups.js' */
 /** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
@@ -311,7 +313,7 @@ import {
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
-const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive, isRef } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive } = window.Vue;
 
 /** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
@@ -492,8 +494,6 @@ export const createAppSetup = () => {
     resultPanelTab,
     lastRunInfo,
     annotationWarnings,
-    featureIdentityNotices,
-    featureEditRemovalCount,
     comparisonWarnings,
     labelFitReports,
     matchSequenceRegistry,
@@ -1068,36 +1068,9 @@ export const createAppSetup = () => {
   // D-03: the Rich Feature Popup preference records no Undo step, but a change
   // of it is unsaved work that Load Session asks about (D-07 (b)).
   const markRichFeaturePopupChanged = () => history.markChangeOutsideHistory();
-  /** @param {unknown} value */
-  const displayPreservedConfigValue = (value) => {
-    const serialized = JSON.stringify(value) ?? String(value);
-    return serialized.length <= 240
-      ? serialized
-      : `${serialized.slice(0, 237)}...`;
-  };
-  const unmanagedConfigOverrideEntries = computed(() => (
-    Object.entries(state.activeDrawing().unmanagedConfigOverrides)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([path, value]) => ({
-        path,
-        value,
-        displayValue: displayPreservedConfigValue(value)
-      }))
-  ));
-  /** @param {string} path */
-  const resetUnmanagedConfigOverride = (path) => {
-    const drawing = state.activeDrawing();
-    return history.runUndoable(
-      msg('Reset preserved setting'),
-      () => {
-        if (!Object.prototype.hasOwnProperty.call(drawing.unmanagedConfigOverrides, path)) {
-          return false;
-        }
-        delete drawing.unmanagedConfigOverrides[path];
-        return true;
-      }
-    );
-  };
+  const { unmanagedConfigOverrideEntries, resetUnmanagedConfigOverride } = createPreservedConfigOverrides({
+    state, runUndoable: history.runUndoable
+  });
   /** @param {unknown} index */
   const selectResult = (index) => previewRuntime.selectResult(index);
 
@@ -3261,270 +3234,53 @@ export const createAppSetup = () => {
   };
 
   const { requestPaletteChange, selectPalette, requestResetColors } = resultsManager;
-  /**
-   * @template {unknown[]} A
-   * @template R
-   * @param {string} label
-   * @param {(...args: A) => R} fn
-   * @param {{ joinsOpenStep?: boolean }} [options] History's options for the step.
-   */
-  const undoableAction = (label, fn, options) => (/** @type {A} */ ...args) => history.runUndoable(label, () => fn(...args), options);
-  // Python's report of the per-feature edits the Results do not draw (design
-  // Q4 3.4): dormant edits outside the crop or display, edits whose feature
-  // the source does not have, and the edits a source-replacing Generate removed.
-  const featureIdentityNoticeSummary = computed(() => {
-    const drawing = state.activeDrawing();
-    const notices = Array.isArray(featureIdentityNotices.value) ? featureIdentityNotices.value : [];
-    const summary = {
-      dormant: notices.filter((/** @type {UnresolvedNotice} */ notice) => notice.status !== 'unresolved').length,
-      unmatched: countUnresolvedFeatureEdits({ featureEdits: drawing.slices.featureEdits, notices }),
-      removed: Number(featureEditRemovalCount.value) || 0
-    };
-    return summary.dormant || summary.unmatched || summary.removed ? summary : null;
+  const {
+    undoableAction, featureIdentityNoticeSummary, removeUnmatchedFeatureEdits, addFeatureVisibilityRuleWithHistory,
+    moveFeatureVisibilityRuleDownWithHistory, moveFeatureVisibilityRuleUpWithHistory, removeFeatureVisibilityRuleWithHistory,
+    setFeatureVisibilityRuleFieldWithHistory, setFeatureVisibilityWithHistory, updateClickedFeatureVisibilityWithHistory,
+    handleFeatureVisibilityScopeChoiceWithHistory, requestFeatureColorChangeWithHistory, setFeatureColorValueWithHistory,
+    updateClickedFeatureColorWithHistory, updateLegendEntryColorShown, updateLegendEntryColorInPopup,
+    setLegendEntryStrokeColorValueWithHistory, scopeChoiceWithHistory, handleColorScopeChoiceWithHistory,
+    handleFeatureStyleScopeChoiceWithHistory, featureStyleScopeLabelOptions
+  } = createFeatureEditHistory({
+    state, runUndoable: history.runUndoable, withHistory: dialogChoice.withHistory, editEditorIntent, showingEditorIntent,
+    LEGEND_FILL_DOMAINS, STROKE_DOMAINS, addFeatureVisibilityRule, moveFeatureVisibilityRuleDown, moveFeatureVisibilityRuleUp,
+    removeFeatureVisibilityRule, setFeatureVisibilityRuleField, setFeatureVisibility, updateClickedFeatureVisibility,
+    handleFeatureVisibilityScopeChoice, requestFeatureColorChange, setFeatureColorValue, updateClickedFeatureColor,
+    updateLegendEntryColor, legendRowHasRules, setTypeDefaultColor: featureActions.setTypeDefaultColor,
+    preparedLegendRowDefaultColorType: featureActions.preparedLegendRowDefaultColorType, setLegendEntryStrokeColorValue,
+    cancelFeatureStyleScope, handleColorScopeChoice, handleFeatureStyleScopeChoice
   });
-  // An explicit removal of the edits Python reported unresolved (R2).
-  const removeUnmatchedFeatureEdits = undoableAction(msg('Remove unmatched feature edits'), () => {
-    const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
-    if (busy) return busy;
-    return removeUnresolvedFeatureEdits({
-      featureEdits: drawing.slices.featureEdits, notices: featureIdentityNotices.value
-    }) > 0;
+  const {
+    handleLegendNameCommitWithHistory, joinLegendGroupWithHistory, legendReorder, handleLegendReorderKey,
+    startLegendReorder, overLegendReorder, dropLegendReorder, endLegendReorder, handleLegendRenameChoiceWithHistory,
+    handlePaletteColorsChoiceWithHistory, handleResetColorChoiceWithHistory
+  } = createLegendEditHistory({
+    state, undoableAction, scopeChoiceWithHistory, runUndoableCheckpoint: history.runUndoableCheckpoint,
+    handleLegendNameCommit, joinLegendGroup, moveLegendEntry, handleLegendRenameChoice, restoreLegendRows,
+    restoreDeletedLegendEntries, cancelLegendRename, handlePaletteColorsChoice: resultsManager.handlePaletteColorsChoice,
+    cancelPaletteColorsDialog: resultsManager.cancelPaletteColorsDialog, handleResetColorChoice, cancelResetColor
   });
-  const addFeatureVisibilityRuleWithHistory = undoableAction(msg('Add feature visibility rule'), addFeatureVisibilityRule);
-  const moveFeatureVisibilityRuleDownWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleDown);
-  const moveFeatureVisibilityRuleUpWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleUp);
-  const removeFeatureVisibilityRuleWithHistory = undoableAction(msg('Remove feature visibility rule'), removeFeatureVisibilityRule);
-  const setFeatureVisibilityRuleFieldWithHistory = undoableAction(
-    msg('Edit feature visibility rule'),
-    setFeatureVisibilityRuleField
-  );
-  const setFeatureVisibilityWithHistory = undoableAction(msg('Change feature visibility'), setFeatureVisibility);
-  const updateClickedFeatureVisibilityWithHistory = undoableAction(
-    msg('Change feature visibility'),
-    updateClickedFeatureVisibility
-  );
-  const handleFeatureVisibilityScopeChoiceWithHistory = undoableAction(
-    msg('Change feature visibility'),
-    handleFeatureVisibilityScopeChoice
-  );
-  const requestFeatureColorChangeWithHistory = undoableAction(msg('Change feature color'), requestFeatureColorChange);
-  const setFeatureColorValueWithHistory = undoableAction(msg('Change feature color'), setFeatureColorValue);
-  const updateClickedFeatureColorWithHistory = undoableAction(msg('Change feature color'), updateClickedFeatureColor);
-  const editLegendEntryColor = editEditorIntent(msg('Change legend color'), updateLegendEntryColor, { domains: LEGEND_FILL_DOMAINS });
-  /** @param {number} index @param {string} color */
-  const updateLegendEntryColorShown = (index, color) => (
-    legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
-  );
-  const setTypeDefaultColorWithHistory = undoableAction(msg('Change feature color'), featureActions.setTypeDefaultColor);
-  // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
-  // `input` shows the row's color again afterwards (`shownColor()`): a refused edit leaves the view as it was.
-  /** @param {number} index @param {string} color @param {HTMLInputElement} input @param {() => string} shownColor */
-  const updateLegendEntryColorInPopup = async (index, color, input, shownColor) => {
-    try {
-      return await requestLegendEntryColorInPopup(index, color);
-    } finally {
-      await nextTick();
-      if (input.isConnected && input.value !== shownColor()) input.value = shownColor();
-    }
-  };
-  /** @param {number} index @param {string} color */
-  const requestLegendEntryColorInPopup = async (index, color) => {
-    const entry = state.activeDrawing().legendEntries.value[index];
-    const type = entry ? await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
-    if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);
-    // null: no default color draws the row (the swatch only); undefined: the matches went stale, so do nothing.
-    return type === null ? updateLegendEntryColorShown(index, color) : type;
-  };
-  const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
-    msg('Change legend stroke color'),
-    setLegendEntryStrokeColorValue
-  );
-  // OV-161, D-12: a dialog choice is one History step, Cancel records none, and
-  // neither starts while History's step is open (`createDialogChoice`).
-  /**
-   * @param {() => string} label
-   * @param {(choice: string, ...rest: any[]) => any} handler
-   * @param {() => void} [cancel]
-   */
-  const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
-    dialogChoice.withHistory(label, handler, cancel)
-  );
-  const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => msg('Change feature color'), handleColorScopeChoice);
-  const handleFeatureColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => msg('Change feature color'), handleFeatureStyleScopeChoice);
-  const handleFeatureStrokeScopeChoiceWithHistory = scopeChoiceWithHistory(
-    () => msg('Change feature stroke'),
-    showingEditorIntent(handleFeatureStyleScopeChoice, STROKE_DOMAINS)
-  );
-  /** @param {string} choice @param {unknown[]} rest */
-  const handleFeatureStyleScopeChoiceWithHistory = (choice, ...rest) => (
-    featureStyleScopeDialog.kind === 'stroke'
-      ? handleFeatureStrokeScopeChoiceWithHistory(choice, ...rest)
-      : handleFeatureColorScopeChoiceWithHistory(choice, ...rest)
-  );
-  // The label scopes the Color/Stroke Change Scope dialog offers; a
-  // label that repeats the Legend name, or the other label, is not offered.
-  // OV-648: the color owner decides which label scopes select other features.
-  const featureStyleScopeLabelOptions = computed(() => ({
-    displayLabel: featureStyleScopeDialog.displayLabelOffered === true,
-    annotationLabel: featureStyleScopeDialog.annotationLabelOffered === true
-  }));
-  const handleLegendNameCommitWithHistory = undoableAction(msg('Rename legend item'), handleLegendNameCommit);
-  const joinLegendGroupWithHistory = undoableAction(msg('Rename legend item'), joinLegendGroup);
-  // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
-  // keys; neither is a click, so each move records its own History step.
-  const moveLegendEntryWithHistory = undoableAction(msg('Move legend item'), moveLegendEntry);
-  const legendReorder = reactive({ from: /** @type {number | null} */ (null), over: /** @type {number | null} */ (null) });
-  /** @param {number} from @param {number} to @param {boolean} [refocus] */
-  const reorderLegendEntry = (from, to, refocus = false) => {
-    const count = state.activeDrawing().legendEntries.value.length;
-    if (from === to || to < 0 || to >= count) return;
-    moveLegendEntryWithHistory(from, to);
-    if (refocus) {
-      nextTick(() => {
-        const handle = document.querySelector(`[data-legend-reorder-handle="${to}"]`);
-        if (handle instanceof HTMLElement) handle.focus();
-      });
-    }
-  };
-  /** @param {KeyboardEvent} event @param {number} index */
-  const handleLegendReorderKey = (event, index) => {
-    const step = event.key === 'ArrowUp' ? -1 : (event.key === 'ArrowDown' ? 1 : 0);
-    if (!step) return;
-    event.preventDefault();
-    reorderLegendEntry(index, index + step, true);
-  };
-  /** @param {DragEvent} event @param {number} index */
-  const startLegendReorder = (event, index) => {
-    legendReorder.from = index;
-    legendReorder.over = index;
-    const row = event.target instanceof Element ? event.target.closest('[data-legend-drawer-row]') : null;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', String(index));
-      if (row) event.dataTransfer.setDragImage(row, 12, 12);
-    }
-  };
-  /** @param {DragEvent} event @param {number} index */
-  const overLegendReorder = (event, index) => {
-    if (legendReorder.from === null) return;
-    event.preventDefault();
-    legendReorder.over = index;
-  };
-  /** @param {DragEvent} event @param {number} index */
-  const dropLegendReorder = (event, index) => {
-    const from = legendReorder.from;
-    if (from === null) return;
-    event.preventDefault();
-    legendReorder.from = null;
-    legendReorder.over = null;
-    reorderLegendEntry(from, index);
-  };
-  const endLegendReorder = () => {
-    legendReorder.from = null;
-    legendReorder.over = null;
-  };
-  // R15-3 (OV-285): the Merge of a rename onto a deleted row's caption is the
-  // Restore of that row (by its Python key), then the merge, in one History
-  // checkpoint: the merge's rule commit joins it, so one Undo returns both.
-  // Keep both onto a deleted row in the renamed row's color restores it the
-  // same way: the two are one row (D-28).
-  /** @param {string} choice */
-  const chooseLegendRename = (choice) => {
-    const key = legendRenameDialog.deletedTargetKey;
-    const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
-    if (!restores || !key) return handleLegendRenameChoice(choice);
-    return history.runUndoableCheckpoint(msg('Rename legend item'), async () => {
-      const deleted = state.activeDrawing().deletedLegendEntries.value;
-      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === key);
-      if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
-      return handleLegendRenameChoice(choice);
-    });
-  };
-  const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
-    () => msg('Rename legend item'),
-    chooseLegendRename,
-    cancelLegendRename
-  );
-  // D-15: the palette dialog's choice is one History step too.
-  const handlePaletteColorsChoiceWithHistory = scopeChoiceWithHistory(
-    () => msg('Change setting'),
-    resultsManager.handlePaletteColorsChoice,
-    resultsManager.cancelPaletteColorsDialog
-  );
-  const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
-    () => msg('Reset feature color'),
-    handleResetColorChoice,
-    cancelResetColor
-  );
-  const resetClickedFeatureFillColorWithHistory = undoableAction(msg('Reset feature color'), resetClickedFeatureFillColor);
-  const updateClickedFeatureStrokeWithHistory = editEditorIntent(msg('Change feature stroke'), updateClickedFeatureStroke);
-  const setClickedFeatureStrokeColorValueWithHistory = editEditorIntent(
-    msg('Change feature stroke'),
-    setClickedFeatureStrokeColorValue
-  );
-  const setClickedFeatureStrokeWidthValueWithHistory = editEditorIntent(
-    msg('Change feature stroke'),
-    setClickedFeatureStrokeWidthValue
-  );
-  const resetClickedFeatureStrokeWithHistory = editEditorIntent(msg('Reset feature stroke'), resetClickedFeatureStroke);
-  const setFeatureColorWithHistory = undoableAction(msg('Change feature color'), setFeatureColor);
-  const selectedFeatureBulkColor = ref('#2563eb');
-  const selectedFeatureBulkCaption = ref('Selected features');
-  const selectedFeatureBulkVisibility = ref('off');
-  const selectedFeatureBulkStrokeColor = ref('#1f2937');
-  const selectedFeatureBulkStrokeWidth = ref(1.5);
-  const applySelectedFeatureColor = () => history.runUndoable(msg('Change selected feature color'), async () => {
-    const changed = await applyColorToSelectedFeatures(
-      selectedFeatures.value,
-      selectedFeatureBulkColor.value,
-      selectedFeatureBulkCaption.value
-    );
-    if (changed) featureSelection.syncFeatureSelectionClasses();
-    return changed;
+  const {
+    resetClickedFeatureFillColorWithHistory, updateClickedFeatureStrokeWithHistory,
+    setClickedFeatureStrokeColorValueWithHistory, setClickedFeatureStrokeWidthValueWithHistory,
+    resetClickedFeatureStrokeWithHistory, setFeatureColorWithHistory, selectedFeatureBulkColor, selectedFeatureBulkCaption,
+    selectedFeatureBulkVisibility, selectedFeatureBulkStrokeColor, selectedFeatureBulkStrokeWidth, applySelectedFeatureColor,
+    applySelectedFeatureVisibility, applySelectedFeatureStroke, openFirstSelectedFeature,
+    updateClickedFeatureLabelTextWithHistory, handleLabelTextScopeChoiceWithHistory, handleHiddenLabelTextChoiceWithHistory,
+    requestLabelTextChangeByFeatureIdWithHistory, requestLabelTextChangeByKeyWithHistory, commitListLabelDraft,
+    resetAllLabelTextOverridesWithHistory, loadLabelOverrideTableWithHistory
+  } = createSelectedFeatureHistory({
+    state, undoableAction, editEditorIntent, runUndoable: history.runUndoable,
+    runUndoableCommand: history.runUndoableCommand, resetClickedFeatureFillColor, updateClickedFeatureStroke,
+    setClickedFeatureStrokeColorValue, setClickedFeatureStrokeWidthValue, resetClickedFeatureStroke, setFeatureColor,
+    applyColorToSelectedFeatures, syncFeatureSelectionClasses: featureSelection.syncFeatureSelectionClasses,
+    buildSelectedFeaturesVisibilityCommand, clearFeatureSelection: featureSelection.clearFeatureSelection,
+    applyStrokeToSelectedFeatures, openFeatureEditorForFeature, updateClickedFeatureLabelText, handleLabelTextScopeChoice,
+    handleHiddenLabelTextChoice, requestLabelTextChangeByFeatureId, requestLabelTextChangeByKey,
+    getEditableLabelByFeatureId: featureActions.getEditableLabelByFeatureId, resetAllLabelTextOverrides,
+    loadLabelOverrideTable
   });
-  const applySelectedFeatureVisibility = async () => {
-    const changed = await history.runUndoableCommand(msg('Change selected feature visibility'), () =>
-      buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value)
-    );
-    if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
-    return changed;
-  };
-  const editSelectedFeatureStroke = editEditorIntent(msg('Change selected feature stroke'), () => applyStrokeToSelectedFeatures(
-    selectedFeatures.value,
-    selectedFeatureBulkStrokeColor.value,
-    selectedFeatureBulkStrokeWidth.value
-  ));
-  const applySelectedFeatureStroke = async () => {
-    const changed = await editSelectedFeatureStroke();
-    if (changed === true) featureSelection.syncFeatureSelectionClasses();
-    return changed;
-  };
-  const openFirstSelectedFeature = (event = null) => {
-    const first = selectedFeatures.value[0] || null;
-    if (!first) return null;
-    return openFeatureEditorForFeature(first, event);
-  };
-  const updateClickedFeatureLabelTextWithHistory = undoableAction(msg('Change label text'), updateClickedFeatureLabelText);
-  const handleLabelTextScopeChoiceWithHistory = undoableAction(msg('Change label text'), handleLabelTextScopeChoice);
-  // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
-  // A registered test reads the label from this line (feature-label-visual-unit.test.mjs).
-  const handleHiddenLabelTextChoiceWithHistory = undoableAction(msg('Change label visibility'), handleHiddenLabelTextChoice, { joinsOpenStep: true });
-  const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
-    msg('Change label text'),
-    requestLabelTextChangeByFeatureId
-  );
-  const requestLabelTextChangeByKeyWithHistory = undoableAction(msg('Change label text'), requestLabelTextChangeByKey);
-  // The Features list's label input commits what was typed; its draft then follows the label.
-  /** @param {string} featureId @param {string} text */
-  const commitListLabelDraft = (featureId, text) => {
-    const committed = requestLabelTextChangeByFeatureIdWithHistory(featureId, text);
-    const entry = featureActions.getEditableLabelByFeatureId(featureId);
-    if (entry) entry.draftText = entry.text;
-    return committed;
-  };
-  const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
-  const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
   const {
     runInfoCopyStatus, exactReplayCopyStatus, runInfoElapsedText, runInfoReproducibilityText, runInfoHasCliHelperFiles,
     copyRunCommand, copyExactReplayCommand
@@ -3970,40 +3726,12 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature, markSelectedPairwiseMatch: featureActions.markSelectedPairwiseMatch
   });
 
-  /** @param {unknown} value */
-  const normalizeSessionTitle = (value) => {
-    if (value === null || value === undefined) return '';
-    return String(value).trim();
-  };
-
-  const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
-  // D-25: a Result without current feature metadata (a Session older than 40)
-  // is saved only after one Generate; the notice comes from the same state.
-  const sessionSaveNeedsGenerate = computed(() => results.value.length > 0 && !state.featureCatalog?.value);
-  const reloadAfterOperationError = () => window.location.reload();
-
-  const sessionTitleLabel = computed(() => {
-    const title = normalizeSessionTitle(sessionTitle.value);
-    return title || t('Untitled session');
+  const {
+    normalizeSessionTitle, errorDisplay, sessionSaveNeedsGenerate, reloadAfterOperationError, sessionTitleLabel
+  } = createSessionStatus({ state });
+  const { canUseLinearRulerOnAxis, canUseCircularScaleStyling } = createScaleStyleAvailability({
+    state, circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled
   });
-
-  const canUseLinearRulerOnAxis = computed(
-    () => linearAxisRulerApplies(state.activeDrawing().form)
-  );
-
-  const canUseCircularScaleStyling = computed(
-    () => {
-      const drawing = state.activeDrawing();
-      return (
-        drawing.adv.circular_track_slots_enabled
-          ? drawing.adv.circular_track_slots.some((/** @type {CircularTrackSlot} */ slot) => (
-              slot?.renderer === 'ticks' &&
-              circularTrackSlotEditor.circularTrackSlotEffectiveEnabled(slot)
-            ))
-          : drawing.form.show_scale !== false
-      );
-    }
-  );
 
   const {
     clickedFeatureHeading, clickedFeatureSummary, copyClickedFeatureDetails, copyClickedFeatureQualifiers
@@ -4017,27 +3745,8 @@ export const createAppSetup = () => {
     shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest, awaitLinearRecordDiscovery, committedLinearRecordsOf
   });
 
-  // The list under the popup's Legend name: the color-rule Legend groups of
-  // the clicked feature's type, by name (PD-OI-061 revision 4). Each is shown
-  // as the Legend shows its row: by the row's drawn name, and a group that
-  // draws no row by its name as written, never by a key.
-  const popupLegendGroups = computed(() => {
-    const type = clickedFeature.value?.feat?.type;
-    if (type === undefined) return [];
-    const drawing = state.activeDrawing();
-    const rowKeyOf = groupLegendRowKeys(displayedLegendRowContext(state, drawing));
-    return colorRuleLegendGroups(drawing.manualSpecificRules, String(type))
-      .map((group) => ({ group, shownName: legendActions.shownLegendName(rowKeyOf(group)) }))
-      .sort((left, right) => left.group.name.localeCompare(right.group.name) || left.shownName.localeCompare(right.shownName));
-  });
-
-  const featureVisibilityFeatureSuggestions = computed(() => {
-    const values = new Set(['*', ...featureKeys]);
-    for (const feat of Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []) {
-      const type = String(feat?.type || '').trim();
-      if (type) values.add(type);
-    }
-    return Array.from(values);
+  const { popupLegendGroups, featureVisibilityFeatureSuggestions } = createFeatureChoiceReaders({
+    state, shownLegendName: legendActions.shownLegendName
   });
 
   // The Session title is asked in the app's dialog; Save asks for it when the Session has none.
@@ -4254,30 +3963,6 @@ export const createAppSetup = () => {
     linearSourceGroups, linearSourceRemovalDialog, linearSourceRemovalReturnFocus, sessionOperationAvailability,
     shownDrawingOfMode, runUndoable: history.runUndoable, removeLinearSource, askLinearFileRemoval
   });
-  // Keeps Tab inside the modal dialog of the overlay that handles the keydown.
-  /** @param {KeyboardEvent & { currentTarget: Element }} event Tab on the overlay that holds the dialog. */
-  const trapDialogFocus = (event) => {
-    const dialog = /** @type {HTMLElement | null} */ (event.currentTarget?.querySelector('[role="dialog"]'));
-    const controls = /** @type {HTMLElement[]} */ (Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []));
-    if (!controls.length) {
-      // A busy choice disables every button: Tab stays on the dialog panel.
-      if (dialog) {
-        event.preventDefault();
-        dialog.focus({ preventScroll: true });
-      }
-      return;
-    }
-    // `controls` is not empty, so `dialog` is an element and `last` is a button.
-    const first = controls[0];
-    const last = /** @type {HTMLElement} */ (controls.at(-1));
-    if (event.shiftKey && (document.activeElement === first || !(/** @type {HTMLElement} */ (dialog)).contains(document.activeElement))) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !(/** @type {HTMLElement} */ (dialog)).contains(document.activeElement))) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
   const { replaceLinearSourceFile, setLinearSeqPrimaryFile } = createLinearSourceFileReplacement({
     state, shownAction, pendingDiscoveryOf, applyLinearSeqMutation, askLinearFileRemoval, sourceReplacementRetiresPresentation
   });
@@ -4558,50 +4243,8 @@ export const createAppSetup = () => {
     clearAlignmentForMutation: similarityAlignmentActions.clearForMutation
   });
 
-  const labelSettingsShown = computed(() => {
-    const drawing = state.activeDrawing();
-    const scope = mode.value === 'linear' ? drawing.form.show_labels_linear : drawing.form.labels_mode;
-    return labelSettingsVisible(scope, drawing.featureOverrides);
-  });
-
-  // The template's names for the members of the shown mode's drawing: a ref
-  // member is its value, any other member the object itself. Only a setting's
-  // ref takes a write, its control's (plan-r2 §13 item 3); an editor member's
-  // writers are ports, and a derived value is read-only.
-  /** @param {keyof DrawingState} key */
-  const drawingMember = (key) => {
-    if (!isRef(state.activeDrawing()[key])) return computed(() => state.activeDrawing()[key]);
-    if (!(/** @type {readonly string[]} */ (SETTINGS_SLICE.members)).includes(key)) return computed(() => state.activeDrawing()[key].value);
-    return computed({
-      get: () => state.activeDrawing()[key].value,
-      /** @param {unknown} value */
-      set: (value) => SETTINGS_SLICE.install(state.activeDrawing().slices.settings, { [key]: value })
-    });
-  };
-
-  // The default colors of the feature types the shown figure draws,
-  // and the user's own default colors, come first; the others wait under More.
-  // The values are read untracked, so editing a color never moves it to the
-  // other grid; the grouping follows the drawn types, the palette, the keys,
-  // and a replaced color table (Reset, palette change, Session load, an
-  // imported Default colors file).
-  const defaultColorGroups = computed(() => {
-    const drawing = state.activeDrawing();
-    /** @type {Record<string, string>} */
-    const colors = drawing.currentColors.value || {};
-    const keys = Object.keys(colors);
-    const drawn = new Set((state.extractedFeatures.value || [])
-      .map((/** @type {{ type?: string }} */ feature) => String(feature?.type || '')));
-    if (!drawn.size) return { primary: keys, more: /** @type {string[]} */ ([]) };
-    const circular = mode.value === 'circular';
-    if (circular ? !drawing.form.suppress_gc : drawing.form.show_gc) drawn.add('gc_content');
-    if (circular ? !drawing.form.suppress_skew : drawing.form.show_skew) ['skew_high', 'skew_low'].forEach((key) => drawn.add(key));
-    if (!circular && drawing.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
-      COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
-    }
-    resultsManager.userDefaultColorRows(drawing, toRaw(colors)).forEach(([key]) => drawn.add(key));
-    const primary = keys.filter((key) => key === 'default' || drawn.has(key));
-    return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
+  const { labelSettingsShown, drawingMember, defaultColorGroups } = createShownDrawingMembers({
+    state, linearComparisonGlobalAction, userDefaultColorRows: resultsManager.userDefaultColorRows
   });
 
   // New drawing from a region: the shown drawing's draft request, as Save stores it, goes to Python.
