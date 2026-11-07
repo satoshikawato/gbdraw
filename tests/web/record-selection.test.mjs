@@ -276,7 +276,7 @@ test('Delete settings counts and removes the color rows that name a feature inst
     { feat: 'CDS', qual: 'product', val: 'uid-a', color: '#0000ff', cap: 'Product' }
   ];
   const colorRules = [...rows];
-  // As app-setup's recordEditData builds it, fresh for every call.
+  // As recordEditData in app/record-settings.js builds it, fresh for every call.
   const data = () => ({
     colorRuleEdits: colorRules.flatMap((rule) => {
       const instance = namedFeatureInstance(rule);

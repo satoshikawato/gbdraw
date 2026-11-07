@@ -38,7 +38,7 @@ const MAX_FUNCTION_LINES = 150;
 
 const FUNCTION_LINES = {
   'app/annotations.js::createAnnotationEditor': 332,
-  'app/app-setup.js::createAppSetup': 4793,
+  'app/app-setup.js::createAppSetup': 4576,
   'app/candidate-render.js::compilePlanBundle': 409,
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 1456,
   'app/drawing-list.js::createDrawingList': 220,

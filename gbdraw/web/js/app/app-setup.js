@@ -24,10 +24,8 @@
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
-/** @import { RecordDrawKey, RecordIdentitySources, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
+/** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
 /** @import { RegionSourceFeature } from './region-drawing.js' */
-/** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
-/** @import { CircularRecordsDiscovered } from './run-analysis.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
@@ -64,7 +62,6 @@ import {
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
-import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -131,12 +128,9 @@ import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js'
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
 import { bindDrawingInputFileTree, createLinearSeq, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
-import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
-  groupLinearSourceRecords,
   linearFileCardRecord,
-  planLinearSourceRemoval,
   getLinearSourceDefaultDefinition,
   inferredDefinitionForRecord,
   setLinearSourceDefaultDefinition,
@@ -227,9 +221,6 @@ import { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } fr
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
-  annotationRecordKeysOf
-} from './annotations/record-catalog.js';
-import {
   reconcileAnnotationRecordBindings, resultRecordBindings
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
@@ -242,6 +233,8 @@ import { createSessionStatus } from './session-status.js';
 import { createFeatureChoiceReaders, createScaleStyleAvailability, createShownDrawingMembers } from './shown-drawing-settings.js';
 import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits } from './circular-record-controls.js';
 import { createDrawingRecordCatalog } from './drawing-record-catalog.js';
+import { createRecordDiscoveryRequests, createRecordDiscoveryRuns } from './record-discovery-requests.js';
+import { createRecordSettingsSources, createRecordSettingsTransitions } from './record-settings.js';
 import { createShownDrawingReaders } from './shown-drawing-readers.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
 import { createFigureSizeField } from './figure-size-field.js';
@@ -254,8 +247,7 @@ import {
   buildDisambiguatedRecordEntries,
   circularEstimateLengths,
   circularRequestDiagrams,
-  formatRecordLength,
-  resolveDisambiguatedRecordSelection
+  formatRecordLength
 } from '../services/record-options.js';
 import {
   setLinearRecordRow as updateLinearRecordRow
@@ -263,23 +255,10 @@ import {
 import {
   missingUploadPairsToResolve
 } from '../services/linear-comparisons.js';
-import {
-  RECORD_SETTINGS_DEFAULTS,
-  circularRecordDrawKey,
-  circularRecordRequestKeys,
-  linearCardHasSettings,
-  recordsWithEdits,
-  removeRecordEdits
-} from '../services/record-draw-selection.js';
-import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
-import { addAnnotationSet as addSearchSetToDrawing, removeAnnotations } from '../services/drawing/annotation-sets.js';
+import { addAnnotationSet as addSearchSetToDrawing } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
 import { resultRecordBinding } from '../services/sequence-search.js';
-import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
-import {
-  discoverInputRecords
-} from '../services/record-discovery.js';
 import { normalizeFileList } from '../services/conservation-series.js';
 import {
   comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd
@@ -689,41 +668,9 @@ export const createAppSetup = () => {
     state, shownDrawingOfMode, losatCacheInfo
   });
 
-  /**
-   * What a drawing's next record discoveries do, for the rows and input of
-   * that drawing only (OV-2148: a Duplicate keeps its row uids, so a uid alone
-   * names a row of several drawings).
-   * - `expansions`: the Linear rows whose next discovery may expand them, each
-   *   with whether the row's own names were entered for the file being read.
-   *   They were not when the file replaced another: those names belong to it.
-   * - `uploads`, `circularUpload`: the Linear Files and the Circular input just
-   *   uploaded: their first discovery infers record definitions (Linear
-   *   GenBank) and asks for the record list of a file with many records (D-04).
-   *   A Session load, a rollback, and a History step never add one.
-   * - `listRequests`: those asks, in upload order; the drawing's panel opens them.
-   * @typedef {{ expansions: Map<string, boolean>, uploads: Set<string>, circularUpload: InputFileRef | null,
-   *   listRequests: RecordListRequest[] }} PendingRecordDiscovery
-   */
-  /** @type {WeakMap<DrawingState, PendingRecordDiscovery>} */
-  const pendingDiscoveries = new WeakMap();
-  /** @param {DrawingState} drawing @returns {PendingRecordDiscovery} */
-  const pendingDiscoveryOf = (drawing) => {
-    const known = pendingDiscoveries.get(drawing);
-    if (known) return known;
-    /** @type {PendingRecordDiscovery} */
-    const pending = { expansions: new Map(), uploads: new Set(), circularUpload: null, listRequests: reactive([]) };
-    pendingDiscoveries.set(drawing, pending);
-    return pending;
-  };
-  /**
-   * @param {DrawingState} drawing
-   * @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount
-   */
-  const requestRecordListAfterUpload = (drawing, listMode, sourceKey, recordCount) => {
-    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) {
-      pendingDiscoveryOf(drawing).listRequests.push({ mode: listMode, sourceKey });
-    }
-  };
+  const {
+    pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, readInputRecords
+  } = createRecordDiscoveryRequests({ state });
   /**
    * @param {DrawingState} drawing
    * @param {{ uid: string, records: SequenceRecord[], inferDefinitions?: boolean }} discovered
@@ -765,14 +712,6 @@ export const createAppSetup = () => {
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
-  /**
-   * The drawing a discovery ran for, or null when it was deleted while the
-   * discovery ran: such a discovery changes nothing (OV-2148).
-   * @param {DrawingId} drawingId @returns {DrawingState | null}
-   */
-  const listedDrawingOf = (drawingId) => (
-    state.drawingTabs.value.some((tab) => tab.id === drawingId) ? state.drawingOf(drawingId) : null
-  );
   /** @param {{ drawingId: DrawingId, uid: string, records: SequenceRecord[] }} discovered the records of one card, for the drawing the discovery ran for */
   const handleLinearRecordsDiscovered = ({ drawingId, uid, records }) => {
     const drawing = listedDrawingOf(drawingId);
@@ -789,42 +728,6 @@ export const createAppSetup = () => {
     if (!expanded) rebindAnnotationRecords();
     return expanded;
   };
-  /**
-   * A Circular drawing's discovery settled (success or error): the first after
-   * its input's upload asks for the record list.
-   * @param {CircularRecordsDiscovered} discovered
-   */
-  const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
-    rebindAnnotationRecords();
-    const drawing = listedDrawingOf(drawingId);
-    if (!drawing) return;
-    const pending = pendingDiscoveryOf(drawing);
-    const upload = pending.circularUpload;
-    if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
-    pending.circularUpload = null;
-    requestRecordListAfterUpload(drawing, 'circular', 'circular', recordCount);
-  };
-  /** @param {DrawingState} drawing */
-  const materializeAutomaticLinearRecords = async (drawing) => {
-    if (drawing.mode !== 'linear') return;
-    // A row that already waits for its discovery keeps what its writer said
-    // about its names (a replacing file does not own the row's record name).
-    const { expansions } = pendingDiscoveryOf(drawing);
-    drawing.linearSeqs.forEach((seq) => {
-      if (!seq.region_record_id && !expansions.has(seq.uid)) expansions.set(seq.uid, true);
-    });
-    await linearRecordSelector.refresh(drawing);
-  };
-  /**
-   * The records of one input: a GenBank file, a GFF3 file with its FASTA, or a FASTA alone.
-   * The bindings name the files by ref; their bytes come from the store.
-   * @param {string} inputType
-   * @param {InputFileRef | null} primaryFile
-   * @param {InputFileRef | null} pairedFile
-   */
-  const readInputRecords = (inputType, primaryFile, pairedFile) => discoverInputRecords(
-    inputTypeSpec(inputType), state.inputFiles.fileOf(primaryFile), state.inputFiles.fileOf(pairedFile)
-  );
   const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
     state,
@@ -859,6 +762,10 @@ export const createAppSetup = () => {
       reconcileAnnotationRecordBindings(drawing, catalog);
     }
   };
+  const { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords } = createRecordDiscoveryRuns({
+    pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
+    refreshLinearRecords: linearRecordSelector.refresh
+  });
   const { changeCircularMultiRecordCanvas } = createCircularMultiRecordCanvas({ state, rebindAnnotationRecords });
   // Bumped by each edit of the displayed Result's root (R1).
   const resultEditRevision = shallowRef(0);
@@ -4043,162 +3950,17 @@ export const createAppSetup = () => {
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  // Record selection (D-01..D-10): the record sources and edits its owner
-  // reads, and the transitions it asks the root for.
-  /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq The discovered record a Linear card draws. */
-  const linearCardRecord = (drawing, seq) => {
-    const selection = resolveDisambiguatedRecordSelection(linearRecordSelector.recordsFor(drawing, seq), seq.region_record_id);
-    return selection.record || (selection.entries.length === 1 ? selection.entries[0] : null);
-  };
-  /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq @returns {RecordSettingsOwner} */
-  const linearRecordSettingsOwner = (drawing, seq) => ({
-    key: seq.uid, requestKeys: [seq.uid], ownsExpansions: true,
-    bindingKeys: annotationRecordKeysOf(linearAnnotationSource(drawing, seq, false), seq.uid),
-    displaySource: seq.uid, displaySelector: null
+  const { circularRecordEntries, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+    shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
+    linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
+    takeBackRuleRows: featureActions.takeBackRuleRows
   });
-  /** @param {DrawingState} drawing */
-  const circularRecordEntries = (drawing) => buildDisambiguatedRecordEntries(
-    getCircularRecordDiscoveryState(drawing).records.map((record) => ({
-      ...record, recordId: record?.record_id ?? record?.recordId, recordLength: record?.record_length ?? record?.recordLength
-    }))
-  );
-  /** @returns {RecordSettingsOwner[]} */
-  /** @param {DrawingState} drawing */
-  const circularRecordSettingsOwners = (drawing) => {
-    const discovery = getCircularRecordDiscoveryState(drawing);
-    const bindingKeys = annotationRecordKeysOf(
-      { sourceKey: circularAnnotationSourceKey(drawing), hasInput: discovery.hasInput, status: discovery.status, records: discovery.records },
-      'circular-source'
-    );
-    return circularRecordEntries(drawing).map((entry, index) => ({
-      key: circularRecordDrawKey(entry),
-      requestKeys: circularRecordRequestKeys(entry),
-      bindingKeys: bindingKeys[index] ? [bindingKeys[index]] : [],
-      displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
-    }));
-  };
-  /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
-  const recordSettingsOwners = (drawing) => (drawing.mode === 'circular' ? circularRecordSettingsOwners(drawing) : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq)));
-  /** @param {DrawingState} drawing @returns {RecordEditData} */
-  const recordEditData = (drawing) => ({
-    featureEdits: drawing.slices.featureEdits,
-    paint: drawing.slices.paint,
-    annotationSets: drawing.annotationSets,
-    removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
-    colorRuleEdits: drawing.manualSpecificRules.flatMap((row) => {
-      const instance = namedFeatureInstance(row);
-      return instance ? [{
-        recordKey: instance.recordKey,
-        remove: () => featureActions.takeBackRuleRows(drawing, (rules) => rules.filter((rule) => rule !== row))
-      }] : [];
-    }),
-    recordDisplayDrafts: drawing.recordDisplayDrafts,
-    comparisonEdges: drawing.mode === 'linear' ? drawing.linearComparisonPlan.edges : [],
-    annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
+  const { deleteRecordSettings, removeRecordSource, askRecordFileRemoval, readShownRecords } = createRecordSettingsTransitions({
+    state, shownDrawingOfMode, recordSettingsOwners, recordEditData, retireLegendStylesOfUnnamedCaptions,
+    projectPaletteAndRules, applyLinearSeqMutation, setCircularSourceFile, removeLinearSource, askLinearFileRemoval,
+    dialogChoicePending: dialogChoice.pending, mutationPending: history.mutationPending,
+    refreshLinearRecords: linearRecordSelector.refresh, getCircularRecordDiscoveryState, inspectCircularSourceRecords
   });
-  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @returns {RecordSource | null} */
-  const recordSourceOf = (listMode, sourceKey) => {
-    const drawing = shownDrawingOfMode(listMode);
-    if (!drawing) return null;
-    if (listMode === 'circular') {
-      if (sourceKey !== 'circular' || getCircularRecordDiscoveryState(drawing).status !== 'ready') return null;
-      const owners = circularRecordSettingsOwners(drawing);
-      if (owners.length === 0) return null;
-      const edited = recordsWithEdits(owners, recordEditData(drawing));
-      const entries = circularRecordEntries(drawing);
-      return {
-        key: 'circular',
-        name: (({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files)))
-          .filter(Boolean).map((file) => String(file?.name || 'Unnamed file')).join(' + '),
-        records: owners.map((owner, index) => ({
-          key: owner.key, recordId: entries[index].recordId, length: entries[index].recordLength ?? null,
-          hasSettings: edited.has(owner.key)
-        }))
-      };
-    }
-    const group = linearSourceGroups.value.find((entry) => entry.uid === sourceKey);
-    if (!group) return null;
-    const cards = group.records.map(({ sequence }) => sequence);
-    const edited = recordsWithEdits(cards.map((seq) => linearRecordSettingsOwner(drawing, seq)), recordEditData(drawing));
-    return {
-      key: group.uid,
-      name: linearSourceFileName(group),
-      records: cards.map((seq) => {
-        const record = linearCardRecord(drawing, seq);
-        return {
-          key: seq.uid, recordId: String(record?.recordId || seq.region_record_id || ''),
-          length: record?.recordLength ?? null, hasSettings: edited.has(seq.uid) || linearCardHasSettings(seq)
-        };
-      })
-    };
-  };
-  /**
-   * Delete settings (D-08), inside the owner's History step: the records' card
-   * settings and rotation, feature edits and placements, annotations, and
-   * comparison pairs.
-   * @param {RecordSelectionMode} listMode
-   * @param {RecordDrawKey[]} keys
-   */
-  const deleteRecordSettings = (listMode, keys) => {
-    const drawing = shownDrawingOfMode(listMode);
-    if (!drawing) return false;
-    const deleted = new Set(keys);
-    const owners = recordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key));
-    const ruleCount = drawing.manualSpecificRules.length;
-    retireLegendStylesOfUnnamedCaptions(drawing, () => removeRecordEdits(owners, recordEditData(drawing)));
-    // The color rows it took back color nothing drawn; the rule matches follow the table.
-    if (drawing.manualSpecificRules.length !== ruleCount) void projectPaletteAndRules();
-    if (listMode === 'linear') {
-      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((seq) => (
-        deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
-      )), { alignmentMutation: msg('record settings deleted.') });
-    }
-    return true;
-  };
-  /** @param {DrawingState} drawing @param {string} sourceKey The Linear File's key in the record list. */
-  const recordFileRemovalPlan = (drawing, sourceKey) => {
-    const intent = /** @type {'clear' | 'delete'} */ (groupLinearSourceRecords(drawing.linearSeqs).length > 1 ? 'delete' : 'clear');
-    return { intent, plan: planLinearSourceRemoval({ sequences: drawing.linearSeqs, sourceUid: sourceKey, intent }) };
-  };
-  /**
-   * D-06 Remove File, inside the dialog's History step: a Linear File is
-   * deleted, or cleared when it is the only File; the Circular input loses its
-   * GenBank file or its GFF3 and FASTA pair.
-   * @param {RecordSelectionMode} listMode
-   * @param {string} sourceKey
-   */
-  const removeRecordSource = (listMode, sourceKey) => {
-    if (listMode === 'circular') {
-      // The shown Circular drawing's input, which its File card removes from.
-      const drawing = shownDrawingOfMode('circular');
-      if (drawing === null) return undefined;
-      const { primary, paired } = inputTypeSpec(drawing.inputType.value);
-      if (paired) setCircularSourceFile(CIRCULAR_INPUT_FIELDS[primary], null);
-      return setCircularSourceFile(CIRCULAR_INPUT_FIELDS[paired ?? primary], null);
-    }
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return false;
-    const { intent, plan } = recordFileRemovalPlan(drawing, sourceKey);
-    return plan.allowed ? removeLinearSource(drawing, plan, intent) : false;
-  };
-  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {string} label */
-  const askRecordFileRemoval = (listMode, sourceKey, label) => {
-    const drawing = shownDrawingOfMode('linear');
-    if (listMode !== 'linear' || !drawing || dialogChoice.pending.value || history.mutationPending()) return null;
-    const { intent, plan } = recordFileRemovalPlan(drawing, sourceKey);
-    return plan.allowed
-      ? askLinearFileRemoval(drawing, plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(drawing, plan, intent, turnOffReaching))
-      : null;
-  };
-  // After a Session load the records of the shown drawing's inputs are read on demand, as Generate reads them: the
-  // record list and Select region's Add to annotation set ask for them.
-  /** @param {RecordSelectionMode} listMode */
-  const readShownRecords = async (listMode) => {
-    if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return null;
-    return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
-  };
   const recordSelection = createRecordSelection({
     reactive,
     computed,
