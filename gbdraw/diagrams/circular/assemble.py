@@ -134,6 +134,7 @@ from ...tracks import (
 )
 from ...annotations import (
     AnnotationOptions,
+    AnnotationTrackParams,
     LabelSizing,
     LaneRoom,
     ResolvedAnnotationBundle,
@@ -330,11 +331,7 @@ def _prepare_circular_annotation_tracks(
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
     layouts = _layout_circular_annotation_tracks(
-        gb_record,
-        slots,
-        bundle,
-        canvas_config=canvas_config,
-        record_index=record_index,
+        _CircularAnnotationPacking.of(gb_record, slots, bundle, canvas_config, record_index),
         inside_slot_ids=frozenset(
             slot.id
             for slot in normalize_circular_track_slots_with_axis(slots, tracks.circular_track_axis_index)
@@ -344,43 +341,116 @@ def _prepare_circular_annotation_tracks(
     return CircularPlannedTracks(slots, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
 
+@dataclass(frozen=True)
+class _CircularAnnotationPacking:
+    """What packs one record's annotation slots on a Circular canvas: the record's annotations, its slots as
+    requested (an annotation slot without a width takes its required extent), and the axis radius and label font
+    the packer measures with: the canvas's as planned, which radial labels that grow it later do not change."""
+
+    annotations: tuple[ResolvedRegionAnnotation, ...]
+    requested: tuple[CircularTrackSlot, ...]
+    record_index: int
+    record_length: int
+    axis_radius_px: float
+    font_size: float
+    font_family: str
+
+    @classmethod
+    def of(
+        cls,
+        gb_record: SeqRecord,
+        slots: Sequence[CircularTrackSlot],
+        bundle: ResolvedAnnotationBundle,
+        canvas_config: CircularCanvasConfigurator,
+        record_index: int,
+    ) -> _CircularAnnotationPacking:
+        length = len(gb_record.seq)
+        config = canvas_config.profile.config
+        return cls(
+            tuple(item for item in bundle.annotations if item.record_index == record_index),
+            tuple(slots),
+            record_index,
+            length,
+            float(canvas_config.radius),
+            circular_label_font_size(config, length),
+            str(config.objects.text.font_family),
+        )
+
+    def track(
+        self, slot: CircularTrackSlot, *, inside: bool, lanes_from_px: float, rooms_at_least: Sequence[LaneRoom] = ()
+    ) -> ResolvedAnnotationTrack:
+        """Pack one annotation slot, its labels measured beside their marks on the slot's side
+        (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest
+        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``."""
+
+        params = annotation_track_params_from_mapping(slot.params)
+        return layout_annotation_track(
+            slot.id,
+            params.set_id,
+            self.annotations,
+            record_lengths={self.record_index: self.record_length},
+            params=params,
+            available_extent_px=slot.width.resolve(self.axis_radius_px) if slot.width is not None else None,
+            labels=LabelSizing(
+                font_size=self.font_size,
+                extent=partial(
+                    circular_annotation_label_extent,
+                    font_family=self.font_family,
+                    record_length=self.record_length,
+                    lanes_from_px=lanes_from_px,
+                    outward=not inside,
+                ),
+                bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
+            ),
+            join_origin=True,
+            rooms_at_least=rooms_at_least,
+        )
+
+
+@dataclass(frozen=True)
+class _AnnotationTracks:
+    """One record's annotation slots: how they are packed, each slot's lanes (``layouts``), and the edge each was
+    last packed from where a radial layout draws it (``packed_at``; a slot not in it was packed at the axis circle).
+    The ``circular_labels`` stage takes them and packs the slots again where its radial growth draws them."""
+
+    packing: _CircularAnnotationPacking
+    layouts: Mapping[str, ResolvedAnnotationTrack]
+    packed_at: Mapping[str, float]
+
+    def label_rooms(self, kept: Mapping[str, _AnnotationLabelRoom]) -> dict[str, _AnnotationLabelRoom]:
+        """The room each annotation slot's labels need beyond its band; a slot whose lanes are those of a room in
+        ``kept`` keeps that room, with what it measured."""
+
+        packing = self.packing
+        return {
+            slot_id: room
+            if (room := kept.get(slot_id)) is not None and room.track is track
+            else _AnnotationLabelRoom(track, packing.record_index, packing.record_length, packing.font_family)
+            for slot_id, track in self.layouts.items()
+        }
+
+
 def _layout_circular_annotation_tracks(
-    gb_record: SeqRecord,
-    slots: list[CircularTrackSlot],
-    bundle: ResolvedAnnotationBundle,
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    record_index: int,
-    inside_slot_ids: frozenset[str],
+    packing: _CircularAnnotationPacking, *, inside_slot_ids: frozenset[str]
 ) -> dict[str, ResolvedAnnotationTrack]:
     """Resolve the lanes of each annotation slot, its labels measured on the slot's side (``inside_slot_ids``)
     beside marks at the axis circle: no slot has its radii before the radial layout, which then packs each again
     where it draws it (``_place_annotation_tracks_where_drawn``)."""
 
-    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
     return {
-        slot.id: _circular_annotation_track(
-            gb_record,
-            slot,
-            relevant,
-            canvas_config=canvas_config,
-            record_index=record_index,
-            inside=slot.id in inside_slot_ids,
-            lanes_from_px=float(canvas_config.radius),
-        )
-        for slot in slots
+        slot.id: packing.track(slot, inside=slot.id in inside_slot_ids, lanes_from_px=packing.axis_radius_px)
+        for slot in packing.requested
         if str(slot.renderer).strip().lower() == "annotations"
     }
 
 
-def _sized_annotation_slots(
-    slots: Sequence[CircularTrackSlot], layouts: Mapping[str, ResolvedAnnotationTrack]
-) -> list[CircularTrackSlot]:
-    """``slots`` with each annotation slot that has no width taking its required extent."""
+def _sized_annotation_slots(slots: Sequence[CircularTrackSlot], tracks: _AnnotationTracks) -> list[CircularTrackSlot]:
+    """``slots`` with each annotation slot requested without a width taking its required extent."""
 
+    requested = {slot.id: slot for slot in tracks.packing.requested}
     return [
-        replace(slot, width=ScalarSpec(layouts[slot.id].required_extent_px, "px"))
-        if slot.width is None and slot.id in layouts
+        replace(slot, width=ScalarSpec(tracks.layouts[slot.id].required_extent_px, "px"))
+        if slot.id in tracks.layouts and requested[slot.id].width is None
         else slot
         for slot in slots
     ]
@@ -397,145 +467,73 @@ class _AnnotationTracksWhereDrawn(NamedTuple):
 
     fit: _CentreDefinitionFit
     slots: list[CircularTrackSlot]
-    layouts: dict[str, ResolvedAnnotationTrack]
-    label_rooms: dict[str, AnnotationLabelRoom]
+    tracks: _AnnotationTracks
+    label_rooms: dict[str, _AnnotationLabelRoom]
 
 
 def _place_annotation_tracks_where_drawn(
     place: Callable[[Sequence[CircularTrackSlot], Mapping[str, AnnotationLabelRoom]], _CentreDefinitionFit],
-    gb_record: SeqRecord,
     slots: Sequence[CircularTrackSlot],
-    bundle: ResolvedAnnotationBundle,
-    layouts: dict[str, ResolvedAnnotationTrack],
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    record_index: int,
+    tracks: _AnnotationTracks,
 ) -> _AnnotationTracksWhereDrawn:
     """Lay the tracks out (``place``) with each annotation slot packed where the layout draws it, so that its
-    labels are measured there (OV-2662).
+    labels are measured there (OV-2662, OV-2663).
 
-    ``slots`` are the slots as requested: an annotation slot without a width takes its required extent. The
-    planner packed every annotation slot at the axis circle; a slot whose packing changes where it is drawn lays the
-    tracks out again, until the slots' edges settle. A gap that needed room where the slot was drawn keeps it in
-    later packings: a slot centred on its radius widens toward the axis too, and its lanes' edge moving back as the
-    room dropped would bring the crossing back."""
+    ``slots`` are the slots to lay out: an annotation slot requested without a width takes its required extent. A
+    slot whose packing changes where it is drawn lays the tracks out again, until the slots' edges settle. A gap
+    that needed room where this loop packed the slot before keeps it in later packings: a slot centred on its radius
+    widens toward the axis too, and its lanes' edge moving back as the room dropped would bring the crossing back.
+    A packing made for another layout (the planner's at the axis circle, or one at a circle that radial labels
+    grew since) keeps no room."""
 
-    annotations = tuple(item for item in bundle.annotations if item.record_index == record_index)
-    packed_at: dict[str, float] = {}
+    packed_at = dict(tracks.packed_at)
+    packed_here: set[str] = set()
+    rooms: dict[str, _AnnotationLabelRoom] = {}
     passes = 0
     while True:
-        sized = _sized_annotation_slots(slots, layouts)
-        rooms = _circular_annotation_label_rooms(
-            layouts,
-            record_index=record_index,
-            record_length=len(gb_record.seq),
-            font_family=str(canvas_config.profile.config.objects.text.font_family),
-        )
+        sized = _sized_annotation_slots(slots, tracks)
+        rooms = tracks.label_rooms(rooms)
         fit = place(sized, rooms)
         repacked = (
-            _annotation_tracks_packed_where_drawn(
-                gb_record,
-                slots,
-                annotations,
-                layouts,
-                fit.layout,
-                packed_at,
-                canvas_config=canvas_config,
-                record_index=record_index,
-            )
+            _annotation_tracks_packed_where_drawn(tracks, fit.layout, packed_at, packed_here)
             if passes < _LANE_EDGE_PASSES
             else {}
         )
         if not repacked:
-            return _AnnotationTracksWhereDrawn(fit, sized, layouts, rooms)
-        layouts = {**layouts, **repacked}
+            return _AnnotationTracksWhereDrawn(fit, sized, replace(tracks, packed_at=packed_at), rooms)
+        tracks = replace(tracks, layouts={**tracks.layouts, **repacked})
         passes += 1
 
 
 def _annotation_tracks_packed_where_drawn(
-    gb_record: SeqRecord,
-    slots: Sequence[CircularTrackSlot],
-    annotations: Sequence[ResolvedRegionAnnotation],
-    layouts: Mapping[str, ResolvedAnnotationTrack],
+    tracks: _AnnotationTracks,
     radial_layout: CircularRadialLayout,
     packed_at: dict[str, float],
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    record_index: int,
+    packed_here: set[str],
 ) -> dict[str, ResolvedAnnotationTrack]:
     """The annotation slots beside the axis packed again at the edge their lanes stack from in ``radial_layout``
     (the inner edge outside the axis, the outer edge inside it), where that edge moved from where they were packed
-    (``packed_at``, which this updates; the axis circle at first): only the slots whose packing changed. A slot
-    packed where it was drawn before keeps at least the rooms of that packing; the planner's at the axis circle
-    are not kept.
+    (``packed_at``, which this updates; the axis circle when not in it): only the slots whose packing changed. A
+    slot this loop packed before (``packed_here``, which this updates) keeps at least the rooms of that packing."""
 
-    ``slots`` are the slots as requested (an annotation slot without a width takes its required extent)."""
-
-    requested = {slot.id: slot for slot in slots}
+    requested = {slot.id: slot for slot in tracks.packing.requested}
     repacked: dict[str, ResolvedAnnotationTrack] = {}
     for resolved in radial_layout.slots:
-        if resolved.id not in layouts or resolved.side not in {"inside", "outside"}:
+        if resolved.id not in tracks.layouts or resolved.side not in {"inside", "outside"}:
             continue
         inside = resolved.side == "inside"
         edge = resolved.draw_outer_radius_px if inside else resolved.draw_inner_radius_px
-        if abs(edge - packed_at.get(resolved.id, float(canvas_config.radius))) <= _LANE_EDGE_SETTLED_PX:
+        if abs(edge - packed_at.get(resolved.id, tracks.packing.axis_radius_px)) <= _LANE_EDGE_SETTLED_PX:
             continue
-        rooms_at_least = layouts[resolved.id].lane_rooms if resolved.id in packed_at else ()
+        rooms_at_least = tracks.layouts[resolved.id].lane_rooms if resolved.id in packed_here else ()
         packed_at[resolved.id] = edge
-        layout = _circular_annotation_track(
-            gb_record,
-            requested[resolved.id],
-            annotations,
-            canvas_config=canvas_config,
-            record_index=record_index,
-            inside=inside,
-            lanes_from_px=edge,
-            rooms_at_least=rooms_at_least,
+        packed_here.add(resolved.id)
+        layout = tracks.packing.track(
+            requested[resolved.id], inside=inside, lanes_from_px=edge, rooms_at_least=rooms_at_least
         )
-        if layout != layouts[resolved.id]:
+        if layout != tracks.layouts[resolved.id]:
             repacked[resolved.id] = layout
     return repacked
-
-
-def _circular_annotation_track(
-    gb_record: SeqRecord,
-    slot: CircularTrackSlot,
-    annotations: Sequence[ResolvedRegionAnnotation],
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    record_index: int,
-    inside: bool,
-    lanes_from_px: float,
-    rooms_at_least: Sequence[LaneRoom] = (),
-) -> ResolvedAnnotationTrack:
-    """Pack one annotation slot, its labels measured beside their marks on the slot's side
-    (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest the
-    axis side it starts from; each gap keeps at least its room in ``rooms_at_least``."""
-
-    axis_radius = float(canvas_config.radius)
-    params = annotation_track_params_from_mapping(slot.params)
-    length = len(gb_record.seq)
-    return layout_annotation_track(
-        slot.id,
-        params.set_id,
-        annotations,
-        record_lengths={record_index: length},
-        params=params,
-        available_extent_px=slot.width.resolve(axis_radius) if slot.width is not None else None,
-        labels=LabelSizing(
-            font_size=circular_label_font_size(canvas_config.profile.config, length),
-            extent=partial(
-                circular_annotation_label_extent,
-                font_family=str(canvas_config.profile.config.objects.text.font_family),
-                record_length=length,
-                lanes_from_px=lanes_from_px,
-                outward=not inside,
-            ),
-            bp_per_px={record_index: length / max(1.0, 2.0 * math.pi * axis_radius)},
-        ),
-        join_origin=True,
-        rooms_at_least=rooms_at_least,
-    )
 
 
 def _add_circular_feature_underlays(
@@ -582,7 +580,7 @@ def _add_circular_feature_underlays(
     # The underlay set is new (collision-safe id), so the slots laid out before keep their layouts.
     # The underlay draws no labels.
     underlay_layouts = _layout_circular_annotation_tracks(
-        gb_record, [underlay_slot], merged, canvas_config=canvas_config, record_index=record_index,
+        _CircularAnnotationPacking.of(gb_record, [underlay_slot], merged, canvas_config, record_index),
         inside_slot_ids=frozenset(),
     )
     return [underlay_slot, *slots], merged, {**underlay_layouts, **layouts}
@@ -1192,45 +1190,41 @@ def _feature_label_obstacles(
     )
 
 
-@dataclass(frozen=True)
 class _AnnotationLabelRoom:
     """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
-    own owner; a frozen value, so the label stage that replans the radial layout stays cacheable."""
+    own owner once for each band, axis ring, side, parameters and ``covers_slots`` flag it is asked for: the layouts
+    of one drawing, the definition font scan's among them, ask for the same ones again and again (OV-2664). The
+    memo lives for one drawing and is reused while a slot's lanes are the same object. It is no stage input:
+    a stage takes the tracks (``_AnnotationTracks``) and makes its own rooms."""
 
-    track: ResolvedAnnotationTrack
-    record_index: int
-    record_length: int
-    font_family: str
+    __slots__ = ("track", "_record_index", "_record_length", "_font_family", "_measured")
+
+    def __init__(self, track: ResolvedAnnotationTrack, record_index: int, record_length: int, font_family: str) -> None:
+        self.track = track
+        self._record_index = record_index
+        self._record_length = record_length
+        self._font_family = font_family
+        self._measured: dict[tuple[RadialBand, RadialBand, str, AnnotationTrackParams, bool], float] = {}
 
     def __call__(
         self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
     ) -> float:
-        return circular_annotation_label_room(
-            self.track,
-            record_index=self.record_index,
-            record_length=self.record_length,
-            band=band,
-            side=side,
-            font_family=self.font_family,
-            params=annotation_track_params_from_mapping(params),
-            rings=(axis.paint_band_px,),
-            covers_slots=covers_slots,
-        )
-
-
-def _circular_annotation_label_rooms(
-    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
-    *,
-    record_index: int,
-    record_length: int,
-    font_family: str,
-) -> dict[str, AnnotationLabelRoom]:
-    """The room each annotation slot's labels need beyond its band, measured by the labels' own owner."""
-
-    return {
-        slot_id: _AnnotationLabelRoom(track, record_index, record_length, font_family)
-        for slot_id, track in (annotation_track_layouts or {}).items()
-    }
+        track_params = annotation_track_params_from_mapping(params)
+        key = (band, axis.paint_band_px, side, track_params, covers_slots)
+        room = self._measured.get(key)
+        if room is None:
+            room = self._measured[key] = circular_annotation_label_room(
+                self.track,
+                record_index=self._record_index,
+                record_length=self._record_length,
+                band=band,
+                side=side,
+                font_family=self._font_family,
+                params=track_params,
+                rings=(axis.paint_band_px,),
+                covers_slots=covers_slots,
+            )
+        return room
 
 
 def _primary_radial_half_stroke_px(
@@ -2783,6 +2777,8 @@ class CircularLabelPlacement:
     feature_layers: FeatureBuildResult
     layout_slots: tuple[CircularTrackSlot, ...]
     feature_slot: CircularTrackSlot | None
+    # The annotation slots as packed where the layout draws them.
+    annotation_tracks: _AnnotationTracks
     radial_refused: bool
     # The sides whose labels need much more room than the map has: no label of the record was placed (CAPACITY-STOP).
     capacity: tuple[CircularLabelCapacity, ...]
@@ -2815,7 +2811,7 @@ def circular_labels(
     record_transform: RecordDisplayTransform | None,
     definition_text: tuple[Aabb, ...],
     label_filtering: Mapping[str, Any],
-    annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
+    annotation_tracks: _AnnotationTracks,
     record_id: str,
 ) -> CircularLabelPlacement:
     """Place one record's external and embedded labels; radial labels grow the radius (stage ``circular_labels``).
@@ -2972,18 +2968,18 @@ def circular_labels(
                 base_radius_px=float(geometry.radius),
                 base_track_ratio=float(geometry.track_ratio),
             )
-            replanned_layout = resolve_circular_radial_layout(
-                total_length=total_length,
-                geometry=geometry,
-                cfg=cfg,
-                slots=slots,
-                feature_dict=_radial_layout_feature_dict(feature_layers),
-                definition_reserved_radius_px=definition_reserved_radius_px,
-                preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-                depth_config=depth_axis,
-                center_reserved_radius_explicit=center_reserved_radius_explicit,
-                annotation_label_rooms=annotation_label_rooms,
+            # The annotation slots are packed again where the grown circle draws them (OV-2663).
+            where_drawn = _place_annotation_tracks_where_drawn(
+                lambda sized, rooms: _CentreDefinitionFit(resolve_circular_radial_layout(
+                    total_length=total_length, geometry=geometry, cfg=cfg, slots=sized,
+                    feature_dict=_radial_layout_feature_dict(feature_layers),
+                    definition_reserved_radius_px=definition_reserved_radius_px,
+                    preferred_anchor_slot_ids=preferred_anchor_slot_ids, depth_config=depth_axis,
+                    center_reserved_radius_explicit=center_reserved_radius_explicit, annotation_label_rooms=rooms,
+                ), definition_reserved_radius_px),
+                slots, annotation_tracks,
             )
+            replanned_layout, slots, annotation_tracks = where_drawn.fit.layout, where_drawn.slots, where_drawn.tracks
             resolved_slots = replanned_layout.slots
             outer_content_radius_px = float(replanned_layout.outer_content_radius_px)
             inner_reserve_px = radial_label_inner_reserve_px(replanned_layout)
@@ -3004,6 +3000,7 @@ def circular_labels(
         feature_layers=feature_layers,
         layout_slots=tuple(slots),
         feature_slot=feature_slot,
+        annotation_tracks=annotation_tracks,
         radial_refused=radial_refused,
         capacity=capacity,
         label_candidates=tuple(
@@ -3169,18 +3166,9 @@ def add_record_on_circular_canvas(
     layout_feature_layers = feature_layers
     layout_feature_dict = _radial_layout_feature_dict(layout_feature_layers)
     if feature_layers.underlay_features:
-        (
-            layout_slots,
-            resolved_annotations,
-            annotation_track_layouts,
-        ) = _add_circular_feature_underlays(
-            record.gb_record,
-            feature_layers.underlay_features,
-            layout_slots,
-            resolved_annotations,
-            annotation_track_layouts,
-            canvas_config=canvas_config,
-            record_index=planned.annotation_record_index,
+        layout_slots, resolved_annotations, annotation_track_layouts = _add_circular_feature_underlays(
+            record.gb_record, feature_layers.underlay_features, layout_slots, resolved_annotations,
+            annotation_track_layouts, canvas_config=canvas_config, record_index=planned.annotation_record_index,
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
@@ -3302,10 +3290,12 @@ def add_record_on_circular_canvas(
             return True
         return definition_lines_on_tracks(probe.layout, _centre_definition_ink(probe_definition), {}) == 0
 
-    centre_fit, layout_slots, annotation_track_layouts, annotation_label_rooms = _place_annotation_tracks_where_drawn(
-        partial(place_around_definition, cfg), record.gb_record, layout_slots, resolved_annotations,
-        annotation_track_layouts, canvas_config=canvas_config, record_index=planned.annotation_record_index,
+    centre_fit, layout_slots, annotation_tracks, annotation_label_rooms = _place_annotation_tracks_where_drawn(
+        partial(place_around_definition, cfg), layout_slots, _AnnotationTracks(_CircularAnnotationPacking.of(
+            record.gb_record, layout_slots, resolved_annotations, canvas_config, planned.annotation_record_index
+        ), annotation_track_layouts, {}),
     )
+    annotation_track_layouts = dict(annotation_tracks.layouts)
     radial_layout = centre_fit.layout
     if not (show_external_labels and profile.label_placement == "radial"):  # Radial labels can move the tracks.
         _refuse_unfit_scale_labels(radial_layout, record, canvas_config, user_slot_mode, presentation)
@@ -3361,7 +3351,7 @@ def add_record_on_circular_canvas(
             record_transform=presentation.record_transform,
             definition_text=definition_text,
             label_filtering=label_filtering,
-            annotation_label_rooms=annotation_label_rooms,
+            annotation_tracks=annotation_tracks,
             record_id=str(record.gb_record.id),
         )
         # The one write of the radius the labels grew (a stage result is never changed).
@@ -3372,6 +3362,9 @@ def add_record_on_circular_canvas(
         feature_layers = placement.feature_layers
         layout_slots = list(placement.layout_slots)
         feature_slot = placement.feature_slot
+        annotation_tracks = placement.annotation_tracks
+        annotation_track_layouts = dict(annotation_tracks.layouts)
+        annotation_label_rooms = annotation_tracks.label_rooms(annotation_label_rooms)
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override

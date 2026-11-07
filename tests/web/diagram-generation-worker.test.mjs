@@ -389,6 +389,13 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   const replies = [];
   self.postMessage = (message) => { replies.push(message); };
   const settle = async () => { for (let i = 0; i < 50; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+  // A run whose reply waits on work outside the event loop (the joined reply buffers) takes a varying
+  // number of turns: wait for its run reply, bounded, instead of a fixed count.
+  const settleUntilRun = async () => {
+    for (let i = 0; i < 2000 && !replies.some(({ type }) => type === 'run'); i += 1) {
+      await new Promise((resolve) => (i < 50 ? setImmediate(resolve) : setTimeout(resolve, 1)));
+    }
+  };
   const bootMessage = (id, interruptBuffer) => ({
     type: 'init', id, interruptBuffer, pyodideIndexUrl: `${offline}/pyodide/`, localWheelUrls: [],
     gbdrawWheelUrl: `${offline}/gbdraw-0.0.0-py3-none-any.whl`,
@@ -492,7 +499,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
       return { results: [], metadata };
     };
     run(14);
-    await settle();
+    await settleUntilRun();
     const joinedRun = replies.find(({ type }) => type === 'run');
     assert.equal(joinedRun.ok, true);
     assert.equal(new TextDecoder().decode(joinedRun.results.metadata), '{"a":1}');
@@ -503,7 +510,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
       return { results: [], metadata };
     };
     run(15);
-    await settle();
+    await settleUntilRun();
     const failedRun = replies.find(({ type }) => type === 'run');
     assert.deepEqual([failedRun.ok, failedRun.error.code, failedRun.error.stage], [false, 'UNKNOWN', 'result-admission']);
     wrapperReply = null;

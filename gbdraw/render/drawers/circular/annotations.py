@@ -702,7 +702,8 @@ def _curved_label(
         y=radius * math.sin(theta),
         rotation=0.0,
         ink_radii=(near, far),
-        parts=annular_sector_parts(near, far, centre, math.degrees(0.5 * (right - left) / radius)),
+        # Letters near the centre cover at most one turn (OV-2665: an inside lane that rooms carry past the centre).
+        parts=annular_sector_parts(near, far, centre, min(180.0, math.degrees(0.5 * (right - left) / radius))),
         arc=CircularLabelArc(
             radius=radius,
             angle=angle,
