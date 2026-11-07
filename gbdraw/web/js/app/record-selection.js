@@ -57,8 +57,9 @@ import { msg } from '../utils/i18n.js';
  * @property {DeleteRecordSettingsPort} deleteRecordSettings
  * @property {PrepareRecordsPort} prepareRecords
  * @property {() => RecordListRequest[]} autoOpenRequests The shown drawing's files whose upload opens their
- *   list (D-04), in upload order; the composition root adds one to a drawing's list when a discovery of an
- *   upload into that drawing finds more records than `WEB_UX_PROFILE.recordList.autoOpenAbove`.
+ *   list (D-04), in upload order; `requestRecordListAfterUpload` (app/record-discovery-requests.js) adds one
+ *   to a drawing's list when a discovery of an upload into that drawing finds more records than
+ *   `WEB_UX_PROFILE.recordList.autoOpenAbove`.
  */
 
 /**
