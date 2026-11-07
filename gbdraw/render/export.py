@@ -24,6 +24,7 @@ from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.render.document import write_svg_document, write_text
+from gbdraw.render.export_limits import png_export_dpi
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
@@ -317,9 +318,11 @@ def convert_svg_with_cairosvg(
     (:func:`gbdraw.render.font_embedding.fonts_for_cairosvg`) and
     :func:`prepare_svg_for_cairosvg`. ``options`` are passed
     to CairoSVG (for example ``url``, ``output_width``, ``background_color``).
-    A PNG draws ``dpi / 96`` pixels per SVG pixel (``dpi`` of ``None``: one)
-    and states ``dpi`` (``None``: 96) in its pHYs chunk; other formats ignore
-    ``dpi``. Returns the converted bytes when ``write_to`` is not given.
+    A PNG draws ``dpi / 96`` pixels per SVG pixel and states ``dpi`` in its
+    pHYs chunk (``None``: :data:`gbdraw.render.export_limits.DEFAULT_PNG_DPI`);
+    other formats ignore ``dpi``. An ``output_width`` or ``output_height``
+    option sets the PNG's pixels instead. Returns the converted bytes when
+    ``write_to`` is not given.
     """
     converter_name = _CAIROSVG_CONVERTERS.get(str(fmt).lower())
     if converter_name is None:
@@ -332,12 +335,9 @@ def convert_svg_with_cairosvg(
         if write_to is not None:
             kwargs["write_to"] = write_to
         return getattr(module, converter_name)(**kwargs)
-    if dpi is not None:
-        kwargs["scale"] = dpi / CSS_PX_PER_INCH
-    png = png_with_resolution(
-        bytes(getattr(module, converter_name)(**kwargs)),
-        CSS_PX_PER_INCH if dpi is None else dpi,
-    )
+    png_dpi = png_export_dpi(dpi)
+    kwargs["scale"] = png_dpi / CSS_PX_PER_INCH
+    png = png_with_resolution(bytes(getattr(module, converter_name)(**kwargs)), png_dpi)
     if write_to is None:
         return png
     if isinstance(write_to, (str, os.PathLike)):

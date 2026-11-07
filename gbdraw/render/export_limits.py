@@ -1,4 +1,4 @@
-"""The size limits of the PNG and PDF formats, checked before an export starts.
+"""The size limits of the PNG and PDF formats, checked before an export starts, and the default PNG DPI.
 
 A PNG side over ``PNG_MAX_PIXELS`` cannot be drawn (cairo refuses the surface). A PDF page side over
 ``PDF_MAX_PAGE_PT`` is written by cairo but is over what PDF viewers accept, so only a wrapped figure, new in
@@ -18,6 +18,9 @@ from gbdraw.layout.linear_wrap import LinearWrapSummary, longer_row_lengths, wra
 from gbdraw.render.document import drawing_size
 
 PNG_MAX_PIXELS = 32_767
+# The DPI of a PNG whose caller names none (the CLI without --dpi, Python without dpi=, a Session without a
+# readable ui.downloadDpi), and of the Web app's DPI menu: the Web reads it generated (DEFAULT_PNG_DPI).
+DEFAULT_PNG_DPI: int = 300
 PDF_MAX_PAGE_PT = 14_400
 PDF_PT_PER_SVG_PX = 0.75
 
@@ -36,7 +39,7 @@ def _export_wrap(drawing: Drawing) -> LinearWrapSummary | None:
 
 
 def checked_png_dpi(dpi: float | None) -> float | None:
-    """A PNG DPI as an export takes it: ``None`` (one pixel per SVG pixel) or a positive finite number."""
+    """A PNG DPI as an export takes it: ``None`` (:data:`DEFAULT_PNG_DPI`) or a positive finite number."""
 
     if dpi is not None and (
         isinstance(dpi, bool) or not isinstance(dpi, (int, float)) or not isfinite(dpi) or dpi <= 0
@@ -46,6 +49,12 @@ def checked_png_dpi(dpi: float | None) -> float | None:
             diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE"},
         )
     return dpi
+
+
+def png_export_dpi(dpi: float | None) -> float:
+    """The DPI a PNG is drawn at: ``dpi``, else :data:`DEFAULT_PNG_DPI`. Every PNG writer and check reads it here."""
+
+    return DEFAULT_PNG_DPI if dpi is None else dpi
 
 
 def _row_length_advice(wrap: LinearWrapSummary, width: float, height: float, limit: int) -> tuple[int, float] | None:
@@ -71,15 +80,16 @@ def check_export_limit(
 ) -> None:
     """Raise ``ExportError`` when a figure of this SVG size is over ``fmt``'s limit.
 
-    ``wrap`` is what a wrapped figure drew, and it decides the advice. ``dpi`` is the PNG's DPI when its pixels scale
-    by it (``dpi / 96`` pixels per SVG pixel: the Web app, the CLI ``--dpi`` and the ``dpi`` of the Python exports);
-    ``None`` is one pixel per SVG pixel, and a PDF page never depends on it. The error's diagnostic carries the same
-    facts for the Web: the limit and the size in the format's unit, and the advised row length and DPI when one
-    fits.
+    ``wrap`` is what a wrapped figure drew, and it decides the advice. ``dpi`` is the PNG's DPI (``dpi / 96`` pixels
+    per SVG pixel: the Web app's, the CLI ``--dpi`` and the ``dpi`` of the Python exports); ``None`` is
+    :data:`DEFAULT_PNG_DPI`, which the PNG refusal names with how to set another. A PDF page never depends on it.
+    The error's diagnostic carries the same facts for the Web: the limit and the size in the format's unit, and the
+    advised row length and DPI when one fits.
     """
 
+    png_dpi = png_export_dpi(dpi)
     if fmt == "png":
-        scale = (dpi if dpi is not None else CSS_PX_PER_INCH) / CSS_PX_PER_INCH
+        scale = png_dpi / CSS_PX_PER_INCH
         limit, unit = PNG_MAX_PIXELS, "px"
         # CairoSVG rounds a PNG's size to whole pixels.
         over = max(round(width_px * scale), round(height_px * scale)) > limit
@@ -99,9 +109,10 @@ def check_export_limit(
         "width": round(width),
         "height": round(height),
     }
-    message = (
-        f"{fmt.upper()} is limited to {limit:,} {unit} per side, and this figure is {width:,.0f} x {height:,.0f} {unit}."
-    )
+    message = f"{fmt.upper()} is limited to {limit:,} {unit} per side, and this figure is {width:,.0f} x {height:,.0f} {unit}"
+    if fmt == "png":
+        message += f" at {png_dpi:g} dpi" + (" (the default PNG DPI)" if dpi is None else "")
+    message += "."
     if wrap is not None:
         advice = _row_length_advice(wrap, width, height, limit)
         if advice is None:
@@ -113,11 +124,13 @@ def check_export_limit(
                 f" A longer row length should fit: {wrap_length_option(length)} is about {estimate:,.0f} {unit} "
                 "tall (estimated from the drawn height)."
             )
-    if dpi is not None and fmt == "png":
+    if fmt == "png":
         lower_dpi = floor(limit * CSS_PX_PER_INCH / max(width_px, height_px))
         if lower_dpi >= 1:
             diagnostic["dpi"] = lower_dpi
-            message += f" A DPI of {lower_dpi} or lower would fit."
+            message += f" A DPI of {lower_dpi} or lower would fit"
+            # The caller's DPI and the Session's (gbdraw.session.noting_session_png_dpi) say how they are set.
+            message += "; --dpi on the command line or dpi= in Python sets it." if dpi is None else "."
     raise ExportError(f"{message} SVG has no size limit (-f svg).", diagnostic=diagnostic)
 
 
@@ -131,10 +144,12 @@ def check_drawing_export_limits(drawing: Drawing, formats: Sequence[str], *, dpi
 
 
 __all__ = [
+    "DEFAULT_PNG_DPI",
     "PDF_MAX_PAGE_PT",
     "PNG_MAX_PIXELS",
     "bind_export_wrap",
     "check_drawing_export_limits",
     "check_export_limit",
     "checked_png_dpi",
+    "png_export_dpi",
 ]

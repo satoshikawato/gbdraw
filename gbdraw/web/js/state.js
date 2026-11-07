@@ -28,6 +28,7 @@ import {
 } from './services/linear-comparisons.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import {
+  DEFAULT_PNG_DPI,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   PROTEIN_IDENTITY_MANIFEST_SCHEMA
@@ -58,7 +59,6 @@ import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
 /** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
 import { diagnosticError } from './utils/error-normalization.js';
 import {
-  DEFAULT_PNG_DPI,
   createDefaultAdv,
   createDefaultCircularConservation,
   createDefaultForm,

@@ -1133,22 +1133,38 @@ def test_only_a_sized_figure_carries_its_requested_canvas_in_the_composition_met
 
 
 def test_png_dpi_scales_the_pixels() -> None:
+    """Without a DPI a PNG is drawn at the default, 300 dpi, as the Web app draws it (D-83 revised)."""
+
     pytest.importorskip("cairosvg")
     diagram = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm"))
     _w, _h, view_box = _svg_size(diagram.to_svg())
-    assert _png_size(diagram.to_bytes("png")) == (round(view_box[2]), round(view_box[3]))
-    assert _png_size(diagram.to_bytes("png", dpi=300)) == (
-        round(view_box[2] * 300 / 96),
-        round(view_box[3] * 300 / 96),
+    at_300 = (round(view_box[2] * 300 / 96), round(view_box[3] * 300 / 96))
+    assert _png_size(diagram.to_bytes("png")) == at_300
+    assert _png_size(diagram.to_bytes("png", dpi=300)) == at_300
+    assert _png_size(diagram.to_bytes("png", dpi=96)) == (round(view_box[2]), round(view_box[3]))
+
+
+def test_the_default_png_dpi_is_one_python_constant_among_the_session_choices() -> None:
+    """The Web reads the default generated; it is one of the DPI menu's choices."""
+
+    from gbdraw.render.export_limits import DEFAULT_PNG_DPI
+    from gbdraw.session import SESSION_PNG_DPI_CHOICES
+
+    assert DEFAULT_PNG_DPI == 300
+    assert DEFAULT_PNG_DPI in SESSION_PNG_DPI_CHOICES
+    generated = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/contracts/schema.generated.js").read_text(
+        encoding="utf-8"
     )
+    assert f"export const DEFAULT_PNG_DPI = {DEFAULT_PNG_DPI};" in generated
 
 
 def test_a_png_carries_the_resolution_it_was_drawn_at() -> None:
-    """pHYs: pixels per metre of the requested DPI; 96 (one pixel per CSS pixel) without one."""
+    """pHYs: pixels per metre of the requested DPI; the default 300 without one."""
 
     pytest.importorskip("cairosvg")
     diagram = gbdraw.draw_linear(_mito())
-    assert png_phys(diagram.to_bytes("png")) == (3780, 3780, 1)
+    assert png_phys(diagram.to_bytes("png")) == (11811, 11811, 1)
+    assert png_phys(diagram.to_bytes("png", dpi=96)) == (3780, 3780, 1)
     assert png_phys(diagram.to_bytes("png", dpi=300)) == (11811, 11811, 1)
     assert png_phys(diagram.to_bytes("png", dpi=72.5)) == (2854, 2854, 1)
 
@@ -1163,7 +1179,8 @@ def test_every_python_png_writer_carries_the_resolution(tmp_path) -> None:
     assert png_phys((tmp_path / "saved.png").read_bytes()) == (11811, 11811, 1)
     assert [Path(path).name for path in paths] == ["saved.svg", "saved.png"]
     save_figure_to(canvas, ["png"], output_dir=str(tmp_path), output_prefix="plain")
-    assert png_phys((tmp_path / "plain.png").read_bytes()) == (3780, 3780, 1)
+    assert png_phys((tmp_path / "plain.png").read_bytes()) == (11811, 11811, 1)
+    assert png_phys(render_to_bytes(canvas, "png")) == (11811, 11811, 1)
     gbdraw.draw_linear(_mito()).save(tmp_path / "diagram.png", dpi=96)
     assert png_phys((tmp_path / "diagram.png").read_bytes()) == (3780, 3780, 1)
 
@@ -1225,6 +1242,15 @@ def test_cli_figure_width_and_dpi(tmp_path, monkeypatch) -> None:
     width, _height, view_box = _svg_size(output.with_suffix(".svg").read_text(encoding="utf-8"))
     assert width == "180mm"
     assert _png_size(output.with_suffix(".png").read_bytes())[0] == round(view_box[2] * 2)
+
+
+def test_cli_png_without_dpi_is_drawn_at_300_dpi(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("cairosvg")
+    output = _run_cli(tmp_path, monkeypatch, "linear", "--gbk", str(INPUTS / "HmmtDNA.gbk"), "-f", "svg,png")
+    _width, _height, view_box = _svg_size(output.with_suffix(".svg").read_text(encoding="utf-8"))
+    png = output.with_suffix(".png").read_bytes()
+    assert _png_size(png) == (round(view_box[2] * 300 / 96), round(view_box[3] * 300 / 96))
+    assert png_phys(png) == (11811, 11811, 1)
 
 
 @pytest.mark.parametrize("args", [["--figure_width", "180"], ["--dpi", "0"]])

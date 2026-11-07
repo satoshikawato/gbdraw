@@ -21,6 +21,7 @@ from gbdraw.core.numeric import JS_WHITESPACE
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession51, SessionResult
 from gbdraw.io.table_text import legacy_table_rows
+from gbdraw.render.export_limits import DEFAULT_PNG_DPI
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -79,7 +80,8 @@ logger = logging.getLogger(__name__)
 
 # The PNG DPI choices of the Web app's DPI menu, which a Session's
 # ``ui.downloadDpi`` names. The Web reads them generated
-# (``SESSION_PNG_DPI_CHOICES``) and keeps their labels and its default.
+# (``SESSION_PNG_DPI_CHOICES``) and keeps their labels; the default among them
+# is ``DEFAULT_PNG_DPI`` (gbdraw/render/export_limits.py), generated too.
 SESSION_PNG_DPI_CHOICES: frozenset[int] = frozenset({72, 96, 150, 300, 600})
 
 
@@ -89,9 +91,10 @@ def read_session_png_dpi(session: Mapping[str, object]) -> int | None:
     The one reader of the stored value, as the Web's ``readDownloadDpi``
     reads it: one of :data:`SESSION_PNG_DPI_CHOICES`, as a number or as text
     with outer spaces; unset (missing, null or empty) is ``None``. Any other
-    value is ``None`` with a notice; the Web reads it as its default (300)
-    with a Load dialog row. Every Session version keeps the value in the
-    top-level ``ui`` (Session 51: the project's).
+    value is ``None`` with a notice. A PNG without a DPI is drawn at
+    :data:`~gbdraw.render.export_limits.DEFAULT_PNG_DPI`, as the Web draws
+    both (another value with a Load dialog row). Every Session version keeps
+    the value in the top-level ``ui`` (Session 51: the project's).
     """
 
     ui = session.get("ui")
@@ -107,9 +110,11 @@ def read_session_png_dpi(session: Mapping[str, object]) -> int | None:
         dpi = None
     if dpi is None:
         logger.warning(
-            "WARNING: Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; it is not used.",
+            "WARNING: Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; "
+            "a PNG is drawn at the default PNG DPI (%s) instead.",
             json.dumps(stored, ensure_ascii=False),
             ", ".join(str(choice) for choice in sorted(SESSION_PNG_DPI_CHOICES)),
+            DEFAULT_PNG_DPI,
         )
     return dpi
 
@@ -125,7 +130,8 @@ class SessionPngDpi:
 def session_png_dpi(session: Mapping[str, object], dpi: float | None) -> SessionPngDpi:
     """The caller's ``dpi`` (``--dpi``, ``dpi=``), else the PNG DPI the Session saved (D-93, D-94).
 
-    The stored value is read only when the caller gives none.
+    The stored value is read only when the caller gives none. Without either,
+    ``dpi`` is ``None``: the export draws the PNG at the default PNG DPI.
     """
 
     if dpi is not None:
@@ -781,7 +787,8 @@ def _plan_session_drawings(
     Without selectors every drawing with a committed render is selected and
     the others are skipped with a notice; a named drawing without one is an
     error. The plan keeps document order. A PNG is drawn at ``dpi``, else at
-    the PNG DPI the Session saved (:func:`read_session_png_dpi`).
+    the PNG DPI the Session saved (:func:`read_session_png_dpi`), else at the
+    default PNG DPI (300).
     """
 
     _active_materialization(materialized)
@@ -932,7 +939,8 @@ def render_session(
 
     ``drawing`` selects a drawing by ID or name; without it the Session must
     have one drawing. A PNG is drawn at ``dpi``, else at the PNG DPI the
-    Session saved (:func:`read_session_png_dpi`).
+    Session saved (:func:`read_session_png_dpi`), else at the default PNG
+    DPI (300).
     """
 
     with _session_parse_cache(materialized):
@@ -968,7 +976,8 @@ def render_session_drawings(
     path of every selected drawing is checked before the first file is
     written, and each resource is parsed once for all drawings. The results
     are keyed by drawing ID in document order. A PNG is drawn at ``dpi``,
-    else at the PNG DPI the Session saved (:func:`read_session_png_dpi`).
+    else at the PNG DPI the Session saved (:func:`read_session_png_dpi`),
+    else at the default PNG DPI (300).
     """
 
     from gbdraw.api.request_render import preflight_diagram_request_outputs

@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: PNGs from the command line and Python are now 300 dpi by default,
+  as in the web app, so they are about 3 times as wide and tall as before (a
+  1,000 px figure is 3,125 px). `--dpi 96` (`dpi=96` in Python) keeps the old
+  pixel size, one pixel per SVG pixel. A Session without a PNG DPI, or with a
+  stored value that is not one of 72, 96, 150, 300, and 600 (a warning names
+  it), draws at 300 as the web app does. A figure over 10,485 px on a side is
+  over the 32,767 px PNG limit at 300 dpi: the message names the DPI, says it
+  is the default, and names a lower `--dpi` that fits. SVG, PDF, EPS, and PS
+  do not change.
 - Changed: a Circular figure size that no map size fits is refused sooner. To
   find the smallest map it can draw, which the message states, the fit now
   tries the radii too small to draw first, since those fail at once, and skips
@@ -29,7 +38,7 @@ write-up of a release.
   draw a PNG at the PNG DPI a web app Session saved (72, 96, 150, 300, or 600),
   so a Session drawn again on the command line gives the PNG the web app
   exported. An explicit `--dpi` still wins; a Session without a PNG DPI draws at
-  96 as before, and another stored value is noted and not used. The Python
+  the default, and another stored value is noted and draws at the default. The Python
   functions `render_session()` and `render_session_drawings()` draw the same PNG
   and gain an optional `dpi` argument that overrides it, as `--dpi` does;
   `session_to_request()` returns the drawing's request without it. When the
@@ -91,9 +100,9 @@ write-up of a release.
 - Added: `--dpi` also works with `--session` and on `gbdraw render`, where it sets
   the PNG's DPI. The DPI is the caller's export choice, like `--font_file`: a
   Session saved by the command line does not record `--dpi`, and a replay takes
-  the DPI from `--dpi` alone, not from the PNG DPI a web app Session stores.
+  the DPI from `--dpi`, else from the PNG DPI a web app Session stores.
   Every PNG that the command line or Python writes now carries a pHYs chunk with
-  that DPI (96 when none is given), as the web app's PNG does.
+  that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure

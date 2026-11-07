@@ -102,7 +102,8 @@ def _tick_label_png(tick: int, *, radius: float, font_size: float, path_y: float
     for element in elements:
         group.add(element)
     drawing.add(group)
-    return api_render.render_to_bytes(drawing, "png"), path_radius
+    # 96 dpi: one PNG pixel per SVG pixel, the unit the expected rows are in.
+    return api_render.render_to_bytes(drawing, "png", dpi=96), path_radius
 
 
 def _ink_rows(png_bytes: bytes) -> tuple[int, int]:
@@ -203,7 +204,8 @@ def test_png_export_keeps_mixed_style_caption_runs_where_browsers_draw_them(
     pytest.importorskip("PIL")
     tolerance = 3
 
-    png_bytes = api_render.render_to_bytes(_mixed_caption_drawing(anchor, anchor_x), "png")
+    # 96 dpi: one PNG pixel per SVG pixel, as the browser columns are measured.
+    png_bytes = api_render.render_to_bytes(_mixed_caption_drawing(anchor, anchor_x), "png", dpi=96)
 
     italic, roman = _run_ink_columns(png_bytes)
     assert italic[1] < roman[0], f"italic run {italic} overlaps roman run {roman}"
@@ -294,11 +296,13 @@ def test_every_cairosvg_export_path_converts_the_rewritten_svg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     converted: list[bytes] = []
+    scales: list[float] = []
 
     class CapturingCairoSvg:
         @staticmethod
-        def svg2png(*, bytestring):
+        def svg2png(*, bytestring, scale):
             converted.append(bytestring)
+            scales.append(scale)
             return tiny_png()
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: CapturingCairoSvg)
@@ -321,6 +325,8 @@ def test_every_cairosvg_export_path_converts_the_rewritten_svg(
         export_module.save_figure(drawing("legacy"), ["svg", "png"])
 
     assert len(converted) == 3
+    # Each path draws at the default PNG DPI, 300 (deprecated save_figure too).
+    assert scales == [300 / 96] * 3
     for source in converted:
         (text_path,) = _elements(source, "textPath")
         assert text_path.get("dominant-baseline") == "alphabetic"

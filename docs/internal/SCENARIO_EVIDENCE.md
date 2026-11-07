@@ -321,7 +321,8 @@ gbdraw circular \
   --plot_title_font_size 20 \
   --legend right \
   -o cli_export \
-  -f svg,interactive_svg,png,pdf,eps,ps
+  -f svg,interactive_svg,png,pdf,eps,ps \
+  --dpi 96
 ```
 <!-- executable:H-CLI-13:end -->
 

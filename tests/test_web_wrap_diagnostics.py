@@ -125,13 +125,19 @@ def test_a_wrapped_pdf_refusal_names_a_row_length_and_no_dpi() -> None:
     }
 
 
-def test_a_refusal_with_no_advice_names_only_the_limit_and_size() -> None:
+def test_a_refusal_with_no_row_length_names_the_limit_size_and_a_lower_dpi() -> None:
+    """A PNG always has a DPI (the Web's, the caller's, or the default), so a lower one that fits is named."""
+
     many_records = LinearWrapSummary(50_000, 50_000, (60_000,) * 200)
-    assert _context(_export_refusal("png", (2_000.0, 80_000.0), many_records), "export-png") == {
-        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 2_000, "height": 80_000,
+    assert _context(_export_refusal("png", (2_000.0, 80_000.0), many_records, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 2_000, "height": 80_000, "dpi": 39,
     }
-    assert _context(_export_refusal("png", (33_000.0, 100.0), None), "export-png") == {
-        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100,
+    assert _context(_export_refusal("png", (33_000.0, 100.0), None, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100, "dpi": 95,
+    }
+    # No DPI of 1 or more fits a figure over 32,767 inches: only the limit and the size are named.
+    assert _context(_export_refusal("png", (3_200_000.0, 100.0), None, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 3_200_000, "height": 100,
     }
 
 

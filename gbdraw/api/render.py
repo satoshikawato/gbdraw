@@ -109,8 +109,9 @@ def save_figure_to(
     the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
     PS draw a font whose license forbids embedding it in the nearest
     Liberation font (``gbdraw.render.font_embedding``).
-    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel (``None``: one) and
-    is the resolution in its pHYs chunk (``None``: 96);
+    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel and is the
+    resolution in its pHYs chunk (``None``: the default, 300; ``96`` is one
+    pixel per SVG pixel);
     a figure drawn to a requested size states it in the SVG and PDF.
     """
 
@@ -205,7 +206,7 @@ def render_to_bytes(
 
     ``embed_fonts`` and ``dpi`` as in :func:`save_figure_to`: SVG and
     interactive SVG carry the custom fonts they use, and a PNG scales by ``dpi``
-    and states it in its pHYs chunk.
+    (``None``: the default, 300) and states it in its pHYs chunk.
     """
 
     dpi = checked_png_dpi(dpi)

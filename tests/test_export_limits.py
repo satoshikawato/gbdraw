@@ -36,13 +36,31 @@ def _drawing(tmp_path: Path, width: int, height: int, wrap: LinearWrapSummary | 
 
 
 def test_a_sorangium_png_names_the_limit_the_next_row_length_that_fits_and_svg() -> None:
-    message = _refusal("png", SORANGIUM_SIZE, SORANGIUM)
-    assert "32,767 px" in message
+    message = _refusal("png", SORANGIUM_SIZE, SORANGIUM, dpi=96)
+    assert "32,767 px" in message and "at 96 dpi." in message
     # 131 rows of the 261 drawn: about 23,072 px.
     assert "--wrap_length 100kb" in message and "23,072 px" in message
     assert "estimated from the drawn height" in message
     assert "SVG" in message
-    assert "DPI" not in message
+    # 68 dpi is the last that fits; the caller's DPI is named by its value only.
+    assert "A DPI of 68 or lower would fit." in message
+    assert "default" not in message
+
+
+def test_a_png_without_a_dpi_is_checked_at_the_default_and_names_it() -> None:
+    """A PNG without a DPI is drawn at 300 dpi (DEFAULT_PNG_DPI); its refusal says so and how to draw it smaller."""
+
+    message = _refusal("png", SORANGIUM_SIZE, SORANGIUM)
+    assert message == _refusal("png", SORANGIUM_SIZE, SORANGIUM, dpi=300).replace(
+        "at 300 dpi.", "at 300 dpi (the default PNG DPI)."
+    ).replace(
+        "A DPI of 68 or lower would fit.",
+        "A DPI of 68 or lower would fit; --dpi on the command line or dpi= in Python sets it.",
+    )
+    assert "143,647 px at 300 dpi (the default PNG DPI)." in message
+    # 10,485 SVG px is 32,766 px at 300 dpi; 10,486 is over.
+    check_export_limit("png", 10_485.0, 10.0)
+    assert "A DPI of 299 or lower would fit" in _refusal("png", (10_486.0, 10.0), None)
 
 
 def test_a_sorangium_pdf_skips_the_row_length_that_is_still_too_tall() -> None:
@@ -70,19 +88,21 @@ def test_a_pdf_never_names_a_dpi_a_pdf_page_does_not_depend_on_it() -> None:
 
 def test_no_row_length_fits_when_even_one_row_each_is_too_tall() -> None:
     many_records = LinearWrapSummary(50_000, 50_000, (60_000,) * 200)
-    message = _refusal("png", (2_000.0, 80_000.0), many_records)
+    message = _refusal("png", (2_000.0, 80_000.0), many_records, dpi=96)
     assert "No longer row length would fit" in message
     assert "--wrap_length" not in message
     assert "SVG" in message
 
 
 def test_no_row_length_fits_when_the_width_is_over_the_limit() -> None:
-    message = _refusal("png", (40_000.0, 100.0), LinearWrapSummary(50_000, 50_000, (120_000,)))
+    message = _refusal("png", (40_000.0, 100.0), LinearWrapSummary(50_000, 50_000, (120_000,)), dpi=96)
     assert "No longer row length would fit" in message
 
 
 def test_the_last_row_length_that_fits_may_draw_one_row() -> None:
-    assert "--wrap_length 100kb" in _refusal("png", (2_000.0, 40_000.0), LinearWrapSummary(50_000, 50_000, (60_000,)))
+    assert "--wrap_length 100kb" in _refusal(
+        "png", (2_000.0, 40_000.0), LinearWrapSummary(50_000, 50_000, (60_000,)), dpi=96
+    )
 
 
 def test_row_lengths_run_up_the_1_2_5_ladder_to_the_first_that_holds_the_longest_record() -> None:
@@ -103,9 +123,11 @@ def test_row_lengths_run_up_the_1_2_5_ladder_to_the_first_that_holds_the_longest
     ],
 )
 def test_the_limit_is_on_each_side(fmt: str, fits: tuple[float, float], over: tuple[float, float]) -> None:
+    """At 96 dpi a PNG has one pixel per SVG pixel."""
+
     wrap = LinearWrapSummary(50_000, 50_000, (120_000,))
-    check_export_limit(fmt, *fits, wrap=wrap)
-    _refusal(fmt, over, wrap)
+    check_export_limit(fmt, *fits, wrap=wrap, dpi=96)
+    _refusal(fmt, over, wrap, dpi=96)
 
 
 @pytest.mark.parametrize("fmt", ["svg", "interactive_svg", "eps", "ps"])
@@ -138,7 +160,7 @@ def test_a_wrapped_refusal_stops_before_anything_is_converted_or_written(tmp_pat
     existing.write_text("before", encoding="utf-8")
     drawing = _drawing(tmp_path, 2_000, 45_967, SORANGIUM)
     with pytest.raises(ExportError, match="--wrap_length 100kb"):
-        save_figure_to(drawing, ["svg", "png"], output_prefix=str(tmp_path / "figure"), overwrite=True)
+        save_figure_to(drawing, ["svg", "png"], output_prefix=str(tmp_path / "figure"), overwrite=True, dpi=96)
     with pytest.raises(ExportError, match="--wrap_length 200kb"):
         render_to_bytes(drawing, "pdf")
     assert existing.read_text(encoding="utf-8") == "before"

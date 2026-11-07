@@ -170,9 +170,10 @@ export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.vers
 export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
 /** The input types of a Session's `ui.cInputType` and `ui.lInputType` (Save refuses another; Load reads it, OV-594). */
 export const SESSION_INPUT_TYPES = Object.freeze(/** @type {InputType[]} */ (Object.keys(INPUT_TYPES)));
-/** The PNG DPI the export uses unless the user picks another (the Web's; the command line has none). */
-export const DEFAULT_PNG_DPI = 300;
-/** The word after each PNG DPI in the DPI menu; the DPIs are Python's (`SESSION_PNG_DPI_CHOICES`). */
+/**
+ * The word after each PNG DPI in the DPI menu; the DPIs are Python's (`SESSION_PNG_DPI_CHOICES`), and so is
+ * the one the menu starts at (`DEFAULT_PNG_DPI`, which the command line and Python draw a PNG at too).
+ */
 export const PNG_DPI_CHOICE_WORDS = Object.freeze(/** @type {Readonly<Record<number, string>>} */ ({
   72: 'Web', 96: 'Screen', 150: 'Draft', 300: 'Print', 600: 'High'
 }));

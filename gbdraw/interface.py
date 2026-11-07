@@ -706,7 +706,7 @@ class Diagram:
 
         With ``embed_fonts``, SVG carries a subset of each font it uses that
         gbdraw does not bundle. ``dpi`` scales a PNG to ``dpi / 96`` pixels
-        per SVG pixel (default: one).
+        per SVG pixel (default: 300 dpi; ``96`` is one pixel per SVG pixel).
         """
 
         return render_to_bytes(
