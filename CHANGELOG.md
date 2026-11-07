@@ -12,6 +12,28 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: `gbdraw render --session` and `gbdraw circular`/`linear --session`
+  draw a PNG at the PNG DPI a web app Session saved (72, 96, 150, 300, or 600),
+  so a Session drawn again on the command line gives the PNG the web app
+  exported. An explicit `--dpi` still wins; a Session without a PNG DPI draws at
+  96 as before, and another stored value is noted and not used. The Python
+  functions `render_session()` and `render_session_drawings()` draw the same PNG
+  and gain an optional `dpi` argument that overrides it, as `--dpi` does;
+  `session_to_request()` returns the drawing's request without it. When the
+  Session's PNG DPI makes a PNG too large, the message says the DPI came from the
+  Session and that `--dpi` or `dpi=` overrides it. Saving the
+  Session again keeps its PNG DPI, and a Session saved by the command line still
+  records no `--dpi`.
+- Changed: at a requested figure size, when Circular labels do not fit and no
+  single change of the label settings fits them either, the ways to make room
+  now also say to make the figure larger and name the requested size option
+  without a value (`make the figure larger: increase --figure_width;`, or
+  `--figure_width and --figure_height`). The Web dialog names the field the same
+  way ("Make the figure larger: increase Figure width (Figure size in
+  Layout)."). The room the labels need is not known there, so no size is
+  estimated. When labels were not placed for lack of room, the remedy still
+  names an estimate (`--figure_width about 440.6mm`). Figures without a
+  requested size keep their messages.
 - Deprecated: Python 3.10, whose support by the Python project ended in October
   2026. gbdraw 0.16.0 will need Python 3.11 or later.
 - Added: the technical documentation page
