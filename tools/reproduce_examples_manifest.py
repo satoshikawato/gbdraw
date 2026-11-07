@@ -1151,6 +1151,9 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "lightgray",
                 "--legend",
                 "right",
+                # The tracked PNG has one pixel per SVG pixel; the default PNG DPI is 300.
+                "--dpi",
+                "96",
             ),
         ),
         description="CLI-equivalent MjeNMV rendering for the documented circular Python API example.",
@@ -1205,6 +1208,9 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "lightgray",
                 "--legend",
                 "right",
+                # The tracked PNG has one pixel per SVG pixel; the default PNG DPI is 300.
+                "--dpi",
+                "96",
             ),
         ),
         description="CLI-equivalent Majanivirus comparison for the documented linear Python API example.",

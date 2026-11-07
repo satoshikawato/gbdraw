@@ -478,9 +478,9 @@ test('a PDF export of a wrapped Result without an input summary is refused when 
     assert.equal(refusal.code, 'EXPORT_LIMIT', JSON.stringify(refusal));
     assert.equal(refusal.reason, 'PDF_SIZE');
   }
-  assert.deepEqual(none, { ok: true }, '"none" is off');
-  assert.deepEqual(uncut, { ok: true }, 'nothing is cut: an unwrapped PDF stays as it was');
-  assert.deepEqual(plain, { ok: true });
+  assert.deepEqual(none, { ok: true, pixels: null }, '"none" is off');
+  assert.deepEqual(uncut, { ok: true, pixels: null }, 'nothing is cut: an unwrapped PDF stays as it was');
+  assert.deepEqual(plain, { ok: true, pixels: null });
   // D-57: a typed amount that is no whole bp reaches Python as typed and is refused with its diagnostic.
   assert.deepEqual(fraction, { code: 'INPUT_INVALID', configPath: 'canvas.linear.wrap_length' });
 });
@@ -499,5 +499,5 @@ test('a loaded Result with a cropped record sends its region and Python checks t
   ]);
   assert.equal(cut.code, 'EXPORT_LIMIT', JSON.stringify(cut));
   assert.equal(cut.reason, 'PDF_SIZE');
-  assert.deepEqual(short, { ok: true }, 'the crop cuts no row: an unwrapped PDF stays as it was');
+  assert.deepEqual(short, { ok: true, pixels: null }, 'the crop cuts no row: an unwrapped PDF stays as it was');
 });

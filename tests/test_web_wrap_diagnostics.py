@@ -31,6 +31,8 @@ WRAP = "canvas.linear.wrap_length"
 LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
 SORANGIUM = LinearWrapSummary(50_000, 50_000, (13_033_779,))
 SORANGIUM_SIZE = (2_000.0, 45_967.0)
+# A PDF that fits: a PDF has no pixel size.
+PDF_FITS = {"ok": True, "pixels": None}
 
 
 def _config(**overrides: object) -> GbdrawConfig:
@@ -125,13 +127,19 @@ def test_a_wrapped_pdf_refusal_names_a_row_length_and_no_dpi() -> None:
     }
 
 
-def test_a_refusal_with_no_advice_names_only_the_limit_and_size() -> None:
+def test_a_refusal_with_no_row_length_names_the_limit_size_and_a_lower_dpi() -> None:
+    """A PNG always has a DPI (the Web's, the caller's, or the default), so a lower one that fits is named."""
+
     many_records = LinearWrapSummary(50_000, 50_000, (60_000,) * 200)
-    assert _context(_export_refusal("png", (2_000.0, 80_000.0), many_records), "export-png") == {
-        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 2_000, "height": 80_000,
+    assert _context(_export_refusal("png", (2_000.0, 80_000.0), many_records, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 2_000, "height": 80_000, "dpi": 39,
     }
-    assert _context(_export_refusal("png", (33_000.0, 100.0), None), "export-png") == {
-        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100,
+    assert _context(_export_refusal("png", (33_000.0, 100.0), None, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100, "dpi": 95,
+    }
+    # No DPI of 1 or more fits a figure over 32,767 inches: only the limit and the size are named.
+    assert _context(_export_refusal("png", (3_200_000.0, 100.0), None, dpi=96), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 3_200_000, "height": 100,
     }
 
 
@@ -162,10 +170,12 @@ def test_the_web_export_check_reads_the_wrap_and_refuses_as_the_cli_does(web_hel
     assert pdf["context"] == {"reason": "PDF_SIZE", "limit": 14_400, "width": 1_500, "height": 34_475,
                               "rowLength": 200_000}
     # An unwrapped PDF stays as it was, also when a wrap length cut no record; a PNG that fits at its DPI passes.
-    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, None, None) == {"ok": True}
+    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, None, None) == PDF_FITS
     uncut = LinearWrapSummary(20_000_000, 20_000_000, (13_033_779,))
-    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, uncut, None) == {"ok": True}
-    assert _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 68) == {"ok": True}
+    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, uncut, None) == PDF_FITS
+    # A PNG that fits names its pixel size (OV-2682): 2,000 x 45,967 SVG px at 68 dpi.
+    assert _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 68) == {
+        "ok": True, "pixels": {"width": 1_417, "height": 32_560}}
     # A PNG names its DPI; an unknown format is not checked as another.
     assert "error" in _web_export_check(web_helpers, "png", SORANGIUM_SIZE, None, None)
     assert "error" in _web_export_check(web_helpers, "eps", SORANGIUM_SIZE, None, None)
@@ -188,7 +198,7 @@ def test_the_web_export_check_reads_the_stored_wrap_leaf_with_the_config_validat
         refusal = _web_export_leaf(web_helpers, leaf, [13_033_779])["error"]
         assert refusal["context"]["reason"] == "PDF_SIZE", leaf
     for leaf in ("none", None):
-        assert _web_export_leaf(web_helpers, leaf, [13_033_779]) == {"ok": True}, leaf
+        assert _web_export_leaf(web_helpers, leaf, [13_033_779]) == PDF_FITS, leaf
     # A leaf the validator refuses is refused with its diagnostic, as a Generate of it would be.
     refused = _web_export_leaf(web_helpers, "50 parsecs", [13_033_779])["error"]
     assert refused["code"] == "INPUT_INVALID"
@@ -218,7 +228,7 @@ def test_the_web_export_check_crops_each_record_by_the_drawings_rule(web_helpers
     assert _web_export_records(web_helpers, [past_end])["error"]["context"] == _cli_refusal((5_000_000,))
     # A crop that cuts nothing leaves the PDF as an unwrapped one, unchecked; its source record would be cut.
     short = {"sourceLength": 13_033_779, "region": {"start": 1, "end": 40_000}}
-    assert _web_export_records(web_helpers, [short]) == {"ok": True}
+    assert _web_export_records(web_helpers, [short]) == PDF_FITS
     # A region the drawing cannot crop stops the export with its region diagnostic, as a Generate of it would.
     beyond = _web_export_records(web_helpers, [{"sourceLength": 60, "region": {"start": 1_000, "end": 2_000}}])["error"]
     assert (beyond["code"], beyond["context"]) == ("REGION_INVALID", {"field": "region", "reason": "RECORD_BOUNDS"})

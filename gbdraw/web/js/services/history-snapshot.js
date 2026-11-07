@@ -8,6 +8,7 @@ import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/i
 import { isInputFileRef } from './history-files.js';
 /** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
+import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
@@ -545,7 +546,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   mode: getRef(state.mode, 'circular'),
   ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
-  downloadDpi: getRef(state.downloadDpi, 300),
+  downloadDpi: getRef(state.downloadDpi, DEFAULT_PNG_DPI),
   canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
   generatedLegendPosition: getRef(state.generatedLegendPosition, 'left'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),

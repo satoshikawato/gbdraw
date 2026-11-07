@@ -25,8 +25,9 @@ import {
   readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
+import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
 import {
-  CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, DEFAULT_PNG_DPI, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
+  CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
   SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
   createDefaultLosat, createDefaultLosatpHitLimits, readImportedTrackSlots, readLinearTypographyLinked
 } from './session-active-config-contract.js';
@@ -985,8 +986,8 @@ export const readSessionInputType = exactChoice(SESSION_INPUT_TYPES, 'gb');
 /**
  * The PNG DPI: one of the choices the DPI menu lists, kept as stored, else
  * the default (OV-595). The command line's replay reads the same choices
- * (`read_session_png_dpi` in gbdraw/session.py), with no DPI for an unset or
- * other value.
+ * (`read_session_png_dpi` in gbdraw/session.py) and draws an unset or other
+ * value at the same default.
  * @type {FieldReader<unknown>}
  */
 export const readDownloadDpi = (value) => {

@@ -29,7 +29,7 @@ from gbdraw.core.figure_length import RequestedFigureSize, parse_figure_length
 from gbdraw.crop_genbank import check_start_end_coords
 from gbdraw.layout.linear_wrap import LinearWrapSummary, resolve_wrap_length
 from gbdraw.render.document import export_root_size
-from gbdraw.render.export_limits import check_export_limit
+from gbdraw.render.export_limits import check_export_limit, png_pixel_size
 
 _FORMATS: dict[str, Literal["png", "pdf"]] = {"png": "png", "pdf": "pdf"}
 
@@ -72,6 +72,28 @@ class ExportRootSize(TypedDict):
 
     width: str
     height: str
+
+
+class SvgRootReply(TypedDict):
+    """The answer for an SVG of a Result drawn to a requested size: the root size its file states."""
+
+    ok: Literal[True]
+    root: ExportRootSize
+
+
+class PngPixelSize(TypedDict):
+    """A PNG's width and height in pixels (``png_pixel_size``)."""
+
+    width: int
+    height: int
+
+
+class ExportLimitReply(TypedDict):
+    """The answer for a PNG or PDF that fits: ``pixels`` is the PNG's size, which the Web canvas takes, and ``None``
+    for a PDF."""
+
+    ok: Literal[True]
+    pixels: PngPixelSize | None
 
 
 def _requested_size(payload: _FigureSizePayload | None) -> RequestedFigureSize:
@@ -117,29 +139,31 @@ def _wrap(payload: _WrapPayload | None) -> LinearWrapSummary | None:
 
 
 def check_web_export_limit_json(request_json: str) -> str:
-    """``{"ok": true}`` when the figure fits its format; otherwise ``check_export_limit``'s ``ExportError``.
+    """``ExportLimitReply`` when the figure fits its format; otherwise ``check_export_limit``'s ``ExportError``.
 
-    For an SVG, ``{"ok": true, "root": {"width", "height"}}``: the root size its file states.
+    For an SVG, ``SvgRootReply``: the root size its file states.
     """
 
     request: ExportLimitRequest = json.loads(str(request_json))
     if request["format"] == "svg":
-        return json.dumps({"ok": True, "root": _svg_root(request)})
+        svg_reply: SvgRootReply = {"ok": True, "root": _svg_root(request)}
+        return json.dumps(svg_reply)
     fmt = _FORMATS.get(str(request["format"]))
     if fmt is None:
         raise ValueError(f"Unknown export format: {request['format']}")
     dpi = request["dpi"]
     if fmt == "png" and dpi is None:
         raise ValueError("A PNG export names its DPI.")
-    check_export_limit(
-        fmt,
-        float(request["width"]),
-        float(request["height"]),
-        wrap=_wrap(request["linearWrap"]),
-        # The Web PNG scales by its DPI; a PDF page never depends on it.
-        dpi=float(dpi) if fmt == "png" and dpi is not None else None,
-    )
-    return json.dumps({"ok": True})
+    width, height = float(request["width"]), float(request["height"])
+    # The Web PNG scales by its DPI; a PDF page never depends on it.
+    png_dpi = float(dpi) if fmt == "png" and dpi is not None else None
+    check_export_limit(fmt, width, height, wrap=_wrap(request["linearWrap"]), dpi=png_dpi)
+    pixels: PngPixelSize | None = None
+    if png_dpi is not None:
+        pixel_width, pixel_height = png_pixel_size(width, height, png_dpi)
+        pixels = {"width": pixel_width, "height": pixel_height}
+    reply: ExportLimitReply = {"ok": True, "pixels": pixels}
+    return json.dumps(reply)
 
 
-__all__ = ["ExportLimitRequest", "ExportRootSize", "check_web_export_limit_json"]
+__all__ = ["ExportLimitReply", "ExportLimitRequest", "ExportRootSize", "PngPixelSize", "SvgRootReply", "check_web_export_limit_json"]

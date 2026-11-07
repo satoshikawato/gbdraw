@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
 const { CURRENT_FEATURE_CATALOG_SCHEMA } = require('./helpers/app-lifecycle.cjs');
 
 const EXPORT_MODULE_PATH = '/gbdraw/web/js/services/export.js';
@@ -30,19 +31,19 @@ const displayedErrorOperation = (page) => page.evaluate(
 
 // The fixture is a legacy imported SVG without composition metadata. Mounting
 // it must leave the displayed error unchanged.
-const mountExportFixture = async (page, { interactive = false } = {}) => {
+const mountExportFixture = async (page, { interactive = false, size = { width: 120, height: 80 } } = {}) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const errorBeforeMount = await displayedErrorOperation(page);
-  await page.evaluate(async ({ interactive, catalogSchema }) => {
+  await page.evaluate(async ({ interactive, catalogSchema, size }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
       '/gbdraw/web/js/services/svg-result-ingestion.js'
     );
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('width', '120');
-    svg.setAttribute('height', '80');
-    svg.setAttribute('viewBox', '0 0 120 80');
+    svg.setAttribute('width', String(size.width));
+    svg.setAttribute('height', String(size.height));
+    svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
 
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('id', 'feature-a');
@@ -91,7 +92,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
         comparisonMatches: []
       }]
     } : { schema: catalogSchema, items: [] };
-  }, { interactive, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
+  }, { interactive, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA, size });
   await expect(page.locator('.origin-top svg')).toBeAttached();
   // The preview binds the mounted root in microtasks; two frames cover it.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -143,6 +144,23 @@ test('startup and non-PDF exports do not load PDF or interactive payloads', { ta
   expect((await pngDownload).suggestedFilename()).toBe('lazy-export.png');
   expect(requestCount(EXPORT_MODULE_PATH)).toBe(1);
   expectNoPdfOrInteractiveRequests(requestCount);
+});
+
+// OV-2682: a PNG is the size the command line draws for the same figure and DPI, the size Python's check returns
+// (gbdraw/render/export_limits.py, rounded half to even as CairoSVG rounds). At 300 dpi, 1,237 x 100 SVG px is
+// 3,865.625 x 312.5: a canvas that truncated drew 3,865 px wide, and a JavaScript Math.round would draw 313 px tall.
+test('a PNG download has the pixel size of the command line PNG of the same figure', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html');
+  await mountExportFixture(page, { size: { width: 1237, height: 100 } });
+  await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.downloadDpi.value = 300;
+  });
+  const pngDownload = page.waitForEvent('download', { timeout: 120000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.downloadPNG());
+  const png = readFileSync(await (await pngDownload).path());
+  expect(png.subarray(12, 16).toString('latin1')).toBe('IHDR');
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([3866, 312]);
 });
 
 test('concurrent first PDF exports load each library once and repeated exports reuse them', async ({

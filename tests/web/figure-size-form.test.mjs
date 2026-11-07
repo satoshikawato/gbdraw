@@ -15,9 +15,9 @@ import {
 import { createFigureSizeField } from '../../gbdraw/web/js/app/figure-size-field.js';
 import { getSvgDimensions } from '../../gbdraw/web/js/services/svg-dimensions.js';
 import {
-  DEFAULT_PNG_DPI, PNG_DPI_CHOICES, PNG_DPI_CHOICE_WORDS, createDefaultForm
+  PNG_DPI_CHOICES, PNG_DPI_CHOICE_WORDS, createDefaultForm
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { SESSION_PNG_DPI_CHOICES } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { DEFAULT_PNG_DPI, SESSION_PNG_DPI_CHOICES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { labelCapacityRemedyText } from '../../gbdraw/web/js/services/label-fit.js';
 import { defaultSettingsContainers, installStoredSettings, readDownloadDpi } from '../../gbdraw/web/js/services/config-field-readers.js';

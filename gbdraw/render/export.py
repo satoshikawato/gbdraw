@@ -22,8 +22,9 @@ from svgwrite import Drawing
 
 from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
-from gbdraw.exceptions import GbdrawError, ValidationError
-from gbdraw.render.document import write_svg_document, write_text
+from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
+from gbdraw.render.document import SvgDocument, raster_svg_body, write_svg_document, write_text
+from gbdraw.render.export_limits import check_drawing_export_limits, checked_png_dpi, png_export_dpi
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
@@ -317,9 +318,11 @@ def convert_svg_with_cairosvg(
     (:func:`gbdraw.render.font_embedding.fonts_for_cairosvg`) and
     :func:`prepare_svg_for_cairosvg`. ``options`` are passed
     to CairoSVG (for example ``url``, ``output_width``, ``background_color``).
-    A PNG draws ``dpi / 96`` pixels per SVG pixel (``dpi`` of ``None``: one)
-    and states ``dpi`` (``None``: 96) in its pHYs chunk; other formats ignore
-    ``dpi``. Returns the converted bytes when ``write_to`` is not given.
+    A PNG draws ``dpi / 96`` pixels per SVG pixel and states ``dpi`` in its
+    pHYs chunk (``None``: :data:`gbdraw.render.export_limits.DEFAULT_PNG_DPI`);
+    other formats ignore ``dpi``. An ``output_width`` or ``output_height``
+    option sets the PNG's pixels instead. Returns the converted bytes when
+    ``write_to`` is not given.
     """
     converter_name = _CAIROSVG_CONVERTERS.get(str(fmt).lower())
     if converter_name is None:
@@ -332,12 +335,9 @@ def convert_svg_with_cairosvg(
         if write_to is not None:
             kwargs["write_to"] = write_to
         return getattr(module, converter_name)(**kwargs)
-    if dpi is not None:
-        kwargs["scale"] = dpi / CSS_PX_PER_INCH
-    png = png_with_resolution(
-        bytes(getattr(module, converter_name)(**kwargs)),
-        CSS_PX_PER_INCH if dpi is None else dpi,
-    )
+    png_dpi = png_export_dpi(dpi)
+    kwargs["scale"] = png_dpi / CSS_PX_PER_INCH
+    png = png_with_resolution(bytes(getattr(module, converter_name)(**kwargs)), png_dpi)
     if write_to is None:
         return png
     if isinstance(write_to, (str, os.PathLike)):
@@ -345,6 +345,33 @@ def convert_svg_with_cairosvg(
     else:
         write_to.write(png)
     return None
+
+
+def cairosvg_sources(
+    drawing: Drawing, formats: Sequence[str], written: SvgDocument | None = None
+) -> dict[str, bytes]:
+    """The bytes CairoSVG converts for each of ``formats`` (lower case) of ``drawing``.
+
+    PDF, EPS and PS convert the written document (``written``, else written here), which states a requested size in
+    its unit; a PNG converts the drawing with its px root (:func:`gbdraw.render.document.raster_svg_body`), so its
+    size is ``png_pixel_size`` of the drawn px on every path. Formats that convert the same text share one bytes object.
+    """
+
+    texts: dict[str, str] = {}
+    for fmt in formats:
+        if fmt == "png":
+            texts[fmt] = raster_svg_body(drawing, written)
+        else:
+            if written is None:
+                written = write_svg_document(drawing)
+            texts[fmt] = written.body
+    encoded: dict[int, bytes] = {}
+    sources: dict[str, bytes] = {}
+    for fmt, text in texts.items():
+        if id(text) not in encoded:
+            encoded[id(text)] = text.encode("utf-8")
+        sources[fmt] = encoded[id(text)]
+    return sources
 
 
 def parse_formats(out_formats: str) -> list[str]:
@@ -356,8 +383,13 @@ def save_figure(
     list_of_formats: List[str],
     *,
     interactive_context: InteractiveSvgContext | None = None,
+    dpi: float | None = None,
 ) -> None:
     """Save a figure using the deprecated warning-and-skip export contract.
+
+    ``dpi`` is the PNG's DPI (default 300, the default PNG DPI; ``dpi=96`` gives
+    one pixel per SVG pixel). A format that cannot be written, such as a PNG over
+    the size limit, is skipped with a warning and the others are still written.
 
     Use :func:`gbdraw.api.save_figure_to` for strict file export or
     :func:`gbdraw.api.render_to_bytes` for in-memory output.
@@ -369,6 +401,7 @@ def save_figure(
         DeprecationWarning,
         stacklevel=2,
     )
+    dpi = checked_png_dpi(dpi)
     base_filename = os.path.splitext(canvas.filename)[0]
     svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 
@@ -421,24 +454,32 @@ def save_figure(
         logger.warning("%s; skipped.", _cairosvg_missing_message(formats_to_process))
         return
 
-    try:
-        svg_bytes = svg_source.encode("utf-8")
-        for fmt in formats_to_process:
-            out_file = resolve_format_output_path(base_filename, fmt)
-
+    sources = cairosvg_sources(canvas, formats_to_process, document)
+    for fmt in formats_to_process:
+        out_file = resolve_format_output_path(base_filename, fmt)
+        try:
+            if fmt == "png":
+                # Only the PNG is checked here: its size follows the DPI, whose default is now 300. The other
+                # formats keep what this deprecated function wrote before (a wrapped PDF over the page limit too).
+                check_drawing_export_limits(canvas, [fmt], dpi=dpi)
             convert_svg_with_cairosvg(
-                svg_bytes,
+                sources[fmt],
                 fmt,
                 write_to=out_file,
                 cairosvg_module=cairosvg_module,
+                dpi=dpi,
             )
-
-            logger.info(f"Generated {fmt.upper()}: {out_file}")
-    except Exception as e:
-        logger.error(f"Failed to generate images using CairoSVG: {e}")
+        except ExportError as e:
+            logger.warning("%s; skipped.", str(e).rstrip("."))
+            continue
+        except Exception as e:
+            logger.error(f"Failed to generate {fmt.upper()} using CairoSVG: {e}")
+            continue
+        logger.info(f"Generated {fmt.upper()}: {out_file}")
 
 
 __all__ = [
+    "cairosvg_sources",
     "convert_svg_with_cairosvg",
     "get_cairosvg",
     "has_cairosvg",

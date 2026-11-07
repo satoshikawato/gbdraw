@@ -2311,6 +2311,7 @@ def _assert_export_set(workdir: Path) -> None:
         or not math.isclose(view_box[3], svg_height)
     ):
         raise RecipeContractError("H-CLI-13 SVG size and viewBox differ.")
+    # The recipe draws its PNG at --dpi 96: one pixel per SVG pixel.
     expected_png_dimensions = (int(svg_width), int(svg_height))
     if min(expected_png_dimensions) <= 0:
         raise RecipeContractError("H-CLI-13 PNG dimensions must be positive.")

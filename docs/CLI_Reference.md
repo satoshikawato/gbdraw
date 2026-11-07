@@ -346,9 +346,9 @@ options:
                         sequence width or the Circular radius changes); fonts
                         and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
-                        default: 96, one pixel per SVG pixel; with --session,
-                        the PNG DPI the Session saved). PNG only. The PNG also
-                        states it in its pHYs chunk.
+                        default: 300, or with --session the PNG DPI the
+                        Session saved; 96 draws one pixel per SVG pixel). PNG
+                        only. The PNG also states it in its pHYs chunk.
   --canvas_padding TOP,RIGHT,BOTTOM,LEFT
                         Room around the figure, outside its edge padding, in
                         px: TOP,RIGHT,BOTTOM,LEFT (for example 0,40,0,0). With
@@ -1693,9 +1693,9 @@ options:
                         sequence width or the Circular radius changes); fonts
                         and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
-                        default: 96, one pixel per SVG pixel; with --session,
-                        the PNG DPI the Session saved). PNG only. The PNG also
-                        states it in its pHYs chunk.
+                        default: 300, or with --session the PNG DPI the
+                        Session saved; 96 draws one pixel per SVG pixel). PNG
+                        only. The PNG also states it in its pHYs chunk.
   --canvas_padding TOP,RIGHT,BOTTOM,LEFT
                         Room around the figure, outside its edge padding, in
                         px: TOP,RIGHT,BOTTOM,LEFT (for example 0,40,0,0). With
@@ -1972,9 +1972,9 @@ options:
                         replaced to PATH; use a .gz suffix for gzip
                         compression.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
-                        default: 96, one pixel per SVG pixel; with --session,
-                        the PNG DPI the Session saved). PNG only. The PNG also
-                        states it in its pHYs chunk.
+                        default: 300, or with --session the PNG DPI the
+                        Session saved; 96 draws one pixel per SVG pixel). PNG
+                        only. The PNG also states it in its pHYs chunk.
   --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
                         .otc) whose family the diagram text can use
                         (--font_family, or the font a Session names); every

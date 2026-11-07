@@ -199,8 +199,8 @@ def add_dpi_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--dpi',
         help=(
-            'PNG resolution in pixels per inch (positive integer; default: 96, one pixel per SVG pixel; with '
-            '--session, the PNG DPI the Session saved). PNG only. The PNG also states it in its pHYs chunk.'
+            'PNG resolution in pixels per inch (positive integer; default: 300, or with --session the PNG DPI the '
+            'Session saved; 96 draws one pixel per SVG pixel). PNG only. The PNG also states it in its pHYs chunk.'
         ),
         type=parse_positive_int,
     )
