@@ -94,7 +94,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   moveLegendRecords: (...args) => createLegendManager({ state, commitLegendRowRules: () => true }).moveLegendRecords(...args),
   // app-setup.js: the root's color of each Legend row as it shows (OV-282, D-26).
   readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, []),
-  projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
+  projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
 // Waits until a held Legend preparation has started (`ready`). A commit that
@@ -967,7 +967,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
       } };
     },
     readLegendRowColors: (drawing) => displayedLegendRowColors(drawingState, drawing, []),
-    projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => { rerenders += 1; return true; }, isRedrawOwed: () => false }
+    projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => { rerenders += 1; return true; } }
   });
   const tagRule = (pattern, cap) => ({ feat: 'CDS', qual: 'locus_tag', val: `^(${pattern})$`, color: '#112233', cap });
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'alpha')]), true);

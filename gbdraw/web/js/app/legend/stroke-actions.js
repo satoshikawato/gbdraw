@@ -9,9 +9,9 @@ import { clearStrokes, legendEntryKey, setLegendStroke } from '../../services/dr
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  */
 
-// The Legend row stroke edits write the editor intent only. The composition
-// root shows them on the Result through the executor as one History step
-// (`editEditorIntent` in app/app-setup.js), which records Python's strokes,
+// The Legend row stroke edits write the editor intent only. The editor intent
+// shows them on the Result through the executor as one History step
+// (`editEditorIntent` in app/editor-intent.js), which records Python's strokes,
 // so a reset returns each feature part and swatch to the stroke Python drew.
 // A row's stroke and its open Stroke options are stored under the row's key
 // (`legendEntryKey`), so two rows of one name keep their own; an edit of a row

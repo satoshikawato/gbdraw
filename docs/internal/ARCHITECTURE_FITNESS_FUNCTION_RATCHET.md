@@ -519,6 +519,46 @@ TypeScript, and holds the limit and the baseline.
 - Adding or raising an entry and raising the limit are authority-only changes
   that need the Owner's approval. Lowering or removing an entry is optional.
 
+The same test keeps the logic written in each composition root from growing.
+A composition root of the Web owner graph (`compositionRoots` in
+`tools/web-owner-graph-detectors.mjs`) should hold wiring: it creates the
+owners, passes them to each other as ports, and returns what the app uses.
+Logic written in it is reached only through the root, so it cannot be tested
+or reused on its own, and it can grow back as wiring leaves the root.
+
+- The root function of a composition root is its top-level function that
+  calls a `create*` factory imported from another module; each composition
+  root has exactly one.
+- The logic of a root is every function of two or more lines whose nearest
+  enclosing function is the root function: a `const f = () => {...}`
+  statement, a function passed inline to a factory as a port, a method of an
+  object literal built in the root, a computed getter, and a watch callback
+  alike. Each counts with its whole span, measured as above, so a function
+  nested in it counts once, in it.
+- A one-line function written directly in the root function, such as the port
+  `drawingTabs: () => state.drawingTabs.value`, is wiring and does not count:
+  adding a port is what a composition root is for. A port of two or more lines
+  counts, so logic does not leave the count by moving into an inline port. A
+  one-line function inside a counted function counts with that function's
+  span, as the port object of a wrapper such as
+  `loadSessionFromFile = (event) => importSessionFromFile(event, {...})` does.
+- This check does not count statements written directly in the root body
+  (setup-time `if`, `for`, or `try` blocks) or the other top-level functions of
+  a root module. The root function's whole size stays bounded by
+  `MAX_FUNCTION_LINES` and its `FUNCTION_LINES` entry.
+- `COMPOSITION_ROOT_LOGIC_LINES` records the total lines of that logic per
+  `<path>::<root function>`; the test also reports how many functions make up
+  each total and how many one-line functions it left out. A total may shrink but not grow, and a composition root without
+  an entry fails. There is no limit per function.
+- When the test fails, move the new logic into a module factory and pass it to
+  the root as a port, or shrink other logic in the same root by the same
+  number of lines.
+- Adding or raising an entry (a new composition root, a renamed root function,
+  or more logic) is an authority-only change that needs the Owner's approval.
+  An entry whose key names no root function now (the module is no longer a
+  composition root, or its root function took another name) is reported as
+  removable, whatever its value; lowering or removing an entry is optional.
+
 ## Line coverage
 
 This is the rule `COVERAGE-FLOOR` of `tools/web-design-rule-guards.json`.

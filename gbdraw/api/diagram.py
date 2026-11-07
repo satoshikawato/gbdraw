@@ -140,10 +140,12 @@ from gbdraw.core.fonts import resolve_font_family
 from gbdraw.core.numeric import compensated_sum
 from gbdraw.core.sequence import create_dict_for_sequence_lengths
 from gbdraw.diagrams.circular.assemble import (
+    CircularAnnotationMeasures,
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
     circular_legend_table,
     circular_track_slot_geometry,
+    kept_annotation_measures,
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.parts import (
@@ -3698,20 +3700,27 @@ def _checked_circular_drawing(
     over the definition text alone keep the drawing, warn, and attach the report and its search (rows searched for
     ``warn_search_seconds``). At a requested size, labels not placed for lack of room offer a larger figure of an
     estimated size, and labels no row of the label settings fits offer one without an estimate (PD-OI-114 r3).
+    Every assembly of the figure, the rows' among them, shares its annotation measures (``CircularAnnotationMeasures``).
     """
+
+    measures = CircularAnnotationMeasures()
+
+    def measured(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        with kept_annotation_measures(measures):
+            return assemble(drawn_cfg, overrides)
 
     size = cfg.canvas.figure_size
     if size.requested:
-        drawn = _fitted_circular_pass(assemble, cfg, size, map_item=map_item)
+        drawn = _fitted_circular_pass(measured, cfg, size, map_item=map_item)
     else:
-        drawn = _circular_pass(assemble, cfg)
+        drawn = _circular_pass(measured, cfg)
     drawing = drawn.drawing
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             # A row is verified with the full placement and no capacity check, so the rows stay as they were.
             with label_capacity_unchecked():
-                verified = assemble(drawn.cfg, overrides)
+                verified = measured(drawn.cfg, overrides)
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:

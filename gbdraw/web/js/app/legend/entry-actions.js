@@ -173,8 +173,9 @@ const inAnsweredLegendOrder = (items, added, legendOrder, keyOf, reorder) => {
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
 // intent (`legendEntries`, `deletedLegendEntries`, the override stores) and
-// write no row; the composition root shows the intent on the displayed Result
-// through the port (`showEditorIntent`), whose executor writes the rows.
+// write no row; the editor intent shows the intent on the displayed Result
+// through the port (`showEditorIntent` in app/editor-intent.js), whose
+// executor writes the rows.
 /** @param {LegendEntryActionsOptions} options */
 export const createLegendEntryActions = ({
   state,
@@ -963,7 +964,7 @@ export const createLegendEntryActions = ({
     inherit.forEach((key) => setLegendColor(drawing.slices.paint, key, null));
   };
 
-  // A Legend row color writes the editor intent only; the composition root
+  // A Legend row color writes the editor intent only; app/editor-intent.js
   // shows it on the Result through the executor (`editEditorIntent`). A color
   // the row already shows is no edit (OV-282: the palette's, for a row the
   // palette colors). It colors every row the shown row stands for (D-35).

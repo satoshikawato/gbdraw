@@ -60,8 +60,6 @@ import {
  * @typedef {object} RuleActionsPorts
  * @property {() => boolean} requestAutomaticRerender
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
- * @property {(drawing: DrawingState) => boolean} isRedrawOwed
- *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
  */
 
 /**
@@ -554,11 +552,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       ? runUndoableCheckpoint : runUndoable;
     // D-24 (OV-731): a checkpoint step records whether the figure of each
     // side is the one its state draws, so Undo and Redo of a drawn side ask
-    // for no Python run. The figure the commit starts from is drawn unless a
-    // rerender asked for is still owed when History captures it (D-36). The
-    // commit's own figure is drawn when it also shows every row; otherwise
-    // History keeps the figure of the rerender the commit asks for once that
-    // is shown, while the step is the last one (`keepRedrawnResult`).
+    // for no Python run; History reads the drawing's figure as it captures
+    // each side (`setFigureDrawnReader`). The commit's own figure is drawn
+    // when it also shows every row; otherwise History keeps the figure of the
+    // rerender the commit asks for once that is shown, while the step is the
+    // last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       // `prepareRules` without `asGiven` wrote each rule as `normalizeSpecificRule` does.
@@ -578,7 +576,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    }, { joinsOpenStep, drawn: { before: () => !ports.isRedrawOwed(drawing), change: !redrawsLegend } });
+    }, { joinsOpenStep, drawn: { change: !redrawsLegend } });
     if (applied) appliedWrites += 1;
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;

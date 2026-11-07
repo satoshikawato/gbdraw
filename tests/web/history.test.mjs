@@ -3148,13 +3148,14 @@ for (const previousSuppressed of [false, true]) {
     buildIntent: () => ({ rules }),
     applyIntent: (intent) => { rules = intent.rules; },
     buildCheckpoint: () => ({ rules, figure }),
-    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; }
+    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; },
+    figureDrawn: () => true
   });
   await history.captureBaseline('initial');
   await history.runUndoableCheckpoint('Change feature color', () => {
     rules = 1;
     figure = 'shown-1';
-  }, { drawn: { before: () => true, change: false } });
+  }, { drawn: { change: false } });
   await history.runUndoable('Edit setting', () => { rules = 2; });
   await history.undo();
   assert.equal(history.getRedoCount(), 1);
@@ -3166,14 +3167,18 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
 }
 
-// D-24 (OV-731): a checkpoint step's caller says whether the figure of each
-// side is the one its state draws, and Undo and Redo pass that on. A side not
-// yet drawn takes the figure of a rerender drawn from the current state (D-36)
-// only while its step is the last one and nothing is open.
+// D-24 (OV-731): a checkpoint step reads whether the figure of each side is
+// the one its state draws as it captures that side (the drawing's reader), its
+// caller says whether its own change shows so, and Undo and Redo pass that on.
+// A side not yet drawn takes the figure of a rerender drawn from the current
+// state (D-36) only while its step is the last one and nothing is open.
 {
   let rules = 0;
   let figure = 'drawn-0';
+  let owed = false;
   const restores = [];
+  /** @type {boolean[]} */
+  const reads = [];
   const history = createHistoryManager({
     buildIntent: () => ({ rules }),
     applyIntent: (intent) => { rules = intent.rules; },
@@ -3182,13 +3187,14 @@ for (const previousSuppressed of [false, true]) {
       rules = checkpoint.rules;
       figure = checkpoint.figure;
       restores.push(restored);
-    }
+    },
+    figureDrawn: () => { reads.push(owed); return !owed; }
   });
   await history.captureBaseline('initial');
   await history.runUndoableCheckpoint('Change feature color', () => {
     rules = 1;
     figure = 'shown-1';
-  }, { drawn: { before: () => true, change: false } });
+  }, { drawn: { change: false } });
   figure = 'drawn-1';
   assert.equal(await history.keepRedrawnResult(), true);
   assert.equal(await history.keepRedrawnResult(), false, 'the kept side is drawn');
@@ -3198,10 +3204,12 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual(restores, [{ drawn: true }, { drawn: true }]);
 
   // A later step, or an Undo of the step, keeps the figure out of it.
+  owed = true;
   await history.runUndoableCheckpoint('Change feature color again', () => {
     rules = 2;
     figure = 'shown-2';
-  }, { drawn: { before: () => false, change: true } });
+  }, { drawn: { change: true } });
+  owed = false;
   await history.runUndoable('Edit setting', () => { rules = 3; });
   figure = 'drawn-3';
   assert.equal(await history.keepRedrawnResult(), false, 'not a checkpoint step');
@@ -3219,34 +3227,86 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(await history.keepRedrawnResult(), false, 'a step is open');
   release();
   await open;
-  // A step without a caller's answer restores as before.
+  // A step whose caller says nothing of its change reads the figure too (OV-2560).
   await history.runUndoableCheckpoint('Reset', () => { rules = 4; });
   await history.undo();
-  assert.deepEqual(restores.at(-1), { drawn: false });
-  // N1 (review C): the before side is drawn as History captures it, not as
-  // the caller asked for the step: a step that waits for an open one reads it
-  // once that one settled.
-  let owed = false;
+  assert.deepEqual(restores.at(-1), { drawn: true });
+  // N1 (review C): a side is drawn as History captures it, not as the caller
+  // asked for the step: a step that waits for an open one reads it once that
+  // one settled, and its after side reads it again as the step ends.
   let settle;
   const waiting = history.runUndoable('Edit setting', () => new Promise((resolve) => { settle = resolve; }));
   await new Promise((resolve) => { setTimeout(resolve, 0); });
   assert.equal(typeof settle, 'function', 'the step is open');
-  const reads = [];
+  reads.length = 0;
   const recolored = history.runUndoableCheckpoint('Change feature color late', () => {
     rules = 5;
     figure = 'shown-5';
-  }, { drawn: { before: () => { reads.push(owed); return !owed; }, change: true } });
+  }, { drawn: { change: true } });
   owed = true;
   rules = 6;
   settle();
   await waiting;
   await recolored;
-  assert.deepEqual(reads, [true], 'read once, when the before side is captured');
+  assert.deepEqual(reads, [true, true], 'read as each side is captured');
   await history.undo();
   assert.deepEqual(restores.at(-1), { drawn: false }, 'owed when captured');
   await history.redo();
-  assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side follows the before side');
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'still owed as the step ended');
   console.log('history redrawn result tests passed');
+}
+
+// OV-2677: a control's step that opened after a checkpoint step ended (the
+// focus of a text field, which a closing dialog gives back) leaves that step's
+// state as long as it changed nothing, so the rerender's figure is still kept
+// as the step's. One that changed the intent, or an action's open step, keeps
+// nothing.
+{
+  let rules = 0;
+  let setting = 0;
+  let figure = 'drawn-0';
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules, setting }),
+    applyIntent: (intent) => { ({ rules, setting } = intent); },
+    buildCheckpoint: () => ({ rules, setting, figure }),
+    applyCheckpoint: (checkpoint) => { ({ rules, setting, figure } = checkpoint); },
+    figureDrawn: () => true
+  });
+  await history.captureBaseline('initial');
+  const field = Symbol('field');
+  const checkpointStep = (value) => history.runUndoableCheckpoint('Rename legend item', () => {
+    rules = value;
+    figure = `shown-${value}`;
+  }, { drawn: { change: false } });
+
+  await checkpointStep(1);
+  const focused = await history.begin('Edit setting', { owner: field });
+  figure = 'fitted-1';
+  assert.equal(await history.keepRedrawnResult(), true, 'a focused field that changed nothing keeps the fitted figure');
+  assert.equal(focused.closed, false, 'the field\'s step stays open');
+  await history.commit(focused);
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Rename legend item', 'focus alone records no step');
+  await history.undo();
+  await history.redo();
+  assert.deepEqual({ rules, figure }, { rules: 1, figure: 'fitted-1' }, 'Redo shows the kept figure');
+
+  await checkpointStep(2);
+  const typed = await history.begin('Edit setting', { owner: field });
+  setting = 1;
+  figure = 'fitted-2';
+  assert.equal(await history.keepRedrawnResult(), false, 'a field that changed the intent keeps nothing');
+  await history.commit(typed);
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Edit setting');
+
+  await checkpointStep(3);
+  let release;
+  const action = history.runUndoable('Edit label', () => new Promise((resolve) => { release = resolve; }));
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  figure = 'fitted-3';
+  assert.equal(await history.keepRedrawnResult(), false, 'an action\'s open step keeps nothing');
+  release();
+  await action;
+  console.log('history redrawn result with a focused field tests passed');
 }
 
 // OV-872: what a shown rerender writes (the Legend rows Python drew) while an

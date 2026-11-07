@@ -8,7 +8,7 @@
 // R2: the paint intent of a drawing (its Legend rows and their deleted,
 // dormant, and added lists, and the Legend and feature color and stroke
 // edits) has the writers `PAINT_INTENT_WRITERS` lists, each by the route that
-// reaches it; a live edit goes through `editEditorIntent` in app/app-setup.js.
+// reaches it; a live edit goes through `editEditorIntent` in app/editor-intent.js.
 // The same scan pins both: a write through a name (a mutating method, an
 // assignment to it, an element, or a member, a `delete`), or a call that
 // receives it, in its enclosing named function. Blind spot (P10): a write
@@ -370,7 +370,7 @@ const writerProblems = (writersByFile, owners, { writes, route, list }) => {
 export const ruleWriterProblems = (writersByFile, owners = RULE_WRITERS) => writerProblems(writersByFile, owners,
   { writes: NAME, route: 'editFeatureVisibilityRules', list: 'RULE_WRITERS' });
 export const paintWriterProblems = (writersByFile, owners = PAINT_INTENT_WRITERS) => writerProblems(writersByFile, owners,
-  { writes: 'the paint intent', route: 'editEditorIntent (app/app-setup.js)', list: 'PAINT_INTENT_WRITERS' });
+  { writes: 'the paint intent', route: 'editEditorIntent (app/editor-intent.js)', list: 'PAINT_INTENT_WRITERS' });
 
 test('only the rule edit transition, History restore, Session load, and Reset Settings write the visibility rules (OV-19)', () => {
   const writersByFile = scanModules(ruleWriters);

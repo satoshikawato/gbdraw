@@ -4,13 +4,15 @@
 // catalog is not ready, and the catalog Generate and Add to annotation set read
 // once every Linear card's records are read (`prepareLinearRecordCatalog`).
 // The composition root passes the state, its reader of one input's records,
-// and the Linear record selector's members as ports. It keeps the rebind of the
-// shown drawing's annotations to the catalog (`rebindAnnotationRecords`, R10).
+// and the Linear record selector's members as ports. The rebind of the shown
+// drawing's annotations to the catalog (`rebindAnnotationRecords`, R10) is a
+// factory of its own, which the root creates right after the catalog.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { circularInputSlots, inputSourceFiles } from '../services/input-types.js';
 import { circularDrawingRecordSet } from '../services/record-options.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { annotationSourceKey, buildAnnotationRecordCatalog } from './annotations/record-catalog.js';
+import { reconcileAnnotationRecordBindings } from './annotations/record-selector.js';
 /** @import { DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
@@ -169,4 +171,43 @@ export const createDrawingRecordCatalog = ({
     getCircularRecordDiscoveryState, circularAnnotationSourceKey, linearAnnotationSource, getAnnotationRecordCatalog,
     recordCatalogError, prepareLinearRecordCatalog
   };
+};
+
+/**
+ * @typedef {object} AnnotationRecordRebindPorts
+ * @property {WebState} state
+ * @property {(drawing: DrawingState) => AnnotationRecordCatalog} getAnnotationRecordCatalog
+ *   The drawing's annotation record catalog (`createDrawingRecordCatalog`).
+ * @property {() => SessionBusy | null} sessionOperationAvailability
+ */
+
+/**
+ * Registers nothing. The root creates it right after the catalog; the record
+ * discovery, the record controls, the Linear File edits, the drawing switch
+ * and the record selection call what it returns.
+ * @param {AnnotationRecordRebindPorts} ports
+ */
+export const createAnnotationRecordRebind = ({ state, getAnnotationRecordCatalog, sessionOperationAvailability }) => {
+  // R10 (D-15-46): each transition that changes the annotation record catalog
+  // (a discovery that ends, a mode switch, record selection, a Linear source
+  // edit, a record selector, Multi-Record Canvas) rebinds the shown drawing's
+  // annotations to the records the catalog resolves, in that transition's
+  // History step. Load and its rollback are busy and end in a discovery; a
+  // History restore installs the bindings it captured; Generate rebinds in
+  // `validateAnnotationTargets`. A transition that leaves the catalog's
+  // status and records as the last rebind saw them rebinds nothing (a refresh
+  // after Save or at the end of Load), as the former catalog watcher did.
+  let reboundCatalog = '';
+  const rebindAnnotationRecords = () => {
+    const drawing = state.activeDrawing();
+    const catalog = getAnnotationRecordCatalog(drawing);
+    const seen = `${catalog.status}:${catalog.signature}`;
+    if (seen === reboundCatalog) return;
+    reboundCatalog = seen;
+    if (catalog.status === 'ready' && !sessionOperationAvailability()) {
+      reconcileAnnotationRecordBindings(drawing, catalog);
+    }
+  };
+
+  return { rebindAnnotationRecords };
 };

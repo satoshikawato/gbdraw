@@ -88,6 +88,15 @@ Python writes, which are whole SVG elements with escaped text and no comments,
 CDATA or processing instructions, the joined text equals the sanitization of
 the whole document; tests verify it.
 
+Python writes the reply's byte buffers (the metadata JSON, the feature catalog
+JSON, and each Result's sent children texts) as UTF-8 chunks of about 1 MiB
+(`gbdraw/web_support/reply_buffers.py`) into buffers the Worker makes
+(`createReplyBuffer`). The Python heap holds about one chunk at a time, never a
+whole text's bytes; a children text is still a whole Python string, as the
+render made it. The Worker joins each buffer's chunks right after converting
+Python's result, at result admission, so a reply too large to allocate fails
+there as before. The page detaches each buffer as it decodes it.
+
 Every Generate leaves the page holding a complete feature catalog equal to the
 one a Generate with an empty cache returns. The reply carries that catalog
 unless the request names the catalog revision the page holds for the drawing
@@ -155,11 +164,11 @@ in the same change.
 | A control's name and the value it now holds (a History step's detail, the Feature placement layout dialog's question) | `js/utils/control-description.js` (`describeControl`, `controlValueText`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
-| Editor intent shown on the displayed Result: the edit transition, the port, and the preparation of a History step or a Result display (R3) | `js/app/app-setup.js` (`editEditorIntent`, `showEditorIntent`, `projectMountedEditorIntent`); it compiles with `compilePlanBundle` in `js/app/candidate-render.js` and reconciles with `reconcileMountedResult` in `js/services/svg-result-ingestion.js` |
-| The drawing switch, the shown drawing, and the artifact of each drawing that is not shown | `js/app/app-setup.js` (`selectDrawing`, and `showDrawingNow`, the switch work without its busy check, which a drawing-list step also calls); the artifacts wait by drawing ID in the slot store (`createArtifactSlotStore` in `js/services/artifact-slot.js`, created by `js/services/history-snapshot.js`), which the switch and Session Load change only through its named operations; the one writer of `activeDrawingId` is `installShownDrawing` in `js/services/config.js` |
-| The operations on the drawing list (New, New drawing with this style, Duplicate, Rename, Move, Delete; each one project step), the drawing bar, and the replacement of an input file that another drawing uses, for this drawing or for every drawing that uses it | `js/app/drawing-list.js` (`createDrawingList`, `createDrawingBar`, `createInputReplacement`); `js/app/app-setup.js` passes the ports (`applyInputReplacementToDrawings`, the scope question); the drawing store's list writers are `addDrawing`, `removeDrawing`, `moveDrawing`, and `renameDrawing` in `js/state.js`, and `app/drawing-list.js` is their only caller |
+| Editor intent shown on the displayed Result: the edit transition, the port, and the preparation of a History step or a Result display (R3) | `js/app/editor-intent.js` (`editEditorIntent`, `showEditorIntent`, `projectMountedEditorIntent`); it compiles with `compilePlanBundle` in `js/app/candidate-render.js` and reconciles with `reconcileMountedResult` in `js/services/svg-result-ingestion.js` |
+| The drawing switch, the shown drawing, and the artifact of each drawing that is not shown | `js/app/drawing-switch.js` (`selectDrawing`, and `showDrawingNow`, the switch work without its busy check, which a drawing-list step also calls); the artifacts wait by drawing ID in the slot store (`createArtifactSlotStore` in `js/services/artifact-slot.js`, created by `js/services/history-snapshot.js`), which the switch and Session Load change only through its named operations; the one writer of `activeDrawingId` is `installShownDrawing` in `js/services/config.js` |
+| The operations on the drawing list (New, New drawing with this style, Duplicate, Rename, Move, Delete; each one project step), the drawing bar, and the replacement of an input file that another drawing uses, for this drawing or for every drawing that uses it | `js/app/drawing-list.js` (`createDrawingList`, `createDrawingBar`, `createInputReplacement`); `js/app/input-replacement-ports.js` makes the ports (`applyInputReplacementToDrawings`, the scope question), which `js/app/app-setup.js` passes; the drawing store's list writers are `addDrawing`, `removeDrawing`, `moveDrawing`, and `renameDrawing` in `js/state.js`, and `app/drawing-list.js` is their only caller |
 | What a new drawing holds: New takes its mode's defaults (`withNewDrawingDefaults` in `js/services/reset.js`); Duplicate copies each slice through its capture and install (`duplicateDrawingState`); New drawing with this style installs the style's rows as Load installs a drawing's slice (`applyDrawingStyle`); a region drawing is read as Load reads a stored drawing (`makeRegionDrawing`) | `js/services/config.js`, reached from `js/app/drawing-list.js` through the ports of `js/app/app-setup.js` |
-| Reset Settings: the dialog (Reset this drawing, Reset all drawings, Cancel) and its steps | `js/app/app-setup.js` (`requestResetSettings`, `resetShownDrawing`, `resetSettings`); a drawing's reset is `resetSettings` in `js/services/reset.js`, which resets each slice through its own `reset`, and the one-per-Session values are `resetProject` there |
+| Reset Settings: the dialog (Reset this drawing, Reset all drawings, Cancel) and its steps | `js/app/reset-settings.js` (`requestResetSettings`, `resetShownDrawing`, `resetSettings`); a drawing's reset is `resetSettings` in `js/services/reset.js`, which resets each slice through its own `reset`, and the one-per-Session values are `resetProject` there |
 | New drawing from a region: the dialog, its source records, and the request to Python | `js/app/region-drawing.js` (`createRegionDrawing`); the Worker operation `deriveRegionDrawing` runs `derive_web_region_drawing_json` in `gbdraw/web_support/region_drawing.py` over `derive_region_request` in `gbdraw/api/region_drawing.py`, the derivation behind the Python API's `derive_region_drawing`; the Web derives no region itself |
 | Sequence search (PD-OI-117): the panel's transient queries and settings, the search, the History step of the set it adds, and the panel's reset at a Session Load | `js/app/sequence-search.js` (`createSequenceSearch`); its helpers in `js/app/sequence-search/`: the queries (`queries.js`), the hit table and its chips (`hit-table.js`), the outline over the shown Result (`hit-outline.js`) |
 | What a search sends to Python and reads back: the typed Worker payloads and replies, the searched spans and subjects, the new set's id, the LOSAT job plan | `js/services/sequence-search.js`; Python builds the hit set (`gbdraw/web_support/sequence_search.py` over `gbdraw/annotations/search_hits.py`); a row binds a record of the shown Result through `resultRecordBindings` (`js/app/annotations/record-selector.js`), and the live draw of a search's set is the `diagramOptions.annotations.sets` projector of `js/services/session-request.js` |
@@ -238,7 +247,7 @@ edit through the label owner (`app/feature-editor/label-actions.js`). The edit
 is in the current Result when the action returns: its text follows the mounted
 root on demand (R1). A stroke action, a Legend row color,
 and a Legend row deletion are each one transition, `editEditorIntent` in
-`app/app-setup.js`: the action writes the intent of the drawing it resolved,
+`app/editor-intent.js`: the action writes the intent of the drawing it resolved,
 through that drawing's paint slice (R15), the port shows it when it changed,
 and both are one step in that drawing's History (R11). The other paint edits
 are History steps of their own that show through the same port (R2). If
@@ -420,7 +429,7 @@ key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
 
 A live paint edit, a History apply, and a Result display show the paint and
 visibility domains of the editor intent through one port,
-`showEditorIntent({ domains })` in `app/app-setup.js`. It
+`showEditorIntent({ domains })` in `app/editor-intent.js`. It
 compiles the operations of the shown domains from the active drawing with the
 Generate compiler (`compilePlanBundle` in `app/candidate-render.js`, running
 only the stages those domains need) and reconciles the displayed Result with
@@ -669,7 +678,7 @@ label edit, the Circular multi-record layout defaults after the multi-record
 toggle, the queued palette when Instant Preview turns on
 (`setPaletteInstantPreview` in `app/results.js`), and the annotation record
 bindings at the end of a record discovery and a drawing switch
-(`rebindAnnotationRecords` in `app/app-setup.js`). An auxiliary table import
+(`rebindAnnotationRecords` in `app/drawing-record-catalog.js`). An auxiliary table import
 (default colors, color table, qualifier priority, whitelist, blacklist) is a
 transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
 that writes through the slices of the drawing it changes. Each drawing binds
@@ -1090,7 +1099,7 @@ one drawing never reaches another (PD-OI-090).
   commit use that drawing only. A reflow or rerender of a committed Result uses
   the drawing that Result belongs to, and installs through that drawing's
   artifact owner.
-- The drawing switch is `selectDrawing` in `app/app-setup.js`. It, a step of
+- The drawing switch is `selectDrawing` in `app/drawing-switch.js`. It, a step of
   the drawing list (New, Duplicate, Delete, and their Undo and Redo, through
   `showDrawingNow`), and a Session replacement (Load, a new Session) show a
   drawing through the one writer of `activeDrawingId`, `installShownDrawing`

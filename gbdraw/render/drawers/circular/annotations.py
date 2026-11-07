@@ -28,7 +28,7 @@ from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
-from gbdraw.layout.spatial import Aabb
+from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.layout.text_geometry import (
     Point,
     annular_sector_parts,
@@ -320,25 +320,39 @@ def _box(points: Sequence[Point]) -> Aabb:
 
 class _ObstacleIndex:
     """Counts what a label's letters meet: the polygons within ``clearance``, the segments within theirs; an obstacle
-    met by several parts of a curved label counts once."""
+    met by several parts of a curved label counts once. ``add`` takes a label placed since, so a track's labels are
+    boxed once each, not once per later label (OV-2664)."""
 
     def __init__(self, obstacles: CircularLabelObstacles) -> None:
         self._obstacles = obstacles
-        self._shapes = [
-            (_box([point for part in shape for point in part]), [(_box(part), part) for part in shape])
-            for shape in obstacles.shapes
-        ]
+        self._shapes: list[tuple[Aabb, list[tuple[Aabb, Polygon]]]] = []
+        for shape in obstacles.shapes:
+            self._add_shape(shape)
         self._segments = [
             (_box((segment.start, segment.end)), (segment.start, segment.end), obstacles.clearance + segment.half_width)
             for segment in obstacles.segments
         ]
 
+    def _add_shape(self, shape: Sequence[Polygon]) -> None:
+        self._shapes.append((_box([point for part in shape for point in part]), [(_box(part), part) for part in shape]))
+
+    def add(self, label: CircularAnnotationLabel) -> None:
+        """Count ``label`` as an obstacle from now on, as ``CircularLabelObstacles.with_labels`` would."""
+
+        self._add_shape(label.parts)
+
     def conflicts(self, label: CircularAnnotationLabel) -> int:
+        # An obstacle whose box misses the box around all the grown letters misses each part's box: it is skipped
+        # before the parts are paired with it.
         near = [(_box(part), part) for part in (grown_convex_polygon(part, self._obstacles.clearance) for part in label.parts)]
+        reach = union_aabbs(box for box, _ in near)
+        if reach is None:
+            return 0
         count = sum(
             1
             for box, parts in self._shapes
-            if any(
+            if reach.intersects(box)
+            and any(
                 part_box.intersects(box) and obstacle_box.intersects(part_box) and convex_polygons_intersect(part, obstacle)
                 for part_box, part in near
                 for obstacle_box, obstacle in parts
@@ -349,10 +363,13 @@ class _ObstacleIndex:
             distance: [(_box(part), part) for part in (grown_convex_polygon(part, distance) for part in label.parts)]
             for distance in {item[2] for item in self._segments}
         }
+        line_reach = {distance: union_aabbs(box for box, _ in parts) for distance, parts in line_near.items()}
         return count + sum(
             1
             for box, segment, distance in self._segments
-            if any(
+            if (reach_at := line_reach[distance]) is not None
+            and reach_at.intersects(box)
+            and any(
                 part_box.intersects(box) and segment_intersects_polygon(segment, part, touching=False)
                 for part_box, part in line_near[distance]
             )
@@ -490,19 +507,19 @@ def circular_annotation_labels(
         return tuple(defaults)
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for label in defaults), default=0.0)
     placed: list[CircularAnnotationLabel] = []
+    index = _ObstacleIndex(obstacles)
     for (annotation, label_at), default in zip(entries, defaults):
-        index = _ObstacleIndex(obstacles.with_labels(placed))
-        placed.append(
-            _along_region(
-                annotation,
-                default,
-                label_at,
-                record_length=record_length,
-                fits=lambda label: _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
-                conflicts=index.conflicts,
-                join_origin=track.join_origin,
-            )
+        label = _along_region(
+            annotation,
+            default,
+            label_at,
+            record_length=record_length,
+            fits=lambda label: _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
+            conflicts=index.conflicts,
+            join_origin=track.join_origin,
         )
+        placed.append(label)
+        index.add(label)
     return tuple(placed)
 
 

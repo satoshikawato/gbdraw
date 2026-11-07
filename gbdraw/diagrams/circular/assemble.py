@@ -13,9 +13,12 @@ from gbdraw.features.placement import FeaturePlacementSlot, ResolvedRecordFeatur
 import logging
 import math
 import copy
-from dataclasses import dataclass, replace
+from collections.abc import Hashable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Collection, Literal, Mapping, NamedTuple, Sequence, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Generic, Literal, Mapping, NamedTuple, Sequence, TypeAlias, TypedDict, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -341,6 +344,65 @@ def _prepare_circular_annotation_tracks(
     return CircularPlannedTracks(slots, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
 
+_Kept = TypeVar("_Kept")
+
+
+@dataclass(eq=False)
+class _ResultsByInputs(Generic[_Kept]):
+    """Results of one pure measure by its inputs: a hashable part picks the entries, the rest is compared by value
+    (``==``), so inputs that hold mappings are kept too."""
+
+    _entries: dict[Hashable, list[tuple[object, _Kept]]] = field(default_factory=dict)
+
+    def get(self, bucket: Hashable, inputs: object, measure: Callable[[], _Kept]) -> _Kept:
+        entries = self._entries.setdefault(bucket, [])
+        for seen, result in entries:
+            if seen == inputs:
+                return result
+        result = measure()
+        entries.append((inputs, result))
+        return result
+
+
+@dataclass(eq=False)
+class CircularAnnotationMeasures:
+    """The annotation measures one Circular figure's assemblies share (OV-2664): the slots' packings, their label
+    rooms and the drawn labels' places. The label fit check assembles the figure again for each row it verifies (a
+    smaller definition font, for one), and those assemblies pack and place the same slots with the same inputs; a
+    measure whose inputs equal an earlier one's takes its result. Kept while ``kept_annotation_measures`` runs, in a
+    context variable, so no stage key takes it: a stage's inputs still decide its result."""
+
+    tracks: _ResultsByInputs[ResolvedAnnotationTrack] = field(default_factory=_ResultsByInputs)
+    rooms: _ResultsByInputs[_AnnotationLabelRoom] = field(default_factory=_ResultsByInputs)
+    labels: _ResultsByInputs[tuple[CircularAnnotationLabel, ...]] = field(default_factory=_ResultsByInputs)
+
+
+_KEPT_MEASURES: ContextVar[CircularAnnotationMeasures | None] = ContextVar("gbdraw_circular_annotation_measures", default=None)
+
+
+@contextmanager
+def kept_annotation_measures(measures: CircularAnnotationMeasures) -> Iterator[None]:
+    """Let the Circular assemblies run inside share ``measures`` (``CircularAnnotationMeasures``)."""
+
+    token = _KEPT_MEASURES.set(measures)
+    try:
+        yield
+    finally:
+        _KEPT_MEASURES.reset(token)
+
+
+def _kept_measure(
+    table: Callable[[CircularAnnotationMeasures], _ResultsByInputs[_Kept]],
+    bucket: Hashable,
+    inputs: object,
+    measure: Callable[[], _Kept],
+) -> _Kept:
+    """``measure()``, or the result kept for equal ``bucket`` and ``inputs`` while measures are kept."""
+
+    measures = _KEPT_MEASURES.get()
+    return measure() if measures is None else table(measures).get(bucket, inputs, measure)
+
+
 @dataclass(frozen=True)
 class _CircularAnnotationPacking:
     """What packs one record's annotation slots on a Circular canvas: the record's annotations, its slots as
@@ -381,8 +443,20 @@ class _CircularAnnotationPacking:
     ) -> ResolvedAnnotationTrack:
         """Pack one annotation slot, its labels measured beside their marks on the slot's side
         (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest
-        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``."""
+        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``. A packing with the same
+        inputs is kept (``CircularAnnotationMeasures``)."""
 
+        rooms = tuple(rooms_at_least)
+        return _kept_measure(
+            lambda measures: measures.tracks,
+            (slot.id, inside, lanes_from_px, rooms),
+            (self, slot),
+            partial(self._track, slot, inside=inside, lanes_from_px=lanes_from_px, rooms_at_least=rooms),
+        )
+
+    def _track(
+        self, slot: CircularTrackSlot, *, inside: bool, lanes_from_px: float, rooms_at_least: Sequence[LaneRoom]
+    ) -> ResolvedAnnotationTrack:
         params = annotation_track_params_from_mapping(slot.params)
         return layout_annotation_track(
             slot.id,
@@ -417,15 +491,18 @@ class _AnnotationTracks:
     layouts: Mapping[str, ResolvedAnnotationTrack]
     packed_at: Mapping[str, float]
 
-    def label_rooms(self, kept: Mapping[str, _AnnotationLabelRoom]) -> dict[str, _AnnotationLabelRoom]:
-        """The room each annotation slot's labels need beyond its band; a slot whose lanes are those of a room in
-        ``kept`` keeps that room, with what it measured."""
+    def label_rooms(self) -> dict[str, _AnnotationLabelRoom]:
+        """The room each annotation slot's labels need beyond its band: one room, with what it measured, for each
+        slot lanes equal to those of an earlier packing while annotation measures are kept (``CircularAnnotationMeasures``)."""
 
         packing = self.packing
         return {
-            slot_id: room
-            if (room := kept.get(slot_id)) is not None and room.track is track
-            else _AnnotationLabelRoom(track, packing.record_index, packing.record_length, packing.font_family)
+            slot_id: _kept_measure(
+                lambda measures: measures.rooms,
+                (packing.record_index, packing.record_length, packing.font_family),
+                track,
+                partial(_AnnotationLabelRoom, track, packing.record_index, packing.record_length, packing.font_family),
+            )
             for slot_id, track in self.layouts.items()
         }
 
@@ -488,11 +565,10 @@ def _place_annotation_tracks_where_drawn(
 
     packed_at = dict(tracks.packed_at)
     packed_here: set[str] = set()
-    rooms: dict[str, _AnnotationLabelRoom] = {}
     passes = 0
     while True:
         sized = _sized_annotation_slots(slots, tracks)
-        rooms = tracks.label_rooms(rooms)
+        rooms = tracks.label_rooms()
         fit = place(sized, rooms)
         repacked = (
             _annotation_tracks_packed_where_drawn(tracks, fit.layout, packed_at, packed_here)
@@ -924,18 +1000,30 @@ def _circular_annotation_labels_by_slot(
         layout = (annotation_track_layouts or {}).get(slot.id)
         if str(slot.renderer) != "annotations" or layout is None:
             continue
-        labels[slot.id] = circular_annotation_labels(
-            layout,
-            record_index=record_index,
-            record_length=record_length,
-            inner_radius_px=float(slot.draw_inner_radius_px),
-            outer_radius_px=float(slot.draw_outer_radius_px),
-            side=str(slot.side),
-            font_family=font_family,
-            params=annotation_track_params_from_mapping(slot.params),
-            rings=(axis_paint,),
-            obstacles=obstacles,
-            covers_slots=slot.spans_slots,
+        inner, outer, side, params = (
+            float(slot.draw_inner_radius_px),
+            float(slot.draw_outer_radius_px),
+            str(slot.side),
+            annotation_track_params_from_mapping(slot.params),
+        )
+        labels[slot.id] = _kept_measure(
+            lambda measures: measures.labels,
+            (record_index, record_length, inner, outer, side, font_family, slot.spans_slots),
+            (layout, params, axis_paint, obstacles),
+            partial(
+                circular_annotation_labels,
+                layout,
+                record_index=record_index,
+                record_length=record_length,
+                inner_radius_px=inner,
+                outer_radius_px=outer,
+                side=side,
+                font_family=font_family,
+                params=params,
+                rings=(axis_paint,),
+                obstacles=obstacles,
+                covers_slots=slot.spans_slots,
+            ),
         )
         obstacles = obstacles.with_labels(labels[slot.id])
     return labels
@@ -1194,8 +1282,9 @@ class _AnnotationLabelRoom:
     """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
     own owner once for each band, axis ring, side, parameters and ``covers_slots`` flag it is asked for: the layouts
     of one drawing, the definition font scan's among them, ask for the same ones again and again (OV-2664). The
-    memo lives for one drawing and is reused while a slot's lanes are the same object. It is no stage input:
-    a stage takes the tracks (``_AnnotationTracks``) and makes its own rooms."""
+    memo is reused for equal lanes while annotation measures are kept (``CircularAnnotationMeasures``): within one
+    assembly and across the assemblies of one figure. It is no stage input: a stage takes the tracks (``_AnnotationTracks``) and
+    makes its own rooms."""
 
     __slots__ = ("track", "_record_index", "_record_length", "_font_family", "_measured")
 
@@ -3364,7 +3453,7 @@ def add_record_on_circular_canvas(
         feature_slot = placement.feature_slot
         annotation_tracks = placement.annotation_tracks
         annotation_track_layouts = dict(annotation_tracks.layouts)
-        annotation_label_rooms = annotation_tracks.label_rooms(annotation_label_rooms)
+        annotation_label_rooms = annotation_tracks.label_rooms()
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override
@@ -3824,8 +3913,24 @@ def _assemble_circular_diagram_result(
 ) -> CircularAssemblyResult:
     """Assemble and compose one Circular record: plan its annotation tracks, build its legend, draw it, compose it.
 
-    Returns the composed canvas and its authoritative geometry.
+    Returns the composed canvas and its authoritative geometry. The assembly shares the annotation measures its
+    figure keeps (``kept_annotation_measures``), or keeps its own while it runs.
     """
+
+    if _KEPT_MEASURES.get() is None:
+        with kept_annotation_measures(CircularAnnotationMeasures()):
+            return _assemble_circular_record(canvas_config, configurators, record, tracks, presentation, composition)
+    return _assemble_circular_record(canvas_config, configurators, record, tracks, presentation, composition)
+
+
+def _assemble_circular_record(
+    canvas_config: CircularCanvasConfigurator,
+    configurators: DiagramConfigurators,
+    record: CircularRecordData,
+    tracks: CircularTrackInputs,
+    presentation: CircularPresentationInputs,
+    composition: CompositionInputs,
+) -> CircularAssemblyResult:
 
     profile = canvas_config.profile
     cfg = profile.config
@@ -3884,9 +3989,11 @@ def _assemble_circular_diagram_result(
 
 
 __all__ = [
+    "CircularAnnotationMeasures",
     "CircularAssemblyResult",
     "add_record_on_circular_canvas",
     "build_circular_legend_table",
+    "kept_annotation_measures",
     "plan_circular_annotation_slots",
 ]
 
