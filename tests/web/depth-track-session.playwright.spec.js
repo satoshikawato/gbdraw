@@ -1986,7 +1986,7 @@ ORIGIN
     app.adv.axis_stroke_color = '#123456';
 
     app.setCircularInputType('gb');
-    app.files.c_gb = bound(new File([genbankText], 'layout-preferences.gbk', {
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'layout-preferences.gbk', {
       type: 'text/plain',
       lastModified: 1
     }));
@@ -2014,7 +2014,7 @@ ORIGIN
     const { state } = await import('./js/state.js');
     state.biologicalFeatures.value = [{ nucleotide_sequence: 'ATGC' }];
     state.drawingOf(linearId).linearSeqs[0].gb = bound(new File(
-      [await state.inputFiles.fileOf(app.files.c_gb).arrayBuffer()],
+      [await state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb).arrayBuffer()],
       'inactive-linear-layout.gbk',
       { type: 'application/genbank', lastModified: 22 }
     ));
@@ -2064,11 +2064,11 @@ ORIGIN
   const linearDrawing = savedDrawing(exportedSession, drawingIdOf.linear);
   expect(circularDrawing.webFiles).toEqual(expect.any(Object));
   expect(circularDrawing.webFiles.bindings.schema).toBe(2);
-  expect(circularDrawing.webFiles.bindings.c_gb.name).toBe('layout-preferences.gbk');
+  expect(circularDrawing.webFiles.bindings.circularSources[0].gb.name).toBe('layout-preferences.gbk');
   expect(linearDrawing.webFiles.bindings.linearSeqs[0].gb.name).toBe(
     'inactive-linear-layout.gbk'
   );
-  expect(circularDrawing.webFiles.bindings.c_gb.resourceId).toBe(
+  expect(circularDrawing.webFiles.bindings.circularSources[0].gb.resourceId).toBe(
     linearDrawing.webFiles.bindings.linearSeqs[0].gb.resourceId
   );
   expect(circularDrawing.editorState).toEqual(expect.any(Object));
@@ -2245,7 +2245,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     // copy of the review annotation set.
     const linearDrawing = (await import('./js/state.js')).state.drawingOf(drawingIds.linear);
     app.setCircularInputType('gb');
-    app.files.c_gb = bound(new File([genbankText], 'p3-session.gbk', {
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'p3-session.gbk', {
       type: 'application/genbank',
       lastModified: 31
     }));
@@ -2693,7 +2693,7 @@ for (const mode of ['circular', 'linear']) {
       const file = new File([genbankText], 'extend-to.gbk', { type: 'text/plain', lastModified: 41 });
       if (diagramMode === 'circular') {
         app.setCircularInputType('gb');
-        app.files.c_gb = bound(file);
+        await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(file);
       } else {
         app.setLinearInputType('gb');
         app.setLinearSeqPrimaryFile(0, 'gb', file);
@@ -3318,7 +3318,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
       }
     });
     window.__GBDRAW_PRIMARY_READ_COUNT__ = () => primaryReadCount;
-    app.files.c_gb = bound(combinedFile);
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(combinedFile);
     app.files.c_depth = bound([
       [new File([depthAText], 'sample-a.tsv', {
         type: 'text/tab-separated-values', lastModified: 2
@@ -3886,7 +3886,7 @@ test('Show Depth after hide reuses the held Depth file and its stages', async ({
     window.__HELD_DEPTH_BIND__ = bound;
     app.selectDrawing('circular');
     app.setCircularInputType('gb');
-    app.files.c_gb = bound(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
     window.__HELD_DEPTH_FILE__ = new File([depthText], 'reads.depth.tsv', {
       type: 'text/tab-separated-values', lastModified: 2
     });
