@@ -1388,7 +1388,9 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const losatSettings = createLosatSettings({ state });
+  const losatSettings = createLosatSettings({
+    state, planLinearUnits: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
+  });
   const {
     linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,

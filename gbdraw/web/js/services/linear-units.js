@@ -10,6 +10,7 @@
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
+import { linearWindowsPayload } from './session-request.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearUnits' });
@@ -17,11 +18,6 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
 /**
  * A record the request will draw (`LinearUnitRecordInput`): its key and its windows, as the request writes them.
  * @typedef {{ recordKey: string, windows: CanonicalRecordWindow[] }} LinearUnitRecordInput
- */
-/**
- * The windows the request writes for a card (`linearWindowsPayload` of `services/session-request.js`, which the
- * caller passes with its layout, so this module reads the request writer's windows without importing it).
- * @typedef {(card: LinearSeq) => CanonicalRecordWindow[]} LinearUnitWindowsOf
  */
 /**
  * A record pair of the comparison plan (`LinearUnitPairInput`), by record keys.
@@ -92,19 +88,6 @@ export const readLinearUnitPlan = (result, asked) => {
 };
 
 /**
- * What `planLinearUnits` is asked: the drawn cards' records, keyed and windowed as the request writes them, and the
- * record pairs of the plan's edges.
- * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
- * @param {LinearComparisonResolution} resolution
- * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
- * @returns {LinearUnitPlanPayload}
- */
-export const linearUnitPlanPayload = (cards, resolution, windowsOf) => ({
-  records: cards.map((card, index) => ({ recordKey: linearSeqRecordKey(card, index), windows: windowsOf(card) })),
-  pairs: resolution.edges.map((edge) => ({ queryRecordKey: edge.queryUid, subjectRecordKey: edge.subjectUid, source: edge.source }))
-});
-
-/**
  * The card of each unit, found by its record key; a unit that is one of several windows of its record searches
  * under its unit key. The span a unit's search reads is its window (`LinearUnitSearch.windows`), not the card's crop.
  * @param {readonly LinearSeq[]} cards
@@ -160,15 +143,34 @@ export const linearUnitSearch = (cards, resolution, plan) => {
 };
 
 /**
- * Plans the units of a Generate's comparison searches with Python.
+ * The unit searches of a Linear request's comparison plan: Python's plan of the drawn units when `resolution`
+ * compares records, else null (the request writes `resolution` itself). Generate and the draft request (Save without
+ * a Result, New drawing from a region) read the plan here, so both write the same unit indexes (OV-2738).
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {LinearComparisonResolution} resolution
- * @param {LinearUnitWindowsOf} windowsOf
+ * @param {boolean} arranged Whether the Record Layout arranges the rows (`linearWindowsPayload`).
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
- * @returns {Promise<LinearUnitSearch>}
+ * @returns {Promise<LinearUnitSearch | null>}
  */
-export const planLinearUnitSearch = async (cards, resolution, windowsOf, runHelper) => {
-  const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
+export const planRequestUnitSearch = async (cards, resolution, arranged, runHelper) => {
+  if (resolution.hasComparisonIntent !== true) return null;
+  const payload = requestUnitPlanPayload(cards, resolution, arranged);
   const reply = await runHelper(payload);
   return linearUnitSearch(cards, resolution, readLinearUnitPlan(reply?.result, payload));
 };
+
+/**
+ * What `planLinearUnits` is asked: the drawn cards' records, keyed and windowed as the request writes them, and the
+ * record pairs of the plan's edges.
+ * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
+ * @param {LinearComparisonResolution} resolution
+ * @param {boolean} arranged Whether the Record Layout arranges the rows (`linearWindowsPayload`).
+ * @returns {LinearUnitPlanPayload}
+ */
+export const requestUnitPlanPayload = (cards, resolution, arranged) => ({
+  records: cards.map((card, index) => ({
+    recordKey: linearSeqRecordKey(card, index), windows: linearWindowsPayload(card, { arranged })
+  })),
+  pairs: resolution.edges.map((edge) => ({ queryRecordKey: edge.queryUid, subjectRecordKey: edge.subjectUid, source: edge.source }))
+});
+

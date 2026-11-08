@@ -475,6 +475,38 @@ test('(a) round trip of the Linear region drawing of a Circular source', async (
     { ...at(envelope.renderRequest, '$.diagramOptions.output').value, legend: 'bottom', plotTitlePosition: 'bottom' });
 });
 
+test('the draft request of a card drawn in two windows writes the unit pairs Generate writes', async () => {
+  // OV-2738 on Save without a Result and on New drawing from a region: Python reads a request's comparison indexes
+  // as drawn units, so the draft request plans the units as Generate does (`planRequestUnitSearch`).
+  const { createLinearComparisonEdge } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+  const source = withNewDrawingDefaults(state, createDrawingState('windows-pairs', 'linear'));
+  source.inputType.value = 'gb';
+  const window = (start, end, reverseComplement = false) => ({ start, end, reverseComplement, column: null });
+  source.linearSeqs.splice(0, Infinity,
+    createLinearSeq({ uid: 'a', gb: state.inputFiles.registerFile(genbankFile('a.gb', [recordA])),
+      windows: [window(101, 400), window(601, 900, true)] }),
+    createLinearSeq({ uid: 'b', gb: state.inputFiles.registerFile(genbankFile('b.gb', [recordA])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  source.losatProgram.value = 'blastp';
+  source.losat.blastp.mode = 'pairwise';
+  Object.assign(source.linearComparisonPlan, { mode: 'selected', defaultSource: 'losat',
+    edges: [createLinearComparisonEdge({ queryUid: 'a', subjectUid: 'b', source: 'losat' })] });
+  const planned = [];
+  const planLinearUnits = async (payload) => {
+    planned.push(payload);
+    return { result: JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.linear_units import plan_linear_units
+result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
+`, payload)) };
+  };
+  const { envelope } = await projectDraftRequest(state, source, { ...(await factsOf(source)), planLinearUnits });
+  assert.equal(planned.length, 1);
+  const generated = envelope.renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.deepEqual(generated.pairs, [
+    { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
+  ]);
+});
 // A Linear drawing with one card whose file holds two records: the card draws both.
 const recordB = genbankRecord('recB', 900, [[51, 300, 'B1'], [501, 800, 'B2']], 'linear');
 test('(a) regions of two records of one file are one Linear drawing bound to that one file', async () => {

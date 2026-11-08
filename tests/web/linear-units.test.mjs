@@ -9,11 +9,10 @@ import test from 'node:test';
 import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js';
 import { buildLosatJobSpecs, linearComparisonEdgeKey } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-sources.js';
-import { linearWindowsPayload } from '../../gbdraw/web/js/services/session-request.js';
 import {
-  linearUnitPlanPayload,
-  planLinearUnitSearch,
-  readLinearUnitPlan
+  planRequestUnitSearch,
+  readLinearUnitPlan,
+  requestUnitPlanPayload
 } from '../../gbdraw/web/js/services/linear-units.js';
 
 /** Python's reply to `planLinearUnits` for a payload. */
@@ -80,11 +79,10 @@ for (const testCase of cases) {
   test(`the Web asks for and searches Python's unit plan: ${testCase.id}`, async () => {
     const { cards } = testCase;
     const resolution = resolutionOf(testCase, cards);
-    const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
-    const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
+    const payload = requestUnitPlanPayload(cards, resolution, true);
     assert.deepEqual(payload.pairs, testCase.pairs);
     const plan = pythonPlan(payload);
-    const search = await planLinearUnitSearch(cards, resolution, windowsOf, async (asked) => {
+    const search = await planRequestUnitSearch(cards, resolution, true, async (asked) => {
       assert.deepEqual(asked, payload);
       return { result: plan };
     });
@@ -126,8 +124,7 @@ for (const testCase of cases) {
 
 test('a reply that does not plan the records and pairs asked is refused', () => {
   const [testCase] = cases;
-  const asked = linearUnitPlanPayload(testCase.cards, resolutionOf(testCase, testCase.cards),
-    (card) => linearWindowsPayload(card, { arranged: true }));
+  const asked = requestUnitPlanPayload(testCase.cards, resolutionOf(testCase, testCase.cards), true);
   const plan = pythonPlan(asked);
   const refused = (result) => assert.throws(() => readLinearUnitPlan(result, asked),
     (error) => error.code === 'RESULT_INVALID' && error.operation === 'planLinearUnits');
