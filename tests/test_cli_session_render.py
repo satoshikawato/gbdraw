@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Hashable, Iterator
 
@@ -216,6 +217,49 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
     render_main(["--session", str(path), "-o", str(tmp_path / "out" / "fig")])
 
     assert _svgs(tmp_path / "out") == ["fig_circular_1.svg", "fig_circular_2.svg", "fig_linear.svg"]
+
+
+def test_a_moved_canvas_record_saves_its_session_under_its_own_record(tmp_path: Path) -> None:
+    """OV-2899: a record that a position moves is named by its request index in the figure and the Session."""
+
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+
+    for record_id, repeat in (("moved", True), ("first", False)):
+        record = SeqRecord(Seq("ATGC" * 750), id=record_id, name=record_id, annotations={"molecule_type": "DNA"})
+        record.features = [SeqFeature(FeatureLocation(100, 700, strand=1), type="CDS",
+                                      qualifiers={"product": [f"{record_id} protein"]})]
+        if repeat:
+            record.features.append(SeqFeature(FeatureLocation(1200, 1500, strand=1), type="repeat_region",
+                                              qualifiers={"rpt_family": ["IS1"]}))
+        SeqIO.write(record, tmp_path / f"{record_id}.gb", "genbank")
+    table = tmp_path / "regions.tsv"
+    table.write_text("set_id\tid\tmark\trecord\tstart\tend\nregions\tspan\thighlight\tmoved\t2000\t2600\n")
+    session = tmp_path / "moved.gbdraw-session.json"
+    circular_main(
+        ["--gbk", str(tmp_path / "moved.gb"), str(tmp_path / "first.gb"), "-k", "CDS,repeat_region",
+         "--annotation_table", str(table),
+         "--multi_record_canvas", "--multi_record_position", "first@1", "--multi_record_position", "moved@2",
+         "-o", str(tmp_path / "moved"), "--session_output", str(session)]
+    )
+
+    svg = (tmp_path / "moved.svg").read_text(encoding="utf-8")
+    drawn = {
+        element.get("data-gbdraw-record-id"): element.get("data-gbdraw-record-index")
+        for element in ET.fromstring(svg).iter()
+        if element.get("data-gbdraw-auto-feature-underlay") or element.get("data-gbdraw-annotation-id")
+    }
+    assert drawn == {"moved": "0"}
+
+    def drawn_rows(node: object) -> list[dict[str, Any]]:
+        if isinstance(node, dict):
+            own = [node] if node.get("id") == "span" and "dom_id" in node else []
+            return own + [found for value in node.values() for found in drawn_rows(value)]
+        if isinstance(node, list):
+            return [found for value in node for found in drawn_rows(value)]
+        return []
+
+    saved = drawn_rows(json.loads(session.read_text(encoding="utf-8")))
+    assert saved and {(row["record_id"], row["record_index"]) for row in saved} == {("moved", 0)}
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
