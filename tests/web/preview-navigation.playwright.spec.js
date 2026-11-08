@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { writeFile } = require('node:fs/promises');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, waitForSessionLoadAtRest } = require('./helpers/app-lifecycle.cjs');
 const { seeds, generate, switchMode } = require('./helpers/mode-transition.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
@@ -95,7 +95,7 @@ test('background pan preserves screen displacement after text selection and zoom
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await waitForSessionLoadAtRest(page);
   await startAtFullSize(page, 'Reset layout');
   await settle(page);
   const committed = await page.evaluate(async () => {
@@ -150,7 +150,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await waitForSessionLoadAtRest(page);
   await startAtFullSize(page, 'Reset layout');
   for (let i = 0; i < 7; i += 1) await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await settle(page);
@@ -247,7 +247,9 @@ test('a pan that ends over a feature or a match opens no popup', async ({ page }
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  // The Load shows its Result before it ends and then fits the figure (OV-2701):
+  // a press point read before that Fit lands beside the moved svg.
+  await waitForSessionLoadAtRest(page);
   await settle(page);
 
   for (const [selector, key] of [
@@ -266,8 +268,15 @@ test('a pan that ends over a feature or a match opens no popup', async ({ page }
       }
       throw new Error('No svg background point.');
     });
+    await page.evaluate(() => {
+      const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+      document.addEventListener('pointerdown', (event) => { window.__panPressOnSvg = event.target === svg; },
+        { capture: true, once: true });
+    });
     await page.mouse.move(press.x, press.y);
     await page.mouse.down();
+    // The click below is what Chrome sends only when the press began on the svg.
+    expect(await page.evaluate(() => window.__panPressOnSvg)).toBe(true);
     await page.mouse.move(press.x + 30, press.y + 20, { steps: 5 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.isPanning)).toBe(true);
     await page.mouse.up();
@@ -300,6 +309,54 @@ test('a pan that ends over a feature or a match opens no popup', async ({ page }
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), key)).toBe(false);
   }
+});
+
+// OV-2704: Chrome sends no pointerdown for a left press made while another
+// button is held, only a pointermove that adds the primary button. A pan made
+// that way and ended near where the other button went down is still a pan: its
+// click opens nothing, and a click on the same point still opens the popup.
+test('a pan made while another button is held opens no popup', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await waitForSessionLoadAtRest(page);
+  await settle(page);
+  const sections = page.locator('#settings-popup [data-settings-section]');
+  // A drawn element that opens a settings popup and pans when pressed (L), and a
+  // point of the svg 60 px right of it and 40 px below (R).
+  const { left, right } = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg = app.svgContainer.querySelector('svg');
+    const rect = app.canvasContainerRef.getBoundingClientRect();
+    for (const element of svg.querySelectorAll('[data-gbdraw-preview-item="settings"]')) {
+      const bounds = element.getBoundingClientRect();
+      for (let y = Math.ceil(bounds.y); y <= bounds.bottom; y += 1) {
+        for (let x = Math.ceil(bounds.x); x <= bounds.right; x += 1) {
+          if (x < rect.x || x + 60 > rect.right || y < rect.y || y + 40 > rect.bottom) continue;
+          if (document.elementFromPoint(x, y)?.closest('[data-gbdraw-preview-item="settings"]') !== element) continue;
+          if (!svg.contains(document.elementFromPoint(x + 60, y + 40))) continue;
+          return { left: { x, y }, right: { x: x + 60, y: y + 40 } };
+        }
+      }
+    }
+    throw new Error('No drawn element with settings.');
+  });
+  await page.mouse.move(right.x, right.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(left.x, left.y, { steps: 3 });
+  await page.mouse.down();
+  await page.mouse.move(right.x + 1, right.y + 1, { steps: 5 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.isPanning)).toBe(true);
+  await page.mouse.up();
+  await page.mouse.up({ button: 'right' });
+  await settle(page);
+  await expect(sections).toHaveCount(0);
+
+  await page.mouse.click(right.x + 1, right.y + 1);
+  await expect(sections).toHaveCount(1);
 });
 
 test('docked search and controls remain reachable across Preview sizes and Editor transitions', async ({ page }, testInfo) => {

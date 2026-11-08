@@ -6,7 +6,7 @@
 /** @import { PopupRow } from '../pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
+import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -230,7 +230,7 @@ export {
  * @property {Element | null} activeMatchHoverElement
  * @property {string} activeMatchHoverKey
  * @property {Element | null} pendingMatchElement
- * @property {{ clientX: number, clientY: number } | null} pressPoint Where the last press on the Result began.
+ * @property {{ clientX: number, clientY: number } | null} pressPoint Where the last press of the primary button on the Result began.
  * @property {Set<Element>} activeHoverElements
  * @property {string} hoverHighlightKey The hover whose highlight is written ('' for none).
  * @property {string} pendingHoverHighlightKey The hover whose highlight waits for the dwell.
@@ -1857,10 +1857,9 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           return;
         }
-        // A pan is not a click: Chrome sends the click of a drag to the svg,
-        // the element that holds both the press and the release, so a press
-        // that moved opens, selects, and clears nothing, whatever lies under
-        // the release.
+        // A pan is not a click: Chrome sends a drag's click to the element under
+        // both the press and the release, so a click away from its primary press
+        // opens, selects, and clears nothing, whatever lies under the release.
         if (!isClickAtPress(handlerState.pressPoint, e)) return;
         const selectableFeatureEl = featureSelection?.getSelectableFeatureTarget?.(e, svg) || null;
         const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
@@ -1984,7 +1983,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {PointerEvent} e */
       const handlePointerDown = (e) => {
-        handlerState.pressPoint = { clientX: e.clientX, clientY: e.clientY };
+        handlerState.pressPoint = primaryPressAfter(handlerState.pressPoint, e);
         if (e.button === 0 && e.isPrimary !== false) {
           const matchEl = getPairwiseMatchClickTarget(e, svg);
           if (matchEl) {
@@ -2008,6 +2007,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {PointerEvent} e */
       const handlePointerMove = (e) => {
+        handlerState.pressPoint = primaryPressAfter(handlerState.pressPoint, e);
         if (!featureSelection?.moveMarqueePointer?.(e)) return;
         e.preventDefault();
         e.stopPropagation();

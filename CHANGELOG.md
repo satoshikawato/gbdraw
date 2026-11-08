@@ -12,18 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Changed: the command line writes its progress messages, warnings, and errors
-  to standard error, and standard output stays empty while it draws. A script
-  that saved the messages with `> log.txt` now needs `2> log.txt`. Each log
-  message carries one level label (`INFO:`, `WARNING:`, or `ERROR:`), so
-  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`. The status
-  lines of `gbdraw gui` also go to standard error, without a label. An
-  argument error now reads `error: --gff requires --fasta.` instead of
-  `error: Error: --gff requires --fasta.`, and `gbdraw linear` shows
-  `Loading config file` once instead of twice. In Python, the messages gbdraw
-  logs no longer begin with a level word, so a log format with
-  `%(levelname)s` shows the level once, and importing `gbdraw.circular` or
-  `gbdraw.linear` no longer sets up logging.
+- Fixed (Web app): a pan of the Result made with the left button while
+  another button was held (for example the right button) could end by opening
+  the popup of the element under the pointer, or by clearing the feature
+  selection, when it ended near where the other button was pressed. Such a pan
+  now opens and clears nothing, like any other pan. With Select region on, a
+  click on a record's tracks that selects nothing left an open settings popup
+  open unless the previous press was at the same place; it now closes it, as
+  a click on the Result's background does.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the
@@ -42,6 +38,18 @@ write-up of a release.
   settings; they now show that step's own. A figure fitted to its requested
   size after an Undo, or after Reset all drawings, is kept, so a later Undo or
   Redo back to it shows it at once instead of fitting it again.
+- Changed: the command line writes its progress messages, warnings, and errors
+  to standard error, and standard output stays empty while it draws. A script
+  that saved the messages with `> log.txt` now needs `2> log.txt`. Each log
+  message carries one level label (`INFO:`, `WARNING:`, or `ERROR:`), so
+  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`. The status
+  lines of `gbdraw gui` also go to standard error, without a label. An
+  argument error now reads `error: --gff requires --fasta.` instead of
+  `error: Error: --gff requires --fasta.`, and `gbdraw linear` shows
+  `Loading config file` once instead of twice. In Python, the messages gbdraw
+  logs no longer begin with a level word, so a log format with
+  `%(levelname)s` shows the level once, and importing `gbdraw.circular` or
+  `gbdraw.linear` no longer sets up logging.
 - Changed: PNGs from the command line and Python are now 300 dpi by default,
   as in the web app, so they are about 3 times as wide and tall as before (a
   1,000 px figure is 3,125 px). `--dpi 96` (`dpi=96` in Python) keeps the old
