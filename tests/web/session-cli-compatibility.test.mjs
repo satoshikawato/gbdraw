@@ -274,6 +274,21 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     });
     assert.equal((await load(JSON.stringify(copies))).status, 'ok');
     assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
+    // That `#n` is the selector Python's protein record analysis names for the n-th record of the CLI's ALL input
+    // (`_record_analysis_selector`), so the Web card and the CLI share one derived LOSATP identity. The rule lives on
+    // both sides (a twin); this compares the Web's split with Python's own answer for the same input.
+    const pythonSelectors = JSON.parse(execFileSync('python', ['-c', `
+import json, sys
+from gbdraw.api.request_render import _record_analysis_selector, plan_linear_request
+from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordCardinality, RecordInput
+plan = plan_linear_request(LinearDiagramRequest(records=(
+    RecordInput(GenBankInputSource(sys.argv[1]), cardinality=RecordCardinality.ALL, record_key='record-1'),)))
+print(json.dumps({item.record_identity_key: _record_analysis_selector(item) for item in plan.provenance}))
+`, path.join(root, 'tests/fixtures/web_comparison_shared_block.gb')], {
+      cwd: root, env: { ...process.env, PYTHONPATH: root }, encoding: 'utf8', timeout: 600_000
+    }));
+    assert.deepEqual(Object.fromEntries(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id])),
+      pythonSelectors);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -362,6 +362,9 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
     ((RecordWindow(1, 200), RecordWindow(500, 900)), False, 39.5),
     ((RecordWindow(500, 900), RecordWindow(11, 300, True)), False, 260.5),
     ((RecordWindow(300, 400), RecordWindow(500, 900)), False, None),
+    # Every window reversed: the record is drawn reversed, in the window that holds the anchor (first or later).
+    ((RecordWindow(500, 900, True), RecordWindow(1, 200, True)), False, 160.5),
+    ((RecordWindow(1, 200, True), RecordWindow(500, 900, True)), False, 160.5),
 ])
 def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center):
     helper, context, paths = _circular_fixture(tmp_path, windows=windows, reverse=reverse)
@@ -376,3 +379,7 @@ def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center
     assert circ_center(alone) == circ_center(rendered)
     assert circ_center(rendered)[0] == center
     assert rendered['plan']['records'][1]['status'] == ('aligned' if center is not None else 'skipped')
+    # The flip variant turns the record round from the direction it is drawn in: reversed by its presentation, or when
+    # every window is (the Web reads it so, ``canonicalRecordReverseComplement``).
+    drawn_reverse = reverse or bool(windows) and all(window.reverse_complement for window in windows)
+    assert rendered['projection']['geometryOrientations']['circ'] is (not drawn_reverse)
