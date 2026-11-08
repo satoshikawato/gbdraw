@@ -246,7 +246,8 @@ const {
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
-const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+const { writeSessionDocumentFile } = await import('../../gbdraw/web/js/services/config.js');
+const { readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
 const { createInputFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
@@ -453,7 +454,8 @@ const storedZipEntries = async (blob) => {
     const dataStart = nameStart + nameLength + extraLength;
     entries.push({
       name: decoder.decode(bytes.subarray(nameStart, nameStart + nameLength)),
-      text: decoder.decode(bytes.subarray(dataStart, dataStart + size))
+      text: decoder.decode(bytes.subarray(dataStart, dataStart + size)),
+      bytes: bytes.slice(dataStart, dataStart + size)
     });
     offset = dataStart + size;
   }
@@ -823,7 +825,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         });
       } : null;
     },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state, drawing);
@@ -885,7 +887,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.lastRunInfo.value.sourceRecipe.available, true);
   assert.match(state.lastRunInfo.value.sourceRecipe.command, /--gbk active\.gb/);
   assert.doesNotMatch(state.lastRunInfo.value.sourceRecipe.command, /--session/);
-  assert.match(state.lastRunInfo.value.exactReplay.command, /--session audit-simple\.gbdraw-session\.json/);
+  assert.match(state.lastRunInfo.value.exactReplay.command, /--session audit-simple\.gbdraw$/);
   assert.ok(
     lifecycleEvents.indexOf('generate.processing-published')
       < lifecycleEvents.indexOf('test.after-paint-returned')
@@ -934,9 +936,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(downloadedFilename, 'audit-simple-cli-files.zip');
   const helperEntries = await storedZipEntries(downloadedBlob);
   assertDownloadedFilesMatchCommands(state.lastRunInfo.value, helperEntries);
-  const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw-session.json'));
+  // The exact replay is a Session file container, written by Save's writer (OV-2695).
+  const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw'));
   assert.ok(replayEntry);
-  const replay = JSON.parse(replayEntry.text);
+  const replay = /** @type {Record<string, any>} */ ((await readSessionContainer(new Blob([replayEntry.bytes]))).document);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
   // A replay Session over the Session limit is refused where the app shows errors, not lost.
@@ -1771,7 +1774,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
@@ -2136,12 +2139,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       state.lastRunInfo.value.reproducibility.notes.join('\n'),
       /Download reproducibility files/
     );
-    assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw-session\.json/);
+    assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw$/);
     await runner.downloadCliHelperFiles();
     assert.equal(downloadedFilename, 'lazy-linear-cli-files.zip');
     const linearHelperEntries = await storedZipEntries(downloadedBlob);
     assertDownloadedFilesMatchCommands(state.lastRunInfo.value, linearHelperEntries);
-    assert.ok(linearHelperEntries.some(({ name }) => name.endsWith('.gbdraw-session.json')));
+    assert.ok(linearHelperEntries.some(({ name }) => name.endsWith('.gbdraw')));
     const blastEntry = linearHelperEntries.find(({ name }) => name === 'alpha.gbk-2.tsv');
     const comparisonsEntry = linearHelperEntries.find(({ name }) => name === 'comparisons.tsv');
     assert.ok(blastEntry?.text.includes('MIDDLE\tTHIRD'));
@@ -2789,7 +2792,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state, active),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
@@ -3107,7 +3110,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (snapshot, recordCatalog, drawing) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
@@ -3486,7 +3489,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
       waits.task += 1;
       return afterTask();
     },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
@@ -3603,7 +3606,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing, snapshot)
     ),
@@ -3674,7 +3677,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     state,
     recordDisplayRows: { value: [] },
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing)
     ),
@@ -3798,7 +3801,7 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     recordDisplayRows: { value: [] },
     readRecordIdentitySources: async () => ({}),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',

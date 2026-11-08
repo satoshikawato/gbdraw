@@ -2583,7 +2583,7 @@
                     <a data-gallery-link :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link" :title="t('Gallery & tutorials')" :aria-label="t('Gallery & tutorials')">
                         <i class="ph ph-graduation-cap" aria-hidden="true"></i><span class="app-gallery-link-label">{{ t('Gallery & tutorials') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></span>
                     </a>
-                    <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <input data-history-managed type="file" ref="sessionInput" accept=".gbdraw,.zip,.json,.gz" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Saving session…') }}</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Loading session…') }}</span>

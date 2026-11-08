@@ -22,6 +22,7 @@ import { crc32Update, zipCentralRecord, zipEndRecords, zipLocalHeader } from '..
 import { diagnosticError } from '../utils/error-normalization.js';
 import { SESSION_DOCUMENT_ENTRY, SESSION_RESOURCE_ENTRY_PREFIX } from '../contracts/schema.generated.js';
 import { GZIP_SIGNATURE } from './byte-utils.js';
+import { assertUniqueJsonKeys } from './safe-object-keys.js';
 
 /** @import { ZipEntryFields } from '../utils/zip.js' */
 
@@ -263,6 +264,19 @@ export const openSessionContainerEntry = (blob, entry) => {
   });
 };
 
+/**
+ * Whether `blob` is a container: content decides, as Python's reader decides
+ * (a local header or an empty archive's end record first); any other file is a
+ * JSON Session, plain or gzip.
+ * @param {Blob} blob
+ * @returns {Promise<boolean>}
+ */
+export const isSessionContainerFile = async (blob) => {
+  if (blob.size < 4) return false;
+  const signature = viewOf(await bytesOf(blob, 0, 4)).getUint32(0, true);
+  return signature === 0x04034B50 || signature === 0x06054B50;
+};
+
 const refusedJson = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'JSON_FORMAT' },
   { stage: 'parse', operation: 'session-load' });
 
@@ -287,7 +301,10 @@ export const readSessionContainer = async (blob, { admitDocument = () => {} } = 
   /** @type {unknown} */
   let document;
   try {
-    document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(documentBytes));
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(documentBytes);
+    document = JSON.parse(text);
+    // Python refuses a document with one key twice as invalid JSON (OV-2694).
+    assertUniqueJsonKeys(text);
   } catch {
     throw refusedJson();
   }

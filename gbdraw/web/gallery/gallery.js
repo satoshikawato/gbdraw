@@ -776,7 +776,7 @@ const updateActionLinks = (sample) => {
     sessionLink.href = sessionHref;
     sessionLink.setAttribute(
       'download',
-      sample.session.split('/').pop() || `${sample.id}.gbdraw-session.json`
+      sample.session.split('/').pop() || `${sample.id}.gbdraw`
     );
   } else {
     sessionLink.hidden = true;

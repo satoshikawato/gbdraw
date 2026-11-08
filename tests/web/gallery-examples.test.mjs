@@ -26,7 +26,8 @@ test('every shipped catalog entry is an example, in catalog order, with its Sess
     assert.equal(entry.tutorialStatus, 'ready');
     assert.equal(example.tutorialUrl, `https://gbdraw.app/gallery/${encodeURIComponent(entry.id)}#Tutorial`);
   }
-  assert.ok(examples.some((example) => example.sessionName.endsWith('.json.gz')));
+  // Load reads a Gallery Session by its content; its name is one the Load Session picker takes.
+  assert.ok(examples.every((example) => /\.(?:gbdraw|zip|json|gz)$/.test(example.sessionName)));
 });
 
 test('a title shows its <i> runs as italics and every other character as text', () => {
@@ -68,10 +69,12 @@ test('an unusable catalog or entry gives no example', () => {
     { ...valid, title: ' ' },
     { ...valid, session: 'https://example.org/a.gbdraw-session.json' },
     { ...valid, session: './sessions/a.svg' },
-    { ...valid, id: 'b', mode: 'linear', thumbnail: 'https://example.org/b.webp' }
+    { ...valid, id: 'b', mode: 'linear', thumbnail: 'https://example.org/b.webp' },
+    { ...valid, id: 'c', session: './sessions/c.gbdraw' }
   ], CATALOG_URL);
   assert.deepEqual(examples.map(({ id, mode, thumbnailUrl }) => ({ id, mode, thumbnailUrl })), [
     { id: 'a', mode: '', thumbnailUrl: '' },
-    { id: 'b', mode: 'Linear', thumbnailUrl: '' }
+    { id: 'b', mode: 'Linear', thumbnailUrl: '' },
+    { id: 'c', mode: '', thumbnailUrl: '' }
   ]);
 });

@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { readSessionText } from '../../gbdraw/web/js/services/session-file.js';
 import { assertSafeObjectKeys, isUnsafeObjectKey } from '../../gbdraw/web/js/services/safe-object-keys.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { writeSessionContainer } from '../../gbdraw/web/js/services/session-container.js';
 
 installSessionImportWorker();
 const decode = async blob => {
@@ -42,6 +43,41 @@ test('malformed JSON/gzip and fatal UTF-8 stay structured failures', async () =>
     assert.ok(!JSON.stringify(normalizeUserFacingError(reply.error)).includes('private broken data'));
     assert.ok(!reply.error.message.includes('private broken data'));
   }
+});
+
+// Receipt session.file-container: content decides. The Worker reads a container's directory and document and
+// replies with the document and the entry of each declared resource (the page streams them into the copies);
+// any other file stays a JSON Session.
+test('the production Worker reads a Session file container by its content and replies with its entries', async () => {
+  const document = { format: 'gbdraw-session', version: 51, resources: { 'resource-0001': { kind: 'web-file', name: 'a.gb', type: 'text/plain', size: 5, lastModified: 0 } } };
+  const blob = await writeSessionContainer({
+    document,
+    documentBytes: () => new Blob([JSON.stringify(document)]).stream(),
+    readResource: () => new Blob(['ACGT\n']).stream()
+  });
+  const reply = await decode(new File([blob], 'named.json'));
+  assert.equal(reply.status, 'ok');
+  assert.deepEqual(reply.data, document);
+  assert.deepEqual(Object.keys(reply.container.resources), ['resource-0001']);
+  assert.equal(reply.container.resources['resource-0001'].size, 5);
+  assert.equal(reply.container.inputBytes, 5);
+  const json = await decode(new File([JSON.stringify(document)], 'named.gbdraw'));
+  assert.equal(json.status, 'ok');
+  assert.equal(json.container, null);
+});
+
+// OV-2694 (D-30): a JSON Session with one key twice is refused as not JSON, as Python refuses it.
+test('a JSON Session that holds one key twice is refused as not valid JSON', async () => {
+  for (const text of ['{"version": 46, "version": 46}', '{"a": {"b": 1, "\\u0062": 2}}']) {
+    for (const bytes of [text, gzipSync(text)]) {
+      const reply = await decode(new Blob([bytes]));
+      assert.equal(reply.status, 'error');
+      assert.deepEqual([reply.error.code, reply.error.stage, reply.error.context.reason], ['INPUT_INVALID', 'parse', 'JSON_FORMAT']);
+      assert.equal(normalizeUserFacingError(reply.error, { operation: 'session-load' }).summary,
+        'This file is not a gbdraw Session: it is not valid JSON.');
+    }
+  }
+  assert.equal((await decode(new Blob(['{"a": [{"b": 1}, {"b": 2}], "c": "{\\"a\\": 1}"}']))).status, 'ok');
 });
 
 // The Option Integrity Product Contract cites this title; the production Worker now refuses the key itself.

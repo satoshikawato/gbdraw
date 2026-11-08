@@ -32,10 +32,11 @@ const boundState = (source, store = createInputFileStore()) => {
 const { buildSessionDrawingResources, buildSessionResources: buildUnencodedSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
-const { encodeSessionResources } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'services', 'session-file.js'))
-);
-// Save allocates the resource table, then the Session file writer encodes it.
+const { writtenResourcesWith } = await import('./helpers/written-resources.mjs');
+const encodeSessionResources = writtenResourcesWith(await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+));
+// Save allocates the resource table, then the Session file writer writes each resource's bytes (read here as base64).
 const buildSessionResources = async (...args) => {
   const built = await buildUnencodedSessionResources(...args);
   return { ...built, resources: await encodeSessionResources(built.resources) };

@@ -1004,28 +1004,28 @@ const executeLosatJobs = (jobs, options) => {
  * @param {{
  *   drawing: { id: string, name: string }, startedAtIso: string | null,
  *   renderRequest: { mode: 'circular' | 'linear' }, resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
- *   publishedArtifact: { results: unknown, featureCatalog: unknown }, encodeResources: EncodeSessionResources
+ *   publishedArtifact: { results: unknown, featureCatalog: unknown }, writeSessionFile: WriteSessionDocumentFile
  * }} replay
  */
-const createCanonicalReplayTextBuilder = ({
+const createCanonicalReplayFileBuilder = ({
   drawing,
   startedAtIso,
   renderRequest,
   resources,
   publishedArtifact,
-  encodeResources
+  writeSessionFile
 }) => async () => {
   recordSessionLifecycleEvent('canonical-replay-json-start');
-  // The Session document holds each input's bytes; Generate described them by their File.
-  const writtenResources = await encodeResources(resources);
-  const replayText = JSON.stringify(sessionDocumentOfViews([{
+  // The Session file holds each input's bytes; Generate described them by their File. It is written by Save's
+  // writer, as a Session file container (OV-2695).
+  const replayDocument = sessionDocumentOfViews([{
     id: drawing.id,
     name: drawing.name,
     view: {
       format: 'gbdraw-session',
       createdAt: startedAtIso || new Date().toISOString(),
       renderRequest,
-      resources: writtenResources,
+      resources,
       // Export only after successful generation; reuse the published artifact.
       results: publishedArtifact.results,
       editorState: { featureCatalog: publishedArtifact.featureCatalog },
@@ -1033,13 +1033,17 @@ const createCanonicalReplayTextBuilder = ({
       losatDerivedCache: { entries: [] },
       proteinIdentityManifest: emptyProteinIdentityManifest()
     }
-  }], drawing.id));
-  recordStructuralMetric('canonicalReplayFullSerializationCount');
-  recordSessionLifecycleEvent('canonical-replay-json-end');
-  recordSessionLifecycleEvent('canonical-replay-json-characters', {
-    value: replayText.length
-  });
-  return replayText;
+  }], drawing.id);
+  const written = await writeSessionFile(/** @type {Parameters<WriteSessionDocumentFile>[0]} */ (/** @type {unknown} */ (replayDocument)));
+  try {
+    const replayBytes = new Uint8Array(await written.blob.arrayBuffer());
+    recordStructuralMetric('canonicalReplayFullSerializationCount');
+    recordSessionLifecycleEvent('canonical-replay-json-end');
+    recordSessionLifecycleEvent('canonical-replay-json-characters', { value: replayBytes.byteLength });
+    return replayBytes;
+  } finally {
+    written.release();
+  }
 };
 /** @param {unknown} value */
 const normalizeRecordSelectorText = (value) => {
@@ -1375,10 +1379,10 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 
 /**
  * A file of the CLI reproducibility bundle: its content, or the builder that makes it when the bundle is written.
- * A reproducibility file: its builder may read files (the exact replay encodes
- * the inputs Generate described, `encodeSessionResources`).
+ * A reproducibility file: its builder may read files (the exact replay writes
+ * the inputs Generate described into a Session file, `writeSessionDocumentFile`).
  * @typedef {Omit<RecipeGeneratedFile, 'buildData'> & {
- *   buildData?: () => string | Uint8Array | Promise<string>, retainedBytes?: number
+ *   buildData?: () => string | Uint8Array | Promise<string | Uint8Array>, retainedBytes?: number
  * }} GeneratedCliFile
  */
 
@@ -1531,7 +1535,8 @@ export const executeCanonicalRenderCandidate = async ({
  */
 
 /**
- * @typedef {(resources: Readonly<Record<string, RawSessionResourceDescriptor>>) => Promise<Record<string, RawSessionResourceDescriptor>>} EncodeSessionResources
+ * @typedef {(document: Record<string, unknown> & { resources: Readonly<Record<string, RawSessionResourceDescriptor>> })
+ *   => Promise<{ blob: Blob, release: () => void }>} WriteSessionDocumentFile
  */
 /**
  * The reproducibility files with their content: a builder may read and encode inputs, and may fail.
@@ -1547,8 +1552,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
- * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
- *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
+ * @property {WriteSessionDocumentFile} writeSessionDocumentFile The Session file writer (`writeSessionDocumentFile`),
+ *   which writes the exact replay Session of the reproducibility files with the inputs Generate described (OV-2612, OV-2695).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean, drawing: DrawingState,
  *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
@@ -1620,7 +1625,7 @@ export const createRunAnalysis = ({
   state,
   rulePreparation = null,
   isCurrentFeature,
-  serializeCanonicalFiles, encodeSessionResources,
+  serializeCanonicalFiles, writeSessionDocumentFile,
   adoptCanonicalRenderArtifacts,
   setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
@@ -5064,18 +5069,18 @@ export const createRunAnalysis = ({
         'canonicalResourceBase64Characters',
         canonicalResourceBase64Characters
       );
-      const canonicalReplayPath = '/canonical-render-session.gbdraw-session.json';
+      const canonicalReplayPath = '/canonical-render-session.gbdraw';
       const canonicalReplayName = makeSafeFilename(
-        `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
+        `${normalizedOutputPrefix || 'out'}.gbdraw`
       );
       /** @type {{ results: any[] | null, featureCatalog: Record<string, any> | null | undefined }} */
       const publishedReplayArtifact = { results: null, featureCatalog: null };
-      const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
+      const buildCanonicalReplayFile = createCanonicalReplayFileBuilder({
         drawing: state.drawingTabOf(drawing.id),
         startedAtIso: manualRunStartedAtIso,
         renderRequest: canonical.renderRequest,
         resources: canonical.resources,
-        publishedArtifact: publishedReplayArtifact, encodeResources: encodeSessionResources
+        publishedArtifact: publishedReplayArtifact, writeSessionFile: writeSessionDocumentFile
       });
       // Run Info names the files of its exact replay, the canonical Session (`buildRunInfo` keeps only those);
       // the Source recipe carries its own file names (OV-1591).
@@ -5085,7 +5090,7 @@ export const createRunAnalysis = ({
         slot: 'generatedFiles.canonical_render_session',
         kind: 'generated'
       }]]);
-      recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayText, {
+      recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayFile, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
         retainedBytes:

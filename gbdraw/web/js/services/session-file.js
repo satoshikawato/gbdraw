@@ -1,16 +1,19 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
-import { GZIP_SIGNATURE, bytesToBase64, isGzipBytes, readCappedStream } from './byte-utils.js';
-import { recordStructuralMetric, testByteCap } from './runtime-test-hooks.js';
-import { fileBackedReaderOf } from './session-resource-backing.js';
+import { GZIP_SIGNATURE, isGzipBytes, readCappedStream } from './byte-utils.js';
+import { testByteCap } from './runtime-test-hooks.js';
+import { writeSessionContainer } from './session-container.js';
 
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { SavedEntryData } from './file-content-cache.js' */
+/** @import { SessionContainerResource } from '../contracts/session.generated.js' */
 
-// The largest Session file, gzip or plain, that Load reads; Save refuses to
-// write a larger one (OV-2245).
+// The largest JSON Session file (version 27-50), gzip or plain, that Load reads (OV-2245).
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
-// The most JSON a Session may expand to: Load stops reading past it, and Save
-// refuses to write more (OV-2240).
+// The most settings and results a Session holds in the browser: Load stops
+// reading a JSON Session past it, refuses a container whose
+// `gbdraw-session.json` is larger, and Save refuses to write more (OV-2240,
+// receipt session.file-container). The inputs of a container have no cap.
 export const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
 const LARGEST_INPUT_COUNT = 3;
 const LARGEST_INPUT_NAME_CHARS = 80;
@@ -300,47 +303,138 @@ const largestInputNames = (data) => {
 };
 
 /**
- * @param {Record<string, unknown>} data The Session document.
- * @param {number} sessionBytes Its expanded JSON size, or its file size when `file` is set.
+ * Save's refusal of settings and results over the browser's cap.
+ * @param {number} sessionBytes The size of `gbdraw-session.json`.
  * @param {number} sessionByteLimit The cap it exceeds.
- * @param {boolean} [file] The size is the gzip file's, not the expanded JSON's.
  */
-const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
-  'SESSION_SIZE_LIMIT',
-  { sessionBytes, sessionByteLimit, ...(file && { sessionSizeKind: 'file' }), largestInputs: largestInputNames(data) },
-  { stage: 'write', operation: 'session-save' }
+const sessionSaveSizeLimit = (sessionBytes, sessionByteLimit) => diagnosticError(
+  'SESSION_SIZE_LIMIT', { sessionBytes, sessionByteLimit }, { stage: 'write', operation: 'session-save' }
 );
 
 /**
- * The resources a Session document writes: each file-backed descriptor (a File
- * Generate described, `fileBackedDescriptor`) encoded as base64 text, read
- * once; the others as they are. The base64 text of a Session over its expanded
- * cap would not load again (and past the engine's string limit cannot be made),
- * so it is refused first with `SESSION_SIZE_LIMIT`, naming at least the
- * characters of its resources. The table given is not changed.
- * @param {Readonly<Record<string, RawSessionResourceDescriptor>>} resources
- * @param {Readonly<Record<string, unknown>>} [resourceOriginalNames] The names the
- *   refusal lists for the largest inputs (`webFiles.resourceOriginalNames`).
- * @returns {Promise<Record<string, RawSessionResourceDescriptor>>}
+ * The free space `navigator.storage.estimate()` gives this site, in bytes, or
+ * undefined when the browser gives no estimate.
+ * @returns {Promise<number | undefined>}
  */
-export const encodeSessionResources = async (resources, resourceOriginalNames = {}) => {
-  const maxBytes = testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES;
-  const payloadCharacters = Object.values(resources).reduce((total, descriptor) => total + (
-    fileBackedReaderOf(descriptor) ? 4 * Math.ceil(Number(descriptor.size) / 3)
-      : typeof descriptor.data === 'string' ? descriptor.data.length : 0
-  ), 0);
-  if (payloadCharacters > maxBytes) throw sessionSaveSizeLimit({ resources, webFiles: { resourceOriginalNames } }, payloadCharacters, maxBytes);
-  /** @type {Record<string, RawSessionResourceDescriptor>} */
-  const encoded = { ...resources };
-  for (const [id, descriptor] of Object.entries(resources)) {
-    const readFile = fileBackedReaderOf(descriptor);
-    if (!readFile) continue;
-    const bytes = await readFile();
-    recordStructuralMetric('base64EncodeCount', 1, { resourceName: descriptor.name });
-    recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: descriptor.name });
-    encoded[id] = { ...descriptor, encoding: 'base64', data: bytesToBase64(bytes) };
+export const browserStorageFreeBytes = async () => {
+  try {
+    const { quota, usage } = await globalThis.navigator.storage.estimate();
+    return typeof quota === 'number' && typeof usage === 'number' ? Math.max(0, quota - usage) : undefined;
+  } catch {
+    return undefined;
   }
-  return encoded;
+};
+
+/**
+ * The bytes of the Session's JSON, counted without keeping them.
+ * @param {Record<string, unknown>} data
+ * @returns {Promise<number>}
+ */
+const jsonByteLength = async (data) => {
+  const encoder = new TextEncoder();
+  let total = 0;
+  let taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
+  for (const fragment of jsonFragments(data)) {
+    total += encoder.encode(fragment).byteLength;
+    if (performance.now() >= taskDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
+    }
+  }
+  return total;
+};
+
+/**
+ * The descriptor a Session file container stores for each resource
+ * (`SessionContainerResource`): its file metadata and size; the entry
+ * `resources/<id>` holds the bytes, and its CRC-32 and size replace the
+ * `encoding`, `data` and `checksum` an older JSON Session held.
+ * @param {Readonly<Record<string, RawSessionResourceDescriptor>>} resources Checked descriptors.
+ * @returns {Record<string, SessionContainerResource>}
+ */
+export const sessionContainerResources = (resources) => Object.fromEntries(Object.entries(resources).map(([id, descriptor]) => [id, {
+  kind: String(descriptor.kind || 'web-file'),
+  name: String(descriptor.name || 'file'),
+  type: String(descriptor.type || 'application/octet-stream'),
+  size: /** @type {number} */ (descriptor.size),
+  lastModified: Number(descriptor.lastModified) || 0
+}]));
+
+// A browser that lets no copy be written: the entries wait in memory.
+const NO_COPY_STORE = Symbol('no copy store');
+// A temporary write the browser refused: its storage is full.
+const STORAGE_FULL = Symbol('storage full');
+
+/**
+ * The Session file a Save writes and downloads, and the release of the
+ * temporary copies it is read from.
+ * @typedef {{ blob: Blob, release: () => void }} WrittenSessionFile
+ */
+/**
+ * Where a Save reads each input and keeps each written entry: the stream of a
+ * resource by id (`sessionResourceStream` of its checked descriptor), and the
+ * temporary copy of an entry's data (`keepSaveData`), or null when the page
+ * has no copy store (the entries then wait in memory).
+ * @typedef {{
+ *   readResource: (resourceId: string) => Promise<ReadableStream<Uint8Array>>,
+ *   keep: ((data: ReadableStream<Uint8Array>) => Promise<SavedEntryData>) | null
+ * }} SessionFileSources
+ */
+
+/**
+ * Writes the Session file container (receipt session.file-container):
+ * `gbdraw-session.json` (`data`, whose `resources` are
+ * `sessionContainerResources(sources)`), then each input, one at a time,
+ * streamed from its copy (`sessionResourceStream`) and deflated unless it is
+ * gzip; no input is held whole and none becomes a base64 text. Each entry's
+ * written data waits in a temporary copy (J3), or in memory when the browser
+ * lets no copy be written. It rejects with `SESSION_SIZE_LIMIT` when the JSON
+ * is over the cap, and, when the browser refuses a temporary write, deletes
+ * what it wrote and rejects with the storage refusal (`storageNeedBytes`).
+ * @param {Record<string, unknown> & { resources: Readonly<Record<string, SessionContainerResource>> }} data The Session document.
+ * @param {SessionFileSources} sources
+ * @returns {Promise<WrittenSessionFile>}
+ */
+export const writeSessionFile = async (data, { readResource, keep }) => {
+  if (typeof CompressionStream !== 'function') {
+    throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'transport' });
+  }
+  const maxBytes = testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES;
+  /** @type {{ error: Error | null }} */
+  const refused = { error: null };
+  const content = { document: data, documentBytes: () => jsonByteStream(data, maxBytes, refused), readResource };
+  /** @type {(() => void)[]} */
+  const releases = [];
+  const release = () => releases.splice(0).forEach((end) => end());
+  try {
+    if (!keep) throw NO_COPY_STORE;
+    const blob = await writeSessionContainer(content, {
+      keep: async (entryData) => {
+        const kept = await keep(entryData);
+        if (kept.copy) {
+          releases.push(kept.copy.release);
+          return kept.copy.blob();
+        }
+        throw kept.reason === 'unavailable' ? NO_COPY_STORE : STORAGE_FULL;
+      }
+    });
+    return { blob, release };
+  } catch (error) {
+    release();
+    if (refused.error) throw refused.error;
+    // No copy store, or one whose first write found no storage: the entries wait in memory.
+    if (error === NO_COPY_STORE) {
+      const blob = await writeSessionContainer(content).catch((memoryError) => { throw refused.error ?? memoryError; });
+      return { blob, release: () => {} };
+    }
+    if (error !== STORAGE_FULL) throw error;
+    const free = await browserStorageFreeBytes();
+    const need = Object.values(data.resources).reduce((total, { size }) => total + size, await jsonByteLength(data));
+    throw diagnosticError('SESSION_SIZE_LIMIT', {
+      storageNeedBytes: need, ...(free !== undefined && { storageFreeBytes: free }),
+      largestInputs: largestInputNames(data)
+    }, { stage: 'write', operation: 'session-save' });
+  }
 };
 
 /**
@@ -400,7 +494,7 @@ const jsonByteStream = (data, maxBytes, refused) => {
           }
         }
         complete = true;
-        refused.error = sessionSaveSizeLimit(data, totalBytes, maxBytes);
+        refused.error = sessionSaveSizeLimit(totalBytes, maxBytes);
         controller.error(refused.error);
         return;
       }
@@ -416,29 +510,6 @@ const jsonByteStream = (data, maxBytes, refused) => {
       complete = true;
     }
   });
-};
-
-/**
- * @param {Record<string, any>} data The Session document.
- * @returns {Promise<Blob>} The gzip Session; it rejects with `SESSION_SIZE_LIMIT` (stage `write`)
- *   when the JSON is over the expanded cap or the file is over the file cap that Load reads.
- */
-export const compressSessionData = async (data) => {
-  if (typeof CompressionStream !== 'function') {
-    throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'transport' });
-  }
-  /** @type {{ error: Error | null }} */
-  const refused = { error: null };
-  const compressedStream = jsonByteStream(data, testByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES, refused)
-    .pipeThrough(new CompressionStream('gzip'));
-  const blob = await new Response(compressedStream, {
-    headers: { 'Content-Type': 'application/gzip' }
-  }).blob().catch((error) => {
-    throw refused.error ?? error;
-  });
-  const maxFileBytes = testByteCap('maxSessionFileBytes') ?? MAX_SESSION_FILE_BYTES;
-  if (blob.size > maxFileBytes) throw sessionSaveSizeLimit(data, blob.size, maxFileBytes, true);
-  return blob;
 };
 
 /**

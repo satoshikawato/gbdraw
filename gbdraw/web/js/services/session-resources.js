@@ -237,7 +237,7 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * records and comparison plan, whose uploaded comparison files the Session
  * also binds; every drawing binds its own five card files (R16-4).
  * A File's bytes stay file-backed (`fileBackedDescriptor`): the Session
- * writer encodes them (`encodeSessionResources` in session-file.js).
+ * writer streams them into the Session file (`writeSessionDocumentFile` in config.js).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
@@ -402,7 +402,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       if (descriptor) {
         resources[id] = safePreferred ? descriptor : renamedResourceDescriptor(descriptor, String(name));
       } else {
-        // Bytes read here are encoded with the other files when the Session is written (`encodeSessionResources`).
+        // Bytes read here are written with the other files when the Session is written (`writeSessionDocumentFile`).
         const bytes = await bytesFor(candidate);
         resources[id] = fileBackedDescriptor({
           kind: String(metadata.kind || 'web-file'), name: String(name),

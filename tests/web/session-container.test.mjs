@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const { openSessionContainerEntry, readSessionContainer, writeSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
+const { isSessionContainerFile, openSessionContainerEntry, readSessionContainer, writeSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
 const { SESSION_DOCUMENT_ENTRY } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { crc32Update, zipCentralRecord, zipEndRecords, zipLocalHeader } = await import('../../gbdraw/web/js/utils/zip.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -303,6 +303,26 @@ test('a ZIP without gbdraw-session.json is refused as no Session, and a document
   await refused(readSessionContainer(craft([{ name: 'gbdraw-session.json/', data: new Uint8Array(0) }])), NO_DOCUMENT);
   await refused(readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY, data: encoder.encode('{"resources": ') }])), INVALID_JSON);
   await refused(readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY, data: new Uint8Array([0x22, 0xFF, 0x22]) }])), INVALID_JSON);
+});
+
+// OV-2694 (D-30): Python refuses a document with one key twice as invalid JSON, so the Web does (until the shared
+// vector case arrives, this local case pins it); one key in two objects, or a key-like text in a string, is no duplicate.
+test('a document that holds one key twice is refused as not JSON, as Python refuses it', async () => {
+  for (const text of ['{"resources": {}, "resources": {}}', '{"resources": {}, "a": {"b": 1, "\\u0062": 2}}']) {
+    await refused(readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY, data: encoder.encode(text) }])), INVALID_JSON);
+  }
+  const kept = await readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY,
+    data: encoder.encode('{"resources": {}, "a": [{"b": 1}, {"b": 2}], "c": "{\\"resources\\": 1}"}') }]));
+  assert.deepEqual(kept.document, { resources: {}, a: [{ b: 1 }, { b: 2 }], c: '{"resources": 1}' });
+});
+
+test('content decides: a local header or an empty archive first is a container, any other file a JSON Session', async () => {
+  const empty = craft([]);
+  assert.equal(await isSessionContainerFile(empty), true);
+  assert.equal(await isSessionContainerFile(craft([{ name: 'resources/a', data: plain }])), true);
+  for (const bytes of ['{"format": "gbdraw-session"}', new Uint8Array([0x1f, 0x8b, 8, 0]), 'PK', '']) {
+    assert.equal(await isSessionContainerFile(new Blob([bytes])), false);
+  }
 });
 
 test('a resource is found by its id only: an entry name never becomes a path, and entries not declared are not read', async () => {

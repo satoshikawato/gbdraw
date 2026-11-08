@@ -37,7 +37,9 @@ const { createInputFileStore } = await import('../../gbdraw/web/js/services/hist
 const { buildSessionResources: buildBoundSessionResources } = await import(
   '../../gbdraw/web/js/services/session-resources.js'
 );
-const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+const { writtenResourcesWith } = await import('./helpers/written-resources.mjs');
+// What Save writes for each resource, read as base64 descriptors.
+const encodeSessionResources = writtenResourcesWith(await import('../../gbdraw/web/js/services/session-resource-backing.js'));
 // A fixture state registers its input files in a store and names them by ref, as the app does;
 // its drawings are those of the bound state, so both name the same refs. Save then encodes the
 // table in the Session file writer.
@@ -356,8 +358,8 @@ test('adopted export reuses descriptors and encodes only a replacement', async (
   const changed = await buildSessionResources(state, committed, bindingDrawings(state));
   const changedId = changed.webFiles.bindings.linearSeqs[1].gb.resourceId;
   assert.equal(metricTotal('base64DecodeCount'), 0);
-  assert.equal(metricTotal('base64EncodeCount'), 1);
-  assert.equal(metricTotal('encodedByteCount'), replacement.size);
+  // Save streams the replacement's bytes into the Session file; it never makes a base64 text.
+  assert.equal(metricTotal('base64EncodeCount'), 0);
   assert.equal(changed.webFiles.bindings.linearSeqs[0].gb.resourceId, 'alpha');
   assert.notEqual(changedId, 'beta');
   assert.strictEqual(changed.resources.alpha, resources.alpha);
@@ -473,7 +475,7 @@ test('same-length adopted, alternate-encoded and new candidates decode/hash at m
   assert.equal(result.webFiles.bindings.c_depth[0].resourceId, 'alpha');
   assert.equal(result.webFiles.bindings.c_depth[1].resourceId, 'alpha');
   assert.equal(metricTotal('base64DecodeCount'), 3);
-  assert.equal(metricTotal('base64EncodeCount'), 1);
+  assert.equal(metricTotal('base64EncodeCount'), 0);
   assert.equal(metricTotal('resourceIdentityHashCount'), 5);
   for (const id of ['alpha', 'beta', 'differentId']) assert.equal(metricTotal('resourceByteReadCount', id), 1);
 });

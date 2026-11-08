@@ -31,7 +31,7 @@ export {
 };
 
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { InputCopy, InputCopyStore } from './input-copies.js' */
+/** @import { InputCopy, InputCopyStore, InputCopyWriter } from './input-copies.js' */
 
 /**
  * A resource's content token: the Worker's cache key for its bytes, so equal
@@ -308,11 +308,26 @@ const COPY_WRITE_FAILED = Symbol('copy write failed');
  * @returns {Promise<StreamCopy>}
  */
 export const copyInputStream = async (stream) => {
-  const writer = copyStore ? await copyStore.openWriter().catch(() => null) : null;
+  const writer = await openCopyWriter();
   if (!writer) {
     await stream.cancel().catch(() => {});
     return { copy: null, reason: 'unavailable' };
   }
+  return writeStreamCopy(writer, stream);
+};
+
+/** Whether the page has a copy store (`useInputCopyStore`); its writes may still fail. */
+export const inputCopiesAvailable = () => copyStore !== null;
+
+/** A writer of a new copy, or null when the browser lets none be written. */
+const openCopyWriter = async () => (copyStore ? copyStore.openWriter().catch(() => null) : null);
+
+/**
+ * Writes `stream` through `writer` as `copyInputStream` describes.
+ * @param {InputCopyWriter} writer @param {ReadableStream<Uint8Array>} stream
+ * @returns {Promise<StreamCopy>}
+ */
+const writeStreamCopy = async (writer, stream) => {
   const reader = stream.getReader();
   /** @type {ArrayBuffer[]} */
   const digests = [];
@@ -350,6 +365,54 @@ export const copyInputStream = async (stream) => {
     writer.abort();
     reader.cancel().catch(() => {});
     if (error === COPY_WRITE_FAILED) return { copy: null, reason: 'write-failed' };
+    throw error;
+  }
+};
+
+/**
+ * Where one entry's data waits while a Session Save writes its file (J3): a
+ * new copy, so a large Session waits in the browser's storage, not in memory;
+ * or no copy, because the browser lets none be written (`unavailable`: the
+ * stream is unread, and the caller keeps it another way) or refused the write,
+ * as when its storage is full (`write-failed`: what was written is deleted).
+ * @typedef {{ copy: InputCopy } | { copy: null, reason: 'unavailable' | 'write-failed' }} SavedEntryData
+ */
+/**
+ * @param {ReadableStream<Uint8Array>} stream
+ * @returns {Promise<SavedEntryData>}
+ */
+export const keepSaveData = async (stream) => {
+  const writer = await openCopyWriter();
+  return writer ? writeStreamCopy(writer, stream) : { copy: null, reason: 'unavailable' };
+};
+
+/**
+ * A stream of the plain bytes of a File or Session resource view (`readFileBlob`)
+ * that a Session Save writes; the File's copy is held until the stream ends.
+ * @param {FileLike} file
+ * @returns {Promise<ReadableStream<Uint8Array>>}
+ */
+export const readFileStream = async (file) => {
+  const end = holdFileCopy(file);
+  try {
+    const reader = (await readFileBlob(file)).stream().getReader();
+    return new ReadableStream({
+      async pull(controller) {
+        const step = await reader.read().catch((error) => { end(); throw error; });
+        if (!step.done) {
+          controller.enqueue(step.value);
+          return;
+        }
+        end();
+        controller.close();
+      },
+      cancel(reason) {
+        end();
+        return reader.cancel(reason);
+      }
+    });
+  } catch (error) {
+    end();
     throw error;
   }
 };

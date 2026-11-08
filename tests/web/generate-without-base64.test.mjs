@@ -35,7 +35,9 @@ const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
-const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+const { writtenResourcesWith } = await import('./helpers/written-resources.mjs');
+// What Save writes for each resource, read as base64 descriptors.
+const encodeSessionResources = writtenResourcesWith(await import('../../gbdraw/web/js/services/session-resource-backing.js'));
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
@@ -128,7 +130,8 @@ test('Save encodes a File Generate described, once, under the committed ID', asy
     assert.equal(Buffer.from(saved.resources.src.data, 'base64').toString('utf8'), text);
     assert.equal(saved.webFiles.bindings.c_gb.resourceId, 'src');
     assert.equal(count('resourceIdentityHashCount'), 0, `Save ${save}`);
-    assert.equal(count('base64EncodeCount'), 1, `Save ${save}`);
+    // Save streams the bytes into the Session file; it never makes a base64 text (receipt session.file-container).
+    assert.equal(count('base64EncodeCount'), 0, `Save ${save}`);
   }
   // The committed request keeps its file-backed descriptor: Save writes a copy.
   assert.equal(Object.hasOwn(committed.resources.src, 'data'), false);
@@ -151,16 +154,20 @@ test('Two Files with equal metadata stay two resources in a Save', async () => {
   assert.notEqual(written.resources.a.data, written.resources.b.data);
 });
 
-test('A Save over the Session limit fails with SESSION_SIZE_LIMIT before it encodes', async () => {
-  const file = new File(['x'.repeat(3000)], 'big.tsv', { type: '' });
-  const { sourceState, descriptor } = await generateDescriptor(file);
-  const committed = adoptRuntimeCanonicalSession({ renderRequest: request('src'), resources: { src: descriptor }, webFiles: {} });
+// Receipt session.file-container: the inputs of a Session file have no cap; only the settings and results do.
+test('A Save writes an input larger than the settings-and-results cap, streamed from its File', async () => {
+  const text = 'x'.repeat(3000);
+  const file = new File([text], 'big.tsv', { type: '' });
+  const { descriptor } = await generateDescriptor(file);
+  const { sessionContainerResources, writeSessionFile } = await import('../../gbdraw/web/js/services/session-file.js');
+  const { openSessionContainerEntry, readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
   hooks.maxExpandedSessionBytes = 2048;
   metrics.length = 0;
   try {
-    await assert.rejects(savedSession(sourceState, committed, bindingDrawings(sourceState)),
-      (error) => error.code === 'SESSION_SIZE_LIMIT' && error.operation === 'session-save'
-        && error.context.sessionByteLimit === 2048 && error.context.largestInputs === 'big.tsv');
+    const document = { format: 'gbdraw-session', resources: sessionContainerResources({ src: descriptor }) };
+    const { blob } = await writeSessionFile(document, { keep: null, readResource: async () => backing.sessionResourceStream(descriptor) });
+    const container = await readSessionContainer(blob);
+    assert.equal(await new Response(openSessionContainerEntry(blob, container.resources.src)).text(), text);
     assert.equal(count('base64EncodeCount'), 0);
   } finally {
     delete hooks.maxExpandedSessionBytes;

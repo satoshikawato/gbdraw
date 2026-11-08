@@ -99,23 +99,35 @@ const LF_BYTE = 0x0A;
  * The reader of each file-backed descriptor: a descriptor of the page, never
  * of a Session file, whose bytes a File (or a Session resource view) holds. It
  * has no `encoding` and no `data`; a Session writer encodes it
- * (`encodeSessionResources`), so Generate keeps no base64 text of an input
+ * (`writeSessionDocumentFile`), so Generate keeps no base64 text of an input
  * (OV-2612). One reader per File: it is also the payload's key.
  * @typedef {() => Promise<Uint8Array>} FileBackedReader
  * @type {WeakMap<object, FileBackedReader>}
  */
 const fileBackedReaders = new WeakMap();
+/**
+ * The opener of a stream of the bytes a file-backed reader reads, where they
+ * can be streamed (an input's copy, PD-OI-121, or an entry of the Session file
+ * a Load read): a Session Save streams them and never holds them whole. Keyed
+ * by the reader, so every descriptor that shares the reader shares it.
+ * @typedef {() => Promise<ReadableStream<Uint8Array>>} FileBackedStreamOpener
+ * @type {WeakMap<FileBackedReader, FileBackedStreamOpener>}
+ */
+const fileBackedStreams = new WeakMap();
 
 /**
- * A file-backed descriptor of these fields, whose bytes `readBytes` reads.
+ * A file-backed descriptor of these fields, whose bytes `readBytes` reads, and
+ * `openStream` streams when given.
  * @template {{ kind?: unknown, name: string, type: string, size: number, lastModified: number }} F
  * @param {F} fields
  * @param {FileBackedReader} readBytes
+ * @param {FileBackedStreamOpener | null} [openStream]
  * @returns {F}
  */
-export const fileBackedDescriptor = (fields, readBytes) => {
+export const fileBackedDescriptor = (fields, readBytes, openStream = null) => {
   const descriptor = { ...fields };
   fileBackedReaders.set(descriptor, readBytes);
+  if (openStream) fileBackedStreams.set(readBytes, openStream);
   return descriptor;
 };
 
@@ -127,6 +139,28 @@ export const fileBackedDescriptor = (fields, readBytes) => {
 export const fileBackedReaderOf = (descriptor) => (
   descriptor && typeof descriptor === 'object' ? fileBackedReaders.get(descriptor) ?? null : null
 );
+
+/**
+ * A stream of the bytes a checked Session resource descriptor holds, the one
+ * reader a Session Save writes an entry from: a file-backed descriptor's
+ * stream (`fileBackedDescriptor`), else the bytes its reader reads; an encoded
+ * depth table's text; a base64 text's bytes (a resource of an older JSON
+ * Session).
+ * @param {RawSessionResourceDescriptor} descriptor
+ * @returns {Promise<ReadableStream<Uint8Array>>}
+ */
+export const sessionResourceStream = async (descriptor) => {
+  const readFile = fileBackedReaderOf(descriptor);
+  const openStream = readFile ? fileBackedStreams.get(readFile) : undefined;
+  if (openStream) return openStream();
+  /** @type {Uint8Array} */
+  let bytes;
+  if (readFile) bytes = await readFile();
+  else if (isEncodedDepthFileEntry(/** @type {DepthEntryProbe} */ (descriptor))) {
+    bytes = textToBytes(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));
+  } else bytes = await base64ToBytesInTasks(/** @type {string} */ (descriptor.data));
+  return new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (bytes)]).stream();
+};
 
 /**
  * What names a descriptor's payload until its bytes change: the reader of a
@@ -375,14 +409,16 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   /** @param {unknown} binding @param {boolean} compositeAllowed @returns {boolean} */
   const badSingle = (binding, compositeAllowed) => {
     if (!(object(binding) && Object.hasOwn(binding, 'kind'))) return badLeaf(binding);
-    // A composite is schema 2 `c_gb` only, with only its fields and two or more base64 components.
+    // A composite is schema 2 `c_gb` only, with only its fields and two or more components that hold
+    // their bytes: base64 text, or an entry of a Session file container (file-backed once loaded).
     if (!current || !compositeAllowed || binding.kind !== 'composite') return true;
     if (Object.keys(binding).some(key => !['kind', 'components', 'name', 'type', 'lastModified'].includes(key))) return true;
     const components = binding.components;
     if (!Array.isArray(components) || components.length < 2 || badMetadata(binding) || components.some(badLeaf)) return true;
     // `badLeaf` proved that `resources` holds each component's id and that its entry is an object.
     return components.some((/** @type {{ resourceId: string }} */ component) => (
-      /** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64'));
+      /** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64'
+      && !fileBackedReaders.has(/** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId])));
   };
   /** @type {WebFileBindingFault[]} */
   const faults = [];
@@ -730,6 +766,8 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   // The descriptor Generate made of this combined view (OV-2612) reads the view itself.
   if (fileBackedReaderOf(descriptor) && fileBackedReaderOf(descriptor) === viewReaders.get(/** @type {FileLike} */ (file))) return true;
   if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
+  // Parts a container's entries hold have no text to compare with a base64 combined form.
+  if (backing.sourceBackings.some((part) => typeof part.descriptor.data !== 'string')) return false;
 
   /** @param {{ resourceId: string, name: string, descriptor: SessionResourceDescriptor }} entry */
   const decode = (entry) => {
@@ -806,7 +844,12 @@ export const sessionResourceViewReader = (file) => {
   const backing = fileViewBackings.get(view);
   if (!backing || backing.dirty) return null;
   let reader = viewReaders.get(view);
-  if (!reader) viewReaders.set(view, reader = () => /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(view)));
+  if (!reader) {
+    viewReaders.set(view, reader = () => /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(view)));
+    // A leaf view streams its resource (an entry a Load copied), so a Save after a Generate streams it too.
+    const { descriptor } = /** @type {LeafBacking} */ (backing);
+    if (!backing.descriptors && fileBackedReaderOf(descriptor)) fileBackedStreams.set(reader, () => sessionResourceStream(descriptor));
+  }
   return reader;
 };
 
