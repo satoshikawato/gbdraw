@@ -352,6 +352,8 @@ test('Reset Settings leaves the multi-record layout of a new drawing', async () 
 
 // OV-1167 (Q-DR-7 B): Reset Settings re-derives the Circular comparison rings
 // from the kept ring files, as a new drawing with those files uploaded has them.
+// OV-2818: the kept ring file keeps its ring row at its defaults, and Show
+// Comparison Rings turns off, as Show Depth does for a kept Depth file.
 test('Reset Settings re-derives the comparison rings from the kept ring files', async () => {
   const app = createAppSetup();
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
@@ -360,16 +362,17 @@ test('Reset Settings re-derives the comparison rings from the kept ring files', 
   const ringFiles = (files) => bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_conservation_fastas', files);
   const ringsOf = () => JSON.parse(JSON.stringify({ enabled: rings.enabled, series: rings.series }));
   ringFiles([new File(['>r\nACGT\n'], 'ring.fa')]);
-  app.changeCircularConservationSource();
+  app.changeCircularConservationSource('losat');
+  app.setCircularConservationShown(true);
   const uploaded = ringsOf();
   assert.equal(uploaded.enabled, true);
   assert.equal(uploaded.series.length, 1);
   rings.series[0].label = 'renamed ring';
   await app.resetSettings();
   assert.equal(circular.files.c_conservation_fastas.length, 1, 'the ring file stays');
-  assert.deepEqual(ringsOf(), uploaded);
+  assert.deepEqual(ringsOf(), { ...uploaded, enabled: false });
   ringFiles([]);
-  app.changeCircularConservationSource();
+  app.changeCircularConservationSource('losat');
 });
 
 // OV-1168: the applied palette is the shown Result's (an artifact slot

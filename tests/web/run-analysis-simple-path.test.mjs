@@ -828,7 +828,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state, drawing);
     },
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
@@ -1773,7 +1772,6 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     recordDisplayRows,
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
@@ -1929,6 +1927,26 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1);
     losatCalls = 0;
     modeDrawing(state, 'circular').files.c_gb = bound(referenceView);
+
+    // OV-2818: with Show Comparison Rings off, Generate reads no ring file, runs no LOSAT search (the cache is
+    // empty) and sends no ring; the ring files and rows stay.
+    const cachedRings = state.losatCache.value;
+    state.losatCache.value = new Map();
+    state.activeDrawing().circularConservation.enabled = false;
+    const helpersBeforeRingsOff = workerMessages.filter(({ type }) => type === 'helper').length;
+    const ringsOffResult = result('rings-off.svg', 'rings-off');
+    workerResponses.push(response(ringsOffResult, validCatalog(ringsOffResult.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.equal(losatCalls, 0);
+    assert.deepEqual(workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeRingsOff)
+      .map(({ operation }) => operation), []);
+    const ringsOffOptions = workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request.diagramOptions;
+    assert.equal(ringsOffOptions.conservationLabels, undefined, JSON.stringify(ringsOffOptions));
+    assert.equal(state.activeDrawing().circularConservation.enabled, false);
+    assert.equal(state.activeDrawing().circularConservation.series.length, 3);
+    assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas.length, 3);
+    state.losatCache.value = cachedRings;
+    state.activeDrawing().circularConservation.enabled = true;
 
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
@@ -2791,7 +2809,6 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     recordDisplayRows: { value: [] },
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state, active),
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
@@ -3115,7 +3132,6 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       return serializeActiveRenderFiles(state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
@@ -3488,7 +3504,6 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     },
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
       results: structuredClone(generationResponse.results),
@@ -3673,7 +3688,6 @@ test('Circular Generate gives a Depth series without settings its default color'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing)
@@ -3797,7 +3811,6 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     state,
     recordDisplayRows: { value: [] },
     readRecordIdentitySources: async () => ({}),
-    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
     adoptCanonicalRenderArtifacts: () => {},

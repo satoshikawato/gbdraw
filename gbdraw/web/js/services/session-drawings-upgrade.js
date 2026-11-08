@@ -205,9 +205,13 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  * their Results (a Session 27-44 saved none, and Python's conversion adds
  * none: Load records them, `createSavedResultPlan`). No other reader compares
  * source versions. `resultsRecordPythonPaint` is the Web's own: Python's twin
- * (`ModeScopedSourceFacts`) reads no Results.
+ * (`ModeScopedSourceFacts`) reads no Results. `ringSettingStored` is the
+ * Web's own too: a Session 51 stores a Circular drawing's Show Comparison
+ * Rings (`circularConservation.enabled`) as a setting; the writers of the
+ * Sessions before it turned the rings on by the ring files, so Load reads
+ * theirs from the files (OV-2818). Python reads no Web ring setting.
  * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean,
- *   resultsRecordPythonPaint: boolean }} SourceFacts
+ *   resultsRecordPythonPaint: boolean, ringSettingStored: boolean }} SourceFacts
  */
 /**
  * The one reading of a Session file's source facts by its version, for the
@@ -223,7 +227,8 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
 export const sessionSourceFactsOf = (version, hasDraft) => ({
   cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
   proteinResultsInDrawnFrame: version >= MODE_SCOPED_SESSION_VERSION && version < FILE_IMPORT_ORIGIN_SESSION_VERSION,
-  resultsRecordPythonPaint: version >= MODE_SCOPED_SESSION_VERSION
+  resultsRecordPythonPaint: version >= MODE_SCOPED_SESSION_VERSION,
+  ringSettingStored: version >= LAYOUT.version
 });
 /**
  * One drawing of a Session 51 (`SessionDrawing`, gbdraw/session_contract.py).

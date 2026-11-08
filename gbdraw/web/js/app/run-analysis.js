@@ -1554,8 +1554,6 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
  *   `builtFromDraft` says the draft's rings at this adoption are the rings the request was built from: a Generate whose
  *   rings did not change while it ran, not the committed request (a rotation, an alignment, a placement).
- * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
- *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -1622,7 +1620,6 @@ export const createRunAnalysis = ({
   isCurrentFeature,
   serializeCanonicalFiles, encodeSessionResources,
   adoptCanonicalRenderArtifacts,
-  setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
@@ -3258,10 +3255,9 @@ export const createRunAnalysis = ({
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
           : normalizeFileList(drawing.files.c_conservation_fastas);
-        const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
-        setCircularConservationEnabled(drawing, shouldDrawCircularPairwiseComparisons);
-
-        if (shouldDrawCircularPairwiseComparisons) {
+        // Show Comparison Rings decides whether Generate searches and draws the
+        // rings (OV-2818); the request reads the same setting.
+        if (drawing.circularConservation.enabled === true && circularConservationSourceFiles.length > 0) {
           setProcessingStatus(t('Preparing sequence comparisons for the circular diagram...'));
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.

@@ -16,7 +16,7 @@ import {
   depthSourceLoss,
   reconcileManagedDepthSlots,
   representativeDepthFiles,
-  showDepthAfterSourceChange
+  shownAfterSourceChange
 } from '../services/depth-track-state.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -990,7 +990,7 @@ export const createCircularTrackSlotEditor = ({
     mutate();
     // Adding or removing a series reindexes the stack in its own `mutate`.
     if (change.series === 'same') reconcileCircularDepthSlots(drawing, previousSourced);
-    const show = showDepthAfterSourceChange({
+    const show = shownAfterSourceChange({
       wasSourced: previousSourced.length > 0,
       isSourced: circularSourcedDepthTrackIndexes(drawing).length > 0,
       inShownDrawing: drawing.id === state.activeDrawing().id,

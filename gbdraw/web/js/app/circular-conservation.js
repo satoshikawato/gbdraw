@@ -1,8 +1,9 @@
 // @ts-check
 // The comparison rings of a Circular drawing (similarity rings, kept as
 // `circularConservation`): their source files, the series each file draws,
-// whether the rings are on, the managed stack rows that follow them, and the
-// ring controls of the Circular panel. The composition root passes the state,
+// Show Comparison Rings (`enabled`, a stored setting that follows the ring
+// files as Show Depth follows the Depth files), the managed stack rows that
+// follow them, and the ring controls of the Circular panel. The composition root passes the state,
 // the shown-drawing admission, the stack editor's ring-row functions, the
 // LOSAT cache-info write, and History's undoable step as ports.
 import { bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource } from '../services/drawing/inputs.js';
@@ -19,6 +20,7 @@ import {
   reconcileConservationSeries,
   withoutConservationSeries
 } from '../services/conservation-series.js';
+import { shownAfterSourceChange } from '../services/depth-track-state.js';
 import { msg, t } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
@@ -28,6 +30,7 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { ConservationFile, RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 
 const { computed } = window.Vue;
 
@@ -46,7 +49,10 @@ const { computed } = window.Vue;
  *   apply: (turnOffReaching: () => void) => unknown
  * ) => unknown} AskRingSourceRemoval
  */
-/** @typedef {(drawing: DrawingState, nextFiles: InputFileCandidate | readonly InputFileCandidate[]) => void} SetRingSourceFiles */
+/**
+ * The ring source files of a drawing, set by a change of the kind `change` names.
+ * @typedef {(drawing: DrawingState, nextFiles: InputFileCandidate | readonly InputFileCandidate[], change: DepthSourceChange) => void} SetRingSourceFiles
+ */
 
 /** @param {DrawingState} drawing */
 const isCircularConservationUploadSource = (drawing) => (
@@ -65,8 +71,34 @@ const getCircularConservationSourceFiles = (drawing) => (
     : normalizeFileList(drawing.files.c_conservation_fastas)
 );
 /** @param {DrawingState} drawing */
-const syncCircularConservationEnabled = (drawing, sourceFiles = getCircularConservationSourceFiles(drawing)) => {
-  drawing.circularConservation.enabled = normalizeFileList(sourceFiles).length > 0;
+const hasRingSourceFiles = (drawing) => getCircularConservationSourceFiles(drawing).length > 0;
+/** A ring file added as a new series (Add Seq, an upload). @type {DepthSourceChange} */
+const RING_FILE_ADDED = Object.freeze({ setsFile: true, series: 'added' });
+/** A series removed with its ring file. @type {DepthSourceChange} */
+const RING_FILE_REMOVED = Object.freeze({ setsFile: false, series: 'removed' });
+/** A change of the ring source or of its files that adds or removes no series. @type {DepthSourceChange} */
+const RING_SOURCE_CHANGED = Object.freeze({ setsFile: false, series: 'same' });
+/** A ring file replaced in its place. @type {DepthSourceChange} */
+const RING_FILE_REPLACED = Object.freeze({ setsFile: true, series: 'same' });
+
+/**
+ * A change of the ring source files (`write` binds them) and the setting that
+ * follows it: Show Comparison Rings turns on with the first ring file or a
+ * ring file added or set in the shown drawing, and off with the last, by the
+ * rule of Show Depth (`shownAfterSourceChange`, OV-2818); the caller then
+ * reconciles the rings.
+ * @param {WebState} state @param {DrawingState} drawing @param {DepthSourceChange} change @param {() => void} write
+ */
+const changeRingSourceFiles = (state, drawing, change, write) => {
+  const wasSourced = hasRingSourceFiles(drawing);
+  write();
+  const shown = shownAfterSourceChange({
+    wasSourced,
+    isSourced: hasRingSourceFiles(drawing),
+    inShownDrawing: drawing.id === state.activeDrawing().id,
+    change
+  });
+  if (shown !== null) drawing.circularConservation.enabled = shown;
 };
 
 /**
@@ -102,15 +134,17 @@ export const createCircularConservationSources = ({
     bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', []);
     setConservationBlastsSource(drawing.slices.inputs, null);
   };
-  /** @param {DrawingState} drawing @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles Files, or refs kept */
-  const setCircularConservationSourceFiles = (drawing, nextFiles) => {
-    if (isCircularConservationUploadSource(drawing)) {
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
-      setConservationBlastsSource(drawing.slices.inputs, null);
-    } else {
-      clearDerivedCircularConservationBlasts(drawing);
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
-    }
+  /** @type {SetRingSourceFiles} */
+  const setCircularConservationSourceFiles = (drawing, nextFiles, change) => {
+    changeRingSourceFiles(state, drawing, change, () => {
+      if (isCircularConservationUploadSource(drawing)) {
+        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
+        setConservationBlastsSource(drawing.slices.inputs, null);
+      } else {
+        clearDerivedCircularConservationBlasts(drawing);
+        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
+      }
+    });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
   };
@@ -122,10 +156,12 @@ export const createCircularConservationSources = ({
    */
   const replaceCircularConservationBlasts = (drawing, nextFiles) => {
     if (isCircularConservationUploadSource(drawing)) {
-      setCircularConservationSourceFiles(drawing, nextFiles);
+      setCircularConservationSourceFiles(drawing, nextFiles, RING_FILE_REPLACED);
       return;
     }
-    bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
+    changeRingSourceFiles(state, drawing, RING_FILE_REPLACED, () => {
+      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
+    });
     reconcileCircularConservation(drawing);
   };
   /**
@@ -149,20 +185,19 @@ export const createCircularConservationSources = ({
     apply
   });
   // The comparison rings of a Circular drawing follow their source files: the
-  // series, whether the rings are on, and the managed stack rows. Each
-  // transition that changes the source, its files, or the legacy series names
-  // calls it (R10): the ring controls, a Generate that adopts a LOSAT result,
-  // and Session Load (`afterImport`). A History restore and the Load rollback
-  // install what they captured.
+  // series and the managed stack rows. Each transition that changes the
+  // source, its files, or the legacy series names calls it (R10): the ring
+  // controls, a Generate that adopts a LOSAT result, Reset Settings, and
+  // Session Load (`afterImport`). It leaves Show Comparison Rings as it is: a
+  // change of the files sets it first (`changeRingSourceFiles`). A History
+  // restore and the Load rollback install what they captured.
   /** @param {DrawingState} drawing */
   const reconcileCircularConservation = (drawing) => {
     const sourceFiles = getCircularConservationSourceFiles(drawing);
     if (isDerivedCircularConservationReplay(drawing)) {
-      drawing.circularConservation.enabled = true;
       refreshCircularConservationSlots(drawing);
       return;
     }
-    syncCircularConservationEnabled(drawing, sourceFiles);
     const legacyLabels = parseConservationLabelText(drawing.circularConservation.labels);
     const nextSeries = reconcileConservationSeries({
       sourceFiles,
@@ -172,21 +207,23 @@ export const createCircularConservationSources = ({
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
     refreshCircularConservationSlots(drawing);
   };
-  // Reset Settings: the rings follow the kept comparison files as a new drawing
-  // with those files uploaded has them, and the LOSAT result the old settings
-  // searched goes with those settings (OV-2758).
+  // Reset Settings: the kept comparison files keep a ring row each, with the
+  // default settings, and Show Comparison Rings stays off as Reset left it, as
+  // Show Depth does for kept Depth files (OV-2818); the LOSAT result the old
+  // settings searched goes with those settings (OV-2758).
   /** @param {DrawingState} drawing */
   const rederiveCircularConservation = (drawing) => {
     clearDerivedCircularConservationBlasts(drawing);
     reconcileCircularConservation(drawing);
   };
-  // Generate turns the rings on or off by their source files; the managed stack
-  // rows follow in the same step, also when the run then fails or is canceled.
-  /** @param {DrawingState} drawing @param {boolean} enabled */
-  const setCircularConservationEnabled = (drawing, enabled) => {
-    if (drawing.circularConservation.enabled === enabled) return;
-    drawing.circularConservation.enabled = enabled;
-    refreshCircularConservationSlots(drawing);
+  // Session Load (`afterImport`): a Session whose Show Comparison Rings is not
+  // a setting (`ringSettingStored` false: before Session 51, the drawings
+  // layout; their writers turned the rings on by the ring files) shows the
+  // rings when it has ring files; a Session 51 keeps the setting it saved.
+  /** @param {DrawingState} drawing @param {boolean} ringSettingStored */
+  const reconcileLoadedCircularConservation = (drawing, ringSettingStored) => {
+    if (!ringSettingStored) drawing.circularConservation.enabled = hasRingSourceFiles(drawing);
+    reconcileCircularConservation(drawing);
   };
   // A ring row's name or color, or a record label read for it, shows in its
   // managed stack row.
@@ -198,7 +235,7 @@ export const createCircularConservationSources = ({
   };
   return {
     clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
-    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, setCircularConservationEnabled,
+    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   };
 };
@@ -233,8 +270,10 @@ export const createCircularConservationSeriesPanel = ({
     const sourceFiles = normalizeFileList(nextFiles);
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
-      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', sourceFiles);
-      setConservationBlastsSource(drawing.slices.inputs, null);
+      changeRingSourceFiles(state, drawing, sourceFiles.length > 0 ? RING_FILE_ADDED : RING_FILE_REMOVED, () => {
+        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', sourceFiles);
+        setConservationBlastsSource(drawing.slices.inputs, null);
+      });
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', []);
       writeLosatCacheInfo([]);
       reconcileCircularConservation(drawing);
@@ -286,12 +325,19 @@ export const createCircularConservationSeriesPanel = ({
   const openCircularConservationComparisonFilePicker = () => {
     circularConservationFastaInput.value?.click();
   };
-  // The ring controls' transitions: the source radio, and a ring row's name
-  // or color.
-  const changeCircularConservationSource = () => {
-    const drawing = shownDrawingOfMode('circular');
-    if (drawing) reconcileCircularConservation(drawing);
-  };
+  // The ring controls' transitions: the source radio (it changes the ring
+  // files the drawing uses, so Show Comparison Rings follows them), Show
+  // Comparison Rings, and a ring row's name or color.
+  /** @param {'losat' | 'upload'} source */
+  const changeCircularConservationSource = (source) => shownAction('circular', (drawing) => {
+    changeRingSourceFiles(state, drawing, RING_SOURCE_CHANGED, () => { drawing.circularConservation.source = source; });
+    reconcileCircularConservation(drawing);
+  });
+  /** @param {boolean} shown */
+  const setCircularConservationShown = (shown) => shownAction('circular', (drawing) => {
+    drawing.circularConservation.enabled = shown;
+    refreshCircularConservationSlots(drawing);
+  });
   const refreshShownCircularConservationSlots = () => {
     const drawing = shownDrawingOfMode('circular');
     if (drawing) refreshCircularConservationSlots(drawing);
@@ -299,7 +345,7 @@ export const createCircularConservationSeriesPanel = ({
   return {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
     moveCircularConservationSeries, openCircularConservationComparisonFilePicker, changeCircularConservationSource,
-    refreshShownCircularConservationSlots
+    setCircularConservationShown, refreshShownCircularConservationSlots
   };
 };
 
@@ -359,9 +405,11 @@ export const createCircularConservationComparisonFiles = ({
     // captures its before now, the row appears at once, and the step commits
     // after the label read, so Undo and Redo restore the label.
     const step = runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
-    clearDerivedCircularConservationBlasts(drawing);
-    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
-      [...normalizeFileList(drawing.files.c_conservation_fastas), selectedRef]);
+    changeRingSourceFiles(state, drawing, RING_FILE_ADDED, () => {
+      clearDerivedCircularConservationBlasts(drawing);
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
+        [...normalizeFileList(drawing.files.c_conservation_fastas), selectedRef]);
+    });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
     if (target) target.value = '';
@@ -405,11 +453,12 @@ export const createCircularConservationComparisonFiles = ({
       const applyKept = (turnOffReaching) => {
         drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
         drawing.circularConservation.labels = kept.labels;
-        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', kept.blasts);
-        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', kept.fastas);
-        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources);
-        setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
-        drawing.circularConservation.enabled = kept.enabled;
+        changeRingSourceFiles(state, drawing, RING_FILE_REMOVED, () => {
+          bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', kept.blasts);
+          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', kept.fastas);
+          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources);
+          setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
+        });
         writeLosatCacheInfo([]);
         refreshCircularConservationSlots(drawing);
         turnOffReaching?.();
@@ -433,7 +482,7 @@ export const createCircularConservationComparisonFiles = ({
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources',
           drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== sourceIndex));
       }
-      setCircularConservationSourceFiles(drawing, keptFiles);
+      setCircularConservationSourceFiles(drawing, keptFiles, RING_FILE_REMOVED);
       turnOffReaching?.();
     };
     return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();

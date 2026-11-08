@@ -9,7 +9,7 @@ import {
   depthSourceLoss,
   depthTrackMatrixWidth,
   reconcileManagedDepthSlots,
-  showDepthAfterSourceChange
+  shownAfterSourceChange
 } from '../services/depth-track-state.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
@@ -908,7 +908,7 @@ export const createLinearTrackSlotEditor = ({
     mutate();
     // Adding or removing a series reindexes the stack in its own `mutate`.
     if (change.series === 'same') reconcileLinearDepthSlots(drawing, previousSourced);
-    const show = showDepthAfterSourceChange({
+    const show = shownAfterSourceChange({
       wasSourced: previousSourced.length > 0,
       isSourced: linearSourcedDepthTrackIndexesForDrawing(drawing).length > 0,
       inShownDrawing: drawing.id === state.activeDrawing().id,
