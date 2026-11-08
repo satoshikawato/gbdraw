@@ -85,6 +85,11 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
     ("GALLERY_SESSION_DRAWN_DRAWINGS", "gbdraw.session_contract", "GALLERY_SESSION_DRAWN_DRAWINGS"),
+    # The Session file's entries and its refusals (the twin's vectors pin the rest).
+    ("SESSION_DOCUMENT_ENTRY", "gbdraw.session_container", "SESSION_DOCUMENT_ENTRY"),
+    ("SESSION_RESOURCE_ENTRY_PREFIX", "gbdraw.session_container", "SESSION_RESOURCE_ENTRY_PREFIX"),
+    ("SESSION_CONTAINER_DAMAGED_MESSAGE", "gbdraw.session_container", "SESSION_CONTAINER_DAMAGED_MESSAGE"),
+    ("SESSION_CONTAINER_NO_DOCUMENT_MESSAGE", "gbdraw.session_container", "SESSION_CONTAINER_NO_DOCUMENT_MESSAGE"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
     # A "This feature only" color rule names a feature instance; the Source
     # recipe names the CLI record of its record key.
@@ -363,7 +368,11 @@ def _references(shape: object) -> set[str]:
 
 
 def render_session_typedefs_module() -> str:
-    from gbdraw.session_contract import describe_session_admission, describe_session_document
+    from gbdraw.session_contract import (
+        describe_session_admission,
+        describe_session_container_resource,
+        describe_session_document,
+    )
     from gbdraw.session_request_codec import describe_canonical_request
 
     description = describe_session_document()
@@ -403,6 +412,7 @@ def render_session_typedefs_module() -> str:
         "\n"
         f"/** @import {{ {', '.join(imported)} }} from './{REQUEST_TARGET.name}' */\n"
         + _typedefs(types)
+        + _typedefs(describe_session_container_resource()["types"])
         + "/** @typedef {SessionInput & { format: "
         + f"{_jsdoc_type(root['format'])}, version: {_jsdoc_type(root['version'])}"
         + " }} SessionEnvelope */\n"

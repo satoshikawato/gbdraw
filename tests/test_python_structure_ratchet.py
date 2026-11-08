@@ -83,6 +83,7 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "api",
             "interface",
             "session",
+            "session_container",
             "session_contract",
             "session_drawings",
             "session_io",

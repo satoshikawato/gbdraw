@@ -388,6 +388,14 @@
  * @property {unknown} [features]
  * @property {unknown} [files]
  */
+/**
+ * @typedef {object} SessionContainerResource
+ * @property {string} kind
+ * @property {string} name
+ * @property {string} type
+ * @property {number} size
+ * @property {number} lastModified
+ */
 /** @typedef {SessionInput & { format: 'gbdraw-session', version: number }} SessionEnvelope */
 /**
  * @typedef {{

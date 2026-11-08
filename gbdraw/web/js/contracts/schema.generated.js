@@ -115,6 +115,18 @@ export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 // gbdraw/session_contract.py: GALLERY_SESSION_DRAWN_DRAWINGS
 export const GALLERY_SESSION_DRAWN_DRAWINGS = 1;
 
+// gbdraw/session_container.py: SESSION_DOCUMENT_ENTRY
+export const SESSION_DOCUMENT_ENTRY = 'gbdraw-session.json';
+
+// gbdraw/session_container.py: SESSION_RESOURCE_ENTRY_PREFIX
+export const SESSION_RESOURCE_ENTRY_PREFIX = 'resources/';
+
+// gbdraw/session_container.py: SESSION_CONTAINER_DAMAGED_MESSAGE
+export const SESSION_CONTAINER_DAMAGED_MESSAGE = 'This file is not a gbdraw Session: it is incomplete or damaged.';
+
+// gbdraw/session_container.py: SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
+export const SESSION_CONTAINER_NO_DOCUMENT_MESSAGE = 'This file is not a gbdraw Session: it has no gbdraw-session.json.';
+
 // gbdraw/api/options.py: LEGEND_POSITIONS
 /** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */
 export const LEGEND_POSITIONS = Object.freeze({

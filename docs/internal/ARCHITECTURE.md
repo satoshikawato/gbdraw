@@ -56,7 +56,7 @@ below it. An arrow points to the layer below.
 ```mermaid
 flowchart TB
   L5["<b>entry points and adapters</b><br/>package root · _build_support · _web_assets · circular · cli<br/>cli_utils · crop_genbank · linear · web_support"]
-  L4["<b>API and Session</b><br/>api · interface · session · session_contract · session_drawings<br/>session_io · session_legacy_values · session_migration · session_request_codec · session_resources"]
+  L4["<b>API and Session</b><br/>api · interface · session · session_container · session_contract<br/>session_drawings · session_io · session_legacy_values · session_migration · session_request_codec<br/>session_resources"]
   L3["<b>drawing</b><br/>diagrams · render · render_stages"]
   L2["<b>placement</b><br/>configurators · labels · legend"]
   L1["<b>model and geometry</b><br/>analysis · annotations · auto_sizes · canvas · comparisons<br/>config · definition_line_styles · features · io · layout<br/>linear_comparison · losat_setup · mode_profiles · svg · tracks"]

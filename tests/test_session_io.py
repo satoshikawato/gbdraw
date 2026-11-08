@@ -18,6 +18,7 @@ from Bio.SeqRecord import SeqRecord
 
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.circular as circular_cli_module
+import gbdraw.session_container as session_container_module
 import gbdraw.session_io as session_io_module
 from gbdraw.analysis.protein_colinearity import (
     build_protein_losat_cache_key,
@@ -167,7 +168,7 @@ def test_write_session_json_no_replace_commit_preserves_late_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output_path = tmp_path / "saved.gbdraw-session.json"
-    real_commit = session_io_module.commit_staged_output_file
+    real_commit = session_container_module.commit_staged_output_file
 
     def create_target_immediately_before_commit(
         staged_path: Path,
@@ -179,7 +180,7 @@ def test_write_session_json_no_replace_commit_preserves_late_target(
         real_commit(staged_path, target_path, overwrite=overwrite)
 
     monkeypatch.setattr(
-        session_io_module,
+        session_container_module,
         "commit_staged_output_file",
         create_target_immediately_before_commit,
     )

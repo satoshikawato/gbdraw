@@ -301,11 +301,23 @@ class SessionDrawing(_SessionDrawingRequired, total=False):
     webFiles: dict[str, object]
 
 
+class SessionContainerResource(TypedDict):
+    """A resource of a Session file (``gbdraw.session_container``): what the
+    input file was. Its bytes are the entry ``resources/<id>``, as the input
+    file holds them, gzip or not; the ZIP's sizes and CRC-32 check them."""
+
+    kind: str
+    name: str
+    type: str
+    size: int
+    lastModified: int
+
+
 class _GbdrawSession51Required(TypedDict):
     format: Literal["gbdraw-session"]
     version: int
     createdAt: str
-    resources: dict[str, object]
+    resources: dict[str, SessionContainerResource]
     ui: SessionProjectUi
     drawings: list[SessionDrawing]
 
@@ -390,6 +402,19 @@ def describe_session_document() -> dict[str, Any]:
     top_level = [*types_[root["name"]]["fields"], *get_type_hints(LegacySessionFields)]
     named("SessionInput", obj({key: UNKNOWN for key in top_level}, optional=top_level))
     return {"root": root["name"], "types": types_}
+
+
+def describe_session_container_resource() -> dict[str, Any]:
+    """Describe a resource descriptor of a Session file (``SessionContainerResource``).
+
+    Returns ``{"types": {name: shape}}`` with the shapes of
+    :mod:`gbdraw.contract_shapes`; ``tools/generate_web_contracts.py`` writes
+    its typedef beside the Session's.
+    """
+
+    from .contract_shapes import typed_dict_shape
+
+    return {"types": {"SessionContainerResource": typed_dict_shape(SessionContainerResource)}}
 
 
 def describe_session_admission() -> dict[str, Any]:
@@ -591,6 +616,7 @@ __all__ = [
     "GbdrawSession",
     "GbdrawSession51",
     "SESSION_ID_RE",
+    "SessionContainerResource",
     "SessionDrawing",
     "SessionProjectUi",
     "SessionProjectWebFiles",
@@ -601,6 +627,7 @@ __all__ = [
     "SessionOtherModeUi",
     "SessionRunMetadata",
     "describe_session_admission",
+    "describe_session_container_resource",
     "describe_session_document",
     "keys_of",
 ]

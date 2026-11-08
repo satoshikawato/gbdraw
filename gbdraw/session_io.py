@@ -15,7 +15,6 @@ import json
 import math
 import os
 import re
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    BinaryIO,
     Literal,
     Mapping,
     MutableMapping,
@@ -70,7 +70,7 @@ from .exceptions import GbdrawError, ValidationError
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
-from .render.output_paths import OutputExistsError, commit_staged_output_file
+from .session_container import invalid_session_json_message, parse_session_json, staged_session_file
 from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -684,12 +684,9 @@ def _read_session_json(path: str | Path) -> object:
 
     session_path = Path(path)
     try:
-        return json.loads(
-            _read_session_text(session_path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except (json.JSONDecodeError, UnicodeDecodeError, *GZIP_ERRORS) as exc:
-        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
+        return parse_session_json(_read_session_text(session_path), session_path)
+    except (UnicodeDecodeError, *GZIP_ERRORS) as exc:
+        raise ValidationError(invalid_session_json_message(session_path)) from exc
     except OSError as exc:
         raise ValidationError(f"Could not read session file: {session_path}") from exc
 
@@ -4763,17 +4760,6 @@ def session_mode(session: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """Reject duplicate JSON object keys before the decoder can discard them."""
-
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValidationError(f"Session JSON contains a duplicate object key: {key!r}.")
-        result[key] = value
-    return result
-
-
 def encode_depth_text(text: str) -> dict[str, Any] | None:
     """Encode samtools depth text using the browser session depth codec schema."""
 
@@ -5884,56 +5870,19 @@ def write_serialized_session(path: str | Path, data: bytes, *, overwrite: bool =
 
 
 @contextmanager
-def _staged_session_file(path: str | Path, *, overwrite: bool) -> Iterator[io.BufferedIOBase]:
-    """The one stream every Session file is written to.
-
-    A name that ends in ``.gz`` gets rsyncable gzip (``gbdraw.io.rsyncable_gzip``),
-    so a regenerated Session shares most compressed bytes with its previous
-    version; any other name gets the bytes as written. The file is staged in the
-    same directory and becomes ``path`` only when the block ends without an error.
+def _staged_session_file(path: str | Path, *, overwrite: bool) -> Iterator[io.BufferedIOBase | BinaryIO]:
+    """A JSON Session file's stream: rsyncable gzip for a name that ends in
+    ``.gz`` (``gbdraw.io.rsyncable_gzip``), so a regenerated Session shares most
+    compressed bytes with its previous version; the bytes as written otherwise.
+    Staged as every Session file is (``session_container.staged_session_file``).
     """
 
-    output_path = Path(path)
-    temp_path: Path | None = None
-    temp_fd: int | None = None
-    try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_fd, temp_name = tempfile.mkstemp(
-            prefix=f".{output_path.name}.",
-            suffix=".tmp",
-            dir=output_path.parent,
-        )
-        temp_path = Path(temp_name)
-        raw_file = os.fdopen(temp_fd, "wb")
-        temp_fd = None
-        with raw_file:
-            if output_path.suffix.lower() == ".gz":
-                with RsyncableGzipWriter(raw_file) as compressed_file:
-                    yield compressed_file
-            else:
-                yield raw_file
-            raw_file.flush()
-            os.fsync(raw_file.fileno())
-        commit_staged_output_file(
-            temp_path,
-            output_path,
-            overwrite=overwrite,
-        )
-    except FileExistsError as exc:
-        raise OutputExistsError((output_path,), subject="Session output") from exc
-    except OSError as exc:
-        raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
-    finally:
-        if temp_fd is not None:
-            try:
-                os.close(temp_fd)
-            except OSError:
-                pass
-        try:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+    with staged_session_file(path, overwrite=overwrite) as raw_file:
+        if Path(path).suffix.lower() == ".gz":
+            with RsyncableGzipWriter(raw_file) as compressed_file:
+                yield compressed_file
+        else:
+            yield raw_file
 
 
 def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
