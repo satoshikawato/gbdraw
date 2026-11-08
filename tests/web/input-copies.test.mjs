@@ -279,6 +279,38 @@ test('a first read whose bytes are detached before they are copied keeps its fac
   assert.deepEqual(await readFileBytes(file), bytes, 'the File is read again');
 });
 
+test('a copy whose source is detached after its first piece holds fewer bytes than the facts count, and fails', async () => {
+  let writes = 0;
+  /** @type {Promise<Uint8Array> | null} */
+  let first = null;
+  /** @type {{ reads: number } | null} */
+  let file = null;
+  const fileSystem = createFakeFileSystem({
+    // While the first piece is written, the facts are hashed and the source bytes go elsewhere.
+    writeGate: async () => {
+      writes += 1;
+      if (writes !== 1) return;
+      const bytes = await first;
+      await readFileContentFacts(file);
+      structuredClone(bytes.buffer, { transfer: [bytes.buffer] });
+    }
+  });
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const content = new Uint8Array(PIECE + 1024).map((_, index) => index % 251);
+  file = chosenFile(content, 'two-pieces.gb');
+  keepFileCopy(file);
+  first = readFileBytes(file);
+  assert.equal((await within(readFileContentFacts(file))).byteLength, content.byteLength);
+  await until(() => writes >= 1 && fileSystem.copyFiles().every(({ open }) => !open));
+  await flush();
+  assert.equal(writes, 1, 'the loop stopped at the detached source');
+  // Lengths and a comparison, not deepEqual: a failure message of 16 MiB arrays would take minutes.
+  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes.byteLength), [], 'no truncated copy is kept');
+  const again = await readFileBytes(file);
+  assert.ok(Buffer.from(again).equals(Buffer.from(content)), 'the File is read again');
+  assert.equal(file.reads, 2);
+});
+
 test('without a copy, a File that returns other bytes than its first read is refused (Firefox)', async () => {
   const bytes = new TextEncoder().encode('LOCUS f\n//\n');
   const longer = chosenFile(bytes);

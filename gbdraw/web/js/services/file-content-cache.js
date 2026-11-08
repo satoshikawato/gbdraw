@@ -451,19 +451,44 @@ export const holdFileCopy = (file) => {
 };
 
 /**
+ * A copy a failed import keeps for its Retry: the error that offers Retry and
+ * the drawing it failed in.
+ * @typedef {{ readonly error: unknown, readonly drawing: object, readonly end: () => void }} RetryCopy
+ */
+/** @type {Set<RetryCopy>} */
+const retryCopies = new Set();
+/** @param {RetryCopy | null} held */
+const endRetryCopy = (held) => {
+  if (held && retryCopies.delete(held)) held.end();
+};
+
+/**
  * The copy that one kind of import's failure offers to Retry (PD-OI-121), so
  * Retry reads the content chosen even after the file changed: each call keeps
- * the copy of `file` (a failure that offers Retry of it) and lets go of the one
- * kept before; null (no failure offers Retry) lets it go.
- * @returns {(file: unknown) => void}
+ * the copy of `file` for the failure `offer` names and lets go of the one kept
+ * before; null (no failure offers Retry) lets it go. A copy also goes once its
+ * Retry can no longer be offered (`endStaleRetryCopies`).
+ * @returns {(file: unknown, offer?: { error: unknown, drawing: object }) => void}
  */
 export const createRetryCopyHold = () => {
-  let end = () => {};
-  return (file) => {
-    const next = file ? holdFileCopy(file) : () => {};
-    end();
-    end = next;
+  /** @type {RetryCopy | null} */
+  let held = null;
+  return (file, offer) => {
+    const next = file && offer ? { error: offer.error, drawing: offer.drawing, end: holdFileCopy(file) } : null;
+    if (next) retryCopies.add(next);
+    endRetryCopy(held);
+    held = next;
   };
+};
+
+/**
+ * Ends the Retry copies whose Retry can no longer be offered: their error is
+ * no longer the one shown (cleared or replaced), or a Load or History restore
+ * replaced their drawing.
+ * @param {unknown} shownError @param {readonly object[]} drawings The drawings now.
+ */
+export const endStaleRetryCopies = (shownError, drawings) => {
+  for (const held of [...retryCopies]) if (held.error !== shownError || !drawings.includes(held.drawing)) endRetryCopy(held);
 };
 
 /** @param {unknown} file */

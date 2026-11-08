@@ -105,14 +105,21 @@ class _GuiServer(socketserver.TCPServer):
     allow_reuse_address = sys.platform != "win32"
 
 
+_PROBE_TIMEOUT_S = 0.1
+"""How long a probe waits for a loopback server: one answers in well under a
+millisecond, and Windows retries a refused loopback connection until the timeout,
+so a short one bounds the start-up wait at about 0.2 s."""
+
+
 def _port_answers(port: int) -> bool:
     """Whether a server already accepts connections on ``port`` of 127.0.0.1 or ::1,
     either of which ``localhost`` can reach. It also finds a server on every
-    address, which the reuse option would let a bind on macOS share."""
+    address, which the reuse option would let a bind on macOS share. A probe that
+    times out found no server."""
     for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
         try:
             with socket.socket(family, socket.SOCK_STREAM) as probe:
-                probe.settimeout(0.5)
+                probe.settimeout(_PROBE_TIMEOUT_S)
                 if probe.connect_ex((host, port)) == 0:
                     return True
         except OSError:

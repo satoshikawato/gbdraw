@@ -1835,7 +1835,7 @@ export const createFeatureLabelActions = ({
       labelImportFailure.value = { error: model, snapshot: before, intent: labelIntent, revision,
         input: event.sourceInput || input,
         retry: () => loadLabelOverrideTable({ target: { files: [file], value: '' }, sourceInput: event.sourceInput || input }) };
-      keepRetryCopy(file);
+      keepRetryCopy(file, { error: model, drawing });
     } finally {
       endRead();
       if (input?.files?.[0] === file) input.value = '';

@@ -118,6 +118,37 @@ def test_a_restart_right_after_the_server_stopped_binds_the_fixed_port_again(
         again.server_close()
 
 
+class _ProbeSocket:
+    """A socket whose connect never completes: each probe times out, as a refused
+    loopback connection does on Windows."""
+
+    timeouts: list[float | None] = []
+
+    def __init__(self, *_args: object) -> None:
+        pass
+
+    def __enter__(self) -> _ProbeSocket:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        pass
+
+    def settimeout(self, value: float | None) -> None:
+        _ProbeSocket.timeouts.append(value)
+
+    def connect_ex(self, _address: object) -> int:
+        raise TimeoutError("timed out")
+
+
+def test_a_probe_that_times_out_finds_no_server_and_waits_briefly(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ProbeSocket.timeouts = []
+    monkeypatch.setattr(cli.socket, "socket", _ProbeSocket)
+    assert cli._port_answers(cli.GUI_PORT) is False
+    # Both loopback addresses are probed, each with a short timeout, so the start waits at most about 0.2 s.
+    assert len(_ProbeSocket.timeouts) == 2
+    assert all(value is not None and 0 < value <= 0.1 for value in _ProbeSocket.timeouts)
+
+
 def _get(port: int, path: str, headers: dict[str, str] | None = None) -> tuple[int, Message]:
     request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers or {})
     try:

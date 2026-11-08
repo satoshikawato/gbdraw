@@ -24,13 +24,14 @@ const { installShownDrawing } = await import('../../gbdraw/web/js/services/confi
 const card = (key) => state.activeDrawing().files[key];
 const bindCard = (key, file) => bindInputFile(state.inputFiles, state.activeDrawing().slices.inputs, key, file);
 
-// The watcher owner's watches: `runWatches()` calls each one whose getter now returns another value, as Vue does.
-/** @type {{ source: () => unknown, callback: (value: unknown) => unknown, last: unknown }[]} */
+// The watcher owner's watches: `runWatches()` calls each one whose getter, or one of whose getters, now returns
+// another value, as Vue does.
+/** @type {{ source: () => unknown[], callback: (value: unknown) => unknown, last: unknown[] }[]} */
 const watches = [];
 const runWatches = () => {
   for (const entry of watches) {
     const value = entry.source();
-    if (Object.is(value, entry.last)) continue;
+    if (value.every((each, index) => Object.is(each, entry.last[index]))) continue;
     entry.last = value;
     entry.callback(value);
   }
@@ -52,7 +53,9 @@ const {
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
   watch: (source, callback) => {
-    if (typeof source === 'function') watches.push({ source, callback, last: source() });
+    const read = typeof source === 'function' ? () => [source()]
+      : Array.isArray(source) ? () => source.map((each) => (typeof each === 'function' ? each() : each?.value)) : null;
+    if (read) watches.push({ source: read, callback, last: read() });
     return () => {};
   },
   nextTick: async () => {},
@@ -305,6 +308,59 @@ test('a Load or History restore that replaces the drawings ends their card failu
     for (let round = 0; round < 500 && released.length === 0; round += 1) await new Promise((resolve) => setTimeout(resolve, 2));
     assert.equal(released.length, 1, 'the replaced drawing\'s failure lets the copy go');
   } finally {
+    useInputCopyStore(null);
+  }
+});
+
+test('a failed table import\'s Retry copy ends once its error is cleared or replaced, or its drawing is replaced', async () => {
+  const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
+  const { createRetryCopyHold, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  /** @type {string[]} */
+  const released = [];
+  let copies = 0;
+  useInputCopyStore({
+    openWriter: async () => ({
+      write: async (buffer) => buffer,
+      finish: async (token) => {
+        copies += 1;
+        return { read: async () => new Uint8Array(0), release: () => released.push(token) };
+      },
+      abort: () => {}
+    })
+  });
+  const wait = async (check) => {
+    for (let round = 0; round < 500 && !check(); round += 1) await new Promise((resolve) => setTimeout(resolve, 2));
+  };
+  try {
+    const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+    const ends = [
+      ['the error is cleared', () => { state.errorLog.value = null; }],
+      ['the error is replaced', () => { state.errorLog.value = { code: 'OTHER' }; }],
+      ['a Load replaces the drawing', () => {
+        state.replaceDrawings(state.drawingList().map((drawing) => createDrawingState(drawing.id, drawing.mode)), state.drawingTabs.value);
+      }]
+    ];
+    for (const [index, [cause, change]] of ends.entries()) {
+      const keepRetryCopy = createRetryCopyHold();
+      const bytes = new TextEncoder().encode(`*\t*\tlabel\t^a$\tT${index}\n`);
+      const file = { name: `labels-${index}.tsv`, arrayBuffer: async () => bytes.slice().buffer };
+      const error = { code: 'FAILED' };
+      state.errorLog.value = error;
+      runWatches();
+      // The import holds its read, fails, and keeps the copy for its Retry.
+      keepRetryCopy(file, { error, drawing: state.activeDrawing() });
+      await readFileBytes(file);
+      await wait(() => copies > index);
+      runWatches();
+      for (let round = 0; round < 20; round += 1) await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(released.length, index, 'the copy stays while its Retry is offered');
+      change();
+      runWatches();
+      await wait(() => released.length > index);
+      assert.equal(released.length, index + 1, `the copy goes once ${cause}`);
+    }
+  } finally {
+    state.errorLog.value = null;
     useInputCopyStore(null);
   }
 });

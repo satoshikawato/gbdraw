@@ -171,7 +171,7 @@ export const createFeatureEditTableActions = ({
       const sourceInput = event.sourceInput || input;
       failure.value = { error: model, input: sourceInput,
         retry: () => loadFeatureEditTable({ target: { files: [file], value: '' }, sourceInput }) };
-      keepRetryCopy(file);
+      keepRetryCopy(file, { error: model, drawing });
       return false;
     } finally {
       endRead();

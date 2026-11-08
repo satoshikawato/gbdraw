@@ -17,7 +17,7 @@ import {
   withoutImportedRows
 } from '../services/file-imports.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { holdFileCopy, readFileText } from '../services/file-content-cache.js';
+import { endStaleRetryCopies, holdFileCopy, readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 import {
   replacePriorityRules, replaceWhitelistRules, setBlacklistText
@@ -297,10 +297,13 @@ export const setupWatchers = ({
   const setAuxiliaryImportFailure = (drawing, failure) => {
     auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, drawing, failure, state.drawingList());
   };
-  // A Load or History restore replaces drawings: their failures, and the copies those keep, end then.
-  // Every write of the drawing store writes new tabs, and a switch of the shown drawing writes none.
-  watch(() => state.drawingTabs.value, () => {
-    auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, null, null, state.drawingList());
+  // A Load or History restore replaces drawings, and a shown error is cleared or replaced: the failures whose
+  // Retry can no longer be offered end then, with the copies they keep. Every write of the drawing store writes
+  // new tabs, and a switch of the shown drawing writes none.
+  watch([() => state.drawingTabs.value, () => errorLog.value], () => {
+    const drawings = state.drawingList();
+    auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, null, null, drawings);
+    endStaleRetryCopies(errorLog.value, drawings);
   });
   /** @param {DrawingState} drawing */
   const retryableAuxiliaryImportFailure = (drawing) => {
