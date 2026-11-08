@@ -357,6 +357,23 @@ const applyFontAndPaintStyles = (target, source) => {
   });
 };
 
+/**
+ * The element that styles each UTF-16 unit of `textPath`'s text, in `textContent` order: the textPath itself or the
+ * tspan run around the unit (an italic run of a region label, OV-2808).
+ * @param {Element} textPath
+ * @returns {Element[]}
+ */
+const textPathUnitStyles = (textPath) => {
+  /** @type {Element[]} */
+  const sources = [];
+  const walker = document.createTreeWalker(textPath, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const source = node.parentElement || textPath;
+    for (let unit = 0; unit < (node.nodeValue || '').length; unit += 1) sources.push(source);
+  }
+  return sources;
+};
+
 /** @param {SVGSVGElement} svg */
 const flattenTextPathsForPdf = (svg) => {
   const textElements = Array.from(svg.querySelectorAll('text')).filter((el) =>
@@ -375,6 +392,7 @@ const flattenTextPathsForPdf = (svg) => {
     const group = document.createElementNS(SVG_NS, 'g');
     copyAttributes(group, textEl, ['transform', 'opacity', 'display', 'visibility']);
     applyFontAndPaintStyles(group, textPath);
+    const unitStyles = textPathUnitStyles(textPath);
 
     // SVG character positions are UTF-16 indexes; keep surrogate pairs together.
     for (let i = 0; i < charCount && i < textContent.length; i += 1) {
@@ -399,6 +417,8 @@ const flattenTextPathsForPdf = (svg) => {
       charText.setAttribute('y', String(pos.y));
       charText.setAttribute('text-anchor', 'start');
       charText.setAttribute('dominant-baseline', 'alphabetic');
+      const unitStyle = unitStyles[index];
+      if (unitStyle && unitStyle !== textPath) applyFontAndPaintStyles(charText, unitStyle);
       if (rotation) {
         charText.setAttribute('transform', `rotate(${rotation} ${pos.x} ${pos.y})`);
       }

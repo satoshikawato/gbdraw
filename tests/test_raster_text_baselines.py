@@ -214,6 +214,39 @@ def test_png_export_keeps_mixed_style_caption_runs_where_browsers_draw_them(
     assert roman[0] == pytest.approx(browser_roman[0], abs=tolerance)
 
 
+def _mixed_caption_on_path_drawing() -> Drawing:
+    """The runs of ``_mixed_caption_drawing`` along a straight path, anchored at its middle (x 700) like a curved
+    region label (OV-2808)."""
+    drawing = Drawing(size=("1400px", "100px"), viewBox="0 0 1400 100")
+    drawing.add(drawing.rect(insert=(0, 0), size=(1400, 100), fill="white"))
+    path = drawing.path(d="M 0,60 L 1400,60", id="caption_path", fill="none", stroke="none")
+    drawing.defs.add(path)
+    caption = drawing.text("", text_anchor="middle", font_size="32.0", font_family=FONT_FAMILY)
+    text_path = drawing.textPath(path, text="", startOffset="50%")
+    for part in parse_mixed_content_text(MIXED_CAPTION):
+        italic = bool(part["italic"])
+        style = {"font_style": "italic"} if italic else {}
+        text_path.add(drawing.tspan(str(part["text"]), fill=ITALIC_FILL if italic else ROMAN_FILL, **style))
+    caption.add(text_path)
+    drawing.add(caption)
+    return drawing
+
+
+@requires_cairosvg
+def test_png_export_keeps_mixed_style_runs_on_a_path_where_browsers_draw_them() -> None:
+    pytest.importorskip("PIL")
+    tolerance = 3
+
+    png_bytes = api_render.render_to_bytes(_mixed_caption_on_path_drawing(), "png", dpi=96)
+
+    # Chromium draws the runs on the path where it draws them as plain text anchored at x 700.
+    italic, roman = _run_ink_columns(png_bytes)
+    assert italic[1] < roman[0], f"italic run {italic} overlaps roman run {roman}"
+    assert italic[0] == pytest.approx(277, abs=tolerance)
+    assert italic[1] == pytest.approx(579, abs=tolerance)
+    assert roman[0] == pytest.approx(591, abs=tolerance)
+
+
 def _svg(body: str) -> bytes:
     return (
         f'<?xml version="1.0" encoding="utf-8" ?>'

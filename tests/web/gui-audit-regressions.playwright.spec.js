@@ -278,6 +278,47 @@ test('PDF text flattening places each curved-label character by its UTF-16 index
   expect(outcome.flattened).toEqual(outcome.expected);
 });
 
+test('PDF text flattening keeps the italic run of a curved label (OV-2808)', async ({ page }) => {
+  await page.goto('/');
+  const flattened = await page.evaluate(async () => {
+    const markup = '<svg xmlns="http://www.w3.org/2000/svg" width="400px" height="200px" viewBox="0 0 400 200">'
+      + '<defs><path id="arc" d="M 10 150 A 190 190 0 0 1 390 150"/></defs>'
+      + '<text font-size="20" text-anchor="middle"><textPath href="#arc" startOffset="50%">'
+      + '<tspan font-style="italic">stx2</tspan><tspan> phage</tspan></textPath></text></svg>';
+    const live = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement;
+    document.body.appendChild(live);
+    const characters = [];
+    const observer = new MutationObserver((records) => records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.localName !== 'g') return;
+        node.querySelectorAll('text').forEach((charText) => characters.push(
+          [charText.textContent, charText.getAttribute('font-style') || node.getAttribute('font-style')]
+        ));
+      });
+    }));
+    observer.observe(document.body, { childList: true, subtree: true });
+    const { downloadPDF } = await import('/gbdraw/web/js/services/export.js');
+    try {
+      await downloadPDF(
+        { svg: live.cloneNode(true), name: 'flatten.svg' },
+        {
+          checkExportLimit: () => Promise.resolve(),
+          resolvePdfFonts: () => Promise.reject(new Error('font not needed'))
+        }
+      );
+    } catch {
+      // The flattened text is captured before fonts are loaded.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    observer.disconnect();
+    return characters;
+  });
+  expect(flattened.map(([character]) => character).join('')).toBe('stx2 phage');
+  expect(flattened.map(([, style]) => style)).toEqual([
+    ...Array(4).fill('italic'), ...Array(6).fill('normal')
+  ]);
+});
+
 test('a failed PDF font request can be retried without reloading the diagram', async ({ page }) => {
   test.setTimeout(180000);
   // Only the cold boot requests the wheel that the case makes fail.
