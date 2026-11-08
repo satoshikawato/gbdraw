@@ -890,7 +890,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     Session: [
       { path: 'app/app-setup.js', count: 2 },
-      { path: 'services/config.js', count: 3 }
+      { path: 'services/config.js', count: 5 },
+      { path: 'services/session-file.js', count: 1 }
     ]
   });
 });
