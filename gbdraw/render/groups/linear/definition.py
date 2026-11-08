@@ -12,7 +12,12 @@ from gbdraw.svg.elements import Group, TSpan, Text
 
 from ....config.models import GbdrawConfig
 from ....config.models.objects import ObjectsDefinitionLinearConfig
-from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
+from ....core.record_metadata import (
+    _source_period,
+    _wrap_source_base,
+    format_replicon_label,
+    infer_record_source_metadata,
+)
 from ....core.numeric import compensated_sum
 from ....core.text import (
     create_text_element,
@@ -20,7 +25,7 @@ from ....core.text import (
     measure_mixed_text_line,
     parse_mixed_content_text,
 )
-from ....layout.record_labels import record_length_label
+from ....layout.record_labels import record_length_label, record_map_span
 from ....layout.spatial import Aabb, union_aabbs
 from ...group_content import DefinitionMeasurement
 from ....svg.ids import definition_group_svg_id
@@ -29,8 +34,6 @@ from ....svg.ids import definition_group_svg_id
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
 
-_COORD_BASE_KEY = "gbdraw_coord_base"
-_COORD_STEP_KEY = "gbdraw_coord_step"
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
 
 
@@ -368,20 +371,10 @@ class DefinitionGroup:
         return bool(raw)
 
     def _format_coordinate_span(self) -> str:
-        annotations = getattr(self.record, "annotations", None) or {}
-        try:
-            start_coord = int(annotations.get(_COORD_BASE_KEY, 1))
-        except (TypeError, ValueError):
-            start_coord = 1
-        try:
-            step = int(annotations.get(_COORD_STEP_KEY, 1))
-        except (TypeError, ValueError):
-            step = 1
-        if step == 0:
-            step = 1
-        step = 1 if step > 0 else -1
-        end_coord = start_coord + (step * max(0, self.record_length - 1))
-        return f"{start_coord}-{end_coord}"
+        # A crop across the origin names its source bases, so its start is after its end (D-28).
+        start_coord, end_coord = record_map_span(self.record, self.record_length)
+        period = _source_period(self.record)
+        return f"{_wrap_source_base(start_coord, period)}-{_wrap_source_base(end_coord, period)}"
 
     def add_elements_to_group(self) -> None:
         """Add all visible definition lines to the SVG group."""

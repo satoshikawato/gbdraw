@@ -47,6 +47,15 @@ write-up of a release.
   Circular, and (Python API) a `RecordCollectionOptions` region on a record
   that already has windows or a region are refused; no command line, Web, or
   Session request writes both.
+- Added: a window of a circular record may run across its origin. In the
+  Python API, a `RecordWindow` whose `start` is after its `end` draws the arc
+  from `start` across the origin to `end` as one continuous unit: a feature
+  across the origin stays whole, and the ruler, caption, and annotations name
+  the record's own bases. A new drawing from a region of a circular record
+  accepts a region across the origin as one such window, where it used to be
+  refused (`ORIGIN_CROSSING`); on a linear record a start after the end is
+  still refused (`START_AFTER_END`). A region string such as `--region
+  9000-1000` still means the reverse complement of 1000..9000.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

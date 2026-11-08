@@ -425,3 +425,95 @@ def test_each_axis_entry_names_its_record_and_window(tmp_path: Path) -> None:
     request = LinearDiagramRequest(records=(_windowed(RecordWindow(100, 900), RecordWindow(5000, 5600)),))
     geometry = plan_linear_request(request).build().drawing._gbdraw_track_slot_geometry["records"]
     assert [(entry["recordKey"], entry.get("windowIndex")) for entry in geometry] == [("mito", 0), ("mito", 1)]
+
+
+# D-28, D-34: a window of a circular record may run across its origin (start after end). HmmtDNA (16,569 bp) has its
+# D-loop across the origin: complement(join(16024..16569,1..576)).
+_ACROSS = RecordWindow(16000, 1000)
+
+
+def _source_record():
+    from Bio import SeqIO
+
+    return SeqIO.read(MITO, "genbank")
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_a_window_across_the_origin_of_a_circular_record_is_one_unit(reverse: bool) -> None:
+    from gbdraw.core.record_metadata import _record_source_start
+
+    assert _ACROSS.crosses_origin
+    collection = resolve_request_records(LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=reverse)),)))
+    [unit] = collection.records
+    source = _source_record()
+    arc = source.seq[15999:] + source.seq[:1000]
+    assert str(unit.seq) == str(arc.reverse_complement() if reverse else arc)
+    # The feature across the origin stays whole, one part, and keeps its source identity.
+    [dloop] = [feature for feature in unit.features if feature.type == "D-loop"]
+    assert len(dloop.location.parts) == 1
+    assert (int(dloop.location.start), int(dloop.location.end)) == ((424, 1546) if reverse else (24, 1146))
+    [source_dloop] = [feature for feature in source.features if feature.type == "D-loop"]
+    assert getattr(dloop, "_gbdraw_source_feature_location_parts") == tuple(
+        (int(part.start), int(part.end), part.strand) for part in source_dloop.location.parts
+    )
+    # The crop map names source bases: the window's source start is its start, also reversed.
+    assert _record_source_start(unit) == 16000
+    assert (unit.annotations["gbdraw_coord_base"], unit.annotations["gbdraw_coord_step"]) == (
+        (1000, -1) if reverse else (16000, 1)
+    )
+
+
+def test_a_window_across_the_origin_of_a_linear_record_is_refused() -> None:
+    record = RecordInput(GenBankInputSource(MITO), windows=(_ACROSS,), display=RecordDisplayOptions(is_circular=False))
+    with pytest.raises(ValidationError, match="crosses the origin of a linear record"):
+        resolve_request_records(LinearDiagramRequest(records=(record,)))
+    with pytest.raises(ValidationError, match="across the origin"):
+        _ = record.region
+
+
+def test_the_ruler_and_caption_of_a_window_across_the_origin_name_source_bases(tmp_path: Path) -> None:
+    from gbdraw.layout.record_labels import coordinate_map_ticks
+
+    [unit] = resolve_request_records(LinearDiagramRequest(records=(_windowed(_ACROSS),))).records
+    ticks = coordinate_map_ticks(unit, len(unit), 500)
+    # 16500 before the origin; the multiples restart at the origin: 500 is 570 + 499 bases in.
+    assert [tick.base for tick in ticks] == [16500, 500]
+    assert [round(tick.position * 1569) for tick in ticks] == [500, 1069]
+    [reversed_unit] = resolve_request_records(
+        LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=True)),))
+    ).records
+    assert [tick.base for tick in coordinate_map_ticks(reversed_unit, len(reversed_unit), 500)] == [500, 16500]
+    request = LinearDiagramRequest(records=(_windowed(_ACROSS),))
+    rendered = render_request(replace(request, output=replace(request.output, output_directory=tmp_path)))
+    [svg] = [path for path in rendered.output_paths if path.suffix == ".svg"]
+    text = svg.read_text(encoding="utf-8")
+    assert 'data-gbdraw-record-source-start="16000"' in text
+    assert 'data-gbdraw-record-source-end="1000"' in text
+
+
+def test_the_caption_of_a_window_across_the_origin_runs_from_its_start_to_its_end() -> None:
+    from gbdraw.layout.record_labels import record_map_span
+    from gbdraw.core.record_metadata import _source_period, _wrap_source_base
+
+    [unit] = resolve_request_records(LinearDiagramRequest(records=(_windowed(_ACROSS),))).records
+    period = _source_period(unit)
+    assert period == 16569
+    assert tuple(_wrap_source_base(value, period) for value in record_map_span(unit, len(unit))) == (16000, 1000)
+
+
+def test_an_annotation_in_a_window_across_the_origin_is_drawn_at_its_source_bases() -> None:
+    records = resolve_request_records(LinearDiagramRequest(records=(_windowed(_ACROSS),))).records
+    selector = RecordSelector("#1", None, 0)
+    bundle = resolve_annotations(
+        (AnnotationSet("s", (
+            RegionAnnotation("after", CoordinateSpan(selector, 100, 300)),
+            RegionAnnotation("before", CoordinateSpan(selector, 16201, 16300)),
+            RegionAnnotation("cut", CoordinateSpan(selector, 900, 1100)),
+        )),),
+        records,
+        mode="linear",
+    )
+    assert {item.id: item.segments for item in bundle.annotations} == {
+        "after": ((669, 870),), "before": ((201, 301),), "cut": ((1469, 1570),),
+    }
+    assert [warning.code for warning in bundle.warnings] == ["out_of_bounds_clipped"]

@@ -17,7 +17,7 @@ from ...render.track_slot_metadata import (
     attach_track_slot_geometry,
     linear_axis_geometry,
 )
-from ...layout.record_labels import source_ruler_ticks
+from ...layout.record_labels import coordinate_map_ticks, source_ruler_ticks
 
 import copy
 from dataclasses import dataclass, replace
@@ -1612,44 +1612,27 @@ def _linear_axis_ruler_bounds(
 
     if not render_context.axis_ruler_enabled or placement.sequence_width <= 0.0:
         return None
-    if record_local_ruler:
-        start_coord, end_coord = 0, len(record.seq)
-    else:
-        annotations = getattr(record, "annotations", None) or {}
-        try:
-            start_coord = int(annotations.get("gbdraw_coord_base", 1))
-        except (TypeError, ValueError):
-            start_coord = 1
-        try:
-            step = int(annotations.get("gbdraw_coord_step", 1))
-        except (TypeError, ValueError):
-            step = 1
-        step = 1 if step >= 0 else -1
-        end_coord = start_coord + (step * max(0, len(record.seq) - 1))
-
-    span = abs(end_coord - start_coord)
     interval = cfg.objects.scale.interval
     tick_interval = (
         int(interval)
         if interval is not None and int(interval) > 0
         else linear_tick_interval(max(1, int(canvas_config.longest_genome)))
     )
-    if span <= 0 or tick_interval <= 0:
+    if tick_interval <= 0:
         return None
-    minimum = min(start_coord, end_coord)
-    maximum = max(start_coord, end_coord)
-    tick = (minimum // tick_interval) * tick_interval
-    if tick < minimum:
-        tick += tick_interval
-    ticks: list[int] = []
-    while tick < maximum:
-        if tick > minimum:
-            ticks.append(int(tick))
-        tick += tick_interval
-    projected_ticks = None
+    axis_length = drawn_axis_length(record, record_transform)
+    # Each tick: the base its label names, its place along the axis (0..1), and its wrap row.
+    ticks: list[tuple[int, float, int]]
     if record_transform is not None and record_transform.projects:
-        projected_ticks = {tick.base: tick for tick in source_ruler_ticks(record_transform, tick_interval)}
-        ticks = list(projected_ticks)
+        ticks = [
+            (tick.base, tick.offset / axis_length, tick.row)
+            for tick in source_ruler_ticks(record_transform, tick_interval)
+        ]
+    else:
+        ticks = [
+            (tick.base, tick.position, 0)
+            for tick in coordinate_map_ticks(record, len(record.seq), tick_interval, record_local=record_local_ruler)
+        ]
     if not ticks:
         return None
 
@@ -1657,13 +1640,10 @@ def _linear_axis_ruler_bounds(
     font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(
         canvas_config.length_param
     )
-    axis_length = drawn_axis_length(record, record_transform)
     row_offsets = plan.row_offsets
-    for coordinate in ticks:
-        offset = (projected_ticks[coordinate].offset / axis_length if projected_ticks is not None
-                  else abs(coordinate - start_coord) / float(span))
+    for coordinate, offset, row in ticks:
         x = placement.sequence_width * offset
-        row_y = row_offsets[projected_ticks[coordinate].row] if projected_ticks is not None else 0.0
+        row_y = row_offsets[row] if record_transform is not None and record_transform.projects else 0.0
         label = format_linear_tick_label(
             coordinate,
             context_length=max(1, int(canvas_config.longest_genome)),

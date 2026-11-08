@@ -303,6 +303,30 @@ def _read_coord_map(record: object) -> tuple[int, int]:
     return base, (1 if step > 0 else -1)
 
 
+def _wrap_source_base(value: int, period: int | None) -> int:
+    """The source base ``value`` names on a circle of ``period`` bases (``value`` itself without a period)."""
+
+    return value if period is None else (value - 1) % period + 1
+
+
+def _source_period(record: object) -> int | None:
+    """The source length by which the map of a crop across the origin wraps its bases, else ``None`` (D-28).
+
+    A crop across the origin of a circular record maps its bases past the
+    source end round to its start: ``source = wrap(base + step * local)``. Any
+    other record maps every base inside 1..length, so it has no period.
+    """
+
+    annotations = getattr(record, "annotations", None) or {}
+    length = annotations.get("gbdraw_source_length")
+    sequence = getattr(record, "seq", None)
+    if not isinstance(length, int) or sequence is None or not len(sequence):
+        return None
+    base, step = _read_coord_map(record)
+    last = base + step * (len(sequence) - 1)
+    return None if 1 <= last <= length else length
+
+
 def _source_to_local_index(
     source: _SourceBase, coord_base: int, coord_step: int
 ) -> _SourceBase:
@@ -324,7 +348,9 @@ def _record_source_start(record: SeqRecord) -> int:
     """
 
     coord_base, coord_step = _read_coord_map(record)
-    return coord_base if coord_step == 1 else coord_base - len(record.seq) + 1
+    return _wrap_source_base(
+        coord_base if coord_step == 1 else coord_base - len(record.seq) + 1, _source_period(record)
+    )
 
 
 def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:

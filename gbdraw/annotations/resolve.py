@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index, record_identity_key
+from gbdraw.core.record_metadata import _read_coord_map, _source_period, _source_to_local_index, record_identity_key
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.selector_values import (
     get_feature_hash,
@@ -136,22 +136,30 @@ def _coordinate_segments(
     else:
         coord_base, coord_step = _read_coord_map(record)
         last_source = coord_base + coord_step * max(0, length - 1)
-        source_high = max(coord_base, last_source, target.start, target.end)
+        period = _source_period(record)
+        source_high = period or max(coord_base, last_source, target.start, target.end)
         ranges = (
             ((target.start, source_high), (1, target.end))
             if target.wraps_origin
             else ((target.start, target.end),)
         )
+        # A crop across the origin (D-28) counts its bases on past the source end, or below 1 when reversed: a span
+        # may show there one turn on or back.
+        shifts = (0,) if period is None else (-period, 0, period)
         resolved = [
             _source_interval_to_local(
-                start,
-                end,
+                start + shift,
+                end + shift,
                 coord_base=coord_base,
                 coord_step=coord_step,
                 record_length=length,
             )
             for start, end in ranges
+            for shift in shifts
         ]
+        if period is not None:
+            shown = sum(segment[1] - segment[0] for segment, _ in resolved if segment[1] > segment[0])
+            resolved = [(segment, shown != sum(end - start + 1 for start, end in ranges)) for segment, _ in resolved]
     segments = tuple(segment for segment, _ in resolved if segment[1] > segment[0])
     return merge_annotation_segments(segments), any(clipped for _, clipped in resolved)
 

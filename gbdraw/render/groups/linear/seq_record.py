@@ -9,7 +9,7 @@ from gbdraw.svg.elements import Group, Line, Rect, Text
 
 from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
-from ....core.record_metadata import _read_coord_map, _record_source_start
+from ....core.record_metadata import _read_coord_map, _record_source_start, _source_period, _wrap_source_base
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
@@ -24,7 +24,7 @@ from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id, stable_svg_id
 from ....layout.linear_wrap import drawn_axis_length
-from ....layout.record_labels import source_ruler_ticks
+from ....layout.record_labels import coordinate_map_ticks, source_ruler_ticks
 from ...label_binding import bind_label_part
 from .feature_identity import LinearFeatureDomIndex
 from .length_bar import (
@@ -176,40 +176,6 @@ class SeqRecordGroup:
         )
         return axis_path
 
-    def _resolve_record_coordinate_span(self, record_length: int) -> tuple[int, int]:
-        if self.record_local_ruler:
-            return 0, record_length
-        annotations = getattr(self.gb_record, "annotations", None) or {}
-        try:
-            start_coord = int(annotations.get("gbdraw_coord_base", 1))
-        except (TypeError, ValueError):
-            start_coord = 1
-        try:
-            step = int(annotations.get("gbdraw_coord_step", 1))
-        except (TypeError, ValueError):
-            step = 1
-        if step == 0:
-            step = 1
-        step = 1 if step > 0 else -1
-        end_coord = start_coord + (step * max(0, record_length - 1))
-        return start_coord, end_coord
-
-    def _axis_tick_coordinates(self, start_coord: int, end_coord: int, tick_interval: int) -> list[int]:
-        if tick_interval <= 0:
-            return []
-        min_coord = min(start_coord, end_coord)
-        max_coord = max(start_coord, end_coord)
-        first_tick = (min_coord // tick_interval) * tick_interval
-        if first_tick < min_coord:
-            first_tick += tick_interval
-        coordinates: list[int] = []
-        tick = first_tick
-        while tick < max_coord:
-            if tick > min_coord:
-                coordinates.append(int(tick))
-            tick += tick_interval
-        return sorted(coordinates, reverse=(start_coord > end_coord))
-
     def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str, width: float) -> Line:
         """One straight part of a feature label's leader, or its underline: one style for both (LP-D95)."""
 
@@ -265,8 +231,6 @@ class SeqRecordGroup:
         if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
             return
 
-        start_coord, end_coord = self._resolve_record_coordinate_span(record_length)
-        coord_span = abs(end_coord - start_coord)
         interval = (
             int(self.scale_interval)
             if (self.scale_interval is not None and int(self.scale_interval) > 0)
@@ -275,12 +239,21 @@ class SeqRecordGroup:
         if interval <= 0:
             return
 
-        tick_coords = self._axis_tick_coordinates(start_coord, end_coord, interval)
-        projected_ticks = None
+        # Each tick: its label's base, its x, and its wrap row (None draws it on ``group``).
+        ticks: list[tuple[int, float, int | None]]
         if self.record_transform is not None and self.record_transform.projects:
-            projected_ticks = {tick.base: tick for tick in source_ruler_ticks(self.record_transform, interval)}
-            tick_coords = list(projected_ticks)
-        if not tick_coords:
+            ticks = [
+                (tick.base, bar_length * tick.offset / record_length, tick.row if row_groups is not None else None)
+                for tick in source_ruler_ticks(self.record_transform, interval)
+            ]
+        else:
+            ticks = [
+                (tick.base, bar_length * tick.position, None)
+                for tick in coordinate_map_ticks(
+                    self.gb_record, record_length, interval, record_local=self.record_local_ruler
+                )
+            ]
+        if not ticks:
             return
 
         label_y = RULER_LABEL_OFFSET
@@ -293,16 +266,8 @@ class SeqRecordGroup:
             tick_end_y = -RULER_TICK_LENGTH
             dominant_baseline = "text-after-edge"
 
-        for coord in tick_coords:
-            target = group
-            if projected_ticks is not None:
-                x_pos = bar_length * projected_ticks[coord].offset / record_length
-                if row_groups is not None:
-                    target = row_groups[projected_ticks[coord].row]
-            elif coord_span <= 0:
-                x_pos = 0.0
-            else:
-                x_pos = bar_length * (abs(coord - start_coord) / float(coord_span))
+        for coord, x_pos, row in ticks:
+            target = group if row is None or row_groups is None else row_groups[row]
             if x_pos < 0.0:
                 x_pos = 0.0
             elif x_pos > bar_length:
@@ -470,7 +435,10 @@ class SeqRecordGroup:
         if source_length and (source_base, source_step) != (1, 1):
             source_low = _record_source_start(self.gb_record)
             record_group.attribs["data-gbdraw-record-source-start"] = str(source_low)
-            record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + source_length - 1)
+            # A crop across the origin ends before it starts (D-28).
+            record_group.attribs["data-gbdraw-record-source-end"] = str(
+                _wrap_source_base(source_low + source_length - 1, _source_period(self.gb_record))
+            )
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         feature_dict = self.feature_layers.foreground_features

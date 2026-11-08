@@ -436,7 +436,6 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "ANNOTATIONS_OUTSIDE"
     ],
     "refusalReasons": [
-      "ORIGIN_CROSSING",
       "START_AFTER_END"
     ]
   },

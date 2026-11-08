@@ -11,10 +11,18 @@ import re
 from pathlib import PurePath, PureWindowsPath
 from typing import Sequence
 
+from Bio.SeqFeature import CompoundLocation, Location, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from ..core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
-from ..core.record_metadata import _read_coord_map, _write_coord_map
+from ..core.record_metadata import (
+    _copy_source_feature_identity,
+    _feature_source_index_map,
+    _read_coord_map,
+    _wrap_source_base,
+    _write_coord_map,
+)
+from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 from .record_select import RecordSelector, reverse_records
 
@@ -68,7 +76,9 @@ class RecordWindow:
     ``start`` and ``end`` are 1-based source coordinates of the record;
     ``reverse_complement`` draws the span reversed; ``column`` orders the
     record's units with the other units of its row. Windows of one record
-    leave out the interval between them.
+    leave out the interval between them. A window whose ``start`` is after its
+    ``end`` runs from ``start`` across the origin to ``end``; only a circular
+    record has one (D-28), and the crop refuses it on a linear record.
     """
 
     start: int
@@ -81,14 +91,17 @@ class RecordWindow:
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f"Window {name} must be a positive integer.")
-        if self.end < self.start:
-            raise ValueError(f"Window {self.start}-{self.end} ends before it starts.")
         if not isinstance(self.reverse_complement, bool):
             raise ValueError("Window reverse_complement must be a boolean.")
         if self.column is not None and (
             not isinstance(self.column, int) or isinstance(self.column, bool) or self.column < 1
         ):
             raise ValueError("Window column must be a positive integer or None.")
+
+    @property
+    def crosses_origin(self) -> bool:
+        """Whether the window runs across the origin of its (circular) record."""
+        return self.start > self.end
 
     @classmethod
     def from_region(cls, spec: RegionSpec, *, column: int | None = None) -> RecordWindow:
@@ -97,7 +110,12 @@ class RecordWindow:
         return cls(spec.start, spec.end, spec.reverse_complement, column)
 
     def region(self) -> RegionSpec:
-        """The crop this window draws, as an unqualified region spec."""
+        """The crop this window draws, as an unqualified region spec.
+
+        The spec of a window across the origin keeps ``start`` after ``end``; its
+        ``raw`` text is not a region string (a region string with the larger
+        number first reads as a reversed span), so only the crop reads it.
+        """
 
         coordinates = f"{self.start}-{self.end}" + (":rc" if self.reverse_complement else "")
         return RegionSpec(
@@ -206,16 +224,149 @@ def parse_region_specs(specs: Sequence[str] | None) -> list[RegionSpec]:
     return parsed
 
 
+def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool) -> tuple[SeqRecord, int, int]:
+    """The record read twice round, and the 0-based bounds of ``spec`` on it, for a span across the origin (D-28).
+
+    Each feature appears once on each turn; a feature across the origin is one
+    continuous location on the turn it starts on, so a window keeps it whole.
+    The features keep the identity of the source feature they copy.
+    """
+
+    length = len(record.seq)
+    if not circular:
+        raise ValidationError(
+            f"Region {spec.start}..{spec.end} of record {record.id} crosses the origin of a linear record; "
+            "only a circular record has a span across its origin.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"},
+        )
+    if record.annotations.get(_REGION_APPLIED_KEY) or _read_coord_map(record) != (1, 1):
+        raise ValidationError(
+            f"Region {spec.start}..{spec.end} of record {record.id} crosses the origin of a record that is "
+            "already cropped or reversed.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"},
+        )
+    if not 1 <= spec.end < spec.start <= length:
+        raise ValidationError(
+            f"Region {spec.start}..{spec.end} across the origin lies outside record {record.id} ({length} bp). "
+            f"Choose a start and an end within 1..{length}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
+    source_indexes = _feature_source_index_map(record.features)
+    turns: list[SeqFeature] = []
+    for feature in record.features:
+        index = source_indexes[id(feature)]
+        shown = _two_turns(_unwrapped_location(feature.location, length), length, (spec.start - 1, length + spec.end))
+        if shown is None:
+            continue
+        copy = SeqFeature(
+            shown,
+            type=feature.type,
+            qualifiers=feature.qualifiers,
+            id=feature.id,
+        )
+        _copy_source_feature_identity(feature, copy, fallback_index=index, coord_base=1, coord_step=1)
+        source_indexes[id(copy)] = index
+        turns.append(copy)
+    view = SeqRecord(
+        record.seq + record.seq,
+        id=record.id,
+        name=record.name,
+        description=record.description,
+        dbxrefs=list(getattr(record, "dbxrefs", []) or []),
+        annotations=dict(getattr(record, "annotations", {}) or {}),
+    )
+    view.features = turns
+    if getattr(record, "letter_annotations", None):
+        try:
+            view.letter_annotations = {key: values + values for key, values in record.letter_annotations.items()}
+        except (TypeError, ValueError):
+            pass
+    return view, spec.start - 1, length + spec.end
+
+
+def _unwrapped_location(location: Location, length: int) -> Location:
+    """``location`` read as one pass round a circle of ``length`` bases: the parts past the origin move one turn on.
+
+    Parts are in biological order. On the plus strand a part that starts before
+    the one read just before it lies past the origin, and it and the parts after
+    it move by ``length``; on the minus strand, read downwards, the parts read
+    before such a jump move instead.
+    """
+
+    parts = list(getattr(location, "parts", None) or [location])
+    minus = all(part.strand == -1 for part in parts)
+    crossed = next(
+        (
+            index
+            for index in range(1, len(parts))
+            if (parts[index].start > parts[index - 1].start if minus else parts[index].start < parts[index - 1].start)
+        ),
+        None,
+    )
+    if crossed is None:
+        return location
+    before, after = parts[:crossed], parts[crossed:]
+    moved = [part + length for part in before] + after if minus else before + [part + length for part in after]
+    # The two parts that meet at the origin are one run of bases: join them, so the feature draws as one part there.
+    last, first = moved[crossed - 1], moved[crossed]
+    low, high = (first, last) if minus else (last, first)
+    if low.end == high.start and low.strand == high.strand:
+        moved[crossed - 1 : crossed + 1] = [SimpleLocation(low.start, high.end, strand=low.strand)]
+    if len(moved) == 1:
+        return moved[0]
+    return CompoundLocation(moved, operator=getattr(location, "operator", "join"))
+
+
+def _two_turns(location: Location, length: int, window: tuple[int, int]) -> Location | None:
+    """``location`` on the turns of the record read twice round that ``window`` shows, in biological order.
+
+    A window across the origin shows at most one turn of each base, so a feature
+    it shows on both turns (one that runs over the left-out arc) is one feature
+    whose parts lie at both ends of the window; parts that meet are joined. A
+    turn the window does not reach is left out whole, so it marks no cut end.
+    """
+
+    parts = list(getattr(location, "parts", None) or [location])
+    low, high = window
+    shown = [
+        turn
+        for turn in ([*parts], [part + length for part in parts])
+        if any(part.start < high and part.end > low for part in turn)
+    ]
+    if all(part.strand == -1 for part in parts):
+        shown.reverse()
+    turns = [part for turn in shown for part in turn]
+    if not turns:
+        return None
+    joined: list[Location] = []
+    for part in turns:
+        previous = joined[-1] if joined else None
+        if previous is not None and previous.strand == part.strand and (
+            previous.end == part.start or part.end == previous.start
+        ):
+            joined[-1] = SimpleLocation(min(previous.start, part.start), max(previous.end, part.end), strand=part.strand)
+        else:
+            joined.append(part)
+    return joined[0] if len(joined) == 1 else CompoundLocation(joined, operator=getattr(location, "operator", "join"))
+
+
 def _crop_record_to_region(
     record: SeqRecord,
     spec: RegionSpec,
     *,
     log: logging.Logger,
+    circular: bool = False,
 ) -> SeqRecord:
-    start_0, end_0 = check_start_end_coords(len(record.seq), spec.start, spec.end, str(record.id))
+    source_length = len(record.seq)
+    crosses_origin = spec.start > spec.end
+    source = record
+    if crosses_origin:
+        source, start_0, end_0 = _origin_crossing_view(record, spec, circular=circular)
+    else:
+        start_0, end_0 = check_start_end_coords(len(record.seq), spec.start, spec.end, str(record.id))
     coord_base, coord_step = _read_coord_map(record)
 
-    if start_0 != spec.start - 1 or end_0 != spec.end:
+    if not crosses_origin and (start_0 != spec.start - 1 or end_0 != spec.end):
         log.warning(
             "Region %s for record %s was clamped to %s..%s (record length %s).",
             spec.raw,
@@ -225,7 +376,7 @@ def _crop_record_to_region(
             len(record.seq),
         )
 
-    new_seq = record.seq[start_0:end_0]
+    new_seq = source.seq[start_0:end_0]
     new_record = SeqRecord(
         new_seq,
         id=record.id,
@@ -239,9 +390,9 @@ def _crop_record_to_region(
         # retain this provenance through the copied annotations.
         new_record.annotations["gbdraw_source_length"] = len(record)
 
-    if getattr(record, "letter_annotations", None):
+    if getattr(source, "letter_annotations", None):
         sliced = {}
-        for key, values in record.letter_annotations.items():
+        for key, values in source.letter_annotations.items():
             try:
                 sliced[key] = values[start_0:end_0]
             except Exception:
@@ -250,7 +401,7 @@ def _crop_record_to_region(
             new_record.letter_annotations = sliced
 
     new_record.features = crop_and_shift_features(
-        record.features,
+        source.features,
         start_0,
         end_0,
         coord_base=coord_base,
@@ -264,6 +415,9 @@ def _crop_record_to_region(
         new_record = reverse_records((new_record,), True, log=log)[0]
         cropped_length = len(new_record.seq)
         rc_base = cropped_base + (cropped_step * max(0, cropped_length - 1))
+        if crosses_origin:
+            # The map reads source bases round the circle (``_wrap_source_base``); its base is a source base.
+            rc_base = _wrap_source_base(rc_base, source_length)
         rc_step = -cropped_step
         _write_coord_map(new_record, base=rc_base, step=rc_step)
 
@@ -395,8 +549,13 @@ def crop_record_to_region(
     spec: RegionSpec,
     *,
     log: logging.Logger | None = None,
+    circular: bool = False,
 ) -> SeqRecord:
-    """Crop one record to ``spec``, then reverse-complement the crop when it says so."""
+    """Crop one record to ``spec``, then reverse-complement the crop when it says so.
+
+    A spec whose start is after its end runs across the origin; ``circular``
+    says whether the record is drawn as circular, which such a spec requires.
+    """
 
     log = log or logger
     log.info(
@@ -406,7 +565,7 @@ def crop_record_to_region(
         spec.end,
         " (reverse complement)" if spec.reverse_complement else "",
     )
-    return _crop_record_to_region(record, spec, log=log)
+    return _crop_record_to_region(record, spec, log=log, circular=circular)
 
 
 def apply_region_specs(
@@ -429,6 +588,7 @@ def crop_record_windows(
     reverse: bool,
     *,
     log: logging.Logger | None = None,
+    circular: bool = False,
 ) -> tuple[SeqRecord, ...]:
     """Crop ``record`` to each of its windows, then reverse-complement each (OV-1279).
 
@@ -436,7 +596,10 @@ def crop_record_windows(
     crop, as the spec's own ``:rc`` does, so both spellings draw one window and
     asking for both reverses once. A record without a window is only reversed.
     Windows of one record may overlap (D-18); a record with several windows
-    orients each window by its own flag (D-01).
+    orients each window by its own flag (D-01). A window across the origin
+    (start after end) needs ``circular``, the record drawn as circular (D-28);
+    it is cropped from the record read round the origin, so its features stay
+    whole.
     """
 
     log = log or logger
@@ -448,7 +611,9 @@ def crop_record_windows(
                 f"Record {record.id} has several windows; reverse-complement each window, not the record."
             )
     return tuple(
-        crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or reverse), log=log)
+        crop_record_to_region(
+            record, replace(spec, reverse_complement=spec.reverse_complement or reverse), log=log, circular=circular
+        )
         for spec in specs
     )
 

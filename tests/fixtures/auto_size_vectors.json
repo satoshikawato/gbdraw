@@ -413,7 +413,8 @@
     {"name": "A margin stops at the record end", "recordLength": 16569, "start": 16000, "end": 16569, "margin": 1000, "expected": {"start": 15000, "end": 16569, "whole": false}},
     {"name": "The whole record", "recordLength": 16569, "start": 1, "end": 16569, "margin": 0, "expected": {"start": 1, "end": 16569, "whole": true}},
     {"name": "A margin that reaches both ends gives the whole record", "recordLength": 16569, "start": 500, "end": 16000, "margin": 1000, "expected": {"start": 1, "end": 16569, "whole": true}},
-    {"name": "The control region crosses the origin", "recordLength": 16569, "start": 16024, "end": 576, "margin": 0, "expected": {"error": "crossesOrigin"}},
+    {"name": "The control region across the origin is one window across it", "recordLength": 16569, "start": 16024, "end": 576, "margin": 0, "expected": {"start": 16024, "end": 576, "whole": false}},
+    {"name": "A margin grows a window across the origin round the circle", "recordLength": 16569, "start": 16024, "end": 576, "margin": 100, "expected": {"start": 15924, "end": 676, "whole": false}},
     {"name": "A start before position 1", "recordLength": 16569, "start": 0, "end": 10, "margin": 0, "expected": {"error": "outOfRange"}},
     {"name": "An end after the record end", "recordLength": 16569, "start": 10, "end": 16570, "margin": 0, "expected": {"error": "outOfRange"}}
   ]

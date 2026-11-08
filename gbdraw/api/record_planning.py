@@ -1904,7 +1904,15 @@ def resolve_record_inputs(
             if record_input.windows:
                 try:
                     units = crop_record_windows(
-                        record, [window.region() for window in record_input.windows], reverse, log=logger
+                        record,
+                        [window.region() for window in record_input.windows],
+                        reverse,
+                        log=logger,
+                        circular=(
+                            record_input.display.is_circular
+                            if record_input.display.is_circular is not None
+                            else detected_topology(source_record, source_kind) == "circular"
+                        ),
                     )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc

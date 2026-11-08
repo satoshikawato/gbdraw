@@ -117,8 +117,7 @@ def test_region_vectors(materialize, case: dict[str, Any]) -> None:
     selection = RegionSelection("mito", case["start"], case["end"])
     expected = case["expected"]
     if "error" in expected:
-        message = "cross the origin" if expected["error"] == "crossesOrigin" else "is outside 1..16569"
-        with pytest.raises(ValidationError, match=message):
+        with pytest.raises(ValidationError, match="is outside 1..16569"):
             derive_region_drawing(materialized, [selection], margin=case["margin"])
         return
     region = derive_region_drawing(materialized, [selection], margin=case["margin"])
@@ -427,13 +426,37 @@ def test_a_region_outside_the_record_names_the_record_bounds(materialize, start:
     assert (shown["code"], shown["context"]) == ("REGION_INVALID", {"field": "region", "reason": "RECORD_BOUNDS"})
 
 
-def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
-    from gbdraw.api.region_drawing import StartAfterEndRegion
+def test_a_region_across_the_origin_of_a_circular_record_is_one_window(materialize) -> None:
+    # D-34: a region whose start is after its end runs across the origin of a circular record; it is drawn as one window.
+    from gbdraw.io.regions import RecordWindow
 
-    with pytest.raises(StartAfterEndRegion) as refusal:
-        derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", 16000, 200)])
-    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "ORIGIN_CROSSING"}
-    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("mito", 16000, 200)
+    [record] = derive_region_request(_mito_circular(), [RegionSelection("mito", 16000, 200)]).request.records
+    assert record.windows == (RecordWindow(16000, 200),)
+    assert record.display.is_circular is True
+    derived = derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", 16000, 200)])
+    assert derived.drawing is not None
+
+
+@pytest.mark.parametrize(
+    ("regions", "margin", "windows"),
+    [
+        ([(16000, 200)], 100, [(15900, 300)]),
+        ([(16000, 200), (150, 400)], 0, [(16000, 400)]),
+        ([(16000, 200), (16400, 16569), (1, 100)], 0, [(16000, 200)]),
+        ([(16000, 200), (5000, 6000)], 0, [(16000, 200), (5000, 6000)]),
+        ([(16000, 200)], 8500, []),
+        ([(1, 100), (16400, 16569)], 0, [(1, 100), (16400, 16569)]),
+    ],
+    ids=["margin", "joined-after", "inside", "two-windows", "whole-turn", "no-crossing-stays-apart"],
+)
+def test_regions_across_the_origin_join_round_the_circle(regions, margin: int, windows) -> None:
+    from gbdraw.io.regions import RecordWindow
+
+    [record] = derive_region_request(
+        _mito_circular(), [RegionSelection("mito", start, end) for start, end in regions], margin=margin
+    ).request.records
+    assert [(window.start, window.end) for window in record.windows] == windows
+    assert all(isinstance(window, RecordWindow) for window in record.windows)
 
 
 ORIGIN_CROSSING = json.loads(
@@ -458,13 +481,13 @@ def test_python_refuses_exactly_the_spans_the_web_says_cross_the_origin(case: di
     assert drawn["axis"]["source"] == axis
     span = case["sourceSpan"]
     selection = [RegionSelection("mito", span["start"], span["end"])]
+    [record] = derive_region_request(request, selection).request.records
     if case["pythonOutcome"] == "ORIGIN_CROSSING":
-        with pytest.raises(StartAfterEndRegion) as refusal:
-            derive_region_request(request, selection)
-        assert refusal.value.reason == "ORIGIN_CROSSING"
+        # D-34: Python now draws the span the Web says crosses the origin as one window across it.
+        assert (record.windows[0].start, record.windows[0].end) == (span["start"], span["end"])
+        assert record.windows[0].crosses_origin
         return
     assert case["pythonOutcome"] == "accepted"
-    [record] = derive_region_request(request, selection).request.records
     whole = (span["start"], span["end"]) == (1, axis["sourceLength"])
     assert (record.windows == ()) if whole else ((record.windows[0].start, record.windows[0].end) == (span["start"], span["end"]))
 
@@ -560,9 +583,19 @@ def test_the_web_helper_names_only_the_resources_the_derived_request_reads(tmp_p
     assert set(reply["resourceSources"]) == named
 
 
-def test_the_web_helper_refuses_an_origin_crossing_region(tmp_path: Path) -> None:
+def test_the_web_helper_takes_an_origin_crossing_region(tmp_path: Path) -> None:
     reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
-    assert reply == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "mito", "start": 16000, "end": 200}
+    assert reply["status"] == "derived"
+    [record] = reply["renderRequest"]["records"]
+    assert record["windows"] == [{"start": 16000, "end": 200, "reverseComplement": False, "column": None}]
+
+
+def test_the_web_helper_refuses_a_start_after_the_end_of_a_linear_record(tmp_path: Path) -> None:
+    from gbdraw.api import RecordDisplayOptions
+
+    linear = _mito_circular(record={"display": RecordDisplayOptions(is_circular=False)})
+    reply = _web_region(linear, [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
+    assert reply == {"status": "refused", "reason": "START_AFTER_END", "recordKey": "mito", "start": 16000, "end": 200}
 
 
 def _origin_record(tmp_path: Path) -> Path:
@@ -604,13 +637,15 @@ def test_a_feature_region_is_the_span_of_its_location(tmp_path: Path) -> None:
     assert by_feature.mode == "linear"
 
 
-def test_a_feature_across_the_origin_is_refused(tmp_path: Path) -> None:
-    from gbdraw.api.region_drawing import FeatureRegionSelection, StartAfterEndRegion
+def test_a_feature_across_the_origin_is_one_window_across_it(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection
+    from gbdraw.io.regions import RecordWindow
 
     source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
-    with pytest.raises(StartAfterEndRegion) as refusal:
-        derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "across"))])
-    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("o", 901, 50)
+    [record] = derive_region_request(
+        source, [FeatureRegionSelection("o", _feature_id(source, "across"))]
+    ).request.records
+    assert record.windows == (RecordWindow(901, 50),)
 
 
 def test_an_unknown_feature_is_refused(tmp_path: Path) -> None:
@@ -627,5 +662,6 @@ def test_the_web_helper_takes_a_feature_region(tmp_path: Path) -> None:
     reply = _web_region(source, [{"recordKey": "o", "featureId": inside}], tmp_path)[2]
     assert reply["status"] == "derived"
     assert reply["renderRequest"]["records"][0]["windows"][0]["start"] == 101
-    refused = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
-    assert refused == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "o", "start": 901, "end": 50}
+    across_reply = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
+    assert across_reply["status"] == "derived"
+    assert [(w["start"], w["end"]) for w in across_reply["renderRequest"]["records"][0]["windows"]] == [(901, 50)]

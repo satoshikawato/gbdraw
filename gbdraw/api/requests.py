@@ -276,6 +276,11 @@ class RecordInput:
                 "This record has several windows; read RecordInput.windows instead of region.",
                 diagnostic={"code": "INPUT_INVALID"},
             )
+        if self.windows[0].crosses_origin:
+            raise ValidationError(
+                "This record's window runs across the origin, which a region cannot write; read RecordInput.windows.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
         span = self.windows[0].region()
         if self.selector is None:
             return span
