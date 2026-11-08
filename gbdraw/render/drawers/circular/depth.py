@@ -167,6 +167,7 @@ class DepthDrawer:
                 id_parts=(axis_group_id,),
                 fill=self.axis_stroke,
                 font_size=font_size,
+                font_family=self.font_family,
             ):
                 axis_group.add(element)
         group.add(axis_group)

@@ -207,6 +207,7 @@ class GcContentDrawer:
                     ),
                     fill=self.axis_stroke,
                     font_size=font_size,
+                    font_family=self.font_family,
                     text_anchor="end",
                     dominant_baseline="central",
                 )
