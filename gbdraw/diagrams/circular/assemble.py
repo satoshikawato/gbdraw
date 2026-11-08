@@ -1150,7 +1150,6 @@ def _record_track_ink(
     canvas_radius = float(sources.geometry.radius)
     record_length = len(gb_record.seq)
     cfg = sources.profile.config
-    font_family = str(cfg.objects.text.font_family)
     record_transform = sources.record_transform
     inks: list[CircularInk] = [CircularInkRing(axis.paint_band_px)]
     for slot in slots:
@@ -1165,7 +1164,7 @@ def _record_track_ink(
                 inks.extend(
                     GcContentDrawer(data_config).ink(
                         canvas_radius, data_df, record_length, slot.draw_width_px, norm_factor,
-                        data_config.dinucleotide, record_transform, font_family=font_family,
+                        data_config.dinucleotide, record_transform,
                     )
                 )
             elif renderer == "dinucleotide_skew" and isinstance(data_config, GcSkewConfigurator):
@@ -1179,7 +1178,7 @@ def _record_track_ink(
                 inks.extend(
                     DepthDrawer(data_config).ink(
                         canvas_radius, data_df, record_length, float(slot.draw_width_px), norm_factor,
-                        font_family=font_family, record_transform=record_transform,
+                        record_transform=record_transform,
                     )
                 )
         elif renderer == "sequence_conservation":

@@ -39,6 +39,7 @@ GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 sys.path.insert(0, str(REPO_ROOT))
 
 from gbdraw.comparisons.identity_scale import identity_color_domain  # noqa: E402
+from gbdraw.session_drawings import checked_drawing_views  # noqa: E402
 from gbdraw.configurators.legend import (  # noqa: E402
     _circular_legend_local_bounds,
     _linear_legend_local_bounds,
@@ -168,7 +169,9 @@ def _gallery_cases() -> list[dict[str, Any]]:
         opener = gzip.open if path.name.endswith(".gz") else open
         with opener(path, "rt", encoding="utf-8") as handle:
             session = json.load(handle)
-        for index, result in enumerate(session.get("results") or []):
+        # A Gallery Session is a Session 51: its Results are its drawing's.
+        results = [result for view in checked_drawing_views(session) for result in view.get("results") or []]
+        for index, result in enumerate(results):
             root = ET.fromstring(result["content"].encode())
             legend = _by_id(root, "legend")
             if legend is None:

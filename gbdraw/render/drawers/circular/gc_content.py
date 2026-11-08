@@ -218,12 +218,10 @@ class GcContentDrawer:
         norm_factor: float,
         dinucleotide: str,
         record_transform: RecordDisplayTransform | None = None,
-        *,
-        font_family: str,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the area between the baseline circle and the content line
         with half its stroke; in percent mode the area, the background ring when it shows, the border circles and
-        the axis (``font_family`` is the family the axis labels inherit)."""
+        the axis, its labels measured in the figure's font as ``draw`` writes them."""
 
         pad = stroke_pad_px(self.gc_path_stroke_color, self.gc_path_stroke_width)
         if self.mode != "percent":
@@ -262,7 +260,7 @@ class GcContentDrawer:
                     outer_radius,
                     self._percent_axis_ticks(baseline_radius, track_width),
                     font_size=self._tick_font_size(track_width),
-                    font_family=font_family,
+                    font_family=self.font_family,
                 )
             )
         return tuple(inks)

@@ -42,7 +42,7 @@ The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC
 
 <a href="https://gbdraw.app/gallery/#hepatoplasma_scabrum_depth"><img src="../gbdraw/web/gallery/thumbnails/hepatoplasma_scabrum_depth.webp" alt="Circular map of Ca. Hepatoplasma scabrum with a blue read-depth ring between the gene ring and the GC content and GC skew rings" width="640"></a>
 
-The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene ring and outside the GC content and GC skew rings. The depth axis marks 20x to 80x. Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.
+The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene ring and outside the GC content and GC skew rings. The depth scale ends at 80x. Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#hepatoplasma_scabrum_depth)
 

@@ -49,7 +49,7 @@ def test_legend_layout_vectors_match_python() -> None:
 def test_legend_layout_vectors_cover_gallery_edits_and_branches() -> None:
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     gallery = [case for case in vectors["layout"] if not case["name"].startswith("synthetic")]
-    assert sum(case["edit"] == "none" for case in gallery) == 10
+    assert sum(case["edit"] == "none" for case in gallery) == 11
     assert sum(case["edit"] != "none" for case in gallery) >= 80
     assert {case["mode"] for case in vectors["layout"]} == {"circular", "linear"}
     assert len(vectors["measurement"]) >= 200

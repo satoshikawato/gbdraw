@@ -2,7 +2,7 @@
  "id": "hepatoplasma_scabrum_depth",
  "version": 1,
  "title": "Add a read-depth ring to a bacterial genome map",
- "summary": "Start from the Web defaults for the <i>Ca.</i> Hepatoplasma scabrum genome, then add a table of read depth, keep its 1-kbp means as they are, and give the depth ring a readable scale, generating after each change.",
+ "summary": "Start from the Web defaults for the <i>Ca.</i> Hepatoplasma scabrum genome, then add a table of read depth, keep its 1-kbp means as they are, give the depth ring a readable scale, and name it in the legend, generating after each change.",
  "appMode": "Circular",
  "primaryWorkflow": "Circular read-depth track from a depth TSV",
  "downloads": [
@@ -102,6 +102,10 @@
         "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'AP027133.gb'"
        }
       ],
+      "clipSelectors": [
+       "[data-setting='inputs'] .card-header",
+       "[data-circular-record-presentation]"
+      ],
       "assertAppState": {
        "mode": "circular",
        "files.c_gb.name": "AP027133.gb"
@@ -189,7 +193,7 @@
   },
   {
    "title": "Add the read-depth table",
-   "body": "Open Depth TSV tracks, click Choose Depth TSV, and choose AP027133.DRR394922.depth-1kb.tsv. Show Depth in Layout turns on with the file. Enter DRR394922 mean depth as the Legend title, then click Generate Diagram. A depth ring appears inside the features, but it looks like a sparse comb: the default Depth Window averages the depth over 100-bp windows, and most of them hold no row of this 1-kbp table.",
+   "body": "Open Depth TSV tracks, click Choose Depth TSV, and choose AP027133.DRR394922.depth-1kb.tsv. Show Depth in Layout turns on with the file. Click Generate Diagram. A depth ring appears inside the features, but it looks like a sparse comb: the default Depth Window averages the depth over 100-bp windows, and most of them hold no row of this 1-kbp table.",
    "table": {
     "columns": [
      "Setting",
@@ -203,10 +207,6 @@
      [
       "Show Depth (Layout)",
       "On"
-     ],
-     [
-      "Legend title",
-      "DRR394922 mean depth"
      ]
     ]
    },
@@ -216,13 +216,13 @@
      "script": "const labels = [\"Layout\", \"Depth TSV tracks\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
     },
     {
-     "type": "check",
-     "selector": "role=checkbox[name='Show Depth'] >> visible=true"
+     "type": "upload",
+     "selector": "role=button[name='Choose Depth TSV'] >> visible=true",
+     "path": "gallery/files/AP027133.DRR394922.depth-1kb.tsv"
     },
     {
-     "type": "fill",
-     "selector": "input[aria-label='Depth legend title']",
-     "value": "DRR394922 mean depth"
+     "type": "check",
+     "selector": "role=checkbox[name='Show Depth'] >> visible=true"
     },
     {
      "type": "generate"
@@ -233,8 +233,8 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-04-01-depth-file.webp",
-      "alt": "Depth TSV tracks card with AP027133.DRR394922.depth-1kb.tsv chosen and DRR394922 mean depth as the Legend title; Depth Window and Depth Step show their automatic values.",
-      "caption": "Choose the depth table and enter the Legend title."
+      "alt": "Depth TSV tracks card with AP027133.DRR394922.depth-1kb.tsv chosen; Depth Window and Depth Step show their automatic values.",
+      "caption": "Choose the depth table."
      },
      "capture": {
       "source": "webapp",
@@ -263,12 +263,6 @@
       "visibleText": [
        "Depth TSV tracks",
        "AP027133.DRR394922"
-      ],
-      "visibleControls": [
-       {
-        "selector": "input[aria-label='Depth legend title']",
-        "value": "DRR394922 mean depth"
-       }
       ]
      }
     },
@@ -276,7 +270,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-04-02-depth-comb-preview.webp",
-      "alt": "Preview with a depth ring inside the features that shows as a sparse comb of thin spikes.",
+      "alt": "Preview with a depth ring inside the features that shows as a sparse comb of thin spikes; the legend names the depth series after the file.",
       "caption": "The default Depth Window turns the 1-kbp table into a sparse comb."
      },
      "capture": {
@@ -307,7 +301,7 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "DRR394922 mean depth"
+       "AP027133.DRR394922.depth-1kb"
       ]
      }
     }
@@ -385,7 +379,7 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "DRR394922 mean depth"
+       "AP027133.DRR394922.depth-1kb"
       ]
      }
     }
@@ -393,7 +387,7 @@
   },
   {
    "title": "Give the depth ring a readable scale",
-   "body": "The ring is thin and its axis shows only the maximum. In Depth TSV tracks, set Depth Max to 80 and Depth Width to 60, then, under the series, set Large Tick to 20, Small Tick to 10, and Tick Font Size to 14. Click Generate Diagram. The axis now reads 20x to 80x: coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+   "body": "The ring is thin and its scale is small and ends at the highest mean in the table. In Depth TSV tracks, set Depth Max to 80 and Depth Width to 60, then, under the series, set Large Tick to 20, Small Tick to 10, and Tick Font Size to 14. Click Generate Diagram. The ring is wider and its scale now ends at 80x: coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
    "table": {
     "columns": [
      "Setting",
@@ -509,9 +503,9 @@
     {
      "dataDependent": true,
      "media": {
-      "src": "./media/hepatoplasma_scabrum_depth/manual-06-02-final-preview.webp",
-      "alt": "Final preview: a 60-px depth ring inside the features with an axis marked 20x, 40x, 60x, and 80x, an even coverage near 20x and one sharp peak near 246 kbp, with GC content and GC skew rings inside it.",
-      "caption": "The axis reads 20x to 80x; one sharp peak stands out near 246 kbp."
+      "src": "./media/hepatoplasma_scabrum_depth/manual-06-02-scale-preview.webp",
+      "alt": "Preview with a 60-px depth ring inside the features whose scale ends at 80x, an even coverage near 20x and one sharp peak near 246 kbp; the legend still names the depth series after the file.",
+      "caption": "The depth scale now ends at 80x; one sharp peak stands out near 246 kbp."
      },
      "capture": {
       "source": "webapp",
@@ -543,9 +537,119 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "DRR394922 mean depth",
-       "80x",
-       "20x"
+       "AP027133.DRR394922.depth-1kb"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Name the depth series in the legend",
+   "body": "The legend names the depth series after the file, AP027133.DRR394922.depth-1kb. In Depth TSV tracks, enter DRR394922 mean depth as the Legend title, then click Generate Diagram. The legend now names the series by its sequencing run.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "Legend title",
+      "DRR394922 mean depth"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth legend title']",
+     "value": "DRR394922 mean depth"
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-07-01-legend-title.webp",
+      "alt": "Depth TSV tracks card with DRR394922 mean depth as the Legend title of the depth series.",
+      "caption": "Enter the Legend title."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 7,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 200
+       }
+      ],
+      "selector": "[data-capture='depth-card']",
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true
+      },
+      "visibleText": [
+       "Depth TSV tracks",
+       "Legend title"
+      ],
+      "visibleControls": [
+       {
+        "selector": "[data-capture='depth-card'] input[aria-label='Depth legend title']",
+        "value": "DRR394922 mean depth"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-07-02-final-preview.webp",
+      "alt": "Final preview: a 60-px depth ring inside the features whose scale ends at 80x, with GC content and GC skew rings inside it, and DRR394922 mean depth in the legend.",
+      "caption": "The legend names the depth series DRR394922 mean depth."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 7,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-depth-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-depth-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true,
+       "adv.depth_max": 80,
+       "adv.depth_width_circular": 60
+      },
+      "visibleText": [
+       "AP027133.1",
+       "606,194 bp",
+       "GC content",
+       "DRR394922 mean depth"
       ]
      }
     }
@@ -557,7 +661,7 @@
    "operations": [
     {
      "media": {
-      "src": "./media/hepatoplasma_scabrum_depth/manual-07-01-feature-popup.webp",
+      "src": "./media/hepatoplasma_scabrum_depth/manual-08-01-feature-popup.webp",
       "alt": "Details popup of a hypothetical protein CDS at 240,989..247,312, 6,324 bp, protein ID BDV03503.1, beside the highlighted long feature near 246 kbp.",
       "caption": "The Details popup names the long CDS under the depth peak and gives its location."
      },
@@ -628,8 +732,8 @@
    "body": "Set Depth Window to 1 and Depth Step to 1000. The table holds one mean per kilobase, and these values draw each mean as it is."
   },
   {
-   "title": "The axis shows only one small label",
-   "body": "Set Depth Max to 80, and Large Tick, Small Tick, and Tick Font Size under the series to 20, 10, and 14."
+   "title": "The depth ring is thin and its scale is hard to read",
+   "body": "Set Depth Max to 80 and Depth Width to 60, and under the series set Large Tick, Small Tick, and Tick Font Size to 20, 10, and 14."
   },
   {
    "title": "The generated diagram differs from the Gallery image",
