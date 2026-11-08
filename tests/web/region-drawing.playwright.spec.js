@@ -123,10 +123,11 @@ test('Coordinates across the origin of a circular record make one window across 
     await expect(dialog).toHaveCount(0);
     const [added] = (await drawingIds(page)).filter((id) => id !== source);
     expect(await shownDrawing(page)).toEqual({ id: added, kind: 'linear' });
-    // The card holds the window in its read-only list (its Start/End fields would read 16,000-100 as reversed), with
-    // the bases it draws across the origin of the 16,569 bp record.
-    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100\s*670 bp$/]);
+    // The card holds the window in its read-only list: its Start/End fields would read 16,000-100 as reversed.
+    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100/]);
     await generate(page);
+    // Once the record is read, the row gives the bases it draws across the origin of the 16,569 bp record.
+    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100\s*670 bp$/]);
     const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
     expect(drawn).toHaveLength(1);
     // The record group carries the drawn span: it ends before it starts, across the origin.
