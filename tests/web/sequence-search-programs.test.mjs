@@ -8,7 +8,7 @@ import { test } from 'node:test';
 
 const search = await import('../../gbdraw/web/js/services/sequence-search.js');
 const runtime = await import('../../gbdraw/web/js/services/losat-runtime.js');
-const generated = await import('../../gbdraw/web/js/utils/sequence-search.generated.js');
+const generated = await import('../../gbdraw/web/js/utils/sequence-search-programs.generated.js');
 
 const nucleotide = { name: 'n1', length: 40, program: 'blastn', reach: 40, fasta: '>n1\nACGT\n' };
 const protein = { name: 'p1', length: 30, program: 'tblastn', reach: 90, fasta: '>p1\nMKV\n' };

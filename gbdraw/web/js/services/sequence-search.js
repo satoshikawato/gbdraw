@@ -8,14 +8,15 @@
 // searched sequences from the records the shown drawing draws, and names the set
 // a search adds. It reads no sequence and decides no program or hit itself.
 import { diagnosticError } from '../utils/error-normalization.js';
-import { SEARCH_PROGRAMS, SEARCH_QUERY_COLORS } from '../utils/sequence-search.generated.js';
+import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.js';
+import { SEARCH_PROGRAMS } from '../utils/sequence-search-programs.generated.js';
 
 /** @import { DrawnRecordInput, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 /** @import { LosatJob } from './losat.js' */
 /** @import { HistoryIntentChange } from './history.js' */
 
-/** The program that searches a query, as Python decides it: blastn for a nucleotide query, tblastn for a protein query. @typedef {import('../utils/sequence-search.generated.js').SearchProgram} SearchProgram */
+/** The program that searches a query, as Python decides it: blastn for a nucleotide query, tblastn for a protein query. @typedef {import('../utils/sequence-search-programs.generated.js').SearchProgram} SearchProgram */
 /**
  * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length (bases, or residues for a protein query),
  * the program that searches it, the most subject bases one of its hits covers (`SearchQuery.reach`, three per residue

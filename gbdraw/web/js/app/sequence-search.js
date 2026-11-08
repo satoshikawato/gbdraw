@@ -15,7 +15,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { comparisonStateForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
 import { boundAnnotation } from './annotations/record-selector.js';
-import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search.generated.js';
+import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
   nextSearchSetId, readSequenceSearchReply, resultRecordBinding, searchLosatPlan, searchPrograms, searchRawText, searchSetIdsOfStep,
   searchSpans, searchSubjects

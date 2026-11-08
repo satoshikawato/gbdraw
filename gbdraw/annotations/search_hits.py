@@ -39,7 +39,7 @@ from .models import AnnotationGradient, AnnotationSet, CoordinateSpan, RegionAnn
 
 SearchProgram = Literal["blastn", "tblastn"]
 # The programs in the order a search runs them, which is the order of their rows in the raw LOSAT table and of the
-# programs in its file name. The Web reads them from utils/sequence-search.generated.js.
+# programs in its file name. The Web reads them from utils/sequence-search-programs.generated.js.
 SEARCH_PROGRAMS: tuple[SearchProgram, ...] = get_args(SearchProgram)
 # The program that searches a query of each molecule (PD-OI-117), and the subject bases one query letter covers.
 _SEARCH_PROGRAMS: Mapping[SequenceMolecule, SearchProgram] = {"nucleotide": "blastn", "protein": "tblastn"}
@@ -48,7 +48,7 @@ SearchColorMode = Literal["query", "gradient"]
 
 # The default hit colours, one per query in query order (repeated past the last), and the
 # gradient by query position from its pale start to its dark end. Moderate chroma: a hit is
-# a large area on a short record. The Web reads them from utils/sequence-search.generated.js.
+# a large area on a short record. The Web reads them from utils/sequence-search-colors.generated.js.
 SEARCH_QUERY_COLORS: tuple[str, ...] = (
     "#c8607e", "#8670c4", "#3f9688", "#c08a3e", "#4f7fb8", "#7f9a4a", "#a0705a", "#6b7a8f",
 )
