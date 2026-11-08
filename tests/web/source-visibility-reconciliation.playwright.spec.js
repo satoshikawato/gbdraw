@@ -94,7 +94,10 @@ test('V6/V7 shared biological targets and manual matchers survive while rejected
     const b = await source(lambda, 'lambda.gb');
     await upload(page, { ...a, buffer: Buffer.concat([a.buffer, Buffer.from('\n'), b.buffer]) });
     await generate(page);
-    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
+    // The record of the one-record file is the first record of its replacement
+    // (D-20, OV-2882): the edit stays, keyed by that record's identity.
+    const [cardKey, featureId] = JSON.parse(key);
+    expect((await snapshot(page)).featureVisibility).toEqual({ [JSON.stringify([`${cardKey}:1`, featureId])]: 'off' });
     // Use the existing manual-rule owner for a type-wide matcher.
     await page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
