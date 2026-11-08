@@ -5,6 +5,7 @@
 // Session file container a user loads (each input an entry, its descriptor the
 // container's), and an older one into its JSON file. `readSavedSession` reads
 // the file a Save wrote back into that JSON form, each entry's bytes as base64.
+import { crc32, deflateRawSync } from 'node:zlib';
 import { SESSION_DRAWINGS_LAYOUT } from '../../../gbdraw/web/js/contracts/schema.generated.js';
 import { sessionContainerResources } from '../../../gbdraw/web/js/services/session-file.js';
 import {
@@ -27,19 +28,67 @@ export const sessionFileOf = async (document) => {
   const bytes = {};
   /** @type {Record<string, any>} */
   const sized = {};
-  // A document without a resources object (a case the reader refuses) is written as it is.
+  // A document without a resources object, or with a resource entry that is no
+  // descriptor (a case the reader refuses or repairs), cannot go through the
+  // writer: its container is built by hand, those entries kept as they are.
   const declared = document.resources && typeof document.resources === 'object' && !Array.isArray(document.resources)
     ? document.resources : null;
+  let damaged = declared === null;
   for (const [id, descriptor] of Object.entries(declared ?? {})) {
-    bytes[id] = typeof descriptor?.data === 'string' ? Buffer.from(descriptor.data, 'base64') : new Uint8Array();
+    if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) { damaged = true; continue; }
+    bytes[id] = typeof descriptor.data === 'string' ? Buffer.from(descriptor.data, 'base64') : new Uint8Array();
     sized[id] = { ...descriptor, size: bytes[id].length };
   }
-  const written = declared ? { ...document, resources: sessionContainerResources(sized) } : document;
+  if (damaged) {
+    const written = declared ? { ...document, resources: { ...declared, ...sessionContainerResources(sized) } } : document;
+    return handBuiltContainer(written, bytes);
+  }
+  const written = { ...document, resources: sessionContainerResources(sized) };
   return writeSessionContainer({
     document: written,
     documentBytes: () => new Blob([JSON.stringify(written)]).stream(),
     readResource: async (id) => new Blob([bytes[id]]).stream()
   });
+};
+
+/**
+ * A container of `document` with an entry for each of `entries`, written
+ * without the checks of `writeSessionContainer`: the document entry first,
+ * every entry deflated.
+ * @param {SessionJson} document
+ * @param {Record<string, Uint8Array>} entries
+ * @returns {Blob}
+ */
+const handBuiltContainer = (document, entries) => {
+  const files = [['gbdraw-session.json', Buffer.from(JSON.stringify(document))],
+    ...Object.entries(entries).map(([id, data]) => [`resources/${id}`, Buffer.from(data)])];
+  /** @type {Buffer[]} */
+  const parts = [];
+  /** @type {Buffer[]} */
+  const central = [];
+  let offset = 0;
+  for (const [name, data] of files) {
+    const nameBytes = Buffer.from(String(name));
+    const packed = deflateRawSync(data);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0, 6); local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(0, 10); local.writeUInt16LE(0x21, 12); local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(packed.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBytes.length, 26);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt16LE(0, 8);
+    entry.writeUInt16LE(8, 10); entry.writeUInt16LE(0, 12); entry.writeUInt16LE(0x21, 14); entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(packed.length, 20); entry.writeUInt32LE(data.length, 24); entry.writeUInt16LE(nameBytes.length, 28);
+    entry.writeUInt32LE((0o100644 << 16) >>> 0, 38); entry.writeUInt32LE(offset, 42);
+    parts.push(local, nameBytes, packed);
+    central.push(entry, nameBytes);
+    offset += 30 + nameBytes.length + packed.length;
+  }
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+  return new Blob([...parts, directory, end]);
 };
 
 /**

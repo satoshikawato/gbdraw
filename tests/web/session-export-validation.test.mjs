@@ -180,10 +180,14 @@ circularFiles.c_conservation_blasts_source = null;
 let downloadedBlobs = 0;
 let downloadedBlob = null;
 let compressionAttempts = 0;
+// A Save compresses each entry of its container; a refused Save compresses none, so the count a Save
+// left is the count at its download.
+let compressionAtDownload = 0;
 const originalCreateObjectUrl = URL.createObjectURL;
 const OriginalCompressionStream = globalThis.CompressionStream;
 URL.createObjectURL = (blob) => {
   downloadedBlobs += 1;
+  compressionAtDownload = compressionAttempts;
   downloadedBlob = blob;
   return 'blob:active-draft-session';
 };
@@ -278,7 +282,7 @@ try {
       assert.equal(state.proteinIdentityManifest.value, invalidManifest);
       assert.deepEqual([...state.losatCache.value], rawEntries);
       assert.equal(downloadedBlobs, 2);
-      assert.equal(compressionAttempts, 2);
+      assert.equal(compressionAttempts, compressionAtDownload);
     }
   }
   for (const rawEntries of [[], [entries.at(-1)]]) {
@@ -320,7 +324,7 @@ try {
   globalThis.CompressionStream = OriginalCompressionStream;
 }
 assert.ok(inputReads > 0, 'saving must bind the active input file');
-assert.equal(compressionAttempts, 5);
+assert.equal(compressionAttempts, compressionAtDownload);
 assert.equal(downloadedBlobs, 5);
 assert.ok(downloadedBlob instanceof Blob);
 

@@ -67,7 +67,7 @@ slotSnapshots.installArtifactSlot(circularSlot, { drawing: modeDrawing(state, 'c
 assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
 
 // The Legend edits are the shown Circular drawing's (Session 49 `drawings[]`, by ID).
-const maliciousLegendSession = JSON.parse(session);
+const maliciousLegendSession = structuredClone(session);
 const circularSlice = maliciousLegendSession.drawings.find((entry) => entry.id === maliciousLegendSession.ui.activeDrawingId);
 circularSlice.editorState = { ...(circularSlice.editorState || {}) };
 circularSlice.editorState.legend = {

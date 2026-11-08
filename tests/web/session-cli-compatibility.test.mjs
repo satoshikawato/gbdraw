@@ -172,7 +172,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         });
         assert.equal(sources.length, sourcePaths.length);
         for (const [index, source] of sources.entries()) {
-          assert.equal(hash(Buffer.from(source.descriptor.data, 'base64')), hash(await readFile(sourcePaths[index])));
+          assert.equal(hash(Buffer.from(await source.readBytes())), hash(await readFile(sourcePaths[index])));
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
@@ -264,7 +264,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
     const [first, second] = modeDrawing(state, 'linear').linearSeqs.map(seq => getSessionResourceSource(state.inputFiles.fileOf(seq.gb)));
     assert.equal(first.resourceId, second.resourceId);
-    assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
+    assert.equal(hash(Buffer.from(await first.readBytes())),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
     // A CLI Session that stored a copy of each drawn record has no selectors;
     // each row takes the `#n` of its expanded recordKey.
