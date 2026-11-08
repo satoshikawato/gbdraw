@@ -346,7 +346,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-05-01-continuous-preview.webp",
-      "alt": "Preview with a continuous depth ring around the genome inside the features, with a single small axis label.",
+      "alt": "Preview with a thin, continuous depth ring around the genome inside the features; its small scale label reads [0–74.5x].",
       "caption": "Window 1 and Step 1000 draw each 1-kbp mean as it is."
      },
      "capture": {
@@ -379,7 +379,8 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "AP027133.DRR394922.depth-1kb"
+       "AP027133.DRR394922.depth-1kb",
+       "[0–74.5x]"
       ]
      }
     }
@@ -387,7 +388,7 @@
   },
   {
    "title": "Give the depth ring a readable scale",
-   "body": "The ring is thin and its scale is small and ends at the highest mean in the table. In Depth TSV tracks, set Depth Max to 80 and Depth Width to 60, then, under the series, set Large Tick to 20, Small Tick to 10, and Tick Font Size to 14. Click Generate Diagram. The ring is wider and its scale now ends at 80x: coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+   "body": "The ring is thin, and its scale label, [0–74.5x], is too small to read. The scale ends at the highest mean in the table and marks nothing between its two ends. In Depth TSV tracks, set Depth Max to 80 for a round upper end and Depth Width to 60 for a wider ring. Under the series, set Large Tick to 20 and Small Tick to 10 to mark the scale every 10x, and Tick Font Size to 14 to enlarge the label. Click Generate Diagram. The label reads [0–80x], and the marks show that coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
    "table": {
     "columns": [
      "Setting",
@@ -504,8 +505,8 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-06-02-scale-preview.webp",
-      "alt": "Preview with a 60-px depth ring inside the features whose scale ends at 80x, an even coverage near 20x and one sharp peak near 246 kbp; the legend still names the depth series after the file.",
-      "caption": "The depth scale now ends at 80x; one sharp peak stands out near 246 kbp."
+      "alt": "Preview with a 60-px depth ring inside the features, its scale label [0–80x] and a mark every 10x; coverage stays near 20x with one sharp peak near 246 kbp; the legend still names the depth series after the file.",
+      "caption": "The label reads [0–80x]; the marks show coverage near 20x and one sharp peak near 246 kbp."
      },
      "capture": {
       "source": "webapp",
@@ -537,7 +538,8 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "AP027133.DRR394922.depth-1kb"
+       "AP027133.DRR394922.depth-1kb",
+       "[0–80x]"
       ]
      }
     }
@@ -616,7 +618,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-07-02-final-preview.webp",
-      "alt": "Final preview: a 60-px depth ring inside the features whose scale ends at 80x, with GC content and GC skew rings inside it, and DRR394922 mean depth in the legend.",
+      "alt": "Final preview: a 60-px depth ring inside the features with its scale label [0–80x], with GC content and GC skew rings inside it, and DRR394922 mean depth in the legend.",
       "caption": "The legend names the depth series DRR394922 mean depth."
      },
      "capture": {
@@ -649,7 +651,8 @@
        "AP027133.1",
        "606,194 bp",
        "GC content",
-       "DRR394922 mean depth"
+       "DRR394922 mean depth",
+       "[0–80x]"
       ]
      }
     }
@@ -732,7 +735,7 @@
    "body": "Set Depth Window to 1 and Depth Step to 1000. The table holds one mean per kilobase, and these values draw each mean as it is."
   },
   {
-   "title": "The depth ring is thin and its scale is hard to read",
+   "title": "The depth ring is thin and its scale label is too small to read",
    "body": "Set Depth Max to 80 and Depth Width to 60, and under the series set Large Tick, Small Tick, and Tick Font Size to 20, 10, and 14."
   },
   {

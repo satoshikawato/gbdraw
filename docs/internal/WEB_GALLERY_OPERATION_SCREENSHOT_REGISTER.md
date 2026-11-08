@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
@@ -21,6 +21,14 @@ tracks** row, which the reader fills only in step 4. The step 6 text and the
 final contract name the scale by Depth Max and Depth Width, not by its tick
 labels. The replayed final preview equals the Session's Result
 element for element.
+
+On 2026-11-09 the previews from step 4 on were recaptured with the depth axis
+drawn as one range label (`[0–74.5x]`, then `[0–80x]`) and unnumbered tick
+marks. Step 6 keeps its five settings, each named by the step-5 preview
+problem it fixes: Depth Width (a thin ring), Depth Max (the scale ends at the
+highest mean), Large Tick and Small Tick (no marks between the two ends), and
+Tick Font Size (a label too small to read). The previews of steps 5, 6 and 7
+assert their range label text (`visibleText`).
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
