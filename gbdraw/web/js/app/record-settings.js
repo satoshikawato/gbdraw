@@ -35,6 +35,7 @@ import { fileCardLine } from './file-card.js';
 /** @import { CircularRecordDiscovery, SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RecordDrawKey, RecordEditData, RecordIdentitySources, RecordSettingsOwner } from '../services/record-draw-selection.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { MultiRecordPosition } from '../services/config.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { ApplyLinearSeqMutation, AskLinearFileRemoval, RemoveLinearSource } from './linear-source-edits.js' */
 /** @import { RecordSelectionMode, RecordSource } from './record-selection.js' */
@@ -60,6 +61,36 @@ import { fileCardLine } from './file-card.js';
  * @property {(drawing: DrawingState, keep: (rules: SpecificColorRule[]) => SpecificColorRule[]) => unknown} takeBackRuleRows
  *   Takes back the drawing's color rule rows that `keep` leaves out, in the open History step.
  */
+
+/**
+ * After a settled read of a Circular drawing's cards, the one place its
+ * record choices are named by identity (OV-2869, OV-2903): each flat `#N`
+ * an older Session kept goes to its record over the cards as loaded
+ * (`placeFlatRecordSelectors`), and a Record select value or a Record
+ * Order row that names one record otherwise (a record ID, as a CLI Session
+ * of one-record files names its rows, OV-2906; a card's `#k`) becomes that
+ * record's identity, which the Record select lists and the Record Order
+ * keeps. The read's caller writes it in its step (Generate's own read
+ * commits it with that Generate).
+ * @param {DrawingState} drawing
+ * @param {ReturnType<typeof circularRecordEntries>} entries The drawing's read records, named.
+ * @param {() => RecordIdentitySources} identitySources The drawing's record lists and its cards as loaded.
+ */
+const placeRecordChoices = (drawing, entries, identitySources) => {
+  /** @type {MultiRecordPosition[]} */
+  const positions = drawing.adv.multi_record_positions;
+  const choices = { recordsOff: [...drawing.recordsOff], selector: drawing.form.circular_record_selector, positions };
+  const placed = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, identitySources()) : choices;
+  /** @param {string} key */
+  const identityOf = (key) => circularRecordSelection(entries, key).record?.value ?? key;
+  const selector = identityOf(placed.selector);
+  if (selector !== drawing.form.circular_record_selector) drawing.form.circular_record_selector = selector;
+  const rows = placed.positions.map((row) => ({ ...row, selector: identityOf(row.selector) }));
+  /** @param {readonly unknown[]} list @param {readonly unknown[]} next */
+  const changed = (list, next) => JSON.stringify(list) !== JSON.stringify(next);
+  if (changed(drawing.recordsOff, placed.recordsOff)) drawing.recordsOff.splice(0, Infinity, ...placed.recordsOff);
+  if (changed(positions, rows)) positions.splice(0, Infinity, ...rows);
+};
 
 /**
  * Registers nothing. The root creates it with the transitions below, before
@@ -108,28 +139,8 @@ export const createRecordSettingsSources = ({
     legacyOrder: heldCardPrefix(drawing.files.c_legacy_record_cards ?? [],
       circularSourceInputs(drawing.inputType.value, drawing.circularSources))
   });
-  /**
-   * After a settled read of a Circular drawing's cards, the one place its
-   * record choices are named by identity (OV-2869, OV-2903): each flat `#N`
-   * an older Session kept goes to its record over the cards as loaded
-   * (`placeFlatRecordSelectors`), and a Record select value that names one
-   * record otherwise (a record ID, a card's `#k`) becomes that record's
-   * identity, which the Record select lists. The read's caller writes it in
-   * its step (Generate's own read commits it with that Generate).
-   * @param {DrawingState} drawing
-   */
-  const placeCircularRecordChoices = (drawing) => {
-    const positions = drawing.adv.multi_record_positions;
-    const choices = { recordsOff: [...drawing.recordsOff], selector: drawing.form.circular_record_selector, positions };
-    const placed = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, circularIdentitySources(drawing)) : choices;
-    const selection = circularRecordSelection(circularEntriesOf(drawing), placed.selector);
-    const selector = selection.record ? selection.record.value : placed.selector;
-    if (selector !== drawing.form.circular_record_selector) drawing.form.circular_record_selector = selector;
-    /** @param {readonly unknown[]} list @param {readonly unknown[]} next */
-    const changed = (list, next) => JSON.stringify(list) !== JSON.stringify(next);
-    if (changed(drawing.recordsOff, placed.recordsOff)) drawing.recordsOff.splice(0, Infinity, ...placed.recordsOff);
-    if (changed(positions, placed.positions)) positions.splice(0, Infinity, ...placed.positions);
-  };
+  /** OV-2869, OV-2906: see `placeRecordChoices`. @param {DrawingState} drawing */
+  const placeCircularRecordChoices = (drawing) => placeRecordChoices(drawing, circularEntriesOf(drawing), () => circularIdentitySources(drawing));
   /** @param {DrawingState} drawing @returns {RecordSettingsOwner[]} */
   const circularRecordSettingsOwners = (drawing) => {
     const discovery = getCircularRecordDiscoveryState(drawing);

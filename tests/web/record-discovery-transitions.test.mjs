@@ -281,3 +281,22 @@ test('the first settled read places a Session\'s flat #N and a record ID Record 
   assert.deepEqual([...circular.recordsOff], []);
   assert.ok(cardA);
 });
+
+// OV-2906: a CLI Session of one-record files names its Record Order rows by
+// record ID (`--multi_record_position BA000007.3@1`), and its committed
+// records carry no selector to read the ID from, so Load keeps the token.
+// The first settled read places each row at the record of that ID.
+test('the first settled read places a Record Order row named by record ID at its record', async () => {
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = true;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50]), genbank('c.gb', ['C1', 60])]);
+  await settle();
+  const [cardA, cardB, cardC] = circular.circularSources.map((card) => card.uid);
+  circular.adv.multi_record_positions = [{ selector: 'A1', row: 1 }, { selector: 'C1', row: 2 }, { selector: 'B1', row: 2 }];
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.deepEqual(circular.adv.multi_record_positions.map(({ selector, row }) => [selector, row]),
+    [[cardA, 1], [cardC, 2], [cardB, 2]]);
+  circular.form.multi_record_canvas = false;
+});

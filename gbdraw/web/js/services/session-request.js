@@ -1937,6 +1937,9 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
  * record key is its record's identity. The token `#k` names the request's k-th
  * record, a record ID the record its selector names by that ID; any other
  * token stays as it is (the request writer leaves out a row no drawn record has).
+ * A record ID of a one-record file, whose request record has no selector (the
+ * CLI's), stays too: the first settled read of the cards places it at the
+ * record of that ID (`placeCircularRecordChoices`, OV-2906).
  * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
  * @param {string} token
  */
