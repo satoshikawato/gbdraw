@@ -275,6 +275,16 @@ export const MODE_PROFILE_DATA = deepFreeze({
         ]
       ]
     },
+    "scalarAxisTickFont": {
+      "rangePx": [
+        5.0,
+        8.0
+      ],
+      "thicknessFraction": {
+        "circular": 0.22,
+        "linear": 0.7
+      }
+    },
     "sizeClassThresholdBp": {
       "circular": 75000,
       "linear": 100000

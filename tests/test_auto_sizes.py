@@ -18,6 +18,7 @@ from gbdraw.auto_sizes import (
     auto_setting_values,
     circular_tick_intervals,
     circular_track_width_px,
+    depth_axis_tick_font_size_px,
     depth_sliding_window,
     determine_length_parameter,
     linear_label_font_size,
@@ -32,7 +33,6 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRend
 from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_for_preset
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
-from gbdraw.layout.circular_depth_axis import depth_axis_tick_font_size_px
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from gbdraw.mode_profiles import DiagramMode
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
@@ -408,6 +408,20 @@ def test_dependent_tick_fonts_follow_a_given_track_thickness(cfg: GbdrawConfig) 
     assert linear["objects.gc_content.tick_font_size"] == 8.0
     circular = auto_setting_values(DrawnExtent("circular", (3_000,)), cfg, track_thickness_px={"gc_content": 30.0})
     assert circular["objects.gc_content.tick_font_size"] == pytest.approx(6.6)
+
+
+@pytest.mark.parametrize("case", VECTORS["gcAxisTickFonts"], ids=lambda case: case["name"])
+def test_a_percent_gc_axis_takes_the_tick_font_of_the_depth_axis_beside_it(case: dict[str, Any]) -> None:
+    # The drawing draws the GC axis in gc_axis_tick_font_size_of_depth's font (OV-2873); its Auto value is that font.
+    cfg = apply_config_overrides(None, case["config"])
+    values = auto_setting_values(
+        DrawnExtent(case["mode"], tuple(case["recordLengths"])),
+        cfg,
+        track_thickness_px=case["trackThicknessPx"],
+        show_depth=case["showDepth"],
+    )
+    for setting, expected in case["expected"].items():
+        assert values[setting] == pytest.approx(expected, abs=1e-9), setting
 
 
 def test_auto_values_list_only_the_settings_drawn_in_the_mode(cfg: GbdrawConfig) -> None:

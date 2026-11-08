@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import NamedTuple, Protocol
 
-from gbdraw.auto_sizes import scalar_axis_tick_font_size
+from gbdraw.auto_sizes import TickedAxisSource, depth_axis_tick_font_size_px, gc_axis_tick_font_size_of_depth
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.core.text import calculate_svg_bbox_dimensions
 
@@ -33,25 +33,9 @@ class ScalarAxisTick(NamedTuple):
     label: str | None
 
 
-class TickFontSource(Protocol):
-    """A scalar axis's tick font size: set, or none for the Auto size of its track."""
-
-    @property
-    def tick_font_size(self) -> float | None: ...
-
-
-class ScalarAxisSource(Protocol):
-    """What the radial layout reads of a scalar track (depth, GC content in percent): its axis, its ticks and their
-    font size."""
-
-    @property
-    def show_axis(self) -> bool: ...
-
-    @property
-    def show_ticks(self) -> bool: ...
-
-    @property
-    def tick_font_size(self) -> float | None: ...
+class ScalarAxisSource(TickedAxisSource, Protocol):
+    """What the radial layout reads of a scalar track (depth, GC content in percent): its axis, its ticks, their
+    font size and their labels."""
 
     @property
     def axis_labels(self) -> ScalarAxisLabelStyle: ...
@@ -84,18 +68,6 @@ class ScalarAxisFootprint:
     radial_outer_extra_px: float
 
 
-def depth_axis_tick_font_size_px(
-    axis: TickFontSource,
-    track_width_px: float,
-) -> float:
-    """The tick font of a Circular scalar axis on a track ``track_width_px`` wide: its own size, else the Auto
-    size of that width."""
-
-    if axis.tick_font_size is not None:
-        return max(0.0, float(axis.tick_font_size))
-    return scalar_axis_tick_font_size("circular", track_width_px)
-
-
 def scalar_axis_footprint(
     axis: ScalarAxisSource,
     track_width_px: float,
@@ -114,26 +86,6 @@ def scalar_axis_footprint(
     if bool(axis.show_ticks) and axis.axis_labels == "numbered":
         extra = max(extra, 0.5 * depth_axis_tick_font_size_px(axis, track_width_px))
     return ScalarAxisFootprint(extra, extra)
-
-
-def gc_axis_tick_font_size_of_depth(
-    gc: TickFontSource, depth: ScalarAxisStyle | None, depth_track_width_px: float | None
-) -> float | None:
-    """The tick font a Percent GC axis without its own size takes from the depth axis beside it, so the two axes
-    read alike: the depth axis's size on its track ``depth_track_width_px`` wide (as requested, before any
-    narrowing). None when the GC axis sets its own size or no depth axis with ticks is drawn; the GC axis then
-    keeps its own size or the Auto size of its own track. The radial layout keeps the GC axis's room in this font
-    and the drawing draws it in it."""
-
-    if (
-        gc.tick_font_size is not None
-        or depth is None
-        or not (depth.show_axis and depth.show_ticks)
-        or depth_track_width_px is None
-        or depth_track_width_px <= 0
-    ):
-        return None
-    return depth_axis_tick_font_size_px(depth, depth_track_width_px)
 
 
 @dataclass(frozen=True)
@@ -264,10 +216,8 @@ def scalar_axis_ink(
 __all__ = [
     "CircularRangeLabel",
     "CircularScalarAxes",
-    "gc_axis_tick_font_size_of_depth",
     "circular_range_label",
     "ScalarAxisSource",
-    "TickFontSource",
     "ScalarAxisStyle",
     "DEPTH_AXIS_SMALL_TICK_SIZE_PX",
     "DEPTH_AXIS_STROKE_WIDTH_PX",
@@ -275,7 +225,6 @@ __all__ = [
     "SCALAR_AXIS_LABEL_GAP_PX",
     "ScalarAxisTick",
     "ScalarAxisFootprint",
-    "depth_axis_tick_font_size_px",
     "scalar_axis_footprint",
     "scalar_axis_ink",
 ]

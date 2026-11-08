@@ -25,7 +25,7 @@ from pandas import DataFrame
 from svgwrite import Drawing
 from svgwrite.container import Group
 
-from ...auto_sizes import circular_track_width_px
+from ...auto_sizes import circular_track_width_px, gc_axis_tick_font_size_of_depth
 from ...canvas import CircularCanvasConfigurator, CircularCanvasGeometry
 from ...analysis.conservation import (
     CONSERVATION_MIXED_BAND_COLOR,
@@ -111,7 +111,7 @@ from ...layout.circular import (
     feature_radius_intervals,
     slots_feature_layout,
 )
-from ...layout.circular_depth_axis import CircularScalarAxes, ScalarAxisStyle, gc_axis_tick_font_size_of_depth
+from ...layout.circular_depth_axis import CircularScalarAxes, ScalarAxisStyle
 from ...layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink, stroke_pad_px
 from ...layout.composition import (
     CompositionInputs,

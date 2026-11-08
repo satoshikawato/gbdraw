@@ -46,6 +46,12 @@ write-up of a release.
   polygon instead of a ring. The rings now follow the circle between samples,
   in the CLI, the Python API, and the Web app. Longer records draw as before
   (OV-2863).
+- Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
+  a Percent GC content axis, the GC content **Tick Font Size** field showed an
+  Auto size that the figure did not use: the GC axis numbers are drawn in the
+  Depth axis's font, so a narrow Depth track drew them smaller than shown
+  (for example 5.5 px drawn, 8 px shown). The field now shows the size the
+  figure draws (OV-2873).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while
