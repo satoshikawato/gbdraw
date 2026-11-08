@@ -43,7 +43,7 @@ const sessionPath = (name) => join(process.cwd(), 'gbdraw/web/gallery/sessions',
 // `file` is a Gallery Session by name, or a Session file as `setInputFiles` takes it.
 const loadSession = async (page, file) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(typeof file === 'string' ? sessionPath(file) : file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(typeof file === 'string' ? sessionPath(file) : file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   await frames(page);

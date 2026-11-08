@@ -15,7 +15,7 @@ const setup = async (page) => {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await openApp(page);
-  await page.locator('input[type="file"][accept*="application/json"]').setInputFiles(fixture());
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(fixture());
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   expect(errors).toEqual([]);
 };

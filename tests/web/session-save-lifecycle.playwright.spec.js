@@ -132,7 +132,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   const nativeDialogs = recordNativeDialogs(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false
@@ -354,7 +354,7 @@ test('Rename Session asks in the app dialog with the title selected; Enter renam
   const nativeDialogs = recordNativeDialogs(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle);
@@ -398,7 +398,7 @@ test('Rename Session is one History step: Undo and Redo move the title apart fro
   test.setTimeout(240_000);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   const read = () => page.evaluate(() => ({

@@ -385,7 +385,7 @@ test('Circular region labels left no room by set radii: the notice counts them a
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+  await page.locator('input[type=file][accept*=".gbdraw"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   await page.evaluate(() => {

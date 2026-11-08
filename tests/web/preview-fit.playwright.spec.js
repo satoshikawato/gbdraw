@@ -156,7 +156,7 @@ const openLinearSession = async (page) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+  await page.locator('input[type=file][accept*=".gbdraw"]')
     .setInputFiles(linearSession);
   await waitForSessionLoadAtRest(page, { timeout: 60_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -234,7 +234,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await openApp(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await sampleLoadFrames(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    await page.locator('input[type=file][accept*=".gbdraw"]')
       .setInputFiles(circularSession);
     await waitForSessionLoadAtRest(page, { timeout: 60_000 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -269,7 +269,7 @@ for (const { session, viewport, tap } of pendingTapCases) {
     await openApp(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await sampleLoadFrames(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    await page.locator('input[type=file][accept*=".gbdraw"]')
       .setInputFiles(join(repoRoot, session));
     if (tap) {
       // The tap comes while the Load is pending: once the stored figure is drawn, else at once.
@@ -307,7 +307,7 @@ test('a legacy configuration Load keeps the zoom of the figure already shown', a
   const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
   for (let step = 0; step < 3; step += 1) await zoomIn.click();
   const zoomed = await appZoom(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles({
     name: 'legacy-config.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ form: {} }))
   });
   await expect(page.getByText('Configuration loaded from an older gbdraw.', { exact: false }).first()).toBeVisible();

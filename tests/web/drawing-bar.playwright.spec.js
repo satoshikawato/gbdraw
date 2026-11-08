@@ -143,7 +143,7 @@ test.describe('390 px', () => {
     await openApp(page);
     const tab = (pane) => page.locator(`.phone-pane-tabs [role="tab"][data-phone-pane="${pane}"]`);
     await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
-    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
     await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     expect(await page.locator('.origin-top svg').count()).toBe(0);
@@ -152,7 +152,7 @@ test.describe('390 px', () => {
     // Result switches to Settings.
     await tab('preview').click();
     await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
-    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
     await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
     expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
     await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');

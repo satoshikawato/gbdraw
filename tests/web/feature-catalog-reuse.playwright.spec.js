@@ -86,7 +86,7 @@ const start = async (browser, { captureReplies = false, crossOriginIsolated = fa
 };
 
 const loadSession = async (page, file) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
 };

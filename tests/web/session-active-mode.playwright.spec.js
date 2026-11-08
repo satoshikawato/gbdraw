@@ -1,12 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile, writeGallerySessionFile } = require('./helpers/session-file.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertLegacyLoadConvertedOnce,
@@ -17,11 +17,10 @@ const {
   expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
-const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const divergentFixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+// Gallery Sessions as the Session files a user loads, written beside each test's output.
+const galleryFile = (info, id) => writeGallerySessionFile(id, info.outputPath(`${id}.gbdraw`));
 const linearSource = path.join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb');
-const sessionInput = 'input[accept^=".json,"]';
-const readSession = async file => JSON.parse(gunzipSync(await fs.readFile(file)));
+const sessionInput = 'input[accept*=".gbdraw"]';
 
 const load = async (page, file) => {
   await page.locator(sessionInput).setInputFiles(file);
@@ -35,7 +34,7 @@ const save = async (page, file) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await (await downloadPromise).saveAs(file);
-  return readSession(file);
+  return readSessionFile(file);
 };
 
 const snapshot = page => page.evaluate(async () => {
@@ -69,7 +68,7 @@ const snapshot = page => page.evaluate(async () => {
 test('current biological Save, fresh Load, and re-save keep a Linear draft beside a Circular Result', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   await openApp(page);
-  await load(page, divergentFixture);
+  await load(page, await galleryFile(info, 'HmmtDNA_basic_circular'));
   const circular = await snapshot(page);
   await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
@@ -90,7 +89,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   expect(before.linearSource).toBeTruthy();
   expect(before.history[0]).toBeGreaterThan(0);
 
-  const firstFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
+  const firstFile = info.outputPath('linear-draft.gbdraw');
   const first = await save(page, firstFile);
   expect(first.version).toBe(CURRENT_SESSION_VERSION);
   expect(first.ui.activeDrawingId).toBe('linear');
@@ -155,7 +154,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(circularResult.selectedResultIndex).toBe(circular.selectedResultIndex);
     await showDrawing(fresh, { kind: 'linear' });
 
-    const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
+    const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw'));
     expect(second.ui.activeDrawingId).toBe('linear');
     // Load opens the Linear typography unlinked, as the draft's scale and ruler
     // label sizes differ (the step above set only the scale size).
@@ -192,7 +191,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
 test('each mode keeps its own title and fonts while missing Linear layout starts fresh', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   await openApp(page);
-  await load(page, fixture);
+  await load(page, await galleryFile(info, 'tobacco-chloroplast'));
   const titles = page.locator('summary[aria-label="Titles and Record Labels"]');
   if (!(await titles.evaluate(summary => summary.parentElement.open))) await titles.press('Enter');
   const plotTitle = page.getByRole('textbox', { name: 'Plot Title', exact: true });
@@ -219,7 +218,7 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
   await showDrawing(page, { kind: 'circular' });
   expect(await draft(page)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
 
-  const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
+  const file = info.outputPath('per-mode-title.gbdraw');
   const saved = await save(page, file);
   // Each drawing holds its own settings (Session 49).
   expect(savedDrawing(saved, 'circular').config.form.plot_title).toBe('Circular title');
@@ -242,16 +241,16 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
 test('matching current, historical, CLI-origin, and settings-only modes keep their Load behavior', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   await openApp(page);
-  await load(page, fixture);
+  await load(page, await galleryFile(info, 'tobacco-chloroplast'));
   let state = await snapshot(page);
   expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
   const previewWorker = await getDiagramWorkerActivity(page);
   expect(previewWorker.runs).toBe(0);
   expect(previewWorker.constructions).toBeLessThanOrEqual(1);
 
-  const current = await save(page, info.outputPath('matching.gbdraw-session.json.gz'));
+  const current = await save(page, info.outputPath('matching.gbdraw'));
   expect(current.ui.activeDrawingId).toBe('circular');
-  await load(page, info.outputPath('matching.gbdraw-session.json.gz'));
+  await load(page, info.outputPath('matching.gbdraw'));
   state = await snapshot(page);
   expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
@@ -272,7 +271,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   const settingsFile = path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz');
-  const settings = await readSession(settingsFile);
+  const settings = JSON.parse(require('node:zlib').gunzipSync(await fs.readFile(settingsFile)));
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
   });
@@ -304,13 +303,14 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
 test('failed import after draft application restores the prior mode, profiles, sources, and Result', async ({ page }, info) => {
   test.setTimeout(240_000);
   await openApp(page);
-  await load(page, fixture);
+  await load(page, await galleryFile(info, 'tobacco-chloroplast'));
   await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   const before = await snapshot(page);
-  const failure = await evaluateWithRetainedPromise(page, async () => {
-    const name = 'tobacco-chloroplast.gbdraw-session.json';
-    const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
+  const sessionBytes = (await fs.readFile(await galleryFile(info, 'tobacco-chloroplast'))).toString('base64');
+  const failure = await evaluateWithRetainedPromise(page, async (base64) => {
+    const name = 'tobacco-chloroplast.gbdraw';
+    const file = new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name);
     const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       // A Gallery Session loads without a dialog; one would cancel the Load.
@@ -318,7 +318,7 @@ test('failed import after draft application restores the prior mode, profiles, s
       beforePreviewMount: () => { throw new Error('S02 forced rollback'); }
     });
     return { status: result.status, error: result.error };
-  });
+  }, sessionBytes);
   expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' } });
   expect(JSON.stringify(failure)).not.toContain('S02 forced rollback');
   const restored = await snapshot(page);
@@ -341,7 +341,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   const digest = content => createHash('sha256').update(content).digest('hex');
   expect((await canonicalSvgHashes(restored.results)).map(digest))
     .toEqual((await canonicalSvgHashes(before.results)).map(digest));
-  const saved = await save(page, info.outputPath('after-rollback.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('after-rollback.gbdraw'));
   expect(saved.ui.activeDrawingId).toBe('linear');
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
 });

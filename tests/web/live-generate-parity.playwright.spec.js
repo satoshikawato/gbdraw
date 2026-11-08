@@ -1746,7 +1746,7 @@ test('Palette change repaints the skew track and its Legend rows of a loaded Ses
   test.setTimeout(240_000);
   await openFresh(page);
   // A CLI Session of 0.13.0 lists no extracted features, so the Load is awaited by its Result.
-  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.svgContainer?.querySelector('g#skew'), null, { timeout: 60_000 });

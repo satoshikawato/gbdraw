@@ -117,7 +117,7 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   page.on('pageerror', error => errors.push(String(error)));
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
   // On a phone a Load with a Result shows the Preview pane, as Generate does.

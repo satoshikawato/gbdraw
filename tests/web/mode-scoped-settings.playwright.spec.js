@@ -157,7 +157,7 @@ const saveAndLoadFresh = async (page, browser, path) => {
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   const fresh = await context.newPage();
   await openFresh(fresh);
-  await fresh.locator('input[accept^=".json,"]').setInputFiles(path);
+  await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await fresh.evaluate(() => window.__GBDRAW_APP__.errorLog), 'Load').toBeNull();
   await settleLive(fresh);
@@ -522,7 +522,7 @@ for (const { fixture, from, to, path, value } of OV106_CASES) {
   test(`OV-106: a ${MODE_NAMES[from]} unmanaged override (${path}) does not fail the ${MODE_NAMES[to]} Generate and Save`, async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     await openFresh(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles({
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles({
       name: `ov106-${from}.gbdraw-session.json`, mimeType: 'application/json', buffer: withConfigOverride(fixture, path, value)
     });
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending

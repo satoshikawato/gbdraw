@@ -10,7 +10,7 @@ const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-ch
 const loadedAnnotationCount = shownSavedDrawing(JSON.parse(require('node:fs').readFileSync(fixture, 'utf8')))
   .config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-const input = 'input[accept^=".json,"]';
+const input = 'input[accept*=".gbdraw"]';
 
 const load = async (page, file) => {
   page.on('dialog', dialog => dialog.accept());

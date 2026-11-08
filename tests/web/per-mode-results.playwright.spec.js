@@ -155,7 +155,7 @@ const load = async (page, path) => {
     dialogPages.add(page);
   }
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -751,7 +751,7 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
       config.disposeSessionOperations();
     };
   });
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await page.waitForFunction(() => window.__E1_CANCELED_IN_BASELINE__ && !window.__GBDRAW_APP__.sessionImportPending,
     null, { timeout: 180_000 });
   await settleLive(page);
@@ -778,7 +778,7 @@ test('the Undo of a Generate after a legacy configuration Load keeps the loaded 
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const before = await undoCount();
   const rule = { feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Loaded' };
-  await page.locator('input[accept^=".json,"]').setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles({
     name: 'legacy-config.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ form: {}, rules: [rule] }))
@@ -879,7 +879,7 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
       }
     });
   });
-  await page.locator('input[accept^=".json,"]').setInputFiles(LAMBDA);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(LAMBDA);
   await page.waitForFunction(() => window.__E1_INJECTED__ === 1 && !window.__GBDRAW_APP__.sessionImportPending,
     null, { timeout: 180_000 });
   await settleLive(page);

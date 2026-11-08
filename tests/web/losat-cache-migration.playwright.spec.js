@@ -45,7 +45,7 @@ const expandedSessionBytes = (path) => {
 const readSession = (path) => JSON.parse(expandedSessionBytes(path).toString('utf8'));
 
 const importSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;

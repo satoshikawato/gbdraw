@@ -26,7 +26,7 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 const sessionSettled = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
 
 const loadSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await sessionSettled(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
 };
@@ -254,7 +254,7 @@ test('Save Session holds no fold state, Load Session folds the loaded cards, and
   await expectFolded(page, [false, true, false, false, false]);
   const broken = testInfo.outputPath('broken.gbdraw-session.json');
   require('node:fs').writeFileSync(broken, text.slice(0, Math.floor(text.length / 2)));
-  await page.locator('input[accept^=".json,"]').setInputFiles(broken);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(broken);
   await sessionSettled(page);
   await expect(page.locator('[data-session-import-status]')).toHaveCount(0);
   expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.errorLog)), 'the broken Session is refused').toBe(true);
@@ -391,7 +391,7 @@ test('a loaded GFF3 + FASTA Session folds a card that holds both of its files', 
   // A fresh page is on GenBank: the load rule reads the input type of the Session it loads.
   await openLinear(page);
   await expect(page.getByRole('radio', { name: 'GenBank', exact: true }).first()).toBeChecked();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await sessionSettled(page);
   await expect(cards(page)).toHaveCount(1);
   await expectFolded(page, [true]);

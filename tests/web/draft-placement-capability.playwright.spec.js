@@ -24,7 +24,7 @@ for (const mode of ['circular', 'linear']) {
       page = await context.newPage();
       page.on('dialog', (dialog) => dialog.dismiss());
       await openApp(page);
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
         && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
     };
@@ -208,7 +208,7 @@ test('a Circular lane placement waits in Circular while Linear generates (OV-08)
     await page.context().close();
     page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
     await openApp(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
     const loaded = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       const app = window.__GBDRAW_APP__;

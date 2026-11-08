@@ -24,7 +24,7 @@ const sourceSession = JSON.parse(readFileSync(join(
 const unmanagedPath = 'objects.gc_content.percent_background_opacity';
 
 const loadSessionPayload = async (page, payload) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
     name: 'unmanaged-config.gbdraw-session.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(payload))
@@ -101,7 +101,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(saved.path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved.path);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(disclosure).toContainText(unmanagedPath);
 

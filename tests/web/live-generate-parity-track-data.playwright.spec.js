@@ -484,7 +484,7 @@ test('A Session saved with Depth hidden loads without a Depth row in the list', 
   const saved = await saveSessionJson(page, 'depth-hidden');
   const path = test.info().outputPath(`depth-hidden-reload-${Date.now()}.gbdraw-session.json`);
   await writeFile(path, JSON.stringify(saved));
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
   await settleLive(page);
   expect(await depthRows(page), 'listed after Load').toEqual([]);
@@ -1201,7 +1201,7 @@ for (const mode of ['circular', 'linear']) {
     const saved = await saveSessionJson(page, `gt-depth-shown-${mode}`);
     const path = test.info().outputPath(`gt-depth-shown-${mode}-${Date.now()}.gbdraw-session.json`);
     await writeFile(path, JSON.stringify(saved));
-    await page.locator('input[accept^=".json,"]').setInputFiles(path);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
     await settleLive(page);
     expect(await resultDepthRows(page), `${mode}: Result after Load`).toEqual(await depthRows(page));

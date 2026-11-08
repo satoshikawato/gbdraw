@@ -139,7 +139,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toHaveValue('BGC0000709');
   await expect(page.getByLabel('Circular region start')).toHaveValue('1000');
@@ -301,7 +301,7 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
 
   const select = page.getByLabel('Circular record', { exact: true });

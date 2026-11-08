@@ -177,7 +177,7 @@ import {
 } from './session-file.js';
 import { openSessionContainerEntry } from './session-container.js';
 import { importSessionFile } from './session-import-client.js';
-/** @import { SessionImportContainer } from './session-import-client.js' */
+/** @import { SessionImportCandidate, SessionImportContainer } from './session-import-client.js' */
 import {
   convertStoredProteinResultFrames, withConvertedResources
 } from './main-session-comparison-frame.js';
@@ -6382,6 +6382,53 @@ const losatEntriesOfDrawing = (request, conservationPairs, entries) => {
 };
 
 /**
+ * Writes a checked Session document as its Session file and hands it to the
+ * browser, after the large-download confirm; the file's temporary copies wait
+ * until the next Save, since the browser may still read the download.
+ * @param {Record<string, unknown> & { resources: Readonly<Record<string, RawSessionResourceDescriptor>> }} document
+ * @param {string} sessionFilename
+ * @param {{ askChoice: DownloadChoicePort, isCurrent: () => boolean }} ports
+ * @returns {Promise<SessionSaveResult>}
+ */
+const downloadSessionFile = async (document, sessionFilename, { askChoice, isCurrent }) => {
+  recordSessionLifecycleEvent('session-save-compression-start');
+  releaseLastSessionFile();
+  releaseLastSessionFile = () => {};
+  const sessionFile = await writeSessionDocumentFile(document);
+  const compressed = sessionFile.blob;
+  recordSessionLifecycleEvent('session-save-compression-end', {
+    compressedSize: compressed.size
+  });
+  if (!isCurrent()) {
+    sessionFile.release();
+    return { status: 'canceled' };
+  }
+  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
+  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
+    title: t('Download a large Session?'),
+    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
+  })) {
+    recordSessionLifecycleEvent('session-save-download-canceled', {
+      reason: 'large-download',
+      compressedSize: compressed.size
+    });
+    sessionFile.release();
+    return { status: 'canceled', compressedSize: compressed.size };
+  }
+  if (!isCurrent()) {
+    sessionFile.release();
+    return { status: 'canceled' };
+  }
+  releaseLastSessionFile = sessionFile.release;
+  downloadBlob(compressed, sessionFilename);
+  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
+    compressedSize: compressed.size
+  });
+  lastSessionFilename = sessionFilename;
+  return { status: 'saved', blob: compressed, filename: sessionFilename };
+};
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  * @returns {Promise<SessionSaveResult>}
@@ -6553,41 +6600,7 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-end');
-  recordSessionLifecycleEvent('session-save-compression-start');
-  releaseLastSessionFile();
-  releaseLastSessionFile = () => {};
-  const sessionFile = await writeSessionDocumentFile({ ...sessionData, resources: built.resources });
-  const compressed = sessionFile.blob;
-  recordSessionLifecycleEvent('session-save-compression-end', {
-    compressedSize: compressed.size
-  });
-  if (!isCurrent()) {
-    sessionFile.release();
-    return { status: 'canceled' };
-  }
-  const largeMegabytes = largeSessionDownloadMegabytes(compressed);
-  if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
-    title: t('Download a large Session?'),
-    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
-  })) {
-    recordSessionLifecycleEvent('session-save-download-canceled', {
-      reason: 'large-download',
-      compressedSize: compressed.size
-    });
-    sessionFile.release();
-    return { status: 'canceled', compressedSize: compressed.size };
-  }
-  if (!isCurrent()) {
-    sessionFile.release();
-    return { status: 'canceled' };
-  }
-  releaseLastSessionFile = sessionFile.release;
-  downloadBlob(compressed, sessionFilename);
-  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
-    compressedSize: compressed.size
-  });
-  lastSessionFilename = sessionFilename;
-  return { status: 'saved', blob: compressed, filename: sessionFilename };
+  return downloadSessionFile({ ...sessionData, resources: built.resources }, sessionFilename, { askChoice, isCurrent });
 };
 
 /**
@@ -7128,6 +7141,35 @@ const copyContainerInputs = async (file, { resources: entries, inputBytes }, par
 };
 
 /**
+ * Load's reading of a Session file before anything changes (PD-OI-016): the
+ * import Worker reads it off the main thread and refuses a document with an
+ * unsafe own key (OV-952) or a key written twice (OV-2694); a Session file
+ * container's inputs then go into the input copies, whose release joins
+ * `loadCopies`. A JSON Session 51 is refused: a Session 51 is a container,
+ * and a JSON Session 51 never reached a release (receipt session.file-container).
+ * @param {File} file
+ * @param {{ signal?: AbortSignal, isCurrent: () => boolean }} options
+ * @param {(() => void)[]} loadCopies
+ * @returns {Promise<SessionImportCandidate | null>} null when the Load is no longer current.
+ */
+const readSessionFileForLoad = async (file, { signal, isCurrent }, loadCopies) => {
+  const candidate = await importSessionFile(file, { signal });
+  if (!isCurrent()) return null;
+  recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+  const parsed = candidate.data;
+  if (candidate.container) {
+    loadCopies.push(await copyContainerInputs(file, candidate.container,
+      /** @type {{ resources: Record<string, unknown> }} */ (parsed)));
+    return isCurrent() ? candidate : null;
+  }
+  if (isPlainObject(parsed) && typeof parsed.version === 'number' && versionHoldsDrawings(parsed.version)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED' },
+      { stage: 'parse', operation: 'session-load' });
+  }
+  return candidate;
+};
+
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
@@ -7178,25 +7220,12 @@ const importSessionDocument = async (e, options = {}) => {
    */
   const legacyFileSets = new Map();
   const previousAlert = state.errorLog.value;
-  // Gives back the copies of a container's inputs unless the Load ends ok.
-  let releaseContainerCopies = () => {};
+  /** @type {(() => void)[]} Gives back the copies of a container's inputs unless the Load ends ok. */ const loadCopies = [];
 
   try {
-    const candidate = await importSessionFile(file, { signal: options.signal });
-    if (!options.isCurrent()) return { status: 'canceled' };
-    recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
-    // The import Worker refused a document with an unsafe own key (OV-952).
+    const candidate = await readSessionFileForLoad(file, { signal: options.signal, isCurrent: options.isCurrent }, loadCopies);
+    if (!candidate) return { status: 'canceled' };
     const parsed = candidate.data;
-    if (candidate.container) {
-      // A Session file container: its inputs go into the copies before anything changes (PD-OI-016).
-      releaseContainerCopies = await copyContainerInputs(file, candidate.container,
-        /** @type {{ resources: Record<string, unknown> }} */ (parsed));
-      if (!options.isCurrent()) return { status: 'canceled' };
-    } else if (isPlainObject(parsed) && typeof parsed.version === 'number' && versionHoldsDrawings(parsed.version)) {
-      // A Session 51 is a container; a JSON Session 51 never reached a release (receipt session.file-container).
-      throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED' },
-        { stage: 'parse', operation: 'session-load' });
-    }
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
@@ -8557,7 +8586,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
-    if (!loadedOk) releaseContainerCopies();
+    if (!loadedOk) loadCopies.splice(0).forEach((release) => release());
     // A Load that did not end ok withdraws the stored figure it showed.
     if (storedFigureWithdrawal && !loadedOk) withdrawStoredFigure(storedFigureWithdrawal, storedFigurePreview);
   }

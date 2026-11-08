@@ -37,7 +37,7 @@ test('History prepares cold rules once, skips warm config preparation, and reche
   test.setTimeout(180_000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   const context = page.context();
   const cdp = await context.newCDPSession(page);
@@ -120,7 +120,7 @@ test('Redo of a rule predicate change shows what Generate draws', async ({ page 
   test.setTimeout(240_000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   await appAction(page, 'setSpecificRuleField', 0, 'color', '#ff0000');
   await appAction(page, 'setSpecificRuleField', 0, 'val', 'psaA_NO_MATCH');

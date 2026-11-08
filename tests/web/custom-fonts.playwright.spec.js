@@ -91,7 +91,7 @@ else:
 // Load the Session, load a font file in Font (it becomes the drawing's font), and Generate.
 const generateWithFontFile = async (page, fontFile, family) => {
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await loadFontFile(page, fontFile, family);
   await generateAndWaitForResult(page);
@@ -127,7 +127,7 @@ test('a font file chosen in Font is one History step and draws and measures the 
   test.setTimeout(300_000);
   const fontFile = renamedFont(testInfo.outputPath('gbdraw-test-serif.ttf'));
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
 
   const select = page.locator('[data-font-select]');
@@ -186,7 +186,7 @@ test('a Session with a font that is not available asks first, and Load with the 
   const sessionFile = testInfo.outputPath('garamond.gbdraw-session.json');
   writeFileSync(sessionFile, JSON.stringify(session));
   await openApp(page);
-  const sessionInput = page.locator('input[type="file"][accept^=".json,"]');
+  const sessionInput = page.locator('input[type="file"][accept*=".gbdraw"]');
   const prompt = page.locator('[data-choice-prompt]');
   const select = page.locator('[data-font-select]');
 
@@ -357,7 +357,7 @@ test('Choose installed font… lists, searches, and loads an installed family, a
     };
   }, { family: INSTALLED, data: base64 });
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(SESSION);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   const select = page.locator('[data-font-select]');
   await reveal(select);
@@ -391,7 +391,7 @@ test('Choose installed font… lists, searches, and loads an installed family, a
 test('PDF export draws each label once on its box, centred on its SVG anchor', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   await openApp(page);
-  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'));
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'));
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await generateAndWaitForResult(page);
   const svgFile = testInfo.outputPath('lambda.svg');

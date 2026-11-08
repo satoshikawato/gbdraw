@@ -10,7 +10,7 @@ const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
 const load = async (page, file) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   // A phone Load shows the Preview pane; the color rules are in Settings.
   await showPhonePane(page, 'settings');

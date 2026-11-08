@@ -8,7 +8,7 @@ const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
-const sessionInputSelector = 'input[accept^=".json,"]';
+const sessionInputSelector = 'input[accept*=".gbdraw"]';
 
 const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;

@@ -173,7 +173,7 @@ for (const mode of ['circular', 'linear']) {
     const context = await browser.newContext();
     const loaded = await context.newPage();
     await openApp(loaded);
-    await loaded.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+    await loaded.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
     await expect.poll(() => loaded.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     const loadedResult = await loaded.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     expect(await svgStructure(loaded, loadedResult)).toEqual(await svgStructure(loaded, savedResult));
@@ -197,7 +197,7 @@ for (const mode of ['circular', 'linear']) {
 test('historical v40/schema6 saves as the joint format without Generate', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
     'tests/fixtures/sessions/rendered-v27.v40-schema6.json.gz');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -258,7 +258,7 @@ for (const mode of ['circular', 'linear']) {
     const saved = await pendingSave;
     const savedPath = testInfo.outputPath(saved.suggestedFilename());
     await saved.saveAs(savedPath);
-    await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
     if (mode === 'linear') {
       await expandLinearRecordControls(page);
@@ -435,7 +435,7 @@ test('loaded replacement draft cannot place or take shortcuts from the prior Res
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
   const download = await pending, savedPath = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(savedPath);
-  await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
   await page.locator('[data-circular-inspect]').click();
   await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true })).toBeEnabled();

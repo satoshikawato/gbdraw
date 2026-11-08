@@ -1644,7 +1644,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   await openInstrumentedApp(page);
   await armHistoryCompletion(page);
   const input = page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   );
   await input.setInputFiles(frozenV39Session);
   await expectNoLoadRepairDialog(page);
@@ -1685,7 +1685,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   await page.evaluate(() => window.__GBDRAW_LAZY_SESSION_PROBE__.reset());
   await armHistoryCompletion(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(roundTripPath);
   await page.waitForFunction(
     () => window.__GBDRAW_LAZY_SESSION_PROBE__?.historyLoaded === true,

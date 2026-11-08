@@ -1,11 +1,21 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gzipSync } = require('node:zlib');
+const { gunzipSync, gzipSync } = require('node:zlib');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
-const inputSelector = 'input[type="file"][accept*="application/json"][accept*="application/gzip"]';
-const baseline = readFileSync('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+const inputSelector = 'input[type="file"][accept*=".gbdraw"]';
+// A current Session file container, and a JSON Session an older gbdraw saved.
+let baseline;
+let container;
+const legacyGzip = readFileSync('tests/fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz');
+test.beforeAll(async () => {
+  const { gallerySessionFile } = await import(pathToFileURL(path.resolve('tests/web/helpers/written-resources.mjs')).href);
+  baseline = Buffer.from(await (await gallerySessionFile('HmmtDNA_basic_circular')).arrayBuffer());
+  container = await import(pathToFileURL(path.resolve('gbdraw/web/js/services/session-container.js')).href);
+});
 const installProbe = page => page.addInitScript(() => {
   const NativeWorker = Worker;
   const probe = window.__importWorkers = { entries: [], events: [], urlsCreated: 0, urlsRevoked: 0 };
@@ -24,10 +34,20 @@ const installProbe = page => page.addInitScript(() => {
   URL.createObjectURL = (...args) => { probe.urlsCreated += 1; return create(...args); };
   URL.revokeObjectURL = (...args) => { probe.urlsRevoked += 1; return revoke(...args); };
 });
-const load = async (page, buffer, name = 'session.json') => {
-  await page.locator(inputSelector).setInputFiles({ name, mimeType: 'application/json', buffer });
+// Load opens a Session by its content, not by its name or type.
+const load = async (page, buffer, name = 'session.gbdraw') => {
+  await page.locator(inputSelector).setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
 };
+// The files this origin holds in browser storage (the input copies).
+const storedFiles = page => page.evaluate(async () => {
+  const count = async (folder) => {
+    let files = 0;
+    for await (const handle of folder.values()) files += handle.kind === 'file' ? 1 : await count(handle);
+    return files;
+  };
+  return count(await navigator.storage.getDirectory());
+});
 const retained = page => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const service = await import('/gbdraw/web/js/services/config.js');
@@ -44,13 +64,22 @@ const expectRetained = async page => expect(await page.evaluate(async () => {
     && before.undo === history.getUndoCount() && before.redo === history.getRedoCount();
 })).toBe(true);
 
-test('real import Worker JSON/gzip and repeated loads terminate before preflight with no transport resources retained', async ({ page }) => {
+test('real import Worker container, JSON and gzip loads terminate before preflight with no transport resources retained', async ({ page }) => {
   await installProbe(page);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  for (let i = 0; i < 5; i += 1) await load(page, i % 2 ? gzipSync(baseline) : baseline, `repeat-${i}.json`);
+  const files = [[baseline, 'gbdraw'], [baseline, 'gbdraw'], [legacyGzip, 'json.gz'], [gunzipSync(legacyGzip), 'json'], [baseline, 'gbdraw']];
+  for (const [i, [buffer, extension]] of files.entries()) {
+    await load(page, buffer, `repeat-${i}.${extension}`);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog), `repeat-${i}`).toBeNull();
+    // A current Session loads with no diagram Worker; an older JSON Session's
+    // conversion may start one.
+    if (i === 1) {
+      expect((await page.evaluate(() => window.__importWorkers)).entries
+        .filter(e => e.url.includes('diagram-generation-worker'))).toHaveLength(0);
+    }
+  }
   const probe = await page.evaluate(() => window.__importWorkers);
-  expect(probe.entries.filter(e => e.url.includes('diagram-generation-worker'))).toHaveLength(0);
   const imports = probe.entries.filter(e => e.url.includes('session-import-worker'));
   expect(imports).toHaveLength(5);
   for (const entry of imports) expect([entry.terminated, entry.listeners]).toEqual([1, 0]);
@@ -66,13 +95,13 @@ test('real import Worker JSON/gzip and repeated loads terminate before preflight
   }
 });
 
-test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve the old document and History', async ({ page, context }) => {
+test('unsafe keys, malformed JSON/gzip, fatal UTF-8, refused containers, storage refusal and Worker crash preserve the old document and History', async ({ page, context }) => {
   await installProbe(page);
   const dialogs = [];
   page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
   await openApp(page);
   await load(page, baseline);
-  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: session.json', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: session.gbdraw', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   await retained(page);
   for (const [index, buffer] of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
@@ -94,6 +123,45 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
     await expectRetained(page);
   }
+  // A refused container, a Session 51 JSON file, a key written twice (OV-2694)
+  // and a container whose inputs do not fit in browser storage each leave the
+  // loaded Session, its Result and History as they were (PD-OI-016).
+  const read = await container.readSessionContainer(new Blob([baseline]));
+  const entry = Object.values(read.resources)[0];
+  const damaged = Buffer.from(baseline);
+  damaged[entry.end - 1] ^= 0xff;
+  const refusals = [
+    [damaged, { code: 'INPUT_INVALID', stage: 'read', context: { field: 'schema', reason: 'CONTAINER_DAMAGED' } }],
+    [Buffer.from(JSON.stringify(read.document)),
+      { code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED' } }],
+    [Buffer.from('{"version":50,"version":50}'),
+      { code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }],
+    [Buffer.from(gunzipSync(legacyGzip).toString('utf8').replace('{', '{"version":50,')),
+      { code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }],
+  ];
+  for (const [buffer, expected] of refusals) {
+    await load(page, buffer);
+    await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ operation: 'session-load', ...expected });
+    await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
+    await expectRetained(page);
+  }
+  // The storage check runs before any input is written.
+  await page.evaluate(() => {
+    window.__GBDRAW_ESTIMATES__ = 0;
+    navigator.storage.estimate = async () => { window.__GBDRAW_ESTIMATES__ += 1; return { quota: 1_000_000, usage: 999_000 }; };
+  });
+  const copiesBefore = await storedFiles(page);
+  await load(page, baseline);
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
+    `The Session was not loaded: its inputs need ${(read.inputBytes / 1048576).toFixed(1)} MB of browser storage and 0.0 MB is free.`);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'SESSION_SIZE_LIMIT', operation: 'session-load', stage: 'read',
+    context: { storageNeedBytes: read.inputBytes, storageFreeBytes: 1000 }
+  });
+  expect(await storedFiles(page)).toBe(copiesBefore);
+  expect(await page.evaluate(() => window.__GBDRAW_ESTIMATES__)).toBe(1);
+  await expectRetained(page);
   await context.route('**/workers/session-import-worker.js', route => route.fulfill({
     contentType: 'text/javascript', body: 'throw new Error("controlled Worker crash")'
   }));
@@ -106,8 +174,13 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   expect(dialogs).toEqual([]);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   await expectRetained(page);
+  // Every import Worker ended; the input copy Worker lives on with the tab.
   const entries = await page.evaluate(() => window.__importWorkers.entries);
-  for (const entry of entries) expect([entry.terminated, entry.listeners]).toEqual([1, 0]);
+  expect(entries.filter(e => !e.url.includes('session-import-worker')).map(e => e.url.replace(/^.*\//, '')))
+    .toEqual(['input-copy-worker.js']);
+  for (const entry of entries.filter(e => e.url.includes('session-import-worker'))) {
+    expect([entry.terminated, entry.listeners]).toEqual([1, 0]);
+  }
 });
 
 test('teardown cancels the actual pending Worker before adoption and permits a new load', async ({ page }) => {
@@ -116,8 +189,8 @@ test('teardown cancels the actual pending Worker before adoption and permits a n
   await openApp(page);
   await load(page, baseline);
   await retained(page);
-  await installImportReadGate(page, 'pending.json');
-  await page.locator(inputSelector).setInputFiles({ name: 'pending.json', mimeType: 'application/json', buffer: baseline });
+  await installImportReadGate(page, 'pending.gbdraw');
+  await page.locator(inputSelector).setInputFiles({ name: 'pending.gbdraw', mimeType: 'application/octet-stream', buffer: baseline });
   await page.waitForFunction(() => window.__GBDRAW_SESSION_IMPORT_GATE__.streamInvocations === 1);
   const outcome = await page.evaluate(async () => {
     const service = await import('/gbdraw/web/js/services/config.js');
@@ -127,8 +200,9 @@ test('teardown cancels the actual pending Worker before adoption and permits a n
   expect(outcome).toBe(false);
   await expectRetained(page);
   await page.evaluate(() => window.__GBDRAW_SESSION_IMPORT_GATE__.release());
-  await load(page, baseline, 'after-teardown.json');
-  const entries = await page.evaluate(() => window.__importWorkers.entries);
+  await load(page, baseline, 'after-teardown.gbdraw');
+  // The input copy Worker a container Load starts lives on with the tab.
+  const entries = (await page.evaluate(() => window.__importWorkers.entries)).filter(e => e.url.includes('session-import-worker'));
   expect(entries).toHaveLength(3);
   for (const entry of entries) expect([entry.terminated, entry.listeners]).toEqual([1, 0]);
 });

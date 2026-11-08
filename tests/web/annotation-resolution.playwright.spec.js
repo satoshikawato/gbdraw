@@ -24,7 +24,7 @@ for (const width of [1440, 390]) {
     page.on('console', (message) => consoleText.push(message.text()));
     page.on('dialog', (dialog) => dialog.accept());
     await openApp(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    await page.locator('input[type=file][accept*=".gbdraw"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     await generateAndWaitForResult(page);
@@ -126,7 +126,7 @@ for (const width of [1440, 390]) {
       const fresh = await context.newPage();
       fresh.on('dialog', (dialog) => dialog.accept());
       await openApp(fresh);
-      await fresh.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]').setInputFiles(sessionPath);
+      await fresh.locator('input[type=file][accept*=".gbdraw"]').setInputFiles(sessionPath);
       await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
       expect(await artifact(fresh)).toEqual(all);
       expect((await getDiagramWorkerActivity(fresh)).instances.flatMap((instance) => instance.runs)).toEqual([]);

@@ -830,7 +830,7 @@ test('a Load after a canceled apply applies none of the loaded draft', async ({ 
     drawing.renderRequest.diagramOptions.configOverrides = {};
     const file = testInfo.outputPath('pending-legend.gbdraw-session.json');
     writeFileSync(file, JSON.stringify(session));
-    await page.locator('input[accept^=".json,"]').setInputFiles(file);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
     await settleLive(page);

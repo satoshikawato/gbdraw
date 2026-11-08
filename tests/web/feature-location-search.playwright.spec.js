@@ -249,7 +249,7 @@ test('a none Specific Table color survives Generate, Save, and Load', async ({ p
   const saved = await (await pendingSave).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), {
     timeout: 180000
   }).toBe(false);

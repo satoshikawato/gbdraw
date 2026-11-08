@@ -45,7 +45,7 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await waitForSessionLoadAtRest(page, { timeout: 180000 });
 };
 
@@ -611,14 +611,14 @@ test('Save Session, Load Session, and Reset Settings leave the display alone', a
 
   // Loading the Session saved in the rail into the stacked display leaves it stacked.
   await toStacked(page).click();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   await page.waitForTimeout(300);
   expect(await paneState(page)).toMatchObject({ display: 'stacked', docked: null, stored: 'stacked' });
   // And loading it in the rail keeps the rail and the docked entry.
   await toRail(page).click();
   await entry(page, 'Features').click();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   await page.waitForTimeout(300);
   expect(await paneState(page)).toMatchObject({ display: 'rail', docked: 'features', shown: ['features'], stored: 'rail' });

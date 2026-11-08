@@ -55,7 +55,7 @@ const openWithGenBank = async (page, path, configure = null) => {
 };
 
 const loadSessionFile = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0, null, { timeout: 180_000 });

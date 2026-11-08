@@ -272,7 +272,7 @@ export const WORK_ALLOWLIST = [
         return app.sessionImportPending ? null : getCommittedSvgResultRuntimeIdentity(app.results[app.selectedResultIndex]);
       });
       const before = await shown();
-      await page.locator('input[accept^=".json,"]').setInputFiles(test.info().outputPath('work-allowlist.gbdraw-session.json'));
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(test.info().outputPath('work-allowlist.gbdraw-session.json'));
       await expect.poll(async () => { const now = await shown(); return now !== null && now !== before; }, { timeout: 180_000 }).toBe(true);
       await settleLive(page);
     }

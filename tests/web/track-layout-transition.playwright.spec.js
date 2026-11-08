@@ -1425,7 +1425,7 @@ const loadRingSession = async (browser, { stack = true, session = ringSessionUpl
   await page.addInitScript(() => { window.__LIFECYCLE__ = []; window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__LIFECYCLE__.push(event) }; });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => window.__LIFECYCLE__.some((event) => event.name === 'interactiveReady') && !window.__GBDRAW_APP__.sessionImportPending);
   await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
     name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\treference-a\t100\t900\n')

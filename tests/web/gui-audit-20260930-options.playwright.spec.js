@@ -470,7 +470,7 @@ test('a CLI Session keeps its legend position through load and the first Generat
     '--legend', 'upper_left', '-o', prefix, '--session_output', session
   ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
   await settle(page);

@@ -361,7 +361,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await installSaveAcceptanceProbe(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(fixturePath);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false
@@ -544,7 +544,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   freshPage.on('dialog', (dialog) => dialog.accept());
   await openApp(freshPage);
   await freshPage.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(savedPath);
   await freshPage.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false

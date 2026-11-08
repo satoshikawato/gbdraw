@@ -478,7 +478,7 @@ const reloadSession = async (page, file, mode, legendSide) => {
     };
   });
   const sessionInput = page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   );
   await expect(sessionInput).toHaveCount(1);
   await sessionInput.setInputFiles(file);

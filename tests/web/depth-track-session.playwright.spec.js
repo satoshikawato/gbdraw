@@ -880,7 +880,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     expect(savedPath).toBeTruthy();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page, { waitForPalette: false });
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
     await expectSessionLoadedWithoutWarnings(page);
     // A phone Load shows the Preview pane; the file cards are in Settings.
     await showPhonePane(page, 'settings');
@@ -1401,7 +1401,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
@@ -1624,7 +1624,7 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
 
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -1692,7 +1692,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
       if (event.name === 'interactiveReady' && event.status === 'error') window.__SESSION_REJECTIONS__++;
     } };
   });
-  const input = page.locator('input[accept^=".json,"]').first();
+  const input = page.locator('input[accept*=".gbdraw"]').first();
 
   const invalidCanonicalSession = {
     format: 'gbdraw-session',
@@ -2111,7 +2111,7 @@ ORIGIN
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
 
   expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
@@ -2163,7 +2163,7 @@ test('a Session legend position outside its mode loads as the mode default and g
   expect(shown.ui.layoutPreferences.legend).toBe('left');
   shown.ui.layoutPreferences.legend = 'Upper_Left';
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
     name: 'legend-position.gbdraw-session.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
@@ -2207,7 +2207,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     return JSON.parse(gunzipSync(readFileSync(filePath)).toString('utf8'));
   };
   const loadSession = async (filePath) => {
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(filePath);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(filePath);
     await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
@@ -2866,7 +2866,7 @@ ORIGIN
     dialogs.push(dialog.message());
     await dialog.accept();
   });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
     name: 'rollback.gbdraw-session.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
@@ -3233,7 +3233,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
@@ -3385,7 +3385,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
@@ -3460,7 +3460,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
 
   const summary = await page.evaluate(() => {
@@ -3530,7 +3530,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
 
   const featureIds = await page.evaluate(() => {
@@ -3669,7 +3669,7 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
   const savedPath = await (await pending).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await depthState()).toEqual(before);
 });
@@ -3770,7 +3770,7 @@ test('a Load takes the loaded Session\'s Depth series, not the previous document
     panel: window.__GBDRAW_APP__.circularDepthTrackRows.length
   }));
   expect(await depthState()).toEqual({ series: 3, panel: 3 });
-  await page.locator('input[accept^=".json,"]').first()
+  await page.locator('input[accept*=".gbdraw"]').first()
     .setInputFiles(join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await expectSessionLoadedWithoutWarnings(page);
   await page.evaluate(() => window.Vue.nextTick());
@@ -3997,7 +3997,7 @@ test('Save Session stores one Depth file used by two series once (D-220)', async
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   await waitForSessionLoadAtRest(page);
   expect(await page.evaluate(async () => {

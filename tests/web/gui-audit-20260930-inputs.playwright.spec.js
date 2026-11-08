@@ -319,7 +319,7 @@ test('each record of a multi-record Linear file keeps its own organism', async (
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   const sessionPath = await (await downloaded).path();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending, null, { timeout: 120_000 });
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
   await settle(page);
@@ -350,7 +350,7 @@ const saveAndReopenSession = async (page) => {
   return reopened;
 };
 const loadSessionFile = async (page, sessionPath) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
   await settle(page);
@@ -449,7 +449,7 @@ for (const [version, fixture] of [
 ]) test(`Save after loading a ${version} Session asks for Generate instead of failing with UNKNOWN`, async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]')
+  await page.locator('input[accept*=".gbdraw"]')
     .setInputFiles(fixture);
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
@@ -482,7 +482,7 @@ for (const fixture of [
 ]) test(`a ${fixture} Session loads without the Load dialog`, async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(`tests/fixtures/sessions/${fixture}.gbdraw-session.json.gz`);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(`tests/fixtures/sessions/${fixture}.gbdraw-session.json.gz`);
   await expectNoLoadRepairDialog(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
 });
@@ -494,7 +494,7 @@ for (const fixture of [
 test('a v31 schema-1 Session takes a live edit and Save before Generate', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]')
+  await page.locator('input[accept*=".gbdraw"]')
     .setInputFiles('tests/fixtures/sessions/lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
   await expectNoLoadRepairDialog(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
@@ -525,7 +525,7 @@ test('a v31 schema-1 Session takes a live edit and Save before Generate', async 
 test('loading a JSON file that is not a Session reports a recognized diagnostic', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles({
     name: 'not-a-session.json', mimeType: 'application/json', buffer: Buffer.from('[1, 2, 3]\n')
   });
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 60_000 });
@@ -536,7 +536,7 @@ test('loading a JSON file that is not a Session reports a recognized diagnostic'
 test('Reset Settings clears Linear per-record display text and the alignment plan', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]')
+  await page.locator('input[accept*=".gbdraw"]')
     .setInputFiles('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 300_000 });

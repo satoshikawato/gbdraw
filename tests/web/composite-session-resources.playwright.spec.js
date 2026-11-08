@@ -45,7 +45,7 @@ const load = async (browser, file, contexts, viewport = { width: 1600, height: 1
     };
   });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: loadTimeout }).toBe(true);
   expect(external).toEqual([]);
@@ -347,7 +347,7 @@ test('Session import lists malformed composite bindings and Cancel keeps existin
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);
-      await page.locator('input[accept^=".json,"]').setInputFiles({
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles({
         name: `${label}.gbdraw-session.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid))
       });
       // The rows name places in the file, never the stored file names.

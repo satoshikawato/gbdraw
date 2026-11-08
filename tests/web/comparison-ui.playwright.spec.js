@@ -526,7 +526,7 @@ test('imported comparison resolutions are explicit and create one History entry 
     .toBe(historyBefore + 1);
 
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
     name: 'decision-required-comparison.gbdraw-session.json',
     mimeType: 'application/json',
@@ -639,7 +639,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
     name: 'preserved-comparison.gbdraw-session.json',
     mimeType: 'application/json',
@@ -1196,7 +1196,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
     name: sessionDownload.suggestedFilename(),
     mimeType: 'application/gzip',
@@ -1805,7 +1805,7 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
   expect(await page.evaluate(() => window.__GBDRAW_APP__.comparisonWarnings)).toEqual([]);
 
   // Loading the saved Session restores the notice with its Result.
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(await saved.path());
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(await saved.path());
   await expect(notice).toBeVisible();
   await expect(notice).toContainText(message);
 });
@@ -1923,7 +1923,7 @@ test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP m
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   page.on('dialog', (dialog) => dialog.accept());
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -1950,7 +1950,7 @@ test('Record Layout and Selected pairs name every record of a multi-record File 
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
     'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
   );
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending

@@ -9,7 +9,7 @@ const { ringSessionUpload } = require('./helpers/ring-session.cjs');
 
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const conservationSession = ringSessionUpload();
-const sessionInput = 'input[type="file"][accept^=".json,"]';
+const sessionInput = 'input[type="file"][accept*=".gbdraw"]';
 
 const preparePage = async (page) => {
   await page.addInitScript(() => {

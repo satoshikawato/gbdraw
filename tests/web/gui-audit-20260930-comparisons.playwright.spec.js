@@ -276,7 +276,7 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
     mkdirSync(directory, { recursive: true });
     const session = await writeSession(directory);
     await openFresh(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
     await settle(page);
@@ -311,7 +311,7 @@ test('a current CLI Linear Session without a comparison generates without a LOSA
     '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-o', 'cli-none', '--session_output', session
   ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
   await settle(page);

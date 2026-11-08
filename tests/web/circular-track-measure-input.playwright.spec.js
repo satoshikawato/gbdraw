@@ -11,7 +11,7 @@ const {
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const sessionInput = 'input[type="file"][accept^=".json,"]';
+const sessionInput = 'input[type="file"][accept*=".gbdraw"]';
 const valueControl = (page, slot, field) => page.getByRole('textbox', { name: `Circular track slot ${slot} ${field} value`, exact: true });
 const unitControl = (page, slot, field) => page.getByRole('combobox', { name: `Circular track slot ${slot} ${field} unit`, exact: true });
 const dialogs = new WeakMap();

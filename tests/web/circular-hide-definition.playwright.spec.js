@@ -79,7 +79,7 @@ test('Show Definition off draws no center definition, keeps the plot title, and 
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.evaluate(() => { document.querySelector('[data-setting="titles"] details').open = true; });
   await expect(showDefinition).not.toBeChecked();

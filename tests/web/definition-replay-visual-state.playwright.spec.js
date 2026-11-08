@@ -27,7 +27,7 @@ for (const composite of [false, true]) {
       ));
       try {
         await openApp(page);
-        await page.locator('input[accept^=".json,"]').setInputFiles(file);
+        await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
         await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length > 0);
         if (phase === 'web') {
           // PD-OI-059: the definition font applies on Generate. Editing it

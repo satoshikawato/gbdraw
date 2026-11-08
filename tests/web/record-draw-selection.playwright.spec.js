@@ -104,7 +104,7 @@ const saveSession = async (page, title) => {
   return (await download).path();
 };
 const loadSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expectSessionLoadedWithoutWarnings(page);
   await openLinearFileCards(page);
 };

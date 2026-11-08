@@ -263,7 +263,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const input = page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   );
   await input.setInputFiles(frozenV39Session);
   await expectSessionLoadedWithoutWarnings(page);

@@ -157,7 +157,7 @@ const strokesAfterSessionRoundTrip = async (page, browser, testInfo, keys, name)
   try {
     const fresh = await context.newPage();
     await openFresh(fresh);
-    await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+    await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
     await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
     await settle(fresh);

@@ -27,7 +27,7 @@ const sourceSessionPath = join(
 );
 const sourceSession = JSON.parse(readFileSync(sourceSessionPath, 'utf8'));
 const sessionInputSelector =
-  'input[type="file"][accept*="application/json"][accept*="application/gzip"]';
+  'input[type="file"][accept*=".gbdraw"]';
 const DIRECT_FILL = '#c026d3';
 const DIRECT_STROKE = '#059669';
 const DIRECT_STROKE_WIDTH = 5;

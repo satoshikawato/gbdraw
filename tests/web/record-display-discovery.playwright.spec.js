@@ -94,7 +94,7 @@ const uploadNative = (page, text, name = 'native.gb') => page.getByLabel('GenBan
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
 const loadPreview = async (page) => {
   page.on('dialog', dialog => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture(
     'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1);
@@ -375,7 +375,7 @@ test('a saved Session with a FASTA source loads its Result without the Worker', 
   const fresh = await context.newPage();
   await openApp(fresh);
   fresh.on('dialog', dialog => dialog.accept());
-  await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1, null, { timeout: 180000 });
   await assertSessionLoadLeftWorkerIdle(fresh);

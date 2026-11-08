@@ -1177,7 +1177,7 @@ test('U3a compat: Reset Settings on a Session 44 main saved shows its deleted ro
 test('R15-2: a Legend row the editor added in a Session main saved loads, shows, and survives Generate (linear)', async ({ page }) => {
   test.setTimeout(240_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {

@@ -55,7 +55,7 @@ const save = async (page, testInfo, label, { again = false, title } = {}) => {
 };
 
 const loadFile = async (page, file, message = 'Session loaded') => {
-  const input = page.locator('input[accept^=".json,"]');
+  const input = page.locator('input[accept*=".gbdraw"]');
   await input.setInputFiles(file);
   if (typeof message === 'string') {
     // A Session 27-44 Load converts through Python, which starts the diagram Worker first: without
@@ -169,7 +169,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await assertDiagramWorkerIdle(page);
 
     const restored = await fresh();
-    await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
+    await restored.locator('input[accept*=".gbdraw"]').setInputFiles(saved.file);
     await expectSessionLoadedWithoutWarnings(restored);
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
@@ -309,7 +309,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     await fs.writeFile(file, JSON.stringify(candidate));
     let error = null;
     if (Array.isArray(expected)) {
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await answerLoadRepairs(page, expected, 'cancel');
       // The Cancel click leaves the pointer over the diagram; its hover is not Session state.
       await page.mouse.move(0, 0);

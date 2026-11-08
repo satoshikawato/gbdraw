@@ -59,7 +59,7 @@ const bootAndGenerate = async (browser, prepare = async () => {}) => {
     await prepare(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await openApp(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(SESSION);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
     await generate(page);

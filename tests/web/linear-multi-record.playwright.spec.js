@@ -86,7 +86,7 @@ const definitionLines = (page) => page.evaluate(() => {
 });
 
 const loadDefinitionSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expectSessionLoadedWithoutWarnings(page);
 };
 
@@ -1571,7 +1571,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
@@ -2100,7 +2100,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
   const restored = await page.evaluate(async () => {
@@ -3451,7 +3451,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
@@ -3719,7 +3719,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
   await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
@@ -3861,7 +3861,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   expect(await page.evaluate(async ([circularId, linearId]) => {
     const { state } = await import('./js/state.js');
@@ -3984,7 +3984,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     const path = await (await saved).path();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page);
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
     await expect(settings).toHaveAttribute('open', '');
     for (const [index, name] of labels.entries()) {
       await expect(settings.getByRole('combobox', { name, exact: true })).toHaveValue([execution, '2', '1', '2'][index]);
@@ -4105,7 +4105,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const path = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const restored = await run();
   expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
@@ -4195,7 +4195,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect(total).toHaveValue('4');
   await expect(runs).toHaveValue('2');
   await expect(threads).toHaveValue('8');

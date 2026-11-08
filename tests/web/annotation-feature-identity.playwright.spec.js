@@ -212,7 +212,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   try {
     const fresh = await context.newPage();
     await openFresh(fresh);
-    await fresh.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+    await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
     await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
     await settle(fresh);
@@ -336,7 +336,7 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
   test.setTimeout(360_000);
   const SESSION = 'tests/fixtures/sessions/selected-feature-annotations.v44.gbdraw-session.json.gz';
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(SESSION);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
