@@ -159,7 +159,7 @@ const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
 
 const entries = (...ids) => ids.map((recordId, sourceIndex) => ({ sourceIndex, selector: `#${sourceIndex + 1}`, recordId }));
 const circularSources = (cards) => ({ mode: 'circular', cards: new Map(cards) });
-const allOf = (...uids) => uids.map((recordKey) => ({ recordKey, cardinality: 'all' }));
+const allOf = (...uids) => uids.map((recordKey) => ({ recordKey, cardinality: 'all', windows: [] }));
 const CARD_A = ['card-a', entries('chr', 'pA')];
 const CARD_B = ['card-b', entries('pB')];
 const CARD_C = ['card-c', entries('pC')];
@@ -182,8 +182,8 @@ await test('turning a record of a card OFF moves no row', () => {
   const before = drawnRecordIdentities(allOf('card-a', 'card-b'), sources);
   // A card with an OFF record draws its ON records one by one, by identity.
   const after = drawnRecordIdentities([
-    { recordKey: 'card-a:1', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 } },
-    { recordKey: 'card-b', cardinality: 'all' }
+    { recordKey: 'card-a:1', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 }, windows: [] },
+    { recordKey: 'card-b', cardinality: 'all', windows: [] }
   ], sources);
   assert.deepEqual(after.map(({ identity }) => identity), ['card-a:1', 'card-b']);
   assert.deepEqual(movesOf(recordKeyMoves(before, after), ['card-a:1', 'card-a:2', 'card-b']), []);

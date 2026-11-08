@@ -16,7 +16,7 @@ const recordPorts = (records) => {
   const sources = { mode: 'circular', cards: new Map(records.map((record, index) => [record.recordKey, [
     { sourceIndex: 0, selector: `#${index + 1}`, recordId: record.caption, recordLength: record.length }
   ]])) };
-  const requestRecords = records.map((record) => ({ recordKey: record.recordKey, cardinality: 'all' }));
+  const requestRecords = records.map((record) => ({ recordKey: record.recordKey, cardinality: 'all', windows: [] }));
   const features = new Map(records.map((record) => [record.recordKey, record.features]));
   const sent = { envelope: { renderRequest: { mode: 'circular', records: requestRecords }, resources: {} }, filesByResource: new Map() };
   return {
