@@ -23,9 +23,6 @@ from .models import (
 class PlacedRegionAnnotation:
     annotation: ResolvedRegionAnnotation
     lane: int
-    mark_geometry: object | None = None
-    label_geometry: object | None = None
-    occupied_bounds: tuple[tuple[float, float], ...] = ()
 
 
 def lane_count_of(placements: Iterable[PlacedRegionAnnotation]) -> int:
@@ -93,18 +90,24 @@ class _LaneBand(NamedTuple):
 
         return 2.0 * self.padding_px + lane_count * self.lane_extent_px + max(0, lane_count - 1) * self.lane_gap_px
 
+    def shares(self, lane_count: int) -> bool:
+        """Whether ``lane_count`` lanes pass the limit, so that they share the band up to it."""
+
+        return self.limit_px is not None and self.bare_px(lane_count) > self.limit_px
+
     def width_px(self, record_lanes: int, slot_lanes: int) -> float:
         """The width of each lane of a record with ``record_lanes`` lanes in a slot whose records take at most
         ``slot_lanes``, where the drawer puts them (``lane_width_px``): the record's lanes share the band the slot's
         lanes take (each record's lanes fill the slot, as the drawers draw them). Lanes that pass the limit share
         the band up to it, as the drawer draws an inside slot clamped at the centre."""
 
-        record_lanes, slot_lanes = max(1, record_lanes), max(1, slot_lanes)
-        if self.limit_px is not None and self.bare_px(slot_lanes) > self.limit_px:
-            return lane_width_px(self.limit_px, padding_px=self.padding_px, room_px=0.0, lane_count=record_lanes)
-        # ``lane_width_px`` of a band sized by the slot's lanes, the lane gaps shared out among them.
-        slot_width = self.lane_extent_px + self.lane_gap_px * (slot_lanes - 1) / slot_lanes
-        return slot_width * (slot_lanes / record_lanes)
+        band = self.bare_px(max(1, slot_lanes))
+        return lane_width_px(
+            band if self.limit_px is None else min(band, self.limit_px),
+            padding_px=self.padding_px,
+            room_px=0.0,
+            lane_count=record_lanes,
+        )
 
     def mark_edge_px(
         self, lane: int, record_lanes: int, slot_lanes: int, *, room_before_px: float, stroke_width: float
@@ -132,6 +135,10 @@ class LabelExtent(NamedTuple):
 # and how far its mark's edge lies from the edge the slot's lanes stack from.
 LabelMeasure = Callable[[ResolvedRegionAnnotation, RegionAnnotationStyle, float, float, float], LabelExtent]
 
+# A labelled annotation's letters standing at a bp beside its mark in a lane, as the drawer measures them there
+# (``LabelMeasure``); None where the track draws no label for it.
+LettersInLane = Callable[[ResolvedRegionAnnotation, float, int], "LabelExtent | None"]
+
 
 @dataclass(frozen=True)
 class LabelSizing:
@@ -156,7 +163,6 @@ class ResolvedAnnotationTrack:
     set_id: str
     placements: tuple[PlacedRegionAnnotation, ...]
     required_extent_px: float
-    occupied_bounds: tuple[tuple[float, float], ...]
     # The feature label font size of the drawing: the size of a label whose style sets none.
     label_font_size: float
     # Whether the drawing closes into a circle (Circular), so the two sides of a span across the origin always
@@ -230,25 +236,21 @@ class _LabelLetters(NamedTuple):
 
 
 def _label_letters(
-    annotation: ResolvedRegionAnnotation,
+    place: LabelPlace,
+    stretch: tuple[int, int],
+    letters: LabelExtent,
     *,
     record_length: int,
-    label_width_bp: float,
     join_origin: bool,
-    label_position: LabelPosition,
 ) -> _LabelLetters:
-    """Where an annotation's label stands and what the lane reservation keeps for its letters (``join_origin`` as
-    in ``mark_parts``), from their estimated width ``label_width_bp``: the lane is chosen before the drawer can
-    measure them at its place.
+    """What the lane reservation keeps for a label standing at ``place`` (``label_stretch``): the bp its
+    ``letters`` paint there (``join_origin`` as in ``mark_parts``, ``_letters_at``), and whether they leave the
+    ``stretch`` of their mark."""
 
-    A start label runs right from its place, an end label left, a centred one both ways (``_letters_at``).
-    """
-
-    place, (low, high) = annotation.label_stretch(label_position, join_origin=join_origin)
-    lead = {"start": 0.0, "end": 1.0}.get(label_position, 0.5) * label_width_bp
-    start, end = place.bp - lead, place.bp - lead + label_width_bp
-    letters = _letters_at(place.bp, -lead, label_width_bp - lead, record_length=record_length, join_origin=join_origin)
-    return _LabelLetters(place, letters, start < low or end > high)
+    low, high = stretch
+    start, end = place.bp + letters.low_bp, place.bp + letters.high_bp
+    intervals = _letters_at(place.bp, letters.low_bp, letters.high_bp, record_length=record_length, join_origin=join_origin)
+    return _LabelLetters(place, intervals, start < low or end > high)
 
 
 def _expanded_intervals(
@@ -256,25 +258,15 @@ def _expanded_intervals(
     row: int,
     *,
     record_length: int,
-    label_width_bp: float,
+    letters: _LabelLetters | None,
     padding_bp: float,
-    join_origin: bool,
-    label_position: LabelPosition,
 ) -> tuple[tuple[float, float], ...]:
-    """What an annotation occupies on one row, with its label's letters where they leave its mark
+    """What an annotation occupies on one row, with its label's ``letters`` where they leave its mark
     (``_label_letters``)."""
 
     intervals = [(float(start), float(end)) for start, end in annotation.row_segments(row)]
-    if annotation.label and label_width_bp > 0.0:
-        letters = _label_letters(
-            annotation,
-            record_length=record_length,
-            label_width_bp=label_width_bp,
-            join_origin=join_origin,
-            label_position=label_position,
-        )
-        if letters.leaves_mark and row == letters.place.part.row:
-            intervals.extend(letters.intervals)
+    if letters is not None and letters.leaves_mark and row == letters.place.part.row:
+        intervals.extend(letters.intervals)
     expanded: list[tuple[float, float]] = []
     for start, end in intervals:
         start -= padding_bp
@@ -301,7 +293,7 @@ def assign_annotation_lanes(
     annotations: Sequence[ResolvedRegionAnnotation],
     *,
     record_lengths: Mapping[int, int],
-    label_width_bp: Callable[[ResolvedRegionAnnotation], float] | None = None,
+    letters_in_lane: LettersInLane | None = None,
     padding_bp: Callable[[ResolvedRegionAnnotation], float] | float = 0.0,
     overflow: str = "error",
     join_origin: bool,
@@ -310,7 +302,9 @@ def assign_annotation_lanes(
     """Assign stable lanes using greedy interval coloring, row by row on a wrapped record.
 
     ``join_origin`` says whether the drawing closes into a circle (``mark_parts``) and ``label_position`` where
-    each label stands on it (centred when not given): the lane keeps room for the label there.
+    each label stands on it (centred when not given): a lane keeps room for the label's letters there, as the
+    drawer measures them beside the annotation's mark in that lane (``letters_in_lane``; no letters when not
+    given).
 
     An annotation keeps one lane on every row it draws on; only annotations on the same row meet.
     Explicit lanes remain fixed. A collision in an explicit lane is rejected by
@@ -320,23 +314,30 @@ def assign_annotation_lanes(
 
     if overflow not in {"error", "compress", "clip"}:
         raise ValidationError("overflow must be 'error', 'compress', or 'clip'.")
-    width_func = label_width_bp or (lambda _annotation: 0.0)
-    bounds_by_annotation: dict[tuple[str, str, int], dict[int, tuple[tuple[float, float], ...]]] = {}
-    for annotation in annotations:
+
+    def occupied_in(annotation: ResolvedRegionAnnotation) -> Callable[[int], dict[int, tuple[tuple[float, float], ...]]]:
+        # What the annotation occupies on each of its rows with its mark in a lane: its letters are measured there.
         length = int(record_lengths[annotation.record_index])
-        annotation_padding = padding_bp(annotation) if callable(padding_bp) else padding_bp
-        bounds_by_annotation[(annotation.set_id, annotation.id, annotation.record_index)] = {
-            row: _expanded_intervals(
-                annotation,
-                row,
-                record_length=length,
-                label_width_bp=max(0.0, float(width_func(annotation))),
-                padding_bp=max(0.0, float(annotation_padding)),
-                join_origin=join_origin,
-                label_position="center" if label_position is None else label_position(annotation),
+        annotation_padding = max(0.0, float(padding_bp(annotation) if callable(padding_bp) else padding_bp))
+        stretch = (
+            annotation.label_stretch("center" if label_position is None else label_position(annotation), join_origin=join_origin)
+            if annotation.label and letters_in_lane is not None
+            else None
+        )
+
+        def rows_in(lane: int) -> dict[int, tuple[tuple[float, float], ...]]:
+            extent = None if stretch is None or letters_in_lane is None else letters_in_lane(annotation, stretch[0].bp, lane)
+            letters = (
+                None
+                if stretch is None or extent is None
+                else _label_letters(*stretch, extent, record_length=length, join_origin=join_origin)
             )
-            for row in annotation.geometry_rows
-        }
+            return {
+                row: _expanded_intervals(annotation, row, record_length=length, letters=letters, padding_bp=annotation_padding)
+                for row in annotation.geometry_rows
+            }
+
+        return rows_in
 
     def first_place(annotation: ResolvedRegionAnnotation) -> tuple[int, int]:
         row = annotation.geometry_rows[0]
@@ -355,10 +356,9 @@ def assign_annotation_lanes(
     lane_bounds: dict[tuple[int, int, int], list[tuple[tuple[float, float], ...]]] = {}
     placements: list[PlacedRegionAnnotation] = []
     for annotation in ordered:
-        key = (annotation.set_id, annotation.id, annotation.record_index)
-        rows = bounds_by_annotation[key]
+        rows_in = occupied_in(annotation)
 
-        def lane_is_taken(lane: int) -> bool:
+        def lane_is_taken(lane: int, rows: Mapping[int, tuple[tuple[float, float], ...]]) -> bool:
             return any(
                 _overlaps(bounds, occupied)
                 for row, bounds in rows.items()
@@ -367,24 +367,21 @@ def assign_annotation_lanes(
 
         if annotation.lane is not None:
             lane = int(annotation.lane)
-            if overflow == "error" and lane_is_taken(lane):
+            rows = rows_in(lane)
+            if overflow == "error" and lane_is_taken(lane, rows):
                 raise ValidationError(
                     f"Annotation {annotation.set_id}/{annotation.id} conflicts in explicit lane {lane}.",
                     diagnostic={"code": "TRACK_INVALID", "reason": "ANNOTATION_LANE_CONFLICT"},
                 )
         else:
             lane = 0
-            while lane_is_taken(lane):
+            rows = rows_in(lane)
+            while lane_is_taken(lane, rows):
                 lane += 1
+                rows = rows_in(lane)
         for row, bounds in rows.items():
             lane_bounds.setdefault((annotation.record_index, row, lane), []).append(bounds)
-        placements.append(
-            PlacedRegionAnnotation(
-                annotation=annotation,
-                lane=lane,
-                occupied_bounds=tuple(bound for bounds in rows.values() for bound in bounds),
-            )
-        )
+        placements.append(PlacedRegionAnnotation(annotation=annotation, lane=lane))
     placements.sort(
         key=lambda item: (
             item.annotation.record_index,
@@ -552,6 +549,41 @@ def _lane_rooms(
     )
 
 
+def _letters_in_lanes(
+    band: _LaneBand,
+    extent_at: Callable[[ResolvedRegionAnnotation, float, float], LabelExtent],
+    stroke_of: Callable[[ResolvedRegionAnnotation], float],
+    *,
+    shows_labels: bool,
+    by_lane: bool,
+) -> LettersInLane:
+    """A label's letters beside its mark in the lane the lane packer tries (``LettersInLane``), as the drawer
+    measures them (``extent_at``) where ``band`` puts that lane as the last of the lanes so far; or, when not
+    ``by_lane``, beside a mark in lane 0 whatever the lane. Each is measured once, before the label rooms between the
+    lanes are known (``_lane_rooms``): a room moves the lanes after it further from the axis than measured. Outward
+    that only shortens the letters, so the lane keeps more than they paint; in an inside slot the letters of a lane
+    past a room span more of the circle than measured, by the ratio of the two radii.
+
+    A Linear label's letters do not depend on its lane (``LabelSizing.extent``). An inside Circular slot whose lanes,
+    measured by lane, would pass the centre (``_LaneBand.shares``) is measured in lane 0: near the centre a label's
+    letters cover most of the circle, so each such label would take a lane of its own, and the lanes would leave no
+    room before the centre."""
+
+    measured: dict[tuple[int, str, int], LabelExtent] = {}
+
+    def letters(annotation: ResolvedRegionAnnotation, place_bp: float, lane: int) -> LabelExtent | None:
+        if not shows_labels or not annotation.label:
+            return None
+        at = lane if by_lane else 0
+        key = (annotation.record_index, annotation.id, at)
+        if key not in measured:
+            edge = band.mark_edge_px(at, at + 1, at + 1, room_before_px=0.0, stroke_width=stroke_of(annotation))
+            measured[key] = extent_at(annotation, place_bp, edge)
+        return measured[key]
+
+    return letters
+
+
 def layout_annotation_track(
     slot_id: str,
     set_id: str,
@@ -567,13 +599,14 @@ def layout_annotation_track(
 ) -> ResolvedAnnotationTrack:
     """Pack one set and calculate its radial/vertical required extent.
 
-    ``labels`` measures the labels (``LabelSizing``). ``join_origin`` is True for a Circular drawing
-    (``mark_parts``). Lanes lie where ``_LaneBand`` puts them (``lane_edge_px``, as the drawers place them) and
-    part by the room of a label that would cross the mark of a lane on its side, within ``room_bounds``
-    (``_lane_rooms``); the track's required extent grows by the largest room a record's row takes
-    (``ResolvedAnnotationTrack.lane_room_px``). A span over other slots (``to_slot``, ``cover_anchor``) gets none:
-    where it covers a slot its labels stand outside the slots it covers, and whether it covers one on a record is
-    known only after the lanes are packed."""
+    ``labels`` measures the labels (``LabelSizing``); a lane keeps a label's letters as the drawer measures them
+    beside the mark in it, before the label rooms are known (``_letters_in_lanes``). ``join_origin`` is True for a
+    Circular drawing (``mark_parts``). Lanes
+    lie where ``_LaneBand`` puts them (``lane_edge_px``, as the drawers place them) and part by the room of a label
+    that would cross the mark of a lane on its side, within ``room_bounds`` (``_lane_rooms``); the track's required
+    extent grows by the largest room a record's row takes (``ResolvedAnnotationTrack.lane_room_px``). A span over
+    other slots (``to_slot``, ``cover_anchor``) gets none: where it covers a slot its labels stand outside the slots
+    it covers, and whether it covers one on a record is known only after the lanes are packed."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -586,14 +619,6 @@ def layout_annotation_track(
         if item.set_id == set_id
         and (track_params.marks is None or item.mark in track_params.marks)
     )
-
-    def label_width(annotation: ResolvedRegionAnnotation) -> float:
-        if not track_params.show_labels or not annotation.label:
-            return 0.0
-        style = effective_annotation_style(annotation, track_params)
-        width_px = len(annotation.label) * annotation_label_font_size(style, labels.font_size) * 0.6
-        scale = float(labels.bp_per_px.get(annotation.record_index, 1.0))
-        return width_px * scale
 
     def style_of(annotation: ResolvedRegionAnnotation) -> RegionAnnotationStyle:
         return effective_annotation_style(annotation, track_params)
@@ -622,15 +647,29 @@ def layout_annotation_track(
         return "center" if join_origin else effective_annotation_style(annotation, track_params).label_position
 
     highlight_track = track_params.marks == ("highlight",)
-    placements = assign_annotation_lanes(
-        selected,
-        record_lengths=record_lengths,
-        label_width_bp=label_width,
-        padding_bp=padding,
-        overflow="compress" if highlight_track else track_params.overflow,
-        join_origin=join_origin,
-        label_position=label_position,
-    )
+
+    def packed(by_lane: bool) -> tuple[PlacedRegionAnnotation, ...]:
+        return assign_annotation_lanes(
+            selected,
+            record_lengths=record_lengths,
+            letters_in_lane=_letters_in_lanes(
+                band,
+                extent_at,
+                lambda annotation: float(style_of(annotation).stroke_width),
+                shows_labels=track_params.show_labels,
+                by_lane=by_lane,
+            ),
+            padding_bp=padding,
+            overflow="compress" if highlight_track else track_params.overflow,
+            join_origin=join_origin,
+            label_position=label_position,
+        )
+
+    # A Circular label's letters depend on its lane; an inside slot whose lanes would pass the centre measured so
+    # measures them all in its outer lane (``_letters_in_lanes``).
+    placements = packed(join_origin)
+    if band.shares(lane_count_of(placements)) and not highlight_track:
+        placements = packed(False)
     if highlight_track:
         placements = tuple(replace(item, lane=0) for item in placements)
     spans_slots = track_params.to_slot is not None or track_params.cover_anchor
@@ -680,13 +719,11 @@ def layout_annotation_track(
                 )
         elif track_params.overflow == "clip":
             clipped = True
-    occupied = tuple(bound for item in placements for bound in item.occupied_bounds)
     return ResolvedAnnotationTrack(
         slot_id=str(slot_id),
         set_id=str(set_id),
         placements=placements,
         required_extent_px=float(required),
-        occupied_bounds=occupied,
         label_font_size=float(labels.font_size),
         join_origin=join_origin,
         clipped=clipped,
@@ -702,6 +739,7 @@ __all__ = [
     "LabelMeasure",
     "LabelSizing",
     "LaneRoom",
+    "LettersInLane",
     "PlacedRegionAnnotation",
     "ResolvedAnnotationTrack",
     "RoomBounds",
