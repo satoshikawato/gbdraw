@@ -418,6 +418,18 @@ const waitForPreviewAtRest = (page, { timeout = 30_000 } = {}) => page.waitForFu
   { timeout }
 );
 
+// A file Session Load has ended with a Result shown, and the figure rests. A
+// loading Session shows its Result before it ends, and the app refuses edits
+// until then (OV-1023); the Load's Fit (R17-25) runs in the task that ends it
+// and moves the figure for 0.2 s after (OV-2457, OV-2684, OV-2685, OV-2686).
+// Without `timeout`, the Load's wait ends with the test and the rest's wait
+// keeps its own default.
+const waitForSessionLoadAtRest = async (page, { timeout } = {}) => {
+  await page.waitForFunction(() => !window.__GBDRAW_APP__?.sessionImportPending
+    && (window.__GBDRAW_APP__?.results || []).length > 0, null, { timeout });
+  await waitForPreviewAtRest(page, timeout === undefined ? {} : { timeout });
+};
+
 // G-G(3), Web GUI audit 2026-09-30: the shared Generate and Save helpers
 // reject three outcomes that previously reached users without failing a test.
 // A caller may opt out only by naming the audit ID of the known defect, so the
@@ -1028,6 +1040,7 @@ module.exports = {
   takePageErrors,
   waitForAppShell,
   waitForPreviewAtRest,
+  waitForSessionLoadAtRest,
   WARM_APP_PAGE,
   warmAppTest
 };
