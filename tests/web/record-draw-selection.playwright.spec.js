@@ -346,24 +346,26 @@ test('Circular draws the ON records in the canvas and as separate diagrams', asy
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.setCircularSourceFile('c_gb', new File([text], 'four.gb', { type: 'text/plain', lastModified: 1 }));
+    void app.addCircularSourceFiles('gb', [new File([text], 'four.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none', legend: 'none' });
   }, genbank(['C1', 'C2', 'C3', 'C4']));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(4);
   await page.locator('[data-record-list-open="circular"]').click();
   const list = page.locator('[data-record-list-dialog]');
-  await list.locator('[data-record-list-row="#1"]').uncheck();
-  await list.locator('[data-record-list-row="#3"]').uncheck();
+  await list.locator('[data-record-list-row$=":1"]').uncheck();
+  await list.locator('[data-record-list-row$=":3"]').uncheck();
   await expect(list.locator('[data-record-list-count]')).toHaveText('2 of 4 records drawn');
   await list.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('[data-circular-records-drawn]')).toHaveText('2 of 4 records drawn');
 
   await generateAndWaitForResult(page);
-  expect((await lastRequest(page)).records.map((entry) => entry.recordKey)).toEqual(['record-2', 'record-4']);
+  // Each record's key is its identity in its File card (`<card uid>:<k>`).
+  const card = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularSources[0].uid);
+  expect((await lastRequest(page)).records.map((entry) => entry.recordKey)).toEqual([`${card}:2`, `${card}:4`]);
   expect(await drawnRecordIds(page)).toEqual([['C2', 'C4']]);
 
   await page.locator('[data-record-list-open="circular"]').click();
-  await list.locator('[data-record-list-row="#2"]').uncheck();
+  await list.locator('[data-record-list-row$=":2"]').uncheck();
   await list.getByRole('button', { name: 'Close', exact: true }).click();
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
   await generateAndWaitForResult(page);
@@ -385,16 +387,17 @@ test('a replaced Linear File and another Circular input draw every record', asyn
   await showDrawing(page, { kind: 'circular' });
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.setCircularSourceFile('c_gb', new File([text], 'three.gb', { type: 'text/plain', lastModified: 1 }));
+    void app.addCircularSourceFiles('gb', [new File([text], 'three.gb', { type: 'text/plain', lastModified: 1 })]);
   }, genbank(['G1', 'G2', 'G3']));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(3);
   await page.locator('[data-record-list-open="circular"]').click();
-  await page.locator('[data-record-list-row="#2"]').uncheck();
+  await page.locator('[data-record-list-row$=":2"]').uncheck();
   await page.locator('[data-record-list-close]').click();
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).first().check();
   await page.getByRole('radio', { name: 'GenBank', exact: true }).first().check();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(3);
-  expect(await page.evaluate(() => ['#1', '#2', '#3'].map((key) => window.__GBDRAW_APP__.recordSelection.isDrawn('circular', key))))
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList
+    .map(({ identity }) => window.__GBDRAW_APP__.recordSelection.isDrawn('circular', identity))))
     .toEqual([true, true, true]);
 });
 
@@ -445,7 +448,7 @@ test('the Circular Auto notes and slot estimates show the sizes Generate draws f
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.setCircularSourceFile('c_gb', new File([text], 'short-long.gb', { type: 'text/plain', lastModified: 1 }));
+    void app.addCircularSourceFiles('gb', [new File([text], 'short-long.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none' });
   }, genbank([{ id: 'S30', repeats: 10_000 }, { id: 'L90', repeats: 30_000 }]));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);
@@ -456,7 +459,7 @@ test('the Circular Auto notes and slot estimates show the sizes Generate draws f
   });
   const setLongRecordDrawn = async (drawn) => {
     await page.locator('[data-record-list-open="circular"]').click();
-    await page.locator('[data-record-list-row="#2"]').setChecked(drawn);
+    await page.locator('[data-record-list-row$=":2"]').setChecked(drawn);
     await page.locator('[data-record-list-close]').click();
   };
 
@@ -493,7 +496,7 @@ test('a Circular record cropped to a region shows the sizes Generate draws for t
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.setCircularSourceFile('c_gb', new File([text], 'long.gb', { type: 'text/plain', lastModified: 1 }));
+    void app.addCircularSourceFiles('gb', [new File([text], 'long.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { multi_record_canvas: false, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none',
       circular_region_start: 1, circular_region_end: 30_000 });
   }, genbank([{ id: 'L90', repeats: 30_000 }]));
