@@ -9,13 +9,16 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-display-boundaries-
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'));
 await mkdir(join(tempDir, 'utils'));
+await mkdir(join(tempDir, 'contracts'));
 for (const path of [
   'services/feature-utils.js',
   'services/feature-sequence-fasta.js',
   'utils/optional-positive-number.js',
   'utils/error-normalization.js',
-  // error-normalization.js reads Python's figure length units from the generated mode profiles.
-  'mode-profiles.generated.js'
+  // error-normalization.js reads Python's figure length units from the generated mode profiles,
+  // and the Session file refusals from the generated persisted contracts.
+  'mode-profiles.generated.js',
+  'contracts/schema.generated.js'
 ]) {
   await writeFile(join(tempDir, path), await readFile(`gbdraw/web/js/${path}`, 'utf8'), 'utf8');
 }

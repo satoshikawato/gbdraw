@@ -1,8 +1,9 @@
 // @ts-check
-// This module imports only the generated mode profiles (a leaf), and declares
-// the identity of utils/i18n.js `msg` instead of importing it, so a test that
-// copies it needs only that leaf beside it.
+// This module imports only generated leaves (the mode profiles and the
+// persisted contracts), and declares the identity of utils/i18n.js `msg`
+// instead of importing it, so a test that copies it needs only those beside it.
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE } from '../contracts/schema.generated.js';
 /** @param {string} text */
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
@@ -172,8 +173,8 @@ const REASONS = Object.freeze({
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
   // A Session file container (gbdraw/session_container.py, services/session-container.js) that Load refuses
   // whole: the sentence is the refusal (NOT_A_SESSION).
-  CONTAINER_DAMAGED: 'This file is not a gbdraw Session: it is incomplete or damaged.',
-  CONTAINER_NO_DOCUMENT: 'This file is not a gbdraw Session: it has no gbdraw-session.json.',
+  CONTAINER_DAMAGED: SESSION_CONTAINER_DAMAGED_MESSAGE,
+  CONTAINER_NO_DOCUMENT: SESSION_CONTAINER_NO_DOCUMENT_MESSAGE,
   SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
   SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',

@@ -1,44 +1,58 @@
 // The Session file container (`<title>.gbdraw`, services/session-container.js):
 // the Web reader and writer of the ZIP that Python owns (gbdraw/session_container.py).
-// A written container reads back entry by entry; Python's `zipfile` reads what
-// the Web writes and the Web reads what Python writes (also with data
-// descriptors and ZIP64); damaged files and a ZIP without gbdraw-session.json
-// are refused with the receipt's texts; an entry is found by resource id only.
+// The shared vectors (tests/fixtures/session_container_vectors.json) pin the
+// two to each other; a written container reads back entry by entry; Python's
+// `zipfile` reads what the Web writes and the Web reads what Python writes
+// (also with data descriptors and ZIP64); damaged files and a ZIP without
+// gbdraw-session.json are refused with the receipt's texts; an entry is found
+// by resource id only.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const { readSessionContainer, writeSessionContainer, SESSION_DOCUMENT_ENTRY } = await import('../../gbdraw/web/js/services/session-container.js');
+const { openSessionContainerEntry, readSessionContainer, writeSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
+const { SESSION_DOCUMENT_ENTRY } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { crc32Update, zipCentralRecord, zipEndRecords, zipLocalHeader } = await import('../../gbdraw/web/js/utils/zip.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 
+const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/session_container_vectors.json', import.meta.url), 'utf8'));
 const encoder = new TextEncoder();
-const DAMAGED = 'This file is not a gbdraw Session: it is incomplete or damaged.';
-const NO_DOCUMENT = 'This file is not a gbdraw Session: it has no gbdraw-session.json.';
+const DAMAGED = VECTORS.messages.damaged.web;
+const NO_DOCUMENT = VECTORS.messages['no-document'].web;
+const INVALID_JSON = VECTORS.messages['invalid-json'].web;
 
 /** @param {Uint8Array} bytes */
-const streamOf = (bytes) => () => new Blob([bytes]).stream();
+const streamOf = (bytes) => new Blob([bytes]).stream();
 /** @param {ReadableStream<Uint8Array>} stream */
 const bytesOfStream = async (stream) => new Uint8Array(await new Response(stream).arrayBuffer());
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 /** @param {Blob} blob */
 const bytesOfBlob = async (blob) => new Uint8Array(await blob.arrayBuffer());
+/** @param {string} text */
+const fromBase64 = (text) => new Uint8Array(Buffer.from(text, 'base64'));
 
-const documentText = JSON.stringify({ format: 'gbdraw-session', version: 51, resources: {} });
 const plain = encoder.encode('LOCUS       test 12 bp DNA\nORIGIN\n        1 acgtacgtacgt\n//\n'.repeat(400));
 const gzipped = new Uint8Array(gzipSync(encoder.encode('>seq\nACGT\n'.repeat(1000))));
+const descriptor = (name, size) => ({ kind: 'web-file', name, type: 'application/octet-stream', size, lastModified: 0 });
+const sampleDocument = {
+  format: 'gbdraw-session', version: 51,
+  resources: { 'resource-1': descriptor('a.gb', plain.length), 'resource-2': descriptor('b.fa.gz', gzipped.length), 'resource-3': descriptor('c', 0) }
+};
+const documentText = JSON.stringify(sampleDocument);
+const sampleBytes = { 'resource-1': plain, 'resource-2': gzipped, 'resource-3': new Uint8Array(0) };
 
-const writeSample = (options) => writeSessionContainer({
-  document: streamOf(encoder.encode(documentText)),
-  resources: [
-    { id: 'resource-1', read: streamOf(plain), stored: false },
-    { id: 'resource-2', read: streamOf(gzipped), stored: true },
-    { id: 'resource-3', read: streamOf(new Uint8Array(0)), stored: false }
-  ]
+/** Writes `document` with the bytes of `bytes` by id. */
+const write = (document, bytes, options) => writeSessionContainer({
+  document, documentBytes: () => streamOf(encoder.encode(JSON.stringify(document))), readResource: (id) => streamOf(bytes[id])
 }, options);
+const writeSample = (options) => write(sampleDocument, sampleBytes, options);
+
+/** The bytes of a read container's resource. */
+const resourceBytes = (blob, container, id) => bytesOfStream(openSessionContainerEntry(blob, container.resources[id]));
 
 /** @param {Promise<unknown>} promise @param {string} summary */
 const refused = async (promise, summary) => {
@@ -73,27 +87,70 @@ const craft = (entries) => {
   const directorySize = directory.reduce((total, record) => total + record.length, 0);
   return new Blob([...parts, ...directory, zipEndRecords({ count: directory.length, directoryOffset: offset, directorySize })]);
 };
-const documentEntry = { name: SESSION_DOCUMENT_ENTRY, data: encoder.encode(documentText) };
+/** A document entry that declares resource `a` of `size` bytes. */
+const documentDeclaring = (size, id = 'a') => ({
+  name: SESSION_DOCUMENT_ENTRY, data: encoder.encode(JSON.stringify({ resources: { [id]: descriptor('a', size) } }))
+});
 
-test('a written container reads back: the document, each resource by its id, stored and deflated', async () => {
+/** What a reader reaches reading a vector's file: the document and each declared resource in full, or the refusal code. */
+const readVector = async (blob) => {
+  try {
+    const container = await readSessionContainer(blob);
+    const document = await bytesOfStream(openSessionContainerEntry(blob, container.documentEntry));
+    const resources = {};
+    for (const id of Object.keys(container.resources)) {
+      const bytes = await resourceBytes(blob, container, id);
+      resources[id] = { size: bytes.length, sha256: sha256(bytes) };
+    }
+    return { ok: true, document: { size: document.length, sha256: sha256(document) }, resources };
+  } catch (error) {
+    const { context, summary } = normalizeUserFacingError(error, { operation: 'session-load' });
+    const code = { CONTAINER_DAMAGED: 'damaged', CONTAINER_NO_DOCUMENT: 'no-document', JSON_FORMAT: 'invalid-json' }[context.reason];
+    assert.equal(summary, VECTORS.messages[code]?.web, `the text of ${code}`);
+    return { ok: false, error: code };
+  }
+};
+
+for (const vector of VECTORS.read) {
+  test(`shared vector read ${vector.id}: ${vector.description}`, async () => {
+    assert.deepEqual(await readVector(new Blob([fromBase64(vector.file)])), vector.expect);
+  });
+}
+
+for (const vector of VECTORS.write) {
+  test(`shared vector write ${vector.id}: ${vector.description}`, async () => {
+    const bytes = Object.fromEntries(Object.entries(vector.resources).map(([id, text]) => [id, fromBase64(text)]));
+    const blob = await write(vector.document, bytes);
+    const file = await bytesOfBlob(blob);
+    const view = new DataView(file.buffer);
+    const entries = [];
+    for (let at = 0; view.getUint32(at, true) === 0x04034B50;) {
+      const nameLength = view.getUint16(at + 26, true);
+      entries.push([new TextDecoder().decode(file.subarray(at + 30, at + 30 + nameLength)), view.getUint16(at + 8, true)]);
+      at += 30 + nameLength + view.getUint16(at + 28, true) + view.getUint32(at + 18, true);
+    }
+    assert.deepEqual(entries, vector.expect.entries);
+    const container = await readSessionContainer(blob);
+    assert.deepEqual(container.document, vector.document);
+    for (const [id, expected] of Object.entries(bytes)) assert.deepEqual(await resourceBytes(blob, container, id), expected);
+  });
+}
+
+
+test('a written container reads back: the document first, each resource by its id, gzip bytes stored and others deflated', async () => {
   const blob = await writeSample();
   const container = await readSessionContainer(blob);
-  assert.equal(new TextDecoder().decode(await bytesOfStream(container.document.open())), documentText);
-  const first = /** @type {NonNullable<ReturnType<typeof container.resource>>} */ (container.resource('resource-1'));
-  assert.equal(first.stored, false);
-  assert.ok(first.compressedSize < plain.length);
-  assert.deepEqual(await bytesOfStream(first.open()), plain);
-  const second = /** @type {NonNullable<ReturnType<typeof container.resource>>} */ (container.resource('resource-2'));
-  assert.equal(second.stored, true);
-  assert.equal(second.compressedSize, gzipped.length);
-  assert.deepEqual(await bytesOfStream(second.open()), gzipped);
-  assert.deepEqual(await bytesOfStream(container.resource('resource-3').open()), new Uint8Array(0));
-  assert.equal(container.resource('resource-4'), null);
-  assert.equal(container.resource(''), null);
+  assert.deepEqual(container.document, sampleDocument);
+  assert.equal(container.resources['resource-1'].method, 8);
+  assert.ok(container.resources['resource-1'].compressedSize < plain.length);
+  assert.equal(container.resources['resource-2'].method, 0);
+  assert.equal(container.resources['resource-3'].method, 8);
+  for (const [id, bytes] of Object.entries(sampleBytes)) assert.deepEqual(await resourceBytes(blob, container, id), bytes);
   assert.equal(container.inputBytes, plain.length + gzipped.length);
-  // The document is the first entry.
   const bytes = await bytesOfBlob(blob);
   assert.equal(new TextDecoder().decode(bytes.subarray(30, 30 + SESSION_DOCUMENT_ENTRY.length)), SESSION_DOCUMENT_ENTRY);
+  // An entry is plain data a Worker can hand to the page.
+  assert.deepEqual(structuredClone(container.resources['resource-1']), container.resources['resource-1']);
 });
 
 test('a container written with every size in the ZIP64 fields reads back the same', async () => {
@@ -101,18 +158,23 @@ test('a container written with every size in the ZIP64 fields reads back the sam
   const bytes = await bytesOfBlob(blob);
   assert.equal(new DataView(bytes.buffer).getUint32(18, true), 0xFFFFFFFF, 'the local header points to the ZIP64 extra field');
   const container = await readSessionContainer(blob);
-  assert.deepEqual(await bytesOfStream(container.resource('resource-1').open()), plain);
-  assert.deepEqual(await bytesOfStream(container.resource('resource-2').open()), gzipped);
+  for (const [id, expected] of Object.entries(sampleBytes)) assert.deepEqual(await resourceBytes(blob, container, id), expected);
 });
 
-test('an entry is kept by the caller\'s keeper, and two inputs of one id are refused before anything is written', async () => {
+test('each entry goes through the caller\'s keeper, and bytes of another size than declared are refused', async () => {
   const kept = [];
   await writeSample({ keep: async (data) => { const blob = await new Response(data).blob(); kept.push(blob.size); return blob; } });
   assert.equal(kept.length, 4);
-  await assert.rejects(writeSessionContainer({
-    document: streamOf(encoder.encode('{}')),
-    resources: [{ id: 'a', read: streamOf(plain), stored: false }, { id: 'a', read: streamOf(plain), stored: false }]
-  }), (error) => error.code === 'RESOURCE_INVALID');
+  await assert.rejects(write({ resources: { a: descriptor('a', 5) } }, { a: plain }), (error) => error.code === 'RESOURCE_INVALID');
+  await assert.rejects(write({ resources: { a: descriptor('a', -1) } }, { a: plain }), (error) => error.code === 'RESOURCE_INVALID');
+});
+
+test('the Web reader admits the document by its declared size before it reads it', async () => {
+  const blob = await writeSample();
+  const sizes = [];
+  const tooLarge = new Error('too large');
+  await assert.rejects(readSessionContainer(blob, { admitDocument: (size) => { sizes.push(size); throw tooLarge; } }), (error) => error === tooLarge);
+  assert.deepEqual(sizes, [encoder.encode(documentText).length]);
 });
 
 test('Python\'s zipfile reads a container the Web wrote, and the Web reads one Python wrote, with data descriptors and ZIP64', async () => {
@@ -140,6 +202,7 @@ def build(target, zip64):
         info = zipfile.ZipInfo('resources/resource-2')
         info.compress_type = zipfile.ZIP_STORED
         archive.writestr(info, base64.b64decode(given['gzipped']))
+        archive.writestr('resources/resource-3', b'')
 seekable = io.BytesIO(); build(seekable, False)
 streamed = Unseekable(); build(streamed, True)
 print(json.dumps({'read': read, 'seekable': base64.b64encode(seekable.getvalue()).decode(),
@@ -159,11 +222,10 @@ print(json.dumps({'read': read, 'seekable': base64.b64encode(seekable.getvalue()
   for (const tag of ['seekable', 'streamed']) {
     const bytes = new Uint8Array(Buffer.from(report[tag], 'base64'));
     if (tag === 'streamed') assert.equal(new DataView(bytes.buffer).getUint16(6, true) & 0x08, 0x08, 'Python wrote data descriptors');
-    const container = await readSessionContainer(new Blob([bytes]));
-    assert.equal(new TextDecoder().decode(await bytesOfStream(container.document.open())), documentText, tag);
-    assert.deepEqual(await bytesOfStream(container.resource('resource-1').open()), plain, tag);
-    assert.deepEqual(await bytesOfStream(container.resource('resource-2').open()), gzipped, tag);
-    assert.equal(container.resource('resource-2').stored, true, tag);
+    const blob = new Blob([bytes]);
+    const container = await readSessionContainer(blob);
+    assert.deepEqual(container.document, sampleDocument, tag);
+    for (const [id, expected] of Object.entries(sampleBytes)) assert.deepEqual(await resourceBytes(blob, container, id), expected, tag);
   }
 });
 
@@ -173,8 +235,8 @@ test('a file without a readable directory is refused as damaged: cut off, empty,
   await refused(readSessionContainer(new Blob([bytes.subarray(0, bytes.length / 2)])), DAMAGED);
   await refused(readSessionContainer(new Blob([])), DAMAGED);
   await refused(readSessionContainer(new Blob([documentText])), DAMAGED);
+  const end = bytes.length - 22;
   const wrongCount = bytes.slice();
-  const end = wrongCount.length - 22;
   new DataView(wrongCount.buffer).setUint16(end + 10, 5, true);
   new DataView(wrongCount.buffer).setUint16(end + 8, 5, true);
   await refused(readSessionContainer(new Blob([wrongCount])), DAMAGED);
@@ -182,71 +244,84 @@ test('a file without a readable directory is refused as damaged: cut off, empty,
   new DataView(pastEnd.buffer).setUint32(end + 16, bytes.length, true);
   await refused(readSessionContainer(new Blob([pastEnd])), DAMAGED);
   // A directory offset below the real one reads as bytes before the ZIP (as in Python's zipfile): the
-  // directory is found, and each entry, looked for that much further on, is refused when it is read.
+  // directory is found, and the document, looked for that much further on, is refused.
   const early = bytes.slice();
   new DataView(early.buffer).setUint32(end + 16, new DataView(bytes.buffer).getUint32(end + 16, true) - 7, true);
-  await refused(bytesOfStream((await readSessionContainer(new Blob([early]))).document.open()), DAMAGED);
+  await refused(readSessionContainer(new Blob([early])), DAMAGED);
 });
 
-test('an entry whose bytes, size or CRC-32 do not match is refused as damaged when it is read', async () => {
+test('a resource whose bytes, size or CRC-32 do not match is refused as damaged when it is read', async () => {
   const bytes = await bytesOfBlob(await writeSample());
-  // A flipped byte in the stored entry: its CRC-32 differs.
   const storedStart = (() => { for (let i = 0; i < bytes.length - gzipped.length; i += 1) if (gzipped.every((b, k) => bytes[i + k] === b)) return i; return -1; })();
   assert.ok(storedStart > 0);
   const flipped = bytes.slice();
   flipped[storedStart + 10] ^= 0xFF;
-  await refused(bytesOfStream((await readSessionContainer(new Blob([flipped]))).resource('resource-2').open()), DAMAGED);
+  const flippedBlob = new Blob([flipped]);
+  await refused(resourceBytes(flippedBlob, await readSessionContainer(flippedBlob), 'resource-2'), DAMAGED);
+  const readA = async (blob) => resourceBytes(blob, await readSessionContainer(blob), 'a');
   // Deflated bytes that do not inflate.
-  const broken = craft([documentEntry, { name: 'resources/a', data: plain, method: 8, compressed: new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF]) }]);
-  await refused(bytesOfStream((await readSessionContainer(broken)).resource('a').open()), DAMAGED);
-  // A declared size one byte larger, then one byte smaller, than the content.
+  await refused(readA(craft([documentDeclaring(plain.length), { name: 'resources/a', data: plain, method: 8, compressed: new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF]) }])), DAMAGED);
+  // A size one byte larger, then one byte smaller, than the content, declared alike in the directory and the document.
   for (const size of [plain.length + 1, plain.length - 1]) {
-    const wrongSize = craft([documentEntry, { name: 'resources/a', data: plain, size }]);
-    const entry = (await readSessionContainer(wrongSize)).resource('a');
-    await refused(bytesOfStream(entry.open()), DAMAGED);
+    await refused(readA(craft([documentDeclaring(size), { name: 'resources/a', data: plain, size }])), DAMAGED);
   }
   // A CRC-32 in the directory that the content does not have.
-  const wrongCrc = craft([documentEntry, { name: 'resources/a', data: plain, crc: 12345 }]);
-  await refused(bytesOfStream((await readSessionContainer(wrongCrc)).resource('a').open()), DAMAGED);
+  await refused(readA(craft([documentDeclaring(plain.length), { name: 'resources/a', data: plain, crc: 12345 }])), DAMAGED);
+});
+
+test('a declared resource without an entry, or whose entry has another size, is refused as damaged', async () => {
+  await refused(readSessionContainer(craft([documentDeclaring(plain.length)])), DAMAGED);
+  await refused(readSessionContainer(craft([documentDeclaring(plain.length + 1), { name: 'resources/a', data: plain }])), DAMAGED);
+  await refused(readSessionContainer(craft([documentDeclaring(SESSION_DOCUMENT_ENTRY.length, '../gbdraw-session.json')])), DAMAGED);
 });
 
 test('two entries of one name, an encrypted entry and an unsupported compression are refused as damaged', async () => {
-  await refused(readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain }, { name: 'resources/a', data: plain }])), DAMAGED);
-  await refused(readSessionContainer(craft([documentEntry, documentEntry])), DAMAGED);
+  const doc = documentDeclaring(plain.length);
+  await refused(readSessionContainer(craft([doc, { name: 'resources/a', data: plain }, { name: 'resources/a', data: plain }])), DAMAGED);
+  await refused(readSessionContainer(craft([doc, doc])), DAMAGED);
   const encrypted = (record) => { record[8] |= 0x01; };
-  await refused(readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain, central: encrypted }])), DAMAGED);
-  await refused(readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain, method: 12 }])), DAMAGED);
-  await refused(readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain, method: 14 }])), DAMAGED);
+  await refused(readSessionContainer(craft([doc, { name: 'resources/a', data: plain, central: encrypted }])), DAMAGED);
+  const strong = (record) => { record[8] |= 0x40; };
+  await refused(readSessionContainer(craft([doc, { name: 'resources/a', data: plain, central: strong }])), DAMAGED);
+  await refused(readSessionContainer(craft([doc, { name: 'resources/a', data: plain, method: 12 }])), DAMAGED);
+  // Any entry, also one the document does not declare.
+  await refused(readSessionContainer(craft([doc, { name: 'resources/a', data: plain }, { name: 'notes.txt', data: plain, method: 14 }])), DAMAGED);
 });
 
 test('an entry whose local header names another entry, or whose data runs into the next entry, is refused as damaged', async () => {
+  const doc = documentDeclaring(plain.length);
   const renamed = (header) => { header[30 + 'resources/'.length] = 'b'.charCodeAt(0); };
-  const misnamed = await readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain, local: renamed }]));
-  await refused(bytesOfStream(misnamed.resource('a').open()), DAMAGED);
+  const misnamed = craft([doc, { name: 'resources/a', data: plain, local: renamed }]);
+  await refused(resourceBytes(misnamed, await readSessionContainer(misnamed), 'a'), DAMAGED);
   const longer = (record) => { new DataView(record.buffer).setUint32(20, plain.length + 50, true); };
-  const overrun = await readSessionContainer(craft([documentEntry, { name: 'resources/a', data: plain, central: longer }, { name: 'resources/b', data: plain }]));
-  await refused(bytesOfStream(overrun.resource('a').open()), DAMAGED);
+  const overrun = craft([doc, { name: 'resources/a', data: plain, central: longer }, { name: 'resources/b', data: plain }]);
+  await refused(resourceBytes(overrun, await readSessionContainer(overrun), 'a'), DAMAGED);
 });
 
-test('a ZIP without gbdraw-session.json is refused as no Session', async () => {
+test('a ZIP without gbdraw-session.json is refused as no Session, and a document that is not UTF-8 JSON as not JSON', async () => {
   await refused(readSessionContainer(craft([{ name: 'resources/a', data: plain }])), NO_DOCUMENT);
   await refused(readSessionContainer(craft([{ name: 'gbdraw-session.json/', data: new Uint8Array(0) }])), NO_DOCUMENT);
+  await refused(readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY, data: encoder.encode('{"resources": ') }])), INVALID_JSON);
+  await refused(readSessionContainer(craft([{ name: SESSION_DOCUMENT_ENTRY, data: new Uint8Array([0x22, 0xFF, 0x22]) }])), INVALID_JSON);
 });
 
-test('an entry is found by its resource id only: a name never becomes a path', async () => {
-  const container = await readSessionContainer(craft([
-    documentEntry, { name: '../x', data: plain }, { name: 'resources/../x', data: gzipped }, { name: 'resources//x', data: encoder.encode('y') }
-  ]));
-  assert.equal(container.resource('x'), null);
-  assert.deepEqual(await bytesOfStream(container.resource('../x').open()), gzipped);
-  assert.deepEqual(await bytesOfStream(container.resource('/x').open()), encoder.encode('y'));
-  assert.equal(container.resource('../../x'), null);
+test('a resource is found by its id only: an entry name never becomes a path, and entries not declared are not read', async () => {
+  const document = { resources: { '../x': descriptor('x', gzipped.length), '/x': descriptor('y', 1) } };
+  const blob = craft([
+    { name: SESSION_DOCUMENT_ENTRY, data: encoder.encode(JSON.stringify(document)) },
+    { name: '../x', data: plain }, { name: 'resources/../x', data: gzipped }, { name: 'resources//x', data: encoder.encode('y') },
+    { name: 'resources/x', data: plain, crc: 1 }
+  ]);
+  const container = await readSessionContainer(blob);
+  assert.deepEqual(Object.keys(container.resources), ['../x', '/x']);
+  assert.deepEqual(await resourceBytes(blob, container, '../x'), gzipped);
+  assert.deepEqual(await resourceBytes(blob, container, '/x'), encoder.encode('y'));
   // Every entry but the document counts toward the storage a Load needs.
-  assert.equal(container.inputBytes, plain.length + gzipped.length + 1);
+  assert.equal(container.inputBytes, 2 * plain.length + gzipped.length + 1);
 });
 
 test('a ZIP with bytes before it is read as Python\'s zipfile reads it', async () => {
   const bytes = await bytesOfBlob(await writeSample());
-  const container = await readSessionContainer(new Blob([encoder.encode('#!prefix\n'), bytes]));
-  assert.deepEqual(await bytesOfStream(container.resource('resource-1').open()), plain);
+  const blob = new Blob([encoder.encode('#!prefix\n'), bytes]);
+  assert.deepEqual(await resourceBytes(blob, await readSessionContainer(blob), 'resource-1'), plain);
 });
