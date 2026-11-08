@@ -737,17 +737,17 @@ def _read_comparison_files(
     if not blast_files:
         return ()
     logger.info(
-        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; "
+        "BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; "
         "identity threshold: {}; alignment length threshold: {}".format(
             thresholds.evalue, thresholds.bitscore, thresholds.identity, thresholds.alignment_length
         )
     )
-    logger.info("INFO: Loading comparison file(s)...")
+    logger.info("Loading comparison file(s)...")
     tables: list[DataFrame] = []
     for comparison_file in blast_files:
-        logger.info("INFO: Loading {}".format(comparison_file))
+        logger.info("Loading {}".format(comparison_file))
         tables.append(read_comparison_resource(comparison_file))
-    logger.info("INFO:             ... finished loading comparison file(s)")
+    logger.info("... finished loading comparison file(s)")
     return tuple(tables)
 
 
@@ -2427,7 +2427,7 @@ def _linear_comparisons(
         )
     ):
         logger.warning(
-            "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
+            "--show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
         )
     return _LinearComparisons(
         rows=comparison_rows,

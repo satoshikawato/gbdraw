@@ -199,7 +199,6 @@ def _parse_optional_positive_int(value: str) -> int | None:
 
 # Setup for the logging system
 logger = logging.getLogger()
-setup_logging()
 
 _LINEAR_OPTION_DEFAULTS = LinearDiagramOptions()
 _COLLINEARITY_PARAMETER_DEFAULTS = LosslessCollinearityParameters()
@@ -1195,7 +1194,7 @@ def replay_legacy_session(
             and (args.blast or args.comparisons_table)
         ):
             logger.warning(
-                "WARNING: This Session crops and reverse-complements a record that has comparisons. "
+                "This Session crops and reverse-complements a record that has comparisons. "
                 "Since 0.14.0 the region is cropped before it is reverse-complemented, so the drawn "
                 "window can differ from the one the stored comparison was searched on; re-run the "
                 "comparison if its matches look misplaced."
@@ -1246,6 +1245,7 @@ def linear_main(cmd_args) -> None:
     The final output includes linear genome diagrams in user-specified file formats,
     illustrating genomic features and optional BLAST comparison results.
     """
+    setup_logging()
     session_request = parse_session_pre_args(cmd_args, mode="linear")
     if session_request is not None:
         # Before the Session is read, so its font names resolve to these files.
@@ -1586,7 +1586,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     ruler_on_axis: bool = bool(args.ruler_on_axis)
     if ruler_on_axis and not show_scale:
         logger.warning(
-            "WARNING: --ruler_on_axis is ignored when --hide_scale is set."
+            "--ruler_on_axis is ignored when --hide_scale is set."
         )
         ruler_on_axis = False
     elif ruler_on_axis and not linear_axis_ruler_applies(
@@ -1595,7 +1595,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         # With a wrap length the record lengths decide whether it draws: rows always have the axis ruler.
         if args.wrap_length is None:
             logger.warning(
-                "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
+                "--ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
             )
         ruler_on_axis = False
     axis_stroke_width: Optional[float] = args.axis_stroke_width
@@ -1777,7 +1777,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         losat_search = _cli_losat_search(args, record_manifest.losat_gencodes)
     if record_manifest.record_options.regions and blast_files:
         logger.warning(
-            "WARNING: Region cropping is enabled; BLAST coordinates must refer "
+            "Region cropping is enabled; BLAST coordinates must refer "
             "to the cropped regions, counted on the source strand."
         )
     has_table_placement = any(
@@ -1991,10 +1991,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
 
 if __name__ == "__main__":
-    # This gets all arguments passed to the script, excluding the script name
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(handler)
+    # ``python -m gbdraw.linear``: linear_main sets up the log as ``gbdraw linear`` does.
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

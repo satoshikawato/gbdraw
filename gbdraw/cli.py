@@ -78,16 +78,17 @@ def start_local_server(directory: str):
         return
 
     url = f"http://localhost:{port}"
-    print(f"✅ Local server started at: {url}")
-    print(f"📂 Serving UI from: {directory}")
-    print("Press Ctrl+C to stop the server.")
+    # Status lines go to standard error with the log; standard output keeps what a command exists to print.
+    print(f"✅ Local server started at: {url}", file=sys.stderr)
+    print(f"📂 Serving UI from: {directory}", file=sys.stderr)
+    print("Press Ctrl+C to stop the server.", file=sys.stderr)
 
     webbrowser.open(url)
 
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping server...")
+        print("\nStopping server...", file=sys.stderr)
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -235,7 +236,7 @@ def main() -> None:
                     import os
                     web_dir = os.path.join(os.path.dirname(__file__), 'web')
 
-                print("Launching gbdraw GUI (Local Mode)...")
+                print("Launching gbdraw GUI (Local Mode)...", file=sys.stderr)
                 start_local_server(str(web_dir))
             else:
                 print(

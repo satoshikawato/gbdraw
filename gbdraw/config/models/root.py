@@ -107,7 +107,7 @@ def read_stored_font_size(value: object, *, path: str) -> object:
     stored = str(int(number)) if isinstance(value, (int, float)) and number.is_integer() else str(value)
     # The wording of the Web's Load notice (utils/load-repairs.js `setting-replaced`).
     logger.warning(
-        'WARNING: Settings: the value "%s" (%s) cannot be used; its default is used.',
+        'Settings: the value "%s" (%s) cannot be used; its default is used.',
         stored,
         path,
     )

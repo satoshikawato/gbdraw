@@ -902,7 +902,7 @@ def _match_feature_starts(
             )
         if not by_start:
             logger.warning(
-                "WARNING: %s %s %s; the record keeps its %s.",
+                "%s %s %s; the record keeps its %s.",
                 option,
                 text,
                 f"matched no feature in {name}"
@@ -1713,7 +1713,7 @@ def _apply_collection_options(
     for field_name in ("labels", "subtitles"):
         if len(getattr(options, field_name)) > len(records):
             logger.warning(
-                "WARNING: More record %s were provided than records resolved; "
+                "More record %s were provided than records resolved; "
                 "extra values will be ignored.",
                 field_name,
             )

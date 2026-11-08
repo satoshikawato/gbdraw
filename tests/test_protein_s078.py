@@ -53,11 +53,17 @@ def test_hsp_exact_private_errors_values_and_all_columns(column, value, finite, 
     pd.testing.assert_frame_equal(pc._aggregate_hsps_by_protein_pair(hits, pm), expected, check_exact=True)
 
 
+def _frozen_observe(build, extraction, caplog, **kwargs):
+    """The frozen copy's outcome and log, without the level word its messages wrote (the log format adds it now)."""
+    outcome, records = _observe(build, extraction, caplog, **kwargs)
+    return outcome, [(level, message.removeprefix(f'{level}: ')) for level, message in records]
+
+
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus', 'invalid'])
 def test_complete_unit_index_s077(mode, caplog):
     ex = _extraction(_boundaries())
     assert _observe(cu.build_collinearity_unit_index, ex, caplog, mode=mode) == \
-           _observe(frozen_units.build_collinearity_unit_index, ex, caplog, mode=mode)
+           _frozen_observe(frozen_units.build_collinearity_unit_index, ex, caplog, mode=mode)
 
 
 def test_hsp_reads_each_numeric_value_once():
@@ -97,7 +103,7 @@ def test_aliases_remain_ordered_for_large_collapsed_locus(mode, caplog):
                       gene=f'gene{i%3}', old_locus_tag='repeat', strand=(-1)**i) for i in range(100)]]
     ex = _extraction(rows)
     expected = _observe(build, ex, caplog, mode=mode)
-    assert _observe(frozen_units.build_collinearity_unit_index, ex, caplog, mode=mode) == expected
+    assert _frozen_observe(frozen_units.build_collinearity_unit_index, ex, caplog, mode=mode) == expected
     assert _observe(cu.build_collinearity_unit_index, ex, caplog, mode=mode) == expected
 
 

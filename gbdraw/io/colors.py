@@ -310,7 +310,7 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
         if missing.any():
             for ft in user_df[missing]["feature_type"].tolist():
                 logger.warning(
-                    f"WARNING: colour missing for feature '{ft}' "
+                    f"colour missing for feature '{ft}' "
                     f"in '{user_defined_default_colors}' – "
                     "keeping built-in value."
                 )
@@ -574,7 +574,7 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         for idx, row in null_rows.iterrows():
             missing = [c for c in mandatory_cols if pd.isna(row[c])]
             logger.error(
-                f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
+                f"Missing values in '{color_table_file}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"
             )
         raise ValidationError(

@@ -619,7 +619,7 @@ def validate_linear_comparison_record_ids(
                 f"displayed record ({', '.join(repr(value) for value in example_ids)}); "
                 "these rows are drawn on the records assigned by position."
             )
-            logger.warning("WARNING: %s", message)
+            logger.warning("%s", message)
             warnings.append(
                 ComparisonRecordIdWarning(
                     query_record_index=endpoints["query"],

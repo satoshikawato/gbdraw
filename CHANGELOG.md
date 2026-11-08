@@ -12,6 +12,16 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: the command line writes its progress messages, warnings, and errors
+  to standard error, and standard output stays empty while it draws. Each
+  message starts with one level word (`INFO:`, `WARNING:`, or `ERROR:`), so
+  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`, and
+  `gbdraw linear` names the config file it loads once instead of twice. A
+  script that saved the messages with `> log.txt` now needs `2> log.txt`.
+  The status lines of `gbdraw gui` also go to standard error. In Python, the
+  messages gbdraw logs no longer begin with a level word; a log format with
+  `%(levelname)s` shows the level once. Importing `gbdraw.circular` or
+  `gbdraw.linear` no longer sets up logging.
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

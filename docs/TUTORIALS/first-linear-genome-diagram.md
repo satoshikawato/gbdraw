@@ -149,8 +149,9 @@ gbdraw linear \
 ```
 <!-- executable:T-CLI-02:end -->
 
-Expected output: the command prints `Generated SVG: lambda_linear.svg` and
-writes the file in the current directory.
+Expected output: among its progress messages, the command prints
+`INFO: Generated SVG: lambda_linear.svg` and writes the file in the current
+directory.
 
 ### Step 3: Inspect the SVG
 

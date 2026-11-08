@@ -488,7 +488,7 @@ def test_a_resave_prints_the_results_the_upgrade_drops(tmp_path: Path) -> None:
         f"WARNING: Upgrading Session 33 to {CURRENT_SESSION_VERSION} dropped the linear drawing's "
         "1 Result(s) 'out.svg': Session 33 saved no feature catalog for them. "
         "Render the drawing and save the Session to write new Results."
-    ) in result.stdout.splitlines()
+    ) in result.stderr.splitlines()
     resaved = drawing_view(load_session_document(tmp_path / "crop.gbdraw-session.json").to_dict(), mode="linear")
     assert [entry["name"] for entry in resaved["results"]] == ["crop"]
 

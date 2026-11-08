@@ -34,14 +34,14 @@ def test_gui_help_prints_usage_without_starting_the_server(flag: str, tmp_path: 
     result = _gbdraw("gui", flag, cwd=tmp_path, timeout=30)
     assert result.returncode == 0, result.stderr
     assert "usage: gbdraw gui" in result.stdout
-    assert "Local server started" not in result.stdout
+    assert "Local server started" not in result.stdout + result.stderr
 
 
 def test_gui_refuses_unknown_arguments(tmp_path: Path) -> None:
     result = _gbdraw("gui", "--port", "8000", cwd=tmp_path, timeout=30)
     assert result.returncode == 2
     assert "unrecognized arguments: --port 8000" in result.stderr
-    assert "Local server started" not in result.stdout
+    assert "Local server started" not in result.stdout + result.stderr
 
 
 def test_version_is_a_top_level_flag_only(tmp_path: Path) -> None:

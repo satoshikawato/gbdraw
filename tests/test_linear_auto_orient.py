@@ -123,7 +123,7 @@ def test_auto_orient_draws_the_figure_of_an_explicit_reverse(
     subject, table = _reversed_subject_inputs(tmp_path)
     with caplog.at_level(logging.INFO):
         auto = _render(tmp_path, "auto", subject, table, "--auto_orient")
-    assert "INFO: auto_orient reverse-complemented record #2" in caplog.text
+    assert "auto_orient reverse-complemented record #2" in caplog.text
     explicit = _render(
         tmp_path, "explicit", subject, table, "--reverse_complement", "0", "--reverse_complement", "1"
     )

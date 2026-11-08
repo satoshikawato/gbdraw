@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
-from gbdraw.cli_utils.common import add_dpi_arg, add_font_file_args, png_dpi, register_font_files
+from gbdraw.cli_utils.common import add_dpi_arg, add_font_file_args, png_dpi, register_font_files, setup_logging
 from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
 from gbdraw.render.font_embedding import remove_embedded_font_css
@@ -936,6 +936,8 @@ def _legacy_session_replay(mode: str) -> Any:
 
 def render_main(cmd_args: Sequence[str]) -> None:
     """``gbdraw render``: render the drawings of a saved Session."""
+
+    setup_logging()
 
     from gbdraw.session import SessionDrawingSelectionError, load_session_document
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION

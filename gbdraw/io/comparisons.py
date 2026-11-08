@@ -303,7 +303,7 @@ def read_comparison_table(
         return _empty_comparison_frame()
     if widest > len(COMPARISON_COLUMNS):
         logger.info(
-            "INFO: %s: using the 12 standard BLAST outfmt 6 columns and ignoring %d extra column(s).",
+            "%s: using the 12 standard BLAST outfmt 6 columns and ignoring %d extra column(s).",
             name,
             widest - len(COMPARISON_COLUMNS),
         )
