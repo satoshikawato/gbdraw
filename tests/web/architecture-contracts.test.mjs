@@ -335,6 +335,19 @@ const retiringSerializationOperators = (detected, path) => {
     `${path}: SVG serialization may only contract (ceiling ${ceiling})`);
   return operatorEntries(detected, path, 'SVG serialization');
 };
+// The Session file container (receipt session.file-container) retires the
+// gzip writer `compressSessionData`: these Session operator counts may shrink
+// without editing this guard; they may not grow.
+const SESSION_RETIRING_CEILINGS = Object.freeze({
+  'services/config.js': 5,
+  'services/session-file.js': 1
+});
+const retiringSessionOperators = (detected, path) => {
+  const ceiling = SESSION_RETIRING_CEILINGS[path];
+  assert.ok(operatorCount(detected, path, 'Session') <= ceiling,
+    `${path}: Session operators may only contract (ceiling ${ceiling})`);
+  return operatorEntries(detected, path, 'Session');
+};
 const keeperCommitOperators = (detected, path) => {
   const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
   assert.ok(operatorCount(detected, path, 'Result content commit') <= ceiling,
@@ -890,8 +903,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     Session: [
       { path: 'app/app-setup.js', count: 2 },
-      { path: 'services/config.js', count: 5 },
-      { path: 'services/session-file.js', count: 1 }
+      ...retiringSessionOperators(detected, 'services/config.js'),
+      ...retiringSessionOperators(detected, 'services/session-file.js')
     ]
   });
 });
