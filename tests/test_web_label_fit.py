@@ -495,7 +495,8 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     ]
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
     font = searches.row(entry["rowToken"], "smaller_definition_font")
-    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 13.0})
+    # 14 pt since the GC skew windows were centred (OV-2870; 13 pt before): the skew ring the line meets moved.
+    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 14.0})
     narrow = searches.row(entry["rowToken"], "narrow_tracks")
     # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
     assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (

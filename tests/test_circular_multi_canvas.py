@@ -4829,10 +4829,11 @@ def test_a_record_part_is_keyed_by_its_record_index_and_its_renames() -> None:
 
 # The record id plans of the merge that ``record_part`` replaced, recorded on its last
 # commit (893fc77eb): per record, each tree's (ordinal, new id) renames and the
-# record's renamed map, as canonical JSON (sha256), and the renames per record.
+# record's renamed map, as canonical JSON (sha256), and the renames per record. The lambda plan names the GC
+# skew clip id, a hash of the skew path: it moved when the skew windows were centred (OV-2870; bc424518... before).
 _GOLDEN_RECORD_ID_PLANS = {
     "whole + region": ("4468945bcd3d089e62a18f8d1bba4010001688935b3327b56341afecb63c10ae", [0, 22]),
-    "lambda twice, radial labels": ("bc424518f794bcdb3f9dff3b34778699b2e65d2be50e2f006ce36888dc81259e", [0, 85]),
+    "lambda twice, radial labels": ("db28d6e60abee6013809ade03344b7b5ec2552efc8f5940bbb21af808b8a1374", [0, 85]),
 }
 
 
