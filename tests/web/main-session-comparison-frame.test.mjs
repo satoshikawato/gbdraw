@@ -142,3 +142,9 @@ test('the converted bytes replace a resource under its stored ID with its size a
   assert.equal(Object.hasOwn((await withConvertedResources({ ...stored, table: unchecked }, converted)).table, 'checksum'), false);
   assert.equal(await withConvertedResources(stored, new Map()), stored);
 });
+
+test('an old region with the larger number first is a reversed record, as Python reads it (stored_record_windows)', () => {
+  const data = protein(47, false);
+  Object.assign(data.renderRequest.records[0].region, { start: 30, end: 11 });
+  assert.equal(storesDrawnFrameProteinResults(data), true);
+});

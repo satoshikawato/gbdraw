@@ -31,7 +31,6 @@ const {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   compareCanonicalRenderRequests,
-  promoteCanonicalRenderRequestToCurrent,
   readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -76,16 +75,9 @@ const loadSessionFile = async (path) => {
 const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
 // The released Session 44 Gallery files (first-parent main fe6861f0), kept to
 // exercise the promotion of released Gallery Sessions to the current writer.
-// A released Session stores the request of its time (schema 9 for Sessions 46-50). Publication reads the current
-// schema only, as it reads the Gallery files `tools/refresh_gallery_sessions.py` wrote, so the fixture's request is
-// promoted first, as Load does.
-const loadReleasedSession = async (name) => {
-  const view = await loadSessionFile(`tests/fixtures/sessions/${name}`);
-  const request = view.renderRequest;
-  return request && request.schema !== CANONICAL_REQUEST_SCHEMA && Number(view.version) >= 46
-    ? { ...view, renderRequest: promoteCanonicalRenderRequestToCurrent(request) }
-    : view;
-};
+// A released Session stores the request of its time (schema 9 for Sessions 46-50); publication reads it through
+// Load's request reader, which promotes it, and publishes the current schema only.
+const loadReleasedSession = (name) => loadSessionFile(`tests/fixtures/sessions/${name}`);
 
 for (const name of sessionNames) {
   const source = await loadSession(name);

@@ -59,13 +59,16 @@ const heldResource = (resources, resourceId) => {
  */
 const storedRecordReverses = (record) => {
   // A stored record of schema 10 writes its spans as `windows`; an older one as one `region`, which reads as one
-  // window (Python's `stored_record_windows`).
+  // window, the larger number first being the reversed span (Python's `stored_record_windows`).
   const stored = /** @type {{ windows?: unknown, region?: unknown }} */ (record ?? {});
   const windows = /** @type {UnvalidatedFields<keyof CanonicalRecordWindow>[]} */ (
     Array.isArray(stored.windows) ? stored.windows : [stored.region]
   );
+  const region = Array.isArray(stored.windows) ? null : windows[0];
+  const reversedRegion = typeof region?.start === 'number' && typeof region?.end === 'number' && region.start > region.end;
   const presentation = /** @type {UnvalidatedFields<keyof CanonicalRecordPresentation>} */ (record?.presentation);
-  return windows.some((window) => Boolean(window?.reverseComplement)) || Boolean(presentation?.reverseComplement);
+  return reversedRegion || windows.some((window) => Boolean(window?.reverseComplement))
+    || Boolean(presentation?.reverseComplement);
 };
 
 /**

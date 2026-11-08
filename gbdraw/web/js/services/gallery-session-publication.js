@@ -480,9 +480,14 @@ const mergeReplayResources = (prepared, replayed) => {
  * @param {GallerySessionPublicationOwners} owners
  */
 export const createGallerySessionPublication = (owners) => {
-  /** @param {PublicationSession} session */
-  const admit = (session) => {
-    const version = Number(session?.version);
+  /** @param {PublicationSession} source */
+  const admit = (source) => {
+    const version = Number(source?.version);
+    // A request of an earlier schema (a Session saved before windows) is read as Load reads it, promoted by the
+    // one request reader (`readRequest`); the publication writes the current schema only.
+    const session = isObject(source?.renderRequest) && Number(source.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA
+      && version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION
+      ? { ...source, renderRequest: publicationCanonicalRequest(source, owners.readRequest) } : source;
     // Only Python converts the protein results these Sessions stored in the drawn frame (OV-1145).
     if (storesDrawnFrameProteinResults(session)) {
       throw new Error(`Gallery publication cannot convert the protein results that Session ${version} stored for a `
