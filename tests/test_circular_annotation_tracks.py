@@ -1012,6 +1012,37 @@ def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None
     assert record_payload["labelCount"] == 2 and record_payload["fontSize"] == 14.0
 
 
+@pytest.mark.parametrize("text", ("Region", "<i>Region</i>"))
+def test_circular_region_label_keeps_a_letter_or_is_left_out(text: str) -> None:
+    # A label cut to fit its circle (LP-D87) is drawn while it keeps at least one letter, its start and an ellipsis;
+    # one cut so far that only the ellipsis is left is not drawn and is returned as left out (RGN-CUT-EMPTY-OMIT,
+    # OV-2804), for the label fit warning to count. Labels along the circle of an inside slot nearer and nearer the
+    # centre, in plain and in italic letters.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, 2000, 3000), label=text, style=RegionAnnotationStyle(label_orientation="auto"))
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+    )
+    seen: dict[str, tuple[bool, bool]] = {}
+    for step in range(200, 0, -1):
+        inner = 0.25 * step
+        labels = circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=inner, outer_radius_px=inner + 10.0,
+            side="inside", font_family="Liberation Sans", params=params,
+        )
+        ((label, drawn),) = [(label, True) for label in labels.drawn] + [(label, False) for label in labels.without_letters]
+        seen.setdefault("".join(run for run, _style in label.runs), (drawn, label.cut))
+    assert seen["Region"] == (True, False)
+    assert seen["R\u2026"] == (True, True)
+    assert seen["\u2026"] == (False, True)
+
+
 def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(monkeypatch: pytest.MonkeyPatch) -> None:
     import gbdraw.diagrams.circular.assemble as assemble
     from gbdraw.render.drawers.circular.annotations import _ObstacleIndex
@@ -1043,7 +1074,7 @@ def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(mo
 
     first = next(call for call in calls if call[0] == "a")
     later = next(call for call in calls if call[0] == "b")
-    (earlier,) = first[2]
+    (earlier,) = first[2].drawn
     assert len(earlier.parts) > 1
     # The slot hand-off gives the later slot the earlier curved label as one shape (F-4).
     assert _ObstacleIndex(first[1]).conflicts(earlier) == 0
@@ -1339,7 +1370,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
             font_family="Liberation Sans",
             params=params,
             obstacles=CircularLabelObstacles(shapes=tuple((polygon,) for polygon in polygons), clearance=3.0) if polygons else None,
-        )
+        ).drawn
 
     (default,) = labels()
     everywhere = ((-1000.0, -1000.0), (1000.0, -1000.0), (1000.0, 1000.0), (-1000.0, 1000.0))

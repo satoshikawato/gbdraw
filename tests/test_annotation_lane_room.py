@@ -978,15 +978,20 @@ def test_a_circular_label_gets_room_before_the_lane_further_on_whose_mark_it_wou
 
 
 def _nested_inside(
-    count: int, labels: tuple[str, ...] | None = None, extra: tuple[RegionAnnotation, ...] = (), slot: str = ""
+    count: int,
+    labels: tuple[str, ...] | None = None,
+    extra: tuple[RegionAnnotation, ...] = (),
+    slot: str = "",
+    orientation: str = "horizontal",
 ) -> tuple[dict[str, ElementTree.Element], list[warnings.WarningMessage], object]:
-    """``count`` nested bands inside the axis around 3 o'clock, each labelled horizontally (``labels``, by default
-    "Region N label text"), so that each label would cross the next lane's mark (``followups2/questions/qrender.py
-    q7-<count>``), and the ``extra`` regions; ``slot`` adds settings to the slot."""
+    """``count`` nested bands inside the axis around 3 o'clock, each labelled in ``orientation`` (``labels``, by
+    default "Region N label text"), so that each label would cross the next lane's mark
+    (``followups2/questions/qrender.py q7-<count>``), and the ``extra`` regions; ``slot`` adds settings to the
+    slot."""
 
     texts = labels or tuple(f"Region {index + 1} label text" for index in range(count))
     regions = tuple(
-        _region(f"r{index}", 1501 + 100 * index, 3500 - 100 * index, texts[index]) for index in range(count)
+        _region(f"r{index}", 1501 + 100 * index, 3500 - 100 * index, texts[index], orientation) for index in range(count)
     ) + extra
     options = gbdraw.CircularOptions(
         annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
@@ -1034,6 +1039,80 @@ def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, witho
     (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
     assert region["counts"] == f"{without_room} {counted} left out for want of room before the centre"
     assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
+
+
+def test_an_inside_label_that_keeps_no_letter_is_left_out_and_counted() -> None:
+    # RGN-CUT-EMPTY-OMIT (OV-2804, PD-OI-097 scenario revision 22): ten nested bands with labels along the circle.
+    # The innermost band's label would be cut so far that no letter is left, only the ellipsis: it is not drawn,
+    # and the warning counts it as a label left out, not as a cut one. Its mark is drawn.
+    from gbdraw.api.diagram import label_fit_report
+    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.web_support.label_fit import label_fit_report_payload
+
+    items, caught, drawing = _nested_inside(10, orientation="auto")
+
+    assert all(_marked(items[f"r{index}"]) for index in range(10))
+    assert not _labelled(items["r9"])
+    drawn = ["".join(text.itertext()) for item in items.values() for text in item.iter(f"{_SVG}text")]
+    assert drawn == [f"Region {index + 1} label text" for index in range(7)], drawn
+    counts = "2 region labels left out for want of room before the centre, 1 region label left out: no letter fits its circle"
+    assert any(counts in str(item.message) for item in caught), [str(item.message) for item in caught]
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn
+    assert (report.region_cuts, report.region_cuts_left_out, report.region_rooms_past_centre) == (0, 1, 2)
+    sentence = "Region labels are left out: no letter of them fits their circle (1)."
+    assert sentence in label_fit_notice(report)
+    payload = label_fit_report_payload(report, "circular")
+    assert sentence in payload["notice"]
+    (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
+    # Every region label of the record, drawn or left out, is counted.
+    assert region["counts"] == counts and region["labelCount"] == 10
+
+
+@pytest.mark.parametrize("slot", ("", ",w=600px,overflow=error"))
+def test_a_label_that_keeps_no_letter_claims_no_lane_room(monkeypatch: pytest.MonkeyPatch, slot: str) -> None:
+    # RGN-CUT-EMPTY-OMIT (OV-2804): at 60 pt, labels of middle lanes of seven nested bands keep no letter on their
+    # circle. The lane packer reads the drawer's verdict (``LabelExtent.drawn``), so such a label claims no room
+    # between the lanes and is no obstacle there: every band stands where it stands when that label has no text.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    left_out: list[str] = []
+    place = assemble_module.circular_annotation_labels
+
+    def spying(track: object, **kwargs: object) -> object:
+        labels = place(track, **kwargs)
+        left_out.extend(label.annotation_id for label in labels.without_letters)
+        return labels
+
+    monkeypatch.setattr(assemble_module, "circular_annotation_labels", spying)
+
+    def bands(empty: frozenset[str]) -> dict[str, tuple[float, float]]:
+        step = 100
+        regions = tuple(
+            RegionAnnotation(
+                f"r{index}",
+                CoordinateSpan(None, 1501 + step * index, 3500 - step * index),
+                label="" if f"r{index}" in empty else f"Region {index + 1} label text",
+                mark="band",
+                style=RegionAnnotationStyle(fill="#ffcc00", label_orientation="arc", label_font_size=60),
+            )
+            for index in range(7)
+        )
+        options = gbdraw.CircularOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            tracks=gbdraw.CircularTrackOptions(slots=("features:features", f"regions:annotations@side=inside,set_id=regions{slot}")),
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            items = _groups(gbdraw.draw_circular(_record(), options=options)._drawing.tostring())
+        return {identity: _signed_radii(items[identity]) for identity in (f"r{index}" for index in range(7))}
+
+    drawn = bands(frozenset())
+    without_letters = frozenset(left_out)
+    # A middle lane's label is among them: a band further in exists.
+    assert without_letters and min(int(identity[1:]) for identity in without_letters) < 6, without_letters
+    left_out.clear()
+    assert bands(without_letters) == drawn
 
 
 def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:

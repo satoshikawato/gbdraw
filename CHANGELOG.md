@@ -169,6 +169,12 @@ write-up of a release.
   beside its own, so figures with lane rooms grow slightly. Every label
   warning of a drawn figure now ends "The figure is drawn." instead of
   "Drawn anyway.".
+- Changed: a Circular region label drawn along its circle that is so long for
+  its circle that not even its first letter fits is no longer drawn as a lone
+  `…`. Its mark is still drawn, it takes no room between lanes, and the warning counts it as a label left out
+  (`N region labels left out: no letter fits their circles`) instead of a cut
+  one. A label that keeps at least one letter is still drawn as its start and
+  `…`.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest

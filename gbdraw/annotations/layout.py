@@ -153,11 +153,14 @@ class _LaneBand(NamedTuple):
 class LabelExtent(NamedTuple):
     """A label's painted letters at its place, as the drawer measures and draws them: the bp they reach along the
     region from the place (``low_bp`` before it, ``high_bp`` after it, both offsets from the place) and the pixels
-    they take across the lanes."""
+    they take across the lanes. ``drawn`` is the drawer's verdict: False where it leaves the label out there because
+    no letter of it fits its circle (RGN-CUT-EMPTY-OMIT); such a label takes no room, is no obstacle and is not cut
+    by a clip."""
 
     low_bp: float
     high_bp: float
     depth_px: float
+    drawn: bool = True
 
 
 # A label's letters (``LabelExtent``) from its annotation, its effective style, its font size, the bp it stands at
@@ -509,9 +512,12 @@ def _lane_letters(
     letters: dict[tuple[int, int], list[tuple[float, float, float]]] = {}
     for placement, place in labels:
         if placement.lane == lane:
+            extent, painted = measured(placement, place)
+            if not extent.drawn:
+                continue
             paint = paint_of(placement.annotation)
             letters.setdefault((placement.annotation.record_index, place.part.row), []).extend(
-                (start, end, paint) for start, end in measured(placement, place)[1]
+                (start, end, paint) for start, end in painted
             )
     return letters
 
@@ -625,7 +631,7 @@ def _lane_rooms(
                 )
                 if _overlaps(painted, ((start, end),))
             ]
-            if not crossed:
+            if not (crossed and extent.drawn):  # one the drawer leaves out (``LabelExtent.drawn``) claims none
                 continue
             style = style_of(annotation)
             width = band.width_px(record_lanes[annotation.record_index], lane_count)
@@ -710,7 +716,11 @@ def _cut_by_clip(
         width = band.width_px(record_lanes[annotation.record_index], lane_count)
         paint = paint_of(annotation, width)
         edge = band.mark_edge_px(placement.lane, width, room_before_px=room, past_lane_edge_px=paint)
-        reach = extent_at(annotation, place.bp, edge).depth_px + float(style.label_offset)
+        extent = extent_at(annotation, place.bp, edge)
+        # A label the drawer leaves out for want of a letter (``LabelExtent.drawn``) is counted there, not here.
+        if not extent.drawn:
+            continue
+        reach = extent.depth_px + float(style.label_offset)
         hidden = band.hides_mark(placement.lane, width, room_before_px=room, past_lane_edge_px=paint)
         if hidden or ((edge - reach < 0.0) if band.labels_above else (edge + reach > limit)):
             cut.add((annotation.record_index, annotation.id))
@@ -748,7 +758,8 @@ def _letters_in_lanes(
             width = band.width_px(at + 1, at + 1)
             edge = band.mark_edge_px(at, width, room_before_px=0.0, past_lane_edge_px=paint_of(annotation, width))
             measured[key] = extent_at(annotation, place_bp, edge)
-        return measured[key]
+        # A label the drawer leaves out (``LabelExtent.drawn``) paints no letters in the lane.
+        return measured[key] if measured[key].drawn else None
 
     return letters
 
