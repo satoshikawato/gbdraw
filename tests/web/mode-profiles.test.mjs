@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { modeDrawing } from './helpers/drawing-state.mjs';
-import { bindDrawingInputFile } from '../../gbdraw/web/js/services/drawing/inputs.js';
+import { addCircularSource, bindCircularSourceFile, createCircularSource } from '../../gbdraw/web/js/services/drawing/inputs.js';
 
 const repoRoot = process.cwd();
 const semanticParity = JSON.parse(await readFile(
@@ -313,7 +313,8 @@ assert.deepEqual(
     }
   );
   const retainedFile = { name: 'retained.gb' };
-  const retainedRef = bindDrawingInputFile(state.inputFiles, circularDrawing.slices.inputs, 'c_gb', retainedFile);
+  addCircularSource(circularDrawing.slices.inputs, createCircularSource({ uid: 'record-1' }));
+  const retainedRef = bindCircularSourceFile(state.inputFiles, circularDrawing.slices.inputs, 'record-1', 'gb', retainedFile);
   const retainedComparisonFile = { name: 'retained-comparison.tsv' };
   state.activeDrawing().linearComparisonPlan.mode = 'selected';
   state.activeDrawing().linearComparisonPlan.defaultSource = 'upload';
@@ -399,7 +400,7 @@ assert.deepEqual(
     state.activeDrawing().adv.linear_track_slots_axis_index,
     resetAdvDefaults.linear_track_slots_axis_index
   );
-  assert.equal(circularDrawing.files.c_gb, retainedRef);
+  assert.equal(circularDrawing.circularSources[0].gb, retainedRef);
   assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
   assert.equal(state.activeDrawing().linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
@@ -526,7 +527,7 @@ for (const modeName of ['circular', 'linear']) {
   }
 
   const filesData = modeName === 'circular'
-    ? { c_gb: genbank, linearSeqs: [] }
+    ? { circularSources: [{ uid: 'record-1', gb: genbank, gff: null, fasta: null }], linearSeqs: [] }
     : {
         linearSeqs: ['record-1', 'record-2'].map((uid) => ({
           uid,
@@ -644,7 +645,7 @@ assert.equal(
     loaded.adv.scale_interval = stored;
     applyCapturedConfigData(state.activeDrawing(), loaded);
     const canonical = buildCanonicalRenderRequest({
-      state, drawing: state.activeDrawing(), filesData: { c_gb: genbank, linearSeqs: [] }, comparisonPlanSnapshot: null
+      state, drawing: state.activeDrawing(), filesData: { circularSources: [{ uid: 'record-1', gb: genbank, gff: null, fasta: null }], linearSeqs: [] }, comparisonPlanSnapshot: null
     });
     assert.equal(canonical.renderRequest.diagramOptions.configOverrides['objects.scale.interval'], stored);
     const recipe = await buildSourceRecipe(canonical);

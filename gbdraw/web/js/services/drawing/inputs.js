@@ -174,6 +174,42 @@ export const collapseEmptyLinearSeqList = (items) => {
 };
 
 
+// The Circular input sources (`CircularSource`): one card per file, in drawing
+// order, as the CLI takes one record input per `--gbk` (or `--gff`/`--fasta`)
+// value. The card's uid is its record key (a CLI Session's `record-<n>`, a
+// random one for a card made in the Web), so a record's identity is `uid:k`,
+// or `uid` for a file of one record, as a Linear card's (D-08).
+let circularSourceUidCounter = 0;
+
+const generateCircularSourceUid = () => {
+  circularSourceUidCounter += 1;
+  if (globalThis.crypto?.randomUUID) {
+    return `circular-source-${globalThis.crypto.randomUUID()}`;
+  }
+  return `circular-source-${Date.now()}-${circularSourceUidCounter}`;
+};
+
+/**
+ * One Circular input source: the drawing's input type picks the files it
+ * reads (`gb`, or `gff` with `fasta`, or `fasta`); the others stay as they were.
+ * @typedef {object} CircularSource
+ * @property {string} uid
+ * @property {InputFileRef | null} gb
+ * @property {InputFileRef | null} gff
+ * @property {InputFileRef | null} fasta
+ */
+
+/**
+ * @param {Partial<CircularSource>} [overrides]
+ * @returns {CircularSource}
+ */
+export const createCircularSource = (overrides = {}) => ({
+  uid: String(overrides.uid ?? '').trim() || generateCircularSourceUid(),
+  gb: overrides.gb ?? null,
+  gff: overrides.gff ?? null,
+  fasta: overrides.fasta ?? null
+});
+
 /**
  * A drawing's bindings, as the retention walk reads them: its uploaded
  * comparison files and, from the inputs slice, its input fields and record
@@ -182,6 +218,7 @@ export const collapseEmptyLinearSeqList = (items) => {
  * @property {{ readonly edges?: readonly { readonly id: string, readonly file?: unknown }[] } | null} [linearComparisonPlan]
  * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly (Readonly<Record<string, unknown>> & { readonly uid: string })[]} linearSeqs
+ * @property {readonly Readonly<CircularSource>[]} circularSources
  */
 /**
  * The bindings that name stored files: every drawing's bindings, its five
@@ -205,9 +242,6 @@ export const collapseEmptyLinearSeqList = (items) => {
  * The input file fields of a drawing (its inputs slice's `files`): each names
  * its stored files by `InputFileRef` of `state.inputFiles`.
  * @typedef {object} DrawingInputFiles
- * @property {InputFileRef | null} c_gb
- * @property {InputFileRef | null} c_gff
- * @property {InputFileRef | null} c_fasta
  * @property {InputFileRef | (InputFileRef | null)[] | (InputFileRef | null)[][] | null} c_depth one record's series, or a record-major matrix
  * @property {InputFileRef[]} c_conservation_blasts
  * @property {string | null} c_conservation_blasts_source a flag (`'losat-cache'`), not a file
@@ -243,10 +277,11 @@ export const registerInputFiles = (store, list) => (
 // The fields of `files` that bind input files; the other members are flags
 // (`c_conservation_blasts_source`) or generated data.
 const BOUND_FILE_KEYS = Object.freeze([
-  'c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts', 'c_conservation_fastas',
+  'c_depth', 'c_conservation_blasts', 'c_conservation_fastas',
   'c_conservation_sequence_sources', 'd_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority'
 ]);
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
+const CIRCULAR_SOURCE_FILE_KEYS = Object.freeze(/** @type {const} */ (['gb', 'gff', 'fasta']));
 
 /**
  * The kinds of file an uploader takes; a binding slot's kind is the kind of
@@ -256,8 +291,8 @@ const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
 /**
  * The slots an input file replacement writes (PD-OI-090 〔入力ファイル〕): every
  * uploader slot except the five cards'. `row.` names a Linear record row's field,
- * `edge` a Linear comparison's uploaded file.
- * @typedef {'c_gb' | 'c_gff' | 'c_fasta' | 'c_depth' | 'c_conservation_blasts'
+ * `source.` a Circular source card's, `edge` a Linear comparison's uploaded file.
+ * @typedef {'c_depth' | 'c_conservation_blasts' | 'source.gb' | 'source.gff' | 'source.fasta'
  *   | 'row.gb' | 'row.gff' | 'row.fasta' | 'row.depth' | 'edge'} ReplaceableInputSlot
  */
 /**
@@ -267,7 +302,8 @@ const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
  * @type {Readonly<Record<ReplaceableInputSlot | CardFileSlot, InputFileKind>>}
  */
 const FILE_KIND_OF_SLOT = Object.freeze({
-  c_gb: 'genbank', 'row.gb': 'genbank', c_gff: 'gff', 'row.gff': 'gff', c_fasta: 'fasta', 'row.fasta': 'fasta',
+  'source.gb': 'genbank', 'row.gb': 'genbank', 'source.gff': 'gff', 'row.gff': 'gff',
+  'source.fasta': 'fasta', 'row.fasta': 'fasta',
   c_depth: 'depth', 'row.depth': 'depth', c_conservation_blasts: 'comparison', edge: 'comparison',
   d_color: 'd_color', t_color: 't_color', blacklist: 'blacklist', whitelist: 'whitelist',
   qualifier_priority: 'qualifier_priority'
@@ -275,7 +311,8 @@ const FILE_KIND_OF_SLOT = Object.freeze({
 
 /**
  * Where a drawing binds a ref: the slot (`FILE_KIND_OF_SLOT`'s keys, `committed` for a committed
- * comparison), the Linear record row of a `row.` slot by its uid, and the Linear comparison of
+ * comparison), the Linear record row of a `row.` slot or the Circular card of a `source.` slot by
+ * its uid, and the Linear comparison of
  * `edge` by its id (null for the other slots).
  * @typedef {object} BoundFilePlace
  * @property {string} slot
@@ -303,6 +340,8 @@ const visitDrawingFiles = (drawing, visit) => {
     .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(field('committed'), comparison?.file));
   drawing.linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => (
     add({ slot: `row.${key}`, rowUid: sequence.uid, edgeId: null }, sequence[key]))));
+  drawing.circularSources.forEach((source) => CIRCULAR_SOURCE_FILE_KEYS.forEach((key) => (
+    add({ slot: `source.${key}`, rowUid: source.uid, edgeId: null }, source[key]))));
   (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add({ slot: 'edge', rowUid: null, edgeId: edge.id }, edge.file));
 };
 /**
@@ -464,6 +503,23 @@ const bindLinearSeqRow = (store, seq) => ({
 });
 
 /**
+ * A Circular source card with its files registered and named by their refs.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {LoadedCircularSource} source
+ * @returns {CircularSource}
+ */
+const bindCircularSourceRow = (store, source) => ({
+  uid: source.uid,
+  gb: store.registerFile(/** @type {InputFileCandidate} */ (source.gb)),
+  gff: store.registerFile(/** @type {InputFileCandidate} */ (source.gff)),
+  fasta: store.registerFile(/** @type {InputFileCandidate} */ (source.fasta))
+});
+
+/**
+ * A Circular source card as a Load candidate or a rolled-back snapshot holds it.
+ * @typedef {{ uid: string, gb: LoadedFileValue | null, gff: LoadedFileValue | null, fasta: LoadedFileValue | null }} LoadedCircularSource
+ */
+/**
  * A Linear record row as a Load candidate or a rolled-back snapshot holds it.
  * @typedef {Omit<LinearSeq, 'gb' | 'gff' | 'fasta' | 'depth'> & {
  *   gb: LoadedFileValue, gff: LoadedFileValue, fasta: LoadedFileValue, depth: LoadedFileValue
@@ -481,8 +537,9 @@ const bindLinearSeqRow = (store, seq) => ({
  * @typedef {object} LoadedInputs
  * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly LoadedLinearSeq[]} linearSeqs
+ * @property {readonly LoadedCircularSource[]} circularSources
  * @property {LoadedComparisonPlan} linearComparisonPlan
- * @property {{ primaryFile?: LoadedFileValue, pairedFile?: LoadedFileValue }} circularRecordDiscovery
+ * @property {{ sources?: readonly { uid: string, primaryFile: LoadedFileValue, pairedFile: LoadedFileValue, error: CircularRecordDiscovery['error'] }[] }} circularRecordDiscovery
  */
 /**
  * The bindings a Load installs: every file it holds is registered here, at
@@ -496,6 +553,7 @@ export const bindLoadedInputs = (store, loaded) => {
   const one = (value) => store.registerFile(/** @type {InputFileCandidate} */ (value));
   const files = bindFileFields(store, loaded.files);
   const linearSeqs = loaded.linearSeqs.map((seq) => bindLinearSeqRow(store, seq));
+  const circularSources = loaded.circularSources.map((source) => bindCircularSourceRow(store, source));
   /** @type {LinearComparisonPlan} */
   const linearComparisonPlan = {
     ...loaded.linearComparisonPlan,
@@ -505,18 +563,21 @@ export const bindLoadedInputs = (store, loaded) => {
   return {
     files,
     linearSeqs,
+    circularSources,
     linearComparisonPlan,
     circularRecordDiscovery: {
       ...discovery,
-      ...(Object.hasOwn(discovery, 'primaryFile') ? { primaryFile: one(discovery.primaryFile) } : {}),
-      ...(Object.hasOwn(discovery, 'pairedFile') ? { pairedFile: one(discovery.pairedFile) } : {})
+      ...(discovery.sources ? { sources: discovery.sources.map((source) => ({
+        ...source, primaryFile: one(source.primaryFile), pairedFile: one(source.pairedFile)
+      })) } : {})
     }
   };
 };
 
 // The inputs slice of a drawing (DESIGN §2): its input fields (`files`, its
 // five card files among them, R16-4), its Linear record rows
-// (`linearSeqs`), its input type, and its Circular record catalog. A drawing
+// (`linearSeqs`), its Circular source cards (`circularSources`), its input
+// type, and its Circular record catalog. A drawing
 // shows them under their member names; its file fields and rows are written
 // only through the writers below, which take the slice's handle
 // (`drawing.slices.inputs`); the input type and the record catalog stay
@@ -524,12 +585,13 @@ export const bindLoadedInputs = (store, loaded) => {
 
 /** @typedef {import('../input-types.js').InputType} InputType */
 /** @typedef {import('../input-types.js').InputSlot} InputSlot */
-/** One Circular record as discovery lists it. @typedef {Readonly<Record<string, unknown>>} CircularRecordEntry */
+/** One Circular record as discovery lists it. @typedef {import('../record-discovery.js').CircularListRecord} CircularRecordEntry */
 /**
  * What `capture` returns and `install` writes.
  * @typedef {object} InputsData
  * @property {DrawingInputFiles} files
  * @property {LinearSeq[]} linearSeqs
+ * @property {CircularSource[]} circularSources
  * @property {InputType} inputType
  * @property {CircularRecordEntry[]} circularRecordList
  * @property {CircularRecordDiscovery} circularRecordDiscovery
@@ -539,6 +601,7 @@ export const bindLoadedInputs = (store, loaded) => {
  * @typedef {object} InputsMembers
  * @property {DrawingInputFiles} files
  * @property {LinearSeq[]} linearSeqs
+ * @property {CircularSource[]} circularSources
  * @property {import('../../utils/reactivity.js').Ref<InputType>} inputType
  * @property {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} circularRecordList
  * @property {CircularRecordDiscovery} circularRecordDiscovery
@@ -548,7 +611,7 @@ export const bindLoadedInputs = (store, loaded) => {
 
 /** @returns {DrawingInputFiles} */
 const emptyDrawingInputFiles = () => ({
-  c_gb: null, c_gff: null, c_fasta: null, c_depth: null,
+  c_depth: null,
   c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [],
   c_conservation_sequence_sources: [], linearCanonicalComparisons: [],
   d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null
@@ -561,7 +624,7 @@ const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.key
  * @returns {CircularRecordDiscovery}
  */
 export const idleCircularRecordDiscovery = () => ({
-  status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
+  status: 'idle', error: '', inputType: '', sources: []
 });
 
 // An inputs handle exists only through `create`, which gives it these members.
@@ -611,6 +674,15 @@ const MEMBER_OPS = Object.freeze({
       members.linearSeqs.splice(0, members.linearSeqs.length, ...data.linearSeqs.map(copyRow));
     }
   },
+  circularSources: {
+    create: () => /** @type {CircularSource[]} */ (reactive([])),
+    /** @param {InputsMembers} members */
+    capture: (members) => members.circularSources.map((source) => ({ ...source })),
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => {
+      members.circularSources.splice(0, members.circularSources.length, ...data.circularSources.map((source) => ({ ...source })));
+    }
+  },
   inputType: {
     create: () => /** @type {import('../../utils/reactivity.js').Ref<InputType>} */ (ref('gb')),
     /** @param {InputsMembers} members */
@@ -630,18 +702,18 @@ const MEMBER_OPS = Object.freeze({
     /** @param {InputsMembers} members */
     capture: (members) => ({
       ...members.circularRecordDiscovery,
-      canonicalRecordIdentities: members.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+      sources: members.circularRecordDiscovery.sources.map((source) => ({ ...source }))
     }),
     /** @param {InputsMembers} members @param {InputsData} data */
     install: (members, data) => {
       Object.assign(members.circularRecordDiscovery, idleCircularRecordDiscovery(), data.circularRecordDiscovery, {
-        canonicalRecordIdentities: data.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+        sources: data.circularRecordDiscovery.sources.map((source) => ({ ...source }))
       });
     }
   }
 });
 /** @type {readonly InputsMember[]} */
-const MEMBERS = Object.freeze(['files', 'linearSeqs', 'inputType', 'circularRecordList', 'circularRecordDiscovery']);
+const MEMBERS = Object.freeze(['files', 'linearSeqs', 'circularSources', 'inputType', 'circularRecordList', 'circularRecordDiscovery']);
 
 /**
  * A new slice, or one over a drawing's existing members (a test fixture).
@@ -695,6 +767,7 @@ const reset = (slice) => {
  * @typedef {object} CapturedInputs
  * @property {Partial<DrawingInputFiles>} files
  * @property {readonly LinearSeq[]} linearSeqs
+ * @property {readonly CircularSource[]} circularSources
  * @property {InputType} [inputType] left out, the input type stays
  */
 /**
@@ -716,6 +789,7 @@ export const installBoundInputs = (store, slice, data, { keep = [] } = {}) => {
       ...Object.fromEntries(keep.map((key) => [key, current[key]]))
     }),
     linearSeqs: normalizeLinearSeqList(data.linearSeqs.map((seq) => bindLinearSeqRow(store, seq))),
+    circularSources: data.circularSources.map((source) => bindCircularSourceRow(store, source)),
     ...(data.inputType ? { inputType: data.inputType } : {})
   });
 };
@@ -731,20 +805,6 @@ export const installBoundInputs = (store, slice, data, { keep = [] } = {}) => {
  * @returns {InputFileRef | null}
  */
 export const bindInputFile = (store, slice, slot, file) => {
-  const ref = store.registerFile(file);
-  membersOf(slice).files[slot] = ref;
-  return ref;
-};
-
-/**
- * Bind a file to one of the drawing's single-file fields.
- * @param {Pick<InputFileStore, 'registerFile'>} store
- * @param {InputsSlice} slice
- * @param {'c_gb' | 'c_gff' | 'c_fasta'} slot
- * @param {InputFileCandidate} file
- * @returns {InputFileRef | null}
- */
-export const bindDrawingInputFile = (store, slice, slot, file) => {
   const ref = store.registerFile(file);
   membersOf(slice).files[slot] = ref;
   return ref;
@@ -799,15 +859,71 @@ export const bindDrawingCanonicalComparisons = (store, slice, comparisons) => {
   membersOf(slice).files.linearCanonicalComparisons = bindCanonicalComparisons(store, comparisons);
 };
 
+// The card lists of a drawing: its Linear record rows and its Circular source
+// cards. One owner adds, removes, moves, and replaces the rows of either list
+// by uid; a Linear drawing always holds a row, a Circular one may hold none
+// (its empty state).
+/** @typedef {'linearSeqs' | 'circularSources'} InputRowList */
 /**
- * The drawing's row of one uid; an unknown uid is refused.
+ * @template {InputRowList} L
+ * @typedef {L extends 'linearSeqs' ? LinearSeq : CircularSource} InputRowOf
+ */
+/**
+ * @template {InputRowList} L
  * @param {InputsSlice} slice
+ * @param {L} list
+ * @returns {InputRowOf<L>[]}
+ */
+const rowsOf = (slice, list) => /** @type {InputRowOf<L>[]} */ (membersOf(slice)[list]);
+
+/**
+ * The index of the row of one uid; an unknown uid is refused.
+ * @param {InputsSlice} slice
+ * @param {InputRowList} list
  * @param {string} uid
  */
-const rowIndexOf = (slice, uid) => {
-  const index = membersOf(slice).linearSeqs.findIndex((seq) => seq.uid === uid);
-  if (index < 0) throw diagnosticError('INPUT_INVALID', { field: 'linearSeqs', reason: 'UNKNOWN_ROW', uid }, { stage: 'drawing-inputs' });
+const rowIndexOf = (slice, list, uid) => {
+  const index = rowsOf(slice, list).findIndex((row) => row.uid === uid);
+  if (index < 0) throw diagnosticError('INPUT_INVALID', { field: list, reason: 'UNKNOWN_ROW', uid }, { stage: 'drawing-inputs' });
   return index;
+};
+
+/**
+ * @template {InputRowList} L
+ * @param {InputsSlice} slice
+ * @param {L} list
+ * @param {InputRowOf<L>} row
+ * @param {number} [index]
+ */
+const addRow = (slice, list, row, index) => {
+  const rows = rowsOf(slice, list);
+  if (rows.some((entry) => entry.uid === row.uid)) throw diagnosticError('INPUT_INVALID', { field: list, reason: 'DUPLICATE_ROW', uid: row.uid }, { stage: 'drawing-inputs' });
+  rows.splice(index === undefined ? rows.length : index, 0, row);
+};
+
+/** @param {InputsSlice} slice @param {InputRowList} list @param {string} uid */
+const removeRow = (slice, list, uid) => {
+  const rows = rowsOf(slice, list);
+  rows.splice(rowIndexOf(slice, list, uid), 1);
+  if (list === 'linearSeqs' && rows.length === 0) rows.push(createLinearSeq());
+};
+
+/** @param {InputsSlice} slice @param {InputRowList} list @param {string} uid @param {number} index */
+const moveRow = (slice, list, uid, index) => {
+  const rows = rowsOf(slice, list);
+  const [row] = rows.splice(rowIndexOf(slice, list, uid), 1);
+  rows.splice(Math.max(0, Math.min(index, rows.length)), 0, row);
+};
+
+/**
+ * @template {InputRowList} L
+ * @param {InputsSlice} slice
+ * @param {L} list
+ * @param {readonly InputRowOf<L>[]} rows
+ */
+const replaceRows = (slice, list, rows) => {
+  const current = rowsOf(slice, list);
+  current.splice(0, current.length, ...rows);
 };
 
 /**
@@ -819,9 +935,24 @@ const rowIndexOf = (slice, uid) => {
  * @param {LoadedFileValue | null} file
  */
 export const bindLinearSeqFile = (store, slice, uid, key, file) => {
-  const row = membersOf(slice).linearSeqs[rowIndexOf(slice, uid)];
+  const row = rowsOf(slice, 'linearSeqs')[rowIndexOf(slice, 'linearSeqs', uid)];
   if (key === 'depth') row.depth = /** @type {DepthFileSlots<InputFileRef>} */ (file === null ? null : registerInputFileTree(store, file));
   else row[key] = store.registerFile(/** @type {InputFileCandidate} */ (file));
+};
+
+/**
+ * Bind a file (or none) to one slot of a Circular source card, found by its uid.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {string} uid
+ * @param {'gb' | 'gff' | 'fasta'} key
+ * @param {InputFileCandidate | null} file
+ * @returns {InputFileRef | null}
+ */
+export const bindCircularSourceFile = (store, slice, uid, key, file) => {
+  const row = rowsOf(slice, 'circularSources')[rowIndexOf(slice, 'circularSources', uid)];
+  row[key] = store.registerFile(/** @type {InputFileCandidate} */ (file));
+  return row[key];
 };
 
 /**
@@ -830,23 +961,24 @@ export const bindLinearSeqFile = (store, slice, uid, key, file) => {
  * @param {LinearSeq} row
  * @param {number} [index]
  */
-export const addLinearSeq = (slice, row, index) => {
-  const rows = membersOf(slice).linearSeqs;
-  if (rows.some((seq) => seq.uid === row.uid)) throw diagnosticError('INPUT_INVALID', { field: 'linearSeqs', reason: 'DUPLICATE_ROW', uid: row.uid }, { stage: 'drawing-inputs' });
-  rows.splice(index === undefined ? rows.length : index, 0, row);
-};
+export const addLinearSeq = (slice, row, index) => addRow(slice, 'linearSeqs', row, index);
+/**
+ * Add a card (built by `createCircularSource`) at `index`, or at the end.
+ * @param {InputsSlice} slice
+ * @param {CircularSource} row
+ * @param {number} [index]
+ */
+export const addCircularSource = (slice, row, index) => addRow(slice, 'circularSources', row, index);
 
 /**
- * Remove the row of one uid; the last row is replaced by an empty one, so a
- * drawing always holds a row.
+ * Remove the row of one uid; the last Linear row is replaced by an empty one,
+ * so a Linear drawing always holds a row.
  * @param {InputsSlice} slice
  * @param {string} uid
  */
-export const removeLinearSeq = (slice, uid) => {
-  const rows = membersOf(slice).linearSeqs;
-  rows.splice(rowIndexOf(slice, uid), 1);
-  if (rows.length === 0) rows.push(createLinearSeq());
-};
+export const removeLinearSeq = (slice, uid) => removeRow(slice, 'linearSeqs', uid);
+/** @param {InputsSlice} slice @param {string} uid */
+export const removeCircularSource = (slice, uid) => removeRow(slice, 'circularSources', uid);
 
 /**
  * Move the row of one uid to `index`.
@@ -854,11 +986,9 @@ export const removeLinearSeq = (slice, uid) => {
  * @param {string} uid
  * @param {number} index
  */
-export const moveLinearSeq = (slice, uid, index) => {
-  const rows = membersOf(slice).linearSeqs;
-  const [row] = rows.splice(rowIndexOf(slice, uid), 1);
-  rows.splice(Math.max(0, Math.min(index, rows.length)), 0, row);
-};
+export const moveLinearSeq = (slice, uid, index) => moveRow(slice, 'linearSeqs', uid, index);
+/** @param {InputsSlice} slice @param {string} uid @param {number} index */
+export const moveCircularSource = (slice, uid, index) => moveRow(slice, 'circularSources', uid, index);
 
 /**
  * Replace the drawing's rows by a list a transition built (normalized by
@@ -866,10 +996,9 @@ export const moveLinearSeq = (slice, uid, index) => {
  * @param {InputsSlice} slice
  * @param {readonly LinearSeq[]} rows
  */
-export const replaceLinearSeqs = (slice, rows) => {
-  const members = membersOf(slice);
-  members.linearSeqs.splice(0, members.linearSeqs.length, ...rows);
-};
+export const replaceLinearSeqs = (slice, rows) => replaceRows(slice, 'linearSeqs', rows);
+/** @param {InputsSlice} slice @param {readonly CircularSource[]} rows */
+export const replaceCircularSources = (slice, rows) => replaceRows(slice, 'circularSources', rows);
 
 export const INPUTS_SLICE = Object.freeze({
   members: MEMBERS,

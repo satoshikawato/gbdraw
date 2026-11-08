@@ -59,7 +59,7 @@ const generate = (mode) => {
   modeDrawing(state, 'circular').inputType.value = 'gb';
   modeDrawing(state, 'linear').inputType.value = 'gb';
   const filesData = mode === 'circular'
-    ? { c_gb: genbank(['LIVE1']), linearSeqs: [] }
+    ? { circularSources: [{ uid: 'record-1', gb: genbank(['LIVE1']), gff: null, fasta: null }], linearSeqs: [] }
     : { linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, gb: fileOf(card.gb) })), linearComparisons: [] };
   const comparisonPlanSnapshot = mode === 'linear'
     ? resolveLinearComparisonPlan({

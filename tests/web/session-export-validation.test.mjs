@@ -43,7 +43,7 @@ const { buildCanonicalRenderRequest } = await import(
   '../../gbdraw/web/js/services/session-request.js'
 );
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { bindCircularSourceFile, createCircularSource, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const circularFiles = modeDrawing(state, 'circular').files;
 const { exportSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
@@ -51,7 +51,8 @@ let inputReads = 0;
 installShownDrawing('circular');
 modeDrawing(state, 'circular').inputType.value = 'gb';
 // The bindings hold the store's refs, as the app's writers bind them.
-bindDrawingInputFile(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'c_gb', {
+replaceCircularSources(modeDrawing(state, 'circular').slices.inputs, [createCircularSource({ uid: 'record-1' })]);
+bindCircularSourceFile(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'record-1', 'gb', {
   name: 'legacy.gbk',
   type: 'application/genbank',
   size: 12,
@@ -100,14 +101,19 @@ const committed = buildCanonicalRenderRequest({
   state,
   drawing: state.activeDrawing(),
   filesData: {
-    c_gb: {
-      name: 'legacy.gbk',
-      type: 'application/genbank',
-      size: 12,
-      lastModified: 1,
-      encoding: 'base64',
-      data: btoa('LOCUS legacy')
-    }
+    circularSources: [{
+      uid: 'record-1',
+      gb: {
+        name: 'legacy.gbk',
+        type: 'application/genbank',
+        size: 12,
+        lastModified: 1,
+        encoding: 'base64',
+        data: btoa('LOCUS legacy')
+      },
+      gff: null,
+      fasta: null
+    }]
   }
 });
 adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true, drawing: modeDrawing(state, 'circular') });
@@ -364,7 +370,7 @@ assert.ok(downloadedBlob instanceof Blob);
 // the input reads the File again.
 {
   const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
-  const file = state.inputFiles.fileOf(circularFiles.c_gb);
+  const file = state.inputFiles.fileOf(modeDrawing(state, 'circular').circularSources[0].gb);
   URL.createObjectURL = () => 'blob:p2-session';
   try {
     assert.equal((await exportSession('p2-release')).status, 'saved');
@@ -380,7 +386,7 @@ assert.ok(downloadedBlob instanceof Blob);
 // copy that the browser refuses to read again (it changed on disk after it was
 // chosen) ends Save with INPUT_UNREADABLE and its text, and no download starts.
 {
-  const file = state.inputFiles.fileOf(circularFiles.c_gb);
+  const file = state.inputFiles.fileOf(modeDrawing(state, 'circular').circularSources[0].gb);
   const { arrayBuffer } = file;
   let downloads = 0;
   URL.createObjectURL = () => {

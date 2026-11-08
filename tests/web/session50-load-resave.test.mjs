@@ -96,7 +96,9 @@ test('Save, Load and Save of drawings without a Result write the same drawings (
 // them again. Runs on the drawings the case above loaded.
 test('Save, Load and Save of a shown drawing saved with a draft request write the same Result fields (OV-1904)', async () => {
   assert.equal(state.activeDrawing().id, 'circular');
-  state.activeDrawing().files.c_gb = state.inputFiles.registerFile(new File(
+  const { bindCircularSourceFile, createCircularSource, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  replaceCircularSources(state.activeDrawing().slices.inputs, [createCircularSource({ uid: 'record-1' })]);
+  bindCircularSourceFile(state.inputFiles, state.activeDrawing().slices.inputs, 'record-1', 'gb', new File(
     [readFileSync(new URL('../fixtures/sessions/cli-web-mito.gb', import.meta.url))], 'cli-web-mito.gb', { type: 'text/plain' }
   ));
   const resultFields = (document) => {

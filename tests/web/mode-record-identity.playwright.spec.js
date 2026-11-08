@@ -209,11 +209,9 @@ for (const operation of ['replacement', 'removal']) {
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         return { sameSource: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb === window.__MODE_SOURCE__,
-          identities: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.canonicalRecordIdentities,
           choices: window.__GBDRAW_APP__.featurePlacementActions.choices([window.__MODE_FEATURE__]) };
       });
       expect(invalidation.sameSource).toBe(false);
-      expect(invalidation.identities).toEqual([]);
       expect(invalidation.choices.every(choice => !choice.enabled)).toBe(true);
       const changed = await snapshot(page);
       expect(changed.records.some(record => record.recordKey === before.feature.recordKey)).toBe(false);

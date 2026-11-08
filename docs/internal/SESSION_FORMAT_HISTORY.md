@@ -57,6 +57,25 @@ a records table row with only a `fasta` path. This adds no request schema:
 the kind is a new value of the record source's `kind`. Fixture:
 `tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz`.
 
+Session 51 also stores a Circular drawing's input as File cards (circular
+multi-file input). Its `webFiles.bindings` holds `circularSources`, a list of
+`{uid, gb, gff, fasta}` cards; each of `gb`, `gff` and `fasta` is a binding or
+null, and the uids are distinct. The CLI writes one card per `--gbk` value, or
+per `--gff`/`--fasta` pair, with the uid of the CLI record key, `record-<n>`.
+The Circular slice's `recordsOff`, `form.circular_record_selector` and
+`adv.multi_record_positions[].selector` name records by identity: `<uid>` for a
+file of one record, `<uid>:<k>` for the `k`-th record of a file of several. A
+Session 51 does not write `c_gb`, `c_gff`, `c_fasta` or the composite, and
+refuses a Circular drawing that holds them. Reading a Session 41 to 50 makes one
+card per file (the components of a composite, in order; the first card keeps
+`c_gff` and `c_fasta`) with uid `record-<n>`, and replaces a `#N` selector by
+the identity of that record where the record counts are known; otherwise the
+selector is left out and the Record select falls back to the first record
+(`circular_sources_of_mode_scoped` in `gbdraw/session_drawings.py`; the Web
+twin is `circularSourcesOfModeScoped`). Session 51 and binding schema 2 keep
+their numbers. Fixtures: the `v51` files that hold a Circular drawing in
+`tests/fixtures/sessions/`.
+
 Session 51 also adds two keys to each record of a drawing's `runMetadata.trackSlotGeometry` (PD-OI-115):
 `recordKey`, the request's record key, and `axis`, where the record's axis lies in the frame of its drawn group
 (Circular: `radiusPx`, the feature band `bandInnerPx` to `bandOuterPx`, `startAngleDeg`, `degreesPerBp`; Linear: one
@@ -1275,6 +1294,8 @@ File's `name`, `type` and `lastModified`. Ordinary bindings store `resourceId`
 and those three metadata fields. Components refer to the existing `resources`
 table; repeated references retain their positions. Nested composites and
 composites outside `c_gb` are rejected.
+A Session 51 has no composite: the move of a Session 41 to 50 reads it and
+makes one File card (`circularSources`) per component.
 
 Schema 1 remains readable with its existing metadata defaults and independent
 File-array semantics. A validating serializer preserves a supplied schema-1

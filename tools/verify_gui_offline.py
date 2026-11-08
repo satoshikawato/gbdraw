@@ -782,10 +782,7 @@ def _run_browser_contract(contract: str) -> None:
             async ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
               app.selectDrawing('circular');
-              const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
-              app.files.c_gb = bound(new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' }));
-              app.files.c_gff = null;
-              app.files.c_fasta = null;
+              await app.addCircularSourceFiles('gb', [new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' })]);
               const run = { status: 'running', error: '' };
               window.__GBDRAW_OFFLINE_CONTRACT_RUN__ = run;
               void (async () => {

@@ -1,0 +1,16 @@
+{
+  "purpose": "Positive fixture of a Circular CLI Session 50 of several --gbk files: the released writer binds the three files as one composite c_gb (components in argv order) and commits one record input per file (record-1:1, record-1:2, record-2, record-3). The move to drawings makes one File card per file (circularSources, uids record-1..3).",
+  "writer": "gbdraw circular --session_output (CLI sidecar) from release tag v0.14.5 (git archive v0.14.5 gbdraw, on PYTHONPATH), run in a directory holding copies of the three inputs",
+  "writerCommit": "v0.14.5",
+  "command": "python -P -c 'from gbdraw.cli import main; main()' circular --gbk web_batch_two_records.gb regex_rules.gb feature_location_search.gb --multi_record_canvas -o cli-circular-three-gbk -f svg --session_output cli-circular-three-gbk.gbdraw-session.json",
+  "inputs": {
+    "tests/fixtures/web_batch_two_records.gb": "eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5",
+    "tests/fixtures/regex_rules.gb": "e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b",
+    "tests/fixtures/feature_location_search.gb": "3a749b593d76523bcbb087e8aa3876f2653b00e51218039fca50d0d76c30f987"
+  },
+  "values": "webFiles.bindings.c_gb {kind: composite, components: record-1-genbank, record-3-genbank, record-4-genbank}; renderRequest.records recordKey record-1:1, record-1:2 (source record-1-genbank), record-2 (record-3-genbank), record-3 (record-4-genbank); cliInvocation.fileBindings slots files.c_gb.components[0..2]",
+  "decompressedSha256": "1806ef9fcb3eabb374ca3b536e2ed7378162de5a60a86cfead5b491e87b89e18",
+  "compression": "gzip level 9, mtime 0 (Python gzip.compress)",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

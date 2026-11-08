@@ -5,17 +5,14 @@
 // mode, the session admission, the shown-drawing readers, and the record
 // refresh as ports.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
-import {
-  buildDisambiguatedRecordEntries,
-  formatRecordLength,
-  resolveDisambiguatedRecordSelection
-} from '../services/record-options.js';
+import { circularRecordEntries, circularRecordSelection, formatRecordLength } from '../services/record-options.js';
 import { circularRecordsToDraw } from '../services/record-draw-selection.js';
+import { circularSourceInputs } from '../services/input-types.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { buildDefaultMultiRecordPositions } from './run-analysis.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
-/** @import { SequenceRecordEntry } from '../services/record-discovery.js' */
+/** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { MultiRecordPosition } from '../services/config.js' */
 
 const { computed } = window.Vue;
@@ -44,14 +41,26 @@ const { computed } = window.Vue;
 export const createCircularRecordPresentation = ({
   state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder
 }) => {
-  /** @param {unknown} selector */
-  const getCircularRecordOrderLabel = (selector) => {
-    const normalized = String(selector || '').trim();
+  // The file name a record's label begins with: its card's file when the drawing has several source cards.
+  /** @param {DrawingState} drawing @returns {(uid: string) => string} */
+  const cardFileNames = (drawing) => {
+    const cards = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
+    const names = new Map(cards.length > 1 ? cards.map((card) => [card.uid, String(card.primaryFile?.name || '')]) : []);
+    return (uid) => names.get(uid) || '';
+  };
+  // A Record Order row names its record by identity; its label is the record's ID, after its file's name.
+  /** @param {unknown} identity */
+  const getCircularRecordOrderLabel = (identity) => {
+    const normalized = String(identity || '').trim();
     if (!normalized) return '';
-    const records = state.activeDrawing().circularRecordList.value;
-    const matched = records.find((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim() === normalized);
+    const drawing = state.activeDrawing();
+    /** @type {CircularListRecord[]} */
+    const records = drawing.circularRecordList.value;
+    const matched = records.find((entry) => entry.identity === normalized);
     if (!matched) return normalized;
-    return `${normalized} (${String(matched.record_id || '').trim() || t('Unknown')})`;
+    const recordId = matched.record_id.trim() || t('Unknown');
+    const fileName = cardFileNames(drawing)(matched.uid);
+    return fileName ? `${fileName}: ${recordId}` : `${matched.selector} (${recordId})`;
   };
 
   const circularRecordDiscoveryState = computed(() => circularDiscoveryForInput(state.activeDrawing()));
@@ -63,15 +72,7 @@ export const createCircularRecordPresentation = ({
   const inspectCircularSourceRecords = () => sessionOperationAvailability() || (circularRecordInspectionEnabled.value
     ? refreshCircularRecordOrder()
     : Promise.resolve({ status: 'unavailable', reason: msg('Source inspection is unavailable.') }));
-  const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
-    circularRecordDiscoveryState.value.records.map(
-      (/** @type {SequenceRecordEntry} */ record) => ({
-        ...record,
-        recordId: record?.record_id ?? record?.recordId,
-        recordLength: record?.record_length ?? record?.recordLength
-      })
-    )
-  );
+  const circularRecordPresentationEntries = () => circularRecordEntries(circularRecordDiscoveryState.value.records);
 
   const circularDrawnRecordCount = computed(() => {
     const drawing = shownDrawingOfMode('circular');
@@ -80,17 +81,21 @@ export const createCircularRecordPresentation = ({
   const circularRecordPresentationOptions = computed(() => {
     const drawing = state.activeDrawing();
     const entries = circularRecordPresentationEntries();
+    const fileNameOf = cardFileNames(drawing);
     const current = String(drawing.form.circular_record_selector || '').trim();
-    const selection = resolveDisambiguatedRecordSelection(entries, current);
+    const selection = circularRecordSelection(entries, current);
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const drawnCount = circularDrawnRecordCount.value;
     // OV-379: a source whose records are not read says so, as the Linear select does.
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
       ? tm(RECORDS_NOT_INSPECTED_LABEL)
-      : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-        ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
-        : t('Automatic (single record)');
+      // OV-2839, D-11: the canvas draws every ON record in one figure; the label names it.
+      : drawing.form.multi_record_canvas && entries.length > 1
+        ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (Multi-Record Canvas)', '{drawn} of {count} records (Multi-Record Canvas)', { drawn: drawnCount }) : t('All records (Multi-Record Canvas)'))
+        : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
+          ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
+          : t('Automatic (single record)');
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
@@ -104,7 +109,7 @@ export const createCircularRecordPresentation = ({
         : []),
       ...entries.map((record) => ({
         value: record.value,
-        label: `${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
+        label: `${fileNameOf(String(record.uid)) ? `${fileNameOf(String(record.uid))}: ` : ''}${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
         synthetic: false
       }))
     ];
@@ -114,10 +119,7 @@ export const createCircularRecordPresentation = ({
     const drawing = state.activeDrawing();
     const current = String(drawing.form.circular_record_selector || '').trim();
     if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
-    const selection = resolveDisambiguatedRecordSelection(
-      circularRecordPresentationEntries(),
-      current
-    );
+    const selection = circularRecordSelection(circularRecordPresentationEntries(), current);
     if (selection.status === 'ambiguous') {
       return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
     }
@@ -134,7 +136,7 @@ export const createCircularRecordPresentation = ({
     if (drawing.form.multi_record_canvas) return 'multi-record-canvas';
     if (circularRecordDiscoveryState.value.status !== 'ready') return 'not-inspected';
     const entries = circularRecordPresentationEntries();
-    const selection = resolveDisambiguatedRecordSelection(entries, drawing.form.circular_record_selector);
+    const selection = circularRecordSelection(entries, drawing.form.circular_record_selector);
     return drawing.adv.circular_grouping_intent !== 'batch'
       && (selection.status === 'resolved' || (selection.status === 'unspecified' && entries.length === 1))
       ? '' : 'no-single-record';
@@ -149,8 +151,7 @@ export const createCircularRecordPresentation = ({
 
 /** @param {DrawingState} drawing */
 export const buildDefaultCircularRecordPositions = (drawing) => buildDefaultMultiRecordPositions(
-  drawing.circularRecordList.value
-    .map((/** @type {{ selector?: unknown }} */ entry) => entry?.selector)
+  drawing.circularRecordList.value.map((entry) => entry.identity)
 );
 
 /**

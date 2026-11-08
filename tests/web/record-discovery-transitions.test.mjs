@@ -32,6 +32,13 @@ const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((
 const app = createAppSetup();
 const circular = modeDrawing(state, 'circular');
 const linear = modeDrawing(state, 'linear');
+// The GenBank file of the drawing's one File card: an upload into the card (a new card while there is none),
+// or, with null, a Remove (which removes the card holding no other file).
+const setCircularGenbank = (file) => {
+  const uid = circular.circularSources[0]?.uid;
+  if (uid) app.setCircularSourceFile(uid, 'gb', file);
+  else if (file) app.addCircularSourceFiles('gb', [file]);
+};
 const recordIds = (drawing) => drawing.circularRecordList.value.map((record) => record.record_id);
 
 test('a Circular upload discovers that drawing only; a switch writes no record list', async () => {
@@ -40,7 +47,7 @@ test('a Circular upload discovers that drawing only; a switch writes no record l
   await settle();
   app.selectDrawing('circular');
   const linearRecordsBefore = linear.linearSeqs.map((seq) => app.linearRecordOptions(seq).map((option) => option.value));
-  app.setCircularSourceFile('c_gb', genbank('c.gb', ['C1', 40], ['C2', 50]));
+  setCircularGenbank(genbank('c.gb', ['C1', 40], ['C2', 50]));
   await settle();
   assert.deepEqual(recordIds(circular), ['C1', 'C2'], 'the upload discovers its drawing\'s records');
   assert.deepEqual(linear.linearSeqs.map((seq) => app.linearRecordOptions(seq).map((option) => option.value)),
@@ -62,7 +69,7 @@ test('the input type change and a Circular Remove discover that drawing again', 
   app.setCircularInputType('gb');
   await settle();
   assert.deepEqual(recordIds(circular), ['C1', 'C2'], 'back to GenBank: its file is read again');
-  app.setCircularSourceFile('c_gb', null);
+  setCircularGenbank(null);
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'idle');
   assert.deepEqual(recordIds(circular), []);
@@ -75,7 +82,7 @@ test('a discovery with nothing to read leaves the idle record of a new drawing',
   const recordOf = (slice) => INPUTS_SLICE.capture(slice).circularRecordDiscovery;
   const idle = recordOf(INPUTS_SLICE.create().handle);
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('c.gb', ['C1', 40]));
+  setCircularGenbank(genbank('c.gb', ['C1', 40]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   app.setCircularInputType('gff');
@@ -83,7 +90,7 @@ test('a discovery with nothing to read leaves the idle record of a new drawing',
   assert.deepEqual(recordOf(circular.slices.inputs), idle, 'GFF without its pair');
   app.setCircularInputType('gb');
   await settle();
-  app.setCircularSourceFile('c_gb', null);
+  setCircularGenbank(null);
   await settle();
   assert.deepEqual(recordOf(circular.slices.inputs), idle, 'no file');
 });
@@ -110,7 +117,7 @@ test('no discovery starts while a Load rolls back', async () => {
   app.selectDrawing('circular');
   state.sessionImportRollbackInProgress.value = true;
   try {
-    app.setCircularSourceFile('c_gb', genbank('r.gb', ['R1', 10]));
+    setCircularGenbank(genbank('r.gb', ['R1', 10]));
     await settle();
     assert.notEqual(circular.circularRecordDiscovery.status, 'ready', 'the rollback admits no discovery');
     assert.deepEqual(recordIds(circular), []);
@@ -124,7 +131,7 @@ test('no discovery starts while a Load rolls back', async () => {
 // Linear card, so New drawing from a region offers the record before a Generate.
 test('the record identities read a Circular list still deferred after a Load', async () => {
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('d.gb', ['D1', 60]));
+  setCircularGenbank(genbank('d.gb', ['D1', 60]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   // The state a Session Load leaves: the list deferred for the current file.
@@ -146,7 +153,7 @@ test('the region dialog reads a deferred Circular list without writing Record Or
     linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
   })).envelope.renderRequest.layout.multiRecordPositions;
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('p.gb', ['P1', 70]));
+  setCircularGenbank(genbank('p.gb', ['P1', 70]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   // The state a Session Load without stored Record Order leaves.
@@ -160,7 +167,8 @@ test('the region dialog reads a deferred Circular list without writing Record Or
   assert.deepEqual(circular.adv.multi_record_positions, [], 'the read writes no Record Order');
   assert.deepEqual(await requestPositions(), before, 'the request carries the Record Order the Load left');
   await app.refreshCircularRecordOrder();
-  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: '#1', row: 1 }], 'Reload Records applies the read');
+  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: circular.circularSources[0].uid, row: 1 }],
+    'Reload Records applies the read, under the record\'s identity (the card\'s uid, a one-record file)');
 });
 
 // The region dialog's rows come from the record list the deferred read
@@ -169,7 +177,7 @@ test('the region dialog reads a deferred Circular list without writing Record Or
 // the ones of the empty list the read starts from.
 test('the region dialog offers every record of a deferred Multi-Record Canvas', async () => {
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('m.gb', ['M1', 80], ['M2', 90]));
+  setCircularGenbank(genbank('m.gb', ['M1', 80], ['M2', 90]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   circular.form.multi_record_canvas = true;

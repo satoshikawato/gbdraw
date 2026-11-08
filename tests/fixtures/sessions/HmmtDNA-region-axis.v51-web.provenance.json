@@ -7,8 +7,9 @@
     "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
   },
   "values": "drawings[0].runMetadata.trackSlotGeometry.records[0]: recordKey \"record-1\", recordId \"NC_012920.1\", axis {kind \"circular\", radiusPx 390, bandInnerPx 308.1, bandOuterPx 386.1, startAngleDeg -90, source {anchorBase 1, recordBase 1, step 1, sourceLength 16569, drawnLength 16569, isCircular true}}",
-  "decompressedSha256": "53023469a3091b4b3191c9096fc8871ae9339cde51272d1d08517fec2f989b8a",
+  "decompressedSha256": "ad5b0ae9d21cd4dcd8a4a70e766abdd5543ec7b3431c08b175a008c5b21e4466",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
-  "requestSchema": 10
+  "requestSchema": 10,
+  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed"
 }

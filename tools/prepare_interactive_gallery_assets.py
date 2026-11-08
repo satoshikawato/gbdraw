@@ -652,10 +652,6 @@ def _session_feature_sources(session: dict[str, Any]) -> list[str]:
 
     files = session.get("files")
     if isinstance(files, dict):
-        c_gb = files.get("c_gb")
-        if isinstance(c_gb, dict):
-            add_name(c_gb.get("name"))
-
         linear_seqs = files.get("linearSeqs")
         if isinstance(linear_seqs, list):
             for entry in linear_seqs:

@@ -22,7 +22,7 @@ import { listText, t, tn } from '../utils/i18n.js';
  * @typedef {InputFileCandidate | InputFileRef} ReplacementFile
  * @typedef {object} InputReplacementPortsPorts
  * @property {WebState} state
- * @property {(drawing: DrawingState, field: 'c_gb' | 'c_gff' | 'c_fasta', value: ReplacementFile) => unknown} replaceCircularSource
+ * @property {(drawing: DrawingState, uid: string, field: 'gb' | 'gff' | 'fasta', value: ReplacementFile) => unknown} replaceCircularSourceFile
  * @property {(drawing: DrawingState, index: number, file: ReplacementFile) => unknown} replaceCircularDepthFile
  * @property {(drawing: DrawingState, nextFiles: readonly (InputFileRef | null)[]) => unknown} replaceCircularConservationBlasts
  * @property {(drawing: DrawingState, rowUid: string, field: 'gb' | 'gff' | 'fasta', value: ReplacementFile) => unknown} replaceLinearSourceFile
@@ -40,7 +40,7 @@ import { listText, t, tn } from '../utils/i18n.js';
  *   askScope: (previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null> }}
  */
 export const createInputReplacementPorts = ({
-  state, replaceCircularSource, replaceCircularDepthFile, replaceCircularConservationBlasts, replaceLinearSourceFile,
+  state, replaceCircularSourceFile, replaceCircularDepthFile, replaceCircularConservationBlasts, replaceLinearSourceFile,
   setLinearDepthFiles, swapLinearComparisonFile, barTabs, askChoice
 }) => {
   /** @param {readonly (InputFileRef | null)[]} slots @param {string} fileId @returns {number[]} */
@@ -52,9 +52,9 @@ export const createInputReplacementPorts = ({
    * @type {Readonly<Record<ReplaceableInputSlot, (drawing: DrawingState, site: DrawingInputSite, fileId: string, file: InputFileCandidate | InputFileRef) => void>>}
    */
   const INPUT_REPLACEMENT_WRITERS = Object.freeze({
-    c_gb: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gb', file),
-    c_gff: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gff', file),
-    c_fasta: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_fasta', file),
+    'source.gb': (drawing, site, _fileId, file) => replaceCircularSourceFile(drawing, String(site.rowUid), 'gb', file),
+    'source.gff': (drawing, site, _fileId, file) => replaceCircularSourceFile(drawing, String(site.rowUid), 'gff', file),
+    'source.fasta': (drawing, site, _fileId, file) => replaceCircularSourceFile(drawing, String(site.rowUid), 'fasta', file),
     c_depth: (drawing, _site, fileId, file) => {
       const indexes = new Set(circularDepthRows(drawing).flatMap((row) => slotIndexesOfFile(row, fileId)));
       indexes.forEach((idx) => replaceCircularDepthFile(drawing, idx, file));

@@ -88,12 +88,48 @@ def test_upgrades_cover_every_session_46_to_48_fixture() -> None:
         for path in FIXTURES.glob("*.gbdraw-session.json.gz")
         if _load(path).get("version") in (46, 47, 48)
     }
-    assert {case["input"] for case in VECTORS["upgrades"]} == fixtures
+    assert fixtures <= {case["input"] for case in VECTORS["upgrades"]}
+
+
+def _vector_input(case: dict[str, object]) -> dict[str, object]:
+    """A case's Session with its ``edits`` (``{path, value}``) applied."""
+
+    data = _load(REPO_ROOT / str(case["input"]))
+    for edit in case.get("edits", []):  # type: ignore[attr-defined]
+        *parents, key = edit["path"]
+        holder = data
+        for part in parents:
+            holder = holder[part]
+        holder[key] = edit["value"]
+    return data
+
+
+def _circular_cards(document: dict[str, object]) -> list[dict[str, object]]:
+    """What the vectors' ``circular`` pins of each Circular drawing: its File
+    cards (files by resource ID) and the record selectors of its draft."""
+
+    projected = []
+    for drawing in document["drawings"]:  # type: ignore[attr-defined]
+        if drawing["mode"] != "circular":
+            continue
+        rows = drawing.get("webFiles", {}).get("bindings", {}).get("circularSources")
+        config = drawing.get("config", {})
+        projected.append({
+            "id": drawing["id"],
+            "circularSources": None if rows is None else [
+                {"uid": row["uid"], **{key: (row[key] or {}).get("resourceId") for key in ("gb", "gff", "fasta")}}
+                for row in rows
+            ],
+            "recordsOff": config.get("recordsOff"),
+            "circular_record_selector": config.get("form", {}).get("circular_record_selector"),
+            "multi_record_positions": config.get("adv", {}).get("multi_record_positions"),
+        })
+    return projected
 
 
 @pytest.mark.parametrize("case", VECTORS["upgrades"], ids=lambda case: str(case["name"]))
-def test_session_46_to_48_moves_to_the_vector_drawings(case: dict[str, object]) -> None:
-    document, facts = drawings_document_from_mode_scoped(_load(REPO_ROOT / str(case["input"])))
+def test_session_46_to_50_moves_to_the_vector_drawings(case: dict[str, object]) -> None:
+    document, facts = drawings_document_from_mode_scoped(_vector_input(case))
     SessionDocument(document)
     assert [
         {"id": drawing["id"], "mode": drawing["mode"], "keys": sorted(drawing)}
@@ -101,6 +137,8 @@ def test_session_46_to_48_moves_to_the_vector_drawings(case: dict[str, object]) 
     ] == case["drawings"]
     assert document["ui"]["activeDrawingId"] == case["activeDrawingId"]
     assert facts == case["sourceFacts"]
+    # The Circular input moves to File cards (circular-multi-file D-01, D-08).
+    assert _circular_cards(document) == case.get("circular", [])
 
 
 def _settings_only_v48() -> dict[str, object]:

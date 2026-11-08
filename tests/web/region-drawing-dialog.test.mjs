@@ -12,10 +12,11 @@ const RECORDS = [
 ];
 /** The shown drawing's request, discovered records and Result features that give `records`. */
 const recordPorts = (records) => {
-  const sources = { mode: 'circular', circular: records.map((record, index) => (
-    { sourceIndex: index, selector: `#${index + 1}`, recordId: record.caption, recordLength: record.length }
-  )) };
-  const requestRecords = records.map((record, index) => ({ recordKey: record.recordKey, selector: { kind: 'recordIndex', index } }));
+  // One File card per record, a one-record file: its identity is the card's uid.
+  const sources = { mode: 'circular', cards: new Map(records.map((record, index) => [record.recordKey, [
+    { sourceIndex: 0, selector: `#${index + 1}`, recordId: record.caption, recordLength: record.length }
+  ]])) };
+  const requestRecords = records.map((record) => ({ recordKey: record.recordKey, cardinality: 'all' }));
   const features = new Map(records.map((record) => [record.recordKey, record.features]));
   const sent = { envelope: { renderRequest: { mode: 'circular', records: requestRecords }, resources: {} }, filesByResource: new Map() };
   return {
@@ -188,35 +189,33 @@ test('a close while the records are read keeps the dialog closed', async () => {
 });
 
 test('without a Result the records come from the request and discovery, with no feature choice', () => {
-  // A Multi-Record Canvas of three discovered records, the third of unknown length, the second OFF.
+  // A Multi-Record Canvas of one card of three discovered records, the third of unknown length, the second OFF.
   const sources = {
     mode: 'circular',
-    circular: [
+    cards: new Map([['record-1', [
       { sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 },
       { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 },
       { sourceIndex: 2, selector: '#3', recordId: 'NC_3', recordLength: null }
-    ]
+    ]]])
   };
   const requestRecords = [
-    { recordKey: 'record-1', selector: { kind: 'recordIndex', index: 0 } },
-    { recordKey: 'record-3', selector: { kind: 'recordIndex', index: 2 } }
+    { recordKey: 'record-1:1', selector: { kind: 'recordIndex', index: 0 } },
+    { recordKey: 'record-1:3', selector: { kind: 'recordIndex', index: 2 } }
   ];
   const asked = [];
   const records = regionSourceRecords(requestRecords, sources, (recordKey) => { asked.push(recordKey); return null; });
-  assert.deepEqual(records, [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: null }]);
-  assert.equal(asked[0], 'record-1');
+  assert.deepEqual(records, [{ recordKey: 'record-1:1', caption: 'NC_1', length: 1200, features: null }]);
+  assert.equal(asked[0], 'record-1:1');
 });
 
 // The shown Result keyed its records as the committed request did; the rows
 // are keyed as the draft is. The join is by the record's identity: its
 // request key, then the keys it has under the other canvas (aliases).
 test('a record drawn alone after a Multi-Record Canvas Generate offers the features the Result drew of it', async () => {
-  const { circularSingleRecordKey } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const entry = { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 };
-  const sources = { mode: 'circular', circular: [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 }, entry] };
-  const draftKey = circularSingleRecordKey(entry);
-  assert.notEqual(draftKey, 'record-2');
-  // The Generated Multi-Record Canvas drew both records as record-1 and record-2.
+  const sources = { mode: 'circular', cards: new Map([['record-1', [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 }, entry]]]) };
+  const draftKey = 'record-1:2';
+  // A Session written before File cards drew both records as record-1 and record-2, the keys over the flat list.
   const catalog = new Map([['record-1', [{ featureId: 'f1', label: 'dnaA' }]], ['record-2', [{ featureId: 'f2', label: 'recA' }]]]);
   const records = regionSourceRecords([{ recordKey: draftKey, selector: { kind: 'recordIndex', index: 1 } }], sources,
     (recordKey) => catalog.get(recordKey) ?? null);
@@ -258,7 +257,7 @@ test('the rows come from the request projected after the records are read', asyn
     shownDrawingId: () => 'circular',
     // The projection keys the records of the list as it is when projected.
     projectShownRequest: async () => ({ envelope: { renderRequest: { mode: 'circular', records: list.map((entry) => (
-      { recordKey: `record-${entry.sourceIndex + 1}`, selector: { kind: 'recordIndex', index: entry.sourceIndex } }
+      { recordKey: `record-1:${entry.sourceIndex + 1}`, selector: { kind: 'recordIndex', index: entry.sourceIndex } }
     )) }, resources: {} }, filesByResource: new Map() }),
     deriveRegion: async () => ({ result: null }),
     newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
@@ -266,13 +265,13 @@ test('the rows come from the request projected after the records are read', asyn
       list.splice(0);
       await new Promise((resolve) => setTimeout(resolve, 5));
       list.push(...discovered);
-      return { mode: 'circular', circular: [...list] };
+      return { mode: 'circular', cards: new Map([['record-1', [...list]]]) };
     },
     resultFeatures: () => null
   });
   await owner.open();
   assert.deepEqual(owner.dialog.rows.map((row) => [row.recordKey, row.caption, row.length]),
-    [['record-1', 'NC_1', 1200], ['record-2', 'NC_2', 900]]);
+    [['record-1:1', 'NC_1', 1200], ['record-1:2', 'NC_2', 900]]);
 });
 
 // A second Create while the first one runs adds nothing: the dialog is

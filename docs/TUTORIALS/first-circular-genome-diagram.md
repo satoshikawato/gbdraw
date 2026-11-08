@@ -43,13 +43,13 @@ files selected.
 The drawing bar shows one **Circular** drawing. Keep **GenBank** selected under
 **Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
 
-The uploader should show `HmmtDNA.gbk` in green. The app inspects the file at
+The file becomes **File 1**, which shows `HmmtDNA.gbk` in green. The app inspects the file at
 once: **Source records** reports **1 source record inspected**, and the
 `NC_012920.1` rotation row appears below it.
 
 ![Circular GenBank input showing HmmtDNA.gbk selected](../images/t-gui-01/01-input-ready.png)
 
-*Confirm that Circular and GenBank are selected, the uploader names `HmmtDNA.gbk`, and **Source records** reports one inspected record.*
+*Confirm that Circular and GenBank are selected, **File 1** names `HmmtDNA.gbk`, and **Source records** reports one inspected record.*
 
 ### Step 2: Generate the first diagram
 

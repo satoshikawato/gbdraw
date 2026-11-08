@@ -22,10 +22,11 @@ const { bindLoadedInputs } = await import('../../gbdraw/web/js/services/drawing/
 const boundState = (source, store = createInputFileStore()) => {
   const bound = bindLoadedInputs(store, {
     files: source.files || {}, linearSeqs: source.linearSeqs || [],
+    circularSources: source.circularSources || [],
     linearComparisonPlan: source.linearComparisonPlan || { edges: [] }, circularRecordDiscovery: {}
   });
   return {
-    ...source, inputFiles: store, files: bound.files, linearSeqs: bound.linearSeqs,
+    ...source, inputFiles: store, files: bound.files, linearSeqs: bound.linearSeqs, circularSources: bound.circularSources,
     ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
   };
 };
@@ -159,10 +160,10 @@ const committed = {
 // The table cards name their files by ref of the input file store.
 const inputFiles = createInputFileStore();
 const state = boundState({
+  circularSources: [{
+    uid: 'record-1', gb: activeFile, gff: sameMetadataDifferentA, fasta: sameMetadataDifferentB
+  }],
   files: {
-    c_gb: activeFile,
-    c_gff: sameMetadataDifferentA,
-    c_fasta: sameMetadataDifferentB,
     c_depth: [[makeFile('depth-1', 'depth-1.tsv')]],
     c_conservation_blasts: [makeFile('blast', 'blast.tsv')],
     c_conservation_blasts_source: 'losat-cache',
@@ -223,28 +224,28 @@ const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');
 assert.equal(
-  bindings.c_gb.resourceId,
+  bindings.circularSources[0].gb.resourceId,
   bindings.d_color.resourceId,
   'one File object used in several roles shares payload bytes'
 );
 assert.equal(
-  bindings.c_gb.resourceId,
+  bindings.circularSources[0].gb.resourceId,
   bindings.linearSeqs[0].gb.resourceId,
   'separate byte-identical File objects share payload bytes'
 );
 assert.notEqual(
-  bindings.c_gff.resourceId,
-  bindings.c_fasta.resourceId,
+  bindings.circularSources[0].gff.resourceId,
+  bindings.circularSources[0].fasta.resourceId,
   'same metadata with different bytes must not deduplicate'
 );
-assert.deepEqual(bindings.c_gb, {
-  resourceId: bindings.c_gb.resourceId,
+assert.deepEqual(bindings.circularSources[0].gb, {
+  resourceId: bindings.circularSources[0].gb.resourceId,
   name: 'circular-display.gb',
   type: 'text/x-genbank',
   lastModified: 101
 });
 assert.deepEqual(bindings.linearSeqs[0].gb, {
-  resourceId: bindings.c_gb.resourceId,
+  resourceId: bindings.circularSources[0].gb.resourceId,
   name: 'linear-display.gb',
   type: 'application/genbank',
   lastModified: 202
@@ -259,7 +260,7 @@ assert.deepEqual(Object.keys(bindings.linearComparisons[0]), ['id', 'file']);
 assert.equal(Object.hasOwn(bindings, 'linearCanonicalComparisons'), false);
 assert.equal(
   built.renderRequest.records[0].source.resourceId,
-  bindings.c_gb.resourceId
+  bindings.circularSources[0].gb.resourceId
 );
 assert.equal(
   built.renderRequest.records[1].source.gffResourceId in built.resources,
@@ -306,7 +307,7 @@ assert.equal(
 );
 assert.deepEqual(
   Object.keys(built.webFiles.resourceOriginalNames),
-  [bindings.c_gb.resourceId]
+  [bindings.circularSources[0].gb.resourceId]
 );
 assert.deepEqual(built.webFiles.conservationLosatFastaSources, [null]);
 assert.equal(
@@ -394,10 +395,10 @@ const frozen = JSON.parse(frozenBytes);
 const frozenLeaf = frozen.webFiles.bindings.c_gb;
 const frozenTable = backing.adoptCurrentSessionResources(frozen.resources);
 const oldFile = backing.createSessionResourceFileView(frozenTable, frozenLeaf.resourceId, frozenLeaf);
-const promotedState = boundState({ files: { c_gb: oldFile } });
+const promotedState = boundState({ circularSources: [{ uid: 'record-1', gb: oldFile, gff: null, fasta: null }] });
 const promoted = await buildSessionResources(promotedState, authority.adoptRuntimeCanonicalSession(frozen), bindingDrawings(promotedState));
 assert.equal(promoted.webFiles.bindings.schema, 2);
-assert.deepEqual(promoted.webFiles.bindings.c_gb, frozenLeaf);
+assert.deepEqual(promoted.webFiles.bindings.circularSources[0].gb, frozenLeaf);
 
 const descriptor = (text, name = 'same.gb') => ({ kind: 'genbank', name, type: 'text/plain',
   encoding: 'base64', size: Buffer.byteLength(text), data: base64(text), lastModified: 0 });
@@ -406,41 +407,34 @@ for (const adopted of [false, true]) {
     resources: { occupied: descriptor('committed\n', 'committed.gb'), same: descriptor('A\n') } };
   const parts = { occupied: descriptor('A\n'), unused: descriptor('B\n', 'unique.gb') };
   const table = backing.adoptCurrentSessionResources(parts);
-  const components = [
-    { resourceId: 'unused', name: '', type: '', lastModified: 0.5 },
-    { resourceId: 'occupied', name: 'one.gb', type: 'text/plain', lastModified: 1 },
-    { resourceId: 'occupied', name: 'repeat.gb', type: 'different', lastModified: 2 }
-  ];
-  const file = backing.createCombinedSessionResourceFileView(table, components, {
-    name: '', type: '', lastModified: 0.25
-  });
-  const state = boundState({ files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } });
+  const views = ['unused', 'occupied', 'occupied'].map((resourceId) => backing.createSessionResourceFileView(table, resourceId));
+  const cardsOf = (gbs, fasta = null) => gbs.map((gb, index) => ({
+    uid: `record-${index + 1}`, gb, gff: null, fasta: index === 0 ? fasta : null
+  }));
+  const state = boundState({ circularSources: cardsOf(views, makeFile('A\n', 'independent.fa')) });
   const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
   const first = await buildSessionResources(state, canonical, bindingDrawings(state));
-  const binding = first.webFiles.bindings.c_gb;
-  assert.equal(binding.kind, 'composite');
-  assert.equal(binding.name, '');
-  assert.equal(binding.components[0].name, '');
-  assert.deepEqual(binding.components.map(c => first.resources[c.resourceId].data),
+  const cards = first.webFiles.bindings.circularSources;
+  assert.deepEqual(cards.map(card => first.resources[card.gb.resourceId].data),
     ['B\n', 'A\n', 'A\n'].map(base64));
-  assert.equal(binding.components[1].resourceId, binding.components[2].resourceId);
-  assert.equal(binding.components[1].resourceId, first.webFiles.bindings.c_fasta.resourceId);
+  assert.equal(cards[1].gb.resourceId, cards[2].gb.resourceId);
+  assert.equal(cards[1].gb.resourceId, cards[0].fasta.resourceId);
   if (adopted) {
-    assert.equal(binding.components[1].resourceId, 'same');
-    assert.equal(binding.components[0].resourceId, 'unused');
+    assert.equal(cards[1].gb.resourceId, 'same');
+    assert.equal(cards[0].gb.resourceId, 'unused');
     assert.equal(first.renderRequest, committed.renderRequest);
   }
-  const loaded = backing.createCombinedSessionResourceFileView(
-    backing.adoptCurrentSessionResources(first.resources), binding.components, binding
-  );
-  const secondState = boundState({ files: { c_gb: loaded } });
+  const loadedTable = backing.adoptCurrentSessionResources(first.resources);
+  const loaded = cards.map((card) => ({
+    uid: card.uid, gff: null, fasta: null, gb: backing.createSessionResourceFileView(loadedTable, card.gb.resourceId, card.gb)
+  }));
+  const secondState = boundState({ circularSources: loaded });
   const second = await buildSessionResources(secondState, authority.adoptRuntimeCanonicalSession(first), bindingDrawings(secondState));
-  assert.deepEqual(second.webFiles.bindings.c_gb, binding);
-  state.files.c_gb = state.inputFiles.registerFile(makeFile('native replacement\n', 'replacement.gb'));
+  assert.deepEqual(second.webFiles.bindings.circularSources.map(card => card.gb), cards.map(card => card.gb));
+  state.circularSources[0].gb = state.inputFiles.registerFile(makeFile('native replacement\n', 'replacement.gb'));
   const replaced = await buildSessionResources(state, canonical, bindingDrawings(state));
-  assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
-  assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
-  assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));
+  const replacedLeaf = replaced.webFiles.bindings.circularSources[0].gb;
+  assert.equal(replaced.resources[replacedLeaf.resourceId].data, base64('native replacement\n'));
 }
 
 // E1: the other mode's committed request (`otherModeResult`) shares the

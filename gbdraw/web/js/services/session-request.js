@@ -1,7 +1,7 @@
 // @ts-check
 import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
-  CIRCULAR_INPUT_FIELDS, INPUT_TYPES, circularInputSlots, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
+  INPUT_TYPES, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
@@ -87,13 +87,12 @@ import {
   parseDepthTrackIndexIdentity
 } from './depth-track-state.js';
 import {
-  buildDisambiguatedRecordEntries,
   circularDrawingRecordSet,
   circularFormCrop,
-  isSingleCircularJourney,
-  resolveDisambiguatedRecordSelection
+  circularRecordEntries,
+  isSingleCircularJourney
 } from './record-options.js';
-import { cardHoldsRecordKey, circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, linearSeqRecordKey } from './record-draw-selection.js';
+import { cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -145,6 +144,7 @@ import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
   CONFIG_UNSET_NUMBER_SPELLINGS,
+  EXPANDED_RECORD_KEY_SEPARATOR,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
@@ -219,8 +219,6 @@ import {
 } from './file-content-cache.js';
 import {
   adoptedSessionResourceDescriptor,
-  adoptCurrentSessionResources,
-  createCombinedSessionResourceFileView,
   createSessionResourceFileView,
   fileBackedDescriptor,
   fileBackedReaderOf,
@@ -258,11 +256,11 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
  *   WebFileBindings } from './session-resource-backing.js'
  */
-/** @import { CircularRecordDrawing, CircularRegionForm, CircularRequestRecordSetOptions } from './record-options.js' */
+/** @import { CircularRecordDrawing, CircularRegionForm } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
-/** @import { DepthFileSlots, DepthSlotRow } from './depth-track-state.js' */
+/** @import { DepthFileSlots, DepthFileSlotsOrRows, DepthSlotFile, DepthSlotRow } from './depth-track-state.js' */
 /** @import { CatalogStateView } from './feature-catalog.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { ExportRef } from './svg-serialization.js' */
@@ -346,18 +344,20 @@ const requestDrawingMode = (drawing) => {
  * @property {CanonicalRecord['cardinality']} [cardinality]
  */
 /**
+ * One Circular source card as a request reads it (`CircularSource` of the inputs
+ * slice): its uid and the files of its slots.
+ * @typedef {{ uid: string, gb?: ResourceEntry | null, gff?: ResourceEntry | null, fasta?: ResourceEntry | null }} RequestCircularSource
+ */
+/**
  * The input files and records a request reads (the `filesData` of the draft).
  * @typedef {object} RequestFilesData
  * @property {RequestLinearSeq[]} [linearSeqs]
- * @property {ResourceEntry | null} [c_gb]
- * @property {ResourceEntry | null} [c_gff]
- * @property {ResourceEntry | null} [c_fasta]
+ * @property {RequestCircularSource[]} [circularSources] The Circular source cards, in drawing order.
  * @property {DepthFileSlots | DepthFileSlots[]} [c_depth]
  * @property {FileLike[]} [c_conservation_blasts]
  * @property {string | null} [c_conservation_blasts_source]
  * @property {FileLike[]} [c_conservation_fastas]
  * @property {(ResourceEntry | null)[]} [c_conservation_sequence_sources]
- * @property {RequestCircularFileRecord[]} [circularRecords]
  * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
  * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
@@ -1598,7 +1598,16 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 };
 
 /**
+ * The draft records of a request: each with the uid of the card it reads
+ * (`recordSources`). Circular also names the identities of its drawn and read
+ * records and how many records its presentation offers (`presentedCount`, which
+ * decides one diagram or separate ones); these are null for Linear.
+ * @typedef {{ records: RequestDraftRecord[], recordSources: string[], drawnIdentities: string[] | null,
+ *   listedIdentities: string[] | null, presentedCount: number | null }} RecordPlan
+ */
+/**
  * @param {{ drawing: RequestDrawing, filesData: RequestFilesData, resources: ResourceBuilder }} input
+ * @returns {RecordPlan}
  */
 const buildRecords = ({ drawing, filesData, resources }) => {
   const mode = requestDrawingMode(drawing);
@@ -1640,115 +1649,119 @@ const buildRecords = ({ drawing, filesData, resources }) => {
         }
       };
     });
-    return { records, circularSourceIndexes: null, circularSourceCount: null, circularPresentedCount: null };
-  }
-
-  if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
-    /** @type {RequestDraftRecord[]} */
-    const records = filesData.circularRecords.map((record, index) => {
-      const source = inputRecordSource(resources, inputTypeOfSourceKind(record.sourceKind), record, index);
-      return {
-        recordKey: String(record.recordKey || `record-${index + 1}`),
-        cardinality: record.cardinality || 'exactly_one',
-        source,
-        selector: record.selector || null,
-        windows: publicationClone(record.windows) || [],
-        presentation: publicationClone(record.presentation) || presentationPayload(),
-        display: publicationClone(record.display) || { isCircular: null, startCoordinate: null }
-      };
-    });
-    const singleJourney = (
-      records.length === 1 &&
-      !drawing.form.multi_record_canvas &&
-      drawing.adv.circular_grouping_intent !== 'batch'
-    );
-    if (singleJourney) {
-      const record = records[0];
-      const savedSelector = canonicalRecordSelector(record);
-      const requestedSelector = String(
-        drawing.form.circular_record_selector || savedSelector || ''
-      ).trim();
-      /** @type {CircularRequestRecordSetOptions['records']} */
-      const circularRecordList = drawing.circularRecordList.value;
-      const knownRecords = (Array.isArray(circularRecordList) ? circularRecordList : []).map((entry) => ({
-          ...entry,
-          recordId: entry?.record_id ?? entry?.recordId
-        }));
-      const selection = resolveDisambiguatedRecordSelection(
-        knownRecords,
-        requestedSelector
-      );
-      const selectedKnownRecord = selection.record || (
-        !requestedSelector && selection.entries.length === 1
-          ? selection.entries[0]
-          : null
-      );
-      if (knownRecords.length > 0 && !selectedKnownRecord) {
-        throw diagnosticError('RECORD_SELECTION', {
-          reason: !requestedSelector ? 'SELECT_ONE' : selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH'
-        });
-      }
-      const selected = selectedKnownRecord || {
-        value: requestedSelector,
-        selector: requestedSelector,
-        recordId: requestedSelector
-      };
-      const windows = circularWindowsPayload(drawing.form, selected);
-      records[0] = {
-        ...record,
-        recordKey: record.recordKey || circularSingleRecordKey(selected),
-        selector: selectorPayload(selected.value),
-        windows,
-        presentation: circularPresentationPayload(drawing.form, {
-          hasRegion: windows.length > 0
-        })
-      };
-    }
     return {
-      records,
-      circularSourceIndexes: records.map((_, index) => index),
-      circularSourceCount: records.length,
-      circularPresentedCount: records.length
+      records, recordSources: (filesData.linearSeqs || []).map((seq, index) => linearSeqRecordKey(seq, index)),
+      drawnIdentities: null, listedIdentities: null, presentedCount: null
     };
   }
-  const source = inputRecordSource(resources, drawing.inputType.value, circularInputSlots(filesData), 0);
+
+  return circularRecordPlan({ drawing, sources: filesData.circularSources || [], resources });
+};
+
+/**
+ * The CLI-form selector of the record an identity names while its card's
+ * records are not read yet: `#k` for `<uid>:<k>`, none for the uid itself, and
+ * the value as given otherwise (a record ID typed into an older Session).
+ * @param {string} selector @param {string} uid
+ */
+const unreadCircularSelector = (selector, uid) => {
+  if (selector === uid) return '';
+  const k = recordKeyExpansion(selector, uid);
+  return k === null ? selector : `#${k}`;
+};
+
+/**
+ * The selector of the CLI's form that a request record of a read card carries
+ * (the committed request the CLI writes): none for the record of a file that
+ * holds one record, else the record's name in its file (`fileValue`: its
+ * record ID, or `#k` when the ID repeats in the file or is unsafe).
+ * @param {{ fileValue: string }} entry @param {number} recordCount The records of its file.
+ */
+const cliRecordSelector = (entry, recordCount) => (recordCount === 1 ? null : selectorPayload(entry.fileValue));
+
+/**
+ * The Circular records of the next request, per source card in drawing order,
+ * in the form the CLI commits for the same files (circular-multi-file D-08,
+ * D-13): each drawn record of a read card is an `exactly_one` record keyed by
+ * its identity (`<uid>:<k>`, or `<uid>` for a file of one record) with the
+ * CLI's selector (`cliRecordSelector`), so a record turned OFF or ON moves no
+ * rows and a Web Generate of the CLI's files equals the CLI's request. A card
+ * whose records are not read yet is one `all` record keyed by its uid, which
+ * Python resolves to the same keys; Generate reads every card before it builds
+ * its request (D-13), so only a draft Save writes it.
+ * `drawnIdentities`: the identities of the drawn records in drawing order (the
+ * Record Order tokens' list); `listedIdentities`: those of every read record.
+ * @param {{ drawing: RequestDrawing, sources: readonly RequestCircularSource[], resources: ResourceBuilder }} input
+ * @returns {RecordPlan}
+ */
+const circularRecordPlan = ({ drawing, sources, resources }) => {
+  const inputType = drawing.inputType.value;
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
   const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
-  const { recordSelectors } = recordSet;
-  const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
-  // The offered records decide the journey, so one ON record of several
-  // stays a batch of one or a grid of one.
-  const singleJourney = isSingleCircularJourney(recordSet);
-  /** @type {RequestDraftRecord[]} */
-  const records = selectedRecords.map((record, index) => {
-    const windows = singleJourney
-      ? circularWindowsPayload(drawing.form, record)
-      : [];
-    // A record keeps its key while others go OFF: `record-<file position>`.
-    return {
-      recordKey: singleJourney && record
-        ? circularSingleRecordKey(record)
-        : circularRecordRequestKey(Number.isInteger(record?.sourceIndex) ? record.sourceIndex : index),
-      cardinality: 'exactly_one',
-      source,
-      selector: windows.length
-        ? selectorPayload(record?.value)
-        : selectorPayload(record?.value ?? record?.selector),
-      windows,
-      presentation: singleJourney
-        ? circularPresentationPayload(drawing.form, { hasRegion: windows.length > 0 })
-        : presentationPayload()
-    };
+  /** @type {Map<string, typeof recordSet.recordSelectors>} */
+  const listedByCard = new Map();
+  recordSet.recordSelectors.forEach((entry) => {
+    listedByCard.set(entry.uid, [...(listedByCard.get(entry.uid) || []), entry]);
   });
-  const circularSourceIndexes = selectedRecords.map((record, index) => (
-    record && Number.isInteger(record.sourceIndex) ? record.sourceIndex : index
-  ));
+  const unread = sources.filter((source) => !listedByCard.has(source.uid));
+  const singleJourney = isSingleCircularJourney(recordSet) && (unread.length === 0 || sources.length === 1);
+  const sourceOf = (/** @type {number} */ index) => inputRecordSource(resources, inputType, sources[index], index);
+  const listedIdentities = recordSet.recordSelectors.map((entry) => entry.identity);
+  if (singleJourney) {
+    const record = recordSet.records[0] ?? null;
+    const index = record ? sources.findIndex((source) => source.uid === record.uid) : 0;
+    if (index < 0 || !sources[index]) return { records: [], recordSources: [], drawnIdentities: [], listedIdentities, presentedCount: 0 };
+    const { uid } = sources[index];
+    const requested = String(drawing.form.circular_record_selector || '').trim();
+    const fileValue = record ? record.fileValue : unreadCircularSelector(requested, uid);
+    const windows = circularWindowsPayload(drawing.form, record ? { ...record, value: fileValue } : { value: fileValue });
+    return {
+      records: [{
+        recordKey: record ? record.identity : uid,
+        cardinality: 'exactly_one',
+        source: sourceOf(index),
+        // A record drawn in windows names its record in its own selector (request schema 10).
+        selector: windows.length || !record ? selectorPayload(fileValue) : cliRecordSelector(record, listedByCard.get(uid)?.length ?? 0),
+        windows,
+        presentation: circularPresentationPayload(drawing.form, { hasRegion: windows.length > 0 })
+      }],
+      recordSources: [uid],
+      drawnIdentities: [record ? record.identity : uid],
+      listedIdentities,
+      presentedCount: 1
+    };
+  }
+  const drawn = new Set(recordSet.records.map((entry) => entry.identity));
+  /** @type {RequestDraftRecord[]} */
+  const records = [];
+  /** @type {string[]} */
+  const recordSources = [];
+  /** @type {string[]} */
+  const drawnIdentities = [];
+  sources.forEach((card, index) => {
+    const listed = listedByCard.get(card.uid);
+    const drawnHere = (listed || []).filter((entry) => drawn.has(entry.identity));
+    if (listed && drawnHere.length === 0) return;
+    const source = sourceOf(index);
+    if (!listed) {
+      records.push({ recordKey: card.uid, cardinality: 'all', source, selector: null, windows: [], presentation: presentationPayload() });
+      recordSources.push(card.uid);
+      drawnIdentities.push(card.uid);
+      return;
+    }
+    drawnHere.forEach((entry) => {
+      records.push({
+        recordKey: entry.identity, cardinality: 'exactly_one', source, selector: cliRecordSelector(entry, listed.length),
+        windows: [], presentation: presentationPayload()
+      });
+      recordSources.push(card.uid);
+      drawnIdentities.push(entry.identity);
+    });
+  });
   return {
-    records,
-    circularSourceIndexes,
-    circularSourceCount: recordSelectors.length || records.length,
-    circularPresentedCount: recordSet.presentedCount || records.length
+    records, recordSources, drawnIdentities, listedIdentities,
+    presentedCount: recordSet.presentedCount + unread.length
   };
 };
 
@@ -1757,10 +1770,9 @@ const buildRecords = ({ drawing, filesData, resources }) => {
  * cardinalities, selectors, and regions), before the request is built: the
  * record plan of `buildCanonicalRenderRequest`, whose descriptors hold no
  * bytes. A Generate matches them with the committed request's records by
- * identity before it projects the per-feature rows (`recordKeyMoves`). An
- * ALL card of several records keeps its one record here; the request may
- * split it into its `<uid>:<k>` records, whose features have those keys either
- * way. Null when the drafts name no complete request (Generate then reports why).
+ * identity before it projects the per-feature rows (`recordKeyMoves`). A
+ * Linear ALL card of several records keeps its one record here, whose features
+ * have the keys `<uid>:<k>` Python resolves it to. Null when the drafts name no complete request (Generate then reports why).
  * @param {{ drawing: RequestDrawing, filesData: RequestFilesData }} input
  * @returns {RequestDraftRecord[] | null}
  */
@@ -1889,25 +1901,23 @@ const linearDefinitionStyleOverrides = (adv) => {
 };
 /**
  * The Circular multi-record canvas layout, field by field. The draft keys each
- * record's row by its file selector `#N`; the request names the drawn records
- * by their position among them (`circularSourceIndexes`: the source index of
- * each drawn record, `circularRecordSourceIndexes`), so an OFF record has no
- * token and returns to its row when it is ON again. Blank is the documented
+ * record's row by its identity; the request names the drawn records by their
+ * position among them, `#k` (`drawnIdentities`: the identity of each drawn
+ * record in drawing order, `circularRequestIdentities`), so an OFF record has
+ * no token and returns to its row when it is ON again. Blank is the documented
  * default (Python's); any number is sent literally.
  * @type {Readonly<{ [K in keyof CanonicalCircularLayout]:
- *   (adv: Record<string, unknown>, circularSourceIndexes: readonly number[]) => CanonicalCircularLayout[K] }>}
+ *   (adv: Record<string, unknown>, drawnIdentities: readonly string[]) => CanonicalCircularLayout[K] }>}
  */
 const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
   multiRecordSizeMode: (adv) => requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode),
   multiRecordMinRadiusRatio: (adv) => projectOptionalNumber(adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
   multiRecordColumnGapRatio: (adv) => projectOptionalNumber(adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
   multiRecordRowGapRatio: (adv) => projectOptionalNumber(adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
-  multiRecordPositions: (adv, circularSourceIndexes) => {
-    /** @param {string} selector */
-    const drawnPosition = (selector) => {
-      const match = /^#([1-9][0-9]*)$/.exec(selector);
-      if (!match) return selector;
-      const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
+  multiRecordPositions: (adv, drawnIdentities) => {
+    /** @param {string} identity */
+    const drawnPosition = (identity) => {
+      const position = drawnIdentities.indexOf(identity);
       return position < 0 ? '' : `#${position + 1}`;
     };
     const positions = Array.isArray(adv.multi_record_positions)
@@ -1921,16 +1931,31 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
     return positions.length > 0 ? positions : null;
   }
 });
-// OV-1072: the source index of each record a Circular grid draws, read from
-// the request records, for Generate (`buildLayout`) and the live layout
-// projector alike. A record drawn with others keeps its file position in its
-// key (`circularRecordRequestKey`), also when it is the only ON record; any
-// other key keeps its place in the request.
-/** @param {readonly { recordKey: string }[]} records @returns {number[]} */
-const circularRecordSourceIndexes = (records) => records.map((record, index) => {
-  const keyed = /^record-([1-9][0-9]*)$/.exec(String(record.recordKey));
-  return keyed ? Number(keyed[1]) - 1 : index;
-});
+/**
+ * The identity a Record Order token of a committed request names (OV-2845): a
+ * Record Order row names its record by identity, and a committed request's
+ * record key is its record's identity. The token `#k` names the request's k-th
+ * record, a record ID the record its selector names by that ID; any other
+ * token stays as it is (the request writer leaves out a row no drawn record has).
+ * @param {readonly { recordKey?: unknown, selector?: unknown }[]} records The committed request's records.
+ * @param {string} token
+ */
+const positionRecordIdentity = (records, token) => {
+  const index = /^#(\d+)$/.exec(token);
+  const record = index
+    ? records[Number(index[1]) - 1]
+    : records.find(({ selector }) => {
+      const named = /** @type {{ kind?: unknown, value?: unknown } | null} */ (selector && typeof selector === 'object' ? selector : null);
+      return named?.kind === 'recordId' && named.value === token;
+    });
+  return typeof record?.recordKey === 'string' && record.recordKey ? record.recordKey : token;
+};
+// OV-1072: the identity of each record a committed Circular request draws, for
+// the live layout projector and the kept Depth parts: a committed request names
+// its records resolved, each by its key, which is its identity (`<uid>:<k>` or
+// `<uid>`).
+/** @param {readonly { recordKey: string }[]} records @returns {string[]} */
+const circularRequestIdentities = (records) => records.map((record) => String(record.recordKey));
 
 /**
  * One write of a live setting: the path in the render request and its value;
@@ -1959,23 +1984,26 @@ const LIVE_SESSION_ROOTS = new Set([LIVE_WEB_FILES_ROOT, 'resources', 'keptTrack
  */
 /**
  * The draft values a live projector reads, given by its caller (the request
- * owner never reads `state`): the Linear cards (each with its Depth files)
- * and the Circular Depth files (`files.c_depth`) of the drawing it projects,
- * never another drawing's, and the project's file store reader
+ * owner never reads `state`): the Linear cards (each with its Depth files),
+ * the Circular Depth files (`files.c_depth`) and the identities of the Circular
+ * records read, in drawing order (the rows of a Depth matrix), of the drawing it
+ * projects, never another drawing's, and the project's file store reader
  * (`state.inputFiles.fileOf`) that gives the File a ref binds (OV-2205).
  * @typedef {{ readonly linearSeqs: readonly LiveSettingCard[], readonly circularDepth: LiveSettingCircularDepth,
- *   readonly fileOf: InputFileStore['fileOf'] }} LiveSettingInputs
+ *   readonly circularIdentities: readonly string[], readonly fileOf: InputFileStore['fileOf'] }} LiveSettingInputs
  */
 /**
  * The live projector inputs of `drawing`: its own Linear cards and Circular
  * Depth files, read through the project's file store (`fileOf`). Every caller
  * builds them here.
- * @param {{ readonly linearSeqs: readonly LiveSettingCard[], readonly files: { readonly c_depth: LiveSettingCircularDepth } }} drawing
+ * @param {{ readonly linearSeqs: readonly LiveSettingCard[], readonly files: { readonly c_depth: LiveSettingCircularDepth },
+ *   readonly circularRecordList: { readonly value: readonly { readonly identity?: unknown }[] } }} drawing
  * @param {InputFileStore['fileOf']} fileOf
  * @returns {LiveSettingInputs}
  */
 export const liveSettingInputsOf = (drawing, fileOf) => ({
-  linearSeqs: drawing.linearSeqs, circularDepth: drawing.files.c_depth ?? null, fileOf
+  linearSeqs: drawing.linearSeqs, circularDepth: drawing.files.c_depth ?? null,
+  circularIdentities: drawing.circularRecordList.value.map((entry) => String(entry.identity ?? '')), fileOf
 });
 /**
  * The committed Session's resources, which name the files each committed
@@ -2183,13 +2211,10 @@ const committedTrackParts = (request, plan, resources, webFiles) => {
  * @param {LiveSettingResources} resources
  */
 const depthSourcesKept = (depth, request, inputs, resources) => {
-  const records = request.records.length;
   /** @type {unknown[][] | null} */
   let rows;
   if (request.mode === 'circular') {
-    const indexes = circularRecordSourceIndexes(request.records);
-    const all = normalizeRecordMajorDepthFileRows(inputs.circularDepth, Math.max(records, ...indexes.map((index) => index + 1)));
-    rows = isRecordMajorDepthFileMatrix(inputs.circularDepth) ? indexes.map((index) => all[index] || []) : all.slice(0, records);
+    rows = circularDrawnDepthRows(inputs.circularDepth, inputs.circularIdentities, circularRequestIdentities(request.records));
   } else {
     const cards = linearRecordCardIndexes(request, inputs, resources);
     rows = cards && cards.map((index) => depthFileSlotsFromValue(/** @type {DepthFileSlots} */ (inputs.linearSeqs[index]?.depth)));
@@ -2497,7 +2522,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT).map(([field, project]) => [
     `layout.${field}`,
     (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (
-      /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, circularRecordSourceIndexes(request.records))]])
+      /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, circularRequestIdentities(request.records))]])
     )
   ])),
   // G2 (PD-OI-103 rev 2, PD-OI-059 rev 3). Default font size: the Circular
@@ -3233,6 +3258,28 @@ const addLabelOverrideResource = (state, drawing, resources, diagramOptions, lab
       'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
     ));
   }
+};
+
+/**
+ * The Depth rows of the drawn Circular records: a record-major matrix whose rows
+ * are the records read (`listedIdentities`, drawing order; a record past its end
+ * has no row yet, `resliceRecordRows`) gives the rows of the drawn ones by
+ * identity; a longer matrix is one row per drawn record, and one series list is
+ * every record's.
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlotsOrRows<F>} depth
+ * @param {readonly string[]} listedIdentities
+ * @param {readonly string[]} drawnIdentities
+ * @returns {(F | null)[][]}
+ */
+const circularDrawnDepthRows = (depth, listedIdentities, drawnIdentities) => {
+  if (!isRecordMajorDepthFileMatrix(depth) || listedIdentities.length === 0 || depth.length > listedIdentities.length) {
+    return normalizeRecordMajorDepthFileRows(depth, drawnIdentities.length);
+  }
+  return normalizeRecordMajorDepthFileRows(drawnIdentities.map((identity) => {
+    const row = depth[listedIdentities.indexOf(identity)];
+    return Array.isArray(row) ? row : [];
+  }), drawnIdentities.length);
 };
 
 /** @param {{ mode: ModeProfileName, filesData: RequestFilesData, recordCount: number }} input */
@@ -4099,9 +4146,10 @@ const buildComparisons = ({
  * @param {RequestState & { similarityAlignmentPlan?: ExportRef<unknown>, linearRecordTranslations?: ExportRef<unknown> }} state
  * @param {RequestDrawing} drawing
  * @param {{ recordKey: string, presentation: { gridRow?: number | null } }[]} [records]
+ * @param {readonly string[]} [drawnIdentities] Circular: the identities of the drawn records, in drawing order.
  * @returns {CanonicalRenderRequest['layout']}
  */
-const buildLayout = (state, drawing, records = []) => {
+const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
   const mode = requestDrawingMode(drawing);
   if (mode === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
@@ -4134,7 +4182,7 @@ const buildLayout = (state, drawing, records = []) => {
   }
   if (!drawing.form.multi_record_canvas) return {};
   return /** @type {CanonicalCircularLayout} */ (Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
-    .map(([field, project]) => [field, project(drawing.adv, circularRecordSourceIndexes(records))])));
+    .map(([field, project]) => [field, project(drawing.adv, drawnIdentities)])));
 };
 
 // A draft without a per-feature edit field (a Session written by the CLI, the
@@ -4213,9 +4261,6 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   /** @type {{ similarityAlignment?: unknown, recordTranslations?: unknown }} */
   const canonicalLayout = projection.config?.linearRecordLayout || {};
   const palette = String(config?.palette || 'default');
-  const records = session?.renderRequest?.records || [];
-  const circularRecordList = records.length === 1 && !records[0]?.selector ? []
-    : records.map((record) => ({ selector: canonicalRecordSelector(record) }));
   const conservation = publicationClone(config?.circularConservation || {
     enabled: false, reference: 'auto', labels: '', series: []
   });
@@ -4230,7 +4275,9 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   const drawingRefs = {
     // The drawing's input type: its mode's Session 48 field, else the request's.
     inputType: (projection.mode === 'linear' ? session?.ui?.lInputType : session?.ui?.cInputType) || projection.inputType,
-    circularRecordList,
+    // The records of the Circular cards: the caller reads them (`readCircularSourceRecords`), as Generate does
+    // (D-13); none are seeded from the committed request.
+    circularRecordList: [],
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
     selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
@@ -4627,8 +4674,8 @@ const projectCanonicalRenderInput = ({
   /** @type {number[]} */
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
-    const sourceUid = mode === 'linear'
-      ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
+    // The card the record reads: a Linear record card, a Circular source card.
+    const sourceUid = recordPlan.recordSources[index];
     const { selectedRows, transformFor, wholeTransform } = requestRecordTransforms({
       mode, sourceUid, record, recordDisplayRows, drafts
     });
@@ -4657,20 +4704,13 @@ const projectCanonicalRenderInput = ({
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
   }
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  // A Depth matrix splits every card into its records (`circularRecordPlan`), so the
+  // request has one record per drawn record, each with its row.
   const selectedCircularFilesData = (
-    mode === 'circular' &&
-    isRecordMajorDepthFileMatrix(filesData.c_depth) &&
-    Array.isArray(recordPlan.circularSourceIndexes) &&
-    // `circularSourceCount` is set with `circularSourceIndexes` (both are null for Linear).
-    recordPlan.circularSourceIndexes.length < /** @type {number} */ (recordPlan.circularSourceCount) &&
-    filesData.c_depth.length === recordPlan.circularSourceCount
+    mode === 'circular' && isRecordMajorDepthFileMatrix(filesData.c_depth)
+    && recordPlan.drawnIdentities !== null && recordPlan.listedIdentities !== null
   )
-    ? {
-        ...filesData,
-        c_depth: recordPlan.circularSourceIndexes.map((sourceIndex) => (
-          filesData.c_depth[sourceIndex] || []
-        ))
-      }
+    ? { ...filesData, c_depth: circularDrawnDepthRows(filesData.c_depth, recordPlan.listedIdentities, recordPlan.drawnIdentities) }
     : filesData;
   const trackPlan = buildTrackPlan({
     drawing,
@@ -4692,7 +4732,7 @@ const projectCanonicalRenderInput = ({
         drawing.form.multi_record_canvas
           ? 'grid'
           : (
-              (recordPlan.circularPresentedCount ?? records.length) === 1
+              (recordPlan.presentedCount ?? records.length) === 1
                 ? (
                     circularGroupingIntent ||
                     WEB_UX_PROFILE.circular.singleRecordGrouping
@@ -4704,24 +4744,13 @@ const projectCanonicalRenderInput = ({
   if (mode === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
-  const knownCircularRecords = Array.isArray(drawing.circularRecordList.value)
-    ? drawing.circularRecordList.value
-    : [];
-  const knownCircularEntries = buildDisambiguatedRecordEntries(
-    knownCircularRecords.map((/** @type {{ record_id?: unknown, recordId?: unknown } | null} */ record) => ({
-      ...record,
-      recordId: record?.record_id ?? record?.recordId
-    }))
-  );
+  // Each record's output name is its record ID, found by its key (its identity), or for a
+  // card's `all` record keyed by the card's uid, its first record's.
+  const knownCircularEntries = circularRecordEntries(drawing.circularRecordList.value);
   const circularOutputRecords = records.map((record, index) => {
-    const selector = canonicalRecordSelector(record);
-    const resolved = resolveDisambiguatedRecordSelection(
-      knownCircularEntries,
-      selector
-    );
-    return {
-      record_id: resolved.record?.recordId || selector || `Record_${index + 1}`
-    };
+    const known = knownCircularEntries.find((entry) => entry.identity === record.recordKey)
+      ?? knownCircularEntries.find((entry) => entry.uid === record.recordKey);
+    return { record_id: known?.recordId || canonicalRecordSelector(record) || `Record_${index + 1}` };
   });
   const defaultCircularPrefix = downloadSafeName(circularRecordId(circularOutputRecords[0], 0), 'out');
   const output = grouping === 'batch'
@@ -4907,7 +4936,7 @@ const projectCanonicalRenderInput = ({
     webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
   }
   if (mode === 'circular' && drawing.inputType.value === 'gb') {
-    const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
+    const circularInputOriginalName = normalizeOriginalResourceName(filesData.circularSources?.[0]?.gb?.name);
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
   if (mode === 'linear') {
@@ -4931,7 +4960,7 @@ const projectCanonicalRenderInput = ({
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, drawing, records),
+      layout: buildLayout(state, drawing, records, recordPlan.drawnIdentities ?? []),
       comparisons: buildComparisons({
       state,
       drawing,
@@ -4980,9 +5009,6 @@ const generationResourceIdentity = (resource) => {
   // A view: the reads below test each member they use.
   const owner = /** @type {UnvalidatedFields<'arrayBuffer' | 'data' | 'encoding'>} */ (getResourcePayloadOwner(resource));
   const backing = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(owner));
-  if (backing?.descriptors) {
-    return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
-  }
   if (backing?.descriptor) return { bindings: [backing.descriptor] };
   if (typeof owner?.arrayBuffer === 'function'
     || (typeof owner?.data === 'string' && owner?.encoding)) {
@@ -5207,6 +5233,17 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
 // A resource id is Session text, so only an own key of the table names a
 // resource (OV-613).
 /**
+ * The key of the record input a record key names: `<base>` of an expanded
+ * `<base>:<k>` (`expandedRecordKey`), else the key itself.
+ * @param {string} recordKey
+ */
+const recordKeyBase = (recordKey) => {
+  const at = recordKey.lastIndexOf(EXPANDED_RECORD_KEY_SEPARATOR);
+  const base = at > 0 ? recordKey.slice(0, at) : '';
+  return base && recordKeyExpansion(recordKey, base) !== null ? base : recordKey;
+};
+
+/**
  * @param {StoredResources} resources
  * @param {unknown} resourceId A request's resource id, or one a stored Web inventory names (unvalidated).
  */
@@ -5282,10 +5319,17 @@ const applyWebFileBindings = (
     ? (id, metadata) => createSessionResourceFileView(sessionResourceTable, id, metadata)
     : resolveResourceFile;
   const restored = { ...files };
+  // A Session 51 Circular drawing's File cards; a Session 41-50 reaches Load
+  // moved to them (`circularSourcesOfModeScoped`).
+  if (Array.isArray(bindings.circularSources)) {
+    restored.circularSources = bindings.circularSources.map((card) => ({
+      uid: card.uid,
+      gb: webBindingValueAsLegacyFile(resources, card.gb, resolveBinding, bindings.schema),
+      gff: webBindingValueAsLegacyFile(resources, card.gff, resolveBinding, bindings.schema),
+      fasta: webBindingValueAsLegacyFile(resources, card.fasta, resolveBinding, bindings.schema)
+    }));
+  }
   [
-    'c_gb',
-    'c_gff',
-    'c_fasta',
     'c_depth',
     'c_conservation_blasts',
     'c_conservation_fastas',
@@ -5297,11 +5341,6 @@ const applyWebFileBindings = (
     'qualifier_priority'
   ].forEach((field) => {
     if (!Object.prototype.hasOwnProperty.call(bindings, field)) return;
-    if (field === 'c_gb' && bindings.c_gb?.kind === 'composite') {
-      const table = sessionResourceTable || adoptCurrentSessionResources(resources);
-      restored.c_gb = createCombinedSessionResourceFileView(table, bindings.c_gb.components, bindings.c_gb);
-      return;
-    }
     restored[field] = webBindingValueAsLegacyFile(
       resources,
       bindings[field],
@@ -6100,48 +6139,6 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
   };
 };
 
-/**
- * @param {Record<string, any> | null | undefined} resources
- * @param {Array<Record<string, any> | null | undefined>} records
- * @param {string} [originalName]
- * @param {{
- *   resolveResourceFile?: ResourceFileResolver | null,
- *   sessionResourceTable?: SessionResourceTable | null
- * }} [options]
- */
-const combineCircularGenbankResources = (
-  resources,
-  records,
-  originalName = '',
-  { resolveResourceFile = null, sessionResourceTable = null } = {}
-) => {
-  /** @type {string[]} */
-  const resourceIds = [];
-  const seen = new Set();
-  records.forEach((record) => {
-    const source = record?.source || {};
-    const resourceId = source.kind === 'genbank' ? String(source.resourceId || '').trim() : '';
-    if (!resourceId || seen.has(resourceId)) return;
-    seen.add(resourceId);
-    resourceIds.push(resourceId);
-  });
-  if (resourceIds.length === 0) return null;
-
-  if (!sessionResourceTable && resourceIds.length === 1) {
-    return resolveResourceFile
-      ? resolveResourceFile(resourceIds[0])
-      : resourceAsLegacyFile(resources, resourceIds[0]);
-  }
-  return createCombinedSessionResourceFileView(
-    sessionResourceTable || adoptCurrentSessionResources(resources),
-    resourceIds.map(resourceId => ({ resourceId })),
-    {
-      name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
-      type: 'text/plain'
-    }
-  );
-};
-
 /** @param {Readonly<Record<string, unknown>>} renderRequest @param {readonly unknown[]} records */
 const canonicalGrouping = (renderRequest, records) => {
   const allowed = renderRequest.mode === 'circular'
@@ -6373,9 +6370,8 @@ export const projectCanonicalSessionRequest = ({
   // particular GFF + FASTA), and initialize absent slots from the typed request.
   // A saved Web draft, including explicit null/[] inputs, always wins unchanged.
   if (initializeCliInputs && storedConfig == null && explicitBindings) {
-    const originalInputFields = renderRequest.mode === 'circular'
-      ? ['c_gb', 'c_gff', 'c_fasta']
-      : ['linearSeqs'];
+    /** @type {readonly string[]} */
+    const originalInputFields = [webBindingInputSlot(true, renderRequest.mode)];
     // A const, so that the narrowing of `explicitBindings` reaches the closure.
     const bindings = explicitBindings;
     const hasOriginalInputs = originalInputFields.some((field) => {
@@ -6401,7 +6397,7 @@ export const projectCanonicalSessionRequest = ({
     const recordsByKey = new Map();
     sourceRecords.forEach((record) => {
       const key = String(record.recordKey || '');
-      const fileKey = key.replace(/:[1-9]\d*$/, '');
+      const fileKey = recordKeyBase(key);
       recordKeysByFile.set(fileKey, [...(recordKeysByFile.get(fileKey) || []), key]);
       recordsByKey.set(key, record);
     });
@@ -6465,14 +6461,6 @@ export const projectCanonicalSessionRequest = ({
         );
       }
     : null;
-  const legacyCircularInputBinding = (Array.isArray(fileBindings) ? fileBindings : [])
-    .find((binding) => /^(?:files\.)?c_gb$/.test(String(binding?.slot || '')));
-  const circularInputOriginalName = normalizeOriginalResourceName(
-    webMetadata.circularInputOriginalName ||
-    legacyFiles?.c_gb?.name ||
-    legacyCircularInputBinding?.name ||
-    (records.length === 1 ? resources?.[records[0]?.source?.resourceId]?.name : '')
-  );
   /** @type {readonly unknown[]} */
   const savedLinearRecordMetadata = Array.isArray(webMetadata.linearRecordMetadata)
     ? webMetadata.linearRecordMetadata
@@ -6516,43 +6504,20 @@ export const projectCanonicalSessionRequest = ({
   /** @type {Record<string, any>} */
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
-    files.circularRecords = records.map((record) => {
-      const source = record.source || {};
-      const resourceFile = (/** @type {string} */ id) => resolveResourceFile
-        ? resolveResourceFile(id)
-        : resourceAsLegacyFile(resources, id);
-      const ids = recordSourceSlotIds(source);
-      return {
-        recordKey: String(record.recordKey || ''),
-        cardinality: record.cardinality || 'exactly_one',
-        sourceKind: source.kind,
-        gb: ids.gb ? resourceFile(ids.gb) : null,
-        gff: ids.gff ? resourceFile(ids.gff) : null,
-        fasta: ids.fasta ? resourceFile(ids.fasta) : null,
-        selector: cloneCanonicalJsonValue(record.selector),
-        windows: cloneCanonicalJsonValue(record.windows),
-        presentation: cloneCanonicalJsonValue(record.presentation),
-        display: cloneCanonicalJsonValue(record.display || { isCircular: null, startCoordinate: null })
-      };
+    // One File card per record input: the records of one input share its
+    // record key's base (`<base>:<k>`, or `<base>` for one record), which is
+    // the card's uid, and its files.
+    /** @type {Map<string, { uid: string, gb: unknown, gff: unknown, fasta: unknown }>} */
+    const cards = new Map();
+    records.forEach((record) => {
+      const uid = recordKeyBase(String(record.recordKey || ''));
+      if (!uid || cards.has(uid)) return;
+      const ids = recordSourceSlotIds(record.source || {});
+      const slotFile = (/** @type {InputSlot} */ slot) => (!ids[slot] ? null
+        : resolveResourceFile ? resolveResourceFile(ids[slot]) : resourceAsLegacyFile(resources, ids[slot]));
+      cards.set(uid, { uid, gb: slotFile('gb'), gff: slotFile('gff'), fasta: slotFile('fasta') });
     });
-    const source = records[0]?.source || {};
-    if (source.kind === 'genbank' && !Object.hasOwn(explicitBindings || {}, 'c_gb')) {
-      files.c_gb = combineCircularGenbankResources(
-        resources,
-        records,
-        circularInputOriginalName,
-        { resolveResourceFile, sessionResourceTable }
-      );
-    }
-    if (source.kind !== 'genbank') {
-      const ids = recordSourceSlotIds(source);
-      for (const slot of /** @type {const} */ (['gff', 'fasta'])) {
-        if (!ids[slot]) continue;
-        files[CIRCULAR_INPUT_FIELDS[slot]] = resolveResourceFile
-          ? resolveResourceFile(ids[slot])
-          : resourceAsLegacyFile(resources, ids[slot]);
-      }
-    }
+    files.circularSources = [...cards.values()];
   } else {
     files.linearSeqs = records.map((record, index) => {
       const source = record.source || {};
@@ -7239,7 +7204,7 @@ export const projectCanonicalSessionRequest = ({
     linear_track_slots: projectedLinearTrackSlots,
     multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
       const split = String(token).lastIndexOf('@');
-      return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
+      return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
     })
   };
   const presentationOwnsLinearRows = records.some(
@@ -7297,7 +7262,7 @@ export const projectCanonicalSessionRequest = ({
   // saved Web draft, initialize the input selector from the original bindings.
   if (storedConfig == null && explicitBindings) {
     const source = renderRequest.mode === 'circular'
-      ? { gb: files.c_gb, gff: files.c_gff, fasta: files.c_fasta }
+      ? (Array.isArray(files.circularSources) ? files.circularSources[0] : undefined)
       : files.linearSeqs[0];
     // The first input type whose files are all bound (GenBank, then GFF3 + FASTA, then FASTA).
     const boundSlots = source ?? {};
@@ -7332,7 +7297,8 @@ export const projectCanonicalSessionRequest = ({
       linearRecordLayout: linearLayout,
       annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
-        sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',
+        // A Circular record's card is the base of its key (a committed key is its record's identity).
+        sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : recordKeyBase(String(record.recordKey)),
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
         topologyOverride: record.display?.isCircular ?? null,

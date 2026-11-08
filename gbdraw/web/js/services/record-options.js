@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { LinearSeqWindow } from './drawing/inputs.js' */
-import { circularRecordRequestKeys, circularRecordsToDraw } from './record-draw-selection.js';
+import { circularRecordsToDraw } from './record-draw-selection.js';
+/** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @param {unknown} value */
@@ -72,12 +73,23 @@ export const buildDisambiguatedRecordEntries = (records) => {
  * @param {readonly T[] | null | undefined} records
  * @param {unknown} requestedValue
  */
-export const resolveDisambiguatedRecordSelection = (records, requestedValue) => {
-  const entries = buildDisambiguatedRecordEntries(records);
+export const resolveDisambiguatedRecordSelection = (records, requestedValue) => (
+  selectAmongRecordEntries(buildDisambiguatedRecordEntries(records), requestedValue)
+);
+
+/**
+ * The entry a requested value names among named entries: by `value`, then
+ * `selector`, then `recordId`; a value two entries share is ambiguous.
+ * @template {{ value: string, selector: string, recordId: string }} E
+ * @param {readonly E[]} entries
+ * @param {unknown} requestedValue
+ * @returns {{ status: 'unspecified' | 'resolved' | 'ambiguous' | 'missing', requested: string, entries: readonly E[], record: E | null }}
+ */
+const selectAmongRecordEntries = (entries, requestedValue) => {
   const requested = cleanText(requestedValue);
   if (!requested) return { status: 'unspecified', requested, entries, record: null };
 
-  for (const field of ['value', 'selector', 'recordId']) {
+  for (const field of /** @type {const} */ (['value', 'selector', 'recordId'])) {
     const matches = entries.filter((record) => record[field] === requested);
     if (matches.length === 1) {
       return { status: 'resolved', requested, entries, record: matches[0] };
@@ -89,6 +101,40 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
   return { status: 'missing', requested, entries, record: null };
 };
 
+/**
+ * The Circular records of a drawing (`circularRecordList`, in drawing order),
+ * named as the Record select and the request name them: each is disambiguated
+ * within its own card's file (a record ID twice in one file, or an unsafe one,
+ * is named by its `#k`), `fileValue` is that name (the selector of the CLI's
+ * form a request record of its file carries), and `value` is its identity,
+ * which the Record select stores.
+ * @template {Partial<CircularListRecord> & { recordId?: unknown, recordLength?: unknown }} T
+ * @param {readonly T[] | null | undefined} records
+ */
+export const circularRecordEntries = (records) => {
+  /** @type {Map<string, T[]>} */
+  const byCard = new Map();
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const uid = cleanText(record?.uid);
+    byCard.set(uid, [...(byCard.get(uid) || []), record]);
+  });
+  return [...byCard.values()].flatMap((list) => buildDisambiguatedRecordEntries(list.map((record, index) => ({
+    ...record,
+    sourceIndex: Number.isInteger(record?.k) ? Number(record.k) - 1 : index,
+    recordId: record?.record_id ?? record?.recordId,
+    recordLength: record?.record_length ?? record?.recordLength
+  }))).map((entry) => ({ ...entry, fileValue: entry.value, value: cleanText(entry.identity) || entry.value })));
+};
+
+/**
+ * The Circular record a Record select value names (`circularRecordEntries`):
+ * its identity, or a selector or record ID that names one record.
+ * @template {{ value: string, selector: string, recordId: string }} E
+ * @param {readonly E[]} entries `circularRecordEntries`
+ * @param {unknown} requestedValue
+ */
+export const circularRecordSelection = (entries, requestedValue) => selectAmongRecordEntries(entries, requestedValue);
+
 // The source records one Circular request draws: the selected record of a
 // single presentation, otherwise every ON record (record selection; an
 // explicit single choice draws its record ON or OFF). services/session-request.js
@@ -98,11 +144,11 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
 // `omittedRecords` are the offered records that are OFF.
 /**
  * @typedef {Object} CircularRequestRecordSetOptions
- * @property {readonly (RecordEntryInput & { record_id?: unknown, record_length?: unknown })[] | null} [records] Discovered records (`record_id` or `recordId`, `record_length`, `selector`).
+ * @property {readonly (Partial<CircularListRecord> & { recordId?: unknown, recordLength?: unknown })[] | null} [records] Discovered records (`circularRecordList`).
  * @property {string} [selector]
  * @property {boolean} [multiRecordCanvas]
  * @property {string} [groupingIntent]
- * @property {readonly string[]} [recordsOff] The drawing's OFF records (`#N`).
+ * @property {readonly string[]} [recordsOff] The drawing's OFF records (their identities).
  */
 
 /** @param {CircularRequestRecordSetOptions} [options] */
@@ -113,14 +159,9 @@ export const resolveCircularRequestRecordSet = ({
   groupingIntent = '',
   recordsOff = []
 } = {}) => {
-  const recordSelectors = buildDisambiguatedRecordEntries(
-    (Array.isArray(records) ? records : []).map((record) => ({
-      ...record,
-      recordId: record?.record_id ?? record?.recordId
-    }))
-  );
+  const recordSelectors = circularRecordEntries(records);
   const requestedSelector = String(selector || '').trim();
-  const selection = resolveDisambiguatedRecordSelection(recordSelectors, requestedSelector);
+  const selection = circularRecordSelection(recordSelectors, requestedSelector);
   const singlePresentation = !multiRecordCanvas && groupingIntent !== 'batch';
   // 'AMBIGUOUS' or 'NO_MATCH' (the RECORD_SELECTION reasons) when a single
   // presentation names a record the input does not resolve to exactly one.
@@ -414,14 +455,14 @@ export const circularRequestDiagrams = (records, drawing) => {
   const single = isSingleCircularJourney(recordSet);
   const drawn = recordSet.records.length > 0 ? recordSet.records : recordSet.recordSelectors;
   // A discovered record keeps its fields through the record set.
-  /** @param {{ record_length?: unknown, sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record */
+  /** @param {{ record_length?: unknown, identity?: unknown }} record */
   const drawnLength = (record) => {
     const crop = circularCropRegion(single, drawing.form, record);
     return crop !== null ? crop.bases ?? 0 : Number(record.record_length);
   };
   return (drawing.form.multi_record_canvas ? [drawn] : drawn.map((record) => [record]))
     .map((diagram) => ({
-      recordKeys: diagram.flatMap(circularRecordRequestKeys),
+      recordKeys: diagram.map((record) => cleanText(record.identity)),
       lengths: diagram.map(drawnLength).filter((length) => length > 0)
     }))
     .filter((diagram) => diagram.lengths.length > 0);

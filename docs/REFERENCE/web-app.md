@@ -686,6 +686,21 @@ readability. Use preview zoom and pan to inspect individual features.
 
 ## Circular source records and one-record settings
 
+The Circular input is a list of File cards, one per file (or per GFF3 and FASTA
+pair), in drawing order, as the command line takes `--gbk a.gb b.gb`. With no
+file yet, **Input Genomes** shows the uploader of the chosen input type; the
+first file you choose there becomes **File 1**. **Add file** adds a card with
+the next file, so a genome whose chromosome and plasmids are in separate files
+is drawn from those files as they are. A card folds to one line: **File N**,
+the file name (with a check once it is read, or a warning when it cannot be
+read), **Move File N up**, **Move File N down**, and **Remove File N**. Open a
+card to see its uploader, **Replace** its file, and read what it holds, such
+as `1 record · 92,721 bp`. **Remove File N** asks first, naming the file and
+its record count; **Remove file** removes the card and its records from the
+drawing, and **Cancel** changes nothing. Each of these is one step that Undo
+reverses. A Session saved by `gbdraw circular` with several `--gbk` files
+loads as one card per file.
+
 The browser inspects a Circular source as soon as you choose a **GenBank/DDBJ
 File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
@@ -697,7 +712,9 @@ order, as on the command line. A FASTA sequence with no GFF3 row is not offered.
 To draw it, add a `region` row to the GFF3.
 
 If a source cannot be inspected, **Source records** reports the failure and
-offers **Retry source inspection**. Replace or remove the file to continue. The
+offers **Retry source inspection**, and that file's card shows its warning;
+the records of the other cards are still listed. Replace or remove the file to
+continue. The
 current Result stays in the Preview until the next successful Generate.
 
 **Record** chooses the records drawn by the next Circular Generate:
@@ -709,7 +726,10 @@ current Result stays in the Preview until the next successful Generate.
 | Several records | One listed record | One diagram of that record |
 
 **Choose records…** beside **Record** opens the same record list, and `M of N
-records drawn` shows the count. **Multi-Record Canvas** and **All records
+records drawn` shows the count. With several File cards the list groups its
+records under each file's name, and **Record** names each record after its
+file (`a.gb: NC_000913.3`). Each card of **Topology and display start** names
+its file beside the record length. **Multi-Record Canvas** and **All records
 (separate diagrams)** draw only the records that are on; choosing one record in
 **Record** draws it whether it is on or off. Turning off the last record that is
 on asks **Remove the whole file?**: **Remove File** removes the GenBank file or
@@ -748,19 +768,12 @@ disclosure, whose summary names the mark and label, holds the mark, label, lane,
 
 ## Circular multi-record canvas
 
-Turn on **Multi-Record Canvas** to place every selected record from one
-multi-record Circular input on a shared canvas. The browser's Circular uploader
-accepts one input container; use the command line or Python API when the records
-must remain in separate source files. Use Circular layout only for complete
+Turn on **Multi-Record Canvas** to place every selected record of the Circular
+input on a shared canvas: every record of every File card, in card order and
+then in file order. Add each file of a genome split over several files, such as
+a chromosome and its plasmids, as its own File card; the files need no joining.
+**Record Order** lists each record once. Use Circular layout only for complete
 records whose biological topology is circular.
-
-To combine separate files for browser upload, concatenate the complete GenBank
-flat files in the intended record order without editing their contents. Every record must keep its terminating `//`. If an expected accession is absent
-from **Record Order**, stop and repair the container before generating.
-
-```bash
-cat record-a.gb record-b.gb > combined.gb
-```
 
 **Record Size Mode** accepts **Auto (Default)**, **Linear**, and **Equal**.
 **Equal** gives every record the same radius, **Linear** scales radius with

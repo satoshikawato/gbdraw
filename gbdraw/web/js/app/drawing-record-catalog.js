@@ -8,7 +8,7 @@
 // drawing's annotations to the catalog (`rebindAnnotationRecords`, R10) is a
 // factory of its own, which the root creates right after the catalog.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
-import { circularInputSlots, inputSourceFiles } from '../services/input-types.js';
+import { circularSourceInputs, inputSourceFiles } from '../services/input-types.js';
 import { circularDrawingRecordSet } from '../services/record-options.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { annotationSourceKey, buildAnnotationRecordCatalog } from './annotations/record-catalog.js';
@@ -49,10 +49,12 @@ export const createDrawingRecordCatalog = ({
   /** @param {DrawingState} drawing */
   const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(drawing);
   /** @param {DrawingState} drawing */
+  // One source of every card's records: its key names each card and the files it reads.
   const circularAnnotationSourceKey = (drawing) => annotationSourceKey({
     scope: 'circular',
-    inputType: drawing.inputType.value,
-    ...inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))
+    uid: circularSourceInputs(drawing.inputType.value, drawing.circularSources)
+      .map(({ uid, primaryFile, pairedFile }) => `${uid}/${primaryFile?.fileId ?? ''}/${pairedFile?.fileId ?? ''}`).join('|'),
+    inputType: drawing.inputType.value
   });
   /**
    * A Linear record card as the annotation record catalog reads it.

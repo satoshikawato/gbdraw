@@ -32,7 +32,7 @@ const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
-const { bindDrawingInputFile, createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { bindCircularSourceFile, createCircularSource, createLinearSeq, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   installShownDrawing, installPreparedDrawing, makeRegionDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -133,7 +133,8 @@ const projectOf = async (drawing) => projectDraftRequest(state, drawing, await f
 const circularSource = (records, form = {}) => {
   const drawing = installShownDrawing('circular');
   drawing.inputType.value = 'gb';
-  bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, 'c_gb', genbankFile('c.gb', records));
+  replaceCircularSources(drawing.slices.inputs, [createCircularSource({ uid: 'record-1' })]);
+  bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, 'record-1', 'gb', genbankFile('c.gb', records));
   drawing.circularRecordList.value = [];
   Object.assign(drawing.form, { labels_mode: 'none', circular_record_selector: '', multi_record_canvas: false, ...form });
   return drawing;
@@ -218,7 +219,7 @@ test('(b) a whole Circular record keeps Circular and binds the source drawing\'s
   assert.equal(installed.made.mode, 'circular');
   assert.deepEqual(installed.prepared.repairs, []);
   assert.deepEqual(installed.derived.returnedToAuto, []);
-  assert.equal(installed.made.files.c_gb.fileId, source.files.c_gb.fileId, 'the source drawing\'s Web file');
+  assert.equal(installed.made.circularSources[0].gb.fileId, source.circularSources[0].gb.fileId, 'the source drawing\'s Web file');
   await assertRoundTrip(installed);
 });
 
@@ -424,8 +425,8 @@ test('(a) a region of one Circular record is a Linear drawing that carries the l
   assert.deepEqual(installed.prepared.repairs, []);
   // The color table is a table the request writes, which Load holds as its card's file.
   assert.deepEqual(registered, ['specific-colors.tsv'], 'no new GenBank file');
-  assert.equal(installed.made.files.c_gb ?? null, null);
-  assert.deepEqual(installed.made.linearSeqs.map((row) => row.gb?.fileId), [source.files.c_gb.fileId],
+  assert.deepEqual(installed.made.circularSources, []);
+  assert.deepEqual(installed.made.linearSeqs.map((row) => row.gb?.fileId), [source.circularSources[0].gb.fileId],
     'the source drawing\'s Web file');
   assertLookCarried(installed.made);
 });
@@ -438,8 +439,8 @@ test('(f) the same region of a drawing loaded from a Session, without a Result',
   assert.deepEqual(prepared.repairs, []);
   const loaded = createDrawingState('loaded', 'circular');
   installPreparedDrawing(loaded, prepared);
-  const loadedFile = loaded.files.c_gb;
-  assert.notEqual(loadedFile.fileId, modeDrawing(state, 'circular').files.c_gb.fileId, 'Load made its own Web file');
+  const loadedFile = loaded.circularSources[0].gb;
+  assert.notEqual(loadedFile.fileId, modeDrawing(state, 'circular').circularSources[0].gb.fileId, 'Load made its own Web file');
   const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(loaded, LOOK_REGION));
   assert.equal(installed.made.mode, 'linear');
   assert.deepEqual(installed.prepared.repairs, []);

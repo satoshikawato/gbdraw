@@ -41,7 +41,7 @@ import {
  * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46, SessionChecked51,
  *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
  */
-/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { RawSessionResourceDescriptor, WebBindingInputSlot } from './session-resource-backing.js' */
 /** @import { AlignmentResetRequest } from './session-active-config-contract.js' */
 /** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
 /** @import { ContractShape } from '../utils/contract-shape.js' */
@@ -471,7 +471,7 @@ const readWebOnlyFields = (document, repairs) => {
  * a schema no writer wrote is dropped whole.
  * @param {unknown} webFiles The `webFiles` that holds the inventory.
  * @param {unknown} resources The Session's resources, as read.
- * @param {'c_gb' | 'linearSeqs'} inputSlot The input slot schema 2 holds (`webBindingInputSlot`).
+ * @param {WebBindingInputSlot} inputSlot The input slot schema 2 holds (`webBindingInputSlot`).
  * @param {string} at Where `webFiles` is in the file.
  * @param {LoadRepair[]} repairs Collects the rows.
  * @returns {unknown} `webFiles` itself when nothing is dropped.
@@ -909,7 +909,9 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
-  || (files.linearSeqs || []).some((/** @type {Record<string, unknown>} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
+  // A Linear row's and a Circular File card's (Session 51) files.
+  || [...(files.linearSeqs || []), ...(files.circularSources || [])]
+    .some((/** @type {Record<string, unknown>} */ row) => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
 /**

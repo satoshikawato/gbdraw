@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
+from gbdraw.api.record_planning import CLI_RECORD_KEY_PREFIX
 from gbdraw.cli_utils.common import add_dpi_arg, add_font_file_args, png_dpi, register_font_files, setup_logging
 from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.core.fonts import custom_font_families
@@ -40,7 +41,6 @@ from gbdraw.session_io import (
     SessionFileBinding,
     _write_validated_session_json,
     build_session_json,
-    get_session_slot,
     safe_embedded_filename,
     serialize_file_entry,
 )
@@ -1016,8 +1016,6 @@ def collect_embedded_files_from_cli_args(
 
     files = _empty_files_payload()
     bindings: list[SessionFileBinding] = []
-    circular_counts: dict[str, int] = {}
-    circular_genbank_bindings: list[int] = []
     linear_depth_track_index = 0
     circular_depth_index = 0
 
@@ -1060,26 +1058,16 @@ def collect_embedded_files_from_cli_args(
                 arg_index = index + 1 + offset
                 if not _is_embeddable_path(value):
                     continue
-                if token == "--gbk":
-                    ordinal = circular_counts.get("gbk", 0)
-                    slot = "files.c_gb" if ordinal == 0 else _append_cli_input(files, value, depth=False)
-                    circular_counts["gbk"] = ordinal + 1
-                elif token == "--gff":
-                    ordinal = circular_counts.get("gff", 0)
-                    slot = "files.c_gff" if ordinal == 0 else _append_cli_input(files, value, depth=False)
-                    circular_counts["gff"] = ordinal + 1
-                elif token == "--fasta":
-                    ordinal = circular_counts.get("fasta", 0)
-                    slot = "files.c_fasta" if ordinal == 0 else _append_cli_input(files, value, depth=False)
-                    circular_counts["fasta"] = ordinal + 1
+                if token in _CIRCULAR_SOURCE_FILE_KEYS:
+                    # One File card per input, as the request has one record
+                    # input per --gbk value or per --gff/--fasta pair.
+                    slot = f"files.circularSources[{offset}].{_CIRCULAR_SOURCE_FILE_KEYS[token]}"
                 elif token == "--conservation_blast":
                     slot = f"files.c_conservation_blasts[{len(files['c_conservation_blasts'])}]"
                 else:
                     slot = f"files.c_depth[{circular_depth_index}]"
                     circular_depth_index += 1
                 _set_file_slot(files, slot, value, depth=token == "--depth_track")
-                if token == "--gbk":
-                    circular_genbank_bindings.append(len(bindings))
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
@@ -1131,20 +1119,6 @@ def collect_embedded_files_from_cli_args(
             continue
         index += 1
 
-    if len(circular_genbank_bindings) > 1:
-        components = [
-            get_session_slot({"files": files}, bindings[index].slot)
-            for index in circular_genbank_bindings
-        ]
-        files["c_gb"] = {
-            "kind": "composite",
-            "components": components,
-            **{key: components[0][key] for key in ("name", "type", "lastModified")},
-        }
-        for component_index, binding_index in enumerate(circular_genbank_bindings):
-            bindings[binding_index] = replace(
-                bindings[binding_index], slot=f"files.c_gb.components[{component_index}]"
-            )
     return files, tuple(bindings)
 
 
@@ -1202,11 +1176,13 @@ _COMMON_SINGLE_FILE_OPTIONS = {
 }
 
 
+# The file of a Circular File card that each input option fills.
+_CIRCULAR_SOURCE_FILE_KEYS = {"--gbk": "gb", "--gff": "gff", "--fasta": "fasta"}
+
+
 def _empty_files_payload() -> dict[str, Any]:
     return {
-        "c_gb": None,
-        "c_gff": None,
-        "c_fasta": None,
+        "circularSources": [],
         "c_depth": None,
         "c_conservation_blasts": [],
         "c_conservation_fastas": [],
@@ -1270,14 +1246,8 @@ def _append_cli_input(files: dict[str, Any], path: object, *, depth: bool) -> st
 
 def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: bool) -> None:
     entry = serialize_file_entry(str(path), depth=depth)
-    if slot == "files.c_gb":
-        files["c_gb"] = entry
-        return
-    if slot == "files.c_gff":
-        files["c_gff"] = entry
-        return
-    if slot == "files.c_fasta":
-        files["c_fasta"] = entry
+    if slot.startswith("files.circularSources["):
+        _set_circular_source_slot(files, slot, entry)
         return
     if slot == "files.c_depth":
         files["c_depth"] = entry
@@ -1342,6 +1312,24 @@ def _set_linear_seq_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]
         seq["depth"][depth_index] = entry
     else:
         raise ValidationError(f"Unsupported linear sequence file slot: {slot}")
+
+
+def _set_circular_source_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]) -> None:
+    """Fill ``files.circularSources[<i>].<gb|gff|fasta>``; card ``i`` is the
+    request's record input ``i``, so its uid is that input's CLI record key."""
+
+    index_text, suffix = slot[len("files.circularSources["):].split("]", 1)
+    index = int(index_text)
+    key = suffix.removeprefix(".")
+    if key not in ("gb", "gff", "fasta"):
+        raise ValidationError(
+            f"Unsupported session file slot: {slot}",
+            diagnostic={"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"},
+        )
+    cards = files["circularSources"]
+    while len(cards) <= index:
+        cards.append({"uid": f"{CLI_RECORD_KEY_PREFIX}{len(cards) + 1}", "gb": None, "gff": None, "fasta": None})
+    cards[index][key] = entry
 
 
 def _ensure_linear_seq(files: dict[str, Any], index: int) -> None:

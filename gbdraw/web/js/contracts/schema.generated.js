@@ -312,9 +312,14 @@ export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
   }),
   bindingCardSlots: Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']),
   bindingModeSlots: Object.freeze({
-    circular: Object.freeze(['c_conservation_blasts', 'c_conservation_blasts_source', 'c_conservation_fastas', 'c_conservation_sequence_sources', 'c_depth', 'c_fasta', 'c_gb', 'c_gff']),
+    circular: Object.freeze(['c_conservation_blasts', 'c_conservation_blasts_source', 'c_conservation_fastas', 'c_conservation_sequence_sources', 'c_depth', 'circularSources']),
     linear: Object.freeze(['linearComparisons', 'linearSeqs'])
   }),
+  bindingInputSlots: Object.freeze({
+    circular: 'circularSources',
+    linear: 'linearSeqs'
+  }),
+  modeScopedCircularInputSlots: Object.freeze(['c_fasta', 'c_gb', 'c_gff']),
   resourceReferenceFields: Object.freeze(['fastaResourceId', 'gffResourceId', 'resourceId']),
   resourceIdListFields: Object.freeze(['conservationLosatFastaSources', 'conservationSequenceSources']),
   drawingResourceFields: Object.freeze(['renderRequest', 'webFiles', 'results'])

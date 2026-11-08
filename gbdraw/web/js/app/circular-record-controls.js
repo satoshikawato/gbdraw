@@ -8,13 +8,21 @@
 // display's source change, the record discovery, the rebind of annotations,
 // the settings pane's reveal, the panels' refs, and the record form defaults
 // as ports.
-import { bindDrawingInputFile } from '../services/drawing/inputs.js';
+import {
+  addCircularSource, bindCircularSourceFile, bindDrawingInputFileTree, createCircularSource, moveCircularSource,
+  removeCircularSource
+} from '../services/drawing/inputs.js';
+import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
+import { inputSourceFiles } from '../services/input-types.js';
+import { cardHoldsRecordKey, resliceRecordRows } from '../services/record-draw-selection.js';
+import { msg } from '../utils/i18n.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
+/** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { RevealSetting } from './settings-pane.js' */
 
 const { computed, nextTick, watch } = window.Vue;
@@ -72,23 +80,84 @@ export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords
  *   What the drawing's next record discovery does with a Circular upload.
  * @property {(drawing: DrawingState) => unknown} discoverDrawingRecords Reads the records of the drawing's inputs.
  * @property {ShownAction} shownAction
+ * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable History's undoable step.
  */
 
 /**
- * Registers nothing.
+ * The Depth matrix of the records of `order` (card uids), each row its
+ * record's (`resliceRecordRows`); a series list or no Depth stays.
+ * @param {WebState['inputFiles']} store @param {DrawingState} drawing @param {readonly string[]} order
+ */
+const resliceDepthMatrix = (store, drawing, order) => {
+  const matrix = drawing.files.c_depth;
+  if (!isRecordMajorDepthFileMatrix(matrix)) return;
+  /** @type {CircularListRecord[]} */
+  const listed = drawing.circularRecordList.value;
+  const previous = listed.map((record) => record.identity);
+  const next = order.flatMap((uid) => listed.filter((record) => record.uid === uid).map((record) => record.identity));
+  // The guard read every row as a list of slots.
+  const rows = resliceRecordRows(/** @type {(InputFileRef | null)[][]} */ (matrix), previous, next, () => /** @type {(InputFileRef | null)[]} */ ([]));
+  bindDrawingInputFileTree(store, drawing.slices.inputs, 'c_depth', rows);
+};
+
+/**
+ * The moves of a Circular drawing's source cards: one place up or down, one
+ * History step, the Depth matrix following its records.
+ * @param {Pick<CircularSourceEditsPorts, 'state' | 'discoverDrawingRecords' | 'shownAction' | 'runUndoable'>} ports
+ */
+const createCircularSourceMoves = ({ state, discoverDrawingRecords, shownAction, runUndoable }) => {
+  /** @param {DrawingState} drawing @param {number} index @param {number} direction */
+  const movedIndex = (drawing, index, direction) => {
+    const target = index + Math.sign(direction);
+    return Number.isInteger(index) && index >= 0 && index < drawing.circularSources.length
+      && target >= 0 && target < drawing.circularSources.length ? target : null;
+  };
+  /** @param {number} index @param {number} direction */
+  const canMoveCircularSource = (index, direction) => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'circular' && movedIndex(drawing, index, direction) !== null;
+  };
+  /**
+   * Moves a source card one place up (`direction` -1) or down (1), one History step.
+   * @param {number} index @param {number} direction
+   */
+  const moveCircularSourceCard = (index, direction) => shownAction('circular', (drawing) => {
+    const target = movedIndex(drawing, index, direction);
+    if (target === null) return undefined;
+    const { uid } = drawing.circularSources[index];
+    return runUndoable(msg('Move File'), () => {
+      const order = drawing.circularSources.map((source) => source.uid);
+      order.splice(target, 0, ...order.splice(index, 1));
+      resliceDepthMatrix(state.inputFiles, drawing, order);
+      moveCircularSource(drawing.slices.inputs, uid, target);
+      void discoverDrawingRecords(drawing);
+    });
+  });
+  return { canMoveCircularSource, moveCircularSourceCard };
+};
+
+
+/**
+ * The edits of a Circular drawing's source cards (circular-multi-file D-01):
+ * add cards with their files, replace or remove one file of a card, remove a
+ * card, and move a card, each one History step (R11), as the Linear File edits
+ * (app/linear-source-edits.js). A card's records keep their identities
+ * (`<uid>:<k>`) through every edit of the other cards, so their rows, OFF
+ * state, Record select and Record Order stay; the edits retire only what names
+ * the records of the card they replace or remove. A record-major Depth matrix
+ * follows its records by identity (`resliceRecordRows`). Registers nothing.
  * @param {CircularSourceEditsPorts} ports
  */
 export const createCircularSourceEdits = ({
-  state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction
+  state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction,
+  runUndoable
 }) => {
   // CI-03: the per-record presentation a source file carries in each mode.
   // Replacing or removing the file resets it in the replacement's History step.
-  // The OFF records name records of the old file too (record selection).
   /** @param {DrawingState} drawing */
-  const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
+  const retireCircularRecordSelector = ({ form, adv }) => {
     form.circular_record_selector = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_selector;
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
-    if (recordsOff.length) recordsOff.splice(0);
   };
   // The whole record presentation: the record form fields return to their
   // defaults (the one list a style copy leaves out too). Each field is written
@@ -112,47 +181,116 @@ export const createCircularSourceEdits = ({
   /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
   const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
   /**
-   * A Circular drawing's source file (upload, replace, Remove), with the
-   * drawing's reactions to its new source: the shown drawing's controls and
-   * the replacement for every drawing that uses a file write through it.
-   * @param {DrawingState} drawing
-   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
-   * @param {InputFileCandidate | InputFileRef} value
+   * The card's records leave the drawing's references: its OFF records, and the
+   * Record select (with the presentation when `retirePresentation`) when it
+   * names one of them.
+   * @param {DrawingState} drawing @param {string} uid @param {boolean} retirePresentation
    */
-  const replaceCircularSource = (drawing, field, value) => {
-    const nextValue = value ?? null;
-    const previous = drawing.files[field];
-    const nextRef = state.inputFiles.registerFile(nextValue);
-    if (previous === nextRef) return;
-    const previousRecordCount = drawing.circularRecordList.value.length;
-    changeRecordSources(drawing, () => { bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, field, nextValue); });
-    if (nextRef) pendingDiscoveryOf(drawing).circularUpload = nextRef;
-    void discoverDrawingRecords(drawing);
-    // An upload into an empty slot starts reading another input (after an
-    // Input switch), whose records the OFF list does not name.
-    if (!previous) {
-      if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
-      return;
-    }
-    if (sourceReplacementRetiresPresentation({
-      removed: !nextValue, previousRecordCount
-    })) retireCircularRecordPresentation(drawing);
+  const retireCardRecords = (drawing, uid, retirePresentation) => {
+    const kept = drawing.recordsOff.filter((key) => !cardHoldsRecordKey(uid, key));
+    if (kept.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, drawing.recordsOff.length, ...kept);
+    if (!cardHoldsRecordKey(uid, String(drawing.form.circular_record_selector || '').trim())) return;
+    if (retirePresentation) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
   };
+  /** @param {DrawingState} drawing @param {InputFileRef | null} ref */
+  const readUpload = (drawing, ref) => {
+    if (ref) pendingDiscoveryOf(drawing).circularUpload = ref;
+    void discoverDrawingRecords(drawing);
+  };
   /**
-   * The Circular source file controls of the shown drawing.
-   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * One file of a Circular source card (upload, replace, Remove), found by the
+   * card's uid, with the drawing's reactions to its new source: the shown
+   * drawing's card and the replacement for every drawing that uses a file
+   * write through it (`INPUT_REPLACEMENT_WRITERS`). A card left with no file
+   * its input type reads is removed.
+   * @param {DrawingState} drawing
+   * @param {string} uid
+   * @param {'gb' | 'gff' | 'fasta'} field
+   * @param {InputFileCandidate | InputFileRef | null} value
+   */
+  const replaceCircularSourceFile = (drawing, uid, field, value) => {
+    const card = drawing.circularSources.find((source) => source.uid === uid);
+    if (!card) return;
+    const previous = card[field];
+    const nextRef = state.inputFiles.registerFile(value ?? null);
+    if (previous === nextRef) return;
+    const keepCard = Boolean(nextRef) || inputSourceFiles(drawing.inputType.value, { ...card, [field]: null }).holdsFile;
+    const previousRecordCount = drawing.circularRecordList.value.filter((/** @type {CircularListRecord} */ record) => record.uid === uid).length;
+    changeRecordSources(drawing, () => {
+      if (keepCard) bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, uid, field, nextRef);
+      else {
+        resliceDepthMatrix(state.inputFiles, drawing, drawing.circularSources.map((source) => source.uid).filter((key) => key !== uid));
+        removeCircularSource(drawing.slices.inputs, uid);
+      }
+    });
+    readUpload(drawing, nextRef);
+    // An upload into an empty slot starts reading another input (after an
+    // Input switch), whose records the OFF list does not name.
+    retireCardRecords(drawing, uid, !previous ? false : sourceReplacementRetiresPresentation({
+      removed: !nextRef, previousRecordCount
+    }));
+  };
+  /**
+   * New source cards at the end of the drawing's list, one per file, each with
+   * its file in `field`: one History step for every file of one pick.
+   * @param {'gb' | 'gff' | 'fasta'} field
+   * @param {readonly (InputFileCandidate | InputFileRef)[]} files
+   */
+  const addCircularSourceFiles = (field, files) => shownAction('circular', (drawing) => (files.length === 0 ? undefined
+    : runUndoable(msg('Add File'), () => {
+      /** @type {InputFileRef | null} */
+      let first = null;
+      changeRecordSources(drawing, () => files.forEach((file) => {
+        const card = createCircularSource();
+        addCircularSource(drawing.slices.inputs, card);
+        const ref = bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, card.uid, field, file);
+        first ??= ref;
+      }));
+      readUpload(drawing, first);
+    })));
+  /**
+   * Removes a source card and every reference to its records, inside the
+   * caller's History step (the record list's Remove File dialog).
+   * @param {DrawingState} drawing @param {string} uid
+   * @returns {boolean} whether the drawing held the card
+   */
+  const removeCircularSourceOf = (drawing, uid) => {
+    if (!drawing.circularSources.some((source) => source.uid === uid)) return false;
+    changeRecordSources(drawing, () => {
+      resliceDepthMatrix(state.inputFiles, drawing, drawing.circularSources.map((source) => source.uid).filter((key) => key !== uid));
+      removeCircularSource(drawing.slices.inputs, uid);
+    });
+    retireCardRecords(drawing, uid, true);
+    void discoverDrawingRecords(drawing);
+    return true;
+  };
+  /**
+   * Removes a source card of the shown drawing, one History step.
+   * @param {string} uid
+   */
+  const removeCircularSourceCard = (uid) => shownAction('circular', (drawing) => (
+    drawing.circularSources.some((source) => source.uid === uid)
+      ? runUndoable(msg('Remove File'), () => removeCircularSourceOf(drawing, uid)) : undefined));
+  /**
+   * The file controls of one card of the shown drawing.
+   * @param {string} uid
+   * @param {'gb' | 'gff' | 'fasta'} field
    * @param {File | null} value
    */
-  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => replaceCircularSource(drawing, field, value));
-  return { sourceReplacementRetiresPresentation, replaceCircularSource, setCircularSourceFile };
+  const setCircularSourceFile = (uid, field, value) => shownAction('circular', (drawing) => replaceCircularSourceFile(drawing, uid, field, value));
+  return {
+    sourceReplacementRetiresPresentation, replaceCircularSourceFile, setCircularSourceFile, addCircularSourceFiles,
+    removeCircularSourceOf, removeCircularSourceCard,
+    ...createCircularSourceMoves({ state, discoverDrawingRecords, shownAction, runUndoable })
+  };
 };
 
 /**
  * @typedef {object} CircularRecordDisplayPorts
  * @property {WebState} state
  * @property {{ readonly value: boolean }} semanticMutationAvailable No session operation holds the inputs.
- * @property {{ readonly value: { status: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null } }} circularRecordDiscoveryState
+ * @property {{ readonly value: { status: string, inputs: readonly { uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }[] } }} circularRecordDiscoveryState
  *   The shown drawing's Circular record discovery.
  * @property {{ readonly value: boolean }} circularSingleRecordPresentationEnabled
  *   Whether the shown Circular drawing presents one record.
@@ -226,8 +364,10 @@ export const createCircularRecordDisplay = ({
     }
     return { status: 'ok' };
   };
-  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
-    circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
+  // The shown drawing's cards and their files, as one value a watch compares.
+  const inputKey = () => circularRecordDiscoveryState.value.inputs
+    .map(({ uid, primaryFile, pairedFile }) => `${uid}/${primaryFile?.fileId ?? ''}/${pairedFile?.fileId ?? ''}`).join('|');
+  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value, inputKey(),
     state.activeDrawing().form.circular_record_selector], async (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
     if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
     const origin = document.activeElement;
@@ -237,9 +377,7 @@ export const createCircularRecordDisplay = ({
     const top = anchored ? origin.getBoundingClientRect().top : null;
     const scrollTop = scrollOwner?.scrollTop;
     await nextTick();
-    if (!circularSingleRecordPresentationEnabled.value
-      || circularRecordDiscoveryState.value.primaryFile !== current[2]
-      || circularRecordDiscoveryState.value.pairedFile !== current[3]) return;
+    if (!circularSingleRecordPresentationEnabled.value || inputKey() !== current[2]) return;
     if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
     await afterPaint();
     if (scrollOwner && document.activeElement === origin) {

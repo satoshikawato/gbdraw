@@ -105,7 +105,7 @@ def main():
               const slow=new File([text],'slow-old.gb');
               const pending=new Promise(resolve=>window.__s01ReleaseOld=()=>resolve(new TextEncoder().encode(text).buffer));
               slow.arrayBuffer=()=>pending;
-              state.files.c_gb=slow;
+              await window.__GBDRAW_APP__.addCircularSourceFiles('gb',[slow]);
             }""",
                 source.decode(),
             )
@@ -113,7 +113,8 @@ def main():
             page.evaluate(
                 """async text => {
               const {state}=await import('./js/state.js');
-              state.files.c_gb=new File([text],'fast-new.gb');
+              const {uid}=state.activeDrawing().circularSources[0];
+              await window.__GBDRAW_APP__.setCircularSourceFile(uid,'gb',new File([text],'fast-new.gb'));
             }""",
                 (ROOT / inputs[1]).read_text(),
             )
@@ -182,7 +183,7 @@ def main():
             # Force the existing parser/helper boundary by rejecting only this source's text read.
             helper = page.evaluate("""async () => {
               const {discoverSequenceRecords}=await import('./js/services/record-discovery.js');
-              const source=window.__GBDRAW_APP__.files.c_gb;
+              const source=(await import('./js/state.js')).state.activeDrawing().circularSources[0].gb;
               return await discoverSequenceRecords({file:source,format:'genbank',
                 readText:async()=>{throw new Error('S01 forced fast-path miss');}});
             }""")

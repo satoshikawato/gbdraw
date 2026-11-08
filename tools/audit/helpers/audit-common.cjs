@@ -32,11 +32,12 @@ const collect = (page) => {
   return log;
 };
 
-const setFile = (page, key, path, name) => page.evaluate(async ({ key, content, name }) => {
+// Adds one Circular File card holding this GenBank file.
+const addCircularGenbank = (page, path, name) => page.evaluate(async ({ content, name }) => {
   const app = window.__GBDRAW_APP__;
-  app.files[key] = new File([content], name, { type: 'text/plain' });
+  await app.addCircularSourceFiles('gb', [new File([content], name, { type: 'text/plain' })]);
   await window.Vue.nextTick();
-}, { key, content: readFileSync(path, 'utf8'), name: name || path.split('/').pop() });
+}, { content: readFileSync(path, 'utf8'), name: name || path.split('/').pop() });
 
 // Generate and return the Result plus the Source recipe the GUI offers for it.
 const runGenerate = (page) => helpers().evaluateWithRetainedPromise(page, async () => {
@@ -166,6 +167,6 @@ module.exports = {
   readSession,
   runGenerate,
   saveSession,
-  setFile,
+  addCircularGenbank,
   writeEvidence
 };

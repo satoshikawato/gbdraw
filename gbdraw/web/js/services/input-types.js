@@ -8,7 +8,7 @@ import { RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
 /** @typedef {'gb' | 'gff' | 'fasta'} InputType */
-/** @typedef {'gb' | 'gff' | 'fasta'} InputSlot A source file slot of a Linear card, or a Circular `c_` slot. */
+/** @typedef {'gb' | 'gff' | 'fasta'} InputSlot A source file slot of a Linear card or of a Circular source card. */
 /**
  * What an input type reads: the slot of its primary file, the slot of the FASTA a
  * GFF3 file pairs with (or null), and the record source kind the request projects
@@ -35,8 +35,8 @@ export const inputTypeOfSourceKind = (sourceKind) => normalizeInputType(
   /** @type {InputType[]} */ (Object.keys(INPUT_TYPES)).find((inputType) => INPUT_TYPES[inputType].sourceKind === sourceKind)
 );
 /**
- * The source files of one input: a Linear card's slots, or the Circular slots
- * (`circularInputSlots`). `complete` says the input has every file its type reads; `holdsFile`, that it has one of
+ * The source files of one input: a Linear card's slots, or a Circular source card's
+ * (`circularSourceInputs`). `complete` says the input has every file its type reads; `holdsFile`, that it has one of
  * them (a file in a slot its type does not read counts for neither).
  * @template F
  * @param {unknown} inputType
@@ -162,12 +162,27 @@ export const recordSourceSlotIds = (source) => {
   inputSourceSlotFiles(inputTypeOfSourceKind(source?.kind)).forEach(({ slot }, index) => { ids[slot] = resourceIds[index]; });
   return ids;
 };
-/** The Circular file field of each source slot. @type {Readonly<Record<InputSlot, 'c_gb' | 'c_gff' | 'c_fasta'>>} */
-export const CIRCULAR_INPUT_FIELDS = Object.freeze({ gb: 'c_gb', gff: 'c_gff', fasta: 'c_fasta' });
 /**
- * The Circular source slots under the names a Linear card uses.
+ * The source files of one Circular source card (`CircularSource` of the inputs
+ * slice): its uid and its files by the drawing's input type (`inputSourceFiles`).
  * @template F
- * @param {{ readonly c_gb?: F | null, readonly c_gff?: F | null, readonly c_fasta?: F | null }} files
- * @returns {Record<InputSlot, F | null>}
+ * @typedef {{ uid: string, spec: Readonly<InputTypeSpec>, primaryFile: F | null, pairedFile: F | null,
+ *   complete: boolean, holdsFile: boolean }} CircularSourceInput
  */
-export const circularInputSlots = (files) => ({ gb: files.c_gb ?? null, gff: files.c_gff ?? null, fasta: files.c_fasta ?? null });
+/**
+ * The source files of each Circular source card, in drawing order: the one
+ * reader of a Circular drawing's input files by its input type.
+ * @template F
+ * @param {unknown} inputType
+ * @param {readonly (Readonly<Partial<Record<InputSlot, F | null>>> & { readonly uid: string })[]} sources
+ * @returns {CircularSourceInput<F>[]}
+ */
+export const circularSourceInputs = (inputType, sources) => sources.map((source) => ({
+  uid: source.uid, ...inputSourceFiles(inputType, source)
+}));
+/**
+ * Whether a Circular drawing's cards make an input Generate reads: at least one
+ * card, and every card with each file its input type reads.
+ * @param {readonly { complete: boolean }[]} inputs `circularSourceInputs`
+ */
+export const circularInputComplete = (inputs) => inputs.length > 0 && inputs.every((input) => input.complete);

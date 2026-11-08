@@ -21,7 +21,7 @@ const genbank = readFileSync(join(__dirname, '../test_inputs/BGC0000708.gbk'));
 
 const cards = (page) => page.locator('[data-linear-source-card]');
 const header = (card) => card.locator(':scope > details > summary');
-const chips = (card) => header(card).locator('.linear-file-chip');
+const chips = (card) => header(card).locator('.file-card-chip');
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const sessionSettled = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
 
@@ -453,7 +453,7 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   await header(card).click();
   await expectFolded(page, [true]);
   await expect(header(card)).toHaveAttribute('aria-label', 'File 1: No file');
-  await expect(header(card).locator('.linear-file-fold-names')).toHaveText('No file');
+  await expect(header(card).locator('.file-card-fold-names')).toHaveText('No file');
   await expect(chips(card)).toHaveCount(0);
   await header(card).click();
 
@@ -495,7 +495,7 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   await header(pair).click();
   await expectFolded(page, [true, true]);
   await expect(header(pair)).toHaveAttribute('aria-label', 'File 1: genome.gff3 + no FASTA');
-  await expect(header(pair).locator('.linear-file-fold-names')).toHaveText('genome.gff3 + no FASTA');
+  await expect(header(pair).locator('.file-card-fold-names')).toHaveText('genome.gff3 + no FASTA');
   await expect(chips(pair)).toHaveCount(0);
   await expect(header(pair).locator('.ph-check-circle')).toHaveCount(0);
   // Both files, and the failed look of a file whose inspection failed.

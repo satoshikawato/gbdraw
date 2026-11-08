@@ -195,7 +195,7 @@ const requestLegend = (mode, drawing = modeDrawing(state, mode)) => {
   modeDrawing(state, 'linear').inputType.value = 'gb';
   drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
-    ? { c_gb: genbank(), linearSeqs: [] }
+    ? { circularSources: [{ uid: 'record-1', gb: genbank(), gff: null, fasta: null }], linearSeqs: [] }
     : {
         linearSeqs: [{
           uid: 'record-1', gb: genbank(), depth: null, losat_gencode: 1, region_record_id: '',

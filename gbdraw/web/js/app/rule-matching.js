@@ -337,7 +337,7 @@ export const createRulePreparation = ({
       // Physical source, palette, and selector inputs retain their identity while
       // request-owned comparison artifacts are published independently.
       inputFiles: /** @type {unknown[]} */ ([
-        files.c_gb, files.c_gff, files.c_fasta, files.c_depth,
+        ...drawing.circularSources.flatMap((source) => [source.gb, source.gff, source.fasta]), files.c_depth,
         files.c_conservation_blasts, files.c_conservation_blasts_source,
         files.c_conservation_fastas, files.c_conservation_sequence_sources,
         files.d_color, files.blacklist, files.whitelist, files.qualifier_priority

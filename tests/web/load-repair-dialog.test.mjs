@@ -197,7 +197,10 @@ const savedView = async (title) => {
   const view = savedModesView(document);
   const bindingsOf = (entry) => savedDrawingView(document, entry.id).webFiles.bindings;
   const others = document.drawings.filter((entry) => entry.id !== document.ui.activeDrawingId);
-  view.webFiles = { ...view.webFiles, bindings: Object.assign({}, ...others.map(bindingsOf), view.webFiles.bindings) };
+  const { circularSources = [], ...bindings } = Object.assign({}, ...others.map(bindingsOf), view.webFiles.bindings);
+  // A Session 48 binds the Circular input in `c_gb`, `c_gff` and `c_fasta` (the first File card of a Session 51).
+  const [card = {}] = circularSources;
+  view.webFiles = { ...view.webFiles, bindings: { ...bindings, c_gb: card.gb ?? null, c_gff: card.gff ?? null, c_fasta: card.fasta ?? null } };
   return view;
 };
 const leafPaths = (value, parts = []) => [

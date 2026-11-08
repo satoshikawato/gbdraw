@@ -179,17 +179,26 @@ OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
 OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
 OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
 # Web file binding slots (``webFiles.bindings``, schema 2): the five file
-# cards, which every drawing binds, and the slots of each diagram mode's inputs.
+# cards, which every drawing binds, and the slots of each diagram mode's inputs
+# in a Session 51 drawing. A Circular drawing's input files are its File cards,
+# ``circularSources`` (``{uid, gb, gff, fasta}`` rows, like ``linearSeqs``).
 WEB_BINDING_CARD_SLOTS = frozenset({"d_color", "t_color", "blacklist", "whitelist", "qualifier_priority"})
 WEB_BINDING_MODE_SLOTS: Mapping[str, frozenset[str]] = {
     "circular": frozenset({
-        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
+        "circularSources", "c_depth", "c_conservation_blasts",
         "c_conservation_blasts_source", "c_conservation_fastas", "c_conservation_sequence_sources",
     }),
     "linear": frozenset({"linearSeqs", "linearComparisons"}),
 }
 # The slot that holds a mode's main input; schema 2 bindings always hold it.
-WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "c_gb", "linear": "linearSeqs"}
+WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "circularSources", "linear": "linearSeqs"}
+# The one Circular input of Sessions 41-50, in place of ``circularSources``:
+# ``c_gb`` (one GenBank file, or a ``composite`` of several) or ``c_gff`` and
+# ``c_fasta``. The move to drawings makes File cards of them
+# (:func:`gbdraw.session_drawings.circular_sources_of_mode_scoped`).
+MODE_SCOPED_CIRCULAR_INPUT_SLOTS = frozenset({"c_gb", "c_gff", "c_fasta"})
+# The fields of one Circular File card (``circularSources`` row).
+CIRCULAR_SOURCE_FIELDS = frozenset({"uid", "gb", "gff", "fasta"})
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -857,6 +866,29 @@ def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
         raise ValidationError("Settings-only Session contains an unbound resource.")
 
 
+def _validate_circular_source_rows(rows: object, leaf: Callable[[Any], None]) -> None:
+    """A Circular drawing's File cards: a list of ``{uid, gb, gff, fasta}``
+    rows with distinct non-empty uids, each file a binding (``leaf``) or null.
+
+    Load admits a card without the file its drawing's input type reads;
+    Generate asks for it.
+    """
+
+    if not isinstance(rows, list):
+        raise ValidationError("Session webFiles.bindings.circularSources must be a list.", diagnostic=_SESSION_FIELDS_INVALID)
+    uids: set[str] = set()
+    for row in rows:
+        if not isinstance(row, Mapping) or set(row) != CIRCULAR_SOURCE_FIELDS:
+            raise ValidationError("A Circular File card holds uid, gb, gff and fasta.", diagnostic=_SESSION_FIELDS_INVALID)
+        uid = row["uid"]
+        if not isinstance(uid, str) or not uid or uid != uid.strip() or uid in uids:
+            raise ValidationError("Each Circular File card needs a distinct uid.", diagnostic=_SESSION_FIELDS_INVALID)
+        uids.add(uid)
+        for key in ("gb", "gff", "fasta"):
+            if row[key] is not None:
+                leaf(row[key])
+
+
 def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     """Admit the Web draft inventory independently of committed replay."""
     web_files = session.get("webFiles")
@@ -878,12 +910,17 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         )
     # A drawings-layout drawing (its one-drawing view names its mode in
     # ``ui.mode``) binds its own mode's inputs; Sessions 41 to the last
-    # mode-scoped version bind both modes' and c_gb.
+    # mode-scoped version bind both modes', the Circular one in c_gb, c_gff and c_fasta.
     mode = session["ui"]["mode"] if drawing else "circular"
-    other_slots = frozenset().union(*(slots for key, slots in WEB_BINDING_MODE_SLOTS.items() if key != mode))
-    if current and (WEB_BINDING_INPUT_SLOT[mode] not in bindings or (drawing and other_slots & set(bindings))):
+    mode_slots = WEB_BINDING_MODE_SLOTS if drawing else {
+        **WEB_BINDING_MODE_SLOTS,
+        "circular": WEB_BINDING_MODE_SLOTS["circular"] - {"circularSources"} | MODE_SCOPED_CIRCULAR_INPUT_SLOTS,
+    }
+    input_slot = WEB_BINDING_INPUT_SLOT[mode] if drawing else "c_gb"
+    other_slots = frozenset().union(*(slots for key, slots in mode_slots.items() if key != mode))
+    if current and (input_slot not in bindings or (drawing and other_slots & set(bindings))):
         raise ValidationError(
-            f"Web binding schema 2 requires {WEB_BINDING_INPUT_SLOT[mode]}"
+            f"Web binding schema 2 requires {input_slot}"
             + (" and no other mode's input." if drawing else ".")
         )
     resources = session.get("resources", {})
@@ -944,11 +981,15 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
             leaf(binding)
 
     # Every slot that holds one file binding or a list of them.
-    slots = (WEB_BINDING_MODE_SLOTS["circular"] | WEB_BINDING_CARD_SLOTS) - {"c_conservation_blasts_source"}
-    if current and set(bindings) - {"schema"} - WEB_BINDING_CARD_SLOTS - frozenset().union(*WEB_BINDING_MODE_SLOTS.values()):
+    slots = (mode_slots["circular"] | WEB_BINDING_CARD_SLOTS) - {"c_conservation_blasts_source", "circularSources"}
+    if current and set(bindings) - {"schema"} - WEB_BINDING_CARD_SLOTS - frozenset().union(*mode_slots.values()):
         raise ValidationError("Unknown Web binding inventory field.")
     for slot in slots:
+        # A composite is the c_gb of a Session 41-50 only; the move to
+        # drawings makes one File card of each of its components.
         value(bindings.get(slot), slot == "c_gb")
+    if "circularSources" in bindings:
+        _validate_circular_source_rows(bindings["circularSources"], leaf)
     for sequence in bindings.get("linearSeqs", []):
         if isinstance(sequence, Mapping):
             for slot in ("gb", "gff", "fasta", "depth", "blast"):
@@ -1221,14 +1262,23 @@ def _validate_mode_slices(session: Mapping[str, Any], version: int) -> None:
         )
     web_files = session.get("webFiles")
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
-    cards = bindings.get("linearSeqs") if isinstance(bindings, Mapping) else None
-    bound_uids = {card.get("uid") for card in cards if isinstance(card, Mapping)} if isinstance(cards, list) else set()
+    def bound_uids(slot: str) -> set[object]:
+        cards = bindings.get(slot) if isinstance(bindings, Mapping) else None
+        return {card.get("uid") for card in cards if isinstance(card, Mapping)} if isinstance(cards, list) else set()
+
     containers = slice_containers(version)
+    # A Session 51 Circular drawing names its records by identity, a Session
+    # 46-50 by source selector.
+    identities = version >= DRAWINGS_SESSION_MIN_VERSION
     for mode, mode_slice in modes.items():
         _validate_mode_slice_fields(mode_slice, mode, containers)
         config = mode_slice.get("config", {})
         if "recordsOff" in config:
-            _validate_records_off(config["recordsOff"], mode, bound_uids)
+            _validate_records_off(
+                config["recordsOff"], mode,
+                bound_uids("linearSeqs" if mode == "linear" else "circularSources"),
+                identities=identities,
+            )
         _validate_display_placement_draft_config(config, mode=mode, scoped=False, current=True)
         _validate_feature_override_drafts(mode_slice.get("features", {}))
         overrides = config.get("unmanagedConfigOverrides")
@@ -1236,12 +1286,29 @@ def _validate_mode_slices(session: Mapping[str, Any], version: int) -> None:
             validate_and_project_web_config_overrides(mode=mode, overrides=overrides)
 
 
-def _validate_records_off(records_off: object, mode: str, bound_uids: set[object]) -> None:
+def _is_record_identity(key: str, uids: set[object]) -> bool:
+    """Whether ``key`` names a record of a bound card: the card uid (a file of
+    one record) or ``<uid>:<k>``, ``k`` its 1-based position in the file."""
+
+    base, _sep, position = key.rpartition(":")
+    return key in uids or (base in uids and re.fullmatch(r"[1-9][0-9]*", position) is not None)
+
+
+def _validate_records_off(records_off: object, mode: str, bound_uids: set[object], *, identities: bool) -> None:
     """Validate a slice's OFF records (record selection D-05), as the Web reader does.
 
-    Each key appears once: a Linear card uid bound in ``webFiles``, or a
-    Circular source selector ``#N``.
+    Each key appears once: a Linear card uid bound in ``webFiles``; in a
+    Session 51 a Circular record identity of a bound File card
+    (:func:`_is_record_identity`), in a Session 46-50 a Circular source
+    selector ``#N``.
     """
+
+    def names_record(key: str) -> bool:
+        if mode == "linear":
+            return key in bound_uids
+        if identities:
+            return _is_record_identity(key, bound_uids)
+        return _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None
 
     if (
         not isinstance(records_off, list)
@@ -1250,7 +1317,7 @@ def _validate_records_off(records_off: object, mode: str, bound_uids: set[object
             isinstance(key, str)
             and key
             and key == key.strip()
-            and (key in bound_uids if mode == "linear" else _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None)
+            and names_record(key)
             for key in records_off
         )
     ):
@@ -5510,6 +5577,42 @@ def _web_card_binding(
     }
 
 
+def _circular_input_bindings(
+    files: Mapping[str, Any],
+    add_file: Callable[[object], dict[str, Any] | None],
+    add_value: Callable[..., object],
+) -> dict[str, object]:
+    """The Circular input of a Web inventory as bindings: File cards (Session 51,
+    and the CLI writer's own mode-scoped payload), or the one input of a Session
+    41-50 source, which the move to drawings makes cards of."""
+
+    circular_cards = files.get("circularSources")
+    if circular_cards is not None and not isinstance(circular_cards, list):
+        raise ValidationError(
+            "Web inventory circularSources must be a list.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+    circular_input: dict[str, object] = (
+        {
+            "circularSources": [
+                {"uid": str(card.get("uid") or ""), **{key: add_file(card.get(key)) for key in ("gb", "gff", "fasta")}}
+                for card in circular_cards
+                if isinstance(card, Mapping)
+            ]
+        }
+        if circular_cards is not None
+        else {
+            "c_gb": add_value(files.get("c_gb"), composite_allowed=True),
+            "c_gff": add_file(files.get("c_gff")),
+            "c_fasta": add_file(files.get("c_fasta")),
+        }
+    )
+    if circular_cards is not None and MODE_SCOPED_CIRCULAR_INPUT_SLOTS & set(files):
+        raise ValidationError(
+            "A Web inventory holds File cards or c_gb, c_gff and c_fasta, not both.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+    return circular_input
+
+
 def _attach_current_web_file_bindings(
     payload: dict[str, Any],
     files: Mapping[str, Any],
@@ -5581,11 +5684,10 @@ def _attach_current_web_file_bindings(
         if comparison_id and binding is not None:
             comparison_bindings.append({"id": comparison_id, "file": binding})
 
+    circular_input = _circular_input_bindings(files, add_file, add_value)
     bindings = {
         "schema": 2,
-        "c_gb": add_value(files.get("c_gb"), composite_allowed=True),
-        "c_gff": add_file(files.get("c_gff")),
-        "c_fasta": add_file(files.get("c_fasta")),
+        **circular_input,
         "c_depth": add_value(files.get("c_depth")),
         "c_conservation_blasts": add_value(
             files.get("c_conservation_blasts")
@@ -5684,24 +5786,9 @@ def build_session_json(
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
     source_version: int | None = None
-    source_composite = None
     if context.source_session is not None:
         validate_session(context.source_session)
         source_version = int(context.source_session["version"])
-        source_web_files = context.source_session.get("webFiles")
-        source_bindings = source_web_files.get("bindings") if isinstance(source_web_files, Mapping) else None
-        explicit = source_bindings.get("c_gb") if isinstance(source_bindings, Mapping) else None
-        if (
-            isinstance(source_bindings, Mapping)
-            and isinstance(explicit, Mapping)
-            and explicit.get("kind") == "composite"
-        ):
-            from .session import _validate_document
-
-            _validate_document(context.source_session, CLI_SESSION_ADMISSION)
-            source_composite = _project_web_file_binding(
-                context.source_session["resources"], explicit, schema=source_bindings["schema"],
-            )
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
         payload = {}
@@ -5806,8 +5893,6 @@ def build_session_json(
         )
     files_value = payload.get("files")
     files_for_web = files_value if isinstance(files_value, Mapping) else {}
-    if source_composite is not None:
-        files_for_web = {**files_for_web, "c_gb": source_composite}
     if source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         force_web_comparison_draft = (
             isinstance(config.get("linearRecordLayout"), Mapping)

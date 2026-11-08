@@ -25,7 +25,7 @@ const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-s
 const MODE_SCOPED_ROWS = MODE_SCOPED_SETTINGS.rows;
 const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.mjs');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
-const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { createCircularSource, createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 
 const MODES = ['circular', 'linear'];
 const genbankText = `LOCUS       PERMODE                    40 bp    DNA     linear   UNK 01-JAN-1980
@@ -65,7 +65,7 @@ const requestOf = (mode, { linearDepth = null, shown = mode } = {}) => {
   drawing.inputType.value = 'gb';
   drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
-    ? { c_gb: genbank(), linearSeqs: [] }
+    ? { circularSources: [{ uid: 'record-1', gb: genbank(), gff: null, fasta: null }], linearSeqs: [] }
     : {
         linearSeqs: [{
           uid: 'record-1', gb: genbank(), depth: linearDepth, losat_gencode: 1, region_record_id: '',
@@ -192,17 +192,21 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   const linear = modeDrawing(state, 'linear');
   installShownDrawing('circular');
   circular.inputType.value = 'gb';
-  circular.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
+  circular.circularRecordList.value = [
+    { uid: 'record-1', k: 1, identity: 'record-1:1', selector: '#1', record_id: 'a' },
+    { uid: 'record-1', k: 2, identity: 'record-1:2', selector: '#2', record_id: 'b' }
+  ];
   circular.form.multi_record_canvas = true;
   const circularKeys = () => buildCanonicalRenderRequest({
-    state, drawing: circular, filesData: { c_gb: genbank(), linearSeqs: [] }
+    state, drawing: circular,
+    filesData: { circularSources: [{ uid: 'record-1', gb: genbank(), gff: null, fasta: null }], linearSeqs: [] }
   }).renderRequest.records.map((record) => record.recordKey);
   const savedCards = [...linear.linearSeqs];
   linear.linearSeqs.splice(0, Infinity, { uid: 'card-1' }, { uid: 'card-2' });
   linear.recordsOff.splice(0, Infinity, 'card-2');
-  assert.deepEqual(circularKeys(), ['record-1', 'record-2'], 'a Linear OFF card leaves the Circular request alone');
-  circular.recordsOff.splice(0, Infinity, '#2');
-  assert.deepEqual(circularKeys(), ['record-1']);
+  assert.deepEqual(circularKeys(), ['record-1:1', 'record-1:2'], 'a Linear OFF card leaves the Circular request alone');
+  circular.recordsOff.splice(0, Infinity, 'record-1:2');
+  assert.deepEqual(circularKeys(), ['record-1:1']);
   assert.deepEqual([...linear.recordsOff], ['card-2']);
   assert.deepEqual(linear.drawnLinearSeqs.value.map((card) => card.uid), ['card-1']);
   circular.recordsOff.splice(0);
@@ -232,7 +236,7 @@ const INPUTS_NO_HANDLE_CALLS = new Set([
   'createLinearSeq', 'cardCropWindow', 'readLinearSeqWindows', 'idleCircularRecordDiscovery', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile',
   'registerInputFiles', 'boundInputFileIds', 'retainHistoryAndBoundFiles', 'registerInputFileTree',
   'bindCanonicalComparisons', 'bindLoadedInputs',
-  'bindDrawingInputFile', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',
+  'createCircularSource', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',
   'bindDrawingCanonicalComparisons', 'sessionFilesOfKind', 'projectInputReplacement'
 ]);
 const isHandleCall = (name, key) => !NOT_WRITERS.has(key) && !(name === 'inputs' && INPUTS_NO_HANDLE_CALLS.has(key));
@@ -281,7 +285,10 @@ const SEEDS = {
     featureColorOverrides: { 'record-1:CDS_1': { color: '#444444', caption: 'Kinase' } },
     featureStrokeOverrides: { 'record-1:CDS_1': { strokeColor: '#555555', strokeWidth: 2 } }
   }),
-  inputs: () => ({ linearSeqs: [createLinearSeq({ uid: 'seed-a' }), createLinearSeq({ uid: 'seed-b', region_record_id: 'r2' })] }),
+  inputs: () => ({
+    linearSeqs: [createLinearSeq({ uid: 'seed-a' }), createLinearSeq({ uid: 'seed-b', region_record_id: 'r2' })],
+    circularSources: [createCircularSource({ uid: 'card-a' }), createCircularSource({ uid: 'card-b' })]
+  }),
   settings: (drawing) => {
     const settings = DRAWING_SLICES.settings.capture(drawing.slices.settings);
     return { ...settings, form: { ...settings.form, plot_title: 'Isolation title' }, losatProgram: 'tblastx' };
@@ -385,7 +392,12 @@ const WRITES = {
     addLinearSeq: (h) => modules.inputs.addLinearSeq(h, createLinearSeq({ uid: 'added' })),
     removeLinearSeq: (h, drawing) => modules.inputs.removeLinearSeq(h, drawing.linearSeqs[0].uid),
     moveLinearSeq: (h, drawing) => modules.inputs.moveLinearSeq(h, drawing.linearSeqs[1].uid, 0),
-    replaceLinearSeqs: (h) => modules.inputs.replaceLinearSeqs(h, [createLinearSeq({ uid: 'replaced' })])
+    replaceLinearSeqs: (h) => modules.inputs.replaceLinearSeqs(h, [createLinearSeq({ uid: 'replaced' })]),
+    bindCircularSourceFile: (h, drawing) => modules.inputs.bindCircularSourceFile(inputStore, h, drawing.circularSources[0].uid, 'gb', { name: 'a.gb' }),
+    addCircularSource: (h) => modules.inputs.addCircularSource(h, createCircularSource({ uid: 'added-card' })),
+    removeCircularSource: (h, drawing) => modules.inputs.removeCircularSource(h, drawing.circularSources[0].uid),
+    moveCircularSource: (h, drawing) => modules.inputs.moveCircularSource(h, drawing.circularSources[1].uid, 0),
+    replaceCircularSources: (h) => modules.inputs.replaceCircularSources(h, [createCircularSource({ uid: 'replaced-card' })])
   },
   settings: {}
 };

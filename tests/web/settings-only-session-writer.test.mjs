@@ -46,7 +46,12 @@ const LAST_SETTINGS_ONLY_VERSION = 48;
 // A Session 48 names both modes' inputs in one inventory; the circular
 // drawing's bindings hold the Linear rows of no Linear drawing as empty lists.
 const asSettingsOnly = (view) => {
-  const bindings = { linearSeqs: [], linearComparisons: [], ...view.webFiles.bindings };
+  // It binds the Circular input in `c_gb`, `c_gff` and `c_fasta` (the first File card of a Session 51).
+  const { circularSources = [], ...held } = view.webFiles.bindings;
+  const [card = {}] = circularSources;
+  const bindings = {
+    linearSeqs: [], linearComparisons: [], ...held, c_gb: card.gb ?? null, c_gff: card.gff ?? null, c_fasta: card.fasta ?? null
+  };
   return { ...view, version: LAST_SETTINGS_ONLY_VERSION, webFiles: { ...view.webFiles, bindings } };
 };
 const settingsOnlyView = (saved, id) => asSettingsOnly(savedDrawingView(saved, id));

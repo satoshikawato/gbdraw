@@ -2,7 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
-import { circularInputSlots, inputSourceFiles, storedRecordSourceResourceIds } from '../services/input-types.js';
+import { circularSourceInputs, inputSourceFiles, storedRecordSourceResourceIds } from '../services/input-types.js';
 import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
@@ -52,18 +52,7 @@ export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
 /** @param {string} kind @param {string} message */
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
 
-
-/**
- * An entry of the Circular record list, as the record discovery stores it (`run-analysis.js`).
- * @typedef {object} CircularListRecord
- * @property {string} [selector]
- * @property {string} [record_id]
- * @property {string} [recordId]
- * @property {number | null} [record_length]
- * @property {number | null} [recordLength]
- * @property {unknown} [detectedTopology]
- * @property {string} [recordKey]
- */
+/** @import { CircularListRecord } from '../services/record-discovery.js' */
 
 /**
  * A record source of one drawing (`sourcesOf`): a File card and its records,
@@ -78,7 +67,31 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {unknown} selector
  * @property {boolean} cropped
  * @property {boolean} reverse
+ * @property {boolean} shown Whether the drawing shows its records' rows (`circularDisplaySources`).
  */
+
+/**
+ * The record sources of a Circular drawing: its source cards, each with the
+ * drawing's crop and orientation. While the Record select names one record,
+ * that record's card shows it alone and the other cards show none, as the
+ * request draws it alone (OV-NEW-1).
+ * @param {DrawingState} drawing @returns {DrawingRecordSource[]}
+ */
+const circularDisplaySources = (drawing) => {
+  /** @type {CircularListRecord[]} */
+  const list = drawing.circularRecordList.value;
+  // The Record select names a record by identity; its card's selector is its `#k`.
+  const chosen = list.find((record) => record.identity === drawing.form.circular_record_selector);
+  return circularSourceInputs(drawing.inputType.value, drawing.circularSources).map(({ uid, primaryFile, pairedFile }) => ({
+    scope: 'circular', drawingId: drawing.id, sourceUid: uid, source: primaryFile, paired: pairedFile,
+    records: list.filter((record) => record.uid === uid)
+      .map((record) => ({ ...record, recordId: record.record_id, recordLength: record.record_length })),
+    selector: chosen && chosen.uid === uid ? chosen.selector : '',
+    shown: !chosen || chosen.uid === uid,
+    cropped: circularDrawingCropped(list, drawing),
+    reverse: cropFormReverseComplement({ windows: drawing.form.circular_windows, reverse: drawing.form.circular_reverse })
+  }));
+};
 
 /**
  * A row of the committed request: the draft row with what the request carries for the record.
@@ -172,23 +185,17 @@ export const createRecordDisplayControls = ({
   /** @type {RecordDisplaySource[]} */
   let boundSources = [];
   // The record sources of one drawing, each named by that drawing's ID: a
-  // Circular drawing's file card with its crop and orientation, a Linear
-  // drawing's cards: each read from that drawing's inputs.
+  // Circular drawing's source cards with its crop and orientation, a Linear
+  // drawing's cards: each read from that drawing's inputs, by card uid.
   /** @param {DrawingState} drawing @returns {DrawingRecordSource[]} */
   const sourcesOf = (drawing) => (drawing.mode === 'circular'
-    ? [{ scope: 'circular', drawingId: drawing.id, sourceUid: 'circular',
-        ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
-          inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))),
-        records: drawing.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
-          recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
-        cropped: circularDrawingCropped(drawing.circularRecordList.value, drawing),
-        reverse: cropFormReverseComplement({ windows: drawing.form.circular_windows, reverse: drawing.form.circular_reverse }) }]
+    ? circularDisplaySources(drawing)
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
         ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
           inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
         cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length),
-        reverse: cropFormReverseComplement(linearCardCropForm(seq)) })));
+        reverse: cropFormReverseComplement(linearCardCropForm(seq)), shown: true })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
     /** @type {DrawingState[]} */
@@ -198,7 +205,7 @@ export const createRecordDisplayControls = ({
   const allRows = computed(() => sources.value.flatMap((source) => source.source
     ? buildRecordDisplayRows({ ...source, selector: '' }).map((row) => ({ ...row, drawingId: source.drawingId,
         cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : []));
-  const rows = computed(() => sourcesOf(state.activeDrawing())
+  const rows = computed(() => sourcesOf(state.activeDrawing()).filter((source) => source.shown)
     .flatMap((source) => {
       try {
         return source.source ? buildRecordDisplayRows(source).map((row) => ({ ...row, drawingId: source.drawingId,
@@ -354,13 +361,13 @@ export const createRecordDisplayControls = ({
     committedRows = allRows.value.filter((row) => row.scope === request.mode
       && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
         && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
-      const selected = request.records.find((/** @type {CommittedRecord} */ record, /** @type {number} */ index) => {
+      const selected = request.records.find((/** @type {CommittedRecord} */ record) => {
         const selector = record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
           ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value);
-        return matchesSelector && (row.scope === 'circular'
-          ? request.records.length === 1 || index === Number(row.selector.slice(1)) - 1
-          : record.recordKey === row.sourceUid || record.recordKey === `${row.sourceUid}:${Number(row.selector.slice(1))}`);
+        // A record of a card is keyed by the card's uid or its identity `<uid>:<k>`, in both modes.
+        return matchesSelector
+          && (record.recordKey === row.sourceUid || record.recordKey === `${row.sourceUid}:${Number(row.selector.slice(1))}`);
       });
       if (!selected) return [];
       const source = selected.source;

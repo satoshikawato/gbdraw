@@ -19,6 +19,7 @@
   ],
   "activeDrawingId": "linear",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
-  "decompressedSha256": "78fb4c607fcb83e8d8da92cf7be3787b43477eec8e339ed31eaf266018e5a2c3",
-  "sessionVersion": 51
+  "decompressedSha256": "0d200543cc863b424e0653bc0af858dd21a6b02a92f7cdf62bbf5a52907a4ca3",
+  "sessionVersion": 51,
+  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed"
 }

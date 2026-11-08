@@ -8,13 +8,15 @@
     "tests/web/auxiliary-file-history.playwright.spec.js": 0.27,
     "tests/web/axe-accessibility.playwright.spec.js": 1.5,
     "tests/web/chloroplast-placement.playwright.spec.js": 0.73,
+    "tests/web/circular-cards-placement-regeneration.playwright.spec.js": 2.3,
+    "tests/web/circular-cards-session-resources.playwright.spec.js": 0.92,
+    "tests/web/circular-file-card-list.playwright.spec.js": 0.8,
+    "tests/web/circular-file-cards.playwright.spec.js": 0.6,
     "tests/web/circular-multi-record-default.playwright.spec.js": 0.37,
     "tests/web/circular-record-presentation.playwright.spec.js": 0.74,
     "tests/web/circular-track-measure-input.playwright.spec.js": 2.36,
     "tests/web/color-captions.playwright.spec.js": 2.61,
     "tests/web/comparison-ui.playwright.spec.js": 1.63,
-    "tests/web/composite-placement-regeneration.playwright.spec.js": 2.3,
-    "tests/web/composite-session-resources.playwright.spec.js": 0.92,
     "tests/web/composition-layout-real.playwright.spec.js": 0.47,
     "tests/web/composition-layout.playwright.spec.js": 0.11,
     "tests/web/computation-ownership.playwright.spec.js": 0.29,
@@ -190,7 +192,7 @@
       "tests/web/region-select.playwright.spec.js"
     ],
     [
-      "tests/web/composite-session-resources.playwright.spec.js",
+      "tests/web/circular-cards-session-resources.playwright.spec.js",
       "tests/web/computation-ownership.playwright.spec.js",
       "tests/web/depth-track-session.playwright.spec.js",
       "tests/web/diagram-resource-recovery.playwright.spec.js",
@@ -209,7 +211,7 @@
     ],
     [
       "tests/web/color-captions.playwright.spec.js",
-      "tests/web/composite-placement-regeneration.playwright.spec.js",
+      "tests/web/circular-cards-placement-regeneration.playwright.spec.js",
       "tests/web/feature-fill-scope.playwright.spec.js",
       "tests/web/gallery-session-regeneration.playwright.spec.js",
       "tests/web/history-region.playwright.spec.js",
@@ -227,6 +229,7 @@
     ],
     [
       "tests/web/annotation-feature-identity.playwright.spec.js",
+      "tests/web/circular-file-cards.playwright.spec.js",
       "tests/web/circular-record-presentation.playwright.spec.js",
       "tests/web/comparison-ui.playwright.spec.js",
       "tests/web/composition-layout-real.playwright.spec.js",
@@ -244,6 +247,7 @@
     ],
     [
       "tests/web/annotation-download.playwright.spec.js",
+      "tests/web/circular-file-card-list.playwright.spec.js",
       "tests/web/composition-layout.playwright.spec.js",
       "tests/web/contracts/active-result-edit-transaction.playwright.spec.js",
       "tests/web/contracts/session-regenerate-intent.playwright.spec.js",

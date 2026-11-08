@@ -37,7 +37,11 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   const inputFiles = createInputFileStore();
   const resources = await buildSessionResources({ inputFiles }, null,
     bindingDrawings({ files: { qualifier_priority: inputFiles.registerFile(file) } }));
-  const document = { ...structuredClone(settings), ...resources };
+  // The v42 document keeps its Session 41-50 inventory; only the bound file comes from the writer.
+  const document = {
+    ...structuredClone(settings), ...resources,
+    webFiles: { bindings: { ...structuredClone(settings.webFiles.bindings), qualifier_priority: resources.webFiles.bindings.qualifier_priority } }
+  };
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   const projected = projectSettingsOnlySession(document, adoptCurrentSessionResources(document.resources));
   const restored = projected.files.qualifier_priority;

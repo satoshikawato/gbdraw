@@ -156,17 +156,18 @@ import {
 } from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
-  discoverInputRecords,
+  circularDiscoveryReadFrom,
   discoveryErrorIsFinal,
   inputRecordsOperation,
   gffFastaReaderSelector,
   parseSequenceRecordsFast,
   readComparisonSequence,
   readOncePerFile,
+  readCircularSourceRecords,
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
 import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
-import { circularInputSlots, inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
+import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
 import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
@@ -360,9 +361,10 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @typedef {{ byOwner: WeakMap<object, Map<string, T>>, limit: number }} FileReadCache
  */
 /**
- * A settled discovery of a Circular drawing's input, for the drawing it ran for.
- * @typedef {{ drawingId: DrawingId, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null,
- *   recordCount: number }} CircularRecordsDiscovered
+ * A settled discovery of a Circular drawing's input, for the drawing it ran for:
+ * each card's files and how many records it read.
+ * @typedef {{ drawingId: DrawingId, sources: readonly { uid: string, primaryFile: InputFileRef | null,
+ *   pairedFile: InputFileRef | null, recordCount: number }[] }} CircularRecordsDiscovered
  */
 // What Generate reads from an input File is kept per File in `services/record-discovery.js` (`readOncePerFile`,
 // OV-1587): each sequence file parsed once by format (OV-1556), the LOSAT FASTA of a record and region and,
@@ -495,6 +497,19 @@ export const buildLosatCachePayload = ({
  * }} LosatSourceJob
  */
 
+/** @type {WeakMap<FileLike, number>} */
+const fileReadTokens = new WeakMap();
+let fileReadTokenCount = 0;
+/**
+ * A number for a File, the same while the page holds it: a key of what is read
+ * from several Files together names them by these.
+ * @param {FileLike} file
+ */
+const fileReadToken = (file) => {
+  if (!fileReadTokens.has(file)) fileReadTokens.set(file, fileReadTokenCount += 1);
+  return /** @type {number} */ (fileReadTokens.get(file));
+};
+
 // The Worker conversion of Generate's ring LOSAT rows (`circular_ring_tables_in_search_frame_json`).
 const RING_TABLE_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation: 'convertRingTablesToSearchFrame' });
 
@@ -504,13 +519,16 @@ const RING_TABLE_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation
  * File (or GFF3 and FASTA pair), whose bytes never change, under the ring's raw cache key (which names immutable
  * search output) and the records' selector, crop and orientation. Each ring keeps its last frame only, and a failed
  * conversion is not kept, nor one of a ring without current search output (`cacheKey` null).
- * @param {readonly [FileLike] | readonly [FileLike, FileLike]} referenceFiles The Files the request's records read.
+ * The conversion is kept on the first card's File, under the read tokens of every card's Files (`fileReadToken`),
+ * so another list of cards converts again.
+ * @param {readonly (readonly [FileLike] | readonly [FileLike, FileLike])[]} referenceFiles The Files of each source
+ *   card the request's records read, in card order.
  * @param {{ renderRequest: unknown, records: readonly unknown[], resources: GenerationPayload['resources'] }} request
  * @param {readonly { resourceId: string, cacheKey: string | null }[]} rings
  * @returns {Promise<Map<string, ConvertedResource>>}
  */
 const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, records, resources }, rings) => {
-  const frameKey = JSON.stringify(records);
+  const frameKey = `${JSON.stringify(records)}\n${referenceFiles.flat().map(fileReadToken).join(',')}`;
   /** @type {string[]} */
   const missing = [];
   /** @type {(resourceIds: string[]) => void} */
@@ -533,7 +551,7 @@ const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, re
     };
     return cacheKey === null
       ? convert()
-      : readOncePerFile(referenceFiles, `ring-search-frame-${index}:${cacheKey}\n${frameKey}`, convert, 1);
+      : readOncePerFile(referenceFiles[0], `ring-search-frame-${index}:${cacheKey}\n${frameKey}`, convert, 1);
   });
   startConversion(missing);
   const converted = await Promise.all(tables);
@@ -1403,8 +1421,9 @@ export const buildDefaultMultiRecordPositions = (selectors) => {
  * @param {unknown} currentPositions
  */
 const mergeCircularRecordPositions = (records, currentPositions) => {
+  // A Record Order row names its record by identity (`circularRecordList`).
   const availableSelectors = Array.isArray(records)
-    ? records.map((entry) => String(entry?.selector || '').trim()).filter(Boolean)
+    ? records.map((entry) => String(entry?.identity || '').trim()).filter(Boolean)
     : [];
   if (availableSelectors.length === 0) return [];
   const availableSet = new Set(availableSelectors);
@@ -2412,7 +2431,8 @@ export const createRunAnalysis = ({
               ? Math.max(1, drawing.files.c_depth.length)
               : 1
           );
-      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length !== recordCount) {
+      // A record past the matrix's end has no row yet (a card added after the matrix, `resliceRecordRows`).
+      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length > recordCount) {
         return `Circular Depth matrix has ${drawing.files.c_depth.length} record rows; expected ${recordCount}.`;
       }
       rows = normalizeRecordMajorDepthFileRows(drawing.files.c_depth, recordCount);
@@ -2467,29 +2487,12 @@ export const createRunAnalysis = ({
     circularRecordRefreshGenerations.set(drawing, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
     const inputType = drawing.inputType.value;
-    const circularFiles = () => inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files));
-    const { spec, primaryFile, pairedFile, complete: hasCompleteInput } = circularFiles();
-    // The read still targets the drawing's input type and files.
+    const circularInputs = () => circularSourceInputs(drawing.inputType.value, drawing.circularSources);
+    const inputs = circularInputs();
+    const hasCompleteInput = circularInputComplete(inputs);
+    // The read still targets the drawing's input type and cards.
     const readTargetsInput = () => drawing.inputType.value === inputType
-      && circularFiles().primaryFile === primaryFile && circularFiles().pairedFile === pairedFile;
-    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput(drawing);
-    const preservedRecordKeys = new Map();
-    if (preserveCanonicalRecordKeys) {
-      [
-        ...(Array.isArray(drawing.circularRecordDiscovery.canonicalRecordIdentities)
-          ? drawing.circularRecordDiscovery.canonicalRecordIdentities
-          : []),
-        ...drawing.circularRecordList.value
-      ]
-        .forEach((/** @type {Readonly<Record<string, unknown>>} */ record) => {
-          const recordKey = String(record?.recordKey || '').trim();
-          if (!recordKey) return;
-          [record?.selector, record?.record_id, record?.recordId]
-            .map((value) => String(value || '').trim())
-            .filter(Boolean)
-            .forEach((value) => preservedRecordKeys.set(value, recordKey));
-        });
-    }
+      && circularDiscoveryReadFrom(inputs.map((input) => ({ ...input, error: '' })), circularInputs());
     // Without its complete input the drawing holds the idle record a new
     // drawing holds, so a History restore that runs this again leaves the
     // record it captured (OV-1669).
@@ -2497,11 +2500,7 @@ export const createRunAnalysis = ({
       status: 'loading',
       error: '',
       inputType,
-      primaryFile,
-      pairedFile,
-      canonicalRecordIdentities: preserveCanonicalRecordKeys
-        ? drawing.circularRecordDiscovery.canonicalRecordIdentities
-        : []
+      sources: inputs.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' }))
     } : idleCircularRecordDiscovery());
     drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
@@ -2514,60 +2513,37 @@ export const createRunAnalysis = ({
       !readTargetsInput()
     ) return;
 
-    try {
-      const records = await discoverInputRecords(spec, inputFiles.fileOf(primaryFile), inputFiles.fileOf(pairedFile));
-      if (
-        refreshGeneration !== currentGeneration() ||
-        recordDiscoverySuppressed() ||
-        !readTargetsInput()
-      ) return;
-      const busy = state.sessionOperationAvailability?.();
-      if (busy) {
-        drawing.circularRecordDiscovery.status = 'deferred';
-        drawing.circularRecordDiscovery.primaryFile = null;
-        return busy;
-      }
-      const nextRecords = records.map((entry) => {
-        const recordKey = preservedRecordKeys.get(String(entry.selector || '').trim())
-          || preservedRecordKeys.get(String(entry.recordId || '').trim())
-          || '';
-        return {
-          selector: entry.selector,
-          record_id: entry.recordId,
-          record_length: entry.recordLength,
-          detectedTopology: entry.detectedTopology,
-          ...(recordKey ? { recordKey } : {})
-        };
-      });
-      drawing.circularRecordList.value = nextRecords;
-      drawing.circularRecordDiscovery.status = 'ready';
-      // Identity belongs to the source, including while its mode is inactive.
-      drawing.circularRecordDiscovery.canonicalRecordIdentities = nextRecords
-        .filter((record) => record.recordKey)
-        .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
-      unappliedCircularRecordReads.set(drawing, refreshGeneration);
-      if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
-      onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: nextRecords.length });
-    } catch (error) {
-      if (
-        refreshGeneration !== currentGeneration() ||
-        recordDiscoverySuppressed() ||
-        !readTargetsInput()
-      ) return;
-      const busy = state.sessionOperationAvailability?.();
-      if (busy) {
-        drawing.circularRecordDiscovery.status = 'deferred';
-        drawing.circularRecordDiscovery.primaryFile = null;
-        return busy;
-      }
-
-      drawing.circularRecordList.value = [];
-      drawing.circularRecordDiscovery.status = 'error';
-      drawing.circularRecordDiscovery.error = formatError(error, inputRecordsOperation(spec), 'helper');
-      unappliedCircularRecordReads.set(drawing, refreshGeneration);
-      releaseSourceInputFailure(drawing);
-      onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: 0 });
+    // Each card is read on its own (the reader keeps each file's records), so
+    // a card whose read fails leaves the others' records listed, and Retry
+    // source inspection reads only the files not read yet.
+    const reads = (await readCircularSourceRecords(inputs, (file) => inputFiles.fileOf(file))).map(({ records, error }, index) => ({
+      records,
+      error: error === null ? /** @type {UserFacingError | ''} */ ('') : formatError(error, inputRecordsOperation(inputs[index].spec), 'helper')
+    }));
+    if (
+      refreshGeneration !== currentGeneration() ||
+      recordDiscoverySuppressed() ||
+      !readTargetsInput()
+    ) return;
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) {
+      drawing.circularRecordDiscovery.status = 'deferred';
+      drawing.circularRecordDiscovery.sources = [];
+      return busy;
     }
+    const nextRecords = reads.flatMap((read) => read.records);
+    const failed = reads.find((read) => read.error);
+    drawing.circularRecordList.value = nextRecords;
+    drawing.circularRecordDiscovery.sources = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({
+      uid, primaryFile, pairedFile, error: reads[index].error
+    }));
+    drawing.circularRecordDiscovery.status = failed ? 'error' : 'ready';
+    drawing.circularRecordDiscovery.error = failed ? failed.error : '';
+    unappliedCircularRecordReads.set(drawing, refreshGeneration);
+    if (failed || nextRecords.length > 0) releaseSourceInputFailure(drawing);
+    onCircularRecordsDiscovered?.({ drawingId: drawing.id, sources: inputs.map(({ uid, primaryFile, pairedFile }, index) => ({
+      uid, primaryFile, pairedFile, recordCount: reads[index].records.length
+    })) });
   };
 
   /**
@@ -2600,7 +2576,7 @@ export const createRunAnalysis = ({
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
       inputType,
-      ...(({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(inputType, circularInputSlots(drawing.files)))
+      ...circularSourceInputs(inputType, drawing.circularSources).flatMap(({ uid, primaryFile, pairedFile }) => [uid, primaryFile, pairedFile])
     ];
     const inflightRead = activeCircularRecordRefreshes.get(drawing);
     if (
@@ -2911,7 +2887,7 @@ export const createRunAnalysis = ({
       linearRecordCatalog = prepared?.catalog || null;
     }
     if (mode.value === 'circular') {
-      const { complete: hasCompleteInput } = inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files));
+      const hasCompleteInput = circularInputComplete(circularSourceInputs(drawing.inputType.value, drawing.circularSources));
       if (
         hasCompleteInput &&
         !circularDiscoveryMatchesCurrentInput(drawing)
@@ -2999,7 +2975,7 @@ export const createRunAnalysis = ({
       if (generationToken !== latestGenerationToken) return { status: 'stale' };
       const nextRecordPlan = identitySources ? requestRecordPlan({
         drawing: requestDrawing,
-        filesData: { linearSeqs: [...drawing.linearSeqs], c_gb: drawing.files.c_gb, c_gff: drawing.files.c_gff, c_fasta: drawing.files.c_fasta }
+        filesData: { linearSeqs: [...drawing.linearSeqs], circularSources: [...drawing.circularSources] }
       }) : null;
       if (identitySources && nextRecordPlan) {
         // A committed request without kept identities reads them again from the current files.
@@ -5072,9 +5048,8 @@ export const createRunAnalysis = ({
           throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
         }
         const converted = await convertRingTablesOncePerFrame(
-          /** @type {[FileLike] | [FileLike, FileLike]} */ ((({ primaryFile, pairedFile }) => (
-            pairedFile ? [inputFiles.fileOf(primaryFile), inputFiles.fileOf(pairedFile)] : [inputFiles.fileOf(primaryFile)]
-          ))(inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files)))),
+          circularSourceInputs(drawing.inputType.value, drawing.circularSources).map(({ primaryFile, pairedFile }) => /** @type {[FileLike] | [FileLike, FileLike]} */ (
+            pairedFile ? [inputFiles.fileOf(primaryFile), inputFiles.fileOf(pairedFile)] : [inputFiles.fileOf(primaryFile)])),
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.
@@ -5459,7 +5434,7 @@ export const createRunAnalysis = ({
         replacedRecordKeys: [...replacedRecordKeys],
         previousRecords: sourceReplaced ? previousRequestRecords : [],
         currentRecords: canonical.renderRequest.records || [],
-        retainedRecords: offRecordRequestRecords(canonical.renderRequest.mode, drawing.recordsOff),
+        retainedRecords: offRecordRequestRecords(drawing.recordsOff),
         biologicalFeatures: candidateBiologicalFeatures,
         moves: recordMoves
       });

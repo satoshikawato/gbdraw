@@ -115,7 +115,7 @@ test('Circular GUI Generate vs. Source recipe sweep', async ({ page }) => {
   page.on('dialog', (d) => d.dismiss());
   await sweep(page, outdir, select(CIRCULAR_PROBES), async () => {
     await A.helpers().openApp(page);
-    await A.setFile(page, 'c_gb', join(A.REPO_ROOT, 'tests/test_inputs', input));
+    await A.addCircularGenbank(page, join(A.REPO_ROOT, 'tests/test_inputs', input));
   });
 });
 

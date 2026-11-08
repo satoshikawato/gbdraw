@@ -23,12 +23,13 @@ import {
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { BoundFileValue, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
+/** @import { BoundFileValue, CircularSource, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
- * What a Session binds of a drawing (`webBindings`): a Circular drawing's input
- * fields, a Linear drawing's record rows and comparison plan.
+ * What a Session binds of a drawing (`webBindings`): a Circular drawing's File
+ * cards and input fields, a Linear drawing's record rows and comparison plan.
  * @typedef {{
  *   readonly mode: string, readonly files: Readonly<Partial<DrawingInputFiles>>,
+ *   readonly circularSources: readonly Readonly<CircularSource>[],
  *   readonly linearSeqs: readonly Readonly<LinearSeq>[],
  *   readonly linearComparisonPlan?: { readonly edges?: readonly LinearComparisonEdge[] } | null
  * }} SessionBindingDrawing
@@ -48,9 +49,8 @@ import {
  */
 /** @typedef {{ name?: unknown, kind?: unknown, type?: unknown, lastModified?: unknown }} ResourceMetadata */
 /**
- * The shape `sessionResourceSource` returns: a single backing (`descriptor`,
- * `readBytes`) or a composite of backings (`descriptors`).
- * @typedef {ResourceSource & { descriptors?: (ResourceSource & ResourceMetadata)[] }} SessionResourceSource
+ * The shape `sessionResourceSource` returns: a single backing (`descriptor`, `readBytes`).
+ * @typedef {ResourceSource} SessionResourceSource
  */
 /** @typedef {ResourceSource & { size: unknown, bytesPromise: Promise<Uint8Array> | null, identityPromise: Promise<string> | null }} ResourceCandidate */
 /** @typedef {{ encoded: Map<unknown, Map<unknown, string>>, identities: Map<string, string>, pending: Map<string, ResourceCandidate> }} SizeBucket */
@@ -511,12 +511,6 @@ export const buildSessionDrawingResources = async (state, sets) => {
     const file = inputFiles.fileOf(ref);
     if (!file) return null;
     const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-    if (Array.isArray(source?.descriptors)) {
-      const components = [];
-      for (const component of source.descriptors) components.push(await bindSource(component, component));
-      const { resourceId: _resourceId, ...metadata } = bindingForFile(file, '');
-      return { kind: 'composite', components, ...metadata };
-    }
     if (source?.descriptor) return bindSource(source, file);
     // The descriptor Generate made of this File names the committed resource
     // by its reader, so binding it reads, hashes and decodes nothing.
@@ -552,11 +546,14 @@ export const buildSessionDrawingResources = async (state, sets) => {
     whitelist: await bindFile(files.whitelist),
     qualifier_priority: await bindFile(files.qualifier_priority)
   });
-  /** @param {SessionBindingDrawing} drawing The bindings of its mode's inputs. */
-  const circularBindings = async ({ files }) => ({
-    c_gb: await bindFile(files.c_gb),
-    c_gff: await bindFile(files.c_gff),
-    c_fasta: await bindFile(files.c_fasta),
+  /** @param {SessionBindingDrawing} drawing The bindings of its mode's inputs: one row per File card. */
+  const circularBindings = async ({ files, circularSources }) => ({
+    circularSources: await Promise.all(circularSources.map(async (card) => ({
+      uid: card.uid,
+      gb: await bindFile(card.gb),
+      gff: await bindFile(card.gff),
+      fasta: await bindFile(card.fasta)
+    }))),
     c_depth: await bindFileValue(files.c_depth),
     c_conservation_blasts: await bindFileValue(files.c_conservation_blasts),
     c_conservation_blasts_source:
@@ -634,7 +631,8 @@ export const buildSessionResources = async (state, committedRequest, drawings = 
     ...(otherCommittedRequest ? [{ drawing: null, committed: otherCommittedRequest }] : []),
     // Without drawings, the bindings of an empty drawing of each mode.
     ...(drawings.length ? drawings : /** @type {SessionBindingDrawing[]} */ ([
-      { mode: 'circular', files: {}, linearSeqs: [] }, { mode: 'linear', files: {}, linearSeqs: [] }
+      { mode: 'circular', files: {}, linearSeqs: [], circularSources: [] },
+      { mode: 'linear', files: {}, linearSeqs: [], circularSources: [] }
     ])).map((drawing) => ({ drawing, committed: null }))
   ]);
   const [top, other] = built.written;

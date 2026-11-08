@@ -7,7 +7,8 @@ import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-head
 import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { circularInputSlots, inputSourceFiles } from './input-types.js';
+import { circularInputComplete, circularSourceInputs } from './input-types.js';
+import { recordIdentity } from './record-draw-selection.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -23,15 +24,38 @@ import {
 /** @import { InputTypeSpec } from './input-types.js' */
 
 /**
- * The record catalog of the Circular source files: whose files it was read
- * from (`inputType`, `primaryFile`, `pairedFile`), and how reading went.
- * @typedef {object} CircularRecordDiscovery
- * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
- * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
- * @property {'' | 'gb' | 'gff' | 'fasta'} inputType
+ * One Circular source card as the record catalog read it: its uid, the files
+ * it was read from, and the reader's error for it ('' when it read).
+ * @typedef {object} CircularSourceDiscovery
+ * @property {string} uid
  * @property {InputFileRef | null} primaryFile
  * @property {InputFileRef | null} pairedFile
- * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
+ * @property {UserFacingError | ''} error
+ */
+/**
+ * The record catalog of the Circular source cards: whose files it was read
+ * from (`inputType`, `sources`, in drawing order), and how reading went. A card
+ * whose read failed makes the catalog's status 'error' with that card's error;
+ * the other cards' records still list (`circularRecordList`).
+ * @typedef {object} CircularRecordDiscovery
+ * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
+ * @property {UserFacingError | ''} error The first failed card's error, or '' when there is none.
+ * @property {'' | 'gb' | 'gff' | 'fasta'} inputType
+ * @property {CircularSourceDiscovery[]} sources
+ */
+/**
+ * One record of the Circular record list (`circularRecordList`): the card it is
+ * in (`uid`), its 1-based position in that card's file (`k`, whose selector is
+ * `#k`), and its identity (`uid:k`, or `uid` for a file of one record), the key
+ * its rows, its OFF state, the Record select and the Record Order name it by.
+ * @typedef {object} CircularListRecord
+ * @property {string} uid
+ * @property {number} k
+ * @property {string} identity
+ * @property {string} selector
+ * @property {string} record_id
+ * @property {number | null} record_length
+ * @property {string} detectedTopology
  */
 
 /**
@@ -82,28 +106,40 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  * @template Entry
  * @typedef {{
  *   inputType: { value: string },
- *   files: { c_gb: InputFileRef | null, c_gff: InputFileRef | null, c_fasta: InputFileRef | null },
+ *   circularSources: readonly { uid: string, gb: InputFileRef | null, gff: InputFileRef | null, fasta: InputFileRef | null }[],
  *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
  * }} CircularDiscoveryDrawing
  */
 
 /**
- * A catalog is current only for the exact active source instance and input type.
+ * Whether a catalog was read from these cards, in this order, with these files.
+ * @param {readonly CircularSourceDiscovery[]} read
+ * @param {readonly { uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }[]} inputs
+ */
+export const circularDiscoveryReadFrom = (read, inputs) => read.length === inputs.length
+  && read.every((source, index) => source.uid === inputs[index].uid
+    && source.primaryFile === inputs[index].primaryFile && source.pairedFile === inputs[index].pairedFile);
+
+/**
+ * A catalog is current only for the exact active source cards and input type.
+ * `failedSources`: the uids of the cards whose read failed; the records of the
+ * others list while one failed.
  * @template Entry
  * @param {CircularDiscoveryDrawing<Entry>} drawing
  */
 export const circularDiscoveryForInput = (drawing) => {
   const inputType = drawing.inputType.value;
-  const { primaryFile, pairedFile, complete: hasInput } = inputSourceFiles(inputType, circularInputSlots(drawing.files));
+  const inputs = circularSourceInputs(inputType, drawing.circularSources);
+  const hasInput = circularInputComplete(inputs);
   const discovery = drawing.circularRecordDiscovery;
-  const current = discovery.inputType === inputType
-    && discovery.primaryFile === primaryFile && discovery.pairedFile === pairedFile;
+  const current = discovery.inputType === inputType && circularDiscoveryReadFrom(discovery.sources, inputs);
   return {
-    hasInput, current, primaryFile, pairedFile, inputType,
+    hasInput, current, inputs, inputType,
     status: hasInput ? (current ? discovery.status : 'deferred') : 'idle',
     error: current ? discovery.error : '',
-    records: current && discovery.status === 'ready' ? drawing.circularRecordList.value : []
+    failedSources: current ? discovery.sources.filter((source) => source.error).map((source) => source.uid) : [],
+    records: current && (discovery.status === 'ready' || discovery.status === 'error') ? drawing.circularRecordList.value : []
   };
 };
 
@@ -1056,6 +1092,38 @@ export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
 export const inputRecordsOperation = (spec) => INPUT_RECORD_READERS[spec.sourceKind].operation;
+
+/**
+ * The one read of a Circular drawing's records: each source card read on its
+ * own (the reader keeps each file's records), in card order, each record named
+ * by its card (`uid`), its place in its file (`k`) and its identity. A card
+ * whose read fails gives no records and its error (the reader's, unformatted);
+ * the other cards still list theirs. Generate, Reload Records and the request
+ * rebuilds outside the app (a Gallery publication) read through this (D-13).
+ * @template F
+ * @param {readonly import('./input-types.js').CircularSourceInput<F>[]} inputs `circularSourceInputs`
+ * @param {(file: F | null) => FileLike | null | undefined} fileOf The File of a card's file.
+ * @returns {Promise<{ records: CircularListRecord[], error: unknown }[]>}
+ */
+export const readCircularSourceRecords = (inputs, fileOf) => Promise.all(inputs.map(async ({ uid, spec, primaryFile, pairedFile }) => {
+  try {
+    const records = await discoverInputRecords(spec, fileOf(primaryFile), fileOf(pairedFile));
+    return {
+      records: records.map((entry, sourceIndex) => ({
+        uid,
+        k: sourceIndex + 1,
+        identity: recordIdentity({ uid, sourceIndex, recordCount: records.length }),
+        selector: `#${sourceIndex + 1}`,
+        record_id: entry.recordId,
+        record_length: entry.recordLength,
+        detectedTopology: entry.detectedTopology
+      })),
+      error: null
+    };
+  } catch (error) {
+    return { records: [], error };
+  }
+}));
 
 /**
  * The selector a FASTA reader of a GFF3 and FASTA pair reads for a record selector. load_gff_fasta reads only the

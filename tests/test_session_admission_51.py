@@ -118,7 +118,7 @@ def _request_of_other_mode(document: Document) -> None:
 
 
 def _without_own_input(document: Document) -> None:
-    del _drawing(document, "circular")["webFiles"]["bindings"]["c_gb"]
+    del _drawing(document, "circular")["webFiles"]["bindings"]["circularSources"]
 
 
 def _other_mode_binding(document: Document) -> None:
@@ -145,7 +145,7 @@ def _other_mode_binding(document: Document) -> None:
         ("drawings-circular-linear", _request_of_other_mode, "another mode"),
         ("drawings-circular-linear", _set("@linear.webFiles", {"circularInputOriginalName": "x"}), "webFiles"),
         ("drawings-per-drawing-cards", _other_mode_binding, "no other mode's input"),
-        ("drawings-per-drawing-cards", _without_own_input, "requires c_gb"),
+        ("drawings-per-drawing-cards", _without_own_input, "requires circularSources"),
     ],
 )
 def test_python_refuses_a_49_document_outside_its_layout(

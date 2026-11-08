@@ -14,6 +14,8 @@
 // (gbdraw/session_io.py), pinned by
 // tests/fixtures/sessions/legend-row-key-vectors.json.
 import {
+  CLI_RECORD_KEY_PREFIX,
+  EXPANDED_RECORD_KEY_SEPARATOR,
   FILE_IMPORT_ORIGIN_SESSION_VERSION,
   MODE_SCOPED_SESSION_VERSION,
   OTHER_MODE_RESULT_EDITOR_FIELDS,
@@ -643,6 +645,139 @@ export const sessionDocumentOfViews = (saved, activeDrawingId) => {
   return /** @type {Session51} */ (/** @type {unknown} */ (project));
 };
 
+const MODE_SCOPED_CIRCULAR_INPUT = fieldSet(LAYOUT.modeScopedCircularInputSlots);
+const SOURCE_SELECTOR = /^#([1-9][0-9]*)$/;
+const CLI_RECORD_KEY = new RegExp(`^${CLI_RECORD_KEY_PREFIX}[1-9][0-9]*$`);
+
+/** `_request_record_file`: the resource of the file a request record reads. @param {unknown} record @returns {unknown} */
+const requestRecordFile = (record) => {
+  const source = mapping(mapping(record).source);
+  return source.resourceId || source.fastaResourceId;
+};
+
+/**
+ * `_card_record_counts`: how many records each card's file holds, when the
+ * request draws every record of each card's own file; else null.
+ * @param {readonly Fields[]} cards
+ * @param {readonly unknown[]} records
+ * @returns {number[] | null}
+ */
+const cardRecordCounts = (cards, records) => {
+  const files = cards.map((card) => mapping(card.gb).resourceId || mapping(card.fasta).resourceId);
+  if (files.some((file) => file === undefined || file === null || file === '') || new Set(files).size !== files.length) return null;
+  const counts = files.map((file) => records.filter((record) => requestRecordFile(record) === file).length);
+  return !counts.includes(0) && counts.reduce((sum, count) => sum + count, 0) === records.length ? counts : null;
+};
+
+/**
+ * `_card_uids`: the uid of each card (D-12). The key base of the committed
+ * request's records of each card's own file, when every card's file is read by
+ * records of one key base of the CLI's form (`record-<n>`) and the bases differ; else
+ * `record-1` for one card and `source-<n>` for several, which no key of a
+ * Session 50 has (a composite drawn as one concatenated source keyed its
+ * records `record-<k>` over all of them).
+ * @param {readonly unknown[]} files The card files: each card's GenBank, or its FASTA.
+ * @param {readonly unknown[]} records The committed request's records.
+ * @returns {string[]}
+ */
+const cardUids = (files, records) => {
+  const bases = files.map((file) => {
+    const resourceId = mapping(file).resourceId;
+    const keys = new Set(records.filter((record) => resourceId && requestRecordFile(record) === resourceId)
+      .map((record) => String(mapping(record).recordKey || '').split(EXPANDED_RECORD_KEY_SEPARATOR)[0]));
+    const base = keys.size === 1 ? [...keys][0] : '';
+    return CLI_RECORD_KEY.test(base) ? base : '';
+  });
+  if (bases.every(Boolean) && new Set(bases).size === bases.length) return bases;
+  return files.map((_file, index) => (files.length === 1 ? 'record-1' : `source-${index + 1}`));
+};
+
+/**
+ * `circular_sources_of_mode_scoped` (gbdraw/session_drawings.py, which says
+ * the rule): a Session 46-50 with its Circular input (`c_gb`, a composite of
+ * several, `c_gff`, `c_fasta`) as File cards (uids: `cardUids`), and the Circular
+ * slice's `#N` selectors as record identities where the counts can be known.
+ * @param {Fields} data
+ * @returns {Fields}
+ */
+export const circularSourcesOfModeScoped = (data) => {
+  const webFiles = mapping(data.webFiles);
+  const bindings = webFiles.bindings;
+  if (!isObject(bindings) || !Object.keys(mapping(bindings)).some((key) => MODE_SCOPED_CIRCULAR_INPUT.has(key))) return { ...data };
+  const held = mapping(bindings);
+  const gb = held.c_gb;
+  const composite = isObject(gb) && mapping(gb).kind === 'composite';
+  /** @type {unknown[]} */
+  const files = composite ? [...(/** @type {unknown[]} */ (mapping(gb).components))] : [gb ?? null];
+  const gff = held.c_gff ?? null;
+  const fasta = held.c_fasta ?? null;
+  const count = files.length > 1 || files[0] !== null || gff !== null || fasta !== null ? files.length : 0;
+  const request = mapping(committedViews(data).get('circular')?.view.renderRequest);
+  const records = Array.isArray(request.records) ? request.records : [];
+  const uids = cardUids(Array.from({ length: count }, (_unused, index) => files[index] ?? (index === 0 ? fasta : null)), records);
+  /** @type {Fields[]} */
+  const cards = Array.from({ length: count }, (_unused, index) => ({
+    uid: uids[index],
+    gb: index < files.length ? files[index] : null,
+    gff: index === 0 ? gff : null,
+    fasta: index === 0 ? fasta : null
+  }));
+  /** @type {Fields} */
+  const moved = {
+    ...data,
+    webFiles: { ...webFiles, bindings: { ...without(held, MODE_SCOPED_CIRCULAR_INPUT), circularSources: cards } }
+  };
+  const modes = mapping(data.modes);
+  const config = mapping(mapping(modes.circular).config);
+  // With no card, no source selector can be placed: each is left out.
+  if (!Object.keys(config).length) return moved;
+  const recordsOff = Array.isArray(config.recordsOff) ? config.recordsOff : [];
+  const form = mapping(config.form);
+  const adv = mapping(config.adv);
+  const positions = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : [];
+  const numbers = [...recordsOff, form.circular_record_selector, ...positions.map((row) => mapping(row).selector)]
+    .flatMap((value) => {
+      const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
+      return match ? [Number(match[1])] : [];
+    });
+  const counts = cards.length === 1
+    ? [records.length > 1 || recordsOff.length > 0 || numbers.some((number) => number > 1) ? 2 : 1]
+    : cardRecordCounts(cards, records);
+  /** The identity of a source selector, null where it cannot be placed; any other value as it is. @param {unknown} value @returns {unknown} */
+  const identity = (value) => {
+    const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
+    if (!match) return value;
+    let number = Number(match[1]);
+    for (const [index, size] of (counts || []).entries()) {
+      const uid = String(cards[index].uid);
+      // One card of unknown size holds every number given.
+      if (cards.length === 1 && size > 1) return `${uid}:${number}`;
+      if (number <= size) return size > 1 ? `${uid}:${number}` : uid;
+      number -= size;
+    }
+    return null;
+  };
+  /** @type {Fields} */
+  const movedConfig = { ...config };
+  // A `recordsOff` that is not a list is left to the reader that repairs it.
+  if (Array.isArray(config.recordsOff)) {
+    movedConfig.recordsOff = [...new Set(recordsOff.map(identity).filter((key) => key !== null))];
+  }
+  if (Object.hasOwn(form, 'circular_record_selector')) {
+    const selected = identity(form.circular_record_selector);
+    movedConfig.form = { ...form, circular_record_selector: selected === null ? '' : selected };
+  }
+  if (Object.hasOwn(adv, 'multi_record_positions')) {
+    movedConfig.adv = {
+      ...adv,
+      multi_record_positions: positions.map((row) => ({ ...mapping(row), selector: identity(mapping(row).selector) }))
+        .filter((row) => row.selector !== null)
+    };
+  }
+  moved.modes = { ...modes, circular: { ...mapping(modes.circular), config: movedConfig } };
+  return moved;
+};
+
 /**
  * A Session 46-50's Session 51, what only the source says, and where the
  * file holds each drawing's saved Result set (`setSources`, by drawing ID;
@@ -681,7 +816,7 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   if (!Number.isInteger(version) || version < MODE_SCOPED_SESSION_VERSION || version >= LAYOUT.version) {
     throw layoutInvalid();
   }
-  const source = /** @type {Fields} */ (/** @type {unknown} */ (checked));
+  const source = circularSourcesOfModeScoped(/** @type {Fields} */ (/** @type {unknown} */ (checked)));
   const committed = committedViews(source);
   if (!committed.size) throw layoutInvalid();
   const order = migratedDrawingModes(source, committed);

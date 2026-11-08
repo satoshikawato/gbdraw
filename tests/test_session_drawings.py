@@ -578,6 +578,28 @@ def test_an_upgraded_session_renders_its_drawing_as_before(fixture: str, tmp_pat
     assert _render_svgs(upgraded, tmp_path / "upgraded", source_drawing.id) == _render_svgs(source, tmp_path / "source")
 
 
+def test_a_composite_circular_input_upgrades_to_one_file_card_per_file(tmp_path: Path) -> None:
+    # circular-multi-file D-01, DESIGN section 7 test 5: the three files a
+    # Session 44 bound as one composite c_gb are three File cards, and no
+    # composite is left. The committed records name the composite, so the
+    # cards take uids no flat record key has (D-12, OV-2843).
+    source = load_session_document(SESSION_FIXTURES / "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz")
+    components = source.to_dict()["webFiles"]["bindings"]["c_gb"]["components"]
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document.to_dict()
+    view = drawing_view(upgraded, "circular")
+    bindings = view["webFiles"]["bindings"]
+    assert not {"c_gb", "c_gff", "c_fasta"} & set(bindings)
+    cards = bindings["circularSources"]
+    assert [card["uid"] for card in cards] == ["source-1", "source-2", "source-3"]
+    assert [card["gb"]["name"] for card in cards] == [part["name"] for part in components]
+    assert [upgraded["resources"][card["gb"]["resourceId"]]["data"] for card in cards] == [
+        source.to_dict()["resources"][part["resourceId"]]["data"] for part in components
+    ]
+    assert all(card["gff"] is None and card["fasta"] is None for card in cards)
+    assert [record["recordKey"] for record in view["renderRequest"]["records"]] == ["record-1", "record-2", "record-3"]
+    assert '"composite"' not in json.dumps(upgraded)
+
+
 def test_an_upgraded_v33_label_override_with_empty_text_renders_as_before(tmp_path: Path) -> None:
     source = load_session_document(SESSION_FIXTURES / "feature-edits-circular.v33.gbdraw-session.json.gz")
     upgraded = upgrade_session_document(source).document

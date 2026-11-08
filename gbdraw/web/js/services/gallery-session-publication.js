@@ -19,7 +19,10 @@ import {
   SESSION_VERSION as CURRENT_VERSION
 } from '../contracts/schema.generated.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+/** @import { FileLike } from './session-resource-backing.js' */
 import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
+import { readCircularSourceRecords } from './record-discovery.js';
+import { circularSourceInputs } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
@@ -61,7 +64,13 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {'circular' | 'linear'} mode
  * @property {PublicationConfig} [config]
  * @property {StoredLayoutPreferences | null} [layoutPreferences]
- * @property {{ linearSeqs: { cardinality?: unknown, depth?: unknown }[], c_depth?: unknown, [field: string]: unknown }} files
+ * @property {{ linearSeqs: { cardinality?: unknown, depth?: unknown }[], c_depth?: unknown,
+ *   circularSources?: PublicationCircularSource[], [field: string]: unknown }} files The input files; a Circular
+ *   projection names its File cards (`circularSources`).
+ */
+/**
+ * A Circular File card of a projection: its uid and the resource of each file it holds.
+ * @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} PublicationCircularSource
  */
 /**
  * A Session document at publication. Admission checks it: the current writer format (`modes`), an
@@ -378,6 +387,14 @@ const rebuildIntent = async (session, owners) => {
     sequence.cardinality = renderRequest.records[index]?.cardinality;
   });
   const { state, drawing, features } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config });
+  // The rebuild reads the records of each Circular card, as Generate does before it builds its request (D-13).
+  if (projection.mode === 'circular') {
+    if (!filesData.circularSources) throw new Error('Gallery publication requires the File cards of a Circular projection.');
+    const reads = await readCircularSourceRecords(circularSourceInputs(drawing.inputType.value, filesData.circularSources), (file) => file);
+    const failed = reads.find(({ error }) => error !== null);
+    if (failed) throw failed.error;
+    drawing.circularRecordList.value = reads.flatMap(({ records }) => records);
+  }
   const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({
     plan: inherit ? noComparisonPlan() : drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
     layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],

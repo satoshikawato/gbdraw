@@ -99,15 +99,16 @@ test('a Load installs its Files as refs at install, and a rolled-back ref stays 
   const view = fileNamed('comparison.tsv');
   const bound = bindLoadedInputs(store, {
     files: {
-      c_gb: genome, c_depth: [[depth, null]], c_conservation_blasts: [kept], c_conservation_blasts_source: 'losat-cache',
+      c_depth: [[depth, null]], c_conservation_blasts: [kept], c_conservation_blasts_source: 'losat-cache',
       linearCanonicalComparisons: [{ kind: 'collinearityResult', file: view }, { kind: 'generatedProteinComparison' }]
     },
     linearSeqs: [{ uid: 'a', gb: genome, gff: null, fasta: null, depth: [depth] }],
+    circularSources: [{ uid: 'card', gb: genome, gff: null, fasta: null }],
     linearComparisonPlan: { mode: 'selected', defaultSource: 'upload', edges: [{ id: 'e', file: edgeFile }] },
-    circularRecordDiscovery: { primaryFile: genome, pairedFile: null }
+    circularRecordDiscovery: { sources: [{ uid: 'card', primaryFile: genome, pairedFile: null, error: null }] }
   });
   const genomeRef = store.registerFile(genome);
-  assert.equal(bound.files.c_gb, genomeRef, 'the loaded File is registered and the field holds its ref');
+  assert.equal(bound.circularSources[0].gb, genomeRef, 'the loaded File is registered and the card holds its ref');
   assert.deepEqual(bound.files.c_depth, [[store.registerFile(depth), null]], 'a Depth matrix keeps its places');
   assert.deepEqual(bound.files.c_conservation_blasts, [kept], 'a ref of the rollback stays bound as it is');
   assert.equal(bound.files.c_conservation_blasts_source, 'losat-cache', 'a flag is not a file');
@@ -116,12 +117,16 @@ test('a Load installs its Files as refs at install, and a rolled-back ref stays 
   assert.equal(bound.linearSeqs[0].gb, genomeRef, 'one ref per File across fields');
   assert.deepEqual(bound.linearSeqs[0].depth, [store.registerFile(depth)]);
   assert.equal(store.fileOf(bound.linearComparisonPlan.edges[0].file), edgeFile);
-  assert.equal(bound.circularRecordDiscovery.primaryFile, genomeRef, 'the discovery names the field\'s ref');
+  assert.equal(bound.circularRecordDiscovery.sources[0].primaryFile, genomeRef, 'the discovery names the card\'s ref');
   const ids = boundInputFileIds({
-    drawingList: () => [{ files: bound.files, linearSeqs: bound.linearSeqs, linearComparisonPlan: bound.linearComparisonPlan }]
+    drawingList: () => [{
+      files: bound.files, linearSeqs: bound.linearSeqs, circularSources: bound.circularSources, linearComparisonPlan: bound.linearComparisonPlan
+    }]
   });
   assert.equal(ids.size, 5, 'every bound ref is named (genome, depth, kept, comparison, edge)');
-  assert.equal(boundInputFileIds({ drawingList: () => [{ files: { c_gb: fileNamed('raw.gb'), d_color: fileNamed('raw.tsv') }, linearSeqs: [] }] }).size, 0,
+  assert.equal(boundInputFileIds({ drawingList: () => [{
+    files: { d_color: fileNamed('raw.tsv') }, linearSeqs: [], circularSources: [{ uid: 'card', gb: fileNamed('raw.gb'), gff: null, fasta: null }]
+  }] }).size, 0,
     'a binding holds refs only: a File in a field names nothing');
 });
 
@@ -131,16 +136,19 @@ test('a file bound only by a hidden drawing survives History eviction (the union
   const record = fileNamed('hidden-record.gb');
   const genomeRef = store.registerFile(genome);
   const recordRef = store.registerFile(record);
-  const shown = { linearComparisonPlan: null, files: { c_gb: null }, linearSeqs: [] };
-  const hidden = { linearComparisonPlan: null, files: { c_gb: genomeRef }, linearSeqs: [{ uid: 'r', gb: recordRef }] };
+  const shown = { linearComparisonPlan: null, files: {}, circularSources: [], linearSeqs: [] };
+  const hidden = {
+    linearComparisonPlan: null, files: {}, circularSources: [{ uid: 'c', gb: genomeRef, gff: null, fasta: null }],
+    linearSeqs: [{ uid: 'r', gb: recordRef }]
+  };
   retainHistoryAndBoundFiles({ drawingList: () => [shown, hidden] }, store)([]);
   assert.equal(store.fileOf(genomeRef), genome, 'the hidden drawing\'s input file stays stored');
   assert.equal(store.fileOf(recordRef), record, 'the hidden drawing\'s record file stays stored');
 });
 
 const {
-  INPUTS_SLICE, addLinearSeq, bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList,
-  bindDrawingInputFileTree, bindLinearSeqFile, createLinearSeq, moveLinearSeq, removeLinearSeq, replaceLinearSeqs,
+  INPUTS_SLICE, addCircularSource, addLinearSeq, bindCircularSourceFile, bindDrawingCanonicalComparisons, bindDrawingInputFileList,
+  bindDrawingInputFileTree, bindLinearSeqFile, createCircularSource, createLinearSeq, moveLinearSeq, removeLinearSeq, replaceLinearSeqs,
   setConservationBlastsSource
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 
@@ -149,8 +157,7 @@ const {
 // is changed to show the capture is a copy. A slice holds only its joined
 // members (`INPUTS_SLICE.members`), which the tests below fill.
 const MEMBER_FILLS = {
-  files: { boundFiles: 4, fill: ({ store, handle, genome }) => {
-    bindDrawingInputFile(store, handle, 'c_gb', genome);
+  files: { boundFiles: 3, fill: ({ store, handle }) => {
     bindDrawingInputFileList(store, handle, 'c_conservation_blasts', [fileNamed('a.tsv'), null]);
     bindDrawingInputFileTree(store, handle, 'c_depth', [[fileNamed('depth.tsv'), null]]);
     setConservationBlastsSource(handle, 'losat-cache');
@@ -161,16 +168,20 @@ const MEMBER_FILLS = {
     bindLinearSeqFile(store, handle, 'second', 'gb', fileNamed('second.gb'));
     bindLinearSeqFile(store, handle, 'second', 'depth', [fileNamed('second-depth.tsv')]);
   }, changeCopy: (captured) => captured.linearSeqs[1].depth.push('changed') },
+  circularSources: { boundFiles: 1, fill: ({ store, handle, genome }) => {
+    addCircularSource(handle, createCircularSource({ uid: 'card' }));
+    bindCircularSourceFile(store, handle, 'card', 'gb', genome);
+  }, changeCopy: (captured) => { captured.circularSources[0].gb = null; } },
   inputType: { boundFiles: 0, fill: ({ view }) => { view.inputType.value = 'gff'; }, changeCopy: () => {} },
   circularRecordList: { boundFiles: 0, fill: ({ view }) => {
-    view.circularRecordList.value = [{ selector: '#1', record_id: 'NC_1' }];
+    view.circularRecordList.value = [{ uid: 'card', k: 1, identity: 'card', selector: '#1', record_id: 'NC_1' }];
   }, changeCopy: () => {} },
   circularRecordDiscovery: { boundFiles: 0, fill: ({ store, view, genome }) => {
     Object.assign(view.circularRecordDiscovery, {
-      status: 'ready', inputType: 'gb', primaryFile: store.registerFile(genome),
-      canonicalRecordIdentities: [{ selector: '#1', record_id: 'NC_1', recordKey: 'k1' }]
+      status: 'ready', inputType: 'gb',
+      sources: [{ uid: 'card', primaryFile: store.registerFile(genome), pairedFile: null, error: null }]
     });
-  }, changeCopy: (captured) => { captured.circularRecordDiscovery.canonicalRecordIdentities[0].recordKey = 'changed'; } }
+  }, changeCopy: (captured) => { captured.circularRecordDiscovery.sources[0].uid = 'changed'; } }
 };
 const filledInputs = () => {
   const store = createInputFileStore();
@@ -184,7 +195,7 @@ const joinedFiles = INPUTS_SLICE.members.includes('files');
 test('inputs: install(capture(x)) gives back x, also after reset, and a capture is a copy', () => {
   const { handle, view, store, genome } = filledInputs();
   if (joinedFiles) {
-    assert.equal(store.fileOf(view.files.c_gb), genome, 'a file field holds the stored file\'s ref');
+    assert.equal(store.fileOf(view.circularSources[0].gb), genome, 'a card holds the stored file\'s ref');
     assert.equal(view.files.d_color, null, 'each drawing binds its own card files (R16-4)');
   }
   assert.deepEqual(Object.keys(view), [...INPUTS_SLICE.members]);
@@ -201,7 +212,7 @@ test('inputs: install(capture(x)) gives back x, also after reset, and a capture 
   assert.equal(JSON.stringify(INPUTS_SLICE.capture(empty.handle)), json, 'another drawing installs the same inputs');
   INPUTS_SLICE.members.forEach((member) => MEMBER_FILLS[member].changeCopy(captured));
   assert.equal(JSON.stringify(INPUTS_SLICE.capture(handle)), json, 'a capture shares no list with the slice');
-  if (joinedFiles) assert.equal(INPUTS_SLICE.capture(handle).files.c_gb, view.files.c_gb, 'refs are kept by reference');
+  if (joinedFiles) assert.equal(INPUTS_SLICE.capture(handle).circularSources[0].gb, view.circularSources[0].gb, 'refs are kept by reference');
 });
 
 test('inputs: the row writers find a row by its uid and refuse an unknown one', () => {
@@ -239,13 +250,14 @@ test('a card file binds in its drawing only, and a reset removes only that drawi
   const b = INPUTS_SLICE.create();
   const colors = bindInputFile(store, a.handle, 'd_color', fileNamed('colors.tsv'));
   const rules = bindInputFile(store, b.handle, 't_color', fileNamed('rules.tsv'));
-  const genome = bindDrawingInputFile(store, a.handle, 'c_gb', fileNamed('genome.gb'));
+  addCircularSource(a.handle, createCircularSource({ uid: 'card' }));
+  const genome = bindCircularSourceFile(store, a.handle, 'card', 'gb', fileNamed('genome.gb'));
   assert.deepEqual([a.view.files.d_color, a.view.files.t_color, b.view.files.d_color, b.view.files.t_color],
     [colors, null, null, rules]);
   assert.deepEqual([...boundInputFileIds({ drawingList: () => [a.view] })].sort(), [colors.fileId, genome.fileId].sort(),
     'a drawing\'s card file is one of its bindings (retention keeps it while any drawing binds it)');
   INPUTS_SLICE.reset(a.handle);
-  assert.deepEqual([a.view.files.d_color, a.view.files.c_gb, b.view.files.t_color], [null, genome, rules],
+  assert.deepEqual([a.view.files.d_color, a.view.circularSources[0].gb, b.view.files.t_color], [null, genome, rules],
     'the reset drawing loses its card files and keeps its genome; the other drawing keeps its card');
   assert.equal(bindInputFile(store, b.handle, 't_color', null), null, 'Remove unbinds the card');
   assert.equal(b.view.files.t_color, null);
@@ -307,11 +319,11 @@ test('a History intent\'s files are the drawing\'s inputs slice capture', async 
   const circular = state.drawingOf('circular');
   bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', fileNamed('keep.tsv'));
   for (const drawing of [circular, state.drawingOf('linear')]) {
-    const { files, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
+    const { files, linearSeqs, circularSources, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
     const { linearCanonicalComparisons: _generated, ...bound } = files;
     const intent = snapshots.drawingHistory(drawing.id).buildIntent();
     const expected = JSON.parse(JSON.stringify({
-      ...bound, inputType, linearSeqs,
+      ...bound, inputType, linearSeqs, circularSources,
       linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: edge.file ?? null }))
     }));
     assert.deepEqual(intent.files, expected, drawing.mode);
@@ -327,7 +339,7 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
   const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
   const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
   const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-  const { INPUTS_SLICE, bindDrawingInputFile, bindDrawingCanonicalComparisons, bindLinearSeqFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { INPUTS_SLICE, bindInputFile, bindDrawingCanonicalComparisons, bindLinearSeqFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const store = state.inputFiles;
   const snapshots = createHistorySnapshotService({
     state, fileStore: store, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
@@ -346,18 +358,18 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
   const uid = linear.linearSeqs[0].uid;
   await history.runUndoable('Change uploaded file', () => {
     bindLinearSeqFile(store, slice, uid, 'gb', fileNamed('first.gb'));
-    bindDrawingInputFile(store, slice, 'c_fasta', fileNamed('kept.fa'));
+    bindInputFile(store, slice, 'blacklist', fileNamed('kept.txt'));
   });
   const stepCapture = INPUTS_SLICE.capture(slice);
   await history.runUndoable('Change uploaded file', () => {
     bindLinearSeqFile(store, slice, uid, 'gb', fileNamed('second.gb'));
-    bindDrawingInputFile(store, slice, 'c_fasta', null);
+    bindInputFile(store, slice, 'blacklist', null);
   });
   const generated = [{ kind: 'generatedProteinComparison', queryRecordIndex: 0, subjectRecordIndex: 1 }];
   bindDrawingCanonicalComparisons(store, slice, generated);
   const released = stepCapture.linearSeqs[0].gb;
   // Only the first row file is released; the step's other file stays stored.
-  const stored = [...boundInputFileIds({ drawingList: () => state.drawingList() }), stepCapture.files.c_fasta.fileId];
+  const stored = [...boundInputFileIds({ drawingList: () => state.drawingList() }), stepCapture.files.blacklist.fileId];
   store.retainOnly(stored.filter((id) => id !== released.fileId));
   await history.undo();
   const expected = {
@@ -379,8 +391,8 @@ test('Save writes each drawing\'s own card bindings', async () => {
   const colors = store.registerFile(new File(['CDS\t#123456\n'], 'colors.tsv', { type: 'text/plain', lastModified: 1 }));
   const words = store.registerFile(new File(['hypothetical\n'], 'black.txt', { type: 'text/plain', lastModified: 2 }));
   const drawings = [
-    { mode: 'circular', files: { d_color: colors }, linearSeqs: [] },
-    { mode: 'linear', files: { blacklist: words }, linearSeqs: [], linearComparisonPlan: null }
+    { mode: 'circular', files: { d_color: colors }, linearSeqs: [], circularSources: [] },
+    { mode: 'linear', files: { blacklist: words }, linearSeqs: [], circularSources: [], linearComparisonPlan: null }
   ];
   const { written } = await buildSessionDrawingResources({ inputFiles: store }, drawings.map((drawing) => ({ drawing, committed: null })));
   const cards = written.map(({ webFiles }) => ['d_color', 'blacklist'].map((key) => Boolean(webFiles.bindings[key])));
@@ -396,7 +408,8 @@ test('a Session file chosen in another drawing binds the same file ID and stores
   const store = createInputFileStore();
   const circular = INPUTS_SLICE.create();
   const linear = INPUTS_SLICE.create();
-  const genome = bindDrawingInputFile(store, circular.handle, 'c_gb', fileNamed('genome.gb'));
+  addCircularSource(circular.handle, createCircularSource({ uid: 'card' }));
+  const genome = bindCircularSourceFile(store, circular.handle, 'card', 'gb', fileNamed('genome.gb'));
   const colors = bindInputFile(store, circular.handle, 'd_color', fileNamed('colors.tsv'));
   const blast = store.registerFile(fileNamed('pair.tsv'));
   const bindings = { drawingList: () => [

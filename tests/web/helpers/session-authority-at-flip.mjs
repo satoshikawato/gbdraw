@@ -13,7 +13,9 @@ const { isSettingsOnlySessionDocument, projectsWithoutRequest, validateSessionAu
 const requestLess = (version) => ({
   format: 'gbdraw-session', version, resources: {}, renderRequest: null, results: [],
   editorState: { featureCatalog: null }, ui: { mode: 'circular' }, modes: { circular: { config: { form: {}, adv: {} } } },
-  webFiles: { bindings: { schema: 2, c_gb: null, c_gff: null, c_fasta: null, linearSeqs: [] } }
+  webFiles: { bindings: version >= 51
+    ? { schema: 2, circularSources: [], linearSeqs: [] }
+    : { schema: 2, c_gb: null, c_gff: null, c_fasta: null, linearSeqs: [] } }
 });
 /** @param {number} version */
 const bindingsRead = (version) => {

@@ -39,6 +39,8 @@ const {
 // reader (which lifts schemas 1 and 2 and promotes 5 to 8), then projected.
 // A stored Session's request as Load reads it: the projection takes only
 // the current schema (D3a).
+// One Circular File card; `uid` is the CLI record key of its file.
+const circularCard = ({ uid = 'record-1', gb = null, gff = null, fasta = null } = {}) => ({ uid, gb, gff, fasta });
 const readStoredSession = (canonical, context = {}) => {
   const read = readStoredRenderRequest(canonical.renderRequest, {
     featureCatalog: null, legacyOrthogroupState: null,
@@ -398,7 +400,19 @@ const ref = (value) => ({ value });
 const state = {
   mode: 'circular',
   inputType: ref('gb'),
-  circularRecordList: ref([]),
+  // The list a fixture assigns holds the records of the one card `record-1` (`CircularListRecord`).
+  circularRecordList: (() => {
+    let list = [];
+    return {
+      get value() { return list; },
+      set value(records) {
+        list = records.map((record, index) => (record.uid ? record : {
+          uid: 'record-1', k: index + 1, identity: records.length === 1 ? 'record-1' : `record-1:${index + 1}`,
+          record_length: null, detectedTopology: '', ...record
+        }));
+      }
+    };
+  })(),
   form: {
     prefix: 'web-session', species: '', strain: '', plot_title: '', legend: 'right',
     multi_record_canvas: false, suppress_gc: false, suppress_skew: false,
@@ -511,7 +525,7 @@ const genbank = {
   lastModified: 0,
   data: btoa(genbankText)
 };
-const filesData = { c_gb: genbank, linearSeqs: [] };
+const filesData = { circularSources: [circularCard({ gb: genbank })], linearSeqs: [] };
 
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
@@ -657,13 +671,18 @@ canonicalWithWebBindings.resources['inactive-comparison'] = {
   data: btoa('match')
 };
 canonicalWithWebBindings.webFiles.bindings = {
-  schema: 1,
-  c_gb: {
-    resourceId: 'record-1-genbank',
-    name: 'bound-circular.gb',
-    type: 'text/x-genbank',
-    lastModified: 123
-  },
+  schema: 2,
+  circularSources: [{
+    uid: 'record-1',
+    gb: {
+      resourceId: 'record-1-genbank',
+      name: 'bound-circular.gb',
+      type: 'text/x-genbank',
+      lastModified: 123
+    },
+    gff: null,
+    fasta: null
+  }],
   linearSeqs: [{
     uid: 'inactive-linear-uid',
     gb: {
@@ -690,15 +709,14 @@ canonicalWithWebBindings.webFiles.bindings = {
       type: 'text/tab-separated-values',
       lastModified: 789
     }
-  }],
-  linearCanonicalComparisons: []
+  }]
 };
 const webBindingProjection = projectCanonicalSessionRequest(
   canonicalWithWebBindings
 );
-assert.equal(webBindingProjection.files.c_gb.name, 'bound-circular.gb');
-assert.equal(webBindingProjection.files.c_gb.type, 'text/x-genbank');
-assert.equal(webBindingProjection.files.c_gb.lastModified, 123);
+assert.equal(webBindingProjection.files.circularSources[0].gb.name, 'bound-circular.gb');
+assert.equal(webBindingProjection.files.circularSources[0].gb.type, 'text/x-genbank');
+assert.equal(webBindingProjection.files.circularSources[0].gb.lastModified, 123);
 assert.equal(webBindingProjection.files.linearSeqs[0].uid, 'inactive-linear-uid');
 assert.equal(webBindingProjection.files.linearSeqs[0].inferred_definition, '<i>Bound organism</i>');
 assert.equal(webBindingProjection.files.linearSeqs[0].gb.name, 'bound-linear.gb');
@@ -1018,10 +1036,8 @@ const implicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData }
 assert.equal(implicitSingleCanonical.renderRequest.grouping, 'single');
 assert.equal(implicitSingleCanonical.webFiles.circularOutputPrefixExplicit, false);
 assert.equal(implicitSingleCanonical.renderRequest.records[0].recordKey, 'record-1');
-assert.deepEqual(
-  implicitSingleCanonical.renderRequest.records[0].selector,
-  { kind: 'recordId', value: 'single.id' }
-);
+// The file's only record needs no selector, as the CLI writes it.
+assert.equal(implicitSingleCanonical.renderRequest.records[0].selector, null);
 assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
 assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
 
@@ -1040,7 +1056,8 @@ Object.assign(state.form, {
 const selectedCircularCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(selectedCircularCanonical.renderRequest.grouping, 'single');
 assert.equal(selectedCircularCanonical.renderRequest.records.length, 1);
-assert.match(selectedCircularCanonical.renderRequest.records[0].recordKey, /second-record/);
+// A record is keyed by its identity (`<card uid>:<k>`), not by its record ID.
+assert.equal(selectedCircularCanonical.renderRequest.records[0].recordKey, 'record-1:2');
 assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].selector, { kind: 'recordId', value: 'second-record' });
 assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].windows, [{
   start: 3,
@@ -1275,27 +1292,31 @@ assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_rec
 state.form.circular_record_selector = 'dup_2';
 const gridWithRetainedSingleSelector = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');
-assert.equal(gridWithRetainedSingleSelector.renderRequest.records.length, 3);
+// A read card draws one record per record of its file, keyed by identity, as the CLI commits it
+// (circular-multi-file D-13).
+assert.deepEqual(gridWithRetainedSingleSelector.renderRequest.records.map((record) => [record.recordKey, record.cardinality]),
+  [['record-1:1', 'exactly_one'], ['record-1:2', 'exactly_one'], ['record-1:3', 'exactly_one']]);
 state.form.circular_record_selector = '';
 
 // Record selection (D-02, DESIGN 2.2): a canvas or batch draws the ON records
 // under stable keys, and grid positions name positions among them. These
 // requests stay out of the characterization below (Raw builder).
 {
-  state.recordsOff = ['#2'];
+  // OFF records and grid positions name records by identity (`<card uid>:<k>`).
+  state.recordsOff = ['record-1:2'];
   state.adv.multi_record_positions = [
-    { selector: '#1', row: 1 }, { selector: '#2', row: 1 }, { selector: '#3', row: 2 }
+    { selector: 'record-1:1', row: 1 }, { selector: 'record-1:2', row: 1 }, { selector: 'record-1:3', row: 2 }
   ];
   const offGrid = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
   assert.equal(offGrid.grouping, 'grid');
-  assert.deepEqual(offGrid.records.map((record) => record.recordKey), ['record-1', 'record-3']);
+  assert.deepEqual(offGrid.records.map((record) => record.recordKey), ['record-1:1', 'record-1:3']);
   assert.deepEqual(offGrid.layout.multiRecordPositions, ['#1@1', '#2@2']);
 
   state.form.multi_record_canvas = false;
-  state.recordsOff = ['#1', '#3'];
+  state.recordsOff = ['record-1:1', 'record-1:3'];
   const oneOn = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
   assert.equal(oneOn.grouping, 'batch', 'All records with one ON record stays a batch of one');
-  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.windows]), [['record-2', []]]);
+  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.windows]), [['record-1:2', []]]);
 
   // An explicit single choice draws its record, ON or OFF (P-2).
   state.form.circular_record_selector = '#1';
@@ -1304,7 +1325,7 @@ state.form.circular_record_selector = '';
   assert.deepEqual(chosen.records[0].selector, { kind: 'recordIndex', index: 0 });
   state.form.circular_record_selector = '';
 
-  state.recordsOff = ['#1', '#2', '#3'];
+  state.recordsOff = ['record-1:1', 'record-1:2', 'record-1:3'];
   assert.throws(
     () => buildCanonicalRenderRequestRaw({ state, filesData }),
     (error) => error.code === 'RECORD_SELECTION' && error.context?.reason === 'NONE_DRAWN'
@@ -2092,7 +2113,7 @@ assert.deepEqual(
   for (const mode of ['circular', 'linear']) {
     const fastaState = { ...state, mode, inputType: ref('fasta') };
     const files = mode === 'circular'
-      ? { c_fasta: fasta, linearSeqs: [] }
+      ? { circularSources: [circularCard({ fasta })], linearSeqs: [] }
       : { linearSeqs: [{ uid: 'alpha', fasta, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
           region_reverse: false }], linearComparisons: [] };
     // Not one of the characterized requests: those stay the recorded set.
@@ -2105,7 +2126,7 @@ assert.deepEqual(
     const projected = projectCanonicalSessionRequest(built);
     assert.equal(projected.inputType, 'fasta', mode);
     const slots = mode === 'circular'
-      ? { gb: projected.files.c_gb, gff: projected.files.c_gff, fasta: projected.files.c_fasta }
+      ? projected.files.circularSources[0]
       : projected.files.linearSeqs[0];
     assert.equal(slots.fasta.data, fasta.data, mode);
     assert.equal(slots.gb ?? null, null, mode);
@@ -2114,8 +2135,8 @@ assert.deepEqual(
 }
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
-assert.equal(projection.files.c_gb.data, genbank.data);
-assert.equal(projection.files.c_gb.name, 'input.gb');
+assert.equal(projection.files.circularSources[0].gb.data, genbank.data);
+assert.equal(projection.files.circularSources[0].gb.name, 'input.gb');
 assert.equal(projection.config.form.prefix, 'web-session');
 assert.equal(projection.config.form.labels_mode, 'none');
 assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
@@ -2213,7 +2234,7 @@ repeatedResourcePrefix.resources['record-1-genbank'].name =
   'record-1-genbank-record-1-genbank-original.gb';
 delete repeatedResourcePrefix.webFiles.resourceOriginalNames;
 delete repeatedResourcePrefix.webFiles.circularInputOriginalName;
-assert.equal(projectCanonicalSessionRequest(repeatedResourcePrefix).files.c_gb.name, 'original.gb');
+assert.equal(projectCanonicalSessionRequest(repeatedResourcePrefix).files.circularSources[0].gb.name, 'original.gb');
 const radialProjection = projectCanonicalSessionRequest(radialCanonical);
 assert.equal(radialProjection.config.adv.circular_label_placement, 'radial');
 assert.deepEqual(
@@ -2368,7 +2389,7 @@ const multiCircularProjection = projectCanonicalSessionRequest({
     grouping: 'grid',
     records: [
       canonical.renderRequest.records[0],
-      { ...canonical.renderRequest.records[0], source: { kind: 'genbank', resourceId: 'record-2-genbank' } }
+      { ...canonical.renderRequest.records[0], recordKey: 'record-2', source: { kind: 'genbank', resourceId: 'record-2-genbank' } }
     ]
   },
   resources: {
@@ -2376,11 +2397,14 @@ const multiCircularProjection = projectCanonicalSessionRequest({
     'record-2-genbank': { kind: 'genbank', ...secondGenbank }
   }
 });
-const { readSessionResourceText } = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
-const combinedCircularGenbank = await readSessionResourceText(multiCircularProjection.files.c_gb);
-assert.equal(combinedCircularGenbank.match(/^LOCUS/gm)?.length, 2);
-assert.match(combinedCircularGenbank, /WEBTEST/);
-assert.match(combinedCircularGenbank, /WEBTWO/);
+// Each file is its own card (a card per `--gbk`, uid = the CLI record key); no composite file joins them.
+const multiCards = multiCircularProjection.files.circularSources;
+assert.deepEqual(multiCards.map((card) => card.uid), ['record-1', 'record-2']);
+const [firstCardGenbank, secondCardGenbank] = multiCards.map((card) => atob(card.gb.data));
+assert.equal(firstCardGenbank.match(/^LOCUS/gm)?.length, 1);
+assert.equal(secondCardGenbank.match(/^LOCUS/gm)?.length, 1);
+assert.match(firstCardGenbank, /WEBTEST/);
+assert.match(secondCardGenbank, /WEBTWO/);
 
 state.mode = 'linear';
 state.inputType.value = 'gb';
@@ -4187,7 +4211,7 @@ state.circularRecordList.value = [
   { selector: '#2' }
 ];
 const circularSparseFilesData = {
-  c_gb: combinedGenbank,
+  circularSources: [circularCard({ gb: combinedGenbank })],
   c_depth: [
     [depthA, null],
     [null, depthB]
@@ -4243,7 +4267,7 @@ assert.deepEqual(
 const circularLegacyFlatCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {
-    c_gb: combinedGenbank,
+    circularSources: [circularCard({ gb: combinedGenbank })],
     c_depth: [depthA, depthB],
     linearSeqs: []
   }
@@ -4258,19 +4282,31 @@ assert.deepEqual(
   projectCanonicalSessionRequest(circularLegacyFlatCanonical).files.c_depth.map(
     (row) => row.map((entry) => Boolean(entry))
   ),
+  // A flat series names one file for every record: the card's two records each get the row.
   [[true, true], [true, true]]
 );
 assert.throws(
   () => buildCanonicalRenderRequest({
     state,
     filesData: {
-      c_gb: combinedGenbank,
-      c_depth: [[depthA, depthB]],
+      circularSources: [circularCard({ gb: combinedGenbank })],
+      c_depth: [[depthA], [depthB], [depthA]],
       linearSeqs: []
     }
   }),
-  /Circular Depth matrix has 1 record rows; expected 2/
+  /Circular Depth matrix has 3 record rows; expected 2/
 );
+// A matrix with fewer rows than the card's records leaves the later records without Depth (their rows are
+// empty), where it was refused when the records were one joined file's.
+// (Not one of the characterized requests: those stay the recorded set.)
+assert.doesNotThrow(() => buildCanonicalRenderRequestRaw({
+  state,
+  filesData: {
+    circularSources: [circularCard({ gb: combinedGenbank })],
+    c_depth: [[depthA, depthB]],
+    linearSeqs: []
+  }
+}));
 // OV-89: a Depth series that no record gives a source is a Depth failure the
 // user can fix, with the series named (it was UNKNOWN), and it offers to
 // attach a TSV or remove the series (TK-06).
@@ -4278,7 +4314,7 @@ assert.throws(
   () => buildCanonicalRenderRequest({
     state,
     filesData: {
-      c_gb: combinedGenbank,
+      circularSources: [circularCard({ gb: combinedGenbank })],
       c_depth: [[depthA, null], [depthB, null]],
       linearSeqs: []
     }
@@ -5905,10 +5941,13 @@ assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
   // Re-recorded when the default merge orientation became "strand" (OV-2301), and when the split of a File card
   // stopped writing rows while Arrange in rows is off (OV-2500, R17-41): one request's two members lost row 1, and
-  // its layout, which then carries nothing, is left out. Re-recorded for request schema 10 (record windows replace
-  // the region; the 81 requests differ from the schema-9 ones only in that shape), and when every request began to
-  // state its depth and GC axis label styles (D-24): without those two leaves each request is the schema-10 one.
-  '43878b3649784163d2d21c3336653065fd44edc8e5a9bea941f2b4b738b76a32',
+  // its layout, which then carries nothing, is left out. Re-recorded again for Circular File cards (circular-multi-file):
+  // a Circular record is keyed by its identity (`<card uid>:<k>`, or the uid for a card of one record), a card that draws
+  // every record of its file on a canvas is one `all` record, and a Depth matrix shorter than a card's records pads.
+  // Re-recorded when a read card wrote the CLI's committed records (D-13): one `exactly_one` record per record, and no
+  // selector for a file's only record. Against dev's request schema 10 requests (record windows, axis label styles),
+  // 14 Circular requests differ, only in `records` (keys, cardinality, selectors, and one file's one resource).
+  'a1731207352d3f179f9c82c479265279fbb330be49379b35bc4ae8944218567b',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.
@@ -5935,7 +5974,7 @@ if (projectSessionIndex >= 0) {
   });
   assert.ok(['circular', 'linear'].includes(projectedSession.mode));
   assert.ok(
-    projectedSession.files.c_gb || projectedSession.files.linearSeqs.length > 0,
+    projectedSession.files.circularSources?.length > 0 || projectedSession.files.linearSeqs.length > 0,
     'projected session must restore at least one input record'
   );
   if (sessionPath.includes('hepatoplasmataceae_')) {
@@ -6049,63 +6088,25 @@ if (roundTripSessionIndex >= 0) {
 {
   const backing = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
   const frozen = readStoredSession(JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json'))));
-  const oldProjection = projectCanonicalSessionRequest({ ...frozen,
-    sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
-  assert.equal(oldProjection.files.c_gb.name, frozen.webFiles.bindings.c_gb.name);
-  assert.equal(oldProjection.files.c_gb.lastModified, 7);
-  const omitted = structuredClone(frozen);
-  omitted.webFiles.bindings.c_gb = { resourceId: frozen.webFiles.bindings.c_gb.resourceId };
-  const defaults = projectCanonicalSessionRequest({ ...omitted,
-    sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
-  assert.equal(defaults.files.c_gb.type, '');
-  assert.equal(defaults.files.c_gb.lastModified, 0);
-  const descriptor = (text, name) => ({ kind: 'web-file', name, type: 'text/plain',
-    encoding: 'base64', data: Buffer.from(text).toString('base64'), size: Buffer.byteLength(text), lastModified: 0 });
-  const resources = { ...frozen.resources, first: descriptor('first', 'misleading.gb'),
-    second: descriptor('second\r\n', 'misleading.gb'), orphan: descriptor('unused', 'first.gb') };
-  const components = ['second', 'first', 'second'].map((resourceId, i) => ({
-    resourceId, name: i === 0 ? '' : `part-${i}.gb`, type: '', lastModified: i / 2
-  }));
-  const composite = { kind: 'composite', components, name: '', type: '', lastModified: 0.25 };
-  const webFiles = { ...frozen.webFiles, bindings: { schema: 2, c_gb: composite } };
-  for (const entries of [Object.entries(resources), Object.entries(resources).reverse()]) {
-    for (const adopted of [true, false]) {
-      const table = Object.fromEntries(entries);
-      const projected = projectCanonicalSessionRequest({ ...frozen, resources: table, webFiles,
-        sessionResourceTable: adopted ? backing.adoptCurrentSessionResources(table) : null });
-      const file = projected.files.c_gb;
-      assert.equal(Array.isArray(file), false);
-      assert.equal(backing.isSessionResourceFileView(file), true);
-      assert.equal(file.name, '');
-      assert.equal(await backing.readSessionResourceText(file), 'second\r\nfirst\nsecond\r\n');
-      assert.deepEqual(backing.sessionResourceSource(file).descriptors.map(({ descriptor, readBytes, ...part }) => part), components);
-    }
-  }
-  const linearSession = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
-  const linear = savedDrawingView(linearSession, linearSession.ui.activeDrawingId);
-  const inactive = projectCanonicalSessionRequest({ ...linear,
-    resources: { ...linear.resources, first: resources.first, second: resources.second },
-    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } },
-    // The Load of a Session 41-48 checks its bindings by `c_gb` whatever the mode.
-    bindingInputSlot: 'c_gb' });
-  assert.equal(linear.renderRequest.mode, 'linear');
-  assert.equal(await backing.readSessionResourceText(inactive.files.c_gb), 'second\r\nfirst\nsecond\r\n');
+  // A Session 41-50 `c_gb` is moved to a File card before a request is projected (Load); the card's file
+  // binding names the display metadata the projection restores.
   const leaf = frozen.webFiles.bindings.c_gb;
-  for (const schema of [1, 2]) {
-    const arrays = [leaf, [null, leaf]];
-    const projected = projectCanonicalSessionRequest({ ...frozen,
-      webFiles: { bindings: { schema, c_gb: arrays } },
-      sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
-    assert.equal(Array.isArray(projected.files.c_gb), true);
-    assert.equal(Array.isArray(projected.files.c_gb[1]), true);
-    assert.equal(projected.files.c_gb[1][0], null);
-    assert.equal(backing.sessionResourceSource(projected.files.c_gb[0]).descriptors, undefined);
-  }
-  const bad = { ...webFiles, bindings: { schema: 2, c_gb: { ...composite, components: [] } } };
-  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }),
-    (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS'); // R6 (R1-M3)
-  const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
-  assert.equal(noDraft.files.c_gb, null);
+  const cardBindings = (schema, gb) => ({ ...frozen.webFiles,
+    bindings: { schema, circularSources: [{ uid: 'record-1', gb, gff: null, fasta: null }] } });
+  const sessionResourceTable = backing.adoptCurrentSessionResources(frozen.resources);
+  const oldProjection = projectCanonicalSessionRequest({ ...frozen, webFiles: cardBindings(1, leaf), sessionResourceTable });
+  assert.equal(oldProjection.files.circularSources[0].gb.name, leaf.name);
+  assert.equal(oldProjection.files.circularSources[0].gb.lastModified, 7);
+  const defaults = projectCanonicalSessionRequest({ ...frozen,
+    webFiles: cardBindings(1, { resourceId: leaf.resourceId }), sessionResourceTable });
+  assert.equal(defaults.files.circularSources[0].gb.type, '');
+  assert.equal(defaults.files.circularSources[0].gb.lastModified, 0);
+  // A drawing with no File card projects none.
+  const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, circularSources: [] } } });
+  assert.deepEqual(noDraft.files.circularSources, []);
+  // A card that is no {uid, gb, gff, fasta} row is the typed Session-fields error (R6, R1-M3).
+  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: cardBindings(2, { ...leaf, components: [] }) }),
+    (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
 }
 
 // The Web factory changes fresh intent only; persisted request omission stays OFF.
@@ -6162,8 +6163,9 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // CLI sidecars without a saved Web draft initialize from complete typed inputs.
 // The same empty slots in a Web draft remain empty, even with a committed Result.
 {
-  const emptyCliSlots = { schema: 2, c_gb: null, c_gff: null, c_fasta: null,
-    c_depth: null, d_color: null, t_color: null, linearSeqs: [], linearComparisons: [] };
+  // A Linear drawing's slots (a Session 51 binds the Circular input in `circularSources` only).
+  const emptyCliSlots = { schema: 2, c_depth: null, d_color: null, t_color: null, linearSeqs: [], linearComparisons: [] };
+  const emptyCircularCliSlots = { ...emptyCliSlots, circularSources: [] };
   const cliProjection = projectCanonicalSessionRequest({ ...numericColumnCanonical,
     webFiles: { ...numericColumnCanonical.webFiles, bindings: emptyCliSlots }, initializeCliInputs: true });
   const typedProjection = projectCanonicalSessionRequest(numericColumnCanonical);
@@ -6181,8 +6183,8 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     assert.deepEqual(emptyWeb.files.linearComparisons, []);
   }
   const circularCli = projectCanonicalSessionRequest({ ...canonical,
-    webFiles: { bindings: emptyCliSlots }, initializeCliInputs: true });
-  assert.deepEqual(circularCli.files.c_gb, projectCanonicalSessionRequest(canonical).files.c_gb);
+    webFiles: { bindings: emptyCircularCliSlots }, initializeCliInputs: true });
+  assert.deepEqual(circularCli.files.circularSources, projectCanonicalSessionRequest(canonical).files.circularSources);
 
   const gffCli = structuredClone(numericColumnCanonical);
   const descriptor = (kind, name, text) => ({ kind, name, type: 'text/plain',
@@ -6199,26 +6201,26 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.equal(gffProjection.inputType, 'gff');
   assert(gffProjection.files.linearSeqs.every(row => row.gff && row.fasta && row.depth));
   assert.equal(gffProjection.files.linearComparisons.length, 1, 'Embedded comparison TSV survives');
-  const originalGffBindings = { ...emptyCliSlots,
-    c_gff: { resourceId: 'annotation-0', name: 'original.gff', type: '', lastModified: 7 },
-    c_fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } };
+  const originalGffBindings = { ...emptyCliSlots, circularSources: [{ uid: 'record-1', gb: null,
+    gff: { resourceId: 'annotation-0', name: 'original.gff', type: '', lastModified: 7 },
+    fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } }] };
   const originalGff = projectCanonicalSessionRequest({ ...canonical,
     resources: { ...canonical.resources, ...gffCli.resources },
     webFiles: { bindings: originalGffBindings }, initializeCliInputs: true });
   assert.equal(originalGff.inputType, 'gff');
-  assert.equal(originalGff.files.c_gb, null);
-  assert.equal(originalGff.files.c_gff.name, 'original.gff');
-  assert.equal(originalGff.files.c_gff.data, gffCli.resources['annotation-0'].data);
-  assert.equal(originalGff.files.c_fasta.data, gffCli.resources['sequence-0'].data);
+  assert.equal(originalGff.files.circularSources[0].gb, null);
+  assert.equal(originalGff.files.circularSources[0].gff.name, 'original.gff');
+  assert.equal(originalGff.files.circularSources[0].gff.data, gffCli.resources['annotation-0'].data);
+  assert.equal(originalGff.files.circularSources[0].fasta.data, gffCli.resources['sequence-0'].data);
   // Without a Web draft the input type is the first whose files are all bound (GenBank, GFF3 + FASTA, FASTA):
   // a FASTA bound alone reads as the FASTA input type.
   const fastaCli = projectCanonicalSessionRequest({ ...canonical,
     resources: { ...canonical.resources, ...gffCli.resources },
-    webFiles: { bindings: { ...emptyCliSlots,
-      c_fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } } },
+    webFiles: { bindings: { ...emptyCliSlots, circularSources: [{ uid: 'record-1', gb: null, gff: null,
+      fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } }] } },
     initializeCliInputs: true });
   assert.equal(fastaCli.inputType, 'fasta');
-  assert.equal(fastaCli.files.c_fasta.data, gffCli.resources['sequence-0'].data);
+  assert.equal(fastaCli.files.circularSources[0].fasta.data, gffCli.resources['sequence-0'].data);
 }
 
 // A helper-produced typed resource uses the Python codec bytes without serializing its graph again.

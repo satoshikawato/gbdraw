@@ -48,9 +48,11 @@ const circularPrefix = ({ prefix = '', recordId = 'FL10.1' } = {}) => {
   Object.assign(drawing.adv, createDefaultAdv('circular'));
   installShownDrawing('circular');
   modeDrawing(state, 'circular').inputType.value = 'gb';
-  drawing.circularRecordList.value = [{ record_id: recordId, record_length: 40 }];
+  drawing.circularRecordList.value = [{
+    uid: 'record-1', k: 1, identity: 'record-1', selector: '#1', record_id: recordId, record_length: 40
+  }];
   const canonical = buildCanonicalRenderRequest({
-    state, drawing, filesData: { c_gb: genbank(recordId), linearSeqs: [] }, comparisonPlanSnapshot: null
+    state, drawing, filesData: { circularSources: [{ uid: 'record-1', gb: genbank(recordId), gff: null, fasta: null }], linearSeqs: [] }, comparisonPlanSnapshot: null
   });
   return canonical.renderRequest.output.prefix;
 };

@@ -26,14 +26,14 @@ test('the drawn Linear cards keep file order and leave out OFF cards', () => {
   assert.deepEqual([...omittedLinearUids(cards, ['c', 'gone'])], ['c']);
 });
 
-test('the Circular records to draw keep their source index', () => {
-  const entries = [0, 1, 2].map((sourceIndex) => ({ selector: `#${sourceIndex + 1}`, sourceIndex }));
-  const drawn = circularRecordsToDraw(entries, ['#2']);
+test('the Circular records to draw are named by their identity', () => {
+  const entries = [0, 1, 2].map((sourceIndex) => ({ identity: `card-a:${sourceIndex + 1}`, sourceIndex }));
+  const drawn = circularRecordsToDraw(entries, ['card-a:2']);
   assert.deepEqual(drawn.map((entry) => entry.sourceIndex), [0, 2]);
-  assert.equal(circularRecordDrawKey({ sourceIndex: 4 }), '#5');
-  assert.equal(isRecordDrawKey('circular', '#3'), true);
-  assert.equal(isRecordDrawKey('circular', '#0'), false);
-  assert.equal(isRecordDrawKey('circular', 'contig_1'), false);
+  assert.equal(circularRecordDrawKey({ identity: 'card-b' }), 'card-b');
+  // One shape of key in both modes: a card uid or a record identity.
+  assert.equal(isRecordDrawKey('circular', 'card-a:3'), true);
+  assert.equal(isRecordDrawKey('circular', ' card-a'), false);
   assert.equal(isRecordDrawKey('linear', 'linear-seq-1'), true);
   assert.equal(isRecordDrawKey('linear', ''), false);
 });
@@ -46,9 +46,10 @@ test('turning records ON or OFF and pruning keep one entry per key', () => {
 
 test('the request keys of OFF records follow the request builder', () => {
   // A Linear OFF card keeps its rows under its uid and its `<uid>:<k>` identities.
-  assert.deepEqual(offRecordRequestRecords('linear', ['uid-2', 'uid-2']), [{ recordKey: 'uid-2', cardinality: 'all' }]);
-  assert.deepEqual(offRecordRequestRecords('circular', ['#2', '#10', 'bad']), [
-    { recordKey: 'record-2', cardinality: 'exactly_one' }, { recordKey: 'record-10', cardinality: 'exactly_one' }
+  // A Circular OFF record keeps them under its identity: one rule for both modes.
+  assert.deepEqual(offRecordRequestRecords(['uid-2', 'uid-2']), [{ recordKey: 'uid-2', cardinality: 'all' }]);
+  assert.deepEqual(offRecordRequestRecords(['card-a:2', 'card-b']), [
+    { recordKey: 'card-a:2', cardinality: 'all' }, { recordKey: 'card-b', cardinality: 'all' }
   ]);
 });
 

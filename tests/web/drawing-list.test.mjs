@@ -119,12 +119,15 @@ test('Reset all gives a second Circular drawing its Record Order rows and compar
   const second = createDrawingState('circular-2', 'circular');
   state.addDrawing(second, 'Circular 2', 2);
   history.addMember('circular-2');
-  second.circularRecordList.value = [{ selector: '#1', record_id: 'NC_1' }, { selector: '#2', record_id: 'NC_2' }];
-  second.adv.multi_record_positions.splice(0, Infinity, { selector: '#2', row: 3 });
+  second.circularRecordList.value = [
+    { uid: 'record-1', k: 1, identity: 'record-1:1', selector: '#1', record_id: 'NC_1' },
+    { uid: 'record-1', k: 2, identity: 'record-1:2', selector: '#2', record_id: 'NC_2' }
+  ];
+  second.adv.multi_record_positions.splice(0, Infinity, { selector: 'record-1:2', row: 3 });
   bindDrawingInputFileTree(state.inputFiles, second.slices.inputs, 'c_conservation_fastas', [new File(['>r\nACGT\n'], 'ring.fa')]);
 
   await app.resetSettings();
-  assert.deepEqual(second.adv.multi_record_positions.map((position) => position.selector), ['#1', '#2'],
+  assert.deepEqual(second.adv.multi_record_positions.map((position) => position.selector), ['record-1:1', 'record-1:2'],
     'one Record Order row per loaded record, at its default');
   // OV-2818: the kept ring file keeps its ring row; Show Comparison Rings is off, as after any Reset.
   assert.equal(second.circularConservation.enabled, false);
@@ -821,13 +824,16 @@ test('removing the Circular source returns every record-bound form field to its 
   const app = createAppSetup();
   app.selectDrawing('circular');
   const drawing = state.activeDrawing();
-  app.setCircularSourceFile('c_gb', new File(['LOCUS'], 'record.gb'));
+  const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  replaceCircularSources(drawing.slices.inputs, [createCircularSource({ uid: 'card-1' })]);
+  app.setCircularSourceFile('card-1', 'gb', new File(['LOCUS'], 'record.gb'));
   const edited = Object.fromEntries(Object.entries(CIRCULAR_RECORD_FORM_DEFAULTS).map(([field, value]) => [
     field, typeof value === 'boolean' ? !value : typeof value === 'string' ? 'edited'
       : Array.isArray(value) ? [{ start: 90, end: 10, reverseComplement: true, column: null }] : 7
   ]));
-  Object.assign(drawing.form, edited);
-  app.setCircularSourceFile('c_gb', null);
+  // The Record select names a record by its identity; the presentation retires with the card the select names.
+  Object.assign(drawing.form, edited, { circular_record_selector: 'card-1' });
+  app.setCircularSourceFile('card-1', 'gb', null);
   assert.deepEqual(Object.fromEntries(Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => [field, drawing.form[field]])),
     { ...CIRCULAR_RECORD_FORM_DEFAULTS });
 });
@@ -842,7 +848,8 @@ test('Every drawing while the drawing switch is busy writes nothing and shows th
   const calls = [];
   const shared = { fileId: 'f1', name: 'a.gb' };
   const drawings = { circular: createDrawingState('circular', 'circular'), 'circular-2': createDrawingState('circular-2', 'circular') };
-  for (const drawing of Object.values(drawings)) drawing.files.c_gb = shared;
+  const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  for (const drawing of Object.values(drawings)) replaceCircularSources(drawing.slices.inputs, [createCircularSource({ uid: 'card-1', gb: shared })]);
   const replacement = createInputReplacement({
     drawingTabs: () => Object.keys(drawings).map((id) => ({ id })),
     shownDrawingId: () => 'circular',
