@@ -8,7 +8,8 @@ block in ``.gitignore`` keeps the placed copies out of git.
 
 ``fetch`` puts every listed file at its path. It takes the file from the user
 cache, else from git history by blob ID (a full clone works offline), else from
-its URL, and checks the sha256 of every copy. pytest runs it once at start.
+its URL, falling back to the GitHub API route to the same Release asset when
+the URL fails, and checks the sha256 of every copy. pytest runs it once at start.
 
 usage:
   python tools/test_data.py fetch [--require]
@@ -191,15 +192,60 @@ def _from_git_history(items: list[InputFile], root: Path, cache: Path) -> None:
     process.wait()
 
 
-def _download(item: InputFile, cache: Path, log: Callable[[str], None]) -> None:
-    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+API_ROOT = f"https://api.github.com/repos/{RELEASE_REPOSITORY}/releases"
+RELEASE_DOWNLOAD_PREFIX = f"https://github.com/{RELEASE_REPOSITORY}/releases/download/"
+
+# tag -> {asset name: API URL of the asset}; None when the lookup failed.
+ReleaseAssets = dict[str, dict[str, str] | None]
+
+
+def _api_request(url: str, accept: str) -> urllib.request.Request:
+    request = urllib.request.Request(url, headers={"Accept": accept})
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        # Unredirected: the API redirects asset downloads to a storage host.
+        request.add_unredirected_header("Authorization", f"Bearer {token}")
+    return request
+
+
+def _api_asset_url(item: InputFile, releases: ReleaseAssets, log: Callable[[str], None]) -> str | None:
+    """The API URL of the Release asset that ``item.url`` names, if it can be found."""
+
+    if not item.url.startswith(RELEASE_DOWNLOAD_PREFIX):
+        return None
+    tag, _, name = item.url[len(RELEASE_DOWNLOAD_PREFIX):].partition("/")
+    if tag not in releases:
         try:
-            with urllib.request.urlopen(item.url, timeout=60) as response:
-                if _store(cache, item, iter(lambda: response.read(CHUNK), b"")):
-                    return
-            log(f"test data: {item.path}: the download does not match the manifest")
-        except (OSError, http.client.HTTPException) as error:
-            log(f"test data: {item.path}: download attempt {attempt} failed: {error}")
+            with urllib.request.urlopen(
+                _api_request(f"{API_ROOT}/tags/{tag}", "application/vnd.github+json"), timeout=60
+            ) as response:
+                assets = json.load(response)["assets"]
+            releases[tag] = {asset["name"]: asset["url"] for asset in assets}
+        except (OSError, http.client.HTTPException, ValueError, KeyError, TypeError) as error:
+            releases[tag] = None
+            log(f"test data: release lookup for {tag} through the API failed: {error}")
+    return (releases[tag] or {}).get(name)
+
+
+def _download(item: InputFile, cache: Path, log: Callable[[str], None], releases: ReleaseAssets) -> None:
+    """Try the download URL, then the API route to the same asset, per attempt."""
+
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        for route in ("download URL", "API"):
+            try:
+                if route == "download URL":
+                    request = urllib.request.Request(item.url)
+                else:
+                    api_url = _api_asset_url(item, releases, log)
+                    if api_url is None:
+                        continue
+                    request = _api_request(api_url, "application/octet-stream")
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    if _store(cache, item, iter(lambda: response.read(CHUNK), b"")):
+                        return
+                log(f"test data: {item.path}: the {route} copy does not match the manifest")
+            except (OSError, http.client.HTTPException) as error:
+                log(f"test data: {item.path}: {route} attempt {attempt} failed: {error}")
 
 
 def _place(entry: Path, destination: Path) -> None:
@@ -237,9 +283,10 @@ def fetch(
     cache = default_cache_dir() if cache is None else cache
     log(f"test data: placing {len(pending)} input file(s) from {cache}, git history or the test-data Release")
     _from_git_history([item for item in pending if not _holds(cache / item.sha256, item)], root, cache)
+    releases: ReleaseAssets = {}
     for item in pending:
         if not _holds(cache / item.sha256, item):
-            _download(item, cache, log)
+            _download(item, cache, log, releases)
     missing = []
     for item in pending:
         entry = cache / item.sha256
