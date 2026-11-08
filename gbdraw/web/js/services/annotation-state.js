@@ -1,4 +1,5 @@
 // @ts-check
+import { DRAFT_ANNOTATION_STYLE } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { nextNumberedId } from './track-slot-validation.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
@@ -41,21 +42,6 @@ import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.j
  * }} AnnotationSet `keepHighlightOverlay`: a sequence search's set (PD-OI-117), written only by Python's search
  *   set builder; Python draws its highlights in front of the features, also in a custom stack that names no slot for it.
  */
-
-const DEFAULT_STYLE = Object.freeze({
-  stroke: '#404040',
-  strokeWidth: 1.5,
-  strokeDasharray: [],
-  lineCap: 'tick',
-  fill: '#94a3b8',
-  fillOpacity: 0.2,
-  hatch: null,
-  labelColor: '#202020',
-  labelFontSize: null,
-  labelOrientation: 'auto',
-  labelPosition: 'center',
-  labelOffset: 4
-});
 
 /**
  * @param {unknown} value
@@ -128,11 +114,14 @@ const normalizeTarget = (target) => {
 // The style and set factories read their input and copy it: a JSON copy is
 // the new value's own (the casts).
 /**
+ * A new style: Python's, written by tools/generate_web_contracts.py (`DRAFT_ANNOTATION_STYLE`), with `overrides`;
+ * its dash array is its own.
  * @param {DeepReadonly<Partial<AnnotationStyle>> | null} [overrides]
  * @returns {AnnotationStyle}
  */
 export const createDefaultAnnotationStyle = (overrides = {}) => ({
-  ...DEFAULT_STYLE,
+  ...DRAFT_ANNOTATION_STYLE,
+  strokeDasharray: [...DRAFT_ANNOTATION_STYLE.strokeDasharray],
   ...(overrides && typeof overrides === 'object' ? /** @type {Partial<AnnotationStyle>} */ (clone(overrides)) : {})
 });
 

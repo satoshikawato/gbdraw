@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from gbdraw.annotations.models import (
     ResolvedAnnotationBundle,
+    annotation_solid_fill,
     annotation_track_params_from_mapping,
     effective_annotation_style,
 )
@@ -75,10 +76,7 @@ def sync_annotation_legend_entries(
             seen.add(signature)
             out.add_source(str(annotation.legend_label), {
                 "type": "solid",
-                "fill": hatch_pattern_paint(hatch) if hatch else (
-                    style.fill
-                    or ("#94a3b8" if annotation.mark == "highlight" else "none")
-                ),
+                "fill": hatch_pattern_paint(hatch) if hatch else annotation_solid_fill(annotation.mark, style),
                 "stroke": style.stroke,
                 "width": style.stroke_width,
                 "annotation_hatch": hatch,

@@ -263,6 +263,11 @@ class AnnotationGradient:
             )
 
 
+# The fill a ``highlight`` draws with when its style has none; the Web starts a new style on it too
+# (``describe_draft_annotation_style`` in gbdraw/session_request_codec.py).
+DEFAULT_HIGHLIGHT_FILL = "#94a3b8"
+
+
 @dataclass(frozen=True)
 class RegionAnnotationStyle:
     stroke: str = "#404040"
@@ -779,6 +784,13 @@ def effective_annotation_style(
     return params.style_override or annotation.style
 
 
+def annotation_solid_fill(mark: str, style: RegionAnnotationStyle) -> str:
+    """The fill of a ``band`` or ``highlight`` mark without hatching: its style's own, else
+    ``DEFAULT_HIGHLIGHT_FILL`` for a highlight and ``none`` for a band."""
+
+    return style.fill or (DEFAULT_HIGHLIGHT_FILL if mark == "highlight" else "none")
+
+
 def annotation_label_font_size(style: RegionAnnotationStyle, feature_label_font_size: float) -> float:
     """A region label's font size: its style's own, else ``feature_label_font_size``, the font size the
     feature labels of its drawing use."""
@@ -792,6 +804,7 @@ __all__ = [
     "AnnotationSet",
     "AnnotationTrackParams",
     "CoordinateSpan",
+    "DEFAULT_HIGHLIGHT_FILL",
     "FeatureSelector",
     "FeatureSpan",
     "HatchStyle",
@@ -804,6 +817,7 @@ __all__ = [
     "ResolvedRegionAnnotation",
     "ResolutionWarning",
     "annotation_label_font_size",
+    "annotation_solid_fill",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
     "linear_annotation_labels_above",

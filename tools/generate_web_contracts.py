@@ -127,6 +127,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("ORGANISM_NAME_RULE", "gbdraw.core.record_metadata", "organism_name_rule_data"),
     # The raw-cache args keep one spelling; the LOSAT Wasm reads the runtime spelling.
     ("LOSAT_SEARCH_FLAGS", "gbdraw.comparisons.losat_runtime", "losat_search_flags"),
+    # The style of a new annotation set: Python's style defaults with the highlight fill (OV-2813).
+    ("DRAFT_ANNOTATION_STYLE", "gbdraw.session_request_codec", "describe_draft_annotation_style"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's

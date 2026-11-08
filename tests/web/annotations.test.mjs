@@ -12,8 +12,10 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
 const {
-  annotationOptionsPayload, createAnnotationSet, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+  annotationOptionsPayload, createAnnotationSet, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest,
+  normalizeAnnotationSets
 } = await load('services/annotation-state.js');
+const { DRAFT_ANNOTATION_STYLE } = await load('contracts/schema.generated.js');
 const {
   annotationRecordSelector,
   annotationRecordSelectorFromValue,
@@ -1008,4 +1010,12 @@ test('a gradient row exports as a plain row in its end color, and a search set k
   const [restored] = parseAnnotationTable(text);
   assert.equal(restored.annotations[0].style.fill, '#123456');
   assert.equal(restored.annotations[0].style.gradient, undefined);
+});
+
+test('a new annotation style is the style Python generates, with no Web copy of its defaults', () => {
+  // tools/generate_web_contracts.py writes DRAFT_ANNOTATION_STYLE from RegionAnnotationStyle (OV-2813).
+  assert.ok(DRAFT_ANNOTATION_STYLE, 'contracts/schema.generated.js exports DRAFT_ANNOTATION_STYLE');
+  assert.deepEqual(createDefaultAnnotationStyle(), { ...DRAFT_ANNOTATION_STYLE });
+  assert.deepEqual(createAnnotationSet({}).defaultStyle, { ...DRAFT_ANNOTATION_STYLE });
+  assert.deepEqual(createDefaultAnnotationStyle({ fill: null }), { ...DRAFT_ANNOTATION_STYLE, fill: null });
 });

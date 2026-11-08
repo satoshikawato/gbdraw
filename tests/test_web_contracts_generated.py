@@ -425,6 +425,30 @@ def test_the_absent_circular_output_comes_from_the_python_options(
     )
 
 
+def test_the_draft_annotation_style_comes_from_the_python_style_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The Web's new annotation style is Python's RegionAnnotationStyle with the highlight fill (OV-2813).
+    import gbdraw.session_request_codec as codec
+    from gbdraw.annotations import RegionAnnotationStyle
+    from gbdraw.annotations.models import DEFAULT_HIGHLIGHT_FILL
+
+    generator = _generator()
+    assert codec.describe_draft_annotation_style() == {
+        **codec._encode_annotation_style(RegionAnnotationStyle()), "fill": DEFAULT_HIGHLIGHT_FILL,
+    }
+    current = generator.render_web_contracts_module()
+    assert "DRAFT_ANNOTATION_STYLE = Object.freeze({\n  stroke: '#404040',\n  strokeWidth: 1.5," in current
+    assert "  labelOffset: 4\n})" in current
+
+    monkeypatch.setattr(
+        codec, "RegionAnnotationStyle", functools.partial(RegionAnnotationStyle, stroke="#123456", label_offset=6)
+    )
+    module = generator.render_web_contracts_module()
+    assert "DRAFT_ANNOTATION_STYLE = Object.freeze({\n  stroke: '#123456'," in module
+    assert "  labelOffset: 6\n})" in module
+
+
 def test_description_data_renders_any_json_key_but_the_prototype() -> None:
     generator = _generator()
 

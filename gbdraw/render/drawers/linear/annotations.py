@@ -24,6 +24,7 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
     mark_parts,
 )
+from gbdraw.annotations.models import annotation_solid_fill
 from gbdraw.annotations.layout import (
     LabelExtent,
     PlacedRegionAnnotation,
@@ -186,7 +187,7 @@ def _band_rect(mark: str, lane_center: float, lane_height: float, x1: float, x2:
 def _solid_fill(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> str:
     """The fill colour of a ``band`` or ``highlight`` mark without hatching (``none`` for none)."""
 
-    return style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+    return annotation_solid_fill(annotation.mark, style)
 
 
 def _band_paint(
