@@ -13,7 +13,7 @@
 // (`layoutResetAvailable`).
 import { LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { buildDefaultCircularRecordPositions } from './circular-record-panel.js';
-import { ensureDepthTrackConfigCount } from './depth-tracks.js';
+import { ensureDepthTrackConfigCount, nameDepthSeriesAfterFiles } from './depth-tracks.js';
 import { paletteColorsEqual } from './svg-styles.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from '../services/reset.js';
 import { msg, t } from '../utils/i18n.js';
@@ -86,8 +86,10 @@ export const createDrawingReset = ({
       ? artifact
       : { ...artifact, similarityAlignmentResetReceipt: null });
     RESET_FOLLOW_UPS[drawing.mode](drawing);
-    // The reset Depth series fit the kept Depth files (OV-1164).
+    // The reset Depth series fit the kept Depth files (OV-1164), and each
+    // kept file names its series (OV-2822).
     ensureDepthTrackConfigCount(drawing);
+    nameDepthSeriesAfterFiles(drawing);
   };
 
   return { resetDrawing };

@@ -497,8 +497,8 @@ PROGRESSIVE_TUTORIALS = {
     "hepatoplasma_scabrum_depth": {
         "generate_steps": [3, 4, 5, 6, 7],
         "selector": "svg[data-capture-depth-preview='true']",
-        # The depth file stays through Reset with Show Depth off and its series named Depth;
-        # the depth step chooses it again, as the reader does, and turns Show Depth on.
+        # The depth file stays through Reset with Show Depth off; the depth step chooses
+        # it again, as the reader does, and turns Show Depth on.
         "required_selectors": {
             "role=button[name='Choose Depth TSV'] >> visible=true",
             "role=checkbox[name='Show Depth'] >> visible=true",

@@ -253,7 +253,8 @@ apply on Generate change at the next **Generate Diagram**; a drawing that is not
 shown takes its reset when it is shown next. Either choice keeps the input
 files, the record selection, file defaults, Depth assignments, and Result, and
 one Undo reverses it. A kept Depth file stays hidden (**Show Depth** turns off)
-until you show it again. A kept Circular comparison sequence file keeps its ring
+until you show it again, and the legend names its series after the file, as an
+upload does. A kept Circular comparison sequence file keeps its ring
 row with the row's settings back to their defaults; the ring results of an
 earlier LOSAT search are dropped, so the next Generate searches again. **Cancel** changes
 nothing and records no step.
@@ -1794,7 +1795,8 @@ groups that the current results do not show. The **Default colors file**,
 **Specific rules file**, **Blacklist File**, **Whitelist File**, and **Priority
 File (TSV)** cards are removed with the settings they loaded; the input files
 (genome, Depth, and comparison files for circular diagrams) stay. A kept Depth
-file stays hidden until **Show Depth** is turned on again, and each kept
+file stays hidden until **Show Depth** is turned on again and is named after
+the file in the legend, and each kept
 comparison sequence file keeps its ring row with default settings; the next
 Generate searches the comparison sequences again. **Remove** on one of these
 cards takes back what its file loaded in both modes and keeps your own edits,

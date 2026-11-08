@@ -15,9 +15,8 @@ Window 1 and Step 1000, the depth scale, and the Legend title, each after the
 preview that shows its problem. The Gallery Session was saved from
 a fresh upload of the two files followed by these steps and published with
 `tools/refresh_gallery_sessions.py`. **Reset Settings** keeps the depth file
-with Show Depth off and its series named Depth, so the depth step chooses the
-file again, as the reader does (the series then takes the file's name), and
-turns Show Depth on; the upload crop of step 2 ends above the **Depth TSV
+with Show Depth off; the depth step chooses the file again, as the reader
+does, and turns Show Depth on; the upload crop of step 2 ends above the **Depth TSV
 tracks** row, which the reader fills only in step 4. The step 6 text and the
 final contract name the scale by Depth Max and Depth Width, not by its tick
 labels. The replayed final preview equals the Session's Result
