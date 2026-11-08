@@ -6,6 +6,7 @@
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { isPlainObject } from '../utils/contract-shape.js';
+import { cloneJsonData } from './json-clone.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
@@ -397,6 +398,28 @@ export const orientedCropForm = (form, reverseComplement) => {
  * @returns {CropFormOrientation<W>}
  */
 export const linearCardCropForm = (card) => ({ windows: card.windows, reverse: card.region_reverse });
+
+/**
+ * A Linear File card's orientation fields as a checkpoint or a History step keeps them: the windows it lists, copied,
+ * and its Reverse complement. Each window keeps its own orientation.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @returns {LinearCardOrientation<W>}
+ */
+export const captureLinearCardOrientation = (card) => ({
+  windows: cloneJsonData(card.windows), region_reverse: card.region_reverse
+});
+
+/**
+ * Puts back the orientation fields `captureLinearCardOrientation` kept, as they were.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {LinearCardOrientation<W>} saved
+ */
+export const restoreLinearCardOrientation = (card, saved) => {
+  card.windows = cloneJsonData(saved.windows);
+  card.region_reverse = saved.region_reverse;
+};
 
 /**
  * Draws a Linear File card's record in the absolute direction `reverseComplement` where the card holds its

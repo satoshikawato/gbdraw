@@ -2169,6 +2169,32 @@ test('Review alignment flips a record drawn in two windows and the next Generate
   expect(await record2()).toEqual(flipped);
 });
 
+// Undo of an Align that flips a record drawn in windows of different orientations gives back each window's own
+// orientation, not one direction for the whole File card.
+test('Undo after Align gives back each window orientation of a record drawn in mixed windows', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows-mixed']);
+  const card2 = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const card = state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[1];
+    return [card.region_reverse, ...card.windows.map((window) => window.reverseComplement)];
+  });
+  const loaded = [false, true, false];
+  expect(await card2()).toEqual(loaded);
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const dialog = await openDirectionReview(page);
+  await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
+  await directionSelect(dialog, 'record-2').selectOption('left');
+  let outcome = await applyAndSettle(page, dialog);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  await expect(dialog).toBeHidden();
+  expect(await card2()).toEqual([false, true, true]);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(card2).toEqual(loaded);
+});
+
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadDirectionSession(page, testInfo);

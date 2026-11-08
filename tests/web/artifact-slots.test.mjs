@@ -399,9 +399,31 @@ test('a Result keeps and gives back the orientation of a Linear card drawn in wi
   linear.linearSeqs.splice(0, linear.linearSeqs.length,
     { uid: 'seq-1', region_reverse: false, windows: [window(1, true), window(21, true)] });
   const ownerSet = snapshots.captureGeneratedArtifactOwnerSet(linear);
-  assert.deepEqual(ownerSet.linearRecordOrientations, [{ recordKey: 'seq-1', reverseComplement: true }]);
+  assert.deepEqual(ownerSet.linearRecordOrientations,
+    [{ recordKey: 'seq-1', card: { region_reverse: false, windows: [window(1, true), window(21, true)] } }]);
   linear.linearSeqs[0].windows = [window(1, false), window(21, false)];
   snapshots.installGeneratedArtifactOwnerSet(ownerSet, { drawing: linear });
   const card = linear.linearSeqs[0];
   assert.deepEqual([card.region_reverse, ...card.windows.map((entry) => entry.reverseComplement)], [false, true, true]);
+});
+
+// A Result gives back a card drawn in windows of different orientations as it was: an Align that turns the record
+// round writes every window, and the Undo after it puts back each window's own orientation, not one direction for the
+// whole card.
+test('a Result gives back each window orientation of a Linear card whose windows differ', async () => {
+  await fillCircularArtifact();
+  const linear = modeDrawing(state, 'linear');
+  const window = (start, reverseComplement) => ({ start, end: start + 9, reverseComplement, column: null });
+  linear.linearSeqs.splice(0, linear.linearSeqs.length,
+    { uid: 'seq-1', region_reverse: false, windows: [window(1, true), window(21, false)] });
+  const ownerSet = snapshots.captureGeneratedArtifactOwnerSet(linear);
+  // Align draws the record reversed: both windows reversed.
+  linear.linearSeqs[0].windows = [window(1, true), window(21, true)];
+  snapshots.installGeneratedArtifactOwnerSet(ownerSet, { drawing: linear });
+  const card = linear.linearSeqs[0];
+  assert.deepEqual([card.region_reverse, ...card.windows.map((entry) => entry.reverseComplement)], [false, true, false]);
+  // The kept value is the History's own copy: a later edit of the card does not change it.
+  card.windows[0].reverseComplement = false;
+  snapshots.installGeneratedArtifactOwnerSet(ownerSet, { drawing: linear });
+  assert.deepEqual(linear.linearSeqs[0].windows.map((entry) => entry.reverseComplement), [true, false]);
 });

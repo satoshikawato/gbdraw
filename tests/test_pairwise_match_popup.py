@@ -98,6 +98,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./record-options.js", "./record-options.mjs")
         .replace("./linear-units.js", "./linear-units.mjs")
         .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
         encoding="utf-8",
     )

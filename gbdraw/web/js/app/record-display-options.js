@@ -7,6 +7,7 @@ import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
   canonicalRecordReverseComplement,
+  captureLinearCardOrientation,
   cropFormReverseComplement,
   linearCardCropForm,
   orientLinearCard,
@@ -15,6 +16,7 @@ import {
   recordDisplaySurface,
   requestedRecordTransform,
   requireReverseComplementOverride,
+  restoreLinearCardOrientation,
   validateAnchorIntent
 } from '../services/record-display-model.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
@@ -50,13 +52,6 @@ export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
 /** @param {string} kind @param {string} message */
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
 
-/** @param {LinearSeq} card @returns {CardOrientation} */
-const captureCardOrientation = (card) => ({ windows: cloneJsonData(card.windows), region_reverse: card.region_reverse });
-/** Puts back the orientation fields a checkpoint kept, as they were. @param {LinearSeq} card @param {CardOrientation} saved */
-const restoreCardOrientation = (card, saved) => {
-  card.windows = cloneJsonData(saved.windows);
-  card.region_reverse = saved.region_reverse;
-};
 
 /**
  * An entry of the Circular record list, as the record discovery stores it (`run-analysis.js`).
@@ -100,7 +95,7 @@ const restoreCardOrientation = (card, saved) => {
  */
 
 /**
- * A Linear File card's orientation fields as a checkpoint keeps them (`captureCardOrientation`): the windows it lists,
+ * A Linear File card's orientation fields as a checkpoint keeps them (`captureLinearCardOrientation`): the windows it lists,
  * copied, and its Reverse complement.
  * @typedef {LinearCardOrientation<LinearSeqWindow>} CardOrientation
  */
@@ -324,13 +319,13 @@ export const createRecordDisplayControls = ({
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
     return alignmentRows(drawing, orientations)
-      .map(({recordKey, sequence, drafts}) => ({ recordKey, card: captureCardOrientation(sequence),
+      .map(({recordKey, sequence, drafts}) => ({ recordKey, card: captureLinearCardOrientation(sequence),
         drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear', drawingId: drawing.id })) }));
   };
   /** @param {DrawingState} drawing @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (drawing, checkpoints) => {
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
-      restoreCardOrientation(sequence, checkpoints[index].card);
+      restoreLinearCardOrientation(sequence, checkpoints[index].card);
       checkpoints[index].drafts.forEach(restoreTargetDraft);
     });
   };
@@ -576,7 +571,7 @@ export const createRecordDisplayControls = ({
       key,
       index,
       draft: index >= 0 ? cloneJsonData(drawing.recordDisplayDrafts[index]) : null,
-      ...(owner ? { ownerUid: owner.uid, ownerOrientation: captureCardOrientation(owner) } : {})
+      ...(owner ? { ownerUid: owner.uid, ownerOrientation: captureLinearCardOrientation(owner) } : {})
     };
   };
   /** @param {TargetDraftCheckpoint} checkpoint */
@@ -584,7 +579,7 @@ export const createRecordDisplayControls = ({
     const drawing = state.drawingOf(checkpoint.drawingId);
     if (checkpoint.ownerUid && checkpoint.ownerOrientation) {
       const owner = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === checkpoint.ownerUid);
-      if (owner) restoreCardOrientation(owner, checkpoint.ownerOrientation);
+      if (owner) restoreLinearCardOrientation(owner, checkpoint.ownerOrientation);
     }
     const index = drawing.recordDisplayDrafts.findIndex(
       (/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === checkpoint.key

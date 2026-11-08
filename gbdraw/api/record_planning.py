@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
+from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
 from Bio.Seq import Seq
@@ -879,12 +879,34 @@ def alignment_anchor_unit(
     units = [index for index, item in enumerate(collection.provenance) if item.record_identity_key == anchor.record_key]
     if not units:
         raise ValidationError("Alignment anchor record coverage is invalid.", diagnostic={"code": "INPUT_INVALID"})
-    for index in units:
-        feature = _alignment_source_feature(anchor, collection.provenance[index])
-        projected = _source_feature_display_center(feature, collection.transforms[index])
-        if 0.0 <= projected <= float(len(collection.records[index])):
-            return index, projected
-    return units[0], None
+    position, center = first_unit_holding(_anchor_center_on_unit(collection, anchor, index) for index in units)
+    return units[position], center
+
+
+def first_unit_holding(offsets: Iterable[float | None]) -> tuple[int, float | None]:
+    """The first drawn unit of a record, in drawing order, that holds a source position, and the position's display
+    offset on it (D-50).
+
+    ``offsets`` are the position's display offsets on the record's units in drawing order, ``None`` on a unit that
+    does not hold it. When no unit holds it the result is the first unit and ``None``. The renderer
+    (``alignment_anchor_unit``) and the Web helper (``similarity_alignment._RecordFact.placed``) anchor a record
+    drawn in several windows by this one rule.
+    """
+
+    for position, offset in enumerate(offsets):
+        if offset is not None:
+            return position, offset
+    return 0, None
+
+
+def _anchor_center_on_unit(
+    collection: ResolvedRecordCollection, anchor: AlignmentAnchorIdentity, index: int,
+) -> float | None:
+    """The anchor's display centre on drawn unit ``index``, ``None`` when the unit does not hold it."""
+
+    feature = _alignment_source_feature(anchor, collection.provenance[index])
+    projected = _source_feature_display_center(feature, collection.transforms[index])
+    return projected if 0.0 <= projected <= float(len(collection.records[index])) else None
 
 
 def _source_feature_display_center(

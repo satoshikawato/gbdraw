@@ -1260,12 +1260,12 @@ def _validate_records_off(records_off: object, mode: str, bound_uids: set[object
         )
 
 
-def mode_slice_of_version(value: Mapping[str, Any], version: int, container: str = "") -> dict[str, Any]:
+def mode_slice_of_version(value: Mapping[str, object], version: int, container: str = "") -> dict[str, object]:
     """``value`` (a slice, or its ``container``) with only the keys a slice of a Session of ``version`` may hold
     (``slice_containers``): what a writer of that version writes from a current slice."""
 
     containers = slice_containers(version)
-    kept: dict[str, Any] = {}
+    kept: dict[str, object] = {}
     for key, child in value.items():
         if key not in containers[container]:
             continue

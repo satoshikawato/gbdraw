@@ -977,3 +977,23 @@ def test_a_record_drawn_in_several_windows_moves_as_one_anchored_in_the_window_h
     assert placements[2].x_for_position(101.0) + moved["second~w2"] == pytest.approx(
         placements[0].x_for_position(150.0) + moved["first"]
     )
+
+
+def test_a_layout_move_of_a_record_drawn_in_several_windows_moves_each_window_without_a_plan() -> None:
+    """OV-2886: a Layout edit move names the record; without a Similarity alignment plan both of its windows take
+    it (the translation was looked up by unit key and ignored)."""
+
+    from gbdraw.io.regions import RecordWindow
+
+    first = _record("first", 1000, 100, 200)
+    second = _record("second", 1000, 600, 700)
+    request = replace(
+        _request(first, second, _plan(_anchor(first, "first"), _anchor(second, "second")),
+                 translations=(LinearRecordTranslation("first"), LinearRecordTranslation("second", x=7.0))),
+        similarity_alignment=None,
+    )
+    windows = (RecordWindow(1, 200), RecordWindow(550, 800))
+    request = replace(request, records=(request.records[0], replace(request.records[1], windows=windows)))
+    drawing = plan_linear_request(request).build().drawing
+    moved = {key: x for key, x, _y in getattr(drawing, "_gbdraw_record_translations")}
+    assert moved == {"first": 0.0, "second~w1": 7.0, "second~w2": 7.0}

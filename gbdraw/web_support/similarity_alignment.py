@@ -11,8 +11,8 @@ from typing import Any, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, _source_details, alignment_record_keys, project_similarity_alignment_anchor_fact,
-    similarity_alignment_evidence_edges,
+    ResolvedRecordCollection, _source_details, alignment_record_keys, first_unit_holding,
+    project_similarity_alignment_anchor_fact, similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
@@ -148,18 +148,15 @@ class _RecordFact:
         holds it, and whether that unit is drawn reverse-complemented.
 
         A record drawn in several windows is anchored in the first window, in drawing order, that holds the position,
-        as the renderer anchors it (``alignment_anchor_unit``, D-50). The offset is ``None`` when no window holds the
+        by the renderer's rule (``first_unit_holding``, D-50). The offset is ``None`` when no window holds the
         position, or when the map needs the source length and it is unknown; the orientation is then the first
         window's.
         """
 
-        if not self.windows:
-            return self._unit_offset(None, source_center), self.presentation_reverse
-        for window in self.windows:
-            offset = self._unit_offset(window, source_center)
-            if offset is not None:
-                return offset, self.presentation_reverse or window.reverse_complement
-        return None, self.presentation_reverse or self.windows[0].reverse_complement
+        units: tuple[RecordWindow | None, ...] = self.windows or (None,)
+        position, offset = first_unit_holding(self._unit_offset(window, source_center) for window in units)
+        window = units[position]
+        return offset, self.presentation_reverse or (window is not None and window.reverse_complement)
 
     def _unit_offset(self, window: RecordWindow | None, source_center: float) -> float | None:
         """The display offset at which the unit of ``window`` (the whole record for ``None``) draws ``source_center``.
