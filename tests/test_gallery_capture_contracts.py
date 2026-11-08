@@ -149,6 +149,18 @@ LAYOUT_RESULT_CAPTURES = {
         },
         "visible_text": {"Tyloplasma litorale", "AP027078.1", "NZ_CP006932.1", "Collinear", "Inverted"},
     },
+    "hepatoplasma_scabrum_depth": {
+        "src": "./media/hepatoplasma_scabrum_depth/manual-06-02-final-preview.webp",
+        "selector": "svg[data-capture-depth-preview='true']",
+        "viewport": {"width": 1400, "height": 1400},
+        "state": {
+            "mode": "circular",
+            "form.show_depth": True,
+            "adv.depth_max": 80,
+            "adv.depth_width_circular": 60,
+        },
+        "visible_text": {"AP027133.1", "DRR394922 mean depth", "80x", "20x"},
+    },
     "HmmtDNA_ATskew": {
         "src": "./media/HmmtDNA_ATskew/manual-09-02-atskew-preview.webp",
         "selector": "svg[data-capture-hmmt-preview='true']",
@@ -481,6 +493,16 @@ PROGRESSIVE_TUTORIALS = {
         "generate_steps": [3, 4, 5, 6, 7, 9],
         "selector": "svg[data-capture-hmmt-preview='true']",
         "required_selectors": {"input[data-circular-canvas-setting]", "input[aria-label='Separate Strands']"},
+    },
+    "hepatoplasma_scabrum_depth": {
+        "generate_steps": [3, 4, 5, 6],
+        "selector": "svg[data-capture-depth-preview='true']",
+        # The depth file stays through Reset with Show Depth off, so the depth step turns it on.
+        "required_selectors": {
+            "role=checkbox[name='Show Depth'] >> visible=true",
+            "input[aria-label='Depth Window'] >> visible=true",
+            "input[aria-label='Depth large tick']",
+        },
     },
     "tobacco-chloroplast": {
         "generate_steps": [3, 4, 5, 6, 7, 8],

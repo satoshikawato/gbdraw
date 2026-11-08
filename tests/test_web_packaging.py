@@ -73,6 +73,7 @@ GALLERY_SESSION_FILES = [
     "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "tobacco-chloroplast.gbdraw-session.json",
+    "hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
@@ -674,6 +675,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "lambda_basic_linear",
         "HmmtDNA_ATskew",
         "tobacco-chloroplast",
+        "hepatoplasma_scabrum_depth",
         "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
         "vibrio-harveyi-group-collinear",
@@ -687,6 +689,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "lambda_basic_linear": ["Linear", "Interactive SVG"],
         "HmmtDNA_ATskew": ["Circular", "Interactive SVG"],
         "tobacco-chloroplast": ["Circular", "Interactive SVG"],
+        "hepatoplasma_scabrum_depth": ["Circular", "Read depth", "Interactive SVG"],
         "Vnig_TUMSAT-TG-2018": ["Circular", "Multi-record", "Interactive SVG"],
         "hepatoplasmataceae_collinear": [
             "Linear",
@@ -730,6 +733,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "A first linear genome map (phage lambda)",
         "Strand composition of the human mitochondrial genome (AT skew)",
         "Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
+        "Read depth around a bacterial genome (<i>Ca.</i> Hepatoplasma scabrum)",
         "Every replicon of a multi-replicon bacterial genome on one canvas "
         "(<i>Vibrio nigripulchritudo</i>)",
         "Shared gene order between neighboring genomes (Hepatoplasmataceae)",
@@ -876,6 +880,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
 def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
+        "hepatoplasma_scabrum_depth": {"./files/AP027133.DRR394922.depth-1kb.tsv"},
         "tobacco-chloroplast": {
             "./files/qualifier_priority.tsv",
             "./files/nicotiana-tabacum-regions-span.tsv",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -60,8 +60,8 @@ const examples = JSON.parse(
 );
 const sessionNames = examples.map((example) => String(example.session).split('/').pop());
 
-assert.equal(sessionNames.length, 10);
-assert.equal(new Set(sessionNames).size, 10);
+assert.equal(sessionNames.length, 11);
+assert.equal(new Set(sessionNames).size, 11);
 
 // A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 51's one
 // drawn drawing as its one-drawing view, an older Session as it is.
@@ -610,6 +610,34 @@ assert.rejects(
         assert.deepEqual(session.modes.linear.config.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] }, id);
       }
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+// A Session that draws a Depth track publishes with Depth shown: the draft split
+// keeps Show Depth only when the drawing has a Depth file, and it counts the
+// files the projection bound, as Load binds them.
+{
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-depth-'));
+  try {
+    const depth = path.join(directory, 'lambda.depth.tsv');
+    await writeFile(depth, Array.from({ length: 48502 }, (_, index) => `NC_001416.1\t${index + 1}\t${10 + (index % 50)}\n`).join(''));
+    const file = path.join(directory, 'depth.gbdraw-session.json');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
+      '--depth_track', depth, '--depth_track_color', '#4A90E2', '--depth_track_label', 'Depth',
+      '--depth_track_large_tick_interval', '20', '--depth_track_small_tick_interval', '10', '--depth_track_tick_font_size', '14', '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
+    { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+    const source = await loadSessionFile(file);
+    assert.equal(source.renderRequest.diagramOptions.depthTracks.length, 1);
+    const { session, equivalence } = await prepareGallerySessionForPublication(source);
+    assert.deepEqual(equivalence.differences, [], 'CLI depth');
+    assert.equal(session.modes.circular.config.form.show_depth, true);
+    // A Session with the Web draft (a published or Web-saved one) publishes again with Depth shown.
+    const again = await prepareGallerySessionForPublication(session);
+    assert.equal(again.session.modes.circular.config.form.show_depth, true);
+    const readiness = await validateGalleryPublicationReadiness(again.session);
+    assert.deepEqual(readiness.equivalence.differences, [], 'published depth');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

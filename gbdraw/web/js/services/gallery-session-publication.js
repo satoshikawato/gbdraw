@@ -58,7 +58,7 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {'circular' | 'linear'} mode
  * @property {PublicationConfig} [config]
  * @property {StoredLayoutPreferences | null} [layoutPreferences]
- * @property {{ linearSeqs: { cardinality?: unknown }[], [field: string]: unknown }} files
+ * @property {{ linearSeqs: { cardinality?: unknown, depth?: unknown }[], c_depth?: unknown, [field: string]: unknown }} files
  */
 /**
  * A Session document at publication. Admission checks it: the current writer format (`modes`), an
@@ -289,7 +289,14 @@ const publishedSession = async (session, config, layout, projection, features, s
   // A flat draft takes the per-feature edits the request was rebuilt from: a
   // CLI Session holds its visibility and label tables only in the request, and
   // Load reads a stored draft's edits from the draft.
-  const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
+  // The split keeps Show Depth only for a drawing with a Depth file, which it counts in `webFiles.bindings`
+  // (`session_depth_source_widths`): the files the projection bound, as Load binds them. A slice draft holds no
+  // bindings of its own, so without them a Web-saved Session published with Depth hidden. The published
+  // `webFiles` is the rebuilt request's (`prepare`).
+  const webFiles = { bindings: { c_depth: projection.files.c_depth ?? null,
+    linearSeqs: projection.files.linearSeqs.map(({ depth }) => ({ depth: depth ?? null })) } };
+  const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode }, webFiles }
+    : { config: scoped, ui: { mode }, webFiles };
   // Override colors merge into the committed request's colors.
   // Only the committed mode's slice is published, so no mode profile feeds the split.
   const split = await splitDraft(draft, { committedMode: mode, paletteColors: projection.config?.colors || null });

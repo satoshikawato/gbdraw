@@ -4,6 +4,7 @@
     "lambda_basic_linear",
     "HmmtDNA_ATskew",
     "tobacco-chloroplast",
+    "hepatoplasma_scabrum_depth",
     "Vnig_TUMSAT-TG-2018",
     "hepatoplasmataceae_collinear",
     "vibrio-harveyi-group-collinear",
@@ -13,8 +14,8 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 26205,
-      "sha256": "2d3514a4f8944a8d6204bbe9cd98642379ed66c944e3232b54902012533b0fd0"
+      "bytes": 28227,
+      "sha256": "288133694933f8c07b33b8554b4930dfb9a28102f8a5e1ae100daa702c85bcf3"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1319101,
@@ -31,6 +32,10 @@
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 27273336,
       "sha256": "b4d308080e00dbddcf1467f5454f3a911e2f39d787a3f29e847f6d6c66aec224"
+    },
+    "gallery/examples/hepatoplasma_scabrum_depth.svg": {
+      "bytes": 2881950,
+      "sha256": "7f19a284a5b1353d51e1f2b67b9b031bcb5826661ca51f399063aa70c75d19a4"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 14671626,
@@ -72,6 +77,10 @@
       "bytes": 11850715,
       "sha256": "efdcdbf69aefeae73a9ca28617e422477c219e0b474c679b698a89b7518b26cd"
     },
+    "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz": {
+      "bytes": 1071436,
+      "sha256": "b64c8f2f9b8678e8338b4e0a54d6a1ac6d1f86d88fb5a22fe33f4059dc04f2d4"
+    },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11557589,
       "sha256": "92899a09f4dd480c062f91f22fb44d96e2e8fd9651a14ef3a64c5c02728955de"
@@ -112,6 +121,10 @@
       "bytes": 2625982,
       "sha256": "0473a7b95002ec61532b0bd31b52344582b2b67dfe7ce75035e8cf564c242c9c"
     },
+    "gallery/sources/hepatoplasma_scabrum_depth.svg": {
+      "bytes": 505948,
+      "sha256": "2e84c76dd7c8869ee2b053ba049aae77726a097b768c1f15e97c3ba677a0d201"
+    },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 3716227,
       "sha256": "9effa68d9b48970284b2d3d0317b58d72adf274bf6bca6644a28ea56313b8251"
@@ -151,6 +164,10 @@
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
       "bytes": 28418,
       "sha256": "9ac5aea732b0ebac8d2fc80afd9ec3b3e9ccb55053df62c84908d734fdcbb936"
+    },
+    "gallery/thumbnails/hepatoplasma_scabrum_depth.webp": {
+      "bytes": 20932,
+      "sha256": "09551395305cb67f6ae7dee97e9e17861aa6288059197d05fe56a987d2ef3ddb"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
       "bytes": 20010,
