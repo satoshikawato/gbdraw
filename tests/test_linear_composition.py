@@ -375,14 +375,12 @@ def test_linear_metadata_has_no_scale_bounds_without_a_drawn_scale() -> None:
             selected_features_set=["CDS"],
         ),
     )
-    multi_record = assemble_linear_diagram_from_records(
+    normalized = assemble_linear_diagram_from_records(
         [_record("record_a"), _record("record_b", length=800)],
         LinearAssemblyInputs(
-            cfg=_config(track_layout="above"),
+            cfg=apply_config_overrides(_config(), {"canvas.linear.normalize_length": True}),
             selected_features_set=["CDS"],
         ),
-        # Two records in one row draw no scale.
-        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
     )
     circular = assemble_circular_diagram_from_record(
         _record(),
@@ -391,6 +389,6 @@ def test_linear_metadata_has_no_scale_bounds_without_a_drawn_scale() -> None:
             legend="right",
         ),
     )
-    for drawing in (hidden, multi_record, circular):
+    for drawing in (hidden, normalized, circular):
         root = ET.fromstring(drawing.tostring())
         assert "lengthBar" not in json.loads(root.attrib["data-gbdraw-composition"])
