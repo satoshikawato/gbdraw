@@ -617,7 +617,8 @@ assert.rejects(
 
 // A Session that draws a Depth track publishes with Depth shown: the draft split
 // keeps Show Depth only when the drawing has a Depth file, and it counts the
-// files the projection bound, as Load binds them.
+// files the projection bound, as Load binds them. The command states no Depth
+// style, and the styles it leaves unstated compare as absent (OV-2819).
 {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-depth-'));
   try {
@@ -625,8 +626,7 @@ assert.rejects(
     await writeFile(depth, Array.from({ length: 48502 }, (_, index) => `NC_001416.1\t${index + 1}\t${10 + (index % 50)}\n`).join(''));
     const file = path.join(directory, 'depth.gbdraw-session.json');
     execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
-      '--depth_track', depth, '--depth_track_color', '#4A90E2', '--depth_track_label', 'Depth',
-      '--depth_track_large_tick_interval', '20', '--depth_track_small_tick_interval', '10', '--depth_track_tick_font_size', '14', '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
+      '--depth_track', depth, '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
     { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
     const source = await loadSessionFile(file);
     assert.equal(source.renderRequest.diagramOptions.depthTracks.length, 1);

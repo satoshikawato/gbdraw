@@ -175,7 +175,9 @@ write-up of a release.
   read-depth ring to the genome map of *Ca.* Hepatoplasma scabrum.
 - Fixed (Gallery tooling): a Web-saved Session that drew a depth track was
   published with Show Depth off, so the published Session no longer drew the
-  depth track it was saved with.
+  depth track it was saved with. A command-line Session whose depth track
+  left its color, label, height, or ticks at their defaults could not be
+  published at all; it now publishes.
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was

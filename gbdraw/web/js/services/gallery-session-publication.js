@@ -374,14 +374,22 @@ const rebuildIntent = async (session, owners) => {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
   // A CLI-written request compares without its resolved configuration;
-  // defaults it leaves unstated compare as absent in the equivalence (OV-398).
+  // defaults it leaves unstated compare as absent in the equivalence (OV-398),
+  // also a Depth series style the command did not state (OV-2819).
   // Its track slots compare as Load reads them (OV-1299).
+  const unstatedDepth = (renderRequest.diagramOptions.depthTracks || []).map((track) => new Set(
+    Object.entries(track).filter(([, value]) => value === null).map(([key]) => key)));
   /** @param {CanonicalRenderRequest} request */
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
       .filter(([key]) => key !== 'config' && key !== 'configOverrides'));
-    return { ...request, diagramOptions: { ...diagramOptions,
+    const depthTracks = Array.isArray(diagramOptions.depthTracks)
+      ? diagramOptions.depthTracks.map((track, index) => (isObject(track)
+        ? Object.fromEntries(Object.entries(track).filter(([key]) => !unstatedDepth[index]?.has(key)))
+        : track))
+      : diagramOptions.depthTracks;
+    return { ...request, diagramOptions: { ...diagramOptions, ...(depthTracks === undefined ? {} : { depthTracks }),
       tracks: tracksAsLoaded(diagramOptions.tracks, projection.mode, drawing.form.track_type) } };
   };
   return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
