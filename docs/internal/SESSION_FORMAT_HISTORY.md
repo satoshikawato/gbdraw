@@ -64,13 +64,16 @@ null, and the uids are distinct. The CLI writes one card per `--gbk` value, or
 per `--gff`/`--fasta` pair, with the uid of the CLI record key, `record-<n>`.
 The Circular slice's `recordsOff`, `form.circular_record_selector` and
 `adv.multi_record_positions[].selector` name records by identity: `<uid>` for a
-file of one record, `<uid>:<k>` for the `k`-th record of a file of several. A
+file of one record, `<uid>:<k>` for the `k`-th record of a file of several; a
+`#N` that the move of an older Session could not place stays. A
 Session 51 does not write `c_gb`, `c_gff`, `c_fasta` or the composite, and
 refuses a Circular drawing that holds them. Reading a Session 41 to 50 makes one
 card per file (the components of a composite, in order; the first card keeps
-`c_gff` and `c_fasta`) with uid `record-<n>`, and replaces a `#N` selector by
-the identity of that record where the record counts are known; otherwise the
-selector is left out and the Record select falls back to the first record
+`c_gff` and `c_fasta`) with uid `record-<n>` (`source-<n>` when the request
+drew the files as one source), and replaces a `#N` selector by the identity of
+that record where the record counts are known; otherwise the selector stays
+`#N`, and the Web app places it over the records of the cards as they were
+loaded, taken together in card order
 (`circular_sources_of_mode_scoped` in `gbdraw/session_drawings.py`; the Web
 twin is `circularSourcesOfModeScoped`). Session 51 and binding schema 2 keep
 their numbers. Fixtures: the `v51` files that hold a Circular drawing in

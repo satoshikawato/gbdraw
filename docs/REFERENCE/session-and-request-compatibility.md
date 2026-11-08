@@ -637,9 +637,10 @@ A Session 41 to 50 may hold an explicit composite `c_gb` (ordered component
 resource bindings, each with its own filename, MIME type, modification time and
 exact bytes; duplicate payloads can share storage while every occurrence is
 kept). Loading it makes one File card per component, in order, with uid
-`record-<n>`, and maps a `#N` record selector to that record where the record
-counts are known; otherwise the selector is left out and the Record select falls
-back to the first record. Python validates and preserves a draft binding of a
+`record-<n>` (`source-<n>` when the request drew the files as one source), and
+maps a `#N` record selector to that record where the record counts are known;
+otherwise the selector stays `#N`, and the Web app places it over the records of
+the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
 
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions

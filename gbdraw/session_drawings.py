@@ -1025,13 +1025,16 @@ def circular_sources_of_mode_scoped(data: Mapping[str, Any]) -> dict[str, Any]:
     (``#N`` over the files' records in order) in ``recordsOff``,
     ``form.circular_record_selector`` and ``adv.multi_record_positions`` become
     record identities (``<uid>:<k>``, or ``<uid>`` for a file of one record)
-    where the record counts can be known: one card (several records when the
-    request draws two or more, a record is OFF, or a selector names ``#2`` or
-    later), or cards whose own records the request draws all
-    (:func:`_card_record_counts`). A selector that cannot be placed is left
-    out (the Record select falls back to the first record). A record ID
-    selector stays. Rows keyed by request keys are not renamed: the Web moves
-    them on the first Generate. The Web's ``circularSourcesOfModeScoped``
+    where the record counts can be known: one card known to hold several
+    records (the request draws two or more, a record is OFF, or a selector
+    names ``#2`` or later) or else one (its Record Order lists only ``#1``:
+    a read lists every record of the file), or cards whose own records the
+    request draws all (:func:`_card_record_counts`). A selector that cannot
+    be placed stays ``#N`` (OV-2869): the Web places it over the records of
+    the cards as they were loaded, as the one file of then held them. A
+    record ID selector stays, and a Record Order row without a selector is
+    left out. Rows keyed by request keys are not renamed: the Web moves them
+    on the first Generate. The Web's ``circularSourcesOfModeScoped``
     (``services/session-drawings-upgrade.js``) is the twin.
     """
 
@@ -1069,7 +1072,7 @@ def circular_sources_of_mode_scoped(data: Mapping[str, Any]) -> dict[str, Any]:
     }
     modes = _mapping(data.get("modes"))
     config = _mapping(_mapping(modes.get("circular")).get("config"))
-    # With no card, no source selector can be placed: each is left out.
+    # With no card, no source selector can be placed: each stays as it is.
     if not config:
         return moved
     records_off = config.get("recordsOff")
@@ -1081,27 +1084,26 @@ def circular_sources_of_mode_scoped(data: Mapping[str, Any]) -> dict[str, Any]:
         *records_off, form.get("circular_record_selector"), *(_mapping(row).get("selector") for row in positions)
     ]
     numbers = [int(match.group(1)) for value in selectors if isinstance(value, str) and (match := _SOURCE_SELECTOR.fullmatch(value))]
+    # One card known to hold several records holds every number given.
+    several = len(records) > 1 or bool(records_off) or any(number > 1 for number in numbers)
     counts = (
-        [2 if len(records) > 1 or records_off or any(number > 1 for number in numbers) else 1]
+        ([max(2, len(records), *numbers)] if several else [1] if positions else None)
         if len(cards) == 1
         else _card_record_counts(cards, records)
     )
 
     def identity(value: object) -> object:
-        """The identity of a source selector, None where it cannot be placed; any other value as it is."""
+        """The identity of a source selector where it can be placed; any other value as it is."""
 
         match = _SOURCE_SELECTOR.fullmatch(value) if isinstance(value, str) else None
-        if match is None:
+        if match is None or counts is None:
             return value
         number = int(match.group(1))
-        for card, held in zip(cards, counts or ()):
-            # One card of unknown size holds every number given.
-            if len(cards) == 1 and held > 1:
-                return f"{card['uid']}:{number}"
+        for card, held in zip(cards, counts):
             if number <= held:
                 return f"{card['uid']}:{number}" if held > 1 else card["uid"]
             number -= held
-        return None
+        return value
 
     moved_config = dict(config)
     # A ``recordsOff`` that is not a list is left to the reader that repairs it.

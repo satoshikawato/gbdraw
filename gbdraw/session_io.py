@@ -1297,18 +1297,18 @@ def _is_record_identity(key: str, uids: set[object]) -> bool:
 def _validate_records_off(records_off: object, mode: str, bound_uids: set[object], *, identities: bool) -> None:
     """Validate a slice's OFF records (record selection D-05), as the Web reader does.
 
-    Each key appears once: a Linear card uid bound in ``webFiles``; in a
-    Session 51 a Circular record identity of a bound File card
-    (:func:`_is_record_identity`), in a Session 46-50 a Circular source
-    selector ``#N``.
+    Each key appears once: a Linear card uid bound in ``webFiles``; a
+    Circular source selector ``#N``, and in a Session 51 a Circular record
+    identity of a bound File card (:func:`_is_record_identity`). A Session 51
+    keeps a ``#N`` that the move of a Session 46-50 could not place
+    (``circular_sources_of_mode_scoped``, OV-2869) until the Web reads the
+    cards' records.
     """
 
     def names_record(key: str) -> bool:
         if mode == "linear":
             return key in bound_uids
-        if identities:
-            return _is_record_identity(key, bound_uids)
-        return _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None
+        return (identities and _is_record_identity(key, bound_uids)) or _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None
 
     if (
         not isinstance(records_off, list)

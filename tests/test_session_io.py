@@ -4431,9 +4431,13 @@ def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
     # The OFF Circular records make the move list an (undrawn) Circular drawing.
     assert drawing_view(resaved, mode="linear")["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
     assert drawing_view(resaved, mode="circular")["modes"]["circular"]["config"]["recordsOff"] == ["record-1:2", "record-1:10"]
-    # A Session 51 Circular slice names records by identity of a bound File card.
+    # A Session 51 Circular slice names records by identity of a bound File
+    # card, or by a source selector the move could not place (OV-2869).
     circular = next(drawing for drawing in resaved["drawings"] if drawing["mode"] == "circular")
-    for records_off in (["#2"], ["record-2"], ["record-1:0"]):
+    kept = copy.deepcopy(resaved)
+    next(d for d in kept["drawings"] if d["mode"] == "circular")["config"]["recordsOff"] = ["#2"]
+    validate_session(kept)
+    for records_off in (["#0"], ["record-2"], ["record-1:0"]):
         invalid = copy.deepcopy(resaved)
         next(d for d in invalid["drawings"] if d["mode"] == "circular")["config"]["recordsOff"] = records_off
         with pytest.raises(ValidationError):

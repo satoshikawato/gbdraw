@@ -696,7 +696,8 @@ const cardUids = (files, records) => {
  * `circular_sources_of_mode_scoped` (gbdraw/session_drawings.py, which says
  * the rule): a Session 46-50 with its Circular input (`c_gb`, a composite of
  * several, `c_gff`, `c_fasta`) as File cards (uids: `cardUids`), and the Circular
- * slice's `#N` selectors as record identities where the counts can be known.
+ * slice's `#N` selectors as record identities where the counts can be known;
+ * a selector that cannot be placed stays `#N` (OV-2869).
  * @param {Fields} data
  * @returns {Fields}
  */
@@ -729,7 +730,7 @@ export const circularSourcesOfModeScoped = (data) => {
   };
   const modes = mapping(data.modes);
   const config = mapping(mapping(modes.circular).config);
-  // With no card, no source selector can be placed: each is left out.
+  // With no card, no source selector can be placed: each stays as it is.
   if (!Object.keys(config).length) return moved;
   const recordsOff = Array.isArray(config.recordsOff) ? config.recordsOff : [];
   const form = mapping(config.form);
@@ -740,22 +741,22 @@ export const circularSourcesOfModeScoped = (data) => {
       const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
       return match ? [Number(match[1])] : [];
     });
+  // One card known to hold several records holds every number given.
+  const several = records.length > 1 || recordsOff.length > 0 || numbers.some((number) => number > 1);
+  /** @type {number[] | null} */
   const counts = cards.length === 1
-    ? [records.length > 1 || recordsOff.length > 0 || numbers.some((number) => number > 1) ? 2 : 1]
+    ? (several ? [Math.max(2, records.length, ...numbers)] : positions.length > 0 ? [1] : null)
     : cardRecordCounts(cards, records);
-  /** The identity of a source selector, null where it cannot be placed; any other value as it is. @param {unknown} value @returns {unknown} */
+  /** The identity of a source selector where it can be placed; any other value as it is. @param {unknown} value @returns {unknown} */
   const identity = (value) => {
     const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
-    if (!match) return value;
+    if (!match || counts === null) return value;
     let number = Number(match[1]);
-    for (const [index, size] of (counts || []).entries()) {
-      const uid = String(cards[index].uid);
-      // One card of unknown size holds every number given.
-      if (cards.length === 1 && size > 1) return `${uid}:${number}`;
-      if (number <= size) return size > 1 ? `${uid}:${number}` : uid;
+    for (const [index, size] of counts.entries()) {
+      if (number <= size) return size > 1 ? `${cards[index].uid}:${number}` : cards[index].uid;
       number -= size;
     }
-    return null;
+    return value;
   };
   /** @type {Fields} */
   const movedConfig = { ...config };
