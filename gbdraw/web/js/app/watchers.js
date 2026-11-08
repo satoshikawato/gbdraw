@@ -17,7 +17,7 @@ import {
   withoutImportedRows
 } from '../services/file-imports.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { readFileText } from '../services/file-content-cache.js';
+import { endStaleRetryCopies, holdFileCopy, readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 import {
   replacePriorityRules, replaceWhitelistRules, setBlacklistText
@@ -105,6 +105,32 @@ export const createAuxiliaryFileImports = (reactive, store) => {
  * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
  * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
  */
+
+/**
+ * @typedef {object} AuxiliaryImportFailure
+ * @property {unknown} error the error the failure showed
+ * @property {FileImportCard} key
+ * @property {DrawingState} drawing the drawing whose card failed
+ * @property {InputFileRef | null} selection the card's file when it failed
+ * @property {ReturnType<RulePreparation['snapshot']> | null} snapshot the rule inputs a Specific rules failure was found on
+ * @property {() => Promise<boolean> | false} retry
+ * @property {() => void} releaseCopy ends the failure's use of its file's copy (PD-OI-121)
+ */
+
+/**
+ * The card failures with `failure` as `drawing`'s, and without those of drawings a Load or History restore
+ * replaced. A failure dropped here ends its use of its file's copy.
+ * @param {Readonly<Record<string, AuxiliaryImportFailure>>} failures
+ * @param {DrawingState | null} drawing null when only the replaced drawings' failures go
+ * @param {AuxiliaryImportFailure | null} failure
+ * @param {readonly DrawingState[]} drawings The drawings now.
+ * @returns {Readonly<Record<string, AuxiliaryImportFailure>>}
+ */
+const withImportFailure = (failures, drawing, failure, drawings) => {
+  const kept = Object.entries(failures).filter(([id, held]) => id !== drawing?.id && drawings.includes(held.drawing));
+  for (const held of Object.values(failures)) if (held !== failure && !kept.some(([, other]) => other === held)) held.releaseCopy();
+  return Object.freeze(Object.fromEntries(failure && drawing ? [...kept, [drawing.id, failure]] : kept));
+};
 
 /** @param {WatchersOptions} options */
 export const setupWatchers = ({
@@ -259,15 +285,6 @@ export const setupWatchers = ({
   // A card's failed import, with Retry, is the card state of the drawing whose
   // card it was chosen in (D-15-126): its message shows while that drawing is
   // shown and on no other drawing, and Retry is that drawing's step (R16-4).
-  /**
-   * @typedef {object} AuxiliaryImportFailure
-   * @property {unknown} error the error the failure showed
-   * @property {FileImportCard} key
-   * @property {DrawingState} drawing the drawing whose card failed
-   * @property {InputFileRef | null} selection the card's file when it failed
-   * @property {ReturnType<RulePreparation['snapshot']> | null} snapshot the rule inputs a Specific rules failure was found on
-   * @property {() => Promise<boolean> | false} retry
-   */
   // One failure per drawing ID. A Load or History restore builds new drawing
   // objects, so a failure of a replaced drawing is never shown again.
   const auxiliaryImportFailures = /** @type {{ value: Readonly<Record<string, AuxiliaryImportFailure>> }} */ (ref({}));
@@ -278,9 +295,16 @@ export const setupWatchers = ({
   };
   /** @param {DrawingState} drawing @param {AuxiliaryImportFailure | null} failure */
   const setAuxiliaryImportFailure = (drawing, failure) => {
-    const kept = Object.entries(auxiliaryImportFailures.value).filter(([id]) => id !== drawing.id);
-    auxiliaryImportFailures.value = Object.freeze(Object.fromEntries(failure ? [...kept, [drawing.id, failure]] : kept));
+    auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, drawing, failure, state.drawingList());
   };
+  // A Load or History restore replaces drawings, and a shown error is cleared or replaced: the failures whose
+  // Retry can no longer be offered end then, with the copies they keep. Every write of the drawing store writes
+  // new tabs, and a switch of the shown drawing writes none.
+  watch([() => state.drawingTabs.value, () => errorLog.value], () => {
+    const drawings = state.drawingList();
+    auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, null, null, drawings);
+    endStaleRetryCopies(errorLog.value, drawings);
+  });
   /** @param {DrawingState} drawing */
   const retryableAuxiliaryImportFailure = (drawing) => {
     const failure = auxiliaryImportFailureOf(drawing);
@@ -465,12 +489,13 @@ export const setupWatchers = ({
     // unbinds the card, and the store may then release the file (OV-1674), so
     // Retry keeps the file itself and binds it again.
     const source = state.inputFiles.fileOf(file);
+    const releaseSourceCopy = holdFileCopy(source);
     // A Specific rules failure found on given inputs offers Retry while they
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
       setAuxiliaryImportFailure(drawing, {
-        error: errorLog.value, key, drawing, selection: drawing.files[key],
+        error: errorLog.value, key, drawing, selection: drawing.files[key], releaseCopy: holdFileCopy(source),
         snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
           const retried = bindCard(drawing, key, source);
@@ -507,7 +532,7 @@ export const setupWatchers = ({
         retainFailure();
       }
       return false;
-    });
+    }).finally(releaseSourceCopy);
     trackAuxiliaryFileImport(file, pending);
     return pending;
   };

@@ -1487,7 +1487,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
-  // Discovery reads the source once and then drops its bytes.
+  // The source is read once when chosen: that read writes its copy, and the page then drops its bytes.
   expect(await page.evaluate(() => window.__GBDRAW_SOURCE_READS__)).toBe(1);
   await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
@@ -1531,8 +1531,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(generated).toEqual({
     result: { status: 'ok' },
     error: null,
-    // Generate reads the source once more, once for both records.
-    sourceReads: 2,
+    // Generate reads the source's copy (PD-OI-121), once for both records, and never the source again.
+    sourceReads: 1,
     cardCount: 2,
     selector: 'AutomaticA',
     grouping: 'single',

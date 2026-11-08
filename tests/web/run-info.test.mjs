@@ -28,7 +28,7 @@ const {
 const { adoptCurrentSessionResources, createSessionResourceFileView, fileBackedDescriptor } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
 );
-const { holdReadBytes, readFileText } = await import(
+const { holdReadBytes, readFileContentFacts, readFileText } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'file-content-cache.js'))
 );
 const { setResourcePayloadOwner } = await import(
@@ -372,6 +372,12 @@ test('source recipe counts survive transfer and follow same-name source replacem
         };
         try {
           assert.equal(await readFileText(file), text);
+          if (input === 'native') {
+            // The discovery read ends once its facts are hashed; a Generate that started
+            // before that would share its bytes instead of reading the File again.
+            await readFileContentFacts(file);
+            await new Promise((resolve) => setImmediate(resolve));
+          }
           // Generate holds its reads: the record count and the transfer share one read of the File.
           const releaseReads = holdReadBytes();
           assert.deepEqual(await readRecipe(), expected);

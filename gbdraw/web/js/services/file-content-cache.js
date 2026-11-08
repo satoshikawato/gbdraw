@@ -31,6 +31,7 @@ export {
 };
 
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { InputCopy, InputCopyStore } from './input-copies.js' */
 
 /**
  * A resource's content token: the Worker's cache key for its bytes, so equal
@@ -50,10 +51,26 @@ export {
 const fileByteCache = new WeakMap();
 /** @type {WeakMap<object, Promise<FileContentFacts>>} */
 const fileContentFacts = new WeakMap();
-// The Files whose cached bytes a gzip file expanded to. They stay until a
-// transfer takes them: expanding again would be slower than keeping them.
+// The Files whose cached bytes a gzip file expanded to while no copy holds
+// them: until the copy is written, or for good when it has none. They stay
+// until a transfer takes them: expanding again would be slower than keeping them.
 /** @type {WeakSet<object>} */
 const expandedFiles = new WeakSet();
+// The temporary copies of the chosen inputs (PD-OI-121, `services/input-copies.js`):
+// the store `state.js` gives (`useInputCopyStore`), the Files the input store
+// holds (`keepFileCopy`), whose first read writes a copy, the other uses that
+// keep a copy (`holdFileCopy`), the copy of each such File, and the Files no
+// longer kept or used, whose copies are given back once no reading runs.
+/** @type {InputCopyStore | null} */
+let copyStore = null;
+/** @type {WeakSet<object>} */
+const keptFiles = new WeakSet();
+/** @type {WeakMap<object, Promise<InputCopy | null>>} */
+const fileCopies = new WeakMap();
+/** @type {WeakMap<object, number>} */
+const copyUses = new WeakMap();
+/** @type {Set<object>} */
+const releasedFiles = new Set();
 /**
  * The descriptor Generate made of each File (`fileBackedDescriptor`), keyed by that File. A
  * File never changes its bytes, so the File object is the key.
@@ -101,37 +118,56 @@ export const contentTokenOfBytes = async (bytes) => {
 };
 
 /**
- * The facts of `key`, started from `bytes` unless an earlier read started them.
- * @param {object} key @param {Promise<Uint8Array>} bytes
+ * The facts of `bytes`, their length taken before they are hashed.
+ * @param {Uint8Array} bytes
  * @returns {Promise<FileContentFacts>}
  */
-const startContentFacts = (key, bytes) => {
-  let facts = fileContentFacts.get(key);
-  if (!facts) {
-    facts = bytes.then(async (read) => ({ token: await contentTokenOfBytes(read), byteLength: read.byteLength }));
-    fileContentFacts.set(key, facts);
-    facts.catch(() => {
-      if (fileContentFacts.get(key) === facts) fileContentFacts.delete(key);
-    });
-  }
+const factsOfBytes = async (bytes) => {
+  const byteLength = bytes.byteLength;
+  return { token: await contentTokenOfBytes(bytes), byteLength };
+};
+
+/**
+ * Keeps `facts` as the facts of `key` until they fail.
+ * @param {object} key @param {Promise<FileContentFacts>} facts
+ */
+const rememberFacts = (key, facts) => {
+  fileContentFacts.set(key, facts);
+  facts.catch(() => {
+    if (fileContentFacts.get(key) === facts) fileContentFacts.delete(key);
+  });
   return facts;
 };
 
 // A File's bytes are kept while a hold covers its read (a Generate, a Save, a
 // once-per-File read): the reads it covers share them. When the last hold ends,
 // or a read settles with no hold, the page drops every settled plain read; the
-// next read reads the File again.
+// next read reads the File's copy, or the File again. A first read settles once
+// its copy is written, so a read that starts meanwhile shares its bytes.
 let readHolds = 0;
 /** @type {Map<object, Promise<Uint8Array>>} */
 const sharedReads = new Map();
 /** @type {WeakSet<Promise<Uint8Array>>} */
 const settledReads = new WeakSet();
+/** @param {object} key */
+const readRuns = (key) => {
+  const pending = sharedReads.get(key);
+  return Boolean(pending && !settledReads.has(pending));
+};
 const dropSharedReads = () => {
   if (readHolds) return;
   for (const [key, pending] of sharedReads) {
     if (!settledReads.has(pending)) continue;
     sharedReads.delete(key);
     if (fileByteCache.get(key) === pending && !expandedFiles.has(key)) fileByteCache.delete(key);
+  }
+  for (const key of releasedFiles) {
+    // A File kept or used again keeps its copy; one that a reading still reads gives it back after.
+    if (keptFiles.has(key) || copyUses.get(key)) releasedFiles.delete(key);
+    if (readRuns(key) || !releasedFiles.has(key)) continue;
+    releasedFiles.delete(key);
+    fileCopies.get(key)?.then((copy) => copy?.release());
+    fileCopies.delete(key);
   }
 };
 
@@ -149,12 +185,15 @@ export const holdReadBytes = () => {
     dropSharedReads();
   };
 };
+
 /**
- * The plain bytes of a File's bytes: a gzip file expands to at most Python's
- * `MAX_EXPANDED_INPUT_BYTES`, and past it rejects with `INPUT_UNREADABLE`
- * (`GZIP_EXPANDED_SIZE`), naming the file and the cap in MiB.
+ * The plain bytes of a File's bytes, the one setup of an input's expansion: a
+ * gzip file expands to at most Python's `MAX_EXPANDED_INPUT_BYTES`, and past it
+ * rejects with `INPUT_UNREADABLE` (`GZIP_EXPANDED_SIZE`), naming the file and
+ * the cap in MiB.
  * @param {string} name The File's name.
  * @param {Uint8Array<ArrayBuffer>} bytes
+ * @returns {Promise<Uint8Array>}
  */
 const expandInputBytes = (name, bytes) => {
   const maxBytes = testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
@@ -162,33 +201,129 @@ const expandInputBytes = (name, bytes) => {
     { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' }));
 };
 
+/** @typedef {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} ReadableFile */
+
 /**
- * Reads `file` (cached under `key`), starts its content facts, and shares the
- * bytes with the reads the current holds cover (`holdReadBytes`).
+ * The File's own bytes, as stored: a read the browser refuses rejects with `INPUT_UNREADABLE`.
+ * @param {ReadableFile} file
+ */
+const readSource = (file) => Promise.resolve()
+  .then(() => file.arrayBuffer())
+  .then(asBytes, (error) => { throw refusedReadError(error); });
+
+/**
+ * A later read of a File that has no copy: its bytes are checked against the
+ * facts of its first read, and a File whose bytes changed on disk since (a
+ * browser may return the new bytes instead of refusing) rejects with
+ * `INPUT_UNREADABLE`, as a refused read does (PD-OI-121).
+ * @param {ReadableFile} file @param {Promise<FileContentFacts>} knownFacts
+ */
+const readAgain = async (file, knownFacts) => {
+  const bytes = await expandInputBytes(String(file.name ?? ''), await readSource(file));
+  const facts = await knownFacts;
+  if (bytes.byteLength !== facts.byteLength || await contentTokenOfBytes(bytes) !== facts.token) {
+    throw diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' });
+  }
+  return bytes;
+};
+
+/**
+ * A later read through a File's copy, or of the File itself when it has no copy or the copy is gone.
+ * @param {ReadableFile} file @param {Promise<InputCopy | null>} copy @param {Promise<FileContentFacts>} facts
+ */
+const readThroughCopy = async (file, copy, facts) => {
+  const held = await copy;
+  if (held) {
+    try {
+      return await held.read();
+    } catch {
+      // The copy is gone (the site's storage was cleared): the File is read itself.
+    }
+  }
+  return readAgain(file, facts);
+};
+
+/**
+ * Writes `plain` to a new copy in 16 MiB pieces, one at a time, while its facts
+ * are hashed, and closes it under their token; null when no copy could be
+ * written, or when it holds fewer bytes than the facts count.
+ * Every piece goes through one buffer, which the Worker gives back, so the copy
+ * holds one piece beside `plain`.
+ * @param {InputCopyStore} store @param {Uint8Array} plain @param {Promise<FileContentFacts>} facts
+ * @returns {Promise<InputCopy | null>}
+ */
+const writeCopy = async (store, plain, facts) => {
+  const writer = await store.openWriter().catch(() => null);
+  if (!writer) return null;
+  try {
+    /** @type {ArrayBuffer | null} */
+    let spare = null;
+    let written = 0;
+    for (let start = 0; start === 0 || start < plain.byteLength; start += TOKEN_PIECE_BYTES) {
+      const piece = plain.subarray(start, start + TOKEN_PIECE_BYTES);
+      const buffer = spare?.byteLength === piece.byteLength ? spare : new ArrayBuffer(piece.byteLength);
+      new Uint8Array(buffer).set(piece);
+      spare = await writer.write(buffer);
+      written += piece.byteLength;
+    }
+    const { token, byteLength } = await facts;
+    if (written !== byteLength) throw new Error(`Copied ${written} of ${byteLength} bytes.`);
+    return await writer.finish(token);
+  } catch {
+    writer.abort();
+    return null;
+  }
+};
+
+/**
+ * The first read of a File: the one read of its own bytes. Readers get them, a
+ * gzip file's expanded, as soon as they are read, and their facts follow from
+ * them. For a File the input store holds or a use holds, a copy is then written from them in
+ * the background (PD-OI-121); a gzip file's expanded bytes are dropped once it
+ * is written, and kept when no copy could be.
+ * @param {object} key @param {ReadableFile} file
+ * @returns {{ bytes: Promise<Uint8Array>, done: Promise<unknown> }}
+ */
+const readFirst = (key, file) => {
+  const bytes = readSource(file).then(async (raw) => {
+    const plain = await expandInputBytes(String(file.name ?? ''), raw);
+    if (plain !== raw) expandedFiles.add(key);
+    return plain;
+  });
+  const facts = rememberFacts(key, bytes.then(factsOfBytes));
+  const store = keptFiles.has(key) || copyUses.get(key) ? copyStore : null;
+  const copy = store ? bytes.then((plain) => writeCopy(store, plain, facts), () => null) : Promise.resolve(null);
+  fileCopies.set(key, copy);
+  const copied = copy.then((written) => {
+    if (written) expandedFiles.delete(key);
+  });
+  return { bytes, done: Promise.allSettled([bytes, facts, copied]) };
+};
+
+/**
+ * Reads `file` (cached under `key`): its first read, or a later read through
+ * its copy, and shares the bytes with the reads the current holds cover
+ * (`holdReadBytes`).
  * @param {object} key
- * @param {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} file
+ * @param {ReadableFile} file
  * @returns {Promise<Uint8Array>}
  */
 const startFileRead = (key, file) => {
-  const pending = Promise.resolve()
-    .then(() => file.arrayBuffer())
-    .then(asBytes, (error) => { throw refusedReadError(error); })
-    .then(async (bytes) => {
-      const plain = await expandInputBytes(String(file.name ?? ''), bytes);
-      if (plain !== bytes) expandedFiles.add(key);
-      return plain;
-    });
+  const facts = fileContentFacts.get(key);
+  const read = facts
+    ? { bytes: readThroughCopy(file, fileCopies.get(key) ?? Promise.resolve(null), facts) }
+    : readFirst(key, file);
+  const pending = read.bytes;
   fileByteCache.set(key, pending);
   sharedReads.set(key, pending);
-  startContentFacts(key, pending);
+  pending.catch(() => {
+    if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
+  });
   const settle = () => {
     settledReads.add(pending);
     dropSharedReads();
   };
-  pending.then(settle, () => {
-    if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
-    settle();
-  });
+  ('done' in read ? read.done : pending).then(settle, settle);
   return pending;
 };
 
@@ -216,8 +351,7 @@ export const readFileBytes = (file) => {
       ));
     }
     // The `typeof` check above holds its `arrayBuffer()`.
-    return fileByteCache.get(key)
-      ?? startFileRead(key, /** @type {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} */ (file));
+    return fileByteCache.get(key) ?? startFileRead(key, /** @type {ReadableFile} */ (file));
   } catch (error) {
     return Promise.reject(error);
   }
@@ -252,7 +386,109 @@ export const readFileText = async (file) => {
 export const readFileContentFacts = (file) => {
   const key = asCacheKey(file);
   if (!key) return Promise.reject(new TypeError('A File-like object is required.'));
-  return fileContentFacts.get(key) ?? startContentFacts(key, readFileBytes(file));
+  const known = fileContentFacts.get(key);
+  if (known) return known;
+  // A File's first read keeps its facts; a Session resource view's are hashed from its bytes.
+  const bytes = readFileBytes(file);
+  return fileContentFacts.get(key) ?? rememberFacts(key, bytes.then(factsOfBytes));
+};
+
+/**
+ * The store the temporary copies are written to; null writes none, and every File is read itself.
+ * @param {InputCopyStore | null} store
+ */
+export const useInputCopyStore = (store) => {
+  copyStore = store;
+};
+
+/**
+ * The input store now holds `file`: the File is read and copied now (PD-OI-121),
+ * unless a read of it has started, and every later reading reads the copy.
+ * @param {unknown} file
+ */
+export const keepFileCopy = (file) => {
+  const key = asCacheKey(file);
+  if (!key || !copyStore || isSessionResourceFileView(file)) return;
+  if (typeof /** @type {{ readonly arrayBuffer?: unknown }} */ (key).arrayBuffer !== 'function') return;
+  releasedFiles.delete(key);
+  if (keptFiles.has(key)) return;
+  keptFiles.add(key);
+  if (!fileContentFacts.has(key)) readFileContentFacts(/** @type {FileLike} */ (file)).catch(() => {});
+};
+
+/**
+ * The input store let go of `file`: its copy is deleted once no hold and no read of it runs.
+ * @param {unknown} file
+ */
+export const releaseFileCopy = (file) => {
+  const key = asCacheKey(file);
+  if (!key || !keptFiles.has(key)) return;
+  keptFiles.delete(key);
+  releasedFiles.add(key);
+  dropSharedReads();
+};
+
+/**
+ * Keeps the copy of `file` while a state the input store does not see can
+ * read it again (a failed import that offers Retry), even after the input
+ * store lets it go. A File no other use holds gets a copy when this use holds
+ * it during its first read.
+ * @param {unknown} file
+ * @returns {() => void} Ends this use; a second call does nothing.
+ */
+export const holdFileCopy = (file) => {
+  const key = asCacheKey(file);
+  if (!key) return () => {};
+  copyUses.set(key, (copyUses.get(key) ?? 0) + 1);
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    copyUses.set(key, (copyUses.get(key) ?? 1) - 1);
+    if (fileCopies.has(key)) releasedFiles.add(key);
+    dropSharedReads();
+  };
+};
+
+/**
+ * A copy a failed import keeps for its Retry: the error that offers Retry and
+ * the drawing it failed in.
+ * @typedef {{ readonly error: unknown, readonly drawing: object, readonly end: () => void }} RetryCopy
+ */
+/** @type {Set<RetryCopy>} */
+const retryCopies = new Set();
+/** @param {RetryCopy | null} held */
+const endRetryCopy = (held) => {
+  if (held && retryCopies.delete(held)) held.end();
+};
+
+/**
+ * The copy that one kind of import's failure offers to Retry (PD-OI-121), so
+ * Retry reads the content chosen even after the file changed: each call keeps
+ * the copy of `file` for the failure `offer` names and lets go of the one kept
+ * before; null (no failure offers Retry) lets it go. A copy also goes once its
+ * Retry can no longer be offered (`endStaleRetryCopies`).
+ * @returns {(file: unknown, offer?: { error: unknown, drawing: object }) => void}
+ */
+export const createRetryCopyHold = () => {
+  /** @type {RetryCopy | null} */
+  let held = null;
+  return (file, offer) => {
+    const next = file && offer ? { error: offer.error, drawing: offer.drawing, end: holdFileCopy(file) } : null;
+    if (next) retryCopies.add(next);
+    endRetryCopy(held);
+    held = next;
+  };
+};
+
+/**
+ * Ends the Retry copies whose Retry can no longer be offered: their error is
+ * no longer the one shown (cleared or replaced), or a Load or History restore
+ * replaced their drawing.
+ * @param {unknown} shownError @param {readonly object[]} drawings The drawings now.
+ */
+export const endStaleRetryCopies = (shownError, drawings) => {
+  for (const held of [...retryCopies]) if (held.error !== shownError || !drawings.includes(held.drawing)) endRetryCopy(held);
 };
 
 /** @param {unknown} file */
@@ -308,6 +544,9 @@ const readAndRelease = async (file) => {
  * @returns {Promise<ArrayBuffer>} A buffer no other take holds.
  */
 export const takeFileBytesForTransfer = async (file) => {
+  // A first read hashes the bytes it read and copies them; a transfer detaches them once both end.
+  const key = asCacheKey(file);
+  if (key) await Promise.allSettled([fileContentFacts.get(key), fileCopies.get(key)]);
   let bytes = await readAndRelease(file);
   if (takenBuffers.has(bytes.buffer)) bytes = await readAndRelease(file);
   if (takenBuffers.has(bytes.buffer) || bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {

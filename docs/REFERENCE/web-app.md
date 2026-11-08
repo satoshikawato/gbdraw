@@ -18,8 +18,31 @@ The application keeps one choice in the browser's local storage: whether the
 settings show in full or as the column of icons. The browser keeps it per
 site address, so another browser, a private window, or another address starts
 with the full settings. Files, settings, and Results are not stored there.
-`gbdraw gui` serves the application on a new port each time it starts, which
-is a new address to the browser, so the choice lasts until that server stops.
+`gbdraw gui` serves the application at the same address on every run,
+`http://localhost:24372`, so the choice lasts from one run to the next. When
+another program uses that port, `gbdraw gui` says so and serves the
+application on a free port instead. That is another address to the browser: a
+choice made there is not kept, and copies left there are deleted only when
+that port is used again.
+
+When you choose an input file, the page writes its contents (a gzip file's
+expanded contents) to a temporary file in the browser's private storage for
+the site, the origin private file system, and releases them from memory.
+Generate, Save Session, and every later reading of the file read that copy, so
+a file changed, moved, renamed, or deleted on disk after it was chosen
+continues with the contents as chosen; choose the file again to use its new
+contents. The copies sit on disk inside the browser profile, other sites
+cannot read them, and they are never sent anywhere. The disk needs free space
+for the inputs in use, including those an Undo step can bring back. A copy is
+deleted when no drawing, History step, or running operation uses its file, and
+when the page closes; copies left by a page or browser that ended abnormally
+are deleted the next time the page opens at the same address, and a copy
+another open tab uses is kept. A private (incognito) window keeps the copies in memory. When a copy
+cannot be written (no free space, or the browser does not allow the storage),
+the page reads the file itself, and a file that changed after it was chosen
+then stops Generate or Save Session with "An input could not be read. Replace
+or reselect it." (`INPUT_UNREADABLE`). Inputs read from a Session file are not
+copied.
 
 `gbdraw gui` serves the application and runtimes from the installed Python
 package. Its normal drawing workflow works without an internet connection once

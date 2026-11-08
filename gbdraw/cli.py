@@ -17,14 +17,17 @@ Functions:
 
 
 import argparse
+import hashlib
+import os
+import socket
 import sys
 import warnings
 import webbrowser
 import http.server
 import socketserver
-import socket
+from http import HTTPStatus
 from collections.abc import Callable
-from typing import TYPE_CHECKING, NoReturn, TextIO
+from typing import TYPE_CHECKING, BinaryIO, NoReturn, TextIO
 from importlib import resources
 from functools import partial
 
@@ -44,9 +47,43 @@ if TYPE_CHECKING:
 
 
 class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the browser UI with the headers required for SharedArrayBuffer."""
+    """Serve the browser UI with the headers required for SharedArrayBuffer.
+
+    The browser revalidates every file, and a cached file is reused only when its
+    ETag matches exactly: the ETag names the file's path, size and modification
+    time and the gbdraw version, so another installation or an older gbdraw at the
+    same address never runs from the cache. A modification date alone never
+    answers 304: a downgrade or another environment can serve older dates."""
+
+    _etag: str | None = None
+
+    def _file_etag(self) -> str | None:
+        path = self.translate_path(self.path)
+        if os.path.isdir(path):
+            path = os.path.join(path, "index.html")
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        if not os.path.isfile(path):
+            return None
+        identity = f"{os.path.realpath(path)}\0{stat.st_size}\0{stat.st_mtime_ns}\0{__version_display__}"
+        return '"' + hashlib.sha256(identity.encode("utf-8", "surrogateescape")).hexdigest()[:32] + '"'
+
+    def send_head(self) -> BinaryIO | None:
+        del self.headers["If-Modified-Since"]
+        self._etag = self._file_etag()
+        matches = {tag.strip() for tag in self.headers.get("If-None-Match", "").split(",")}
+        if self._etag is not None and self._etag in matches:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.end_headers()
+            return None
+        return super().send_head()
 
     def end_headers(self) -> None:
+        if self._etag is not None:
+            self.send_header("ETag", self._etag)
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
@@ -57,29 +94,71 @@ def print_version() -> None:
     print(f"gbdraw version {__version_display__}")
 
 
-def find_free_port():
-    """Find a free port on localhost"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
-        return s.getsockname()[1]
+GUI_PORT = 24372
+"""The port ``gbdraw gui`` serves the Web app on. One address across runs keeps the
+browser's storage for it: the layout choice, and the temporary input copies that
+the next run deletes when a run ended without deleting them (PD-OI-121)."""
+
+
+class _GuiServer(socketserver.TCPServer):
+    # A port the previous run just closed can be bound again at once; Windows
+    # would let a second server bind a port in use with this option, so not there.
+    allow_reuse_address = sys.platform != "win32"
+
+
+_PROBE_TIMEOUT_S = 0.1
+"""How long a probe waits for a loopback server: one answers in well under a
+millisecond, and Windows retries a refused loopback connection until the timeout,
+so a short one bounds the start-up wait at about 0.2 s."""
+
+
+def _port_answers(port: int) -> bool:
+    """Whether a server already accepts connections on ``port`` of 127.0.0.1 or ::1,
+    either of which ``localhost`` can reach. It also finds a server on every
+    address, which the reuse option would let a bind on macOS share. A probe that
+    times out found no server."""
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as probe:
+                probe.settimeout(_PROBE_TIMEOUT_S)
+                if probe.connect_ex((host, port)) == 0:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def bind_gui_server(handler: Callable[..., http.server.BaseHTTPRequestHandler]) -> tuple[socketserver.TCPServer, bool]:
+    """The server on ``GUI_PORT`` of 127.0.0.1, or, when a server answers on that port
+    or it cannot be bound, on a free port; the flag says whether it fell back."""
+    if not _port_answers(GUI_PORT):
+        try:
+            return _GuiServer(("127.0.0.1", GUI_PORT), handler), False
+        except OSError:
+            pass
+    return _GuiServer(("127.0.0.1", 0), handler), True
+
 
 def start_local_server(directory: str):
     """
     Starts a local HTTP server to serve the gbdraw web UI.
     """
 
-    port = find_free_port()
-
     handler = partial(IsolatedSimpleHTTPRequestHandler, directory=directory)
 
     try:
-        httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
+        httpd, fell_back = bind_gui_server(handler)
     except OSError as e:
         print(f"Error starting server: {e}", file=sys.stderr)
         return
 
+    port = httpd.server_address[1]
     url = f"http://localhost:{port}"
     # Status lines go to standard error with the log; standard output keeps what a command exists to print.
+    if fell_back:
+        print(f"Port {GUI_PORT} is in use, so the UI is served at another address.", file=sys.stderr)
+        print("The layout choice made there is not kept, and its temporary input copies are", file=sys.stderr)
+        print(f"deleted only when port {port} is used again.", file=sys.stderr)
     print(f"✅ Local server started at: {url}", file=sys.stderr)
     print(f"📂 Serving UI from: {directory}", file=sys.stderr)
     print("Press Ctrl+C to stop the server.", file=sys.stderr)
