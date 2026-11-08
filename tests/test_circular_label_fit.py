@@ -283,7 +283,7 @@ def test_crossing_leaders_alone_warn_and_return_the_report() -> None:
     ]
     assert caught[0].message.report is report
     assert str(caught[0].message).startswith(
-        "lambda: 111 outer labels do not fit at 14 pt (0 label pairs overlap, 4 leader pairs cross). Drawn anyway.\n"
+        "lambda: 111 outer labels do not fit at 14 pt (0 label pairs overlap, 4 leader pairs cross). The figure is drawn.\n"
     )
 
 
@@ -803,7 +803,7 @@ def test_region_labels_over_other_labels_warn_with_no_fix_and_never_stop() -> No
         report = check_linear_label_fit(label_fit, _no_values, features_separated=False)
     assert report is not None and report.drawn and report.region_overlaps == 7 and report.rows == ()
     assert label_fit_notice(report) == ("Region labels overlap other labels or lines (7).",)
-    assert str(caught[0].message) == "rec: 3 region labels do not fit at 14 pt (7 region label overlaps). Drawn anyway."
+    assert str(caught[0].message) == "rec: 3 region labels do not fit at 14 pt (7 region label overlaps). The figure is drawn."
 
 
 def test_feature_label_rows_are_kept_only_when_the_region_label_that_asked_for_them_clears() -> None:
@@ -870,7 +870,7 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     stderr = capsys.readouterr().err
     assert stderr.startswith(
         "WARNING: NC_001416.1: 71 outer labels do not fit at 15 pt (0 label pairs overlap, 2 leader pairs cross). "
-        "Drawn anyway.\nRun again with one of:\n"
+        "The figure is drawn.\nRun again with one of:\n"
     )
     assert "--outer_label_y_radius_offset 1.025" in stderr
 

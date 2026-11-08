@@ -79,7 +79,15 @@ from ...labels.circular_capacity import CircularLabelCapacity, CircularLabelCapa
 from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
 from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
-from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
+from ...labels.fit import (
+    DEFINITION_FONT_PATH,
+    FITS,
+    LabelFit,
+    LabelFitValue,
+    LabelKind,
+    RegionLabelWarnings,
+    region_rooms_left_out,
+)
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_transform import bind_record_transforms
@@ -164,6 +172,7 @@ from ...render.drawers.circular.annotations import (
     LeaderSegment,
     circular_annotation_label_extent,
     circular_annotation_label_room,
+    circular_annotation_mark_past_lane,
     circular_annotation_labels,
     circular_annotation_track_content,
     circular_annotation_track_ink,
@@ -444,11 +453,11 @@ class _CircularAnnotationPacking:
     ) -> ResolvedAnnotationTrack:
         """Pack one annotation slot, its labels measured beside their marks on the slot's side
         (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest
-        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``. An inside slot
-        without a set width adds no room that would carry its lanes past the centre (LBL-ROOM-STOP-AT-CENTRE-WARN):
-        ``lanes_from_px`` is all the room it has. A packing with the same inputs is kept (``CircularAnnotationMeasures``)."""
+        the axis side it starts from; each gap keeps at least its room in ``rooms_at_least``. An inside slot adds no
+        room that would carry its lanes past the centre (LBL-ROOM-STOP-AT-CENTRE-OMIT): ``lanes_from_px`` is all the
+        room it has, whatever its set width (``_lane_band`` takes the nearer of the two for a clipped slot). A packing with the same inputs is kept (``CircularAnnotationMeasures``)."""
 
-        room_bounds = RoomBounds(tuple(rooms_at_least), float(lanes_from_px) if inside and slot.width is None else None)
+        room_bounds = RoomBounds(tuple(rooms_at_least), float(lanes_from_px) if inside else None)
         return _kept_measure(
             lambda measures: measures.tracks,
             (slot.id, inside, lanes_from_px, room_bounds),
@@ -476,6 +485,7 @@ class _CircularAnnotationPacking:
                     lanes_from_px=lanes_from_px,
                     outward=not inside,
                 ),
+                reach=circular_annotation_mark_past_lane,
                 bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
             ),
             join_origin=True,
@@ -2659,7 +2669,7 @@ def _record_label_layout(
     radial_refused: bool,
     capacity: Sequence[CircularLabelCapacity] = (),
     region_labels: Sequence[CircularAnnotationLabel] = (),
-    region_warnings: LabelFit = FITS,
+    region_warnings: RegionLabelWarnings = RegionLabelWarnings(FITS),
     definition_track_overlaps: int = 0,
     definition_probe: CircularDefinitionFitProbe | None = None,
     definition_narrow_radius_px: float = 0.0,
@@ -2667,8 +2677,9 @@ def _record_label_layout(
     """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
 
     Region labels cut to fit their circle (LP-D87), and those the layout
-    counts in ``region_warnings`` (lying on another track, LP-D86; left
-    without lane room before the centre, LBL-ROOM-STOP-AT-CENTRE-WARN), are a
+    counts in ``region_warnings`` (lying on another track, LP-D86; left out
+    for want of lane room, LBL-ROOM-STOP-AT-CENTRE-OMIT and LBL-ROOM-CLIP-FIT-OMIT, with
+    their font sizes), are a
     ``circular_region`` kind that only warns, and so are the
     lines of the centre definition text that reach into a track (D-12,
     ``circular_definition``). ``capacity`` names the sides whose labels need
@@ -2688,7 +2699,7 @@ def _record_label_layout(
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
     cuts = sum(label.cut for label in region_labels)
-    region_counts = replace(region_warnings, region_cuts=cuts)
+    region_counts = replace(region_warnings.fit, region_cuts=cuts)
     if not placed and region_counts.fits and not definition_track_overlaps and not capacity:
         return None
     cfg = profile.config
@@ -2713,18 +2724,19 @@ def _record_label_layout(
     counts.update((side.label_kind, side.record.label_count) for side in capacity)
     kind_fits = circular_label_fits(drawn_labels, total_length, definition_text=definition_text) if placed else {}
     if not region_counts.fits:
-        counts["circular_region"] = len(region_labels)
+        counts["circular_region"] = len(region_labels) + region_counts.region_left_out
         kind_fits["circular_region"] = region_counts
     if definition_track_overlaps:
         counts["circular_definition"] = definition_track_overlaps
         kind_fits["circular_definition"] = LabelFit(0, 0, definition_track_overlaps=definition_track_overlaps)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
+    font_size = circular_label_font_size(cfg, total_length)
     return CircularLabelLayout(
         record_id=str(gb_record.id),
         record_index=record_index,
         placement="horizontal" if horizontal else "radial",
-        font_size=circular_label_font_size(cfg, total_length),
+        font_size=font_size,
         label_counts=counts,
         kind_fits=kind_fits,
         x_radius_offset=float(outer_offsets.x_radius_offset),
@@ -2734,7 +2746,10 @@ def _record_label_layout(
         capacity={side.label_kind: side.record for side in capacity},
         features_separated=bool(profile.resolve_overlaps),
         probe=probe,
-        region_font_size=max((label.font_size for label in region_labels), default=0.0),
+        # The region labels' own sizes, drawn or left out; a label without a size of its own takes the record's.
+        region_font_size=max(
+            (*(label.font_size for label in region_labels), *region_warnings.left_out_font_sizes), default=font_size
+        ),
         definition_font_size=float(cfg.objects.definition.circular.font_size) if definition_track_overlaps else 0.0,
         definition_probe=definition_probe if definition_track_overlaps else None,
         definition_narrow_radius_px=definition_narrow_radius_px if definition_track_overlaps else 0.0,
@@ -3700,11 +3715,8 @@ def add_record_on_circular_canvas(
         radial_refused=radial_refused,
         capacity=label_capacity,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
-        region_warnings=LabelFit(
-            0,
-            0,
-            region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
-            region_rooms_past_centre=sum(track.labels_without_room for track in annotation_track_layouts.values()),
+        region_warnings=region_rooms_left_out(annotation_track_layouts.values(), planned.annotation_record_index).adding(
+            LabelFit(0, 0, region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels))
         ),
         definition_track_overlaps=(
             definition_lines_on_tracks(radial_layout, definition_ink, annotation_labels) if definition_ink else 0

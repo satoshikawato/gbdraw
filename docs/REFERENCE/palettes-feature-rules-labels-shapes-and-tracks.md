@@ -159,9 +159,14 @@ permits explicit-lane collisions and, only for an overfull multi-lane track,
 reduces the gaps between lanes; it still fails when the fixed lane bands,
 padding, and label room cannot fit. A track needs room before a lane where a
 label would cross a mark in that lane, the next one on the label's side or one
-further on. An `inside` Circular slot without a width adds no room past the
-centre of the circle and warns instead. `overflow=clip` permits explicit-lane collisions and clips
-an overfull track; a lane clipped past the centre of the circle stops there. Increase the slot extent or reduce padding and label offset
+further on. An `inside` Circular slot without a width, or clipped with a width
+that reaches past the centre, adds no room past the centre of the circle; it
+leaves out the labels that needed it and warns. `overflow=clip` permits explicit-lane collisions and clips
+an overfull track; a lane clipped past the centre of the circle stops there. A
+clipped slot whose `h` (Linear) or `w` (Circular) you set adds no room that
+would carry its lanes past that size: it draws every mark, leaves out the
+labels that needed that room, the labels whose letters that size would
+cut, and the labels whose own mark lies wholly past it, and warns. The lanes alone can still pass it and be clipped. Increase the slot extent or reduce padding and label offset
 when the content must remain fully visible.
 
 ## Feature presentation
@@ -358,8 +363,9 @@ affected.
   `GbdrawError`.
 - If leader lines cross, labels cover the definition text, Linear region
   (annotation) labels overlap other labels or lines, Circular region labels
-  are cut to fit their circle, lie on other tracks, or cross another lane's
-  mark for want of room before the centre, or the definition text
+  are cut to fit their circle, lie on other tracks, or are left out for want of
+  room before the centre, region labels of either mode are left out for want of
+  room in a clipped slot, or the definition text
   in the centre of a Circular record overlaps a track, but no labels overlap,
   the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
@@ -367,8 +373,9 @@ affected.
 
 The message counts the overlapping label pairs, crossing leader pairs,
 labels over the definition text, region label overlaps, cut region labels,
-region labels on other tracks, region labels without room before the centre,
-and definition lines over a track of each record
+region labels on other tracks, region labels left out for want of room before
+the centre, region labels left out in clipped slots, and definition lines over a track
+of each record
 and side, and lists settings that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
@@ -405,7 +412,8 @@ is tried only if drawing the figure once more, as long as the last try took,
 ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
 apart. Linear region labels and Circular region labels that are cut, lie
-on other tracks, or are left without room before the centre get no row.
+on other tracks, or are left out for want of room before the centre or in a
+clipped slot get no row.
 
 The definition text in the centre of a Circular record (not a plot title)
 overlaps a track when the box of one of its lines, as drawn (bold first line
@@ -460,18 +468,32 @@ overlay (other than split feature lanes), and an overlay that spans nothing on
 a plot overlay (such as `ov:dinucleotide_skew@side=overlay,r=0.6,w=10px`),
 keep no room, so their labels are not counted.
 
-An `inside` annotation slot without a width (`w=`) adds the room its labels
+An `inside` annotation slot without a width (`w=`), or with `overflow=clip`
+and a width that reaches past the centre, adds the room its labels
 need between lanes gap by gap from its outer edge, and leaves out each
 label's room that would carry its lanes past the centre of the circle: a gap
 takes the largest of its labels' rooms that still fits, and a later room that
 still fits is added. Each label that needed a room the slot did not add is
-drawn across the mark it meets and
-counts as one region label without room before the centre (`1 region label
-without room before the centre`). This only warns: the Web app shows "Region
-labels cross other region marks: there is no room for them before the centre
-(N)." over the figure, with no **Choose a fix** button. When the slot's lanes
+not drawn; its mark is drawn. It counts as one region label left out for want
+of room before the centre (`1 region label left out for want of room before
+the centre`). This only warns: the Web app shows "Region labels are left out:
+there is no room for them before the centre (N)." over the figure, with no
+**Choose a fix** button. When the slot's lanes
 alone reach the centre, they share the space before it. Fewer labels or a slot
 outside the axis (`side=outside`) make room.
+
+A slot whose height `h` (Linear) or width `w` (Circular) you set, with
+`overflow=clip`, adds the room the same way within that size: a gap takes the
+largest of its labels' rooms that still fits, and a later room that still fits
+is added. Every mark is drawn. Each label that needed a room the slot did not
+add is not drawn, nor is a label whose letters the edge of that size would cut,
+nor a label whose own mark lies wholly past that size, where the clip hides it;
+each counts as one region label left out in clipped slots (`1 region label left
+out in clipped slots`). This only warns: the Web app shows "Region labels are
+left out: their clipped slots have no room for them, would cut their letters,
+or hide their marks (N)." over the figure, with no **Choose a fix** button. A
+larger `h` or `w`, fewer labels, or `overflow=error` or `compress` (which add
+the room to what the slot needs) make room.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its

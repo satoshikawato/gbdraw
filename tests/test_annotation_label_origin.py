@@ -33,6 +33,12 @@ _SVG = "{http://www.w3.org/2000/svg}"
 _LENGTH = 10_000
 
 
+def _half_stroke_reach(_annotation, style, _lane_width: float) -> float:
+    # The packer tests' own mark paint (``LabelSizing.reach``): half the stroke past the lane's edge.
+    return 0.5 * float(style.stroke_width)
+
+
+
 def _record(topology: str = "circular", *, region_applied: bool = False) -> SeqRecord:
     record = SeqRecord(
         Seq("ACGT" * (_LENGTH // 4)), id="r1", name="r1", annotations={"topology": topology, "molecule_type": "DNA"}
@@ -440,7 +446,7 @@ def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes:
         for identity, segment, label in (("a", (100, 110), "X" * 10), ("b", (150, 160), ""))
     )
     track = layout_annotation_track(
-        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(font_size=10.0, extent=_letters_6px_each),
+        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=_letters_6px_each),
         join_origin=False
     )
 
@@ -461,7 +467,7 @@ def _packed_lanes(
     )
     track = layout_annotation_track(
         "regions", "s", (labelled, other), record_lengths={0: row_length or length},
-        labels=LabelSizing(font_size=10.0, extent=_letters_6px_each), join_origin=False,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=_letters_6px_each), join_origin=False,
     )
     return {placement.annotation.id: placement.lane for placement in track.placements}
 
