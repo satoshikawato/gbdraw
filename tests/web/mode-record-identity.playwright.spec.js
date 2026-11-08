@@ -171,13 +171,13 @@ for (const committed of [false, true]) {
 // inactive, unbinds the old source identity. Owner decision Q3 = A (design Q4
 // 3.4, 6.3): the source change keeps the placement draft; the next Generate
 // that replaces the source removes the rows it no longer resolves and reports
-// how many. The replacement keeps the record ID, but a new file gets its own
-// record key (not the Session's `record-1`), so the old row reaches no request
-// and is removed; an unrelated file loaded after removal does not take it
-// either.
+// how many. A replacement in the same File card keeps the record's identity
+// (the card uid), so an edit of a feature the new file still has stays
+// (OV-2866). After a removal the old row reaches no request and is removed; an
+// unrelated file loaded after removal does not take it either.
 const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides));
 for (const operation of ['replacement', 'removal']) {
-  test(`Circular source ${operation} after mode inactivity unbinds the old identity and Generate drops its placement`, async ({ browser }) => {
+  test(`Circular source ${operation} after mode inactivity unbinds the old identity until Generate`, async ({ browser }) => {
     test.setTimeout(180000);
     const page = await load(browser);
     try {
@@ -203,12 +203,15 @@ for (const operation of ['replacement', 'removal']) {
           mimeType: 'text/plain', buffer: Buffer.from(source.replace(/Homo sapiens/g, 'Replacement source')) });
         await discovered();
       } else {
-        await upload.locator('xpath=ancestor::div[@role="group"]').getByRole('button', { name: /Remove/ }).click();
+        // A file leaves with its File card, through the removal dialog.
+        await page.getByRole('button', { name: 'Remove File 1', exact: true }).click();
+        await page.locator('[data-circular-source-removal-dialog] [role=dialog]').getByRole('button', { name: 'Remove file' }).click();
         await expect.poll(async () => (await snapshot(page)).records).toEqual([]);
       }
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        return { sameSource: state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb === window.__MODE_SOURCE__,
+        const card = state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0];
+        return { sameSource: Boolean(card) && card.gb === window.__MODE_SOURCE__,
           choices: window.__GBDRAW_APP__.featurePlacementActions.choices([window.__MODE_FEATURE__]) };
       });
       expect(invalidation.sameSource).toBe(false);
@@ -217,11 +220,22 @@ for (const operation of ['replacement', 'removal']) {
       expect(changed.records.some(record => record.recordKey === before.feature.recordKey)).toBe(false);
       // The source change itself removes no draft row (Q3 = A).
       expect(await placementKeys(page)).toEqual(placed);
-      if (operation === 'removal') {
-        await upload.setInputFiles('tests/fixtures/regex_rules.gb');
-        await discovered();
+      if (operation === 'replacement') {
+        // Generate removes only the edits of features the new source does not have
+        // (docs/REFERENCE/web-app.md). The replacement keeps the record and the
+        // feature, and its File card keeps the record's identity, so the placement
+        // stays and binds again (OV-2866: dev dropped it because the record's key
+        // changed with the file).
+        await generate(page);
+        expect((await snapshot(page)).committedPlacements).toHaveLength(1);
         expect(await placementKeys(page)).toEqual(placed);
+        await expect(page.getByTestId('feature-identity-notice')).toHaveCount(0);
+        expect(external.get(page)).toEqual([]);
+        return;
       }
+      await upload.setInputFiles('tests/fixtures/regex_rules.gb');
+      await discovered();
+      expect(await placementKeys(page)).toEqual(placed);
       await generate(page);
       const generated = await snapshot(page);
       expect(generated.committedPlacements).toEqual([]);
