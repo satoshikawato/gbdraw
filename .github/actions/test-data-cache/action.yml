@@ -1,0 +1,16 @@
+name: Test data cache
+description: >-
+  Cache the large test inputs that `tools/test_data.py` downloads from the
+  `test-data-*` GitHub Release into its default cache directory
+  (`~/.cache/gbdraw/test-data`, files named by SHA-256). The key follows the
+  manifest, so a run whose inputs are cached needs no network for them. Every
+  job that runs pytest uses this action before the pytest step and gives that
+  step `GITHUB_TOKEN` for the authenticated API fallback.
+runs:
+  using: composite
+  steps:
+    - name: Restore and save the test inputs
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/gbdraw/test-data
+        key: test-data-v1-${{ hashFiles('tests/test_data.json') }}

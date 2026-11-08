@@ -911,6 +911,43 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   assert.match(smoke, /Upload Playwright PR smoke traces/);
 });
 
+test('every job that runs pytest caches the test inputs and gives each pytest step the workflow token', () => {
+  // conftest.py fetches the Release inputs at the start of every pytest run. The cache keeps a run
+  // off the network for them, and the token authenticates the API fallback when a download fails.
+  const action = readFileSync(resolve(REPOSITORY_ROOT, '.github/actions/test-data-cache/action.yml'), 'utf8');
+  assert.match(action, /uses: actions\/cache@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {6}with:\n {8}path: ~\/\.cache\/gbdraw\/test-data\n {8}key: test-data-v1-\$\{\{ hashFiles\('tests\/test_data\.json'\) \}\}\n/);
+  const workflowsDir = resolve(REPOSITORY_ROOT, '.github/workflows');
+  const users = [];
+  for (const name of readdirSync(workflowsDir).filter((file) => file.endsWith('.yml')).sort()) {
+    const workflow = readFileSync(resolve(workflowsDir, name), 'utf8');
+    const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)].map(([, id]) => id);
+    for (const id of jobIds) {
+      const source = workflowJobOf(workflow, id);
+      const steps = source.split('\n      - name: ').slice(1);
+      const pytestSteps = steps.filter((step) => /python -m pytest /.test(step));
+      if (!pytestSteps.length) continue;
+      users.push(`${name}:${id}`);
+      assert.equal(source.split('uses: ./.github/actions/test-data-cache\n').length - 1, 1, `${name}:${id} caches the test inputs once`);
+      assert.ok(source.indexOf('uses: ./.github/actions/test-data-cache') < source.indexOf('python -m pytest '),
+        `${name}:${id} restores the cache before pytest`);
+      for (const step of pytestSteps) {
+        assert.ok(step.includes('\n          GITHUB_TOKEN: ${{ github.token }}\n'), `${name}:${id} gives pytest the token: ${step.split('\n')[0]}`);
+      }
+    }
+  }
+  assert.deepEqual(users, [
+    'deploy_web.yml:gallery-publication-browser',
+    'test.yml:core',
+    'test.yml:core-pr',
+    'test.yml:recipes-standard',
+    'test.yml:gallery',
+    'test.yml:browser',
+    'test.yml:web-contracts-pr',
+    'test.yml:acceptance-supported-main',
+    'test.yml:slow-main'
+  ]);
+});
+
 test('every job that installs gbdraw from the checkout installs the managed LOSAT release through one action', () => {
   // gbdraw/bin holds no LOSAT build. A test or tool reaches native LOSAT through the CLI or the
   // Python API, also from a Node or Playwright test that spawns the CLI, so every job that

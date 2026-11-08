@@ -245,9 +245,14 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       # With coverage, pytest-cov fails this step when the total line coverage
       # falls below fail_under in pyproject.toml.
       - name: Run core tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "not slow and not (recipe or gallery or browser)"
@@ -301,7 +306,12 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Run core tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "not slow and not (recipe or gallery or browser)"
@@ -359,7 +369,12 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Run standard recipe tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "recipe and not slow"
@@ -415,8 +430,13 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Run Gallery tests
         timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "gallery and not slow"
@@ -523,6 +543,9 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Restore Playwright system packages
         id: playwright-apt
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -569,6 +592,8 @@ jobs:
       - name: Run Python browser tests
         timeout-minutes: 10
         # Dev always has functional shard evidence (run or inherited), which includes the comparison contracts.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
@@ -577,6 +602,8 @@ jobs:
 
       - name: Run package build integration
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/test_web_packaging.py
           -m "slow and not browser"
@@ -584,6 +611,8 @@ jobs:
 
       - name: Run offline GUI browser contracts
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/test_web_packaging.py
           -m "slow and browser"
@@ -624,6 +653,9 @@ jobs:
 
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
+
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
 
       - name: Restore Playwright system packages
         id: playwright-apt
@@ -670,6 +702,7 @@ jobs:
         timeout-minutes: 10
         # The functional shards run the comparison contracts when the plan requires them.
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           COMPARISON_CONTRACTS_DESELECT: ${{ contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') && '--deselect tests/test_linear_comparison_browser_contracts.py' || '' }}
         run: >-
           python -m pytest tests/
@@ -1019,6 +1052,9 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Install browser runtime
         if: matrix.surface == 'browser'
         run: |
@@ -1059,6 +1095,8 @@ jobs:
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Run supported-version acceptance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "${{ matrix.surface }} and not slow"
@@ -1096,6 +1134,9 @@ jobs:
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -1105,6 +1146,8 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run slow tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m pytest tests/
           -m "slow and not browser"
