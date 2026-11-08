@@ -29,6 +29,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     show_drawing,
+    expect_circular_file_card,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -480,11 +481,7 @@ def capture_gui_annotated_chloroplast(
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             GUI_ANNOTATION_GENBANK_PATH
         )
-        expect(
-            page.get_by_role(
-                "group", name="GenBank/DDBJ File selection", exact=True
-            )
-        ).to_contain_text("NC_001879.gbk")
+        expect_circular_file_card(page, 1, "NC_001879.gbk")
         page.get_by_label("Output Prefix", exact=True).fill(
             "annotated_chloroplast_map"
         )
