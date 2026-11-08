@@ -207,7 +207,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors) | Unmatched annotation feature selectors | ACCEPTED | annotations.feature-selector-miss | 1 | — | 1 |
 | [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation) | Specific-color caption disambiguation | ACCEPTED | styles.specific-color-caption-multiplicity | 2 | scenario revision 1 | 18 |
 | [PD-OI-043](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-043-pure-pixel-track-text-inputs) | Pure pixel track text inputs | ACCEPTED | tracks.pixel-text-input-domain | 1 | — | 0 |
-| [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery) | Applicable Circular controls and truthful record discovery | ACCEPTED | diagram-generation.circular-transform-discoverability | 4 | scenario revision 3 | 5 |
+| [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery) | Applicable Circular controls and truthful record discovery | ACCEPTED | diagram-generation.circular-transform-discoverability | 4 | scenario revision 3 | 6 |
 | [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing) | Exclusive semantic Session operations with responsive browsing | ACCEPTED | web.session-operation-consistency | 1 | — | 2 |
 | [PD-OI-046](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-046-guidance-with-bounded-diagnostics) | Guidance with bounded diagnostics | ACCEPTED | web.errors.diagnostic-disclosure | 1 | — | 2 |
 | [PD-OI-047](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-047-rejected-color-rule-pattern-edit-recovery) | Rejected Color rule pattern edit recovery | ACCEPTED | web.rules.rejected-pattern-edit-recovery | 1 | — | 0 |
@@ -367,6 +367,7 @@ are listed under "Cited ids without a record".
   - `tests/web/helpers/session-regeneration-contract.cjs`
   - `tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js`
   - `tests/web/large-preview-transform-interaction.performance.playwright.spec.js`
+  - `tests/web/preview-fit.playwright.spec.js`
   - `tests/web/record-draw-selection.playwright.spec.js`
 - [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing)
   - `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`

@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed (Web app): a loaded Session's figure appears already fitted to the
+  Preview, instead of showing large for a moment and then shrinking to fit.
+  A Session file from an older gbdraw, whose saved figure shows while the
+  file is converted (several seconds on a first Load), shows that figure
+  fitted too, instead of at full size.
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

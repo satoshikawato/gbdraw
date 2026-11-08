@@ -183,6 +183,47 @@ test('Fit shows the whole Linear comparison centred, left of an open Editor', as
   expect(beside.zoom).toBeLessThanOrEqual(plain.zoom);
 });
 
+// OV-2702: a file Session Load shows its figure fitted from the first frame, with no
+// transition to the Fit. Every animation frame from the start of the Load until the Load
+// has ended and the figure lies still records the surface's computed transform while the
+// figure can be seen (the canvas has a size, at a phone width only once the Preview pane
+// shows, and the surface is not hidden), whether the Load was pending, and whether the
+// figure spilled over the canvas by more than a pixel. The sampling ends on the app's own
+// state, not after a delay.
+const sampleLoadFrames = (page) => page.evaluate(() => {
+  const frames = [];
+  let still = 0;
+  window.__loadFrames = new Promise((resolve) => {
+    const sample = () => {
+      const app = window.__GBDRAW_APP__;
+      const surface = app.svgContainer;
+      const canvas = app.canvasContainerRef;
+      if (surface && canvas?.offsetWidth && getComputedStyle(surface).visibility !== 'hidden') {
+        const box = surface.querySelector('svg').getBoundingClientRect();
+        const frame = canvas.getBoundingClientRect();
+        const left = frame.left + canvas.clientLeft;
+        const top = frame.top + canvas.clientTop;
+        const spill = Math.max(left - box.left, box.right - left - canvas.clientWidth,
+          top - box.top, box.bottom - top - canvas.clientHeight);
+        frames.push({ transform: getComputedStyle(surface).transform, animations: surface.getAnimations().length,
+          pending: Boolean(app.sessionImportPending), spills: spill > 1 });
+      }
+      const done = !app.sessionImportPending && app.results.length === 1 && surface && !surface.getAnimations().length;
+      still = done ? still + 1 : 0;
+      if (still >= 3) resolve(frames);
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+});
+const expectFittedFromFirstFrame = async (page, label) => {
+  const frames = await page.evaluate(() => window.__loadFrames);
+  const shown = await page.evaluate(() => getComputedStyle(window.__GBDRAW_APP__.svgContainer).transform);
+  const detail = `${label}: ${JSON.stringify({ shown, frames })}`;
+  expect(frames.length, detail).toBeGreaterThan(0);
+  for (const { transform, animations } of frames) expect({ transform, animations }, detail).toEqual({ transform: shown, animations: 0 });
+};
+
 // R17-25 (OV-1809): a Session file Load with a Result fits the figure to the
 // shown Preview at every width; Generate keeps 100 %.
 const circularSession = join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
@@ -192,6 +233,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.setViewportSize(viewport);
     await openApp(page);
     page.on('dialog', (dialog) => dialog.dismiss());
+    await sampleLoadFrames(page);
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(circularSession);
     await waitForSessionLoadAtRest(page, { timeout: 60_000 });
@@ -200,6 +242,48 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     const loaded = await fitGeometry(page);
     expect(loaded.zoom, JSON.stringify(loaded)).toBeLessThan(1);
     expectFitted(loaded, `Load ${viewport.width}x${viewport.height}`);
+    await expectFittedFromFirstFrame(page, `Load ${viewport.width}x${viewport.height}`);
+  });
+}
+
+// OV-2703: a Session 27-44 file shows its stored figure at once while Python converts the
+// file (DESIGN 4.3, PD-OI-044). That figure is fitted from its first frame too, and so is the
+// Result the Load ends with: no frame shows a figure spilling over the canvas or animating.
+// (The end of the Load may move the fitted figure a few pixels, with the notice that replaces
+// the older-Session notice above the canvas.) At a phone width the Settings pane shows during
+// the Load and the canvas has no room: a tap on the Preview tab while the Load is pending shows
+// the figure fitted from its first frame, the stored figure of a Session 27-44 as well as the
+// Result of a current Session, which stays hidden until the Load ends.
+const pendingTapCases = [
+  { session: 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json', viewport: { width: 1280, height: 800 } },
+  { session: 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json', viewport: { width: 390, height: 844 }, tap: true },
+  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json', viewport: { width: 390, height: 844 }, tap: true }
+];
+for (const { session, viewport, tap } of pendingTapCases) {
+  const older = session.includes('.v40-');
+  const title = `${older ? 'a Session 27-44' : 'a current Session'} file Load shows its ${older ? 'stored figure' : 'figure'} fitted`
+    + ` from the first frame at ${viewport.width}x${viewport.height}${tap ? ' after an early Preview tap' : ''}`;
+  test(title, async ({ page }) => {
+    test.setTimeout(240000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    page.on('dialog', (dialog) => dialog.dismiss());
+    await sampleLoadFrames(page);
+    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+      .setInputFiles(join(repoRoot, session));
+    if (tap) {
+      // The tap comes while the Load is pending: once the stored figure is drawn, else at once.
+      await expect.poll(() => page.evaluate((waitForFigure) => {
+        const app = window.__GBDRAW_APP__;
+        return app.sessionImportPending && (!waitForFigure || app.results.length === 1);
+      }, older), { intervals: [20] }).toBe(true);
+      await page.locator('[data-phone-pane="preview"]').click();
+    }
+    const frames = await page.evaluate(() => window.__loadFrames);
+    const detail = JSON.stringify(frames);
+    // A Session 27-44's stored figure was shown while the Load was pending.
+    if (older) expect(frames.some(({ pending }) => pending), detail).toBe(true);
+    for (const { animations, spills } of frames) expect({ animations, spills }, detail).toEqual({ animations: 0, spills: false });
   });
 }
 

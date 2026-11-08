@@ -129,6 +129,9 @@ const layoutRepositionMode = ref(false);
 const isPanning = ref(false);
 const panStart = reactive({ x: 0, y: 0, panX: 0, panY: 0 });
 const canvasPan = reactive({ x: 0, y: 0 });
+// The figure a file Session Load mounted stays hidden until the Load shows it fitted
+// (OV-2702); the pan and zoom owner (app/ui.js) writes it, `v-preview-transform` reads it.
+const previewHiddenUntilShown = ref(false);
 const canvasContainerRef = ref(null);
 
 // App State
@@ -1231,6 +1234,7 @@ export const state = Object.freeze({
   isPanning,
   panStart,
   canvasPan,
+  previewHiddenUntilShown,
   canvasContainerRef,
   activeDrawingId,
   mode,

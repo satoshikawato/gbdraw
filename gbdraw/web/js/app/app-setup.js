@@ -961,7 +961,7 @@ export const createAppSetup = () => {
     previewTransformInteraction,
     holdPreviewViewport,
     releasePreviewViewport,
-    heldPreviewViewport
+    heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
@@ -2064,37 +2064,36 @@ export const createAppSetup = () => {
   /** @param {SessionFileInput} event @param {{ noticeLink?: NoticeLink | null }} [options] */
   const importSession = async (event, { noticeLink = null } = {}) => {
     const name = String(event?.target?.files?.[0]?.name || '');
-    const result = await loadSessionFromFile(event);
-    // R10: a Load that installed a Session, or rolled back to the previous
-    // one, ends with each drawing's discovery, unless the Session defers it.
-    const recordDiscoveryDeferred = Boolean(result && 'recordDiscoveryDeferred' in result && result.recordDiscoveryDeferred);
-    if (['ok', 'legacy', 'error', 'stale'].includes(String(result?.status)) && !recordDiscoveryDeferred) {
-      state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); });
-    }
-    // The notice of an earlier operation does not stand for this load; a
-    // Load the user canceled changed nothing, the notice included.
-    if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
-    if (result?.status === 'ok') {
-      showNotice({ text: name ? t('Session loaded: {file}.', { file: name }) : t('Session loaded.'), items: result.notices || [] });
-    } else if (result?.status === 'legacy') {
-      showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
-    }
-    if (noticeLink && (result?.status === 'ok' || result?.status === 'legacy')) noticeBanner.addLink(noticeLink);
-    // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
-    // without a Result shows Settings.
-    if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
-    // R17-25: a file Session Load with a Result fits the figure to the shown Preview, at every
-    // width, after the phone pane switch and the whole notice (its height sizes the canvas), so
-    // the measured canvas is the one shown; Generate resets to 100 %. A legacy configuration
-    // Load brings no Result, so the figure already shown keeps its zoom.
-    if (result?.status === 'ok' && svgContent.value) {
-      await nextTick();
-      fitPreviewToViewport();
-    }
-    // A loaded Session makes a Generate likely: download the Worker's boot
-    // files now, after the Load, so they never slow its own requests.
-    if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
-    return result;
+    let fitLoaded = false;
+    try {
+      const result = await loadSessionFromFile(event);
+      // R10: a Load that installed a Session, or rolled back to the previous
+      // one, ends with each drawing's discovery, unless the Session defers it.
+      const recordDiscoveryDeferred = Boolean(result && 'recordDiscoveryDeferred' in result && result.recordDiscoveryDeferred);
+      if (['ok', 'legacy', 'error', 'stale'].includes(String(result?.status)) && !recordDiscoveryDeferred) {
+        state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); });
+      }
+      // The notice of an earlier operation does not stand for this load; a
+      // Load the user canceled changed nothing, the notice included.
+      if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
+      if (result?.status === 'ok') {
+        showNotice({ text: name ? t('Session loaded: {file}.', { file: name }) : t('Session loaded.'), items: result.notices || [] });
+      } else if (result?.status === 'legacy') {
+        showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
+      }
+      if (noticeLink && (result?.status === 'ok' || result?.status === 'legacy')) noticeBanner.addLink(noticeLink);
+      // The phone layout shows a loaded Result in the Preview, as Generate does; a Load without one, Settings.
+      if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
+      // R17-25: a file Session Load with a Result fits the figure to the shown Preview at every width, after the
+      // phone pane switch and the whole notice (its height sizes the canvas); the figure it mounted shows only then,
+      // fitted, and also if this end throws (OV-2702). Generate resets to 100 %; a legacy configuration Load keeps the zoom.
+      fitLoaded = result?.status === 'ok' && Boolean(svgContent.value);
+      if (fitLoaded) await nextTick();
+      // A loaded Session makes a Generate likely: download the Worker's boot
+      // files now, after the Load, so they never slow its own requests.
+      if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
+      return result;
+    } finally { showHiddenPreview({ fit: fitLoaded }); }
   };
   // The Sessions this page has installed: a Load replaces the document, so
   // an owner that holds what an action did to the previous one (Align at
@@ -2124,6 +2123,7 @@ export const createAppSetup = () => {
     beforePreviewMount: (/** @type {{ results: any[], resultIndex: number }} */ {
       results: importedResults, resultIndex
     }) => {
+      hidePreviewUntilShown();
       const selectedResult = importedResults[resultIndex] || null;
       if (!selectedResult) return null;
       const token = `session-load:${nextSessionPreviewToken++}`;
@@ -2141,7 +2141,7 @@ export const createAppSetup = () => {
         )
       }));
     },
-    rollbackState: sessionImportRollbackState,
+    rollbackState: sessionImportRollbackState, storedFigurePreview,
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       // Only a Session Load comes here; a legacy configuration Load returns
       // before it (OV-1792).
