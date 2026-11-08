@@ -26,6 +26,7 @@ from gbdraw.api.requests import (
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     RecordCardinality,
+    RecordDisplayOptions,
     RecordInput,
     RecordPresentation,
 )
@@ -163,25 +164,28 @@ def test_repeated_regions_of_one_record_are_its_windows_on_the_command_line() ->
     assert plan_linear_request(request).layout.multi_record_positions == ("#1@1", "#2@1")  # type: ignore[union-attr]
 
 
-def _table(tmp_path: Path, rows: list[str]) -> Path:
+_GROUPED = "gbk\trecord_label\trow\tcolumn\tregion\treverse_complement\trecord_group"
+
+
+def _table(tmp_path: Path, rows: list[str], header: str = _GROUPED) -> Path:
     table = tmp_path / "records.tsv"
-    table.write_text(
-        "gbk\trecord_label\trow\tcolumn\tregion\treverse_complement\n" + "".join(f"{row}\n" for row in rows),
-        encoding="utf-8",
-    )
+    table.write_text(header + "\n" + "".join(f"{row}\n" for row in rows), encoding="utf-8")
     return table
 
 
-def test_records_table_rows_of_one_record_in_one_row_are_its_windows(tmp_path: Path) -> None:
+def test_records_table_rows_sharing_a_record_group_are_the_windows_of_one_record(tmp_path: Path) -> None:
+    # D-32: rows are windows of one record only when they share a record_group value; the record's label is the
+    # one its rows give.
     table = _table(tmp_path, [
-        f"{MITO}\tM\t1\t1\t100-900\tfalse",
-        f"{MITO}\tT\t1\t2\t\tfalse",
-        f"{MITO}\tM\t1\t3\t5000-5600\ttrue",
-        f"{MITO}\tM\t2\t1\t1-50\tfalse",
+        f"{MITO}\tM\t1\t1\t100-900\tfalse\tmito",
+        f"{MITO}\tT\t1\t2\t\tfalse\t",
+        f"{MITO}\t\t1\t3\t5000-5600\ttrue\tmito",
+        f"{MITO}\tM\t2\t1\t1-50\tfalse\t",
     ])
     manifest = record_input_manifest_from_table(str(table))
     assert [record.record_key for record in manifest.records] == ["record-1", "record-2", "record-3"]
     assert manifest.records[0].windows == (RecordWindow(100, 900, False, 1), RecordWindow(5000, 5600, True, 3))
+    assert manifest.records[0].presentation.label == "M"
     assert manifest.records[2].windows == (RecordWindow(1, 50),)
     request = LinearDiagramRequest(records=manifest.records, layout=LinearMultiRecordOptions())
     plan = plan_linear_request(request)
@@ -190,10 +194,88 @@ def test_records_table_rows_of_one_record_in_one_row_are_its_windows(tmp_path: P
     assert plan.layout.multi_record_positions == ("#1@1", "#3@1", "#2@1", "#4@2")
 
 
-def test_records_table_rows_of_one_record_must_agree_on_its_label(tmp_path: Path) -> None:
-    table = _table(tmp_path, [f"{MITO}\tM\t1\t1\t100-900\tfalse", f"{MITO}\tN\t1\t2\t1000-1100\tfalse"])
-    with pytest.raises(ValidationError, match="record_label"):
-        record_input_manifest_from_table(str(table))
+_V0145 = "gbk\trecord_label\ttopology\trow\tcolumn\tregion"
+
+
+def _v0145_table(tmp_path: Path) -> Path:
+    # v0.14.5 drew these rows as two records side by side, each with its own label and topology.
+    return _table(
+        tmp_path,
+        [f"{MITO}\tA\tlinear\t1\t1\t1000-6000", f"{MITO}\tB\tcircular\t1\t2\t4000-9000:rc"],
+        _V0145,
+    )
+
+
+def test_a_v0145_records_table_naming_one_record_twice_in_a_row_draws_two_records(tmp_path: Path) -> None:
+    manifest = record_input_manifest_from_table(str(_v0145_table(tmp_path)))
+    # The inputs v0.14.5 built from these rows: one record per row, each cropped by its region.
+    assert manifest.records == tuple(
+        RecordInput(
+            source=GenBankInputSource(str(MITO)),
+            cardinality=RecordCardinality.EXACTLY_ONE,
+            selector=None,
+            display=RecordDisplayOptions(is_circular=circular),
+            region=parse_region_spec(region),
+            presentation=RecordPresentation(label=label, grid_row=1, grid_column=column),
+            record_key=f"record-{column}",
+        )
+        for label, circular, column, region in (("A", False, 1, "1000-6000"), ("B", True, 2, "4000-9000:rc"))
+    )
+    collection = resolve_request_records(
+        LinearDiagramRequest(records=manifest.records, layout=LinearMultiRecordOptions())
+    )
+    assert [(item.record_key, item.record_identity_key) for item in collection.provenance] == [
+        ("record-1", "record-1"), ("record-2", "record-2"),
+    ]
+
+
+def test_companion_bindings_of_a_v0145_records_table_name_the_rows(tmp_path: Path) -> None:
+    manifest = record_input_manifest_from_table(str(_v0145_table(tmp_path)))
+    request = LinearDiagramRequest(
+        records=manifest.records,
+        layout=LinearMultiRecordOptions(),
+        options=LinearDiagramOptions(
+            feature_overrides=(FeatureOverride("record-2", _IN_OVERLAP, label_visibility="on", label_text="EDITED"),),
+        ),
+    )
+    plan = plan_linear_request(request)
+    assert plan.inputs is not None
+    assert [[o.label_text for o in unit.overrides.values()] for unit in plan.inputs.record_features] == [
+        [], ["EDITED"],
+    ]
+    records = resolve_request_records(request).records
+    bundle = resolve_annotations(
+        (AnnotationSet("s", (RegionAnnotation("a", CoordinateSpan(RecordSelector("#2", None, 1), 4500, 5000)),)),),
+        records,
+        mode="linear",
+    )
+    assert [item.record_index for item in bundle.annotations] == [1]
+
+
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        ([f"{MITO}\tM\t1\t1\t100-900\tfalse\tg", f"{MITO}\tM\t2\t1\t1000-1100\tfalse\tg"], "same row"),
+        ([f"{MITO}\tM\t1\t1\t100-900\tfalse\tg", f"{TWO_RECORDS}\tM\t1\t2\t1-10\tfalse\tg"], "same gbk"),
+        ([f"{MITO}\tM\t1\t1\t100-900\tfalse\tg", f"{MITO}\tM\t1\t2\t\tfalse\tg"], "region"),
+        ([f"{MITO}\tM\t1\t1\t100-900\tfalse\tg", f"{MITO}\tN\t1\t2\t1000-1100\tfalse\tg"],
+         "different record_label"),
+    ],
+    ids=["row", "file", "region", "label"],
+)
+def test_rows_of_one_record_group_that_disagree_are_refused(tmp_path: Path, rows: list[str], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        record_input_manifest_from_table(str(_table(tmp_path, rows)))
+
+
+def test_rows_of_one_record_group_that_disagree_on_the_record_id_or_topology_are_refused(tmp_path: Path) -> None:
+    header = "gbk\trecord_id\ttopology\trow\tcolumn\tregion\trecord_group"
+    for rows, message in (
+        ([f"{TWO_RECORDS}\tTESTA\t\t1\t1\t1-10\tg", f"{TWO_RECORDS}\tTESTB\t\t1\t2\t1-10\tg"], "same record_id"),
+        ([f"{MITO}\t\tlinear\t1\t1\t1-10\tg", f"{MITO}\t\tcircular\t1\t2\t20-30\tg"], "different topology"),
+    ):
+        with pytest.raises(ValidationError, match=message):
+            record_input_manifest_from_table(str(_table(tmp_path, rows, header)))
 
 
 def test_request_schema_10_writes_windows_and_schema_9_reads_a_region_as_one(tmp_path: Path) -> None:
@@ -249,8 +331,8 @@ def test_overlapping_windows_of_a_record_are_drawn_both() -> None:
 
 
 def test_a_records_table_with_overlapping_crops_of_one_record_in_one_row_draws_both(tmp_path: Path) -> None:
-    # v0.14.5 drew these rows as two crops side by side; they now draw as the two windows of one record.
-    table = _table(tmp_path, [f"{MITO}\tM\t1\t1\t1000-6000\tfalse", f"{MITO}\tM\t1\t2\t4000-9000\tfalse"])
+    # Two rows of one record_group draw as two windows of one record.
+    table = _table(tmp_path, [f"{MITO}\tM\t1\t1\t1000-6000\tfalse\tg", f"{MITO}\tM\t1\t2\t4000-9000\tfalse\tg"])
     manifest = record_input_manifest_from_table(str(table))
     request = LinearDiagramRequest(
         records=manifest.records, layout=LinearMultiRecordOptions(),

@@ -37,8 +37,7 @@ from gbdraw.core.record_metadata import (
     _source_feature_index,
 )
 from gbdraw.io.cli_tables import (
-    RecordsTable,
-    RecordsTableRow,
+    RecordsTableRecord,
     read_comparisons_table,
     read_conservation_table,
     read_records_table,
@@ -2060,50 +2059,20 @@ def record_input_manifest_from_paths(
     )
 
 
-def _records_table_records(table: RecordsTable) -> list[list[RecordsTableRow]]:
-    """The table's rows grouped by the record they draw, in table order (D-01).
+def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
+    """The record input of one records-table record: a row, or the rows that share a ``record_group`` (D-32)."""
 
-    Rows with a region that name the same file and record in the same ``row``
-    are windows of one record; any other row is a record of its own. Rows of
-    one record must agree on what belongs to the record.
-    """
-
-    groups: list[list[RecordsTableRow]] = []
-    windowed: dict[tuple[str, str, str, str, int], list[RecordsTableRow]] = {}
-    for row in table.rows:
-        if row.region and row.row is not None:
-            key = (row.gbk, row.gff, row.fasta, row.record_id, row.row)
-            if key in windowed:
-                windowed[key].append(row)
-                continue
-            windowed[key] = [row]
-            groups.append(windowed[key])
-        else:
-            groups.append([row])
-    for rows in groups:
-        first = rows[0]
-        for name in ("record_label", "record_subtitle", "topology", "losat_gencode"):
-            if any(getattr(row, name) != getattr(first, name) for row in rows[1:]):
-                raise ValidationError(
-                    f"{table.table_path}: rows {', '.join(str(row.row_number) for row in rows)} draw windows of one "
-                    f"record and must agree on {name}.",
-                    diagnostic={"code": "INPUT_INVALID"},
-                )
-    return groups
-
-
-def _records_table_input(rows: Sequence[RecordsTableRow], index: int) -> RecordInput:
-    first = rows[0]
+    first = record.first
     source: RecordInputSource = (
         GenBankInputSource(first.gbk) if first.gbk
         else GffFastaInputSource(first.gff, first.fasta) if first.gff
         else FastaInputSource(first.fasta)
     )
-    several = len(rows) > 1
+    windowed = record.is_windowed and len(record.rows) > 1
     windows: tuple[RecordWindow, ...] = ()
-    if several:
+    if windowed:
         # One table row per window, placed by its column (ties in table order).
-        ordered = sorted(rows, key=lambda row: (row.column is None, row.column or 0))
+        ordered = sorted(record.rows, key=lambda row: (row.column is None, row.column or 0))
         windows = tuple(
             replace(
                 RecordWindow.from_region(spec := parse_region_spec(row.region), column=row.column),
@@ -2111,22 +2080,23 @@ def _records_table_input(rows: Sequence[RecordsTableRow], index: int) -> RecordI
             )
             for row in ordered
         )
+    topology = record.topology
     return RecordInput(
         source=source,
         cardinality=RecordCardinality.EXACTLY_ONE,
         selector=parse_record_selector(first.record_id),
         display=RecordDisplayOptions(
-            is_circular=None if first.topology is None else first.topology == "circular",
+            is_circular=None if topology is None else topology == "circular",
             start_coordinate=first.display_start,
         ),
-        region=parse_region_spec(first.region) if first.region and not several else None,
+        region=parse_region_spec(first.region) if first.region and not windowed else None,
         windows=windows,
         presentation=RecordPresentation(
-            label=first.record_label or None,
-            subtitle=first.record_subtitle or None,
-            reverse_complement=first.reverse_complement and not several,
+            label=record.record_label or None,
+            subtitle=record.record_subtitle or None,
+            reverse_complement=first.reverse_complement and not windowed,
             grid_row=first.row,
-            grid_column=None if several else first.column,
+            grid_column=None if windowed else first.column,
         ),
         record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
     )
@@ -2136,14 +2106,13 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
     """Translate one records table into exact-one unresolved record inputs, one per record it draws."""
 
     table = read_records_table(path)
-    groups = _records_table_records(table)
-    records = [_records_table_input(rows, index) for index, rows in enumerate(groups)]
+    records = [_records_table_input(record, index) for index, record in enumerate(table.records)]
     return RecordInputManifest(
         records=tuple(records),
         record_options=RecordCollectionOptions(),
         source_paths=tuple(_source_details(record.source)[1][0] for record in records),
         losat_gencodes=(
-            tuple(rows[0].losat_gencode for rows in groups)
+            tuple(record.losat_gencode for record in table.records)
             if any(row.losat_gencode is not None for row in table.rows)
             else ()
         ),

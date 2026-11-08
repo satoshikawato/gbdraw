@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Sequence
 
@@ -138,6 +138,97 @@ class RecordsTableRow:
     topology: str | None = None
     display_start: int | None = None
     losat_gencode: int | None = None
+    # The value of the ``record_group`` column; rows sharing a non-empty value are the windows of one record (D-32).
+    record_group: str = ""
+
+
+@dataclass(frozen=True)
+class RecordsTableRecord:
+    """The rows of one record a records table draws, in table order.
+
+    A row without a ``record_group`` value is a record of its own; rows sharing a
+    value are the windows of one record (each row's region, reverse_complement and
+    column are its window's). The record's label, subtitle, topology and LOSAT
+    genetic code are the non-empty value its rows give; the reader refuses rows of
+    one record that give different ones.
+    """
+
+    rows: tuple[RecordsTableRow, ...]
+
+    @property
+    def first(self) -> RecordsTableRow:
+        return self.rows[0]
+
+    @property
+    def is_windowed(self) -> bool:
+        """Whether the record is drawn through windows: rows that share a ``record_group`` value."""
+        return bool(self.first.record_group)
+
+    @property
+    def record_label(self) -> str:
+        return next((row.record_label for row in self.rows if row.record_label), "")
+
+    @property
+    def record_subtitle(self) -> str:
+        return next((row.record_subtitle for row in self.rows if row.record_subtitle), "")
+
+    @property
+    def topology(self) -> str | None:
+        return next((row.topology for row in self.rows if row.topology is not None), None)
+
+    @property
+    def losat_gencode(self) -> int | None:
+        return next((row.losat_gencode for row in self.rows if row.losat_gencode is not None), None)
+
+
+# What the rows of one ``record_group`` must name alike, and what they may give once for the record (D-32).
+_RECORD_GROUP_SOURCE_FIELDS = ("gbk", "gff", "fasta", "record_id", "row")
+_RECORD_GROUP_RECORD_FIELDS = ("record_label", "record_subtitle", "topology", "losat_gencode")
+
+
+def _group_records_table_rows(
+    table_path: Path, rows: Sequence[RecordsTableRow]
+) -> tuple[RecordsTableRecord, ...]:
+    """The table's records in table order: rows sharing a ``record_group`` value are one record's windows."""
+
+    groups: list[list[RecordsTableRow]] = []
+    grouped: dict[str, list[RecordsTableRow]] = {}
+    for row in rows:
+        if not row.record_group:
+            groups.append([row])
+            continue
+        if not row.region:
+            raise ValidationError(
+                _cell_error(
+                    table_path, row.row_number, "region",
+                    f"value is required in a row with {RECORD_GROUP_COLUMN} {row.record_group!r}",
+                ),
+                diagnostic={"code": "TABLE_INVALID", "field": "region", "row": row.row_number},
+            )
+        if row.record_group in grouped:
+            grouped[row.record_group].append(row)
+            continue
+        grouped[row.record_group] = [row]
+        groups.append(grouped[row.record_group])
+    for group in grouped.values():
+        first = group[0]
+        for name in _RECORD_GROUP_SOURCE_FIELDS:
+            values = {getattr(row, name) for row in group}
+            if len(values) > 1:
+                raise ValidationError(
+                    f"{table_path}: rows {', '.join(str(row.row_number) for row in group)} share "
+                    f"{RECORD_GROUP_COLUMN} {first.record_group!r} and must name the same {name}.",
+                    diagnostic={"code": "TABLE_INVALID", "field": name, "row": group[1].row_number},
+                )
+        for name in _RECORD_GROUP_RECORD_FIELDS:
+            values = {getattr(row, name) for row in group} - {"", None}
+            if len(values) > 1:
+                raise ValidationError(
+                    f"{table_path}: rows {', '.join(str(row.row_number) for row in group)} share "
+                    f"{RECORD_GROUP_COLUMN} {first.record_group!r}, one record, and give different {name} values.",
+                    diagnostic={"code": "TABLE_INVALID", "field": name, "row": group[1].row_number},
+                )
+    return tuple(RecordsTableRecord(tuple(group)) for group in groups)
 
 
 @dataclass(frozen=True)
@@ -146,6 +237,11 @@ class RecordsTable:
     input_kind: InputKind
     rows: tuple[RecordsTableRow, ...]
     path_dependencies: tuple[TablePathDependency, ...]
+    # The records the rows draw, in table order (one per row unless rows share a ``record_group``).
+    records: tuple[RecordsTableRecord, ...] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "records", _group_records_table_rows(Path(self.table_path), self.rows))
 
     @property
     def gbk_files(self) -> list[str]:
@@ -227,8 +323,11 @@ _CIRCULAR_TRACK_COLUMNS = frozenset(
         "params",
     }
 )
+# The records-table column whose shared value makes rows the windows of one record (D-32).
+RECORD_GROUP_COLUMN = "record_group"
 _RECORDS_COLUMNS = frozenset(
     {
+        RECORD_GROUP_COLUMN,
         "topology",
         "display_start",
         "gbk",
@@ -585,6 +684,7 @@ def read_records_table(path: str) -> RecordsTable:
                 topology=topology if topology in {"circular", "linear"} else None,
                 display_start=display_start,
                 losat_gencode=_parse_optional_positive_int(table_path, row, "losat_gencode"),
+                record_group=values.get(RECORD_GROUP_COLUMN, "").strip(),
             )
         )
 
@@ -970,7 +1070,9 @@ __all__ = [
     "ConservationTableRow",
     "ComparisonTable",
     "ComparisonTableRow",
+    "RECORD_GROUP_COLUMN",
     "RecordsTable",
+    "RecordsTableRecord",
     "RecordsTableRow",
     "TablePathDependency",
     "read_circular_track_table",

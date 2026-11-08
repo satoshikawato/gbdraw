@@ -34,9 +34,10 @@ write-up of a release.
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
 - Added: one Linear row can show several windows of one record, leaving out
-  the interval between them. Repeat `--region` for a record, or give a records
-  table several rows with a `region` that name the same file and record in the
-  same `row` (ordered by `column`); in the Python API, list
+  the interval between them. Repeat `--region` for a record, or give the rows of
+  a records table that are its windows one value in the new `record_group`
+  column (each with a `region`, ordered by `column`; tables without the column
+  draw as before); in the Python API, list
   `RecordInput.windows`. The windows keep one record identity, so a feature
   cut by a window edge keeps one colour. A new drawing from regions accepts several
   regions of one record. Request schema 10 writes a record's `windows`; older
