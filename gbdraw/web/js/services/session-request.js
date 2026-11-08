@@ -1597,9 +1597,7 @@ const buildRecords = ({ drawing, filesData, resources }) => {
           ...presentationPayload({
             label: linearRecordLabel(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: drawing.linearRecordLayoutEnabled?.value
-              ? (resolvedRows[index]?.row ?? null)
-              : null,
+            gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
             // A record drawn in several windows places each by its own column (D-14).
             gridColumn: arranged && windows.length < 2
               ? (resolvedRows[index]?.canonicalColumn ?? null)
@@ -4546,7 +4544,6 @@ const projectCanonicalRenderInput = ({
     const transform = selected ? transformFor(selected) : {
       display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
         startCoordinate: savedDraft?.startCoordinate ?? null },
-      // A record drawn in windows takes each window's orientation, not the record's.
       reverseComplement: record.windows.length
         ? false
         : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation?.reverseComplement)
@@ -6945,7 +6942,6 @@ export const projectCanonicalSessionRequest = ({
   const circularPresentationRecord = (
     renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
   ) ? records[0] : null;
-  // A Circular single record is drawn whole or in one window.
   const circularPresentationRegion = circularPresentationRecord?.windows?.[0] || null;
   const form = {
     prefix: projectedOutputPrefix(

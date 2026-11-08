@@ -82,10 +82,18 @@ test('a stored schema-9 region reads as one window, its selector as the record s
 });
 
 test("the card's window list follows the windows' columns", () => {
-  assert.deepEqual(linearRecordWindowRows(WINDOWS), [
+  assert.deepEqual(linearRecordWindowRows(WINDOWS, null), [
     { number: 1, span: '900–950', length: '51 bp', reverseComplement: true },
     { number: 2, span: '100–200', length: '101 bp', reverseComplement: false }
   ]);
+});
+
+test('a window across the origin of a circular record counts the bases it draws, once the record length is known', () => {
+  const across = [{ start: 16000, end: 100, reverseComplement: false, column: null }];
+  assert.deepEqual(linearRecordWindowRows(across, 16569), [
+    { number: 1, span: '16,000–100', length: '670 bp', reverseComplement: false }
+  ]);
+  assert.equal(linearRecordWindowRows(across, null)[0].length, '');
 });
 
 const AXIS = {

@@ -10,7 +10,7 @@
 import { inputSummaryOf } from '../services/input-summary.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
-  circularDrawingRegionNote, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
+  circularDrawingRegionNote, linearCardRegion, linearRecordWindowRows, regionClampNote, resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -61,6 +61,14 @@ export const createShownDrawingReaders = ({
   const linearRegionNote = (seq) => {
     const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
     return region && !('error' in region) ? regionClampNote(region.drawn) : '';
+  };
+  /**
+   * The window list of a Linear card of the shown drawing (`linearRecordWindowRows`), with the length of its record.
+   * @param {LinearSeq} seq
+   */
+  const linearCardWindowRows = (seq) => {
+    const recordLength = linearSeqRecord(state.activeDrawing(), seq)?.recordLength;
+    return linearRecordWindowRows(seq.windows, typeof recordLength === 'number' ? recordLength : null);
   };
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
@@ -147,8 +155,8 @@ export const createShownDrawingReaders = ({
     });
   });
   return {
-    linearRegionNote, circularRegionNote, shownInputSummary, drawnLinearRecordLengths, committedLinearRecordsOf,
-    awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
+    linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
+    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
     shownLinearWrapReading
   };
 };

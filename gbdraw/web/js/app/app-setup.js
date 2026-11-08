@@ -239,8 +239,7 @@ import {
   buildDisambiguatedRecordEntries,
   circularEstimateLengths,
   circularRequestDiagrams,
-  formatRecordLength,
-  linearRecordWindowRows
+  formatRecordLength
 } from '../services/record-options.js';
 import {
   setLinearRecordRow as updateLinearRecordRow
@@ -1391,8 +1390,8 @@ export const createAppSetup = () => {
   };
   const losatSettings = createLosatSettings({ state });
   const {
-    linearRegionNote, circularRegionNote, shownInputSummary, drawnLinearRecordLengths, committedLinearRecordsOf,
-    awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
+    linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
+    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
     shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
@@ -4262,7 +4261,7 @@ export const createAppSetup = () => {
     submitChoicePromptField: choicePrompt.submitField,
     circularRegionNote,
     linearRegionNote,
-    linearRecordWindowRows,
+    linearCardWindowRows,
     notice: noticeBanner.notice,
     dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,

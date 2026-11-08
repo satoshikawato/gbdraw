@@ -91,13 +91,16 @@ const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : []).map(
 /**
  * The window a card's own crop fields (`region_*`) hold: the only window of `windows`, unless it crosses the origin
  * of a circular record (its start after its end, D-34), which those fields would read as a reversed span (an End
- * before the Start reverses the crop). Null when `windows` stays the card's list.
- * @param {readonly LinearSeqWindow[]} windows
- * @returns {LinearSeqWindow | null}
+ * before the Start reverses the crop). Null when `windows` stays the card's list. It reads the card's windows and a
+ * request record's, whose endpoints are unvalidated there.
+ * @template {{ start: unknown, end: unknown }} W
+ * @param {readonly W[]} windows
+ * @returns {W | null}
  */
 export const cardCropWindow = (windows) => {
   const [only] = windows.length === 1 ? windows : [null];
-  return only && !(only.start !== null && only.end !== null && only.start > only.end) ? only : null;
+  const crosses = only && typeof only.start === 'number' && typeof only.end === 'number' && only.start > only.end;
+  return only && !crosses ? only : null;
 };
 
 /**

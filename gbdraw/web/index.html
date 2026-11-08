@@ -3324,7 +3324,7 @@
                                             <span>{{ tn(seq.windows.length, '{count} window of this record', '{count} windows of this record') }}</span>
                                         </div>
                                         <ol class="space-y-0.5" :aria-label="t('Windows of sequence {n}', { n: idx + 1 })">
-                                            <li v-for="row in linearRecordWindowRows(seq.windows)" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
+                                            <li v-for="row in linearCardWindowRows(seq)" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
                                                 <span>{{ row.number }}. {{ row.span }}<span v-if="row.reverseComplement" class="text-[10px] text-slate-500"> ({{ t('Reverse complement') }})</span></span>
                                                 <span class="text-[10px] text-slate-500">{{ row.length }}</span>
                                             </li>

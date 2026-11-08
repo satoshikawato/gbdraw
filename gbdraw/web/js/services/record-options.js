@@ -211,20 +211,25 @@ export const regionWithinRecord = (start, end, recordLength) => {
  */
 /**
  * The rows of a record card's window list, in column order (D-08; windows without a column keep the request's
- * order after those with one, as the layout places them).
+ * order after those with one, as the layout places them). A window whose start is after its end crosses the origin
+ * of a circular record (D-34): its length needs the record's, and is empty until the record is read.
  * @param {readonly { start: number | null, end: number | null, reverseComplement: boolean, column: number | null }[]} windows
+ * @param {number | null} recordLength the length of the record the card draws, once read
  * @returns {LinearRecordWindowRow[]}
  */
-export const linearRecordWindowRows = (windows) => windows
+export const linearRecordWindowRows = (windows, recordLength) => windows
   .map((window, index) => ({ window, index }))
   .sort((a, b) => (a.window.column ?? Infinity) - (b.window.column ?? Infinity) || a.index - b.index)
   .map(({ window }, order) => {
     const { start, end } = window;
     const stated = start !== null && end !== null;
+    const across = stated && start > end;
+    const bases = !stated || (across && recordLength === null) ? null
+      : across ? /** @type {number} */ (recordLength) - start + 1 + end : end - start + 1;
     return {
       number: order + 1,
       span: stated ? `${formatGroupedNumber(start)}\u2013${formatGroupedNumber(end)}` : '',
-      length: stated ? `${formatGroupedNumber(Math.abs(end - start) + 1)} bp` : '',
+      length: bases === null ? '' : `${formatGroupedNumber(bases)} bp`,
       reverseComplement: window.reverseComplement
     };
   });
