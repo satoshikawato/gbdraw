@@ -1960,10 +1960,10 @@ test('exclusive directions include the minority reference and keep Custom Select
   await page.screenshot({ path: testInfo.outputPath('minority-reference-right.png') });
 });
 
-const loadDirectionSession = async (page, testInfo) => {
+const loadDirectionSession = async (page, testInfo, variant = []) => {
   const directory = testInfo.outputPath('direction-fixture');
   mkdirSync(directory, { recursive: true });
-  execFileSync('python', ['tests/web/helpers/alignment-direction-fixture.py', directory],
+  execFileSync('python', ['tests/web/helpers/alignment-direction-fixture.py', directory, ...variant],
     { cwd: process.cwd(), stdio: 'pipe' });
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
@@ -2101,6 +2101,98 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect(combined).toHaveAccessibleDescription(/does not record which directions the latest Align changed/);
   await positions.focus(); await page.keyboard.press('ArrowDown'); await expect(positions).toBeChecked();
   await positions.press('Escape'); await expect(reset).toBeHidden(); await expect(resetButton).toBeFocused();
+});
+
+// OV-2771: a record drawn in one window across the origin is placed by the window that holds its anchor.
+test('Review alignment places a record drawn in one window across the origin', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['origin']);
+  const committed = await artifactSnapshot(page);
+  expect(committed.session.renderRequest.records[1].windows).toEqual([{ start: 401, end: 300, reverseComplement: false, column: null }]);
+  const dialog = await openDirectionReview(page);
+  const outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  const aligned = await artifactSnapshot(page);
+  expect(aligned.plan.records.find(({ recordKey }) => recordKey === 'record-2'))
+    .toMatchObject({ status: 'aligned', anchor: { recordKey: 'record-2' } });
+});
+
+// D-50: a record drawn in several windows moves as one, anchored in the window that holds its anchor.
+test('Review alignment moves a record drawn in two windows as one', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows']);
+  const windowShifts = async () => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
+    return ['record-2~w1', 'record-2~w2'].map((key) => Number(
+      svg.querySelector(`g[data-record-key="${key}"]`).getAttribute('data-record-translation-x')));
+  });
+  // Both windows draw the record's own translation before the Align.
+  expect(await windowShifts()).toEqual([48, 48]);
+  const dialog = await openDirectionReview(page);
+  const outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  const aligned = await artifactSnapshot(page);
+  expect(aligned.plan.records.find(({ recordKey }) => recordKey === 'record-2'))
+    .toMatchObject({ status: 'aligned', anchor: { recordKey: 'record-2' } });
+  const [first, second] = await windowShifts();
+  expect(first).toBe(second);
+  expect(first).not.toBe(48);
+});
+
+// OV-2883: Align's flip of a record drawn in windows is written on the File card's windows, the orientation Generate
+// reads for such a card, so the next Generate draws the record flipped too.
+test('Review alignment flips a record drawn in two windows and the next Generate keeps it flipped', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows']);
+  const record2 = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const card = state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[1];
+    const drawn = getCommittedCanonicalSession().renderRequest.records[1];
+    return { card: [card.region_reverse, ...card.windows.map((window) => window.reverseComplement)],
+      drawn: [drawn.presentation.reverseComplement, ...drawn.windows.map((window) => window.reverseComplement)] };
+  });
+  expect(await record2()).toEqual({ card: [false, false, false], drawn: [false, false, false] });
+  const dialog = await openDirectionReview(page);
+  await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
+  await directionSelect(dialog, 'record-2').selectOption('left');
+  let outcome = await applyAndSettle(page, dialog);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  await expect(dialog).toBeHidden();
+  const flipped = { card: [false, true, true], drawn: [false, true, true] };
+  expect(await record2()).toEqual(flipped);
+  // The fixture's saved comparison is read-only: Generate reuses it (Inherit), as a user picks it before Generate.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.inheritImportedComparison());
+  const generated = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(generated.status).toBe('ok');
+  expect(await record2()).toEqual(flipped);
+});
+
+// Undo of an Align that flips a record drawn in windows of different orientations gives back each window's own
+// orientation, not one direction for the whole File card.
+test('Undo after Align gives back each window orientation of a record drawn in mixed windows', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows-mixed']);
+  const card2 = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const card = state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[1];
+    return [card.region_reverse, ...card.windows.map((window) => window.reverseComplement)];
+  });
+  const loaded = [false, true, false];
+  expect(await card2()).toEqual(loaded);
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const dialog = await openDirectionReview(page);
+  await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
+  await directionSelect(dialog, 'record-2').selectOption('left');
+  let outcome = await applyAndSettle(page, dialog);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  await expect(dialog).toBeHidden();
+  expect(await card2()).toEqual([false, true, true]);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(card2).toEqual(loaded);
 });
 
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {

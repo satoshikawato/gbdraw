@@ -16,7 +16,7 @@ import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, 
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { INPUT_TYPES } from './input-types.js';
-/** @import { InputType } from './drawing/inputs.js' */
+/** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 import { isUnsetValue } from '../utils/field-reading.js';
 import { depthTrackEditDefaults, ensureDepthTrackConfigCount } from './depth-track-state.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
@@ -86,6 +86,9 @@ export const createDefaultForm = () => ({
   prefix: '', species: '', strain: '', plot_title: '', track_type: 'tuckin', linear_track_layout: 'middle', show_scale: true, scale_style: 'bar',
   linear_ruler_on_axis: false, labels_mode: 'none', show_labels_linear: 'none', multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
   circular_record_selector: '', circular_region_start: null, circular_region_end: null, circular_reverse: false,
+  // The window across the origin a CLI or Python Session gave the record, which the Start/End fields cannot hold
+  // (`cardCropWindow`); shown read-only.
+  circular_windows: /** @type {LinearSeqWindow[]} */ ([]),
   circular_record_label: '', circular_record_subtitle: '',
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false,
@@ -576,8 +579,11 @@ export const validateAlignmentResetReceiptShape = (receipt, request) => {
   return /** @type {AlignmentResetReceipt | null} */ (receipt ?? null);
 };
 
-/** @param {AlignmentResetCanonical} canonical */
-const resetBinding = async (canonical) => {
+/**
+ * @param {AlignmentResetCanonical} canonical
+ * @param {(record: AlignmentResetRecord) => unknown} [selectorOf] Each record's selector as the binding reads it.
+ */
+const resetBinding = async (canonical, selectorOf = (record) => record.selector) => {
   const request = canonical?.renderRequest;
   if (request?.mode !== 'linear' || !request.layout?.similarityAlignment) {
     throw new Error('Alignment reset receipt requires an active canonical plan.');
@@ -610,7 +616,7 @@ const resetBinding = async (canonical) => {
   // The mode check above admits a Linear request only; the request writer gives each of its records a `recordKey` and a `source`.
   const records = await Promise.all(/** @type {AlignmentResetRecord[]} */ (request.records).map(async (record) => ({
     recordKey: record.recordKey, source: await sourceIdentity(record.source),
-    selector: record.selector,
+    selector: selectorOf(record),
     region: regionBinding(record.windows),
     display: record.display
   })));
@@ -636,6 +642,44 @@ export const readSimilarityAlignmentResetReceipt = async (receipt, canonical) =>
   // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
   if (value && value.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) return { value: null, stale: true };
   return { value, stale: false };
+};
+
+/**
+ * The record selectors of a request the file stored before windows (its records hold a `region`), by record key;
+ * null for any other request. Values are not validated.
+ * @param {unknown} request The stored request, unvalidated.
+ * @returns {Map<unknown, unknown> | null}
+ */
+const storedRegionRecordSelectors = (request) => {
+  const records = isObject(request) && Array.isArray(request.records) ? request.records.filter(isObject) : [];
+  if (!records.some((record) => Object.hasOwn(record, 'region'))) return null;
+  return new Map(records.map((record) => [record.recordKey, record.selector ?? null]));
+};
+
+/**
+ * Load: a stored receipt read against the request Load promoted (`readSimilarityAlignmentResetReceipt`). A request
+ * the file stored before windows bound each record's selector where the file stored it: the v0.14.5 Web wrote a
+ * cropped Linear card's selector in its region and bound the record's own, `null`, and promotion moves the selector
+ * onto the record (`promoteRecordRegionsToWindows`, OV-2772). Such a receipt is read with the stored selectors, as
+ * Python's verifier reads the stored request (`_validate_alignment_reset_receipt`), and is rebound to the promoted
+ * request, which History, Align and Save read.
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical The promoted request and the resources.
+ * @param {unknown} storedRequest The request as the file stored it, unvalidated.
+ * @returns {Promise<{ value: AlignmentResetReceipt | null, stale: boolean }>}
+ */
+export const readStoredSimilarityAlignmentResetReceipt = async (receipt, canonical, storedRequest) => {
+  const read = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+  const storedSelectors = storedRegionRecordSelectors(storedRequest);
+  if (!read.stale || storedSelectors === null || !receipt
+    || !alignmentResetReceiptShapeHolds(receipt, canonical?.renderRequest)) return read;
+  // The shape check passed: a receipt of a Linear request with a plan, so `canonical` is set.
+  const value = /** @type {AlignmentResetReceipt} */ (receipt);
+  const current = /** @type {AlignmentResetCanonical} */ (canonical);
+  const asStored = await resetBinding(current, (record) => (
+    storedSelectors.has(record.recordKey) ? storedSelectors.get(record.recordKey) : record.selector));
+  if (value.binding !== asStored) return read;
+  return { value: { ...value, binding: await resetBinding(current) }, stale: false };
 };
 
 /**

@@ -385,8 +385,8 @@ def test_hidden_and_excluded_cds_leave_losatp_protein_extraction(mode):
         feature_overrides=(FeatureOverride("k", cds, feature_visibility=mode),),
     )
     plan = plan_request(request)
-    before = _protein_tags(_extract_linear_request_proteins(base.request, base.records, base.inputs))
-    after = _protein_tags(_extract_linear_request_proteins(plan.request, plan.records, plan.inputs))
+    before = _protein_tags(_extract_linear_request_proteins(base.request, base.records, base.inputs, base.provenance))
+    after = _protein_tags(_extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance))
     assert "TESTA_0006" in before
     assert after == [tag for tag in before if tag != "TESTA_0006"]
 

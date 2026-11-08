@@ -4,6 +4,7 @@ import { LABEL_STYLE_CHOICES, labelStyleForMode } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
+import { readLinearSeqWindows } from './drawing/inputs.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
@@ -885,6 +886,8 @@ const containerTables = (mode) => Object.freeze([
     // an amount and a unit.
     row('figure_width', (value) => figureLengthFormValue('width', value)),
     row('figure_height', (value) => figureLengthFormValue('height', value)),
+    // The window list of a Circular record (a window across the origin); anything but a list is none, with its row.
+    row('circular_windows', (value) => ({ value: readLinearSeqWindows(value), lost: !Array.isArray(value) && !isUnsetValue(value) })),
     // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
     // the target's value for one of another kind, with its row.
     row('keep_definition_left_aligned', onlyTrue)

@@ -100,10 +100,9 @@ from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
+    _drawn_source_span,
     _read_coord_map,
-    _record_source_start,
     _source_period,
-    _wrap_source_base,
 )
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -1074,15 +1073,12 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
     """
 
     annotations = record.annotations
-    base, step = _read_coord_map(record)
-    length = len(record)
-    source_length = annotations.get("gbdraw_source_length", length)
-    period = _source_period(record)
-    if period is not None and annotations.get("gbdraw_region_applied"):
+    _base, step = _read_coord_map(record)
+    source_length = annotations.get("gbdraw_source_length", len(record))
+    first, last = _drawn_source_span(record)
+    if _source_period(record) is not None and annotations.get("gbdraw_region_applied"):
         # A crop across the origin (D-28): its span starts after it ends.
-        first = _record_source_start(record)
-        return (first, _wrap_source_base(first + length - 1, period)), step < 0
-    first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
+        return (first, last), step < 0
     if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
         return None
     if annotations.get("gbdraw_region_applied"):
@@ -1338,7 +1334,7 @@ def _encode_record(
     }
 
 
-def _encode_window(window: RecordWindow) -> dict[str, Any]:
+def _encode_window(window: RecordWindow) -> StoredRecordWindow:
     return {
         "start": window.start,
         "end": window.end,
@@ -1461,8 +1457,12 @@ def _decode_record(
             else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
-        region=None if schema >= RECORD_WINDOWS_SCHEMA else _decode_region(item["region"], path=f"{path}.region"),
-        windows=_decode_windows(item["windows"], path=f"{path}.windows") if schema >= RECORD_WINDOWS_SCHEMA else (),
+        # A schema <= 9 region is the record's one span (D-09); schema 10 stores its windows.
+        **(
+            {"windows": _decode_windows(item["windows"], path=f"{path}.windows")}
+            if schema >= RECORD_WINDOWS_SCHEMA
+            else {"region": _decode_region(item["region"], path=f"{path}.region")}
+        ),
         presentation=presentation,
         display=display,
         record_key=(
@@ -1518,13 +1518,16 @@ class StoredRecordWindow(TypedDict):
     column: object
 
 
-def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]:
+def stored_record_windows(record: Mapping[str, object]) -> list[StoredRecordWindow]:
     """The windows of a stored request record of any schema, as schema 10 writes them.
 
     The one reader of a record's spans in a stored payload that is not decoded
-    (Session hash and receipt readers): schema 10 writes ``windows``; a schema
-    <= 9 ``region`` is one window, read as :func:`_decode_record` reads it. The
-    values are as stored; the request decode validates them.
+    (Session hash, receipt and source readers): schema 10 writes ``windows``,
+    returned as stored; a schema <= 9 ``region`` is one window, read as
+    :func:`_decode_region` reads it (:func:`legacy_region_span`: a start greater
+    than the end is the reversed span), which is what the Web's
+    ``promoteRecordRegionsToWindows`` writes. Values are not validated; the
+    request decode does that.
     """
 
     windows = record.get("windows")
@@ -1540,16 +1543,12 @@ def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]
             if isinstance(item, Mapping)
         ]
     region = record.get("region")
-    if isinstance(region, Mapping):
-        return [
-            StoredRecordWindow(
-                start=region.get("start"),
-                end=region.get("end"),
-                reverseComplement=region.get("reverseComplement"),
-                column=None,
-            )
-        ]
-    return []
+    if not isinstance(region, Mapping):
+        return []
+    start, end, reverse = region.get("start"), region.get("end"), region.get("reverseComplement")
+    if type(start) is int and type(end) is int and start > end:
+        start, end, reverse = legacy_region_span(start, end, True)
+    return [StoredRecordWindow(start=start, end=end, reverseComplement=reverse, column=None)]
 
 
 def legacy_region_span(start: int, end: int, reverse: bool) -> tuple[int, int, bool]:

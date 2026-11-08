@@ -13,7 +13,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
-import { savedDrawingView, savedModesView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { drawingViewAt, savedDrawingView, savedModesView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
@@ -297,7 +297,7 @@ const filledSession = async ({ overrides = false } = {}) => {
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...modeDrawing(state, 'linear').linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
   }
   // The G2 file is the saved drawings as one 48-shaped file (every leaf has a place `modes.<mode>...`).
-  return { ...(await savedView('g2-filled')), version: 48 };
+  return drawingViewAt(await savedView('g2-filled'), 48);
 };
 /**
  * Loads `base` with each mutation of each leaf under `roots` and saves it

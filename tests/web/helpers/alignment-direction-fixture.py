@@ -10,12 +10,13 @@ sys.path.insert(0, str(ROOT))
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult  # noqa: E402
 from gbdraw.api import SessionDrawingSpec, build_session_document, materialize_session, save_session_document  # noqa: E402
+from gbdraw.io.regions import RecordWindow  # noqa: E402
 from gbdraw.web_support.request_render import render_canonical_web_request  # noqa: E402
 from tests.test_alignment_direction_projection import build_fixture  # noqa: E402
 from tests.utils.session_drawing_view import drawing_view  # noqa: E402
 
 
-def main(directory: Path) -> None:
+def main(directory: Path, variant: str = '') -> None:
     request, helper, _context, _paths, _response, _sources = build_fixture(directory)
     # The negative-strand reference is the only left-facing selected anchor.
     # UI fixture uses full records; native S01 tests retain the crop geometry cases. ``replace`` copies a record's
@@ -23,6 +24,16 @@ def main(directory: Path) -> None:
     records = tuple(replace(record, selector=None, windows=(), presentation=replace(record.presentation, label=record.record_key, reverse_complement=False),
                             record_key=f'record-{index + 1}')
                     for index, record in enumerate(request.records) if record.record_key != 'unusable')
+    if variant == 'origin':
+        # record-2 (target, 500 bp) drawn circular through one window from 401 across the origin to 300 (OV-2771).
+        target = records[1]
+        records = (records[0], replace(target, windows=(RecordWindow(401, 300),),
+                                       display=replace(target.display, is_circular=True))) + records[2:]
+    if variant in ('windows', 'windows-mixed'):
+        # record-2 (target, 500 bp) drawn in two windows, 401..500 and 1..300; the second holds its anchor (D-50).
+        # ``windows-mixed`` draws the first window reverse-complemented.
+        first = RecordWindow(401, 500, variant == 'windows-mixed')
+        records = (records[0], replace(records[1], windows=(first, RecordWindow(1, 300)))) + records[2:]
     members = []
     for member in helper['members']:
         if member['anchor']['recordKey'] == 'unusable':
@@ -30,7 +41,9 @@ def main(directory: Path) -> None:
         key = member['anchor']['recordKey']
         members.append(OrthogroupMember(
             orthogroup_id='group', protein_id=key + '-protein',
-            record_index=next(i for i, record in enumerate(request.records) if record.record_key == key),
+            # A member's record index counts drawn units: the target sits in record-2's second window, a unit of its own.
+            record_index=next(i for i, record in enumerate(request.records) if record.record_key == key)
+            + (variant in ('windows', 'windows-mixed') and key != 'ref'),
             feature_index=0, record_id=key, label=key + '-protein',
             start=member['sourceStart'], end=member['sourceEnd'], strand=member['sourceStrand'],
             feature_svg_id=None, source_protein_id=key + '-protein'))
@@ -48,4 +61,4 @@ def main(directory: Path) -> None:
 
 
 if __name__ == '__main__':
-    main(Path(sys.argv[1]))
+    main(Path(sys.argv[1]), *sys.argv[2:])

@@ -61,7 +61,7 @@ from ...configurators import (
 from ...configurators.bundle import DiagramConfigurators
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...core.record_metadata import WINDOW_OF_ANNOTATION
+from ...core.record_metadata import WINDOW_OF_ANNOTATION, record_identity_key
 from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
     GroupContent,
@@ -638,7 +638,7 @@ def _serialize_linear_track_slot_geometry(
         record_id = str(getattr(drawn.record, "id", "") or "")
         row_bands = [(row.axis_offset_y, row.plan.feature_lanes_band.translate(row.axis_offset_y)) for row in plan.rows]
         window_of = (getattr(drawn.record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION)
-        window_entry: dict[str, Any] = {}
+        window_entry: dict[str, int] = {}
         if window_of is not None:
             window_entry = {"windowIndex": window_counts.get(str(window_of), 0)}
             window_counts[str(window_of)] = window_entry["windowIndex"] + 1
@@ -2091,6 +2091,10 @@ def _final_record_translations(
     position meets the reference's; a rotated reference is drawn at x 0 (its y
     kept), any other reference and every other record keep their base
     translation.
+
+    ``record_keys`` name the record each drawn unit draws: the windows of one
+    record share its key, its base translation and its move, which the window
+    holding its anchor centre decides (D-50).
     """
 
     base_by_key = {
@@ -2108,38 +2112,39 @@ def _final_record_translations(
                 (0.0, base_y) if index == reference_index else (base_x, base_y)
                 for index, (base_x, base_y) in enumerate(base)
             )
+        # Each moved unit and the unit whose position it meets the reference's at.
         aligned = {
-            index for index, status in enumerate(feature_anchor.statuses)
+            index: index for index, status in enumerate(feature_anchor.statuses)
             if status in ("rotated", "aligned") and index != reference_index
         }
     else:
         centers = tuple(anchor_centers or ())
-        similarity_alignment.validate_record_coverage(record_keys)
+        similarity_alignment.validate_record_coverage(tuple(dict.fromkeys(str(key) for key in record_keys)))
         if len(centers) != len(record_keys):
             raise ValidationError(
-                "Similarity alignment requires one projected anchor center per record."
+                "Similarity alignment requires one projected anchor center per drawn unit."
             )
-        index_by_key = {str(key): index for index, key in enumerate(record_keys)}
-        reference_index = index_by_key[similarity_alignment.reference.record_key]
-        if centers[reference_index] is None:
+        anchor_units = {str(key): index for index, key in enumerate(record_keys) if centers[index] is not None}
+        if similarity_alignment.reference.record_key not in anchor_units:
             raise ValidationError("Similarity alignment reference center is missing.")
+        reference_index = anchor_units[similarity_alignment.reference.record_key]
         decisions = {decision.record_key: decision for decision in similarity_alignment.records}
+        for decision in decisions.values():
+            if decision.status is AlignmentDecisionStatus.ALIGNED and decision.record_key not in anchor_units:
+                raise ValidationError(
+                    f"Similarity alignment center is missing for record {decision.record_key!r}."
+                )
         aligned = {
-            index for index, record_key in enumerate(record_keys)
+            index: anchor_units[str(record_key)] for index, record_key in enumerate(record_keys)
             if decisions[str(record_key)].status is AlignmentDecisionStatus.ALIGNED
         }
-        for index in aligned:
-            if centers[index] is None:
-                raise ValidationError(
-                    f"Similarity alignment center is missing for record {record_keys[index]!r}."
-                )
     reference_world_x = (
         placements[reference_index].x_for_position(cast(float, centers[reference_index]))
         + base[reference_index][0]
     )
     return tuple(
         (
-            reference_world_x - placements[index].x_for_position(cast(float, centers[index]))
+            reference_world_x - placements[aligned[index]].x_for_position(cast(float, centers[aligned[index]]))
             if index in aligned
             else base_x,
             base_y,
@@ -2784,7 +2789,8 @@ def _linear_horizontal_frame(
     feature_anchor = alignment.feature_anchor
     placements = frame.horizontal_placements
     translations = _final_record_translations(
-        record_keys=frame.record_keys,
+        # The record each unit draws: the windows of a record move as one (D-50).
+        record_keys=[record_identity_key(record) or str(key) for record, key in zip(records, frame.record_keys)],
         placements=placements,
         layout=record_inputs.linear_layout,
         similarity_alignment=alignment.similarity_alignment,

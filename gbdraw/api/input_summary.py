@@ -24,7 +24,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.auto_sizes import DrawnExtent
 from gbdraw.config.models.canvas import LinearWrapLength
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _drawn_source_span
 from gbdraw.features.ids import feature_instances
 from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
@@ -82,7 +82,8 @@ class RecordInputSummary:
     source_record_count: int
     drawn_length: int
     source_length: int
-    # The drawn source bases, 1-based and inclusive, when the record is cropped.
+    # The drawn source bases, 1-based and inclusive, when the record is cropped; a crop across the origin starts after
+    # it ends.
     region: tuple[int, int] | None
     features: tuple[FeatureTypeTally, ...]
     # The region of the source record the request asked for (1-based, inclusive, as asked: its end may run past the
@@ -137,7 +138,7 @@ class RegionPayload(TypedDict):
 
 class RecordPayload(TypedDict):
     """One drawn record (:class:`RecordInputSummary`): its source record's bases and the region of the source the
-    request asked for. Its drawn bases follow from them by the crop rule (``check_start_end_coords``), which the Web
+    request asked for. Its drawn bases follow from them by the crop rule (``region_slice``), which the Web
     export check applies in Python (D-70)."""
 
     sourceLength: int
@@ -197,12 +198,14 @@ def _record_feature_tallies(
 
 
 def _drawn_region(record: SeqRecord, source_length: int) -> tuple[int, int] | None:
-    length = len(record.seq)
-    if length >= source_length:
-        return None
-    base, step = _read_coord_map(record)
-    end = base + step * (length - 1)
-    return (min(base, end), max(base, end))
+    return None if len(record.seq) >= source_length else _drawn_source_span(record)
+
+
+def _region_text(region: tuple[int, int]) -> str:
+    """A drawn region in the summary's words; a region whose start is after its end runs across the origin."""
+
+    start, end = region
+    return f"{start:,}..{end:,}{' across the origin' if start > end else ''}"
 
 
 def summarize_inputs(
@@ -282,7 +285,7 @@ def _record_label(record: RecordInputSummary) -> str:
 def _record_line(record: RecordInputSummary) -> str:
     place = f"record {record.source_record_index + 1:,} of {record.source_record_count:,}"
     extent = (
-        f"{record.region[0]:,}..{record.region[1]:,} of {record.source_length:,} bp"
+        f"{_region_text(record.region)} of {record.source_length:,} bp"
         if record.region is not None
         else f"{record.drawn_length:,} bp"
     )
@@ -348,7 +351,7 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
     hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
     not_drawn = _types_not_drawn(record)
     if record.region is not None and not hidden and not not_drawn:
-        return f"its region {record.region[0]:,}..{record.region[1]:,} holds no feature of a type drawn"
+        return f"its region {_region_text(record.region)} holds no feature of a type drawn"
     if not record.features:
         return "it has no features"
     reasons = []

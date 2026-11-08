@@ -10,6 +10,7 @@ import { base64ToBytes, sha256Hex } from './byte-utils.js';
 import { storedRecordSourceResourceIds } from './input-types.js';
 import { isResourceBackedCanonicalComparison } from './canonical-comparisons.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { storedRegionWindows } from './record-display-model.js';
 import { DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION } from '../contracts/schema.generated.js';
 
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
@@ -58,11 +59,11 @@ const heldResource = (resources, resourceId) => {
  * @returns {boolean} whether the stored record is drawn reverse-complemented
  */
 const storedRecordReverses = (record) => {
-  // A stored record of schema 10 writes its spans as `windows`; an older one as one `region`, which reads as one
-  // window (Python's `stored_record_windows`).
+  // A stored record of schema 10 writes its spans as `windows`; an older one as one `region`, read as the
+  // promotion reads it (`storedRegionWindows`; Python's `stored_record_windows`).
   const stored = /** @type {{ windows?: unknown, region?: unknown }} */ (record ?? {});
   const windows = /** @type {UnvalidatedFields<keyof CanonicalRecordWindow>[]} */ (
-    Array.isArray(stored.windows) ? stored.windows : [stored.region]
+    Array.isArray(stored.windows) ? stored.windows : storedRegionWindows(stored.region)
   );
   const presentation = /** @type {UnvalidatedFields<keyof CanonicalRecordPresentation>} */ (record?.presentation);
   return windows.some((window) => Boolean(window?.reverseComplement)) || Boolean(presentation?.reverseComplement);

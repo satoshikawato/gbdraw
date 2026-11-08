@@ -361,6 +361,23 @@ def _record_source_start(record: SeqRecord) -> int:
     return _wrap_source_base(_record_frame_base(record), _source_period(record))
 
 
+def _drawn_source_span(record: SeqRecord) -> tuple[int, int]:
+    """The source bases a record draws, 1-based and inclusive, in source order.
+
+    The span of a crop across the origin (D-28) starts after it ends; any other
+    record's span is ordered (a reverse complement does not change it). The
+    one reader of a drawn record's span from its coordinate map.
+    """
+
+    length = len(record.seq)
+    period = _source_period(record)
+    if period is not None:
+        first = _record_source_start(record)
+        return first, _wrap_source_base(first + length - 1, period)
+    base, step = _read_coord_map(record)
+    return (base, base + length - 1) if step > 0 else (base - length + 1, base)
+
+
 def _record_frame_base(record: SeqRecord) -> int:
     """The coordinate of a record's first base on its source strand, on the axis of its coordinate map.
 

@@ -28,6 +28,7 @@ from .web_support.mode_scoped_settings import (
     LOSAT_EXECUTION_FIELDS,
     SLICE_CONTAINERS,
     DiagramMode,
+    slice_containers,
 )
 
 # A value another owner describes; describe_session_document() names its shape.
@@ -430,10 +431,10 @@ def describe_session_admission() -> dict[str, Any]:
         open: bool = False,
         defaults: dict[str, object] | None = None,
         name: str | None = None,
+        only: frozenset[str] | None = None,
     ) -> Shape:
-        """The writer's object ``writer_name``: its keys, each ``unknown``
-        unless ``checked`` names the shape Python proves."""
-        keys = list(writer[writer_name]["fields"])
+        """The writer's object ``writer_name``: its keys (in ``only``), ``unknown`` unless ``checked`` proves them."""
+        keys = [key for key in writer[writer_name]["fields"] if only is None or key in only]
         undeclared = (set(checked or ()) | set(required)) - set(keys)
         if undeclared:
             raise RuntimeError(f"{writer_name} declares no field(s) {sorted(undeclared)}.")
@@ -485,16 +486,16 @@ def describe_session_admission() -> dict[str, Any]:
         )),
     }
 
-    def mode_slice(writer_name: str, container: str = "") -> Shape:
-        """A slice container: the registry's keys only, each optional (_validate_mode_slice_fields)."""
+    def mode_slice(writer_name: str, containers: dict[str, frozenset[str]], container: str = "") -> Shape:
+        """A slice container: its band's keys (``containers``), each optional (_validate_mode_slice_fields)."""
         checked: dict[str, Shape] = {}
         for key, shape in writer[writer_name]["fields"].items():
             path = f"{container}.{key}" if container else key
             if shape["kind"] == "ref" and shape["name"].startswith("SessionModeSlice"):
-                checked[key] = mode_slice(shape["name"], path)
+                checked[key] = mode_slice(shape["name"], containers, path)
             elif path in slice_leaves:
                 checked[key] = slice_leaves[path]
-        return relaxed(writer_name, checked)
+        return relaxed(writer_name, checked, only=containers[container])
 
     other_mode_result = relaxed("SessionOtherModeResult", {  # _validate_other_mode_result
         "results": array(result),
@@ -574,8 +575,8 @@ def describe_session_admission() -> dict[str, Any]:
             if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION:
                 fields["features"] = record(UNKNOWN)
             else:
-                fields["modes"] = nullable(relaxed("SessionModes", {
-                    mode: mode_slice("SessionModeSlice") for mode in DIAGRAM_MODES
+                fields["modes"] = nullable(relaxed("SessionModes", {  # the keys of the band's newest version
+                    mode: mode_slice("SessionModeSlice", slice_containers(versions[-1])) for mode in DIAGRAM_MODES
                 }))
                 fields["cliOptions"] = record(UNKNOWN)
                 fields["otherModeResult"] = other_mode_result

@@ -317,8 +317,18 @@ def _parse_sequence_file(path, fmt):
     from Bio import SeqIO
     return list(SeqIO.parse(path, fmt))
 
-def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
-    """Extract the first record as FASTA for LOSAT input."""
+def _web_display_circular(is_circular):
+    """The record's display option display.isCircular the page sends with an extraction: true, false, or none
+    (the topology its file states). The extraction crops a window across the origin as the drawing does
+    (drawn_circular)."""
+    if _is_blank_or_js_nullish(is_circular):
+        return None
+    if isinstance(is_circular, bool):
+        return is_circular
+    raise ValueError("A record's display topology must be true, false or null.")
+
+def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None, is_circular=None):
+    """Extract the first record as FASTA for LOSAT input; is_circular is the record's display option."""
     from Bio import SeqIO
     from io import StringIO
     from gbdraw.io.record_select import parse_record_selector, select_record
@@ -342,8 +352,11 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
             records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
         specs = parse_region_specs([region_spec]) if region_spec else []
-        records = [unit for units in crop_then_reverse_records(records, specs, [reverse] * len(records))[0] for unit in units]
-        record = records[0]
+        cropped = crop_then_reverse_records(
+            records, specs, [reverse] * len(records),
+            is_circular=_web_display_circular(is_circular), source_kind=fmt_map[fmt],
+        )[0]
+        record = [unit for units in cropped for unit in units][0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id, "record_length": len(record.seq)})
@@ -553,7 +566,7 @@ def _web_feature_view_hash_parts(record, source_feature_position):
         (),
     )
 
-def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
+def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None, is_circular=None):
     from gbdraw.features.source import capture_source_features
     from gbdraw.io.record_select import parse_record_selector, select_record
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
@@ -590,7 +603,11 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     else:
         raise ValueError(f"Unsupported format: {fmt}")
     specs = parse_region_specs([region_spec]) if region_spec else []
-    records = [unit for units in crop_then_reverse_records(records, specs, [reverse] * len(records))[0] for unit in units]
+    cropped = crop_then_reverse_records(
+        records, specs, [reverse] * len(records),
+        is_circular=_web_display_circular(is_circular), source_kind="genbank" if fmt == "genbank" else "gff_fasta",
+    )[0]
+    records = [unit for units in cropped for unit in units]
     if not records:
         raise ValueError("No records found")
     return records[0]
@@ -621,14 +638,16 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
         "coord_step": coord_step,
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None, window_of=None):
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None, window_of=None, is_circular=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp.
 
     feature_overrides_json holds this record's canonical featureOverrides rows;
     the shared resolver binds them as Generate does (R4). window_of names the
     record when this unit is one of several windows of it (the unit plan,
     gbdraw/web_support/linear_units.py): its edits bind to that record, and
-    its proteins carry it as the render's do (D-01).
+    its proteins carry it as the render's do (D-01). is_circular is the
+    record's display option, by which a window across the origin is cropped
+    as the drawing crops it.
     """
     try:
         from gbdraw.analysis.protein_colinearity import (
@@ -647,6 +666,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             record_selector=record_selector,
             reverse_flag=reverse_flag,
             source_feature_catalogs=source_feature_catalogs,
+            is_circular=is_circular,
         )
         if not _is_blank_or_js_nullish(window_of):
             from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION

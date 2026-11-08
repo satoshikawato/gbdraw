@@ -83,13 +83,29 @@ def test_registry_rows_are_unique_and_use_known_tokens() -> None:
     assert SLICE_CONTAINERS["config.losat"] == {"outfmt", "blastn", "blastp"}
 
 
+def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> None:
+    from gbdraw.web_support.mode_scoped_settings import slice_containers
+
+    session_51_rows = {(row.domain, row.path) for row in MODE_SCOPED_SETTINGS if row.since == 51}
+    assert session_51_rows == {
+        ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
+    }
+    assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 51}
+    assert slice_containers(CURRENT_SESSION_VERSION) == SLICE_CONTAINERS
+    for version in range(46, 51):
+        assert slice_containers(version)["config.form"] == SLICE_CONTAINERS["config.form"] - {
+            path for _domain, path in session_51_rows
+        }
+
+
 def test_registry_rows_match_the_phase_e_registry_table() -> None:
-    # The table (Phase E's registry-v46.tsv, revision 5) is the readable form
-    # of the registry: each of its slice rows is a row here, and the reverse.
+    # The table (Phase E's registry-v46.tsv, revision 5, with the first Session
+    # version of each row) is the readable form of the registry: each of its
+    # slice rows is a row here, and the reverse.
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 288
+    assert len(table) == 289
     rows = set()
     for row in table:
         if row["migrate"] == "-":
@@ -102,9 +118,11 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
             if path == "ui.pendingPaletteName/Colors"
             else (path,)
         )
-        rows |= {(name, row["modes"], row["key"] or None, row["migrate"]) for name in paths}
+        rows |= {(name, row["modes"], row["key"] or None, row["migrate"], int(row["since"])) for name in paths}
 
-    assert rows == {(f"{row.domain}.{row.path}", row.modes, row.key, row.migrate) for row in MODE_SCOPED_SETTINGS}
+    assert rows == {
+        (f"{row.domain}.{row.path}", row.modes, row.key, row.migrate, row.since) for row in MODE_SCOPED_SETTINGS
+    }
 
 
 # The `browser` marker puts this test in the jobs a Web-only pull request runs.
@@ -392,6 +410,15 @@ def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dic
          "modes.linear.config.losat cannot contain executionMode"),
         (lambda s: s["modes"]["linear"]["config"]["form"].update(legend="top"),
          "modes.linear.config.form cannot contain legend"),
+        # A reader admits only what the format had: Session 51 adds these rows, so a Session 46-50 slice
+        # holding one holds a field no writer of its version wrote.
+        (lambda s: s["modes"]["circular"]["config"]["form"].update(
+            circular_windows=[{"start": 90, "end": 10, "reverseComplement": False, "column": None}]),
+         "modes.circular.config.form cannot contain circular_windows"),
+        (lambda s: s["modes"]["linear"]["config"]["form"].update(figure_width="180mm"),
+         "modes.linear.config.form cannot contain figure_width"),
+        (lambda s: s["modes"]["circular"]["config"]["form"].update(figure_height=None),
+         "modes.circular.config.form cannot contain figure_height"),
     ],
 )
 def test_session_46_rejects_draft_fields_outside_the_mode_slices(

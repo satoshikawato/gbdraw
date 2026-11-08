@@ -83,6 +83,7 @@ import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
+  catalogDrawnUnits,
   resolveCircularComparisonSequenceAvailability
 } from './match-sequences.js';
 import {
@@ -253,7 +254,7 @@ import {
 import { getResourcePayloadIdentity, setResourcePayloadOwner } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
-  readSimilarityAlignmentResetReceipt,
+  readStoredSimilarityAlignmentResetReceipt,
   validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
@@ -350,7 +351,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -1483,6 +1484,21 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
 const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain: string }} */ row) => (
   row.domain === 'config' || row.domain.startsWith('config.')
 ));
+/**
+ * The places (dotted, under `config`) of the registry fields a stored slice config holds that its Session's
+ * version did not write yet (`since`; Python's `slice_containers`): a field no writer of that version wrote.
+ * @param {unknown} sliceConfig
+ * @param {number} sliceVersion
+ * @returns {string[]}
+ */
+const unwrittenSliceFields = (sliceConfig, sliceVersion) => (isPlainObject(sliceConfig) ? CONFIG_SLICE_ROWS : [])
+  .filter((/** @type {{ since: number }} */ row) => row.since > sliceVersion)
+  .map((/** @type {{ domain: string, path: string }} */ row) => [row.domain.slice('config.'.length), row.path].filter(Boolean).join('.'))
+  .filter((at) => {
+    const parts = at.split('.');
+    const container = parts.slice(0, -1).reduce((/** @type {unknown} */ value, part) => (isPlainObject(value) ? value[part] : undefined), sliceConfig);
+    return isPlainObject(container) && Object.hasOwn(container, parts[parts.length - 1]);
+  });
 // A drawing's settings on Load (plan 4.1): the projection of its mode's
 // committed request, then each registry row its slice holds. A slice may
 // omit any row; the drawing's defaults fill what neither holds. The
@@ -2307,16 +2323,17 @@ const readResultSetFeatureCatalog = async ({ at, projected, set }, repairs) => {
  * @param {StoredResultSet} stored
  * @param {StoredSetProject} project
  * @param {LoadRepair[]} repairs
+ * @param {unknown} storedRequest The set's request as the file stored it, which the receipt bound (OV-2772).
  * @returns {Promise<SessionInput>}
  */
-const readResultSetResetReceipt = async ({ at, set }, project, repairs) => {
+const readResultSetResetReceipt = async ({ at, set }, project, repairs, storedRequest) => {
   const editorState = isPlainObject(set.editorState) ? set.editorState : {};
   const receipt = editorState.alignmentResetReceipt;
   if (receipt === null || receipt === undefined) return set;
   // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
   const canonical = /** @type {AlignmentResetCanonical} */ ({ renderRequest: set.renderRequest, resources: project.resources });
-  const { stale } = await readSimilarityAlignmentResetReceipt(receipt, canonical);
-  if (!stale) return set;
+  const { value, stale } = await readStoredSimilarityAlignmentResetReceipt(receipt, canonical, storedRequest);
+  if (!stale) return value === receipt ? set : { ...set, editorState: { ...editorState, alignmentResetReceipt: value } };
   repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
   return { ...set, editorState: { ...editorState, alignmentResetReceipt: null } };
 };
@@ -2725,7 +2742,10 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     : readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
   /** @type {StoredSetProject} */
   const project = { resources: authorityData.resources };
-  const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
+  // Each set's request as the file stored it, by where the file holds the set: a receipt bound it (OV-2772).
+  const storedRequests = new Map(storedResultSets(legendRead.session).map(({ at, set }) => [at, set.renderRequest]));
+  const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(
+    entry, project, repairs, storedRequests.get(entry.at)));
   const leafReadings = await readStoredLeaves(rawData);
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
   /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
@@ -3066,7 +3086,8 @@ const restoreLoadedSetSequenceSources = async ({
     ? analyzeCatalogSequenceSourceCoverage({
         mode,
         catalogFeatureState: catalog,
-        renderRequest,
+        // Load read every stored request to the current schema before (`readSessionRequests`).
+        renderRequest: /** @type {CanonicalRenderRequest | undefined} */ (renderRequest),
         comparisonSourceAvailability: mode === 'circular'
           ? resolveCircularComparisonSequenceAvailability({ files, circularConservation })
           : undefined
@@ -3077,7 +3098,9 @@ const restoreLoadedSetSequenceSources = async ({
   try {
     return {
       restored: await buildRestoredMatchSequenceSources({
-        mode, cInputType, lInputType, files, linearSeqs, circularConservation
+        mode, cInputType, lInputType, files, linearSeqs, circularConservation,
+        // The drawn units the catalog names key the sources it lacks (review S5).
+        units: mode === 'linear' && catalog ? catalogDrawnUnits(catalog) : null
       }),
       error: null
     };
@@ -5610,16 +5633,16 @@ export const duplicateDrawingState = (source, copyId) => {
  * (D-15-182), and a source replacement that retires the record presentation
  * (D-32, app/circular-record-controls.js) writes these values.
  * @typedef {{ circular_record_selector: string, circular_region_start: number | null,
- *   circular_region_end: number | null, circular_reverse: boolean, circular_record_label: string,
- *   circular_record_subtitle: string }} CircularRecordForm
+ *   circular_region_end: number | null, circular_reverse: boolean, circular_windows: readonly LinearSeqWindow[],
+ *   circular_record_label: string, circular_record_subtitle: string }} CircularRecordForm
  */
 /** @type {Readonly<CircularRecordForm>} */
 export const CIRCULAR_RECORD_FORM_DEFAULTS = Object.freeze((({
-  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
-  circular_record_subtitle
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_windows,
+  circular_record_label, circular_record_subtitle
 }) => ({
-  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
-  circular_record_subtitle
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse,
+  circular_windows: Object.freeze(circular_windows), circular_record_label, circular_record_subtitle
 }))(createDefaultForm()));
 // The registry rows that name records of the drawing's files (R17-4, D-15-182):
 // the Circular record form fields, the OFF records, the Multi-Record Canvas
@@ -6731,6 +6754,8 @@ const liveFileStateOf = ({ target, linearSeqs }) => /** @type {LiveFileState} */
  * @property {boolean} resolveTrackPlacements False for settings only or a stored slice without its request projection.
  * @property {Record<string, unknown> | null} validatedConfig The restored config whose unmanaged overrides Load read already, else null.
  * @property {number | undefined} sourceSessionVersion The version of the file it is in.
+ * @property {number} sliceVersion The version of the document that holds its slice: the file's, or for a Session
+ *   27-44 the version of Python's conversion of it.
  */
 /**
  * One stored drawing's draft as Load installs it, and the settings its
@@ -6766,8 +6791,14 @@ const readStoredDrawingDraft = async (view, repairs) => {
   droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
     code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
   })));
+  // A field the file's version did not write yet is dropped with a row, as any other field no writer wrote.
+  const unwritten = unwrittenSliceFields(slice.config, view.sliceVersion);
+  unwritten.forEach((field) => repairs.push(loadRepair({
+    code: 'setting-replaced', path: `${pathIn(at, 'config')}.${field}`, effect: 'dropped'
+  })));
+  const storedConfig = withoutFieldsAt(slice.config, unwritten);
   /** @type {Record<string, any>} */
-  let config = view.config;
+  let config = /** @type {typeof view.config} */ (withoutFieldsAt(view.config, unwritten));
   // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
   if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
   // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
@@ -6790,9 +6821,9 @@ const readStoredDrawingDraft = async (view, repairs) => {
   // What `applyModeSliceData` installs.
   const installedConfig = overlayModeSliceConfig(null, config);
   repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
-    stored: slice.config, mode, resolveTrackPlacements: view.resolveTrackPlacements
+    stored: storedConfig, mode, resolveTrackPlacements: view.resolveTrackPlacements
   }));
-  repairs.push(...unreadFieldRepairs(slice.config,
+  repairs.push(...unreadFieldRepairs(storedConfig,
     pathIn(at, 'config'), mode, { slice: true }));
   // (A Session 27-44 keeps them in its `ui` and `features`.)
   repairs.push(...sliceFieldRepairs(slice, at, mode));
@@ -6876,7 +6907,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
     id, mode, part, config,
     legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }),
     files, storedConservationBlasts: null, resolveTrackPlacements: true, validatedConfig: null,
-    sourceSessionVersion: SESSION_VERSION
+    sourceSessionVersion: SESSION_VERSION, sliceVersion: SESSION_VERSION
   }, repairs);
   return {
     mode,
@@ -7893,7 +7924,7 @@ const importSessionDocument = async (e, options = {}) => {
         storedConservationBlasts: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts,
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         validatedConfig: unmanagedConfigValidation ? restoredConfig : null,
-        sourceSessionVersion
+        sourceSessionVersion, sliceVersion: storedDocument.version
       }, repairs);
       installedSettings.set(id, settings);
       drafts.set(id, draft);

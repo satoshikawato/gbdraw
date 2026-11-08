@@ -818,3 +818,50 @@ def test_windows_on_a_file_of_several_records_without_a_selector_are_refused(car
     windows = (RecordWindow(1, 100), RecordWindow(200, 300))
     with pytest.raises(ValidationError, match=r"selectorless per-input region|requires exactly one record"):
         resolve_request_records(LinearDiagramRequest(records=(RecordInput(source, cardinality=cardinality, windows=windows),)))
+
+
+def test_window_refusals_of_a_record_input_name_the_record() -> None:
+    # PD-OI-122: a record-wide reverse complement together with windows, and several windows in Circular mode, are
+    # refused with a reason that names the record.
+    two = (RecordWindow(1, 100), RecordWindow(200, 300))
+    with pytest.raises(ValidationError, match=r"Record 'mito' \(HmmtDNA\.gbk\)"):
+        RecordInput(GenBankInputSource(MITO), windows=two, presentation=RecordPresentation(reverse_complement=True),
+                    record_key="mito")
+    with pytest.raises(ValidationError, match=r"Record 'mito' \(HmmtDNA\.gbk\)"):
+        RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(1, 100, True),),
+                    presentation=RecordPresentation(reverse_complement=True), record_key="mito")
+    with pytest.raises(ValidationError, match=r"Record 'NC_012920\.1' \(HmmtDNA\.gbk\)"):
+        CircularDiagramRequest(records=(RecordInput(
+            GenBankInputSource(MITO), selector=RecordSelector("NC_012920.1", "NC_012920.1", None), windows=two
+        ),))
+
+
+def test_a_region_passed_to_replace_replaces_the_windows_as_on_dev() -> None:
+    # OV-2769: dataclasses.replace(record, region=...) re-crops and region=None uncrops, as it did before windows.
+    cropped = RecordInput(GenBankInputSource(MITO), region=parse_region_spec("NC_012920.1:51-350:rc"), record_key="m")
+    assert cropped.windows == (RecordWindow(51, 350, True),)
+    whole = replace(cropped, region=None)
+    assert whole.windows == () and whole.selector == cropped.selector
+    recropped = replace(cropped, region=parse_region_spec("10-20"))
+    assert recropped.windows == (RecordWindow(10, 20),) and recropped.selector == cropped.selector
+    # Without region, replace keeps the windows (and several windows stay several).
+    two = RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(1, 100), RecordWindow(200, 300)), record_key="m")
+    assert replace(two, record_key="n").windows == two.windows
+    assert replace(cropped, record_key="n").windows == cropped.windows
+    # replace passes the record's own windows with the region: the region is the record's one span, also for a
+    # record drawn in several windows.
+    assert replace(two, region=parse_region_spec("5-9")).windows == (RecordWindow(5, 9),)
+    # Windows the caller gives with a region conflict with it, at construction and in replace, and the refusal
+    # names the record.
+    with pytest.raises(ValidationError, match=r"Record 'm' \(HmmtDNA\.gbk\): give a region or windows, not both"):
+        RecordInput(GenBankInputSource(MITO), region=parse_region_spec("1-5"), windows=(RecordWindow(1, 9),),
+                    record_key="m")
+    with pytest.raises(ValidationError, match="give a region or windows, not both"):
+        replace(cropped, region=parse_region_spec("1-5"), windows=[RecordWindow(1, 9)])
+    # No windows given is no conflict.
+    assert RecordInput(GenBankInputSource(MITO), region=parse_region_spec("1-5"), windows=()).windows == (
+        RecordWindow(1, 5),
+    )
+    # A record with several windows still names windows when region is read.
+    with pytest.raises(ValidationError, match="several windows"):
+        _ = two.region

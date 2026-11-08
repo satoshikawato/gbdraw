@@ -73,8 +73,9 @@ await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/re
 // It finds the annotation groups by the drawn-group owner's marks.
 await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-groups.js');
 await copyModule('gbdraw/web/js/services/drawn-attributes.generated.js', 'services/drawn-attributes.generated.js');
-// The member tables name records through the Linear record label owners (OV-369).
-for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
+// The member tables name records through the Linear record label owners (OV-369); the catalog reads its drawn units
+// through the unit plan's reader (linear-units.js).
+for (const name of ['linear-comparisons', 'linear-units', 'linear-sources', 'file-content-cache', 'session-resource-backing',
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
   await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
 }

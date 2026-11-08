@@ -20,6 +20,7 @@ const {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest: buildDrawingRenderRequest,
   bindCanonicalTypedResource,
+  linearCardRequestedCircular,
   canonicalLinearRecordLayout,
   decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
@@ -29,7 +30,8 @@ const {
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   projectCanonicalSessionRequest,
-  readStoredRenderRequest
+  readStoredRenderRequest,
+  requestRecordPlan
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
@@ -404,7 +406,7 @@ const state = {
     labels_mode: 'none', show_labels_linear: 'none', track_type: 'tuckin',
     linear_track_layout: 'middle', linear_ruler_on_axis: false, align_center: false,
     keep_definition_left_aligned: false, show_scale: true, scale_style: 'bar',
-    normalize_length: false
+    normalize_length: false, circular_windows: []
   },
   adv: {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
@@ -1098,6 +1100,53 @@ assert.equal(
   selectedCircularRebuilt.renderRequest.records[0].presentation.label,
   '長い <i>環状ゲノム</i> ラベル'
 );
+
+// Review S3 (PD-OI-122): a CLI or Python Circular Session whose record has one window across the origin
+// (start after end) loads into the drawing's window list, not into the Start/End fields, which read an End
+// before the Start as an error; Save and Generate write the window back unchanged.
+const originCircularCanonical = structuredClone(selectedCircularCanonical);
+originCircularCanonical.renderRequest.records[0].windows = [{ start: 15, end: 3, reverseComplement: true, column: null }];
+const originCircularProjection = projectCanonicalSessionRequest(originCircularCanonical);
+assert.deepEqual(
+  (({ circular_region_start, circular_region_end, circular_reverse, circular_windows }) => ({
+    circular_region_start, circular_region_end, circular_reverse, circular_windows
+  }))(originCircularProjection.config.form),
+  {
+    circular_region_start: null,
+    circular_region_end: null,
+    circular_reverse: false,
+    circular_windows: [{ start: 15, end: 3, reverseComplement: true, column: null }]
+  }
+);
+Object.assign(state.form, originCircularProjection.config.form);
+assert.deepEqual(
+  buildCanonicalRenderRequestRaw({ state, filesData: originCircularProjection.files }).renderRequest.records[0].windows,
+  [{ start: 15, end: 3, reverseComplement: true, column: null }]
+);
+// Review X1 of #1750: Python allows a record-wide reverse complement over one forward window (the CLI records table
+// writes it for `16000-100:origin` with reverse_complement=true), which draws that window reversed. Load folds it
+// into the listed window, the one owner of a listed window's orientation, so Generate draws the record reversed.
+const reversedOriginCanonical = structuredClone(selectedCircularCanonical);
+reversedOriginCanonical.renderRequest.records[0].windows = [{ start: 15, end: 3, reverseComplement: false, column: null }];
+reversedOriginCanonical.renderRequest.records[0].presentation.reverseComplement = true;
+const reversedOriginProjection = projectCanonicalSessionRequest(reversedOriginCanonical);
+assert.deepEqual(
+  [reversedOriginProjection.config.form.circular_reverse, reversedOriginProjection.config.form.circular_windows],
+  [false, [{ start: 15, end: 3, reverseComplement: true, column: null }]]
+);
+Object.assign(state.form, reversedOriginProjection.config.form);
+const reversedOriginRecord = buildCanonicalRenderRequestRaw({ state, filesData: reversedOriginProjection.files }).renderRequest.records[0];
+assert.deepEqual(
+  [reversedOriginRecord.windows, reversedOriginRecord.presentation.reverseComplement],
+  [[{ start: 15, end: 3, reverseComplement: true, column: null }], false]
+);
+// An End typed before the Start keeps its meaning: refused (ORDER), with no window in the list.
+Object.assign(state.form, { circular_windows: [], circular_region_start: 15, circular_region_end: 3 });
+assert.throws(
+  () => buildCanonicalRenderRequestRaw({ state, filesData: originCircularProjection.files }),
+  { code: 'REGION_INVALID', context: { field: 'region', reason: 'ORDER' } }
+);
+Object.assign(state.form, selectedCircularProjection.config.form);
 
 const invalidCircularCases = [
   [{ circular_region_start: 3, circular_region_end: null }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'BOTH_ENDPOINTS' } }],
@@ -2574,6 +2623,33 @@ assert.equal(
   );
 }
 
+// A comparison search's extraction reads the display topology the request writes for the card's record
+// (`linearCardRequestedCircular`), so Python crops a window across the origin as the drawing does: the card's
+// topology draft when its File card lists the record, else the draft saved for its source and selector, else none.
+{
+  const card = {
+    uid: 'origin-card', gb: genbank, cardinality: 'exactly_one', losat_gencode: 1,
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false,
+    windows: [{ start: 4, end: 1, reverseComplement: false, column: null }]
+  };
+  const filesData = { linearSeqs: [card], linearComparisons: [] };
+  const rows = [{
+    key: JSON.stringify(['origin-card', '#1']), scope: 'linear', sourceUid: 'origin-card', selector: '#1',
+    recordId: 'WEBTEST', recordLength: 4, detectedTopology: 'linear', reverse: false, cropped: true
+  }];
+  const snapshot = resolveLinearComparisonPlan({ plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: [card] });
+  for (const [topologyOverride, recordDisplayRows] of [[true, rows], [false, rows], [null, rows], [true, []]]) {
+    const drawing = { ...state, recordDisplayDrafts: [{ sourceUid: 'origin-card', selector: '#1', recordId: 'WEBTEST',
+      topologyOverride, startCoordinate: null, reverseComplementOverride: null, anchorIntent: null }] };
+    const written = buildDrawingRenderRequest({
+      state: drawing, drawing, filesData, recordDisplayRows, comparisonPlanSnapshot: snapshot
+    });
+    const sent = linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows });
+    assert.equal(sent, topologyOverride, `the card's topology draft ${topologyOverride}`);
+    assert.equal(sent, written.renderRequest.records[0].display.isCircular, 'the extraction reads what the request writes');
+  }
+}
+
 // Align at feature's Apply (PD-OI-113 scenario revision 3): the placement candidate writes Python's display start of
 // each rotated record with the translations, and keeps every other record's start; a start for a record the
 // committed request does not draw is refused as stale. Reset record positions and Similarity alignment pass none.
@@ -3874,6 +3950,25 @@ assert.deepEqual(
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+// Review X1 of #1750, the Linear twin: a record-wide reverse complement over one window across the origin is that
+// window reversed. Load folds it into the window the card lists (the card's Reverse complement checkbox is hidden
+// while it lists one), and the request writes the reversed window.
+const reversedOriginLinear = structuredClone(linearCanonical);
+reversedOriginLinear.renderRequest.records[2].windows = [{ start: 15, end: 3, reverseComplement: false, column: null }];
+reversedOriginLinear.renderRequest.records[2].presentation.reverseComplement = true;
+const reversedOriginCard = projectCanonicalSessionRequest(reversedOriginLinear).files.linearSeqs[2];
+assert.deepEqual(
+  [reversedOriginCard.region_reverse, reversedOriginCard.windows],
+  [false, [{ start: 15, end: 3, reverseComplement: true, column: null }]]
+);
+const reversedOriginLinearRecord = requestRecordPlan({
+  drawing: { mode: 'linear', inputType: { value: 'genbank' }, linearRecordRows: [], linearRecordLayoutEnabled: { value: false } },
+  filesData: { linearSeqs: [reversedOriginCard] }
+})?.[0];
+assert.deepEqual(
+  [reversedOriginLinearRecord?.windows, reversedOriginLinearRecord?.presentation.reverseComplement],
+  [[{ start: 15, end: 3, reverseComplement: true, column: null }], false]
+);
 
 const pythonConfigCanonical = structuredClone(linearCanonical);
 delete pythonConfigCanonical.renderRequest.diagramOptions.configOverrides;

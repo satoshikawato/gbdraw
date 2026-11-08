@@ -187,8 +187,9 @@ export const linearWrapInputValue = (text, unit) => {
  *   | { kind: 'rows', rowLength: number, rowCount: number, drawnAxisLength: number }} ShownLinearWrap
  */
 /**
- * A record the next Linear Generate draws, as its card asks for it: the bases of its source record and the region of
- * it the card states (1-based, both ends included, the smaller first), null without one. Python's input summary
+ * A record the next Linear Generate draws, as its card asks for it: the bases of its source record and the window of
+ * it the card writes (1-based, both ends included; the start is after the end only for a window across the origin),
+ * null without one. Python's input summary
  * names each drawn record by the same two facts (`RecordSummary`), so the Web never predicts a cropped length.
  * @typedef {RecordSummary} LinearDraftRecord
  */

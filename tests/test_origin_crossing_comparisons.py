@@ -44,6 +44,8 @@ from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
 from tests.utils.comparison_tables import converted_pair_rows
 
 LENGTH = 720
+# A record in memory, circular as its topology annotation states.
+IN_MEMORY = {"is_circular": None, "source_kind": "memory"}
 
 
 def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
@@ -314,7 +316,7 @@ def _web_helpers() -> dict[str, object]:
 def _web_records(strand: int, reverse: bool) -> list[SeqRecord]:
     """``_records``, whose subject a reversed view draws in the order that forms a block."""
     query, subject = _records(strand)
-    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0][0]]
+    return [query, crop_then_reverse_records([subject], [], [reverse], **IN_MEMORY)[0][0][0]]
 
 
 def _web_conversion(
@@ -386,8 +388,8 @@ def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: st
     back with x -> L + 1 - x, the rule of the planner's search-frame projection.
     """
     query, subject = _web_records(strand, reverse)
-    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0][0]
-    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0][0]
+    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False], **IN_MEMORY)[0][0][0]
+    drawn = crop_then_reverse_records([subject], [], [reverse], **IN_MEMORY)[0][0][0]
     records = [query, drawn]
     extraction = extract_cds_proteins(records)
     pairs = [(q, s) for q, s in _pairs(strand) if s in extraction.protein_map]
@@ -461,10 +463,74 @@ def test_the_worker_nucleotide_fasta_of_a_window_across_the_origin_is_the_cli_se
     SeqIO.write([subject], path, "genbank")
     extracted = json.loads(str(_web_helpers()["extract_first_fasta"](str(path), "genbank", "600-250:origin")))
     assert "error" not in extracted, extracted.get("error")
-    [unit] = crop_then_reverse_records([subject], parse_region_specs(["600-250:origin"]), [False])[0][0]
+    [unit] = crop_then_reverse_records([subject], parse_region_specs(["600-250:origin"]), [False], **IN_MEMORY)[0][0]
     sequence = "".join(extracted["fasta"].splitlines()[1:])
     assert sequence == str(subject.seq[599:] + subject.seq[:250])
     assert sequence == "".join(losat_search_frame_fasta(unit).splitlines()[1:])
+
+
+# The record's display option decides whether it is circular, else the topology its file states (D-28): the Worker
+# extractions read it as the drawing does, so a window across the origin of a FASTA genome the card draws as circular
+# is searched, and one of a record drawn as linear is refused in both.
+ORIGIN_DISPLAY_CASES = [
+    pytest.param("fasta", None, None, False, id="fasta-file-topology"),
+    pytest.param("fasta", None, True, True, id="fasta-drawn-circular"),
+    pytest.param("genbank", "linear", True, True, id="linear-file-drawn-circular"),
+    pytest.param("genbank", "circular", False, False, id="circular-file-drawn-linear"),
+    pytest.param("genbank", "circular", None, True, id="circular-file"),
+]
+
+
+def _origin_display_source(tmp_path: Path, fmt: str, topology: str | None) -> tuple[Path, SeqRecord]:
+    [_query, subject] = _records(1)
+    if topology is not None:
+        subject.annotations["topology"] = topology
+    path = tmp_path / f"subject.{'fa' if fmt == 'fasta' else 'gb'}"
+    SeqIO.write([subject], path, fmt)
+    return path, subject
+
+
+@pytest.mark.parametrize(("fmt", "topology", "is_circular", "drawn"), ORIGIN_DISPLAY_CASES)
+def test_the_worker_fasta_of_a_window_across_the_origin_reads_the_record_as_the_drawing_does(
+    tmp_path: Path, fmt: str, topology: str | None, is_circular: bool | None, drawn: bool
+) -> None:
+    path, subject = _origin_display_source(tmp_path, fmt, topology)
+    extracted = json.loads(str(_web_helpers()["extract_first_fasta"](
+        str(path), fmt, "600-250:origin", None, "0", is_circular
+    )))
+    if not drawn:
+        assert extracted["error"]["context"] == {"field": "region", "reason": "START_AFTER_END"}
+        return
+    assert "error" not in extracted, extracted.get("error")
+    assert "".join(extracted["fasta"].splitlines()[1:]) == str(subject.seq[599:] + subject.seq[:250])
+
+
+@pytest.mark.parametrize(("fmt", "topology", "is_circular", "drawn"), [
+    case for case in ORIGIN_DISPLAY_CASES if case.values[0] == "genbank"
+])
+def test_the_worker_proteins_of_a_window_across_the_origin_read_the_record_as_the_drawing_does(
+    tmp_path: Path, fmt: str, topology: str | None, is_circular: bool | None, drawn: bool
+) -> None:
+    """The protein extraction and the drawing (``plan_request``) of the same request agree."""
+
+    from gbdraw.api.requests import GenBankInputSource
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.io.regions import RecordWindow
+
+    path, _subject = _origin_display_source(tmp_path, fmt, topology)
+    extracted = json.loads(str(_web_helpers()["extract_cds_protein_fasta"](
+        str(path), "genbank", None, "600-250:origin", None, "0", 0, "subject", None, None, None, is_circular
+    )))
+    request = LinearDiagramRequest(records=(RecordInput(
+        GenBankInputSource(path), windows=(RecordWindow(600, 250),), display=RecordDisplayOptions(is_circular=is_circular)
+    ),))
+    if not drawn:
+        assert extracted["error"]["context"] == {"field": "region", "reason": "START_AFTER_END"}
+        with pytest.raises(ValidationError, match="crosses the origin of a linear record"):
+            plan_request(request)
+        return
+    assert "error" not in extracted, extracted.get("error")
+    assert extracted["record_length"] == len(plan_request(request).records[0].seq) == 371
 
 
 # ``sequence`` travels in the FASTA, read back by _web_ordered_proteins_from_fasta,
@@ -505,7 +571,7 @@ def test_every_cds_protein_field_crosses_the_web_transport(strand: int, window_o
 def test_web_display_map_flips_the_arc_of_a_reversed_record(strand: int) -> None:
     helpers = _web_helpers()
     records = _records(strand)
-    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0][0]
+    flipped = crop_then_reverse_records([records[1]], [], [True], **IN_MEMORY)[0][0][0]
     source = extract_cds_proteins([records[1]]).proteins_by_record[0]
     expected = extract_cds_proteins([flipped]).proteins_by_record[0]
     raw_map = json.loads(json.dumps({

@@ -2797,7 +2797,19 @@
                                             <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region') }}</span>
                                             <help-tip id="help-circular-region" :text="t('Use 1-based inclusive coordinates of the selected record. Both values are required. An End past the record end is drawn to the record end; a Start past it is refused.')"></help-tip>
                                         </div>
-                                        <div class="grid grid-cols-2 gap-2">
+                                        <div v-if="circularWindowRows.length" data-record-windows class="space-y-1">
+                                            <div class="flex items-center justify-between text-[10px] text-slate-600">
+                                                <span class="font-semibold">{{ t('Windows') }}</span>
+                                                <span>{{ tn(circularWindowRows.length, '{count} window of this record', '{count} windows of this record') }}</span>
+                                            </div>
+                                            <ol class="space-y-0.5" :aria-label="t('Windows')">
+                                                <li v-for="row in circularWindowRows" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
+                                                    <span>{{ row.span }}<span v-if="row.reverseComplement" class="text-[10px] text-slate-500"> ({{ t('Reverse complement') }})</span></span>
+                                                    <span class="text-[10px] text-slate-500">{{ row.length }}</span>
+                                                </li>
+                                            </ol>
+                                        </div>
+                                        <div v-else class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">{{ t('Start') }}</label>
                                                 <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular region start')" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs">
@@ -2809,7 +2821,7 @@
                                         </div>
                                         <p v-if="circularRegionNote" id="circular-region-note" data-region-clamp-note class="mt-1 text-[9px] text-amber-700">{{ circularRegionNote }}</p>
                                     </div>
-                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
+                                    <label v-if="!circularWindowRows.length" class="flex items-center gap-2 text-[10px] text-slate-600">
                                         <input type="checkbox" v-model="form.circular_reverse" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" :aria-label="t('Circular reverse complement')" :aria-describedby="circularSingleRecordPresentationEnabled ? null : 'circular-record-presentation-reason'" class="form-checkbox"> {{ t('Reverse complement') }}
                                     </label>
                                 </div>

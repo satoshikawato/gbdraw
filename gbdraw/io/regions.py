@@ -24,7 +24,7 @@ from ..core.record_metadata import (
 )
 from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
-from ..layout.record_transform import detected_topology
+from ..layout.record_transform import detected_topology, drawn_circular
 from .record_select import RecordSelector, reverse_records
 
 logger = logging.getLogger(__name__)
@@ -243,6 +243,27 @@ def parse_region_specs(specs: Sequence[str] | None) -> list[RegionSpec]:
     return parsed
 
 
+def region_slice(record_length: int, start: int, end: int, record_id: str) -> tuple[int, int]:
+    """The 0-based slice a region of a record draws, its end clamped as the crop clamps it.
+
+    A region whose start is after its end runs across the origin (D-28): its
+    slice is on the record read twice round, ``start - 1`` to ``length + end``.
+    It reads only the record's length, so the crop and the Web export check of
+    a drawn record's bases share it (D-70); whether the record is circular is
+    the crop's to check.
+    """
+
+    if start <= end:
+        return check_start_end_coords(record_length, start, end, record_id)
+    if not 1 <= end < start <= record_length:
+        raise ValidationError(
+            f"Region {start}..{end} across the origin lies outside record {record_id} ({record_length} bp). "
+            f"Choose a start and an end within 1..{record_length}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
+    return start - 1, record_length + end
+
+
 def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool) -> tuple[SeqRecord, int, int]:
     """The record read twice round, and the 0-based bounds of ``spec`` on it, for a span across the origin (D-28).
 
@@ -264,17 +285,12 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
             "already cropped or reversed.",
             diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"},
         )
-    if not 1 <= spec.end < spec.start <= length:
-        raise ValidationError(
-            f"Region {spec.start}..{spec.end} across the origin lies outside record {record.id} ({length} bp). "
-            f"Choose a start and an end within 1..{length}.",
-            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
-        )
+    start_0, end_0 = region_slice(length, spec.start, spec.end, str(record.id))
     source_indexes = _feature_source_index_map(record.features)
     turns: list[SeqFeature] = []
     for feature in record.features:
         index = source_indexes[id(feature)]
-        shown = _two_turns(_unwrapped_location(feature.location, length), length, (spec.start - 1, length + spec.end))
+        shown = _two_turns(_unwrapped_location(feature.location, length), length, (start_0, end_0))
         if shown is None:
             continue
         copy = SeqFeature(
@@ -300,7 +316,7 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
             view.letter_annotations = {key: values + values for key, values in record.letter_annotations.items()}
         except (TypeError, ValueError):
             pass
-    return view, spec.start - 1, length + spec.end
+    return view, start_0, end_0
 
 
 def _unwrapped_location(location: Location, length: int) -> Location:
@@ -382,7 +398,7 @@ def _crop_record_to_region(
     if crosses_origin:
         source, start_0, end_0 = _origin_crossing_view(record, spec, circular=circular)
     else:
-        start_0, end_0 = check_start_end_coords(len(record.seq), spec.start, spec.end, str(record.id))
+        start_0, end_0 = region_slice(len(record.seq), spec.start, spec.end, str(record.id))
     coord_base, coord_step = _read_coord_map(record)
 
     if not crosses_origin and (start_0 != spec.start - 1 or end_0 != spec.end):
@@ -597,7 +613,9 @@ def apply_region_specs(
 
     if not specs:
         return list(records)
-    windows, _cropped = crop_then_reverse_records(records, specs, [False] * len(records), log=log)
+    windows, _cropped = crop_then_reverse_records(
+        records, specs, [False] * len(records), is_circular=None, source_kind="memory", log=log
+    )
     return [unit for units in windows for unit in units]
 
 
@@ -642,14 +660,17 @@ def crop_then_reverse_records(
     specs: Sequence[RegionSpec],
     reverse: Sequence[bool],
     *,
+    is_circular: bool | None,
+    source_kind: str,
     log: logging.Logger | None = None,
 ) -> tuple[list[tuple[SeqRecord, ...]], frozenset[int]]:
     """Crop each record to the windows the specs select, then orient them (:func:`crop_record_windows`).
 
     Returns each record's drawn windows (one record when no spec selects it)
-    and the indexes of the cropped records. A record in memory is circular
-    when its ``topology`` annotation says so, which a window across the origin
-    (``:origin``) needs.
+    and the indexes of the cropped records. A window across the origin
+    (``:origin``) needs the record drawn as circular, decided as the drawing
+    decides it (:func:`drawn_circular`): by its display option ``is_circular``,
+    else by the topology its file of ``source_kind`` states.
     """
 
     assignments = assign_region_specs(records, specs) if specs else {}
@@ -659,7 +680,7 @@ def crop_then_reverse_records(
             assignments.get(index, ()),
             flag,
             log=log,
-            circular=detected_topology(record, "memory") == "circular",
+            circular=drawn_circular(is_circular, detected_topology(record, source_kind)),
         )
         for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
     ]

@@ -33,6 +33,19 @@ def _text(name: str) -> str:
     return gzip.decompress((SESSIONS / name).read_bytes()).decode("utf-8")
 
 
+def test_a_legacy_draft_read_with_the_current_form_moves_through_session_50_without_its_51_fields() -> None:
+    """Web Load sends a Session 27-44 draft read into the current form, which holds the fields Session 51 added
+    (Figure size, the window across the origin) at their defaults; the Session 50 step writes none of them, as a
+    Session 50 holds none, and the drawing takes its defaults."""
+
+    source = json.loads(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"))
+    source["config"]["form"].update({"figure_width": None, "figure_height": None, "circular_windows": []})
+    reply = json.loads(legacy_session_to_drawings_json(json.dumps(source)))
+    assert "error" not in reply, reply.get("error")
+    form = reply["document"]["drawings"][0]["config"]["form"]
+    assert [key for key in ("figure_width", "figure_height", "circular_windows") if key in form] == []
+
+
 @pytest.mark.parametrize(
     ("name", "mode"),
     [

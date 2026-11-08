@@ -3,12 +3,14 @@ import test from 'node:test';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
+  catalogDrawnUnits,
   buildMatchSequenceBundle,
   createSequenceSourceRegistry,
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
 } from '../../gbdraw/web/js/services/match-sequences.js';
+import { catalogUnitRecords } from '../../gbdraw/web/js/services/linear-units.js';
 import { readRecordSourceSpan, recordSourceInterval } from '../../gbdraw/web/js/services/record-source-coordinates.js';
 import { parseSequenceRecordsFast } from '../../gbdraw/web/js/services/record-discovery.js';
 import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../../gbdraw/web/js/services/runtime-capabilities.js';
@@ -80,7 +82,7 @@ const analyzeCircularHomologyCoverage = ({
 } = {}) => analyzeCatalogSequenceSourceCoverage({
   mode: 'circular',
   renderRequest: {
-    records: [{ recordKey: 'record-reference' }]
+    records: [{ recordKey: 'record-reference', windows: [] }]
   },
   catalogFeatureState: {
     items: [{
@@ -236,7 +238,7 @@ test('coverage reports a match endpoint whose displayed record source is missing
   const coverage = analyzeCatalogSequenceSourceCoverage({
     mode: 'linear',
     renderRequest: {
-      records: [{ recordKey: 'record-a' }, { recordKey: 'record-b' }]
+      records: [{ recordKey: 'record-a', windows: [] }, { recordKey: 'record-b', windows: [] }]
     },
     catalogFeatureState: {
       items: [{
@@ -768,4 +770,73 @@ test('a FASTA entry without an ID is read by the Python loader (OV-1599)', async
   });
   assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
   assert.deepEqual(sources.map(({ recordId }) => recordId), ['A', '']);
+});
+
+// Review S5 of PR #1734: a catalog names its units (`recordKeys`) and maps each window of a record drawn in several
+// to that record (`windowOf`); its rows name the record, its sources and match endpoints the unit. Coverage reads a
+// unit's record through the unit plan's reader, so a record drawn in windows is displayed and its sources cover it.
+const windowedCatalogItem = () => ({
+  recordKeys: ['a~w1', 'a~w2', 'b'],
+  windowOf: { 'a~w1': 'a', 'a~w2': 'a' },
+  sequenceSources: ['AACC', 'GGTT', 'ACGT'].map((sequence, recordIndex) => ({
+    key: `linear:record:${recordIndex}`,
+    recordId: recordIndex < 2 ? 'A' : 'B',
+    aliases: [],
+    sequence,
+    origin: 'linear-record',
+    recordIndex
+  })),
+  biologicalFeatures: [{ recordKey: 'a', biologicalFeatureId: 'feature-a', sequenceSourceIndex: 0 }],
+  comparisonMatches: [{
+    id: 'match-a2-b',
+    match_kind: 'pairwise',
+    query_record_id: 'A',
+    query_record_index: 1,
+    subject_record_id: 'B',
+    subject_record_index: 2
+  }]
+});
+
+test('coverage reads the units of a record drawn in several windows as that record (review S5)', () => {
+  const coverage = analyzeCatalogSequenceSourceCoverage({
+    mode: 'linear',
+    renderRequest: { records: [{ recordKey: 'a', windows: [{ start: 1, end: 4 }, { start: 5, end: 8 }] }, { recordKey: 'b', windows: [] }] },
+    catalogFeatureState: { items: [windowedCatalogItem()] }
+  });
+  assert.equal(coverage.complete, true, JSON.stringify(coverage.missingConsumers));
+  assert.deepEqual(coverage.resolvedConsumers.map(({ expectedSource }) => expectedSource.key).sort(),
+    ['linear:record:0', 'linear:record:1', 'linear:record:2']);
+  assert.deepEqual(coverage.displayedRecordsWithoutConsumers, []);
+});
+
+// The sources Load reads again are keyed by the unit the catalog names, its card found by record key; a unit that is
+// one of several windows of its card keeps the catalog's source (Python crops it), never another card's.
+test('restored Linear sources are keyed by drawn unit and leave windows to the catalog (review S5)', async () => {
+  const gb = (id, bases) => textFile(`LOCUS       ${id}\nACCESSION   ${id}\nVERSION     ${id}.1\nORIGIN\n        1 ${bases}\n//\n`);
+  const item = windowedCatalogItem();
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear',
+    lInputType: 'gb',
+    linearSeqs: [
+      { uid: 'a', gb: gb('A', 'aaccggtt'), windows: [{ start: 1, end: 4 }, { start: 5, end: 8 }] },
+      { uid: 'b', gb: gb('B', 'acgt') }
+    ],
+    units: catalogDrawnUnits({ items: [item] })
+  });
+  assert.deepEqual(sources.map(({ key, recordIndex, sequence }) => ({ key, recordIndex, sequence })), [
+    { key: 'linear:record:2', recordIndex: 2, sequence: 'ACGT' }
+  ]);
+});
+
+// Follow-up 2 of the #1750 review: Load keys the sources it reads again by the units the catalog names whenever the
+// catalog names them (every item names the same units), not only for a catalog of one item; a catalog without items
+// keys none (the cards in order), and items that name different units cannot key one set of sources.
+test('a Linear catalog names its drawn units through every item, or none without an item', () => {
+  const item = windowedCatalogItem();
+  const units = catalogUnitRecords(item.recordKeys, item.windowOf);
+  assert.deepEqual(catalogDrawnUnits({ items: [item] }), units);
+  assert.deepEqual(catalogDrawnUnits({ items: [item, structuredClone(item)] }), units);
+  assert.equal(catalogDrawnUnits({ items: [] }), null);
+  assert.throws(() => catalogDrawnUnits({ items: [item, { ...item, windowOf: {} }] }),
+    { code: 'RESULT_INVALID', context: { reason: 'CATALOG_UNITS' } });
 });

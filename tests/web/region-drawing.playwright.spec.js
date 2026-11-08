@@ -2,9 +2,13 @@
 // from a region…" opens the dialog of app/region-drawing.js, which derives the
 // new drawing from the shown one in Python and adds it as one project step.
 // The cases find the new drawing by its drawing ID, never by its tab text.
+const { execFileSync } = require('node:child_process');
+const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
-const { generate, load, seeds } = require('./helpers/mode-transition.cjs');
+const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -136,4 +140,66 @@ test('Coordinates across the origin of a circular record make one window across 
   } finally {
     await page.context().close();
   }
+});
+
+// Review S3 (PD-OI-122): a window of a circular record may cross the origin. A Circular Session the Python API saved
+// with RecordWindow(16000, 100) loads that window into the record's read-only list (the Start/End fields would read
+// 16,000-100 as an error), Generate draws the 670 bp window across the origin, and Save writes the window back.
+test('A Circular Session whose record has one window across the origin loads it, Generate draws it, and Save keeps it', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  const sessionPath = testInfo.outputPath('circular-origin-window.gbdraw-session.json');
+  execFileSync('python', ['-c', [
+    'import sys',
+    'from gbdraw.api import save_session_document',
+    'from gbdraw.api.requests import CircularDiagramRequest, GenBankInputSource, RecordInput',
+    'from gbdraw.io.regions import RecordWindow',
+    'source = GenBankInputSource("tests/test_inputs/HmmtDNA.gbk")',
+    'request = CircularDiagramRequest(records=(RecordInput(source, windows=(RecordWindow(16000, 100),), record_key="mito"),))',
+    'save_session_document(sys.argv[1], request, title="circular-origin-window", overwrite=True)'
+  ].join('\n'), sessionPath], { cwd: process.cwd(), stdio: 'inherit' });
+  // The Session holds no Result: Load ends with its notice, without the features a Result lists.
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  expect(await shownDrawing(page)).toMatchObject({ kind: 'circular' });
+  // Generate draws the window across the origin of the 16,569 bp record: 16,000 to the end, then 1 to 100.
+  await generate(page);
+  const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
+  expect(drawn).toHaveLength(1);
+  // A Circular drawing prints its drawn length in the center: 670 bp, not the record's 16,569 bp.
+  expect(drawn[0]).toMatch(/>670 bp<\/text>/);
+  expect(drawn[0]).not.toContain('16,569 bp');
+  // The drawing holds the window in its read-only list, not in the Start/End fields, which would refuse 16,000-100.
+  const originWindow = { start: 16000, end: 100, reverseComplement: false, column: null };
+  expect(await page.evaluate(() => {
+    const { circular_region_start, circular_region_end, circular_windows } = window.__GBDRAW_APP__.form;
+    return { circular_region_start, circular_region_end, circular_windows };
+  })).toEqual({ circular_region_start: null, circular_region_end: null, circular_windows: [originWindow] });
+  await page.locator('[data-circular-record-presentation] summary').click();
+  await expect(page.getByLabel('Circular region start')).toHaveCount(0);
+  await expect(page.locator('[data-circular-record-presentation] [data-record-window]')).toHaveText([/^16,000\u2013100\s*670 bp$/]);
+  await page.locator('main svg').last().screenshot({ path: testInfo.outputPath('circular-origin-window.png') });
+  await page.screenshot({ path: testInfo.outputPath('circular-origin-window-page.png') });
+  // Save writes the window back unchanged.
+  const bytes = await download(page, 'Save Session', testInfo.outputPath('saved.gbdraw-session.json'));
+  const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  expect(shownSavedDrawing(saved).renderRequest.records[0].windows).toEqual([originWindow]);
+
+  // Review X1 of #1750: the listed window holds the record's orientation. The record popup's Reverse complement
+  // reads and writes that window, and Generate draws the window reversed.
+  await page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"] text').first().click();
+  const reverse = page.locator('.preview-item-popup[role="dialog"]').getByRole('checkbox', { name: 'Reverse complement', exact: true });
+  await expect(reverse).not.toBeChecked();
+  await expect(reverse).toBeEnabled();
+  await reverse.check();
+  expect(await page.evaluate(() => {
+    const { circular_reverse, circular_windows } = window.__GBDRAW_APP__.form;
+    return { circular_reverse, circular_windows };
+  })).toEqual({ circular_reverse: false, circular_windows: [{ ...originWindow, reverseComplement: true }] });
+  await generate(page);
+  const committed = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+  expect([committed.records[0].windows, committed.records[0].presentation.reverseComplement])
+    .toEqual([[{ ...originWindow, reverseComplement: true }], false]);
+  await expect(page.locator('[data-circular-record-presentation] [data-record-window]'))
+    .toHaveText([/^16,000\u2013100 \(Reverse complement\)\s*670 bp$/]);
 });

@@ -53,13 +53,13 @@ def _request() -> dict[str, object]:
             {
                 "recordKey": "record-a",
                 "recordLength": 1000,
-                "region": None,
+                "windows": [],
                 "presentation": {"reverseComplement": False},
             },
             {
                 "recordKey": "record-b",
                 "recordLength": 400,
-                "region": {"start": 101, "end": 300, "reverseComplement": True},
+                "windows": [{"start": 101, "end": 300, "reverseComplement": True, "column": None}],
                 "presentation": {"reverseComplement": False},
             },
         ],
@@ -133,13 +133,39 @@ def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
         resolve_similarity_alignment_payload(unknown)
 
     cropped = _request()
-    cropped["records"][0]["region"] = {  # type: ignore[index]
+    cropped["records"][0]["windows"] = [{  # type: ignore[index]
         "start": 500,
         "end": 600,
         "reverseComplement": False,
-    }
+        "column": None,
+    }]
     with pytest.raises(ValidationError, match="exact reference.*current crop"):
         resolve_similarity_alignment_payload(cropped)
+
+
+def test_web_adapter_reads_a_window_across_the_origin_and_places_a_record_of_several_windows() -> None:
+    request = _request()
+    # record-b (400 bp) drawn from 301 across the origin to 160: the target 140..170 centres at 155,
+    # which the window holds at 100 + 155 = 255, reversed at 160 - 155 = 5 (OV-2771).
+    window = {"start": 301, "end": 160, "reverseComplement": False, "column": None}
+    request["records"][1]["windows"] = [window]  # type: ignore[index]
+    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 255.0  # type: ignore[index]
+    window["reverseComplement"] = True
+    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 5.0  # type: ignore[index]
+    window["end"] = 150
+    outside = resolve_similarity_alignment_payload(request)["records"][1]  # type: ignore[index]
+    assert outside["candidates"][0]["displayCenter"] is None  # type: ignore[index]
+    assert outside["status"] == "skipped"  # type: ignore[index]
+
+    several = _request()
+    several["records"][1]["windows"] = [  # type: ignore[index]
+        {"start": 1, "end": 100, "reverseComplement": False, "column": None},
+        {"start": 131, "end": 200, "reverseComplement": False, "column": None},
+    ]
+    # The record is anchored in the window that holds the target (131..200 draws 155 at 25), and aligns (D-50).
+    row = resolve_similarity_alignment_payload(several)["records"][1]  # type: ignore[index]
+    assert (row["candidates"][0]["displayCenter"], row["candidates"][0]["displayedStrand"]) == (25.0, -1)  # type: ignore[index]
+    assert row["status"] == "aligned"  # type: ignore[index]
 
 
 def test_web_projection_discloses_candidate_evidence_and_strand_relation() -> None:
@@ -198,17 +224,26 @@ def test_web_rejects_removed_choice_field_and_invalid_crop() -> None:
     with pytest.raises(ValidationError, match="invalid fields"):
         resolve_similarity_alignment_payload(request)
 
+    # A window whose End runs past the record end is drawn clamped to the record end (the crop's
+    # `region_slice`), so record-b's window 101..300 of a 200-bp record draws 101..200, reversed: the
+    # target centre 155 is at 200 - 155 = 45, not at 300 - 155.
     cropped = _request()
     cropped["records"][1]["recordLength"] = 200  # type: ignore[index]
-    with pytest.raises(ValidationError, match="exceeds recordLength"):
+    row = resolve_similarity_alignment_payload(cropped)["records"][1]  # type: ignore[index]
+    assert row["candidates"][0]["displayCenter"] == 45.0  # type: ignore[index]
+    assert row["status"] == "aligned"  # type: ignore[index]
+    # A window that starts past the record end is refused, as the crop refuses it.
+    cropped["records"][1]["recordLength"] = 100  # type: ignore[index]
+    with pytest.raises(ValidationError, match="starts after the end of record") as refused:
         resolve_similarity_alignment_payload(cropped)
+    assert refused.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"}
 
 
 def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
     request = _request()
     target_record = request["records"][1]
     target_record["presentation"]["reverseComplement"] = True
-    target_record["region"]["reverseComplement"] = False
+    target_record["windows"][0]["reverseComplement"] = False
     request["members"][1]["sourceStrand"] = 1
     result = resolve_similarity_alignment_payload(request)
     candidate = result["records"][1]["candidates"][0]
@@ -218,8 +253,8 @@ def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
     assert candidate["displayedStrand"] == -1
     assert candidate["strandRelation"] == "opposite"
 
-    target_record["region"]["reverseComplement"] = True
-    with pytest.raises(ValidationError, match="both region and presentation"):
+    target_record["windows"][0]["reverseComplement"] = True
+    with pytest.raises(ValidationError, match="both window and presentation"):
         resolve_similarity_alignment_payload(request)
 
 
@@ -276,8 +311,7 @@ def bgc_og18(tmp_path_factory):
     }
     records = [{
         "recordKey": record["recordKey"], "recordLength": lengths[record["recordKey"]],
-        "region": ({key: record["windows"][0][key] for key in ("start", "end", "reverseComplement")}
-                   if record["windows"] else None),
+        "windows": record["windows"],
         "presentation": {"reverseComplement": bool(record["presentation"]["reverseComplement"])},
     } for record in session["renderRequest"]["records"]]
     return session, members, anchors, paths, records, tmp

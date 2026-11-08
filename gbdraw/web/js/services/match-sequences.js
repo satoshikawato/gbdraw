@@ -12,9 +12,13 @@ import {
   readComparisonSequenceRecords
 } from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
+import { catalogUnitRecords, unitRecordsOf } from './linear-units.js';
+import { linearSeqRecordKey } from './record-draw-selection.js';
 import { t } from '../utils/i18n.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
-/** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { LinearUnitRecord, LinearUnitRecords } from './linear-units.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
 
 /**
@@ -626,10 +630,15 @@ const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
  * source that its feature and match-popup consumers require.
  */
 /**
+ * The records of a request of schema 10 as the coverage reads them: `windows` is required at that schema, which Load
+ * promotes every stored request to before the coverage reads it.
+ * @typedef {{ recordKey: string, windows: readonly unknown[] }} CoverageRequestRecord
+ */
+/**
  * @param {{
  *   mode?: string,
  *   catalogFeatureState?: Record<string, any>,
- *   renderRequest?: Record<string, any>,
+ *   renderRequest?: { records: readonly CoverageRequestRecord[] } | null,
  *   comparisonSourceAvailability?: Record<string, any>[]
  * }} [options]
  */
@@ -640,11 +649,10 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   comparisonSourceAvailability
 } = {}) => {
   const normalizedMode = text(mode).toLowerCase();
-  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
-  const displayedRecords = records.map((record, recordIndex) => ({
-    recordIndex,
-    recordKey: text(record?.recordKey)
+  const records = (renderRequest ? renderRequest.records : []).map(({ recordKey, windows }) => ({
+    recordKey: text(recordKey), windows
   }));
+  const displayedRecords = records.map(({ recordKey }, recordIndex) => ({ recordIndex, recordKey }));
   const displayedIndexByKey = new Map(
     displayedRecords.map((record) => [record.recordKey, record.recordIndex])
   );
@@ -765,9 +773,9 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   };
 
   catalogItems.forEach((item) => {
-    const recordKeys = Array.isArray(item?.recordKeys)
-      ? item.recordKeys.map(text)
-      : [];
+    // Rows name records; sources and match endpoints name drawn units, read as their records (review S5).
+    const units = catalogUnitRecords(Array.isArray(item?.recordKeys) ? item.recordKeys.map(text) : [], item?.windowOf);
+    const unitRecords = /** @type {(LinearUnitRecord | null)[]} */ (unitRecordsOf(records, units));
     const itemSources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
     const expectedPrimaryOrigin = normalizedMode === 'linear'
       ? 'linear-record'
@@ -777,7 +785,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
         if (!Object.prototype.hasOwnProperty.call(feature || {}, 'sequenceSourceIndex')) return;
         const sequenceSourceIndex = feature.sequenceSourceIndex;
         const recordKey = text(feature?.recordKey);
-        const itemRecordIndex = recordKeys.indexOf(recordKey);
+        // A record drawn in windows is read from its first unit, as Python writes the row's source.
+        const itemRecordIndex = units.recordKeys.indexOf(recordKey);
         const source = Number.isInteger(sequenceSourceIndex)
           ? itemSources[sequenceSourceIndex]
           : null;
@@ -846,9 +855,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
           const expectedOrigin = homology
             ? (role === normalizedReferenceSide ? 'circular-reference' : 'homology-comparison')
             : 'linear-record';
-          const displayedRecord = recordIndex.value === null
-            ? null
-            : displayedRecords[recordIndex.value] || null;
+          const unitRecord = recordIndex.value === null ? null : unitRecords[recordIndex.value] ?? null;
+          const displayedRecord = unitRecord && displayedRecords[unitRecord.recordIndex];
           const expectedSource = sourceIdentity(null, {
             key: expectedOrigin === 'linear-record' && recordIndex.value !== null
               ? `linear:record:${recordIndex.value}`
@@ -1141,12 +1149,33 @@ const readComparisonRecords = async (file) => {
  * BLAST upload without its optional comparison FASTA) remain unavailable.
  */
 /**
+ * The drawn units a Linear Result set's catalog names (`catalogUnitRecords`), which key the set's sources: those of
+ * its items, one per Result, which name the same units. Null for a catalog without items, which keys no source.
+ * Items that name different units cannot key one set of sources (RESULT_INVALID).
+ * @param {Pick<FeatureCatalog, 'items'>} catalog
+ * @returns {LinearUnitRecords | null}
+ */
+export const catalogDrawnUnits = (catalog) => {
+  const [units = null, ...others] = catalog.items.map((item) => catalogUnitRecords(item.recordKeys, item.windowOf));
+  if (others.some((other) => JSON.stringify(other) !== JSON.stringify(units))) {
+    throw diagnosticError('RESULT_INVALID', { reason: 'CATALOG_UNITS' }, { stage: 'result-admission' });
+  }
+  return units;
+};
+
+/**
+ * A Linear source is keyed by the drawn unit it stands for (`linear:record:<unit>`, as Python writes the catalog's):
+ * with the catalog's `units`, each unit's card is found by its record key; without (a Session older than the
+ * catalog, whose cards each draw one unit), the cards in order. A card drawn through its window list (several
+ * windows, or one across the origin) is not read again here: Python crops those windows, and the catalog's sources
+ * stand for them (review S5).
  * @param {{
  *   mode?: string,
  *   cInputType?: string,
  *   lInputType?: string,
  *   files?: MatchSequenceFiles,
  *   linearSeqs?: Record<string, any>[],
+ *   units?: LinearUnitRecords | null,
  *   circularConservation?: Record<string, any>
  * }} [options]
  */
@@ -1156,14 +1185,21 @@ export const buildRestoredMatchSequenceSources = async ({
   lInputType,
   files,
   linearSeqs = [],
+  units = null,
   circularConservation
 } = {}) => {
   /** @type {SequenceSourceInput[]} */
   const sources = [];
   if (text(mode).toLowerCase() === 'linear') {
     const { spec, slot: sequenceSlot, format: fmt } = inputSequenceSource(text(lInputType).toLowerCase());
-    for (let recordIndex = 0; recordIndex < (linearSeqs || []).length; recordIndex += 1) {
-      const sequenceState = linearSeqs[recordIndex] || {};
+    const cards = linearSeqs || [];
+    const cardKeys = cards.map((seq, index) => linearSeqRecordKey(seq, index));
+    const cardOfUnit = units
+      ? units.recordKeys.map((recordKey, unit) => (units.windowOf[unit] === null ? cardKeys.indexOf(recordKey) : -1))
+      : cardKeys.map((_, index) => index);
+    for (const [recordIndex, card] of cardOfUnit.entries()) {
+      const sequenceState = cards[card] || {};
+      if (card < 0 || (Array.isArray(sequenceState.windows) && sequenceState.windows.length > 0)) continue;
       const file = sequenceState[sequenceSlot];
       const records = await readInputSequenceRecords(file, fmt);
       const selector = text(sequenceState.region_record_id);

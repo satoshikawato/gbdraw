@@ -11,7 +11,7 @@ import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
-import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { drawingViewAt, savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
@@ -181,7 +181,7 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
   resetDrawings();
   // The one-drawing view of a saved drawing is the Session 46 shape this test loads.
   const current = await save('current');
-  const viewOf = (id) => ({ ...structuredClone(savedDrawingView(current, id)), version: 46 });
+  const viewOf = (id) => drawingViewAt(savedDrawingView(current, id), 46);
   const saved = viewOf('circular');
   const rows = async (session, label) => {
     const outcome = await load(session);
@@ -205,6 +205,34 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
   assert.deepEqual(await rows(thirdMode, 'modes.radial'), ['session-field-dropped@modes.radial']);
+});
+
+// A Session reader admits only what its format had (CLAUDE.md "Persisted-format compatibility"): the Figure size
+// and the window across the origin are fields Session 51 adds to a drawing's form, so in a Session 46-50 slice
+// they are fields no writer of that version wrote, dropped with a row each like any other.
+test('a Session 50 slice drops the form fields only Session 51 writes, with a row each', async () => {
+  resetDrawings();
+  const current = await save('session 50 fields');
+  const saved = drawingViewAt(savedDrawingView(current, 'circular'), 50);
+  const form = saved.modes.circular.config.form;
+  const rows = async (session) => {
+    const outcome = await load(session);
+    assert.equal(outcome.status, 'ok', JSON.stringify(outcome.error));
+    return (outcome.repairs ?? []).map(({ code, path }) => `${code}@${path}`).sort();
+  };
+  assert.deepEqual(await rows(structuredClone(saved)), []);
+  Object.assign(form, { figure_width: '180mm', figure_height: null,
+    circular_windows: [{ start: 90, end: 10, reverseComplement: false, column: null }] });
+  assert.deepEqual(await rows(structuredClone(saved)), ['circular_windows', 'figure_height', 'figure_width']
+    .map((field) => `setting-replaced@modes.circular.config.form.${field}`));
+  const loaded = modeDrawing(state, 'circular').form;
+  assert.deepEqual([loaded.figure_width, loaded.figure_height, loaded.circular_windows],
+    [createDefaultForm().figure_width, createDefaultForm().figure_height, []]);
+  // A Session 51 drawing holds them.
+  assert.deepEqual(await rows(withSavedDrawingView(current, 'circular', (view) => {
+    view.modes.circular.config.form.figure_width = '180mm';
+  })), []);
+  assert.equal(modeDrawing(state, 'circular').form.figure_width, '180mm');
 });
 
 // OV-160: a named CSS color in a Legend color or a stroke override (also the
@@ -327,7 +355,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   assert.deepEqual({ ...loadedDrawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
 
   // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
-  const older = { ...structuredClone(savedDrawingView(saved, 'circular')), version: 46 };
+  const older = drawingViewAt(savedDrawingView(saved, 'circular'), 46);
   older.modes.circular.editorState.legend = {
     ...older.modes.circular.editorState.legend,
     entries: [

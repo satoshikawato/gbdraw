@@ -371,12 +371,9 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
             if index == reversed_record
         ]
         assert ends and set(ends) <= search_frame
-    if reversed_record is None:
-        # The identity of a reversed record differs between the two (OV-1180,
-        # pre-existing on dev); its pairs and typed result agree.
-        assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
-        assert converted["identity"] == api_payload["identity"]
-        assert converted["provenance"] == api_payload["provenance"]
+    assert converted["identity"] == api_payload["identity"]
+    assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
+    assert converted["provenance"] == api_payload["provenance"]
     assert [(pair["pair_index"], pair["query_index"], pair["subject_index"]) for pair in api_payload["pairs"]] == [
         (number, query, subject) for (query, subject), number in display.items()
     ]
@@ -519,7 +516,7 @@ def test_api_builds_no_derived_entry_without_one_raw_entry_per_search(
     plan = plan_request(request)
     built = build_request_diagram(request)
     linear_artifacts = request_render_module._prepare_linear_artifacts(
-        plan.request, plan.records, CurrentRequestArtifacts(), plan.inputs, extraction=None,
+        plan.request, plan.records, CurrentRequestArtifacts(), plan.inputs, plan.provenance, extraction=None,
     )
     raw = tuple(built.losat_cache_entries)
 

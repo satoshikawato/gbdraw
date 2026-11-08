@@ -85,7 +85,7 @@ from gbdraw.session_io import (
     write_serialized_session,
     write_session_json,
 )
-from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view
+from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view, view_at
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session import (
@@ -1019,6 +1019,66 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
         session_io_module._validate_alignment_reset_receipt(session)
     session["editorState"]["alignmentResetReceipt"] = None
     session_io_module._validate_alignment_reset_receipt(session)
+
+
+def _receipt_session(schema: int, placement: str, binding: str) -> dict[str, object]:
+    """A Linear alignment Session whose record ``b`` is cropped 2..10, with its record selector stored where
+    ``placement`` says: in the region, as the v0.14.5 Web wrote it, or on the record."""
+
+    source = b"source bytes remain biological authority"
+
+    def anchor(key: str) -> dict[str, object]:
+        return {"recordKey": key, "biologicalFeatureId": f"gene-{key}", "sourceFeatureIndex": 1, "stableFeatureSvgId": None}
+
+    def record(key: str) -> dict[str, object]:
+        selector = {"kind": "recordId", "value": key}
+        span = {"start": 2, "end": 10, "reverseComplement": False}
+        cropped = key == "b"
+        stored: dict[str, object] = {
+            "recordKey": key, "source": {"kind": "genbank", "resourceId": "source"}, "cardinality": "exactly_one",
+            "selector": None if cropped and placement == "region" else selector,
+            "display": {"isCircular": None, "startCoordinate": None}, "presentation": {"reverseComplement": False},
+        }
+        if schema >= 10:
+            stored["windows"] = [{**span, "column": None}] if cropped else []
+        else:
+            stored["region"] = {"selector": selector if placement == "region" else None, **span} if cropped else None
+        return stored
+
+    plan = {"schema": 2, "groupId": "og-1", "reference": anchor("a"), "records": [
+        {"recordKey": "a", "status": "reference", "rationale": "reference", "anchor": anchor("a")},
+        {"recordKey": "b", "status": "aligned", "rationale": "user_selected", "anchor": anchor("b")},
+        {"recordKey": "c", "status": "skipped", "rationale": "skipped_by_user", "anchor": None},
+    ]}
+    return {
+        "renderRequest": {"schema": schema, "mode": "linear", "records": [record(key) for key in "abc"],
+                          "layout": {"recordTranslations": [], "similarityAlignment": plan}},
+        "editorState": {"featureCatalog": None,
+                        "alignmentResetReceipt": {"binding": binding, "directions": [], "referenceDeltaX": None}},
+        "resources": {"source": {"name": "record.gbk", "kind": "genbank", "encoding": "base64",
+                                 "data": base64.b64encode(source).decode(), "size": len(source)}},
+    }
+
+
+# OV-2772: a receipt binds its request as the file stored it. The bindings are those the v0.14.5 Web writes for
+# request schema 9 (the selector in the region, or on the record) and the one the Web rebinds a promoted request to
+# (tests/web/alignment-reset-receipt.test.mjs).
+_V0145_REGION_SELECTOR_BINDING = "fe2664f3a1b0107bdf2e54ec4c0636a064039fb4484a758fa8109c0648964da4"
+_RECORD_SELECTOR_BINDING = "cf9c72f1cdbb85e4b89178634a5a22c54a7a6250e5357b985a457c2b3d8317b1"
+
+
+@pytest.mark.parametrize(("schema", "placement", "binding"), [
+    (9, "region", _V0145_REGION_SELECTOR_BINDING),
+    (9, "record", _RECORD_SELECTOR_BINDING),
+    (CANONICAL_REQUEST_SCHEMA, "record", _RECORD_SELECTOR_BINDING),
+])
+def test_alignment_reset_receipt_binds_the_request_as_stored(schema: int, placement: str, binding: str) -> None:
+    session_io_module._validate_alignment_reset_receipt(_receipt_session(schema, placement, binding))
+
+
+def test_alignment_reset_receipt_of_a_region_selector_is_not_the_promoted_binding() -> None:
+    with pytest.raises(ValidationError, match="binding changed"):
+        session_io_module._validate_alignment_reset_receipt(_receipt_session(9, "region", _RECORD_SELECTOR_BINDING))
 
 
 def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
@@ -4479,7 +4539,7 @@ def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_wr
     from gbdraw.api.request_render import CurrentRequestArtifacts
 
     # The drawing's view is the 48 layout this case exercises (a 49 holds no top-level manifest).
-    payload = {**drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), "version": 48}
+    payload = view_at(drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), 48)
     raw = copy.deepcopy(payload["proteinIdentityManifest"])
     protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
     protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])
@@ -4535,3 +4595,12 @@ def test_cli_only_legacy_draft_states_its_protein_comparison_as_the_adjacent_pla
 
     assert migrated_config.get("linearComparisonPlan") == plan
     assert migrated_files["linearComparisons"] == []
+
+
+def test_python_card_bindings_keep_the_card_windows_as_the_web_writes_them() -> None:
+    # One card shape (the Web's `linearBindings` in services/session-resources.js): a card's windows travel with it.
+    windows = [{"start": 16000, "end": 100, "reverseComplement": False, "column": None}]
+    payload: dict = {"resources": {}}
+    session_io_module._attach_current_web_file_bindings(payload, {"linearSeqs": [{"uid": "a", "windows": windows}]})
+    card = payload["webFiles"]["bindings"]["linearSeqs"][0]
+    assert card["windows"] == windows

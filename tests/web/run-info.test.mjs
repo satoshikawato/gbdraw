@@ -2026,3 +2026,58 @@ test('the Source recipe writes a window across the origin with :origin and every
     await materializeAndRunRecipe(session, recipe, info, `origin window ${drawn.length} ${isCircular}`);
   }
 });
+
+// Review S4 of PR #1734: a request's comparison indexes count drawn units (Python's unit plan, which Generate passes
+// as `drawnUnits`), while the CLI's `#n` counts records. A records table writes record A's two windows as one record,
+// so a comparison of B with C is `#2→#3`; a comparison of a record drawn in several windows has no comparison file the
+// CLI takes (it refuses one, K-2), so the recipe is unavailable and says why.
+test('the Source recipe names compared records by record, not by drawn unit, and refuses a windowed record\'s file', async () => {
+  const genbank = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_comparison_shared_block.gb'), 'utf8');
+  const record = (recordKey, id, windows = []) => ({
+    recordKey,
+    cardinality: 'exactly_one',
+    source: { kind: 'genbank', resourceId: `source-${recordKey}` },
+    selector: { kind: 'recordId', value: id },
+    windows,
+    presentation: presentation()
+  });
+  const twoWindows = [
+    { start: 1, end: 1000, reverseComplement: false, column: null },
+    { start: 2001, end: 3000, reverseComplement: false, column: null }
+  ];
+  const drawnUnits = { recordKeys: ['a', 'a', 'b', 'c'], windowOf: ['a', 'a', null, null] };
+  const session = (comparisons) => canonical({
+    mode: 'linear',
+    records: [record('a', 'R2c', twoWindows), record('b', 'R3c'), record('c', 'R2c')],
+    resources: {
+      'source-a': resource('genbank', 'a.gb', genbank),
+      'source-b': resource('genbank', 'b.gb', genbank),
+      'source-c': resource('genbank', 'c.gb', genbank),
+      blast: resource('nucleotide-blast', 'blast.tsv', 'R3c\tR2c\t100\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n')
+    },
+    comparisons: comparisons.map(([queryRecordIndex, subjectRecordIndex]) => ({
+      kind: 'nucleotideBlast', resourceId: 'blast', queryRecordIndex, subjectRecordIndex
+    })),
+    webFiles: { resourceOriginalNames: { 'source-a': 'a.gb', 'source-b': 'b.gb', 'source-c': 'c.gb', blast: 'blast.tsv' } }
+  });
+
+  // A compared with B: the unit pairs (0, 2) and (1, 2), which are A-C and B-C read as records.
+  const windowed = await buildSourceRecipe({ ...session([[0, 2], [1, 2]]), drawnUnits });
+  assert.equal(windowed.available, false);
+  assert.match(windowed.unavailableReason, /several windows/);
+
+  // B compared with C: unit pair (2, 3) is records #2 and #3.
+  const plain = session([[2, 3]]);
+  const recipe = await buildSourceRecipe({ ...plain, drawnUnits });
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  // Run Info names the generated files and writes the comparisons table with those names, in the recipe's list.
+  const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.comparisons_table');
+  const [header, ...rows] = table.data.trim().split('\n').map((line) => line.split('\t'));
+  assert.deepEqual(rows.map((row) => [row[header.indexOf('query')], row[header.indexOf('subject')]]), [['#2', '#3']]);
+  await assertCliParserAccepts(recipe);
+  await materializeAndRunRecipe(plain, recipe, info, 'units by record');
+
+  // Without the unit plan a request that draws a record in several windows cannot be read as records.
+  assert.equal((await buildSourceRecipe(plain)).available, false);
+});

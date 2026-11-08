@@ -79,7 +79,6 @@ from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losa
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import record_identity_key
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
     FeatureOverride,
@@ -194,6 +193,7 @@ from .record_planning import (
     effective_record_presentation,
     unit_presentation,
     resolve_anchor_feature,
+    alignment_record_keys,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -224,6 +224,7 @@ from .requests import (
     RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
+    drawn_record_identity,
 )
 
 if TYPE_CHECKING:
@@ -1843,7 +1844,7 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     units are one, and the positions stay as given.
     """
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if len(set(keys)) == len(keys):
         return layout
     records = [cast(InMemoryRecordSource, record_input.source).record for record_input in request.records]
@@ -1858,21 +1859,10 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     return replace(layout, multi_record_positions=tuple(positions))
 
 
-def _drawn_record_identities(request: LinearDiagramRequest) -> list[str | None]:
-    """The record each drawn unit of a projected request draws (``record_identity_key``); windows of one share it."""
-
-    return [
-        record_identity_key(record_input.source.record)
-        if isinstance(record_input.source, InMemoryRecordSource)
-        else record_input.record_key
-        for record_input in request.records
-    ]
-
-
 def _with_window_layout(request: LinearDiagramRequest) -> LinearDiagramRequest:
     """A projected request whose windows share rows has a Linear layout, the default one when it set none (D-01)."""
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if request.layout is not None or len(set(keys)) == len(keys):
         return request
     return replace(request, layout=LinearMultiRecordOptions())
@@ -1887,7 +1877,7 @@ def _windows_share_rows(
     keeps its layout (one record per row).
     """
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if layout is None or len(set(keys)) == len(keys):
         return layout
     rows = {key: row for row, key in enumerate(dict.fromkeys(keys), start=1)}
@@ -2370,7 +2360,7 @@ def resolve_similarity_alignment_plan(
             f"Similarity Group ID {target!r}.",
         )
     collection = ResolvedRecordCollection(plan.records, plan.provenance)
-    record_keys = tuple(item.record_key for item in collection.provenance)
+    record_keys = alignment_record_keys(collection)
     candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
     exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
     for members in orthogroups.orthogroups.values():
@@ -2714,11 +2704,31 @@ def _source_protein_mode(
     return "orthogroup" if request.options.orthogroups is not None else "pairwise"
 
 
+def _record_analysis_selector(item: ResolvedRecordProvenance) -> str | None:
+    """The record selector a protein record analysis of ``item`` names: its input's, else ``#n`` for the n-th record
+    of a file its ALL input expanded to (``<key>:<n>``), the selector of the Web card each such record becomes.
+
+    The planned request holds no selector (its records are materialized), so the plan's provenance gives it.
+    """
+
+    if item.selector is not None:
+        return item.selector.raw
+    if item.cardinality is RecordCardinality.ALL and item.source_record_count > 1:
+        return f"#{item.source_record_index + 1}"
+    return None
+
+
 def _extract_linear_request_proteins(
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
     inputs: PreparedDiagramInputs,
+    provenance: Sequence[ResolvedRecordProvenance],
 ) -> ProteinExtractionResult:
+    """The proteins of the drawn units of a planned request, with the record analyses the Web's extraction of each
+    unit writes: each unit of a window names the region its search reads (``ResolvedWindow.search_region``), each
+    unit the record selector of its card (:func:`_record_analysis_selector`), and the manifest names every protein
+    in its record's search frame (``extract_protein_identity_manifest``)."""
+
     record_instance_keys = _request_record_instance_keys(request)
     extraction = render_stage(
         "protein_extraction",
@@ -2726,13 +2736,10 @@ def _extract_linear_request_proteins(
         records,
         record_instance_keys=record_instance_keys,
         record_source_ids=tuple(str(record.id) for record in records),
-        record_selectors=tuple(
-            record_input.selector.raw if record_input.selector is not None else None
-            for record_input in request.records
-        ),
+        record_selectors=tuple(_record_analysis_selector(item) for item in provenance),
         regions=tuple(
-            ";".join(window.region().raw for window in record_input.windows) or None
-            for record_input in request.records
+            item.window.search_region if item.window is not None else None
+            for item, _record in zip(provenance, records, strict=True)
         ),
         feature_visibility_rules=inputs.features.feature_visibility_rules,
         feature_overrides=tuple(item.overrides for item in inputs.record_features) or None,
@@ -2747,6 +2754,7 @@ def _prepare_linear_artifacts(
     records: tuple[SeqRecord, ...],
     artifacts: CurrentRequestArtifacts,
     inputs: PreparedDiagramInputs,
+    provenance: Sequence[ResolvedRecordProvenance],
     *,
     extraction: ProteinExtractionResult | None,
 ) -> _PreparedLinearArtifacts:
@@ -2781,7 +2789,7 @@ def _prepare_linear_artifacts(
         )
 
     if extraction is None:
-        extraction = _extract_linear_request_proteins(request, records, inputs)
+        extraction = _extract_linear_request_proteins(request, records, inputs, provenance)
     manifest = extraction.identity_manifest
     assert manifest is not None
     reusable_current = tuple(
@@ -3048,17 +3056,15 @@ def _build_current_derived_entries(
     derived_records = []
     for index, instance_key in enumerate(_request_record_instance_keys(request)):
         binding = record_instances.get(instance_key, {})
-        windows = request.records[index].windows
+        # The drawn unit's orientation, as the Web's view transform of it states (the planned request's records
+        # are materialized and hold none).
         derived_records.append(
             DerivedLosatpRecord(
                 index=index,
                 runtime_binding_hash=str(binding.get("runtimeBindingHash") or ""),
                 display_binding_hash=str(binding.get("displayBindingHash") or ""),
                 length=len(records[index].seq),
-                reverse=bool(
-                    request.records[index].presentation.reverse_complement
-                    or any(window.reverse_complement for window in windows)
-                ),
+                reverse=record_is_reverse_complemented(records[index]),
             )
         )
     identity = derived_losatp_identity(settings, derived_records, pairs)
@@ -3223,6 +3229,7 @@ def _build_request_plan_diagram(
                 records,
                 current_artifacts,
                 plan.inputs,
+                plan.provenance,
                 extraction=protein_extraction,
             )
         with _request_render_diagnostic_phase("drawing"):

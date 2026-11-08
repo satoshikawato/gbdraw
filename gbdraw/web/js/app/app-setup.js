@@ -1396,13 +1396,13 @@ export const createAppSetup = () => {
   };
   const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
-    linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
     shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf
   });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
@@ -4267,6 +4267,7 @@ export const createAppSetup = () => {
     resolveChoicePrompt: choicePrompt.resolve,
     submitChoicePromptField: choicePrompt.submitField,
     circularRegionNote,
+    circularWindowRows,
     linearRegionNote,
     linearCardWindowRows,
     notice: noticeBanner.notice,

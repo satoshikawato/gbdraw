@@ -98,3 +98,104 @@ def test_a_malformed_plan_request_is_a_helper_protocol_error(records: list, pair
     with pytest.raises(ValidationError) as caught:
         plan_linear_units(records, pairs)
     assert caught.value.diagnostic == {"code": "HELPER_PROTOCOL"}
+
+
+def test_the_cli_and_the_web_write_one_protein_identity_for_each_window_unit() -> None:
+    """A record analysis names the span its unit's search reads (``searchRegion``), on the CLI as on the Web, so a
+    Session saved by either reuses the other's protein results; a record drawn whole names none (PD-OI-122)."""
+
+    from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
+    from tests.test_origin_crossing_comparisons import _web_helpers
+
+    windows = (RecordWindow(3000, 6000), RecordWindow(7000, 12000, True), RecordWindow(14000, 4300))
+    request = LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(MITO), windows=windows, record_key="mito"),
+        RecordInput(GenBankInputSource(MITO), record_key="other"),
+    ))
+    plan = plan_linear_request(request)
+    cli = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance).identity_manifest
+    assert cli is not None
+    units = plan_linear_units(
+        [{"recordKey": "mito", "windows": [
+            {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None} for w in windows
+        ]}, {"recordKey": "other", "windows": []}],
+        [],
+    )["units"]
+    helpers = _web_helpers()
+    for index, unit in enumerate(units):
+        window = unit["window"]
+        web = json.loads(str(helpers["extract_cds_protein_fasta"](
+            str(MITO), "genbank", None, None if window is None else window["searchRegion"], None, "0", index,
+            unit["unitKey"], None, None, unit["windowOf"],
+        )))
+        assert "error" not in web, web.get("error")
+        analysis = cli["recordAnalyses"][cli["recordInstances"][unit["unitKey"]]["recordAnalysisId"]]
+        assert analysis["region"] == (None if window is None else window["searchRegion"]), unit["unitKey"]
+        assert web["record_analysis_id"] == cli["recordInstances"][unit["unitKey"]]["recordAnalysisId"], unit["unitKey"]
+        assert web["runtime_binding_hash"] == cli["recordInstances"][unit["unitKey"]]["runtimeBindingHash"]
+        assert web["display_binding_hash"] == cli["recordInstances"][unit["unitKey"]]["displayBindingHash"]
+
+
+def _two_record_genbank(tmp_path: Path) -> Path:
+    """HmmtDNA twice, the second under its own ID: a file whose records a selector or an ALL input picks."""
+
+    import copy
+
+    from Bio import SeqIO
+
+    first = SeqIO.read(MITO, "genbank")
+    second = copy.deepcopy(first)
+    second.id = second.name = "SECOND"
+    path = tmp_path / "two.gb"
+    SeqIO.write([first, second], path, "genbank")
+    return path
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["reversed-window", "reversed-record", "selector", "all-split"],
+)
+def test_the_cli_and_the_web_write_one_record_analysis_and_display_binding(tmp_path: Path, case: str) -> None:
+    """A protein record analysis is the Web's on the CLI: its display metadata is in the search frame (the crop before
+    its reverse complement), and its selector names the record of the file the Web card names (OV-2855, OV-2856). A
+    Session saved by either surface then reuses the other's derived protein results."""
+
+    from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
+    from gbdraw.api.requests import RecordCardinality, RecordPresentation
+    from gbdraw.io.record_select import parse_record_selector
+    from tests.test_origin_crossing_comparisons import _web_helpers
+
+    path = MITO
+    # Each case: the CLI record input, then the Web card's helper arguments for each unit (path, region, selector).
+    if case == "reversed-window":
+        record = RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(7000, 12000, True),), record_key="mito")
+        web_units = [("mito", "7000-12000", None)]
+    elif case == "reversed-record":
+        record = RecordInput(
+            GenBankInputSource(MITO), presentation=RecordPresentation(reverse_complement=True), record_key="mito",
+        )
+        web_units = [("mito", None, None)]
+    elif case == "selector":
+        path = _two_record_genbank(tmp_path)
+        record = RecordInput(GenBankInputSource(path), selector=parse_record_selector("#2"), record_key="b")
+        web_units = [("b", None, "#2")]
+    else:
+        # An ALL input expands to `<key>:<n>`; the Web splits it into one card per record, selected by `#n`.
+        path = _two_record_genbank(tmp_path)
+        record = RecordInput(GenBankInputSource(path), cardinality=RecordCardinality.ALL, record_key="all")
+        web_units = [("all:1", None, "#1"), ("all:2", None, "#2")]
+    plan = plan_linear_request(LinearDiagramRequest(records=(record,)))
+    cli = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance).identity_manifest
+    assert cli is not None
+    helpers = _web_helpers()
+    for index, (unit_key, region, selector) in enumerate(web_units):
+        web = json.loads(str(helpers["extract_cds_protein_fasta"](
+            str(path), "genbank", None, region, selector, "0", index, unit_key, None, None, None,
+        )))
+        assert "error" not in web, web.get("error")
+        web_binding = web["identity_manifest"]["recordInstances"][unit_key]
+        cli_binding = cli["recordInstances"][unit_key]
+        assert cli["recordAnalyses"][cli_binding["recordAnalysisId"]] == (
+            web["identity_manifest"]["recordAnalyses"][web_binding["recordAnalysisId"]]
+        ), unit_key
+        assert cli_binding == web_binding, unit_key

@@ -3,7 +3,7 @@
 ``gbdraw.render.export_limits`` owns the PNG and PDF limits and the advice. This function only reads the browser's
 request: the SVG size of the figure, the PNG DPI, and the wrap length leaf of the exported Result's committed request,
 as stored, with each record's source length and requested region. The config validator reads the leaf, the drawing's
-crop rule (``check_start_end_coords``) gives each record's drawn bases, and whether a record is cut and the rows follow
+crop rule (``region_slice``) gives each record's drawn bases, and whether a record is cut and the rows follow
 from them here, by ``gbdraw.layout.linear_wrap`` as the drawing did, so a Result without an input summary (a loaded
 Session, whatever wrote its leaf, a cropped record included) is checked as the CLI checks it (D-52, D-55, D-70). A
 figure over the limit raises the ``EXPORT_LIMIT`` error.
@@ -26,7 +26,7 @@ from gbdraw.config.models.canvas import (
     linear_wrap_length_from_config,
 )
 from gbdraw.core.figure_length import RequestedFigureSize, parse_figure_length
-from gbdraw.crop_genbank import check_start_end_coords
+from gbdraw.io.regions import region_slice
 from gbdraw.layout.linear_wrap import LinearWrapSummary, resolve_wrap_length
 from gbdraw.render.document import export_root_size
 from gbdraw.render.export_limits import check_export_limit, png_pixel_size
@@ -117,13 +117,14 @@ def _svg_root(request: ExportLimitRequest) -> ExportRootSize:
 
 
 def _drawn_length(record: RecordPayload, ordinal: int) -> int:
-    """The bases the drawing draws of a record: the whole source, or its region as the drawing crops it."""
+    """The bases the drawing draws of a record: the whole source, or its region as the drawing crops it (a region
+    across the origin too)."""
 
     length = int(record["sourceLength"])
     region = record["region"]
     if region is None:
         return length
-    start_0, end_0 = check_start_end_coords(length, int(region["start"]), int(region["end"]), f"#{ordinal}")
+    start_0, end_0 = region_slice(length, int(region["start"]), int(region["end"]), f"#{ordinal}")
     return end_0 - start_0
 
 

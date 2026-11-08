@@ -496,13 +496,21 @@ def extract_features_from_records_payload(
     return payload
 
 
-def _crop_then_reverse(records: list[SeqRecord], region_spec: object | None, reverse_flag: object | None) -> list[SeqRecord]:
-    """Crop to ``region_spec``, then reverse-complement, the planner's order (OV-1279)."""
+def _crop_then_reverse(
+    records: list[SeqRecord], region_spec: object | None, reverse_flag: object | None, *, source_kind: str
+) -> list[SeqRecord]:
+    """Crop to ``region_spec``, then reverse-complement, the planner's order (OV-1279).
+
+    The page sends a card's own crop here, never a window across the origin, so the record's display topology does
+    not reach it: the record is circular as its file of ``source_kind`` states.
+    """
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
 
     specs = parse_region_specs([str(region_spec)]) if region_spec else []
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-    windows = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+    windows = crop_then_reverse_records(
+        records, specs, [reverse] * len(records), is_circular=None, source_kind=source_kind
+    )[0]
     return [unit for units in windows for unit in units]
 
 
@@ -521,7 +529,7 @@ def extract_features_from_genbank_payload(
 
     records = read_flat_file_records(str(gb_path))
     selector = parse_record_selector(_normalize_record_selector(record_selector))
-    records = _crop_then_reverse(select_record(records, selector), region_spec, reverse_flag)
+    records = _crop_then_reverse(select_record(records, selector), region_spec, reverse_flag, source_kind="genbank")
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,
@@ -554,7 +562,7 @@ def extract_features_from_gff_fasta_payload(
         keep_all_features=True,
         record_selectors=[selector] if selector else None,
     )
-    records = _crop_then_reverse(records, region_spec, reverse_flag)
+    records = _crop_then_reverse(records, region_spec, reverse_flag, source_kind="gff_fasta")
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,

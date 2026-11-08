@@ -5,7 +5,7 @@ import test from 'node:test';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import {
-  circularDrawingRegionNote, circularEstimateLengths, circularFormRegion, circularRequestDiagrams, linearCardRegion,
+  circularDrawingRegionNote, circularDrawingWindowRows, circularEstimateLengths, circularFormCrop, circularRequestDiagrams, linearCardRegion,
   regionClampNote
 } from '../../gbdraw/web/js/services/record-options.js';
 import { circularSingleRecordKey } from '../../gbdraw/web/js/services/record-draw-selection.js';
@@ -134,7 +134,7 @@ const SHORT_AND_LONG = Object.freeze([
 const circularDrawing = (/** @type {Record<string, unknown>} */ form = {}, /** @type {string[]} */ recordsOff = []) => ({
   form: {
     circular_record_selector: '', multi_record_canvas: false,
-    circular_region_start: null, circular_region_end: null, ...form
+    circular_region_start: null, circular_region_end: null, circular_windows: [], ...form
   },
   adv: { circular_grouping_intent: 'auto' },
   recordsOff,
@@ -262,23 +262,42 @@ test('OV-1097: an End past the record end is drawn to the record end, and the no
     circularDrawingRegionNote(MITOGENOME, past),
     'Region reaches 20,000, past the record end (16,569 bp); Generate draws to 16,569.'
   );
-  assert.deepEqual(circularFormRegion(past.form, MITOGENOME[0]), { start: 10_000, end: 20_000, drawnEnd: 16_569, recordLength: 16_569 });
+  assert.deepEqual(circularFormCrop(past.form, MITOGENOME[0])?.region, { start: 10_000, end: 20_000, drawnEnd: 16_569, recordLength: 16_569 });
   // A region within the record, or a record of unknown length, has no note.
   assert.equal(circularDrawingRegionNote(MITOGENOME, circularDrawing({ circular_region_start: 1, circular_region_end: 16_569 })), '');
   assert.equal(circularDrawingRegionNote([{ selector: '#1', record_id: 'unread' }], past), '');
   // Separate diagrams draw whole records, so no region and no note.
   assert.equal(circularDrawingRegionNote(SHORT_AND_LONG, circularDrawing({ circular_region_start: 1, circular_region_end: 400_000 })), '');
   // A Start past the record end stays an error, as Python refuses it.
-  const late = circularFormRegion(circularDrawing({ circular_region_start: 16_570, circular_region_end: 20_000 }).form, MITOGENOME[0]);
+  const late = circularFormCrop(circularDrawing({ circular_region_start: 16_570, circular_region_end: 20_000 }).form, MITOGENOME[0]);
   assert.ok(late && 'error' in late);
   assert.equal(/** @type {{ code?: string }} */ (late.error).code, 'REGION_INVALID');
   assert.deepEqual(/** @type {{ context?: unknown }} */ (late.error).context, { field: 'region', reason: 'RECORD_BOUNDS' });
   assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, circularDrawing({ circular_region_start: 16_570, circular_region_end: 20_000 })), [[16_569]]);
 });
 
+// Review S3 (PD-OI-122): the window across the origin a CLI or Python Session gave the record (16,000-100 of a
+// 16,569 bp record) draws 670 bp; the lengths, the note and the read-only list read the one crop owner.
+test('a Circular window across the origin draws from its start through the origin to its end', () => {
+  const across = circularDrawing({ circular_windows: [{ start: 16_000, end: 100, reverseComplement: false, column: null }] });
+  assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, across), [[670]]);
+  assert.equal(circularDrawingRegionNote(MITOGENOME, across), '');
+  assert.deepEqual(circularDrawingWindowRows(MITOGENOME, across), [
+    { number: 1, span: '16,000\u2013100', length: '670 bp', reverseComplement: false }
+  ]);
+  assert.deepEqual(circularFormCrop(across.form, MITOGENOME[0]), {
+    start: 16_000, end: 100, reverseComplement: false, bases: 670, region: null
+  });
+  // The list wins over the Start/End fields, as a Linear card's list does.
+  assert.deepEqual(
+    circularDiagramRecordLengths(MITOGENOME, circularDrawing({ ...across.form, circular_region_start: 1, circular_region_end: 10 })),
+    [[670]]
+  );
+});
+
 test('a Region Generate cannot draw is a typed REGION_INVALID diagnostic, named by its reason', () => {
   const reasonOf = (start, end) => {
-    const region = circularFormRegion(circularDrawing({ circular_region_start: start, circular_region_end: end }).form, MITOGENOME[0]);
+    const region = circularFormCrop(circularDrawing({ circular_region_start: start, circular_region_end: end }).form, MITOGENOME[0]);
     assert.ok(region && 'error' in region);
     const { code, context } = /** @type {{ code?: string, context?: unknown }} */ (region.error);
     return [code, context];

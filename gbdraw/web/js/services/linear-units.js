@@ -92,11 +92,57 @@ export const readLinearUnitPlan = (result, asked) => {
 };
 
 /**
- * Whether a drawn card draws several units: only a card whose window list holds several windows does (D-01). Without
- * one, Python's unit plan is the cards themselves and the plan's own edges, so a request needs no plan to write them.
- * @param {readonly LinearSeq[]} cards
+ * Whether drawn cards or request records draw several units: only one whose window list holds several windows does
+ * (D-01). Without one, Python's unit plan is the records themselves and the plan's own edges, so a request needs no
+ * plan to write them, and a unit index is a record index.
+ * @param {readonly { windows: readonly unknown[] }[]} records Drawn cards, or request records.
  */
-export const drawsSeveralUnits = (cards) => cards.some((card) => card.windows.length > 1);
+export const drawsSeveralUnits = (records) => records.some((record) => record.windows.length > 1);
+
+/**
+ * The record each drawn unit draws, in unit order: the record's key (`recordKeys`), and that key again when the unit
+ * is one of several windows of the record, else null (`windowOf`). Python's unit plan gives it (`LinearUnitSearch`),
+ * and so does a catalog item (`catalogUnitRecords`).
+ * @typedef {Pick<LinearUnitSearch, 'recordKeys' | 'windowOf'>} LinearUnitRecords
+ */
+/**
+ * The record each drawn unit of a catalog item draws (`LinearUnitRecords`): a unit `windowOf` names is one of
+ * several windows of the record it maps to; any other unit is its own record (Python's `catalog_record_units`,
+ * gbdraw/render/interactive_svg.py). A `windowOf` that is no object names none; admission validates it
+ * (feature-catalog.js).
+ * @param {readonly string[]} recordKeys The item's `recordKeys`: its units, in drawing order.
+ * @param {unknown} windowOf The item's `windowOf`.
+ * @returns {LinearUnitRecords}
+ */
+export const catalogUnitRecords = (recordKeys, windowOf) => {
+  const windows = isRecord(windowOf) ? windowOf : {};
+  const recordOf = recordKeys.map((unitKey) => (Object.hasOwn(windows, unitKey) ? String(windows[unitKey]) : null));
+  return { recordKeys: recordKeys.map((unitKey, unit) => recordOf[unit] ?? unitKey), windowOf: recordOf };
+};
+
+/**
+ * The request record a drawn unit draws: its index among the request's records, and whether the unit is one of
+ * several windows of it.
+ * @typedef {{ recordIndex: number, oneOfSeveral: boolean }} LinearUnitRecord
+ */
+
+/**
+ * The request record each drawn unit draws, found by its record key (null for a unit whose record `records` does not
+ * hold). A request's comparison indexes and a catalog's sources and match endpoints count drawn units; the CLI's `#n`
+ * and `records[]` count records: this is the one reader from the first to the second. Without `units`, the units are
+ * the records when none is drawn in several windows (`drawsSeveralUnits`), and unknown (null) otherwise.
+ * @param {readonly { recordKey: string, windows: readonly unknown[] }[]} records The request's records.
+ * @param {LinearUnitRecords | null} units The request's drawn units, as Python planned or drew them.
+ * @returns {(LinearUnitRecord | null)[] | null}
+ */
+export const unitRecordsOf = (records, units) => {
+  if (!units) return drawsSeveralUnits(records) ? null : records.map((_, recordIndex) => ({ recordIndex, oneOfSeveral: false }));
+  const indexByKey = new Map(records.map(({ recordKey }, index) => [recordKey, index]));
+  return units.recordKeys.map((recordKey, unit) => {
+    const recordIndex = indexByKey.get(recordKey);
+    return recordIndex === undefined ? null : { recordIndex, oneOfSeveral: units.windowOf[unit] !== null };
+  });
+};
 
 /**
  * What `planLinearUnits` is asked: the drawn cards' records, keyed and windowed as the request writes them, and the

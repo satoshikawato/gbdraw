@@ -19,7 +19,10 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
 import { regionSelectionHeading } from '../services/region-axis.js';
-import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
+import { readLinearSeqWindows } from '../services/drawing/inputs.js';
+import {
+  canonicalRecordReverseComplement, cropFormReverseComplement, orientedCropForm
+} from '../services/record-display-model.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
@@ -41,10 +44,14 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  * @typedef {{
  *   name: string, subtitle: string, reverse: boolean, reverseAvailable: boolean,
  *   nameLabel: string, subtitleLabel: string, sequenceUid: string,
- *   fields: Readonly<Record<RecordField, RecordPopupField>>, settingsSelector: string
+ *   fields: RecordPopupFields, settingsSelector: string
  * }} RecordDraft
  * @typedef {{ readonly key: string, readonly setting: SettingApplicationId }} RecordPopupField
  *   The draft key a popup field writes and the setting row (`SETTING_APPLICATION`) of its timing note.
+ * @typedef {RecordPopupField & { readonly windows: string }} RecordPopupReverseField
+ *   The Reverse complement field and the key of the windows its form lists, which hold the orientation while
+ *   listed (`orientedCropForm`).
+ * @typedef {{ readonly name: RecordPopupField, readonly subtitle: RecordPopupField, readonly reverse: RecordPopupReverseField }} RecordPopupFields
  * @typedef {ReturnType<typeof buildLegendEntryView>} LegendEntryView
  * @typedef {ReturnType<typeof buildRecordDefinitionView>} RecordDefinitionView
  */
@@ -284,21 +291,44 @@ const readDrawnDefinitionLines = (group, recordId) => {
 // one owner of field -> setting key -> row for the popup and its notes. A
 // Circular record selected on its own draws its Record label and Subtitle,
 // which win over the drawing's Species and Strain.
-/** @type {Readonly<Record<'linear' | 'circularRecord' | 'circularDrawing', Readonly<Record<RecordField, RecordPopupField>>>>} */
+/** @type {Readonly<Record<'linear' | 'circularRecord' | 'circularDrawing', RecordPopupFields>>} */
 export const RECORD_POPUP_FIELDS = Object.freeze({
   linear: Object.freeze({
     name: { key: 'definition', setting: 'record-names' }, subtitle: { key: 'record_subtitle', setting: 'inputs' },
-    reverse: { key: 'region_reverse', setting: 'inputs' }
+    reverse: { key: 'region_reverse', windows: 'windows', setting: 'inputs' }
   }),
   circularRecord: Object.freeze({
     name: { key: 'circular_record_label', setting: 'record-names' },
-    subtitle: { key: 'circular_record_subtitle', setting: 'record-names' }, reverse: { key: 'circular_reverse', setting: 'inputs' }
+    subtitle: { key: 'circular_record_subtitle', setting: 'record-names' },
+    reverse: { key: 'circular_reverse', windows: 'circular_windows', setting: 'inputs' }
   }),
   circularDrawing: Object.freeze({
     name: { key: 'species', setting: 'species' }, subtitle: { key: 'strain', setting: 'species-strain' },
-    reverse: { key: 'circular_reverse', setting: 'inputs' }
+    reverse: { key: 'circular_reverse', windows: 'circular_windows', setting: 'inputs' }
   })
 });
+/**
+ * The write of a record popup's text field, or null when the field holds `next` already.
+ * @param {Record<string, unknown>} target @param {string} key @param {string} next
+ * @returns {(() => void) | null}
+ */
+const recordTextWrite = (target, key, next) => (target[key] === next ? null : () => { target[key] = next; });
+/**
+ * The write that draws a record popup's record in the direction `next` where its crop form holds the orientation:
+ * its listed windows, else its Reverse complement (`orientedCropForm`, as Generate reads them); null when it is drawn
+ * so already.
+ * @param {Record<string, unknown>} target @param {RecordPopupReverseField} field @param {boolean} next
+ * @returns {(() => void) | null}
+ */
+const recordReverseWrite = (target, field, next) => {
+  const form = { windows: readLinearSeqWindows(target[field.windows]), reverse: Boolean(target[field.key]) };
+  if (cropFormReverseComplement(form) === next) return null;
+  return () => {
+    const oriented = orientedCropForm(form, next);
+    target[field.windows] = oriented.windows;
+    target[field.key] = oriented.reverse;
+  };
+};
 const CIRCULAR_RECORD = {
   fields: RECORD_POPUP_FIELDS.circularRecord,
   nameLabel: msg('Record label'), subtitleLabel: msg('Subtitle'),
@@ -367,7 +397,7 @@ export const createPreviewItemPopup = ({
   const linearDraft = (sequence) => sequence && {
     name: text(resolveLinearRecordEffectiveDefinition(sequence)),
     subtitle: text(resolveLinearRecordEffectiveSubtitle(sequence)),
-    reverse: Boolean(sequence.region_reverse),
+    reverse: cropFormReverseComplement({ windows: sequence.windows, reverse: sequence.region_reverse }),
     reverseAvailable: true,
     nameLabel: t('Organism / strain'),
     subtitleLabel: t('Subtitle'),
@@ -391,7 +421,7 @@ export const createPreviewItemPopup = ({
       subtitleLabel: tm(target.subtitleLabel),
       name: text(form[target.fields.name.key]),
       subtitle: text(form[target.fields.subtitle.key]),
-      reverse: Boolean(form.circular_reverse),
+      reverse: cropFormReverseComplement({ windows: form.circular_windows, reverse: form.circular_reverse }),
       reverseAvailable: ownRecord,
       sequenceUid: ''
     };
@@ -466,14 +496,11 @@ export const createPreviewItemPopup = ({
    */
   const setRecordField = (recordView, field, value) => {
     const target = recordTarget(recordView);
-    if (!target || sessionBusy()) return null;
-    const key = recordView.draft?.fields[field].key;
-    if (!key) return null;
-    const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
-    if (target[key] === next) return null;
-    return runUndoable(field === 'reverse' ? msg('Change Reverse complement') : msg('Edit record definition'), () => {
-      target[key] = next;
-    });
+    const fields = recordView.draft?.fields;
+    if (!target || !fields || sessionBusy()) return null;
+    const write = field === 'reverse' ? recordReverseWrite(target, fields.reverse, Boolean(value))
+      : recordTextWrite(target, fields[field].key, String(value ?? ''));
+    return write && runUndoable(field === 'reverse' ? msg('Change Reverse complement') : msg('Edit record definition'), write);
   };
 
   // Shows the record's settings in the settings pane: the field the popup's

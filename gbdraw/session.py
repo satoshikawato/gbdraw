@@ -30,6 +30,7 @@ from gbdraw.session_io import (
     DEPTH_FILE_ENCODING,
     DRAWINGS_SESSION_MIN_VERSION,
     MODE_SCOPED_SESSION_MAX_VERSION,
+    mode_slice_of_version,
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
@@ -1129,6 +1130,11 @@ def _mode_scoped_data(
     data = _enveloped(
         view, MODE_SCOPED_SESSION_MAX_VERSION, created_at or datetime.now(timezone.utc), encoded.resources,
     )
+    # A Session 50 holds no field Session 51 added (an older Session, read by the Web, holds their defaults).
+    if "modes" in data:
+        data["modes"] = {
+            mode: mode_slice_of_version(slice_, MODE_SCOPED_SESSION_MAX_VERSION) for mode, slice_ in data["modes"].items()
+        }
     if web_file_inventory is not None:
         _attach_current_web_file_bindings(data, web_file_inventory)
     if resources:

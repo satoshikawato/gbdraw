@@ -163,13 +163,15 @@ test('sessions without per-record values fall back to comparing label and fileDe
           recordKey: 'rec-1',
           source: { kind: 'genbank', resourceId: 'res-1' },
           presentation: { label: '<i>Escherichia coli</i>', subtitle: 'Chromosome 1' },
-          display: { isCircular: null, startCoordinate: null }
+          display: { isCircular: null, startCoordinate: null },
+          windows: []
         },
         {
           recordKey: 'rec-2',
           source: { kind: 'genbank', resourceId: 'res-1' },
           presentation: { label: '<i>Custom Override</i>', subtitle: 'Overridden Subtitle' },
-          display: { isCircular: null, startCoordinate: null }
+          display: { isCircular: null, startCoordinate: null },
+          windows: []
         }
       ],
       diagramOptions: { featurePlacements: [], featureOverrides: [] },
@@ -216,13 +218,15 @@ test('an explicit override equal to the file default survives a save and reload'
           recordKey: 'rec-1',
           source: { kind: 'genbank', resourceId: 'res-1' },
           presentation: { label: shared, subtitle: 'Chromosome 1' },
-          display: { isCircular: null, startCoordinate: null }
+          display: { isCircular: null, startCoordinate: null },
+          windows: []
         },
         {
           recordKey: 'rec-2',
           source: { kind: 'genbank', resourceId: 'res-1' },
           presentation: { label: shared, subtitle: 'Chromosome 1' },
-          display: { isCircular: null, startCoordinate: null }
+          display: { isCircular: null, startCoordinate: null },
+          windows: []
         }
       ],
       diagramOptions: { featurePlacements: [], featureOverrides: [] },

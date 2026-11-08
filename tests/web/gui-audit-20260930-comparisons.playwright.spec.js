@@ -443,6 +443,50 @@ test('the match popup and its FASTA header report source coordinates of a croppe
 });
 
 
+// Review S5 of PR #1734: after Load, a ribbon of the second window of a record drawn in two windows copies that
+// window's bases. The saved catalog names its sources by drawn unit; Load reads them by unit, not by card.
+test('after Load, Copy FASTA of a ribbon of a second window gives that window\'s bases', async ({ page }, testInfo) => {
+  test.setTimeout(600_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
+  await useLosat(page, {
+    task: 'blastn',
+    configure: () => {
+      window.__GBDRAW_APP__.linearSeqs[0].windows = [
+        { start: 1, end: 1000, reverseComplement: false, column: null },
+        { start: 2001, end: 3000, reverseComplement: false, column: null }
+      ];
+    }
+  });
+  await generateAndWaitForResult(page);
+  expect(await committedRibbons(page)).toHaveLength(1);
+  const copied = () => evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    app.clickedPairwiseMatch = null;
+    app.svgContainer.querySelector('svg [data-gbdraw-match-id]')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
+    for (let attempt = 0; attempt < 100 && !app.clickedPairwiseMatch; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const match = JSON.parse(JSON.stringify(app.clickedPairwiseMatch));
+    return (match.sequenceBundle?.entries || []).map(({ available, fasta, unavailableReason }) => ({
+      available, fasta, unavailableReason
+    }));
+  });
+  const generated = await copied();
+  expect(generated.map(({ available }) => available)).toEqual([true, true]);
+  expect(generated[0].fasta.split('\n')[0]).toMatch(/coords=2\d{3}\.\.\d{4}/);
+  const file = path.join(directory, 'windows.gbdraw-session.json.gz');
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'windows'; });
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(file);
+  await openFresh(page);
+  await loadSessionFile(page, file);
+  expect(await copied()).toEqual(generated);
+});
+
 // origin/main Web Sessions stored rows of a reversed record after the reverse
 // complement; Load converts them to the search frame once (D-18 Must preserve).
 for (const scenario of ['upload', 'losatn']) {

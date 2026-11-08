@@ -823,7 +823,8 @@ test('removing the Circular source returns every record-bound form field to its 
   const drawing = state.activeDrawing();
   app.setCircularSourceFile('c_gb', new File(['LOCUS'], 'record.gb'));
   const edited = Object.fromEntries(Object.entries(CIRCULAR_RECORD_FORM_DEFAULTS).map(([field, value]) => [
-    field, typeof value === 'boolean' ? !value : typeof value === 'string' ? 'edited' : 7
+    field, typeof value === 'boolean' ? !value : typeof value === 'string' ? 'edited'
+      : Array.isArray(value) ? [{ start: 90, end: 10, reverseComplement: true, column: null }] : 7
   ]));
   Object.assign(drawing.form, edited);
   app.setCircularSourceFile('c_gb', null);

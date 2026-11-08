@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
+from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
 from Bio.Seq import Seq
@@ -67,7 +67,7 @@ from gbdraw.io.regions import (
 )
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_transform import detected_topology, drawn_circular
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -161,11 +161,7 @@ def resolve_record_display(
         raise ValidationError("Resolved crop flags must be booleans.")
     if options.start_coordinate is not None and any(crop_flags):
         raise ValidationError("An explicit display start cannot be combined with a crop.")
-    is_circular = (
-        detected_topology == "circular"
-        if options.is_circular is None
-        else options.is_circular
-    )
+    is_circular = drawn_circular(options.is_circular, detected_topology)
     # The transform owns length, affine-domain, orientation and anchor validation.
     RecordDisplayTransform(
         source_length, source_base, source_step, options.start_coordinate, is_circular,
@@ -207,6 +203,13 @@ class ResolvedWindow:
     def window_of(self) -> str | None:
         """The key of the record this unit is one of several windows of; ``None`` when the record draws one unit."""
         return self.record_key if self.is_one_of_several else None
+
+    @property
+    def search_region(self) -> str:
+        """The region a comparison search of this unit reads: the window's crop before its reverse complement
+        (``region_text``). The Web's extraction crops by it (``LinearUnitWindow.searchRegion``), and a protein record
+        analysis names it on the CLI and on the Web alike."""
+        return region_text(self.span.start, self.span.end, False)
 
 
 def record_drawn_windows(record_key: str, windows: Sequence[RecordWindow]) -> tuple[ResolvedWindow | None, ...]:
@@ -824,51 +827,86 @@ def project_source_bound_results(
     return FrameProjection(projected, typed.unmatched)
 
 
+def alignment_record_keys(collection: ResolvedRecordCollection) -> tuple[str, ...]:
+    """The records a Similarity alignment plan covers, in drawing order: the windows of one record are one (D-50)."""
+
+    return tuple(dict.fromkeys(item.record_identity_key for item in collection.provenance))
+
+
 def project_similarity_alignment_centers(
     collection: ResolvedRecordCollection,
     plan: SimilarityAlignmentPlan | None,
 ) -> tuple[float | None, ...]:
-    """Project selected anchor centers from already resolved record orientations."""
+    """Project selected anchor centers from already resolved record orientations.
 
+    One centre per drawn unit: a record drawn in several windows has it in the window that holds its anchor
+    (``alignment_anchor_unit``) and ``None`` in its other windows, which move with it (D-50).
+    """
+
+    centers: list[float | None] = [None] * len(collection.records)
     if plan is None:
-        return tuple(None for _ in collection.records)
-    record_keys = tuple(item.record_key for item in collection.provenance)
-    plan.validate_record_coverage(record_keys)
-    decisions = {decision.record_key: decision for decision in plan.records}
-    return tuple(
-        _project_alignment_anchor_center(
-            decision.anchor,
-            provenance=provenance,
-            transform=transform,
-            displayed_length=len(record),
-        )
-        if decision.status is not AlignmentDecisionStatus.SKIPPED
-        else None
-        for record, provenance, transform, decision in zip(
-            collection.records,
-            collection.provenance,
-            collection.transforms,
-            (decisions[key] for key in record_keys),
-            strict=True,
-        )
-    )
+        return tuple(centers)
+    plan.validate_record_coverage(alignment_record_keys(collection))
+    for decision in plan.records:
+        if decision.status is AlignmentDecisionStatus.SKIPPED:
+            continue
+        if decision.anchor is None:
+            raise ValidationError(
+                f"Similarity alignment record {decision.record_key!r} has no anchor.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        index, center = alignment_anchor_unit(collection, decision.anchor)
+        if center is None:
+            raise ValidationError(
+                "Similarity alignment anchor is outside the current crop for record "
+                f"{decision.record_key!r}.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        centers[index] = center
+    return tuple(centers)
 
 
-def _project_alignment_anchor_center(
-    anchor: AlignmentAnchorIdentity | None,
-    *,
-    provenance: ResolvedRecordProvenance,
-    transform: RecordDisplayTransform,
-    displayed_length: int,
-) -> float:
-    feature = _alignment_source_feature(anchor, provenance)
-    projected = _source_feature_display_center(feature, transform)
-    if not 0.0 <= projected <= float(displayed_length):
-        raise ValidationError(
-            "Similarity alignment anchor is outside the current crop for record "
-            f"{provenance.record_key!r}."
-        )
-    return projected
+def alignment_anchor_unit(
+    collection: ResolvedRecordCollection, anchor: AlignmentAnchorIdentity,
+) -> tuple[int, float | None]:
+    """The drawn unit of the anchor's record that holds the anchor, and the anchor's centre on it (D-50).
+
+    A record drawn whole or in one window has one unit. A record drawn in several windows is anchored in the first
+    window, in drawing order, that holds the anchor's centre; when none holds it the centre is ``None`` (the anchor
+    is unusable) and the unit is the record's first.
+    """
+
+    units = [index for index, item in enumerate(collection.provenance) if item.record_identity_key == anchor.record_key]
+    if not units:
+        raise ValidationError("Alignment anchor record coverage is invalid.", diagnostic={"code": "INPUT_INVALID"})
+    position, center = first_unit_holding(_anchor_center_on_unit(collection, anchor, index) for index in units)
+    return units[position], center
+
+
+def first_unit_holding(offsets: Iterable[float | None]) -> tuple[int, float | None]:
+    """The first drawn unit of a record, in drawing order, that holds a source position, and the position's display
+    offset on it (D-50).
+
+    ``offsets`` are the position's display offsets on the record's units in drawing order, ``None`` on a unit that
+    does not hold it. When no unit holds it the result is the first unit and ``None``. The renderer
+    (``alignment_anchor_unit``) and the Web helper (``similarity_alignment._RecordFact.placed``) anchor a record
+    drawn in several windows by this one rule.
+    """
+
+    for position, offset in enumerate(offsets):
+        if offset is not None:
+            return position, offset
+    return 0, None
+
+
+def _anchor_center_on_unit(
+    collection: ResolvedRecordCollection, anchor: AlignmentAnchorIdentity, index: int,
+) -> float | None:
+    """The anchor's display centre on drawn unit ``index``, ``None`` when the unit does not hold it."""
+
+    feature = _alignment_source_feature(anchor, collection.provenance[index])
+    projected = _source_feature_display_center(feature, collection.transforms[index])
+    return projected if 0.0 <= projected <= float(len(collection.records[index])) else None
 
 
 def _source_feature_display_center(
@@ -1254,13 +1292,17 @@ def _feature_location_text(feature: SourceFeatureIdentity) -> str:
 
 @dataclass(frozen=True)
 class AlignmentAnchorDisplayFact:
-    """Source-bound anchor geometry in one already resolved display transform."""
+    """Source-bound anchor geometry in one already resolved display transform.
+
+    ``unit_index`` is the drawn unit that holds the anchor (``alignment_anchor_unit``), whose placement draws it.
+    """
 
     source_start: int
     source_end: int
     source_strand: int | None
     displayed_strand: int | None
     display_center: float | None
+    unit_index: int
 
 
 def project_similarity_alignment_anchor_fact(
@@ -1269,28 +1311,17 @@ def project_similarity_alignment_anchor_fact(
 ) -> AlignmentAnchorDisplayFact:
     """Use the same source identity and center projection as the renderer."""
 
-    matches = [i for i, item in enumerate(collection.provenance)
-               if item.record_key == anchor.record_key]
-    if len(matches) != 1:
-        raise ValidationError("Alignment anchor record coverage is invalid.")
-    index = matches[0]
-    provenance = collection.provenance[index]
-    feature = _alignment_source_feature(anchor, provenance)
+    # An exact source anchor outside every window of its record is unusable (centre None).
+    index, center = alignment_anchor_unit(collection, anchor)
+    feature = _alignment_source_feature(anchor, collection.provenance[index])
     if anchor.biological_feature_id not in {feature.biological_feature_id, feature.stable_feature_id}:
         raise ValidationError("Alignment anchor biological identity changed.")
     strands = {part[2] for part in feature.location_parts}
     strand = next(iter(strands)) if len(strands) == 1 and strands <= {-1, 1} else None
-    try:
-        center = _project_alignment_anchor_center(
-            anchor, provenance=provenance, transform=collection.transforms[index],
-            displayed_length=len(collection.records[index]),
-        )
-    except ValidationError:
-        center = None  # An exact source anchor outside the crop is unusable.
     return AlignmentAnchorDisplayFact(
         min(part[0] for part in feature.location_parts),
         max(part[1] for part in feature.location_parts),
-        strand, None if strand is None else strand * collection.transforms[index].source_step, center,
+        strand, None if strand is None else strand * collection.transforms[index].source_step, center, index,
     )
 
 def similarity_alignment_evidence_edges(
@@ -1352,7 +1383,8 @@ def _similarity_candidate_from_orthogroup_member(
     identity_is_unique = len(matches) == 1
     feature = matches[0] if identity_is_unique else None
     anchor = AlignmentAnchorIdentity(
-        record_key=provenance.record_key,
+        # A plan names a record drawn in several windows by the record's key (D-50).
+        record_key=provenance.record_identity_key,
         biological_feature_id=(
             feature.biological_feature_id
             if feature is not None
@@ -1788,12 +1820,6 @@ def _apply_provenance_annotations(
         ).name
 
 
-def _drawn_circular(display: RecordDisplayOptions, topology: str) -> bool:
-    """Whether a record is drawn as circular: its display option, else the topology its file states (D-28)."""
-
-    return display.is_circular if display.is_circular is not None else topology == "circular"
-
-
 @dataclass
 class _PendingRecord:
     """One resolved record before its windows expand: its drawn records so far and how to finish them."""
@@ -1851,7 +1877,7 @@ def _expand_record_windows(
                     specs,
                     item.pending_reverse,
                     log=logger,
-                    circular=_drawn_circular(item.provenance.display, item.provenance.detected_topology),
+                    circular=drawn_circular(item.provenance.display.is_circular, item.provenance.detected_topology),
                 )
             except ValueError as exc:
                 raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
@@ -1978,7 +2004,7 @@ def resolve_record_inputs(
                         [window.region() for window in record_input.windows],
                         reverse,
                         log=logger,
-                        circular=_drawn_circular(record_input.display, detected_topology(source_record, source_kind)),
+                        circular=drawn_circular(record_input.display.is_circular, detected_topology(source_record, source_kind)),
                     )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
@@ -2163,8 +2189,8 @@ def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
             is_circular=None if topology is None else topology == "circular",
             start_coordinate=first.display_start,
         ),
-        region=parse_region_spec(first.region) if first.region and not windowed else None,
-        windows=windows,
+        # One region is the record's span; a group's windows are its spans (a region passed replaces windows).
+        **({"windows": windows} if windowed or not first.region else {"region": parse_region_spec(first.region)}),
         presentation=RecordPresentation(
             label=record.record_label or None,
             subtitle=record.record_subtitle or None,

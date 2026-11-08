@@ -296,8 +296,6 @@ def _validation(error: BaseException) -> tuple[str, dict]:
                 context.update(inputOrdinal=int(match[1]), recordCount=int(match[2]))
             return code, context
     for suffix, field, reason in (
-        ("region start must not exceed end.", "region", "ORDER"),
-        ("region exceeds recordLength.", "region", "RECORD_BOUNDS"),
         ("sourceEnd must not precede sourceStart.", "sourceEnd", "ORDER"),
         ("sourceStrand must be -1, 1, or null.", "sourceStrand", "STRAND"),
     ):

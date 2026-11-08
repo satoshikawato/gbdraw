@@ -84,13 +84,14 @@ const createPopup = ({
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
   countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
   readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
-  palettes = {}, appliedPalette = 'default'
+  palettes = {}, appliedPalette = 'default', circularWindows = [], sequenceWindows = []
 } = {}) => {
   const steps = [];
   const form = {
-    species: 'Homo sapiens', strain: '', circular_reverse: false, circular_record_label: recordLabel, circular_record_subtitle: ''
+    species: 'Homo sapiens', strain: '', circular_reverse: false, circular_record_label: recordLabel, circular_record_subtitle: '',
+    circular_windows: circularWindows
   };
-  const sequence = { uid: 'uid-1', definition: 'Old name', record_subtitle: '', region_reverse: false };
+  const sequence = { uid: 'uid-1', definition: 'Old name', record_subtitle: '', region_reverse: false, windows: sequenceWindows };
   const state = {
     clickedPairwiseMatch: { value: null },
     svgContainer: { value: definitionGroup && { querySelector: () => definitionGroup } },
@@ -135,6 +136,31 @@ test('the popup view follows the open item and counts once the matches are ready
   assert.equal(popup.view.value.subtitle, '22 features');
   state.clickedPairwiseMatch.value = { previewItem: { kind: 'legend-entry', key: 'gone' } };
   assert.equal(popup.view.value, null);
+});
+
+// Review X1 of #1750: while a crop form lists windows (one across the origin, or several), they hold the record's
+// orientation and Generate does not read the form's Reverse complement; the popup reads and writes the windows.
+test('the Reverse complement of a record drawn through its window list reads and writes its windows', () => {
+  const across = { start: 16000, end: 100, reverseComplement: false, column: null };
+  const circular = createPopup({ mode: 'circular', circularBlock: '', circularWindows: [across] });
+  // A value Generate does not read while a window is listed.
+  circular.form.circular_reverse = true;
+  circular.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  assert.equal(circular.popup.view.value.draft.reverse, false);
+  circular.popup.setRecordField(circular.popup.view.value, 'reverse', true);
+  assert.deepEqual([circular.form.circular_windows, circular.form.circular_reverse], [[{ ...across, reverseComplement: true }], false]);
+  assert.equal(circular.popup.view.value.draft.reverse, true);
+  assert.deepEqual(circular.steps, ['Change Reverse complement']);
+
+  const several = [across, { start: 5, end: 90, reverseComplement: true, column: 2 }];
+  const linear = createPopup({ sequenceWindows: several });
+  linear.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+  assert.equal(linear.popup.view.value.draft.reverse, false);
+  linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
+  assert.deepEqual(linear.sequence.windows, several.map((window) => ({ ...window, reverseComplement: true })));
+  assert.equal(linear.sequence.region_reverse, false);
+  linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
+  assert.deepEqual(linear.steps, ['Change Reverse complement']);
 });
 
 test('a record edit writes the sidebar setting as one History step', () => {

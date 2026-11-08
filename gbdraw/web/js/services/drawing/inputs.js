@@ -72,11 +72,12 @@ const normalizeLinearSeqNumber = (value) => {
  */
 
 /**
- * The windows a slot or a Session stores, read as `LinearSeqWindow`s; a value that is no list reads as none.
+ * The windows a slot, the Circular form or a Session stores, read as `LinearSeqWindow`s; a value that is no list reads
+ * as none.
  * @param {unknown} value
  * @returns {LinearSeqWindow[]}
  */
-const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : []).map((item) => {
+export const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : []).map((item) => {
   const window = /** @type {Partial<Record<keyof LinearSeqWindow, unknown>>} */ (
     item && typeof item === 'object' && !Array.isArray(item) ? item : {}
   );

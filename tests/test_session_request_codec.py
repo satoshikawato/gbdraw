@@ -94,6 +94,7 @@ from gbdraw.session_request_codec import (
     encode_canonical_table,
     encode_canonical_typed_resource,
     migrate_flat_config_overrides,
+    stored_record_windows,
 )
 from gbdraw.tracks import (
     CircularTrackSlot,
@@ -3764,7 +3765,15 @@ def test_a_schema9_region_whose_start_is_greater_than_its_end_is_the_reversed_sp
     payload["records"][0]["region"].update(start=300, end=50, reverseComplement=False)
     decoded = decode_canonical_request(payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
     assert decoded.records[0].windows == (RecordWindow(50, 300, True),)
+    # The reader of stored spans that is not a decode (receipts, hashes) reads it the same way, as the Web's promoter
+    # writes it.
+    assert stored_record_windows(payload["records"][0]) == [
+        {"start": 50, "end": 300, "reverseComplement": True, "column": None}
+    ]
     windowed = copy.deepcopy(encoded.payload)
     windowed["records"][0]["windows"][0].update(start=300, end=50, reverseComplement=False)
     decoded = decode_canonical_request(windowed, resource_paths=resource_paths, output_directory=tmp_path / "out")
     assert decoded.records[0].windows == (RecordWindow(300, 50, False),)
+    assert stored_record_windows(windowed["records"][0]) == [
+        {"start": 300, "end": 50, "reverseComplement": False, "column": None}
+    ]

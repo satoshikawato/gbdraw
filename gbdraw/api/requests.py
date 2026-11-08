@@ -13,6 +13,7 @@ from typing import Literal, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
@@ -220,6 +221,21 @@ _NEW_PRESENTATION = RecordPresentation()
 _NEW_DISPLAY = RecordDisplayOptions()
 
 
+class _NoRegion:
+    """The default of ``RecordInput``'s ``region``: no region was passed, so ``windows`` stand."""
+
+
+_NO_REGION = _NoRegion()
+
+
+class _HeldWindows(tuple[RecordWindow, ...]):
+    """The windows a ``RecordInput`` holds, which ``dataclasses.replace`` passes back with any region given to it.
+
+    A region given with windows of this type replaces them (OV-2769); a region
+    given with windows the caller built conflicts with them.
+    """
+
+
 @dataclass(frozen=True, init=False)
 class RecordInput:
     """A record source plus selection, windows, and presentation metadata.
@@ -232,7 +248,12 @@ class RecordInput:
     is read as one window (D-09); read back, ``region`` is that one window
     named by the record's selector, ``None`` without windows, and an error
     with several (D-20). Windows of one record may overlap (D-18).
-    ``dataclasses.replace`` copies ``windows``, never ``region``.
+    A ``region`` passed explicitly, ``None`` included, is the record's one span
+    and replaces the windows the record held, so
+    ``dataclasses.replace(record, region=None)`` draws the record whole and
+    ``replace(record, region=other)`` crops it again, as before windows
+    (OV-2769); without ``region``, ``replace`` copies ``windows``. A region
+    given with windows of the caller's own is refused: give one or the other.
     """
 
     source: RecordInputSource
@@ -247,7 +268,7 @@ class RecordInput:
         self,
         source: RecordInputSource,
         selector: RecordSelector | None = None,
-        region: RegionSpec | None = None,
+        region: RegionSpec | None | _NoRegion = _NO_REGION,
         presentation: RecordPresentation = _NEW_PRESENTATION,
         record_key: str | None = None,
         cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE,
@@ -258,11 +279,22 @@ class RecordInput:
         # default gets its own presentation and display, as the fields' default factories give.
         presentation = RecordPresentation() if presentation is _NEW_PRESENTATION else presentation
         display = RecordDisplayOptions() if display is _NEW_DISPLAY else display
+        # A region passed explicitly is the record's one span: it replaces the windows the record held, which
+        # ``replace`` passes back (OV-2769); windows the caller built conflict with it.
+        conflict = not isinstance(region, _NoRegion) and bool(windows) and not isinstance(windows, _HeldWindows)
+        if isinstance(region, _NoRegion):
+            region = None
+        else:
+            windows = ()
         for name, value in (
             ("source", source), ("selector", selector), ("presentation", presentation),
             ("record_key", record_key), ("cardinality", cardinality), ("display", display), ("windows", windows),
         ):
             object.__setattr__(self, name, value)
+        if conflict:
+            raise ValidationError(
+                f"{self.refusal_name()}: give a region or windows, not both.", diagnostic={"code": "INPUT_INVALID"}
+            )
         self._validate(region)
 
     @property
@@ -345,8 +377,6 @@ class RecordInput:
                     "A selector-qualified region identifies one record and therefore "
                     "requires RecordCardinality.EXACTLY_ONE."
                 )
-            if self.windows:
-                raise ValidationError("Specify a record's span as a region or as windows, not both.", diagnostic={"code": "INPUT_INVALID"})
             # The boundary adapter of D-09: a region is one window; a record
             # selector in it selects the record.
             if region_selects_record:
@@ -373,10 +403,26 @@ class RecordInput:
             )
         return replace(self, presentation=replace(self.presentation, reverse_complement=reverse))
 
+    def refusal_name(self) -> str:
+        """How a refusal names this record (PD-OI-122): its selector, else its key, and its file."""
+
+        source = self.source
+        if isinstance(source, GenBankInputSource):
+            file_name: str | None = Path(source.path).name
+        elif isinstance(source, (GffFastaInputSource, FastaInputSource)):
+            file_name = Path(source.fasta_path).name
+        else:
+            file_name = None
+        name = (self.selector.raw if self.selector is not None else self.record_key) or (
+            str(source.record.id) if isinstance(source, InMemoryRecordSource) else None
+        )
+        label = f"Record {name!r}" if name else "A record"
+        return f"{label} ({file_name})" if file_name else label
+
     def _validate_windows(self) -> None:
         if isinstance(self.windows, (str, bytes)) or not isinstance(self.windows, Sequence):
             raise ValidationError("Record windows must be a sequence of RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
-        windows = tuple(self.windows)
+        windows = _HeldWindows(self.windows)
         if not all(isinstance(window, RecordWindow) for window in windows):
             raise ValidationError("Record windows must contain RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
         object.__setattr__(self, "windows", windows)
@@ -399,9 +445,9 @@ class RecordInput:
             len(windows) > 1 or windows[0].reverse_complement
         ):
             raise ValidationError(
-                "Reverse complement is set in both the region and record presentation."
+                f"{self.refusal_name()}: reverse complement is set in both the region and record presentation."
                 if len(windows) == 1
-                else "A record with several windows reverse-complements each window, not the record.",
+                else f"{self.refusal_name()} has several windows: reverse-complement each window, not the record.",
                 diagnostic={"code": "INPUT_INVALID"},
             )
 
@@ -476,6 +522,21 @@ def window_unit_key(record_key: str, window_index: int, window_count: int) -> st
     """The key of the drawn unit of one window of the record ``record_key`` (the one owner of that key)."""
 
     return record_key if window_count == 1 else f"{record_key}{WINDOW_UNIT_KEY_SEPARATOR}{window_index + 1}"
+
+
+def drawn_record_identity(record_input: RecordInput) -> str | None:
+    """The key of the record ``record_input`` draws: its own key, or, for a drawn unit that is one of several windows
+    of a record (a projected request), that record's key (``WINDOW_OF_ANNOTATION``, D-01).
+
+    Record translations and a Similarity alignment plan are keyed by it: the windows of a record move as one (D-50).
+    """
+
+    source = record_input.source
+    if isinstance(source, InMemoryRecordSource):
+        window_of = (source.record.annotations or {}).get(WINDOW_OF_ANNOTATION)
+        if window_of is not None:
+            return str(window_of)
+    return record_input.record_key
 _OUTPUT_PREFIX_MAX_BYTES = 200
 
 
@@ -634,10 +695,13 @@ def _request_records(records: Sequence[RecordInput]) -> tuple[RecordInput, ...]:
 
 def _circular_request_records(records: Sequence[RecordInput]) -> tuple[RecordInput, ...]:
     normalized = _request_records(records)
-    if any(len(record.windows) > 1 for record in normalized):
+    windowed = next((record for record in normalized if len(record.windows) > 1), None)
+    if windowed is not None:
         # Windows of one record share a Linear row (D-01); a Circular record is drawn whole or as one span.
         raise ValidationError(
-            "A Circular diagram draws one window of a record at most; several windows are Linear.", diagnostic={"code": "INPUT_INVALID"}
+            f"{windowed.refusal_name()} has several windows; a Circular diagram draws one window of a record at "
+            "most, so several windows are Linear.",
+            diagnostic={"code": "INPUT_INVALID"},
         )
     return normalized
 
@@ -971,8 +1035,9 @@ class LinearDiagramRequest:
         )
         if translations or plan is not None:
             # None keys are rejected just below.
+            # The windows of one record share its key (D-50).
             record_keys = cast(
-                "tuple[str, ...]", tuple(record.record_key for record in records)
+                "tuple[str, ...]", tuple(dict.fromkeys(drawn_record_identity(record) for record in records))
             )
             if any(record_key is None for record_key in record_keys):
                 raise ValidationError(

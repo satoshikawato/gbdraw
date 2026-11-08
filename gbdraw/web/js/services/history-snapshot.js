@@ -6,6 +6,7 @@
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
+import { captureLinearCardOrientation, restoreLinearCardOrientation } from './record-display-model.js';
 /** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
@@ -95,6 +96,12 @@ const editedIntentPartOf = (path, value) => (
 /** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
 /** @import { CurrentResultsPort } from './svg-result-ingestion.js' */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
+/** @import { LinearCardOrientation } from './record-display-model.js' */
+/** @import { LinearSeqWindow } from './drawing/inputs.js' */
+/**
+ * A Linear File card's orientation fields as a Result keeps them, named by the card's uid.
+ * @typedef {{ recordKey: string, card: LinearCardOrientation<LinearSeqWindow> }} LinearRecordOrientation
+ */
 /**
  * The `ui` values of an intent, checkpoint, or generated artifact: the fallback fields, the shown
  * mode (a checkpoint's and a handle's only), and the keys the owners of `ui` add.
@@ -912,26 +919,22 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
-  // The orientations of the cards of `drawing`, the drawing a step captures.
-  /** @param {D} drawing */
+  // The orientation fields of the cards of `drawing`, the drawing a step captures, as each card holds them
+  // (`captureLinearCardOrientation`): each window keeps its own orientation.
+  /** @param {D} drawing @returns {LinearRecordOrientation[]} */
   const captureLinearRecordOrientations = (drawing) => (
     drawing.linearSeqs.map((sequence) => ({
       recordKey: String(sequence?.uid || ''),
-      reverseComplement: Boolean(sequence?.region_reverse)
+      card: captureLinearCardOrientation(sequence)
     })).filter(({ recordKey }) => recordKey)
   );
 
-  /** @param {D} drawing @param {unknown} orientations */
+  /** @param {D} drawing @param {LinearRecordOrientation[] | undefined} orientations */
   const installLinearRecordOrientations = (drawing, orientations) => {
-    const byRecord = new Map(
-      (Array.isArray(orientations) ? orientations : []).map((entry) => [
-        String(entry?.recordKey || ''),
-        Boolean(entry?.reverseComplement)
-      ])
-    );
+    const byRecord = new Map((orientations || []).map((entry) => [entry.recordKey, entry.card]));
     drawing.linearSeqs.forEach((sequence) => {
-      const reverse = byRecord.get(String(sequence?.uid || ''));
-      if (reverse !== undefined) sequence.region_reverse = reverse;
+      const saved = byRecord.get(String(sequence?.uid || ''));
+      if (saved) restoreLinearCardOrientation(sequence, saved);
     });
   };
 
