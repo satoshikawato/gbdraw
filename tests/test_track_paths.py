@@ -9,7 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gbdraw.svg.circular_tracks import generate_circle_path_desc, generate_circular_scalar_area_path_desc
+import re
+
+from gbdraw.svg.circular_tracks import (
+    generate_circle_path_desc,
+    generate_circular_gc_content_path_desc,
+    generate_circular_gc_skew_path_desc,
+    generate_circular_scalar_area_path_desc,
+)
 from gbdraw.svg.track_paths import (
     TRACK_PATH_TOLERANCE_PX,
     kept_track_points,
@@ -129,3 +136,105 @@ def test_index_arrays_are_platform_integers(monkeypatch: pytest.MonkeyPatch) -> 
     xs = np.linspace(0.0, 50.0, 400)
     ys = np.sin(xs)
     assert track_paths.kept_track_points(xs, ys, (130, 260)).sum() > 4
+
+
+# OV-2863: a Circular track line joins its samples along the circle. A short record has few windows (670 bp
+# at the Auto 100 bp step is 7 samples, 51 degrees apart); straight chords between them drew a polygon.
+
+_PATH_ROUNDING_PX = 0.001
+# The added points keep each piece within the tolerance of the line, and the simplification then moves the
+# outline by at most the tolerance again.
+_LINE_BOUND_PX = 2 * TRACK_PATH_TOLERANCE_PX + _PATH_ROUNDING_PX
+
+
+def _first_subpath_vertices(desc: str) -> np.ndarray:
+    """The M/L vertices of the first subpath of a path (up to its first ``z`` or arc)."""
+
+    first = re.split(r"[zA]", desc, maxsplit=1)[0]
+    pairs = re.findall(r"[ML]\s*(-?[0-9.]+)[ ,](-?[0-9.]+)", first)
+    return np.array([[float(x), float(y)] for x, y in pairs])
+
+
+def _polar_curve(positions: np.ndarray, radii: np.ndarray, total: float, per_sample: int = 400) -> np.ndarray:
+    """Points of the line a Circular track draws: angle and radius change linearly between samples."""
+
+    t = np.linspace(0.0, 1.0, per_sample, endpoint=False)
+    pos = np.concatenate([a + (b - a) * t for a, b in zip(positions[:-1], positions[1:])] + [positions[-1:]])
+    rad = np.concatenate([a + (b - a) * t for a, b in zip(radii[:-1], radii[1:])] + [radii[-1:]])
+    angles = np.radians(360.0 * pos / total - 90.0)
+    return np.column_stack((rad * np.cos(angles), rad * np.sin(angles)))
+
+
+def _max_deviation(curve: np.ndarray, vertices: np.ndarray) -> float:
+    closed = np.vstack((vertices, vertices[:1]))
+    return max(_distance_to_polyline(x, y, closed[:, 0], closed[:, 1]) for x, y in curve)
+
+
+def _short_gc_df() -> pd.DataFrame:
+    starts = np.arange(0, 670, 100)
+    content = np.array([0.42, 0.47, 0.44, 0.50, 0.46, 0.43, 0.48])
+    skew = np.array([0.05, -0.10, 0.02, -0.04, 0.08, -0.06, 0.01])
+    return pd.DataFrame({"GC content": content, "GC skew": skew}, index=starts)
+
+
+def test_short_record_gc_content_follows_the_circle() -> None:
+    df = _short_gc_df()
+    desc = generate_circular_gc_content_path_desc(300, 670, df, 60, 1.0, "GC")
+    diff = df["GC content"] - df["GC content"].mean()
+    radii = (300 + 30 * diff / diff.abs().max()).to_numpy()
+    positions = np.append(df.index.to_numpy(dtype=float), 670.0)
+    curve = _polar_curve(positions, np.append(radii, radii[0]), 670.0)
+    assert _max_deviation(curve, _first_subpath_vertices(desc)) <= _LINE_BOUND_PX
+
+
+def test_short_record_gc_skew_follows_the_circle_through_its_close() -> None:
+    df = _short_gc_df()
+    desc = generate_circular_gc_skew_path_desc(200, df, 670, 60, 1.0, "GC")
+    diff = df["GC skew"] - df["GC skew"].mean()
+    radii = (200 + 30 * diff / diff.abs().max()).to_numpy()
+    # The line closes from the last window (600) back to 12 o'clock on the radius of the first.
+    positions = np.append(df.index.to_numpy(dtype=float), 670.0)
+    curve = _polar_curve(positions, np.append(radii, radii[0]), 670.0)
+    assert _max_deviation(curve, _first_subpath_vertices(desc)) <= _LINE_BOUND_PX
+
+
+def test_a_constant_short_line_is_a_circle() -> None:
+    df = pd.DataFrame({"GC content": [0.5] * 7, "GC skew": [0.0] * 7}, index=np.arange(0, 670, 100))
+    for desc in (
+        generate_circular_gc_content_path_desc(300, 670, df, 60, 1.0, "GC"),
+        generate_circular_gc_skew_path_desc(300, df, 670, 60, 1.0, "GC"),
+    ):
+        vertices = _first_subpath_vertices(desc)
+        angles = np.linspace(0.0, 2 * math.pi, 3600, endpoint=False)
+        circle = np.column_stack((300 * np.cos(angles), 300 * np.sin(angles)))
+        assert _max_deviation(circle, vertices) <= _LINE_BOUND_PX
+
+
+def test_short_record_scalar_area_outer_line_follows_the_circle() -> None:
+    plot = pd.DataFrame({"position": np.arange(0, 670, 100), "value_normalized": [0.2, 0.9, 0.4, 0.7, 0.1, 0.6, 0.3]})
+    desc = generate_circular_scalar_area_path_desc(300, 670, plot, 60, 1.0, close_at_record_len=True)
+    outer = _first_subpath_vertices(desc)[1:-1]  # drop the baseline ends
+    positions = np.append(plot["position"].to_numpy(dtype=float), 670.0)
+    radii = 270 + 60 * np.append(plot["value_normalized"].to_numpy(), 0.2)
+    curve = _polar_curve(positions, radii, 670.0)
+    deviation = max(_distance_to_polyline(x, y, outer[:, 0], outer[:, 1]) for x, y in curve)
+    assert deviation <= _LINE_BOUND_PX
+
+
+def test_densely_sampled_lines_gain_no_points() -> None:
+    """Samples already closer than the tolerance draw exactly the polyline through them (long records keep
+    their paths)."""
+
+    total = 300_000
+    positions = np.arange(0, total, 100, dtype=float)
+    rng = np.random.default_rng(3)
+    df = pd.DataFrame({"GC content": 0.5 + rng.normal(0, 0.02, len(positions))}, index=positions.astype(int))
+    desc = generate_circular_gc_content_path_desc(300, total, df, 60, 1.0, "GC")
+    diff = df["GC content"] - df["GC content"].mean()
+    radii = (300 + 30 * diff / diff.abs().max()).to_numpy()
+    line_positions = np.append(positions, float(total))
+    line_radii = np.append(radii, radii[0])
+    angles = np.radians(360.0 * line_positions / total - 90)
+    xs = np.concatenate(([line_radii[0] * math.cos(math.radians(-90))], line_radii * np.cos(angles)))
+    ys = np.concatenate(([line_radii[0] * math.sin(math.radians(-90))], line_radii * np.sin(angles)))
+    assert desc.startswith(track_polyline(xs, ys) + "z")
