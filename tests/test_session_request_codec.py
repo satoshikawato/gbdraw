@@ -3733,3 +3733,23 @@ def test_gallery_comparison_tables_survive_a_read_unchanged(name: str, tmp_path:
     assert tables
     for text in tables:
         assert _reencoded(text, tmp_path) == text
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_schema9_region_whose_start_is_greater_than_its_end_is_the_reversed_span(tmp_path: Path, mode: str) -> None:
+    # OV-2746: before request schema 10 a region with the larger number first was the reversed span, as the Web read
+    # it (v0.14.5); only a schema 10 window whose start is after its end crosses the origin.
+    source = _source_file(tmp_path / "record.gbk")
+    request_type = LinearDiagramRequest if mode == "linear" else CircularDiagramRequest
+    encoded = encode_canonical_request(
+        request_type(records=(RecordInput(source=GenBankInputSource(source), region=parse_region_spec("50-300")),))
+    )
+    resource_paths = _materialize_resources(encoded, tmp_path / "resources")
+    payload = _payload_for_schema(encoded, 9)
+    payload["records"][0]["region"].update(start=300, end=50, reverseComplement=False)
+    decoded = decode_canonical_request(payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert decoded.records[0].windows == (RecordWindow(50, 300, True),)
+    windowed = copy.deepcopy(encoded.payload)
+    windowed["records"][0]["windows"][0].update(start=300, end=50, reverseComplement=False)
+    decoded = decode_canonical_request(windowed, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert decoded.records[0].windows == (RecordWindow(300, 50, False),)

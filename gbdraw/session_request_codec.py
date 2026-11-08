@@ -1541,6 +1541,14 @@ def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]
     return []
 
 
+def legacy_region_span(start: int, end: int, reverse: bool) -> tuple[int, int, bool]:
+    """The span a schema <= 9 ``region`` draws: one whose start is greater than its end is the reversed span, as
+    the Web read it in v0.14.5; only a schema 10 window whose start is after its end crosses the origin. The Web's
+    reader is ``promoteRecordRegionsToWindows``."""
+
+    return (end, start, True) if start > end else (start, end, reverse)
+
+
 def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     if value is None:
         return None
@@ -1553,6 +1561,7 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     start = _integer(region["start"], f"{path}.start")
     end = _integer(region["end"], f"{path}.end")
     reverse = _boolean(region["reverseComplement"], f"{path}.reverseComplement")
+    start, end, reverse = legacy_region_span(start, end, reverse)
     selector_text = selector.raw if selector is not None else ""
     coordinate_text = region_text(start, end, reverse)
     raw = f"{selector_text}:{coordinate_text}" if selector_text else coordinate_text
@@ -6211,6 +6220,7 @@ def describe_canonical_request() -> dict[str, Any]:
 
 __all__ = [
     "StoredRecordWindow",
+    "legacy_region_span",
     "stored_record_windows",
     "decode_record_selector",
     "encode_annotation_set",

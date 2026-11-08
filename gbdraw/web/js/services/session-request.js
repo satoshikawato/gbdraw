@@ -1517,7 +1517,8 @@ const linearSeqRecordFields = (record) => {
     region_record_id: canonicalRecordSelector(record) || '',
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
-    region_reverse: Boolean(only ? only.reverseComplement : record?.presentation?.reverseComplement),
+    // A record's own reverse complement applies after its crop, as the window's does (`crop_record_windows`).
+    region_reverse: Boolean(only?.reverseComplement || record?.presentation?.reverseComplement),
     windows: only ? [] : windows
   };
 };
@@ -7447,9 +7448,14 @@ const promoteRecordRegionsToWindows = (records) => {
       return;
     }
     if (region.selector != null && record.selector == null) record.selector = region.selector;
-    record.windows = [{
-      start: region.start, end: region.end, reverseComplement: region.reverseComplement, column: null
-    }];
+    // A schema <= 9 region with the larger number first is the reversed span (v0.14.5); only a schema 10 window
+    // whose start is after its end crosses the origin, so the promoted window states the span in order (Python's
+    // `_decode_region`).
+    const { start, end } = region;
+    const reversed = typeof start === 'number' && typeof end === 'number' && start > end;
+    record.windows = [reversed
+      ? { start: end, end: start, reverseComplement: true, column: null }
+      : { start, end, reverseComplement: region.reverseComplement, column: null }];
   });
 };
 

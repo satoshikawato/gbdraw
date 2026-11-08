@@ -3121,7 +3121,7 @@
         },
         {
           "resourceId": "record-1-genbank",
-          "regionSpec": "300-50:rc",
+          "regionSpec": "50-300:rc",
           "recordSelector": null,
           "reverse": false
         }

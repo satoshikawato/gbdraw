@@ -6294,11 +6294,13 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.equal(requestOf({ ...base.form, linear_wrap_length: 'auto' }).renderRequest.diagramOptions.configOverrides[WRAP], 'auto');
   assert.equal(requestOf({ ...base.form, linear_wrap_length: 20000 }).renderRequest.diagramOptions.configOverrides[WRAP], 20000);
   // Off writes no leaf: the request equals the one of the same draft without the field, and the request the base
-  // of Wrap Rows (893e3c153, before the field existed) compiled from this state, by its digest.
+  // of Wrap Rows (893e3c153, before the field existed) compiled from this state, by its digest, written at request
+  // schema 10: the only difference from that request is schema 9 -> 10 and each record's `region` (with its
+  // selector) becoming `windows` beside the record's selector.
   const offRequest = JSON.stringify(requestOf({ ...base.form, linear_wrap_length: null }).renderRequest);
   assert.equal(offRequest, JSON.stringify(requestOf(formBeforeTheField).renderRequest), 'off: no leaf');
   assert.equal(createHash('sha256').update(offRequest).digest('hex'),
-    '2170105a4f563c058c1f38dec30c07a5ab21229e0b19c5d1544baa180425b9c9', 'off: the request 893e3c153 compiled');
+    '4c1978d0495f864924b1588a2cfdba33ba6c1a93486f0483be7ba47fd009117b', 'off: the request 893e3c153 compiled, at schema 10');
   assert.ok(managedConfigOverridePathsForMode('linear').includes(WRAP));
   assert.ok(!managedConfigOverridePathsForMode('circular').includes(WRAP));
 
