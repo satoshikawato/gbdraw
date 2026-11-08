@@ -3056,17 +3056,15 @@ def _build_current_derived_entries(
     derived_records = []
     for index, instance_key in enumerate(_request_record_instance_keys(request)):
         binding = record_instances.get(instance_key, {})
-        windows = request.records[index].windows
+        # The drawn unit's orientation, as the Web's view transform of it states (the planned request's records
+        # are materialized and hold none).
         derived_records.append(
             DerivedLosatpRecord(
                 index=index,
                 runtime_binding_hash=str(binding.get("runtimeBindingHash") or ""),
                 display_binding_hash=str(binding.get("displayBindingHash") or ""),
                 length=len(records[index].seq),
-                reverse=bool(
-                    request.records[index].presentation.reverse_complement
-                    or any(window.reverse_complement for window in windows)
-                ),
+                reverse=record_is_reverse_complemented(records[index]),
             )
         )
     identity = derived_losatp_identity(settings, derived_records, pairs)
