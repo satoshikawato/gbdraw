@@ -350,7 +350,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -5617,16 +5617,16 @@ export const duplicateDrawingState = (source, copyId) => {
  * (D-15-182), and a source replacement that retires the record presentation
  * (D-32, app/circular-record-controls.js) writes these values.
  * @typedef {{ circular_record_selector: string, circular_region_start: number | null,
- *   circular_region_end: number | null, circular_reverse: boolean, circular_record_label: string,
- *   circular_record_subtitle: string }} CircularRecordForm
+ *   circular_region_end: number | null, circular_reverse: boolean, circular_windows: readonly LinearSeqWindow[],
+ *   circular_record_label: string, circular_record_subtitle: string }} CircularRecordForm
  */
 /** @type {Readonly<CircularRecordForm>} */
 export const CIRCULAR_RECORD_FORM_DEFAULTS = Object.freeze((({
-  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
-  circular_record_subtitle
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_windows,
+  circular_record_label, circular_record_subtitle
 }) => ({
-  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
-  circular_record_subtitle
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse,
+  circular_windows: Object.freeze(circular_windows), circular_record_label, circular_record_subtitle
 }))(createDefaultForm()));
 // The registry rows that name records of the drawing's files (R17-4, D-15-182):
 // the Circular record form fields, the OFF records, the Multi-Record Canvas

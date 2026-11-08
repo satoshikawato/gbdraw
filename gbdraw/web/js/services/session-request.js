@@ -89,7 +89,7 @@ import {
 import {
   buildDisambiguatedRecordEntries,
   circularDrawingRecordSet,
-  circularFormRegion,
+  circularFormCrop,
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
@@ -1447,17 +1447,17 @@ const linearRecordMetadataEntry = ({ recordKey, losatGencode }, definition, subt
  */
 
 /**
- * The windows of a Circular single record: its crop as one window, or none.
+ * The windows of a Circular single record: its crop as one window (`circularFormCrop`), or none.
  * @param {CircularRegionForm & { circular_reverse?: unknown }} form
  * @param {{ recordLength?: unknown, record_length?: unknown, value?: unknown } | null} record
  * @returns {CanonicalRecord['windows']}
  */
 const circularWindowsPayload = (form, record) => {
-  const region = circularFormRegion(form, record);
-  if (region === null) return [];
-  if ('error' in region) throw region.error;
+  const crop = circularFormCrop(form, record);
+  if (crop === null) return [];
+  if ('error' in crop) throw crop.error;
   // The request sends the End as typed: Python shortens an End past the record end (R7).
-  return [{ start: region.start, end: region.end, reverseComplement: Boolean(form.circular_reverse), column: null }];
+  return [{ start: crop.start, end: crop.end, reverseComplement: crop.reverseComplement, column: null }];
 };
 
 /**
@@ -1506,22 +1506,32 @@ export const linearWindowsPayload = (seq, { arranged }) => {
   }];
 };
 
+/**
+ * A request record's windows as a crop form holds them: the one window its Start/End fields hold
+ * (`cardCropWindow`), else the list it shows read-only (several windows, or one across the origin).
+ * @param {RequestRecordView | null | undefined} record
+ */
+const cropFieldsOfWindows = (record) => {
+  const windows = (record?.windows || []).map(({ start, end, reverseComplement, column }) => ({
+    start, end, reverseComplement, column
+  }));
+  const only = cardCropWindow(windows);
+  return { only, listed: only ? [] : windows };
+};
+
 // The Linear card fields that hold a request record's selection, windows, and
 // orientation: one window is the card's own crop, several the windows it shows
 // (`createLinearSeq`).
 /** @param {RequestRecordView | null | undefined} record */
 const linearSeqRecordFields = (record) => {
-  const windows = (record?.windows || []).map(({ start, end, reverseComplement, column }) => ({
-    start, end, reverseComplement, column
-  }));
-  const only = cardCropWindow(windows);
+  const { only, listed } = cropFieldsOfWindows(record);
   return {
     region_record_id: canonicalRecordSelector(record) || '',
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
     // A record's own reverse complement applies after its crop, as the window's does (`crop_record_windows`).
     region_reverse: Boolean(only?.reverseComplement || record?.presentation?.reverseComplement),
-    windows: only ? [] : windows
+    windows: listed
   };
 };
 
@@ -6986,7 +6996,9 @@ export const projectCanonicalSessionRequest = ({
   const circularPresentationRecord = (
     renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
   ) ? records[0] : null;
-  const circularPresentationRegion = circularPresentationRecord?.windows?.[0] || null;
+  // The crop the Start/End fields hold, or the window across the origin the list holds (D-45).
+  const circularPresentationCrop = cropFieldsOfWindows(circularPresentationRecord);
+  const circularPresentationRegion = circularPresentationCrop.only;
   const form = {
     prefix: projectedOutputPrefix(
       renderRequest,
@@ -7005,6 +7017,7 @@ export const projectCanonicalSessionRequest = ({
       : '',
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,
+    circular_windows: circularPresentationCrop.listed,
     circular_reverse: Boolean(
       circularPresentationRegion?.reverseComplement ||
       circularPresentationRecord?.presentation?.reverseComplement

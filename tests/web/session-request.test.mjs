@@ -404,7 +404,7 @@ const state = {
     labels_mode: 'none', show_labels_linear: 'none', track_type: 'tuckin',
     linear_track_layout: 'middle', linear_ruler_on_axis: false, align_center: false,
     keep_definition_left_aligned: false, show_scale: true, scale_style: 'bar',
-    normalize_length: false
+    normalize_length: false, circular_windows: []
   },
   adv: {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
@@ -1098,6 +1098,36 @@ assert.equal(
   selectedCircularRebuilt.renderRequest.records[0].presentation.label,
   '長い <i>環状ゲノム</i> ラベル'
 );
+
+// Review S3 (PD-OI-122): a CLI or Python Circular Session whose record has one window across the origin
+// (start after end) loads into the drawing's window list, not into the Start/End fields, which read an End
+// before the Start as an error; Save and Generate write the window back unchanged.
+const originCircularCanonical = structuredClone(selectedCircularCanonical);
+originCircularCanonical.renderRequest.records[0].windows = [{ start: 15, end: 3, reverseComplement: true, column: null }];
+const originCircularProjection = projectCanonicalSessionRequest(originCircularCanonical);
+assert.deepEqual(
+  (({ circular_region_start, circular_region_end, circular_reverse, circular_windows }) => ({
+    circular_region_start, circular_region_end, circular_reverse, circular_windows
+  }))(originCircularProjection.config.form),
+  {
+    circular_region_start: null,
+    circular_region_end: null,
+    circular_reverse: false,
+    circular_windows: [{ start: 15, end: 3, reverseComplement: true, column: null }]
+  }
+);
+Object.assign(state.form, originCircularProjection.config.form);
+assert.deepEqual(
+  buildCanonicalRenderRequestRaw({ state, filesData: originCircularProjection.files }).renderRequest.records[0].windows,
+  [{ start: 15, end: 3, reverseComplement: true, column: null }]
+);
+// An End typed before the Start keeps its meaning: refused (ORDER), with no window in the list.
+Object.assign(state.form, { circular_windows: [], circular_region_start: 15, circular_region_end: 3 });
+assert.throws(
+  () => buildCanonicalRenderRequestRaw({ state, filesData: originCircularProjection.files }),
+  { code: 'REGION_INVALID', context: { field: 'region', reason: 'ORDER' } }
+);
+Object.assign(state.form, selectedCircularProjection.config.form);
 
 const invalidCircularCases = [
   [{ circular_region_start: 3, circular_region_end: null }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'BOTH_ENDPOINTS' } }],

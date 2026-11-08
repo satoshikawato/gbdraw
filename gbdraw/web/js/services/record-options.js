@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { LinearSeqWindow } from './drawing/inputs.js' */
 import { circularRecordRequestKeys, circularRecordsToDraw } from './record-draw-selection.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -143,10 +144,12 @@ export const resolveCircularRequestRecordSet = ({
 };
 
 /**
- * The region fields of the Circular form.
+ * The crop fields of the Circular form: the region its Start/End fields state, and the window list that holds what
+ * those fields cannot (one window across the origin of a circular record, which a CLI or Python Session wrote).
  * @typedef {object} CircularRegionForm
  * @property {unknown} circular_region_start
  * @property {unknown} circular_region_end
+ * @property {readonly LinearSeqWindow[]} circular_windows
  */
 
 /**
@@ -282,7 +285,7 @@ export const regionClampNote = (region) => (
  * @param {{ recordLength?: unknown, record_length?: unknown } | null} [record] the record it crops, when known
  * @returns {RecordRegion | { error: Error } | null}
  */
-export const circularFormRegion = (form, record = null) => {
+const circularFormRegion = (form, record = null) => {
   const hasStart = cleanText(form.circular_region_start) !== '';
   const hasEnd = cleanText(form.circular_region_end) !== '';
   if (!hasStart && !hasEnd) return null;
@@ -297,17 +300,52 @@ export const circularFormRegion = (form, record = null) => {
 };
 
 /**
- * The region Generate crops a record to: the form's region when the drawing
- * offers that record alone and Generate can draw the region; null otherwise
- * (a region Generate refuses crops nothing).
+ * The crop of a Circular record as Generate sends it: its span and orientation, the bases it draws (null while the
+ * length of a record whose window crosses the origin is not known), and the region of the Start/End fields it came
+ * from (null for a listed window).
+ * @typedef {{ start: number, end: number, reverseComplement: boolean, bases: number | null, region: RecordRegion | null }} CircularCrop
+ */
+/**
+ * The crop of the record a Circular drawing offers alone: the window its list holds (one window across the origin,
+ * D-45: the list is the mark, never the Start/End fields), else the region its fields state (`circularFormRegion`).
+ * null without one, and `{ error }` while Generate cannot draw it. The one reader of the crop for the request, the
+ * estimates and the notes.
+ * @param {CircularRegionForm & { circular_reverse?: unknown }} form
+ * @param {{ recordLength?: unknown, record_length?: unknown } | null} [record] the record it crops, when known
+ * @returns {CircularCrop | { error: Error } | null}
+ */
+export const circularFormCrop = (form, record = null) => {
+  const [listed] = form.circular_windows;
+  if (listed) {
+    const { start, end } = listed;
+    if (start === null || end === null) {
+      return { error: diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }) };
+    }
+    const length = Number(record?.recordLength ?? record?.record_length);
+    const known = Number.isInteger(length) && length > 0;
+    const bases = start <= end ? end - start + 1 : known ? length - start + 1 + end : null;
+    return { start, end, reverseComplement: listed.reverseComplement, bases, region: null };
+  }
+  const region = circularFormRegion(form, record);
+  if (region === null || 'error' in region) return region;
+  return {
+    start: region.start, end: region.end, reverseComplement: Boolean(form.circular_reverse),
+    bases: region.drawnEnd - region.start + 1, region
+  };
+};
+
+/**
+ * The crop Generate applies to a record: the form's crop when the drawing
+ * offers that record alone and Generate can draw it; null otherwise
+ * (a crop Generate refuses crops nothing).
  * @param {boolean} single whether the drawing offers one record alone (`isSingleCircularJourney`)
  * @param {CircularRegionForm} form
  * @param {{ recordLength?: unknown, record_length?: unknown } | null} record the record it crops, when known
- * @returns {RecordRegion | null}
+ * @returns {CircularCrop | null}
  */
 const circularCropRegion = (single, form, record) => {
-  const region = single ? circularFormRegion(form, record) : null;
-  return region !== null && !('error' in region) ? region : null;
+  const crop = single ? circularFormCrop(form, record) : null;
+  return crop !== null && !('error' in crop) ? crop : null;
 };
 
 /**
@@ -329,7 +367,19 @@ export const circularDrawingCropped = (records, drawing) => {
  */
 export const circularDrawingRegionNote = (records, drawing) => {
   const recordSet = circularDrawingRecordSet(records, drawing);
-  return regionClampNote(circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null));
+  return regionClampNote(circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null)?.region ?? null);
+};
+
+/**
+ * The read-only list of the window a Circular drawing's record keeps across the origin (`linearRecordWindowRows`),
+ * with the length of the record it offers alone, once read; empty without one.
+ * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
+ * @param {CircularRecordDrawing} drawing
+ */
+export const circularDrawingWindowRows = (records, drawing) => {
+  if (!drawing.form.circular_windows.length) return [];
+  const length = Number(circularDrawingRecordSet(records, drawing).records[0]?.record_length);
+  return linearRecordWindowRows(drawing.form.circular_windows, Number.isInteger(length) && length > 0 ? length : null);
 };
 
 /**
@@ -358,8 +408,8 @@ export const circularRequestDiagrams = (records, drawing) => {
   // A discovered record keeps its fields through the record set.
   /** @param {{ record_length?: unknown, sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record */
   const drawnLength = (record) => {
-    const region = circularCropRegion(single, drawing.form, record);
-    return region !== null ? region.drawnEnd - region.start + 1 : Number(record.record_length);
+    const crop = circularCropRegion(single, drawing.form, record);
+    return crop !== null ? crop.bases ?? 0 : Number(record.record_length);
   };
   return (drawing.form.multi_record_canvas ? [drawn] : drawn.map((record) => [record]))
     .map((diagram) => ({

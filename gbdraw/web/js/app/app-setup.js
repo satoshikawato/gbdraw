@@ -1396,7 +1396,7 @@ export const createAppSetup = () => {
   };
   const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
-    linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
     shownLinearWrapReading
   } = createShownDrawingReaders({
@@ -4267,6 +4267,7 @@ export const createAppSetup = () => {
     resolveChoicePrompt: choicePrompt.resolve,
     submitChoicePromptField: choicePrompt.submitField,
     circularRegionNote,
+    circularWindowRows,
     linearRegionNote,
     linearCardWindowRows,
     notice: noticeBanner.notice,

@@ -58,6 +58,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_region_start"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_region_end"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_reverse"},
+    {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_windows"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_record_label"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "circular_record_subtitle"},
     {"domain": "config.form", "key": null, "migrate": "copy", "modes": "both", "path": "separate_strands"},

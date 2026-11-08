@@ -253,7 +253,7 @@ classDiagram
     103 fields
   }
   class SessionModeSliceConfigForm {
-    30 fields
+    31 fields
   }
   class SessionModeSliceConfigLosat {
     +blastn? any

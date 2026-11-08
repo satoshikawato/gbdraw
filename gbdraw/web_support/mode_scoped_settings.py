@@ -110,6 +110,8 @@ _FORM_ROWS = _rows(
     ("circular_region_start", "circular", "own"),
     ("circular_region_end", "circular", "own"),
     ("circular_reverse", "circular", "own"),
+    # The window across the origin a CLI or Python Session gave the record; the Start/End fields cannot hold it.
+    ("circular_windows", "circular", "own"),
     ("circular_record_label", "circular", "own"),
     ("circular_record_subtitle", "circular", "own"),
     ("separate_strands", "both", "copy"),

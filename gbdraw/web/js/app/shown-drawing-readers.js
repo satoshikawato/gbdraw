@@ -10,7 +10,7 @@
 import { inputSummaryOf } from '../services/input-summary.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
-  circularDrawingRegionNote, linearCardRegion, linearRecordWindowRows, regionClampNote, resolveDisambiguatedRecordSelection
+  circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, linearRecordWindowRows, regionClampNote, resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -37,7 +37,7 @@ const { computed } = window.Vue;
  */
 
 /**
- * Registers the three computeds (`circularRegionNote`, `shownInputSummary`,
+ * Registers the computeds (`circularRegionNote`, `circularWindowRows`, `shownInputSummary`,
  * `shownLinearWrapReading`); the root calls it where they stood.
  * @param {ShownDrawingReaderPorts} ports
  */
@@ -75,6 +75,11 @@ export const createShownDrawingReaders = ({
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
     return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
+  });
+  // The read-only list of the window across the origin the shown Circular drawing's record keeps (D-45).
+  const circularWindowRows = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing ? circularDrawingWindowRows(drawing.circularRecordList.value, drawing) : [];
   });
   // The input summary of the shown Result: its warnings in the status area, its lines in Run info, its
   // wrapped rows.
@@ -167,7 +172,7 @@ export const createShownDrawingReaders = ({
     });
   });
   return {
-    linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
     shownLinearWrapReading
   };

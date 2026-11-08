@@ -146,6 +146,15 @@ requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*`
 Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
 refuses every Session 51 file by its version.
 
+A Circular drawing of Session 51 keeps the window of its record that its Start/End fields cannot hold, one window
+across the origin of a circular record (start after end, PD-OI-122), in `config.form.circular_windows`: a list of
+`{start, end, reverseComplement, column}` as the request writes it, empty for a record drawn whole or in one ordered
+window (`circular_region_start`/`circular_region_end` hold that one). It is a mode-scoped row of the Circular slice
+(`gbdraw/web_support/mode_scoped_settings.py`). Load fills it from the request (`projectCanonicalSessionRequest`), so
+a Session that the Python API saved with `RecordWindow(16000, 100)` loads with the window, and Save and Generate write
+it back as the request's window. A stored config without the key reads as an empty list; a value that is not a list
+reads as empty, with its Load repair row. The version does not change (Session 51 has not reached `main`).
+
 ## Unreleased: depth and GC Percent axis label styles
 
 No Session or request version changes. The config leaves `objects.depth.axis_labels` and

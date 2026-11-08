@@ -14,6 +14,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
+/** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { RevealSetting } from './settings-pane.js' */
 
 const { computed, nextTick, watch } = window.Vue;
@@ -57,8 +58,8 @@ export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords
 /**
  * The record form fields of a Circular drawing as a new drawing has them.
  * @typedef {Readonly<{ circular_record_selector: string, circular_region_start: number | null,
- *   circular_region_end: number | null, circular_reverse: boolean, circular_record_label: string,
- *   circular_record_subtitle: string }>} CircularRecordFormDefaults
+ *   circular_region_end: number | null, circular_reverse: boolean, circular_windows: readonly LinearSeqWindow[],
+ *   circular_record_label: string, circular_record_subtitle: string }>} CircularRecordFormDefaults
  */
 
 /**
@@ -100,6 +101,7 @@ export const createCircularSourceEdits = ({
     form.circular_region_start = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_start;
     form.circular_region_end = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_end;
     form.circular_reverse = CIRCULAR_RECORD_FORM_DEFAULTS.circular_reverse;
+    form.circular_windows = [...CIRCULAR_RECORD_FORM_DEFAULTS.circular_windows];
     form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
     form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };

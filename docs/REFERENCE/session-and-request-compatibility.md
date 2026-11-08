@@ -40,6 +40,10 @@ A Session 51 drawing's stored config also holds the **figure size** leaves
 The Web app keeps them in each drawing's `config.form.figure_width` and
 `config.form.figure_height` (`null` for Auto) and writes a set side as the leaf.
 A Session without the leaves reads as auto.
+A Session 51 Circular drawing whose record is drawn in one window across the origin of a circular record (a start
+after its end, such as a Session the Python API saved with `RecordWindow(16000, 100)`) keeps that window in
+`config.form.circular_windows`; the Web app shows it read-only under Region and draws and saves it unchanged. A
+Session without the key reads as no such window.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
 `axis` (with `axis.source.isCircular`, whether a selected span may cross the

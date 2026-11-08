@@ -636,6 +636,7 @@
         "circular_region_end": true,
         "circular_region_start": true,
         "circular_reverse": true,
+        "circular_windows": true,
         "figure_height": true,
         "figure_width": true,
         "keep_definition_left_aligned": true,
