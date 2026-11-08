@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  MAX_POPUP_PLACES, placePopupNearPoint, placePopupWithin, popupPlaces, popupViewportBounds
+  MAX_POPUP_PLACES, placePopupNearPoint, placePopupWithin, popupPlaces, popupViewportBounds, primaryPressAfter
 } from '../../gbdraw/web/js/utils/popup-bounds.js';
 
 // OV-371 and OV-384: the first placement of a popup opened at a clicked point.
@@ -204,4 +204,18 @@ test('a popup stays inside the rectangle its anchor gives besides the bounds', (
   const obstacles = [{ left: 0, right: 1600, top: 56, bottom: 400 }];
   const clear = placePopupNearPoint({ point: { x: 700, y: 600, within, obstacles }, width: 400, height: 300, bounds: desktop });
   assert.ok(clear.y >= 412 && clear.y + 300 <= toolbarTop - 12, JSON.stringify(clear));
+});
+
+// OV-2704: a click is measured from the press of the primary button, which a
+// chorded press (another button already held) sends as a pointermove.
+test('the press a click is measured from is that of the primary button', () => {
+  const kept = { clientX: 5, clientY: 5 };
+  const event = (type, button, buttons) => ({ type, button, buttons, clientX: 100, clientY: 80 });
+  const at = { clientX: 100, clientY: 80 };
+  assert.deepEqual(primaryPressAfter(kept, event('pointerdown', 0, 1)), at);
+  assert.deepEqual(primaryPressAfter(null, event('pointerdown', 0, 0)), at, 'a synthetic press sets no buttons');
+  assert.equal(primaryPressAfter(kept, event('pointerdown', 2, 2)), kept, 'another button does not click');
+  assert.deepEqual(primaryPressAfter(kept, event('pointermove', 0, 3)), at, 'the primary button added to a held one');
+  assert.equal(primaryPressAfter(kept, event('pointermove', 0, 2)), kept, 'the primary button released, another held');
+  assert.equal(primaryPressAfter(kept, event('pointermove', -1, 1)), kept, 'a move with no button change');
 });
