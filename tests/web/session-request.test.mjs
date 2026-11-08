@@ -2405,9 +2405,10 @@ assert.equal(firstCardGenbank.match(/^LOCUS/gm)?.length, 1);
 assert.equal(secondCardGenbank.match(/^LOCUS/gm)?.length, 1);
 assert.match(firstCardGenbank, /WEBTEST/);
 assert.match(secondCardGenbank, /WEBTWO/);
-// OV-2878: cards follow the source files, not the record keys' base: keys
-// `x:1` (first file) and `x:2` (second file) make two cards, each keyed by
-// its record; two records of one file keep the base as their card's uid.
+// OV-2878: cards follow the source files, not the record keys' base. Their
+// uids come from the one card uid rule (D-12, `cardUids`, OV-2904): the CLI
+// key base a file's records share (`record-<n>`, distinct over the files),
+// else `record-1` for one card and `source-<n>` for several.
 /** @param {{ recordKey: string, resourceId: string }[]} keyed */
 const cardsOfKeys = (keyed) => projectCanonicalSessionRequest({
   renderRequest: {
@@ -2423,11 +2424,24 @@ const firstResource = canonical.renderRequest.records[0].source.resourceId;
 const firstName = multiCards[0].gb.name;
 assert.deepEqual(
   cardsOfKeys([{ recordKey: 'x:1', resourceId: firstResource }, { recordKey: 'x:2', resourceId: 'record-2-genbank' }]),
-  [{ uid: 'x:1', name: firstName }, { uid: 'x:2', name: multiCards[1].gb.name }]
+  [{ uid: 'source-1', name: firstName }, { uid: 'source-2', name: multiCards[1].gb.name }]
 );
 assert.deepEqual(
   cardsOfKeys([{ recordKey: 'x:1', resourceId: firstResource }, { recordKey: 'x:2', resourceId: firstResource }]),
-  [{ uid: 'x', name: firstName }]
+  [{ uid: 'record-1', name: firstName }]
+);
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'record-1:1', resourceId: firstResource }, { recordKey: 'record-1:2', resourceId: firstResource }]),
+  [{ uid: 'record-1', name: firstName }]
+);
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'record-2:1', resourceId: firstResource }, { recordKey: 'record-1', resourceId: 'record-2-genbank' }]),
+  [{ uid: 'record-2', name: firstName }, { uid: 'record-1', name: multiCards[1].gb.name }]
+);
+// A 0.14.2 Session of record 2 drawn alone keyed it `circular-<record ID>-#2`: its card is `record-1` (OV-2904).
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'circular-BGC0000709-#2', resourceId: firstResource }]),
+  [{ uid: 'record-1', name: firstName }]
 );
 
 state.mode = 'linear';

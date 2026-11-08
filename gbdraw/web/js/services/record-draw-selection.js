@@ -301,13 +301,24 @@ const legacyFlatRecords = (sources) => {
   return flat;
 };
 
-const FLAT_RECORD_SELECTOR = /^#[1-9][0-9]*$/;
+const FLAT_RECORD_SELECTOR = /^#([1-9][0-9]*)$/;
+/**
+ * The N of a source selector `#N` (the N-th record over all the drawing's
+ * records, as a Session 46-50 wrote it), null for any other value: the one
+ * reader of that shape, for the Session move and for the `#N` it kept (OV-2869).
+ * @param {unknown} key
+ * @returns {number | null}
+ */
+export const flatRecordSelectorNumber = (key) => {
+  const match = typeof key === 'string' ? FLAT_RECORD_SELECTOR.exec(key) : null;
+  return match ? Number(match[1]) : null;
+};
 /**
  * Whether a key is a record selector `#N` that a Session 46-50 Session move
  * kept as it was (OV-2869): the N-th record of all the drawing's records.
  * @param {unknown} key
  */
-export const isFlatRecordSelector = (key) => typeof key === 'string' && FLAT_RECORD_SELECTOR.test(key);
+export const isFlatRecordSelector = (key) => flatRecordSelectorNumber(key) !== null;
 
 /**
  * The Circular record choices a Session names records in: the OFF records,

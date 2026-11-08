@@ -28,7 +28,7 @@ import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
 import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
-import { isCliRecordKey } from './record-draw-selection.js';
+import { flatRecordSelectorNumber, isCliRecordKey } from './record-draw-selection.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
@@ -646,10 +646,9 @@ export const sessionDocumentOfViews = (saved, activeDrawingId) => {
 };
 
 const MODE_SCOPED_CIRCULAR_INPUT = fieldSet(LAYOUT.modeScopedCircularInputSlots);
-const SOURCE_SELECTOR = /^#([1-9][0-9]*)$/;
 
 /** `_request_record_file`: the resource of the file a request record reads. @param {unknown} record @returns {unknown} */
-const requestRecordFile = (record) => {
+export const requestRecordFile = (record) => {
   const source = mapping(mapping(record).source);
   return source.resourceId || source.fastaResourceId;
 };
@@ -669,7 +668,8 @@ const cardRecordCounts = (cards, records) => {
 };
 
 /**
- * `_card_uids`: the uid of each card (D-12). The key base of the committed
+ * `_card_uids`: the uid of each card (D-12), the one rule of a Session move's
+ * cards and of the cards a Load makes of a request without bindings (OV-2904). The key base of the committed
  * request's records of each card's own file, when every card's file is read by
  * records of one key base of the CLI's form (`record-<n>`) and the bases differ; else
  * `record-1` for one card and `source-<n>` for several, which no key of a
@@ -679,7 +679,7 @@ const cardRecordCounts = (cards, records) => {
  * @param {readonly unknown[]} records The committed request's records.
  * @returns {string[]}
  */
-const cardUids = (files, records) => {
+export const cardUids = (files, records) => {
   const bases = files.map((file) => {
     const resourceId = mapping(file).resourceId;
     const keys = new Set(records.filter((record) => resourceId && requestRecordFile(record) === resourceId)
@@ -737,8 +737,8 @@ export const circularSourcesOfModeScoped = (data) => {
   const positions = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : [];
   const numbers = [...recordsOff, form.circular_record_selector, ...positions.map((row) => mapping(row).selector)]
     .flatMap((value) => {
-      const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
-      return match ? [Number(match[1])] : [];
+      const number = flatRecordSelectorNumber(value);
+      return number === null ? [] : [number];
     });
   // One card known to hold several records holds every number given.
   const several = records.length > 1 || recordsOff.length > 0 || numbers.some((number) => number > 1);
@@ -748,9 +748,8 @@ export const circularSourcesOfModeScoped = (data) => {
     : cardRecordCounts(cards, records);
   /** The identity of a source selector where it can be placed; any other value as it is. @param {unknown} value @returns {unknown} */
   const identity = (value) => {
-    const match = typeof value === 'string' ? SOURCE_SELECTOR.exec(value) : null;
-    if (!match || counts === null) return value;
-    let number = Number(match[1]);
+    let number = flatRecordSelectorNumber(value);
+    if (number === null || counts === null) return value;
     for (const [index, size] of counts.entries()) {
       if (number <= size) return size > 1 ? `${cards[index].uid}:${number}` : cards[index].uid;
       number -= size;

@@ -93,6 +93,7 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import { cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion } from './record-draw-selection.js';
+import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -6508,36 +6509,27 @@ export const projectCanonicalSessionRequest = ({
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     // One File card per source file, in the order the records first read it
-    // (OV-2878; the Circular counterpart of the Linear cards below). Its uid is
-    // the base its records' keys share (`<base>:<k>`, or `<base>` for one
-    // record) when no other file's records use that base, else its first
-    // record's key.
-    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, keys: string[] }>} */
+    // (OV-2878; the Circular counterpart of the Linear cards below). The uids
+    // are the one card uid rule's (`cardUids`, D-12, OV-2904), over each file
+    // its records read.
+    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, record: (typeof records)[number] }>} */
     const sourceFiles = new Map();
     records.forEach((record) => {
-      const recordKey = String(record.recordKey || '');
+      if (!record.recordKey) return;
       const ids = recordSourceSlotIds(record.source || {});
       const file = JSON.stringify([ids.gb ?? null, ids.gff ?? null, ids.fasta ?? null]);
-      const held = sourceFiles.get(file) || { ids, keys: [] };
-      if (recordKey) held.keys.push(recordKey);
+      const held = sourceFiles.get(file) || { ids, record };
       sourceFiles.set(file, held);
     });
-    const groups = [...sourceFiles.values()].map(({ ids, keys }) => ({ ids, keys, bases: new Set(keys.map(recordKeyBase)) }));
-    /** @type {{ uid: string, gb: unknown, gff: unknown, fasta: unknown }[]} */
-    const cards = [];
-    groups.forEach(({ ids, keys, bases }, index) => {
-      const [base] = bases;
-      const ownBase = bases.size === 1 && groups.every((other, at) => at === index || !other.bases.has(base));
-      const uid = ownBase ? base : keys[0];
-      // Request keys are distinct, so are these uids, and none is a `<uid>:<k>` of another.
-      if (!uid) return;
+    const groups = [...sourceFiles.values()];
+    const uids = cardUids(groups.map(({ record }) => ({ resourceId: requestRecordFile(record) })), records);
+    files.circularSources = groups.map(({ ids }, index) => {
       const slotFile = (/** @type {InputSlot} */ slot) => {
         const id = ids[slot];
         return !id ? null : resolveResourceFile ? resolveResourceFile(id) : resourceAsLegacyFile(resources, id);
       };
-      cards.push({ uid, gb: slotFile('gb'), gff: slotFile('gff'), fasta: slotFile('fasta') });
+      return { uid: uids[index], gb: slotFile('gb'), gff: slotFile('gff'), fasta: slotFile('fasta') };
     });
-    files.circularSources = cards;
   } else {
     files.linearSeqs = records.map((record, index) => {
       const source = record.source || {};
