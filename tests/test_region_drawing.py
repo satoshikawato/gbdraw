@@ -501,6 +501,45 @@ def test_a_region_compares_the_gc_axis_font_of_the_first_depth_row_of_the_stack(
     assert _gc_font_adaptation(region) == ("reset", (7, 5.0, 8.0))
 
 
+def _adaptation_of(region: Any) -> tuple[Any, ...]:
+    reset = [(item.setting, item.explicit, item.source_auto, item.target_auto) for item in region.adaptation.reset]
+    return (dict(region.adaptation.kept), reset)
+
+
+def test_circular_track_slots_given_as_strings_adapt_like_typed_slots(tmp_path: Path) -> None:
+    # OV-2935: the CLI spelling of a slot ("id:renderer@width=20px") and the typed slot are one drawing; the Depth row's
+    # hand-set width is reset in a Linear drawing, and the widths are kept in a whole-record Circular one, in both.
+    from gbdraw.api import CircularRequestTrackOptions, CircularTrackSlot, ScalarSpec
+
+    typed = (
+        CircularTrackSlot("features", "features", width=ScalarSpec(30.0, "px")),
+        CircularTrackSlot("depth", "depth", width=ScalarSpec(20.0, "px")),
+        CircularTrackSlot("gc_content", "gc_content", width=ScalarSpec(60.0, "px")),
+    )
+    strings = ("features:features@width=30px", "depth:depth@width=20px", "gc_content:gc_content@width=60px")
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("".join(f"NC_012920.1\t{position}\t{position % 9}\n" for position in range(1, 16570)))
+
+    def derive(slots: Any, selection: RegionSelection, mode: str) -> Any:
+        source = _mito_circular(
+            depth_tracks=(DepthTrackInput(source=str(depth)),),
+            tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+        )
+        return derive_region_request(source, [selection], mode=mode)
+
+    for selection, mode in ((RegionSelection("mito", 12337, 14148), "linear"), (RegionSelection("mito", 1, 16000), "circular")):
+        from_typed = derive(typed, selection, mode)
+        from_strings = derive(strings, selection, mode)
+        assert _adaptation_of(from_strings) == _adaptation_of(from_typed)
+        assert from_typed.adaptation.kept or from_typed.adaptation.reset
+    linear = derive(strings, *(RegionSelection("mito", 12337, 14148), "linear"))
+    assert {item.setting for item in linear.adaptation.reset} >= {"circularSlot.depth.width", "circularSlot.features.width"}
+    whole = derive(strings, RegionSelection("mito", 1, 16000), "circular")
+    assert whole.adaptation.kept["circularSlot.features.width"] == 30.0
+    slots = whole.request.options.tracks.circular_track_slots
+    assert [(slot.id, slot.width) for slot in slots] == [(slot.id, slot.width) for slot in typed]
+
+
 # The request-level core and the Worker helper of New drawing from a region.
 
 
