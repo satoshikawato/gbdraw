@@ -22,15 +22,26 @@ from gbdraw.mode_profiles import DiagramMode
 SizeClass = Literal["short", "long"]
 AutoValue = float | int
 
-# (at most bp, large tick, small tick); longer records use the last pair.
+# (at most bp, large tick, small tick); longer records use the last pair. Above 10 Mbp the large ticks step
+# 1-2-5 Mbp, and each row ends at the longest record whose large tick labels, at their drawn widths, do not
+# overlap in the default figure (OV-2747; tests/test_circular_ticks.py measures every bound again).
 _CIRCULAR_TICK_TIERS: tuple[tuple[int, int, int], ...] = (
     (30_000, 1_000, 100),
     (50_000, 5_000, 1_000),
     (150_000, 10_000, 1_000),
     (1_000_000, 50_000, 10_000),
     (10_000_000, 500_000, 100_000),
+    (35_868_344, 1_000_000, 200_000),
+    (71_736_688, 2_000_000, 400_000),
+    (158_235_065, 5_000_000, 1_000_000),
+    (316_470_130, 10_000_000, 2_000_000),
+    (632_940_260, 20_000_000, 4_000_000),
+    (1_415_733_530, 50_000_000, 10_000_000),
+    (2_831_467_060, 100_000_000, 20_000_000),
+    (5_662_934_121, 200_000_000, 40_000_000),
 )
-_CIRCULAR_TICKS_ABOVE_TIERS = (1_000_000, 200_000)
+# Its labels fit records up to 12.8 Gbp.
+_CIRCULAR_TICKS_ABOVE_TIERS = (500_000_000, 100_000_000)
 # (below bp, tick interval); longer records use the last interval.
 _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
     (2_000, 100),

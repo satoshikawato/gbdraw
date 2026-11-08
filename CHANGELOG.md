@@ -193,6 +193,14 @@ write-up of a release.
   every base of the record; the sums are taken in pieces and kept only at the
   window edges. `gbdraw circular` with a 64 Mbp depth file peaks at 396 MiB
   instead of 780 MiB. Drawings do not change.
+- Fixed: Circular scale labels no longer overlap on records longer than about
+  36 Mbp (OV-2747). Every record above 10 Mbp had a large tick every 1 Mbp, so a
+  113 Mbp record drew 112 labels that merged into a black band. Above 10 Mbp the
+  interval now steps 1, 2, 5, 10, 20, 50 ... Mbp, and a record takes a longer
+  interval only where the labels of the shorter one would overlap in the
+  default figure: a 113 Mbp record has a tick every 5 Mbp. Figures of records up
+  to 35.8 Mbp do not change. The Auto hint of the scale interval in the Web app
+  shows the same interval.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.
