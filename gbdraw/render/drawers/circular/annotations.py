@@ -761,28 +761,34 @@ def _curved_label(
 
     # Text in the lower half reads anticlockwise with its tops toward the centre; elsewhere its tops face out.
     flipped = 0.0 < angle % 360.0 < 180.0
-    shown = runs
-    while True:
+
+    def placed(shown: tuple[TextRun, ...]) -> tuple[float, float, float, float, float]:
+        """The ink of ``shown`` along its baseline (left, right), how near the centre and how far from it its
+        letters come, and its baseline radius, cleared of its mark (and rings)."""
+
         left, right, top, bottom = ink(shown)
         low, high = (top, bottom) if flipped else (-bottom, -top)
 
-        def extent(radius: float, low: float = low, high: float = high) -> tuple[float, float]:
+        def extent(radius: float) -> tuple[float, float]:
             return radius + low, radius + high
 
-        def radius_for(target: float, low: float = low, high: float = high) -> float:
+        def radius_for(target: float) -> float:
             # The letters' radial extent moves one for one with the baseline radius; the nearest ink stays off the
             # centre.
             return max(target - (low if outward else high), 1e-6 - low)
 
         radius = clear(extent, radius_for)
-        # How far the ink may reach each way from the label's middle, along the circle its letters come nearest the
-        # centre on (OV-2806): there they stand closest together, and a circle about as small as the letters, or
-        # letters pressed against the centre past their mark, leave no room for one.
-        room = math.radians(_MAX_HALF_PATH_DEG) * extent(radius)[0] - font_size
-        if max(-left, right) <= room or shown == _CUT_ONLY:
-            break
-        shown = _cut_to(runs, room, ink)
-    near, far = extent(radius)
+        return left, right, *extent(radius), radius
+
+    def fits(shown: tuple[TextRun, ...]) -> bool:
+        # The ink reaches at most this far each way from the label's middle along the circle its letters come
+        # nearest the centre on, where they stand closest together (OV-2806): a circle about as small as the
+        # letters, or letters pressed against the centre past their mark, leave no room for one.
+        left, right, near, _far, _radius = placed(shown)
+        return max(-left, right) <= math.radians(_MAX_HALF_PATH_DEG) * near - font_size
+
+    shown = runs if fits(runs) else _cut_to(runs, fits)
+    left, right, near, far, radius = placed(shown)
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0
     centre = angle + sign * math.degrees(0.5 * (left + right) / radius)
@@ -805,9 +811,10 @@ def _curved_label(
     )
 
 
-def _cut_to(runs: tuple[TextRun, ...], room: float, ink: LabelInk) -> tuple[TextRun, ...]:
-    """The longest start of ``runs``, ended with an ellipsis in the style of its last run, whose ink reaches at most
-    ``room`` each way from its middle (only the ellipsis when no start fits)."""
+def _cut_to(runs: tuple[TextRun, ...], fits: Callable[[tuple[TextRun, ...]], bool]) -> tuple[TextRun, ...]:
+    """The longest start of ``runs``, ended with an ellipsis in the style of its last run, that ``fits`` its circle
+    where its own letters stand (only the ellipsis when no start fits): a longer start reaches further along the
+    circle and no less far across it, so the starts that fit are the shorter ones."""
 
     def cut(length: int) -> tuple[TextRun, ...]:
         kept: list[TextRun] = []
@@ -823,14 +830,10 @@ def _cut_to(runs: tuple[TextRun, ...], room: float, ink: LabelInk) -> tuple[Text
         text, style = kept[-1]
         return (*kept[:-1], (text.rstrip() + _CUT_MARK, style))
 
-    def fits(length: int) -> bool:
-        left, right, _top, _bottom = ink(cut(length))
-        return max(-left, right) <= room
-
     low, high = 0, sum(len(text) for text, _style in runs) - 1
     while low < high:
         middle = (low + high + 1) // 2
-        if fits(middle):
+        if fits(cut(middle)):
             low = middle
         else:
             high = middle - 1
