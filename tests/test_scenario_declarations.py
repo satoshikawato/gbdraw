@@ -116,6 +116,7 @@ CLI_OPTION_CAPABILITIES: dict[str, str] = {
     "--conservation_ring_gap": "comparison.circular-rings",
     "--conservation_ring_width": "comparison.circular-rings",
     "--conservation_sequence": "comparison.circular-rings",
+    "--conservation_genome": "comparison.circular-rings",
     "--gc": "track.gc-content",
     "--no-gc": "track.gc-content",
     "--gc_content_large_tick_interval": "track.gc-content",

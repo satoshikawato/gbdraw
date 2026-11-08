@@ -27,7 +27,8 @@ diagrams, with native LOSAT or the matching NCBI BLAST+ program. They search
 the same source-file databases as the web app and write the same raw-cache
 keys, so a Session saved from either reuses its LOSAT results in the other.
 For Circular similarity rings they run LOSATN or TLOSATX: each comparison
-genome (`--conservation_sequence`, one file per ring) is the query and the
+genome (`--conservation_sequence`, one file per ring, or `--conservation_genome`
+for a genome in several files) is the query and the
 subject database is the whole reference file, as in the web app: every record
 of the file that has a sequence, uncropped and on the file's strand, also
 records that are not drawn (for GFF3 input, every entry of the FASTA file,

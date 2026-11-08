@@ -43,7 +43,9 @@ class ConservationTableRow:
     blast: str
     label: str
     color: str
-    comparison_sequence: str = ""
+    # The comparison genome files of the ring, in the listed order (a ``;``
+    # separated cell); empty without one.
+    comparison_sequences: tuple[str, ...] = ()
     losat_gencode: int | None = None
 
 
@@ -81,10 +83,10 @@ class ConservationTable:
         return [row.losat_gencode or 1 for row in self.rows]
 
     @property
-    def comparison_sequence_files(self) -> list[str | None] | None:
+    def comparison_sequence_files(self) -> list[tuple[str, ...]] | None:
         if not self.has_comparison_sequence_column:
             return None
-        return [row.comparison_sequence or None for row in self.rows]
+        return [row.comparison_sequences for row in self.rows]
 
     @property
     def dependency_paths(self) -> tuple[str, ...]:
@@ -375,10 +377,15 @@ _CIRCULAR_TRACK_STRUCTURAL_PARAM_KEYS = frozenset(
 _FEATURE_LANE_PARAM_KEYS = frozenset({"lane_direction", "lanes"})
 
 
+# Separates the files of one comparison genome in a ``comparison_sequence`` cell.
+COMPARISON_SEQUENCE_SEPARATOR = ";"
+
+
 def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTable:
     """Read a ring manifest.
 
-    Precomputed rings need ``blast``. With ``losat`` (``--losat``) the search
+    A ``comparison_sequence`` cell lists the files of the ring's comparison
+    genome, separated by ``;``. Precomputed rings need ``blast``. With ``losat`` (``--losat``) the search
     builds each ring from ``comparison_sequence``, so ``blast`` is rejected; the
     optional ``losat_gencode`` column sets each TLOSATX ring's table.
     """
@@ -441,10 +448,27 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
                     },
                 )
         comparison_sequence_raw = row.values.get("comparison_sequence", "").strip()
-        comparison_sequence_path = (
-            _resolve_table_path(table_path, comparison_sequence_raw)
+        comparison_sequence_parts = (
+            [part.strip() for part in comparison_sequence_raw.split(COMPARISON_SEQUENCE_SEPARATOR)]
             if comparison_sequence_raw
-            else ""
+            else []
+        )
+        if not all(comparison_sequence_parts):
+            raise ValidationError(
+                _cell_error(
+                    table_path, row.row_number, "comparison_sequence",
+                    f"lists an empty path; separate the files of one genome with "
+                    f"{COMPARISON_SEQUENCE_SEPARATOR!r}",
+                ),
+                diagnostic={
+                    "code": "TABLE_INVALID",
+                    "reason": "EMPTY_PATH",
+                    "field": "comparison_sequence",
+                    "row": row.row_number,
+                },
+            )
+        comparison_sequence_paths = tuple(
+            _resolve_table_path(table_path, part) for part in comparison_sequence_parts
         )
         parsed_rows.append(
             ConservationTableRow(
@@ -453,7 +477,7 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
                 blast=blast_path,
                 label=row.values.get("label", "").strip(),
                 color=row.values.get("color", "").strip(),
-                comparison_sequence=comparison_sequence_path,
+                comparison_sequences=comparison_sequence_paths,
                 losat_gencode=losat_gencode,
             )
         )
@@ -466,15 +490,15 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
                     path=blast_path,
                 )
             )
-        if comparison_sequence_path:
-            dependencies.append(
-                TablePathDependency(
-                    row_index=row.row_index,
-                    row_number=row.row_number,
-                    column="comparison_sequence",
-                    path=comparison_sequence_path,
-                )
+        dependencies.extend(
+            TablePathDependency(
+                row_index=row.row_index,
+                row_number=row.row_number,
+                column="comparison_sequence",
+                path=path,
             )
+            for path in comparison_sequence_paths
+        )
 
     return ConservationTable(
         table_path=str(table_path),
@@ -1096,6 +1120,16 @@ class ComparisonsTableEntry:
     blast: str = ""
 
 
+@dataclass(frozen=True)
+class ConservationTableEntry:
+    """One row of a conservation table to write (:func:`conservation_table_text`)."""
+
+    blast: str
+    comparison_sequences: tuple[str, ...] = ()
+    label: str = ""
+    color: str = ""
+
+
 def _table_text(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter="\t", lineterminator="\n")
@@ -1132,6 +1166,26 @@ def records_table_text(entries: Sequence[RecordsTableEntry]) -> str:
     )
 
 
+def conservation_table_text(entries: Sequence[ConservationTableEntry]) -> str:
+    """A conservation table of ``entries`` in order; a ring's genome files share one ``;`` cell."""
+
+    for entry in entries:
+        for path in entry.comparison_sequences:
+            if COMPARISON_SEQUENCE_SEPARATOR in path:
+                raise ValidationError(
+                    f"The conservation table cannot name {path}: a comparison_sequence cell separates "
+                    f"files with {COMPARISON_SEQUENCE_SEPARATOR!r}. Rename the file.",
+                    diagnostic={"code": "INPUT_INVALID", "reason": "TABLE_PATH", "field": "comparison_sequence"},
+                )
+    return _table_text(
+        ("blast", "comparison_sequence", "label", "color"),
+        [
+            [entry.blast, COMPARISON_SEQUENCE_SEPARATOR.join(entry.comparison_sequences), entry.label, entry.color]
+            for entry in entries
+        ],
+    )
+
+
 def comparisons_table_text(entries: Sequence[ComparisonsTableEntry]) -> str:
     """A comparisons table of ``entries`` in order."""
 
@@ -1143,8 +1197,10 @@ def comparisons_table_text(entries: Sequence[ComparisonsTableEntry]) -> str:
 
 __all__ = [
     "CircularTrackTable",
+    "COMPARISON_SEQUENCE_SEPARATOR",
     "ComparisonsTableEntry",
     "ConservationTable",
+    "ConservationTableEntry",
     "ConservationTableRow",
     "ComparisonTable",
     "ComparisonTableRow",
@@ -1155,6 +1211,7 @@ __all__ = [
     "RecordsTableRow",
     "TablePathDependency",
     "comparisons_table_text",
+    "conservation_table_text",
     "read_circular_track_table",
     "read_conservation_table",
     "read_comparisons_table",

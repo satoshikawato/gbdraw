@@ -692,7 +692,7 @@ test('circular source recipe names comparison genomes with --conservation_sequen
     { resourceId: 'conservation-blast-files-1', representation: 'file' }
   ];
   session.renderRequest.diagramOptions.conservationFastaFiles = [
-    { resourceId: 'conservation-fasta-files-1', representation: 'file' }
+    [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
   ];
   session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
   session.resources['conservation-fasta-files-1'] = resource('conservation-fasta-file', 'ring.gb', 'LOCUS       ring\n//\n');
@@ -700,6 +700,29 @@ test('circular source recipe names comparison genomes with --conservation_sequen
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   assert.ok(sourceRecipe.args.includes('--conservation_sequence'));
   assert.ok(!sourceRecipe.args.includes('--conservation_fasta'));
+  await assertCliParserAccepts(sourceRecipe);
+});
+
+test('circular source recipe gives a ring of several genome files one --conservation_genome', async () => {
+  const session = structuredClone(circularCanonical);
+  const ref = (resourceId) => ({ resourceId, representation: 'file' });
+  session.renderRequest.diagramOptions.conservationBlastFiles = [ref('conservation-blast-files-1'), ref('conservation-blast-files-2')];
+  session.renderRequest.diagramOptions.conservationFastaFiles = [
+    [ref('conservation-fasta-files-1-1'), ref('conservation-fasta-files-1-2')],
+    []
+  ];
+  session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
+  session.resources['conservation-blast-files-2'] = resource('conservation-blast-file', 'ring2.tsv', '');
+  session.resources['conservation-fasta-files-1-1'] = resource('conservation-fasta-file', 'chromosome.gb', 'LOCUS       c\n//\n');
+  session.resources['conservation-fasta-files-1-2'] = resource('conservation-fasta-file', 'plasmid.gb', 'LOCUS       p\n//\n');
+  const sourceRecipe = await buildSourceRecipe(session);
+  assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
+  const visible = sourceRecipe.args.map((token) => sourceRecipe.fileMetadata.get(token)?.name || token);
+  const first = visible.indexOf('--conservation_genome');
+  const [flag, chromosome, plasmid, secondFlag, noGenome] = visible.slice(first, first + 5);
+  assert.deepEqual([flag, secondFlag, noGenome], ['--conservation_genome', '--conservation_genome', '']);
+  assert.ok(chromosome && plasmid && chromosome !== plasmid);
+  assert.ok(!visible.includes('--conservation_sequence'));
   await assertCliParserAccepts(sourceRecipe);
 });
 

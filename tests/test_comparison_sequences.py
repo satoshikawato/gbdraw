@@ -185,7 +185,7 @@ def test_comparison_fasta_column_is_rejected_naming_the_replacement(tmp_path: Pa
 
     table.write_text(f"blast\tcomparison_sequence\n{DANIO_TSV}\t{DANIO_GENBANK}\n", encoding="utf-8")
     parsed = read_conservation_table(str(table))
-    assert parsed.comparison_sequence_files == [str(DANIO_GENBANK)]
+    assert parsed.comparison_sequence_files == [(str(DANIO_GENBANK),)]
     assert [dep.column for dep in parsed.path_dependencies] == ["blast", "comparison_sequence"]
 
 
@@ -196,7 +196,7 @@ def test_python_field_is_renamed_without_alias() -> None:
         conservation_blast_files=[str(DANIO_TSV)],
         conservation_sequence_files=[str(DANIO_GENBANK)],
     )
-    assert tuple(options.conservation_sequence_files) == (str(DANIO_GENBANK),)
+    assert options.conservation_genome_files == ((str(DANIO_GENBANK),),)
 
 
 @pytest.mark.circular
@@ -210,7 +210,7 @@ def test_saved_session_keeps_the_persisted_wire_name(tmp_path: Path) -> None:
     session = session_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
     options = session["renderRequest"]["diagramOptions"]
     assert options["conservationFastaFiles"] == [
-        {"resourceId": "conservation-fasta-files-1", "representation": "file"}
+        [{"resourceId": "conservation-fasta-files-1-1", "representation": "file"}]
     ]
     assert "conservationSequenceFiles" not in options
     assert "--conservation_sequence" in session["cliInvocation"]["args"]

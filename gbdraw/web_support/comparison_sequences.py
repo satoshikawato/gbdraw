@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 
 from gbdraw.comparisons.circular_losat import comparison_query_fasta
-from gbdraw.io.comparison_sequences import read_comparison_sequence_file
+from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 
 
 def read_comparison_sequence_json(path: str) -> str:
@@ -28,12 +28,13 @@ def read_comparison_sequence_json(path: str) -> str:
     sequence) like the CLI ring search.
     """
 
-    comparison = read_comparison_sequence_file(path)
+    file = read_comparison_sequence_file(path)
+    comparison = comparison_genome((file,))
     fasta = comparison_query_fasta(comparison, ordinal=1)
     return json.dumps(
         {
             "fasta": fasta,
-            "format": comparison.format,
+            "format": file.format,
             "recordLabel": comparison.record_label,
             "recordIds": [str(record.id) for record in comparison.records],
         },

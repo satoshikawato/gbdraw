@@ -595,7 +595,12 @@ _FILE_FIELDS = frozenset(
 )
 _TABLE_SEQUENCE_FIELDS = frozenset({"depth_tables", "conservation_dataframes"})
 _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
-_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_sequence_files"})
+# One list of file references per ring: the files of its comparison genome
+# (none for a ring without one). Schema 9 and older wrote one reference or null.
+_FILE_LIST_SEQUENCE_FIELDS = frozenset({"conservation_sequence_files"})
+RING_GENOME_FILES_SCHEMA = 10
+# The shape the encoder writes where the typed field takes more (one path or a list per ring).
+_OPTION_WIRE_HINTS: dict[str, object] = {"conservation_sequence_files": Sequence[Sequence[str]]}
 # Typed option -> persisted snake name, where the typed name changed and the
 # wire name did not (design D6, D18). Keys and resource IDs use the wire name.
 _OPTION_WIRE_NAMES = {"conservation_sequence_files": "conservation_fasta_files"}
@@ -3305,14 +3310,13 @@ def _encode_option_value(
             _file_ref(f"{name}-{index}", item, resources=resources)
             for index, item in enumerate(_sequence(value, name=name), start=1)
         ]
-    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
+    if name in _FILE_LIST_SEQUENCE_FIELDS:
         return [
-            (
-                _file_ref(f"{_option_wire_name(name)}-{index}", item, resources=resources)
-                if item is not None
-                else None
-            )
-            for index, item in enumerate(_sequence(value, name=name), start=1)
+            [
+                _file_ref(f"{_option_wire_name(name)}-{index}-{file_index}", item, resources=resources)
+                for file_index, item in enumerate(_sequence(files, name=name), start=1)
+            ]
+            for index, files in enumerate(_sequence(value, name=name), start=1)
         ]
     if name in _TABLE_MATRIX_FIELDS:
         return _encode_resource_matrix(name, value, table=True, resources=resources)
@@ -3374,19 +3378,26 @@ def _decode_option_value(
             )
             for index, item in enumerate(raw, start=1)
         )
-    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
-        raw = _array(value, path=f"renderRequest.diagramOptions.{_option_wire_key(name)}")
+    if name in _FILE_LIST_SEQUENCE_FIELDS:
+        path = f"renderRequest.diagramOptions.{_option_wire_key(name)}"
+        raw = _array(value, path=path)
+
+        def ring_files(index: int, item: object) -> list[object]:
+            if schema >= RING_GENOME_FILES_SCHEMA:
+                return _array(item, path=f"{path}[{index - 1}]")
+            # A released request: one file reference or null per ring.
+            return [] if item is None else [item]
+
         return tuple(
-            (
+            tuple(
                 str(
                     _decode_file_ref(
-                        item,
-                        name=f"{_option_wire_name(name)}-{index}",
+                        file,
+                        name=f"{_option_wire_name(name)}-{index}-{file_index}",
                         resource_paths=resource_paths,
                     )
                 )
-                if item is not None
-                else None
+                for file_index, file in enumerate(ring_files(index, item), start=1)
             )
             for index, item in enumerate(raw, start=1)
         )
@@ -6382,7 +6393,7 @@ def describe_canonical_request() -> dict[str, Any]:
     }
     option_files = (
         _TABLE_FIELDS | _FILE_FIELDS | _TABLE_SEQUENCE_FIELDS | _FILE_SEQUENCE_FIELDS
-        | _OPTIONAL_FILE_SEQUENCE_FIELDS
+        | _FILE_LIST_SEQUENCE_FIELDS
     )
     # The decoder also reads the depth inputs of older writers (the writer
     # stores every depth input as depthTracks).
@@ -6441,7 +6452,7 @@ def describe_canonical_request() -> dict[str, Any]:
             for item in fields(owner)
         }))
         data(output_class)
-        hints = _class_type_hints(options_class)
+        hints = {**_class_type_hints(options_class), **_OPTION_WIRE_HINTS}
         members: dict[str, Shape] = {
             "featurePlacements": array(wire[FeaturePlacementOverride]),
             "featureOverrides": array(wire[FeatureOverride]),

@@ -125,7 +125,9 @@ from gbdraw.features.visibility import (
 )
 from gbdraw.io.colors import read_color_table, read_default_color_overrides
 from gbdraw.io.comparison_sequences import (
+    ComparisonGenome,
     ComparisonSequenceFile,
+    comparison_genome,
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
@@ -198,7 +200,6 @@ from .options import (
 from .prepared import (
     RECORD_IDENTITY_TAG,
     ParsedRecordInputs,
-    PreparedResourceIdentity,
     ResolvedFeatureInputs,
     get_or_build_parsed_source,
     get_or_build_resolved_records,
@@ -460,74 +461,44 @@ def _resolve_request_option_tables(
 
 @dataclass
 class _ComparisonSequenceSources:
-    """Memoized Circular comparison-genome records shared by a request batch."""
+    """Memoized Circular comparison-genome records shared by a request batch.
 
-    paths: tuple[str | None, ...]
-    _files: tuple[ComparisonSequenceFile | None, ...] | None = None
+    ``genomes`` are the files of each ring (``conservation_genome_files``);
+    each file is parsed once, through the prepared parsed-source cache.
+    """
+
+    genomes: tuple[tuple[str, ...], ...]
+    _genomes: tuple[ComparisonGenome | None, ...] | None = None
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
-
-    def cache_specs(
-        self,
-    ) -> tuple[
-        tuple[Hashable, frozenset[PreparedResourceIdentity]] | None,
-        ...,
-    ]:
-        specs: list[
-            tuple[Hashable, frozenset[PreparedResourceIdentity]] | None
-        ] = []
-        for path in self.paths:
-            if path is None:
-                specs.append(None)
-                continue
-            identity = prepared_resource_identity(path)
-            specs.append(
-                None
-                if identity is None
-                else (
-                    ("parsed-source-v1", "comparison-sequence", identity),
-                    frozenset({identity}),
-                )
-            )
-        return tuple(specs)
 
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
             self._records = tuple(
-                file.records if file is not None else () for file in self.files()
+                genome.records if genome is not None else () for genome in self.files()
             )
         return self._records
 
-    def files(self) -> tuple[ComparisonSequenceFile | None, ...]:
-        """Each comparison genome read once by the one reader (design D12)."""
+    @staticmethod
+    def _read(path: str) -> ComparisonSequenceFile:
+        identity = prepared_resource_identity(path)
+        if identity is None:
+            return read_comparison_sequence_file(path)
+        return get_or_build_parsed_source(
+            ("parsed-source-v1", "comparison-sequence", identity),
+            frozenset({identity}),
+            lambda: read_comparison_sequence_file(path),
+            publish=lambda value: bool(value.records),
+        )
 
-        if self._files is None:
-            loaded: list[ComparisonSequenceFile | None] = []
-            for path, cache_spec in zip(
-                self.paths,
-                self.cache_specs(),
-                strict=True,
-            ):
-                if not path:
-                    loaded.append(None)
-                    continue
+    def files(self) -> tuple[ComparisonGenome | None, ...]:
+        """Each comparison genome read once by the one reader (design D12); ``None`` for a ring without one."""
 
-                def parse(path: str = path) -> ComparisonSequenceFile:
-                    return read_comparison_sequence_file(path)
-
-                if cache_spec is None:
-                    loaded.append(parse())
-                    continue
-                key, identities = cache_spec
-                loaded.append(
-                    get_or_build_parsed_source(
-                        key,
-                        identities,
-                        parse,
-                        publish=lambda value: bool(value.records),
-                    )
-                )
-            self._files = tuple(loaded)
-        return self._files
+        if self._genomes is None:
+            self._genomes = tuple(
+                comparison_genome(tuple(self._read(path) for path in paths)) if paths else None
+                for paths in self.genomes
+            )
+        return self._genomes
 
 
 @dataclass(frozen=True)
@@ -1335,9 +1306,7 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
     comparison_sequences = (
-        _ComparisonSequenceSources(
-            tuple(options.conservation_sequence_files or ())
-        )
+        _ComparisonSequenceSources(options.conservation_genome_files)
         if isinstance(options, CircularDiagramOptions)
         and options.conservation_sequence_files
         else None
@@ -1996,11 +1965,11 @@ def _resolve_ring_losat(
         return (parsed if parsed is not None else load_render_source_records(source)).records
 
     sources = inputs.comparison_sequences or _ComparisonSequenceSources(
-        tuple(options.conservation_sequence_files or ())
+        options.conservation_genome_files
     )
 
-    def load_sequences() -> tuple[ComparisonSequenceFile, ...]:
-        return tuple(file for file in sources.files() if file is not None)
+    def load_sequences() -> tuple[ComparisonGenome, ...]:
+        return tuple(genome for genome in sources.files() if genome is not None)
 
     return resolve_circular_conservation_losat(
         options,
@@ -3783,13 +3752,9 @@ def _comparison_sequence_records(
     if inputs is not None and inputs.comparison_sequences is not None:
         return require_interactive_svg_metadata(inputs.comparison_sequences.load)
 
-    def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
-        return tuple(
-            read_comparison_sequence_file(path).records if path else ()
-            for path in options.conservation_sequence_files or ()
-        )
-
-    return require_interactive_svg_metadata(load_unprepared)
+    return require_interactive_svg_metadata(
+        _ComparisonSequenceSources(options.conservation_genome_files).load
+    )
 
 
 def _render_output_paths(output: RenderOutputRequest) -> tuple[Path, ...]:

@@ -6566,7 +6566,7 @@ const losatEntriesOfDrawing = (request, conservationPairs, entries, catalog) => 
   const named = (uid) => records.has(uid) || records.has(places.get(uid)?.recordKey ?? '');
   // A request without sequence rings names no pair, whatever its drawing's file held.
   const readsRings = request.mode === 'circular'
-    && (request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null);
+    && (request.diagramOptions.conservationFastaFiles ?? []).some((files) => files.length > 0);
   return entries.filter(({ queryUid, subjectUid, flow, queryCanonicalHash, subjectCanonicalHash }) => (
     typeof queryUid === 'string' && typeof subjectUid === 'string' ? named(queryUid) && named(subjectUid)
       : flow === CIRCULAR_CONSERVATION_FLOW

@@ -249,14 +249,14 @@ test('an unreadable conservation ring drops its column from every ring list, so 
       conservationBlastFiles: [ref('ring-a'), null, ref('ring-c')],
       conservationLabels: ['A', 'B', 'C'],
       conservationColors: ['#111111', '#222222', '#333333'],
-      conservationFastaFiles: [null, null, null]
+      conservationFastaFiles: [[], [], []]
     }
   }, { ...contextOf(session), resourceIds: new Set([...Object.keys(session.resources), 'ring-a', 'ring-c']) });
   const options = result.value.diagramOptions;
   assert.deepEqual(options.conservationBlastFiles, [ref('ring-a'), ref('ring-c')]);
   assert.deepEqual(options.conservationLabels, ['A', 'C']);
   assert.deepEqual(options.conservationColors, ['#111111', '#333333']);
-  assert.deepEqual(options.conservationFastaFiles, [null, null]);
+  assert.deepEqual(options.conservationFastaFiles, [[], []]);
   assert.deepEqual(rows(result), [{ code: 'setting-entries-dropped', path: 'renderRequest.diagramOptions.conservationBlastFiles' }]);
 });
 
@@ -278,7 +278,7 @@ test('a managed conservation slot keeps its ring when a ring column is dropped (
     conservationBlastFiles: [ref('ring-a'), null, ref('ring-c')],
     conservationLabels: ['A', 'B', 'C'],
     conservationColors: ['#111111', '#222222', '#333333'],
-    conservationFastaFiles: [null, null, null]
+    conservationFastaFiles: [[], [], []]
   });
   request.diagramOptions.tracks = {
     ...request.diagramOptions.tracks,

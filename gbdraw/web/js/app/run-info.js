@@ -821,11 +821,15 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage, ref, `${path}.source${Array.isArray(track.source) ? `[${refIndex}]` : ''}`
     ));
   });
-  /** @type {const} */ (['conservationBlastFiles', 'conservationFastaFiles']).forEach((field) => {
-    (Array.isArray(options[field]) ? options[field] : []).forEach((ref, index) => (
-      coverResourceRef(coverage, ref, `diagramOptions.${field}[${index}]`)
-    ));
-  });
+  (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).forEach((ref, index) => (
+    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)
+  ));
+  // The files of each ring's comparison genome (request schema 10).
+  (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : []).forEach((ring, index) => (
+    (Array.isArray(ring) ? ring : []).forEach((ref, fileIndex) => (
+      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)
+    ))
+  ));
   if (options.annotations !== undefined) {
     throw recipeUnavailable(msg('canonical annotation semantics have no fully lossless current CLI projection.'));
   }
@@ -1991,9 +1995,12 @@ const appendComparisonOptions = (args, request, files, units) => {
       ? options.conservationBlastFiles
       : [];
     if (blasts.length === 0) return;
-    const fastas = Array.isArray(options.conservationFastaFiles)
-      ? options.conservationFastaFiles
-      : [];
+    const genomes = (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : [])
+      .map((ring, index) => (Array.isArray(ring) ? ring : []).flatMap((ref, fileIndex) => {
+        const resourceId = referencedResourceId(ref);
+        const fallback = `comparison-${index + 1}${fileIndex > 0 ? `-${fileIndex + 1}` : ''}.fasta`;
+        return resourceId ? [files.resourcePath(resourceId, { fallback })] : [];
+      }));
     const labels = Array.isArray(options.conservationLabels) ? options.conservationLabels : [];
     const colors = Array.isArray(options.conservationColors) ? options.conservationColors : [];
     args.push(
@@ -2007,16 +2014,12 @@ const appendComparisonOptions = (args, request, files, units) => {
         }
       ))
     );
-    if (fastas.some(Boolean)) {
-      args.push(
-        '--conservation_sequence',
-        ...fastas.map((ref, index) => {
-        const resourceId = referencedResourceId(ref);
-          return resourceId
-            ? files.resourcePath(resourceId, { fallback: `comparison-${index + 1}.fasta` })
-            : '';
-        })
-      );
+    // One file per ring keeps --conservation_sequence; a genome in several files needs
+    // --conservation_genome, once per ring ('' alone for a ring without a genome).
+    if (genomes.some((paths) => paths.length > 1)) {
+      genomes.forEach((paths) => args.push('--conservation_genome', ...(paths.length > 0 ? paths : [''])));
+    } else if (genomes.some((paths) => paths.length > 0)) {
+      args.push('--conservation_sequence', ...genomes.map((paths) => paths[0] || ''));
     }
     if (labels.length > 0) args.push('--conservation_labels', ...labels.map(String));
     // A ring without a color of its own ('') is `auto` (gbdraw/circular.py conservation_colors_from_cli);

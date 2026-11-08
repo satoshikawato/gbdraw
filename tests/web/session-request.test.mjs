@@ -561,6 +561,15 @@ const schema8Canonical = structuredClone(canonical.renderRequest);
 schema8Canonical.schema = 8;
 delete schema8Canonical.diagramOptions.featureOverrides;
 assert.deepEqual(promoteCanonicalRenderRequestToCurrent(schema8Canonical), canonical.renderRequest);
+// Schema 9 wrote one file reference or null per similarity ring; schema 10 a list of the
+// ring's genome files, read as Python's decoder reads it (tests/test_ring_genome_files.py).
+{
+  const vectors = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'ring-genome-files-vectors.json'), 'utf8'));
+  for (const { name, schema9, schema10 } of vectors.cases) {
+    const stored = { schema: 9, mode: 'circular', records: [], diagramOptions: { conservationFastaFiles: schema9 } };
+    assert.deepEqual(promoteCanonicalRenderRequestToCurrent(stored).diagramOptions.conservationFastaFiles, schema10, name);
+  }
+}
 const withIdentityRows = structuredClone(canonical);
 withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
   recordKey: canonical.renderRequest.records[0].recordKey,
@@ -1830,7 +1839,7 @@ const conservationCanonical = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   conservationCanonical.renderRequest.diagramOptions.conservationFastaFiles,
-  [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
+  [[{ resourceId: 'conservation-fasta-files-1-1', representation: 'file' }]]
 );
 assert.equal(conservationCanonical.webFiles.conservationSequenceSources, undefined);
 assert.equal(
@@ -1885,7 +1894,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   reorderedUploadCanonical.renderRequest.diagramOptions.conservationFastaFiles
-    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+    .map(([ref]) => reorderedUploadCanonical.resources[ref.resourceId].data),
   [comparisonFastaB.data, comparisonFasta.data]
 );
 const reorderedUploadProjection = projectCanonicalSessionRequest(reorderedUploadCanonical);
@@ -6017,7 +6026,9 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   // Re-recorded when a read card wrote the CLI's committed records (D-13): one `exactly_one` record per record, and no
   // selector for a file's only record. Against dev's request schema 10 requests (record windows, axis label styles),
   // 14 Circular requests differ, only in `records` (keys, cardinality, selectors, and one file's one resource).
-  'a1731207352d3f179f9c82c479265279fbb330be49379b35bc4ae8944218567b',
+  // Re-recorded when a similarity ring's comparison genome became a list of files (request schema 10): with each
+  // ring's list read back as its one reference or null, the four ring requests are the ones recorded before.
+  'de6e464d0a032170306020d2022448fcfee1aa01e3f01f2454acd71903676a26',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.

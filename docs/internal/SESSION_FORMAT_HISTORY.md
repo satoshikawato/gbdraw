@@ -188,6 +188,15 @@ requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*`
 Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
 refuses every Session 51 file by its version.
 
+Request schema 10 also writes `diagramOptions.conservationFastaFiles` as one list of file references per similarity
+ring: the files of the ring's comparison genome, in the listed order (a genome split over several files, such as a
+chromosome and its plasmids), and an empty list for a ring without one. Schemas 1 to 9 wrote one file reference or
+null per ring; the decoder (`_decode_option_value` in `gbdraw/session_request_codec.py`) and the Web promotion
+(`promoteRingFilesToLists` in `gbdraw/web/js/services/session-request.js`) read it as a list of that one file or an
+empty list (`tests/fixtures/ring-genome-files-vectors.json`, read by both). The file references of ring `i` are
+allocated as `conservation-fasta-files-<i>-<n>`. This change entered schema 10 before schema 10 reached `main`, so
+the schema does not change again.
+
 A Circular drawing of Session 51 keeps the window of its record that its Start/End fields cannot hold, one window
 across the origin of a circular record (start after end, PD-OI-122), in `config.form.circular_windows`: a list of
 `{start, end, reverseComplement, column}` as the request writes it, empty for a record drawn whole or in one ordered

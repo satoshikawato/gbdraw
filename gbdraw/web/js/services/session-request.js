@@ -4865,14 +4865,15 @@ const projectCanonicalRenderInput = ({
         (entry) => comparisonSources[entry.sourceIndex] || null
       );
       if (orderedComparisonSources.some(Boolean)) {
+        // One list of genome files per ring (request schema 10); the Web gives a ring one file.
         diagramOptions.conservationFastaFiles = orderedComparisonSources.map((entry, index) => (
           entry
-            ? fileRef(resources.addFile(
-              `conservation-fasta-files-${index + 1}`,
+            ? [fileRef(resources.addFile(
+              `conservation-fasta-files-${index + 1}-1`,
               'conservation-fasta-file',
               entry
-            ))
-            : null
+            ))]
+            : []
         ));
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation, conservationEntries, 'auto'));
@@ -4914,15 +4915,15 @@ const projectCanonicalRenderInput = ({
       const comparisonFastas = resolvedCircularConservation.map(
         (entry, index) => (
           entry?.fasta
-            ? fileRef(resources.addFile(
+            ? [fileRef(resources.addFile(
                 `conservation-resolved-fasta-${index + 1}`,
                 'conservation-fasta-file',
                 entry.fasta
-              ))
-            : null
+              ))]
+            : []
         )
       );
-      if (comparisonFastas.some(Boolean)) {
+      if (comparisonFastas.some((files) => files.length > 0)) {
         diagramOptions.conservationFastaFiles = comparisonFastas;
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
@@ -6909,13 +6910,15 @@ export const projectCanonicalSessionRequest = ({
     }
   }
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
-    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => (
-      ref?.resourceId
+    // A Web ring holds one file: the first of the ring's genome files (request schema 10).
+    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {unknown} */ ringFiles) => {
+      const [ref] = /** @type {UnvalidatedFields<'resourceId'>[]} */ (Array.isArray(ringFiles) ? ringFiles : []);
+      return ref?.resourceId
         ? (resolveResourceFile
             ? resolveResourceFile(ref.resourceId)
             : resourceAsLegacyFile(resources, ref.resourceId))
-        : null
-    ));
+        : null;
+    });
   } else if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
@@ -7589,8 +7592,24 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   // Schema 9 adds per-feature edits by source identity (design Q4).
   if (promoted.schema < 9) promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
   promoteRecordRegionsToWindows(promoted.records);
+  promoteRingFilesToLists(promoted.diagramOptions);
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   return promoted;
+};
+
+/**
+ * Schema 10 writes the files of a ring's comparison genome as a list
+ * (`conservationFastaFiles[i]`); schemas 9 and older wrote one file reference
+ * or null per ring, read as a list of that one file or none, as Python's
+ * decoder reads it (`_decode_option_value`). Edited in place; a value that is
+ * no array is left to the repair.
+ * @param {unknown} diagramOptions
+ */
+const promoteRingFilesToLists = (diagramOptions) => {
+  if (!isPlainObject(diagramOptions) || !Array.isArray(diagramOptions.conservationFastaFiles)) return;
+  diagramOptions.conservationFastaFiles = diagramOptions.conservationFastaFiles.map(
+    (/** @type {unknown} */ ref) => (ref === null ? [] : [ref])
+  );
 };
 
 /**

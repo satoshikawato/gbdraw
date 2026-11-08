@@ -2091,14 +2091,10 @@
         "conservationFastaFiles": {
           "type": "array",
           "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CanonicalFileRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CanonicalFileRef"
+            }
           }
         },
         "conservationDataframes": {
