@@ -75,6 +75,17 @@ write-up of a release.
   `region` column, for the window across the origin. Sessions saved by the CLI
   or the Web, the Source recipe, `RecordInput.region`, and a browser LOSAT
   search read and write that window.
+- Added: `gbdraw locate` finds where the genes of a reference span lie in
+  other genomes, one target file per genome, and writes the windows to draw
+  them: `PREFIX.records.tsv` and `PREFIX.comparisons.tsv` for `gbdraw linear
+  --records_table ... --comparisons_table ... --losat losatp --losatp_mode
+  pairwise`, and `PREFIX.plan.json` with every candidate window and the gene
+  coverage of each file. It searches the proteins of the CDS inside the
+  reference windows with tblastn (`--losat tlosatn`, the default) or their
+  nucleotide sequences (`--losat losatn`), and reports each file's windows,
+  contig ends, and the genes found in part or not at all on standard error.
+  tblastn needs a LOSAT that has it (`--losat_bin`) or NCBI BLAST+
+  (`--ncbi_blast_bin`); the LOSAT that `gbdraw setup-losat` installs has none.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the
