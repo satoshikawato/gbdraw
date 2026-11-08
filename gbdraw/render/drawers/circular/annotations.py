@@ -24,7 +24,7 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_edge_px, lane_width_px
+from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_count_of, lane_edge_px, lane_width_px
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -158,7 +158,7 @@ def _record_lanes(
     label room (``lane_width_px``)."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
-    lane_count = max((item.lane for item in placements), default=-1) + 1
+    lane_count = lane_count_of(placements)
     width = lane_width_px(
         outer_radius_px - inner_radius_px, padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
     )

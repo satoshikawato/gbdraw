@@ -27,6 +27,7 @@ from gbdraw.annotations import (
 from gbdraw.annotations.layout import (
     LabelExtent,
     PlacedRegionAnnotation,
+    lane_count_of,
     lane_edge_px,
     lane_width_px,
 )
@@ -258,7 +259,7 @@ def _lane_height(
     """The height of one lane of the record's ``placements`` in a slot ``height_px`` high: the lanes share it less
     its padding and the slot's label room (``lane_width_px``)."""
 
-    lane_count = max((item.lane for item in placements), default=-1) + 1
+    lane_count = lane_count_of(placements)
     return (
         14.0
         if track.clipped
