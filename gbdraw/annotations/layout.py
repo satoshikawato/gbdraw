@@ -492,6 +492,30 @@ class _TrackMeasures(NamedTuple):
         return tuple((record, self.font_size(by_key[record, identity])) for record, identity in track.without_room)
 
 
+# A label's measured letters and the bp they cover on its row (``_letters_at``).
+_Letters = tuple[LabelExtent, tuple[tuple[float, float], ...]]
+
+
+def _lane_letters(
+    labels: Sequence[tuple[PlacedRegionAnnotation, LabelPlace]],
+    lane: int,
+    measured: Callable[[PlacedRegionAnnotation, LabelPlace], _Letters],
+    paint_of: Callable[[ResolvedRegionAnnotation], float],
+) -> dict[tuple[int, int], list[tuple[float, float, float]]]:
+    """The letters of the labels in ``lane`` where ``measured`` puts them, per record and row, each with how far its
+    mark paints past its lane (``paint_of``) as ``_lane_rooms`` keeps the marks. They stand past the lane's mark, so
+    the room that clears the mark clears them too (OV-2811)."""
+
+    letters: dict[tuple[int, int], list[tuple[float, float, float]]] = {}
+    for placement, place in labels:
+        if placement.lane == lane:
+            paint = paint_of(placement.annotation)
+            letters.setdefault((placement.annotation.record_index, place.part.row), []).extend(
+                (start, end, paint) for start, end in measured(placement, place)[1]
+            )
+    return letters
+
+
 def _lane_rooms(
     placements: Sequence[PlacedRegionAnnotation],
     *,
@@ -502,7 +526,7 @@ def _lane_rooms(
     at_least: Sequence[LaneRoom],
 ) -> _LaneRooms:
     """The room between lanes for the labels that would cross a mark of another lane on their side (PD-OI-119,
-    lane room; LBL-ROOM-BEFORE-MET-LANE), per record and row.
+    lane room; LBL-ROOM-BEFORE-MET-LANE), or the letters of its labels (``_lane_letters``), per record and row.
 
     ``measures`` measures a labelled annotation's letters at its place (``label_anchor``) as the drawer does,
     given how far its mark's painted edge lies from where the lanes start (``_LaneBand.mark_edge_px`` of its lane
@@ -529,50 +553,52 @@ def _lane_rooms(
     # Each mark's segments on a row, and how far its paint passes its lane (``measures.paint``): toward a label that
     # meets it, as on its own label's side (a mark paints alike on both sides of its lane's centre).
     marks: dict[tuple[int, int, int], list[tuple[float, float, float]]] = {}
+    def lane_paint(annotation: ResolvedRegionAnnotation) -> float:
+        return paint_of(annotation, band.width_px(record_lanes[annotation.record_index], lane_count))
+
     for placement in placements:
         annotation = placement.annotation
-        paint = paint_of(annotation, band.width_px(record_lanes[annotation.record_index], lane_count))
+        paint = lane_paint(annotation)
         for row in annotation.geometry_rows:
             marks.setdefault((annotation.record_index, row, placement.lane), []).extend(
                 (float(start), float(end), paint) for start, end in annotation.row_segments(row)
             )
     step = -1 if band.labels_above else 1
-    labelled = [
+    every_label = [
         (placement, annotation.label_anchor(measures.label_position(annotation), join_origin=join_origin))
         for placement in placements
-        if (annotation := placement.annotation).label and 0 <= placement.lane + step < lane_count
+        if (annotation := placement.annotation).label
     ]
+    labelled = [item for item in every_label if 0 <= item[0].lane + step < lane_count]
     rooms = {(room.record_index, room.row, room.gap): room.px for room in at_least}
     # The gap that parts a lane from the one before it on the labels' side, and each label's letters, measured
     # when its own gap is reckoned (the rooms before it are known then).
     def gap_before(lane: int) -> int:
         return min(lane, lane - step)
 
-    letters: dict[int, tuple[LabelExtent, tuple[tuple[float, float], ...]]] = {}
+    letters: dict[int, _Letters] = {}
 
-    def letters_of(index: int) -> tuple[LabelExtent, tuple[tuple[float, float], ...]]:
-        if index not in letters:
-            placement, place = labelled[index]
-            annotation = placement.annotation
-            own_gap = gap_before(placement.lane + step)
-            before = sum(
-                px
-                for (record, room_row, room_gap), px in rooms.items()
-                if record == annotation.record_index and room_row == place.part.row and room_gap < own_gap
-            )
-            width = band.width_px(record_lanes[annotation.record_index], lane_count)
-            edge = band.mark_edge_px(
-                placement.lane, width, room_before_px=before, past_lane_edge_px=paint_of(annotation, width)
-            )
-            extent = extent_at(annotation, place.bp, edge)
-            letters[index] = extent, _letters_at(
-                place.bp,
-                extent.low_bp,
-                extent.high_bp,
-                record_length=int(record_lengths[annotation.record_index]),
-                join_origin=join_origin,
-            )
-        return letters[index]
+    def measured(placement: PlacedRegionAnnotation, place: LabelPlace) -> _Letters:
+        """A label's letters where the rooms reckoned so far put its lane."""
+        annotation = placement.annotation
+        own_gap = gap_before(placement.lane + step)
+        before = sum(
+            px
+            for (record, room_row, room_gap), px in rooms.items()
+            if record == annotation.record_index and room_row == place.part.row and room_gap < own_gap
+        )
+        width = band.width_px(record_lanes[annotation.record_index], lane_count)
+        edge = band.mark_edge_px(
+            placement.lane, width, room_before_px=before, past_lane_edge_px=paint_of(annotation, width)
+        )
+        extent = extent_at(annotation, place.bp, edge)
+        return extent, _letters_at(
+            place.bp,
+            extent.low_bp,
+            extent.high_bp,
+            record_length=int(record_lengths[annotation.record_index]),
+            join_origin=join_origin,
+        )
 
     last_gap = max(lane_count - 2, max((room.gap for room in at_least), default=-1))
     bare = band.drawn_px(lane_count)
@@ -580,6 +606,7 @@ def _lane_rooms(
     left_out: set[tuple[int, str]] = set()
     for gap in range(last_gap + 1) if step > 0 else range(last_gap, -1, -1):
         met_lane = gap + 1 if step > 0 else gap
+        met_letters = _lane_letters(every_label, met_lane, measured, lane_paint)
         # The room each label of this gap needs, per record and row.
         needs: dict[tuple[int, int, int], dict[str, float]] = {}
         for index, (placement, place) in enumerate(labelled):
@@ -589,10 +616,13 @@ def _lane_rooms(
             if lanes_on < 1 or (annotation.record_index, annotation.id) in left_out:
                 continue
             row = place.part.row
-            extent, painted = letters_of(index)
+            extent, painted = letters.get(index) or letters.setdefault(index, measured(*labelled[index]))
             crossed = [
                 paint
-                for start, end, paint in marks.get((annotation.record_index, row, met_lane), ())
+                for start, end, paint in (
+                    *marks.get((annotation.record_index, row, met_lane), ()),
+                    *met_letters.get((annotation.record_index, row), ()),
+                )
                 if _overlaps(painted, ((start, end),))
             ]
             if not crossed:

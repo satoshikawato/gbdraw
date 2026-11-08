@@ -343,13 +343,17 @@ def _prepare_circular_annotation_tracks(
         return CircularPlannedTracks(slots, bundle, {}, tracks.circular_track_axis_index, record_index)
     # The planner generates the slot list whenever annotations are present.
     assert slots is not None
+    # The drawing's complete list: an overlay reference the given list left
+    # open (a comparison ring) is checked here (OV-2810).
+    try:
+        normalized = normalize_circular_track_slots_with_axis(slots, tracks.circular_track_axis_index)
+    except ValueError as exc:
+        raise ValidationError(
+            str(exc), diagnostic={"code": "TRACK_INVALID"}
+        ) from exc
     layouts = _layout_circular_annotation_tracks(
         _CircularAnnotationPacking.of(gb_record, slots, bundle, canvas_config, record_index),
-        inside_slot_ids=frozenset(
-            slot.id
-            for slot in normalize_circular_track_slots_with_axis(slots, tracks.circular_track_axis_index)
-            if slot.side == "inside"
-        ),
+        inside_slot_ids=frozenset(slot.id for slot in normalized if slot.side == "inside"),
     )
     return CircularPlannedTracks(slots, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
@@ -1368,7 +1372,8 @@ def _collect_circular_primary_bounds(
     overlay_obstacles: Sequence[Aabb],
     definition_target: Group | None = None,
 ) -> Aabb:
-    """Collect authoritative plot-space bounds before outer composition."""
+    """Collect authoritative plot-space bounds before outer composition: the rings, and past them only the
+    ``overlay_obstacles`` (the labels as drawn), not the room the slots keep for region labels (OV-2809)."""
     stroke_safety = _primary_radial_half_stroke_px(
         canvas_config=canvas_config,
         feature_config=feature_config,
@@ -1376,7 +1381,7 @@ def _collect_circular_primary_bounds(
         skew_config=skew_config,
         depth_config=depth_config,
     )
-    radius = float(radial_layout.outer_content_radius_px) + stroke_safety
+    radius = float(radial_layout.ring_outer_radius_px) + stroke_safety
     center_x = float(canvas_config.offset_x)
     center_y = float(canvas_config.offset_y)
     bounds: list[Aabb] = [
@@ -3520,7 +3525,7 @@ def add_record_on_circular_canvas(
     # The record is an obstacle whatever this record's own legend position:
     # a grid places its legend over records drawn without one, and the Web
     # moves a drawn legend to a corner with these obstacles. The label pass
-    # predicts the corner with it before the centre definition is drawn.
+    # predicts the corner with it (region labels too) before the centre definition is drawn.
     def record_obstacle(definition: Group | None = None) -> Aabb:
         return _collect_circular_primary_bounds(
             radial_layout=radial_layout,
@@ -3529,7 +3534,7 @@ def add_record_on_circular_canvas(
             gc_config=configurators.gc,
             skew_config=configurators.skew,
             depth_config=configurators.depth,
-            overlay_obstacles=(),
+            overlay_obstacles=annotation_label_obstacles,
             definition_target=definition,
         )
 

@@ -106,8 +106,15 @@ def validate_overlay_annotation_anchors(
     slots: Sequence[Any],
     *,
     anchorless_renderers: Collection[str],
+    listed_ids: Collection[str] | None = None,
 ) -> None:
-    """Validate aggregate overlay references after every slot is normalized."""
+    """Validate aggregate overlay references after every slot is normalized.
+
+    ``slots`` is the drawing's list unless ``listed_ids`` is given: then it is a
+    list the drawing may still add slots to (Circular comparison rings), and a
+    reference to an id not in ``listed_ids`` (every listed id, enabled or not)
+    is left to the check of the drawing's complete list.
+    """
 
     by_id = {str(slot.id): slot for slot in slots}
     for slot in slots:
@@ -124,6 +131,8 @@ def validate_overlay_annotation_anchors(
             if reference is None:
                 continue
             target = by_id.get(str(reference))
+            if target is None and listed_ids is not None and str(reference) not in listed_ids:
+                continue
             if target is None:
                 raise ValueError(
                     f"annotation slot '{slot.id}' references unknown {name}={reference!r}"

@@ -292,7 +292,7 @@ from gbdraw.tracks import (
     ScalarSpec,
     circular_track_slots_from_order,
     default_circular_track_slots,
-    normalize_circular_track_slots_with_axis,
+    normalize_listed_circular_track_slots,
     normalize_linear_track_slots_with_axis,
     parse_circular_track_slots,
     parse_linear_track_slots,
@@ -509,7 +509,7 @@ def _validate_circular_track_axis_index(
             f"circular_track_axis_index must be between 0 and the number of circular track slots ({len(parsed_circular_track_slots)})."
         )
     try:
-        normalize_circular_track_slots_with_axis(
+        normalize_listed_circular_track_slots(
             parsed_circular_track_slots,
             circular_track_axis_index,
         )

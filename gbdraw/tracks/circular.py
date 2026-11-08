@@ -65,6 +65,9 @@ _RENDERER_ALIASES: dict[str, str] = {
     "circular_comparison": "sequence_conservation",
 }
 
+# Slots with no band an overlay annotation can anchor to or extend to.
+_ANCHORLESS_RENDERERS = frozenset({"ticks", "spacer"})
+
 _ORDER_RENDERER_BY_ID: dict[str, str] = {
     "features": "features",
     "ticks": "ticks",
@@ -438,7 +441,7 @@ def parse_circular_track_slot(
             legacy_spacing=legacy_spacing,
         )
     try:
-        _normalize_circular_track_slots([slot], validate_anchor_references=False)
+        _normalize_circular_track_slots([slot])
     except Exception as exc:
         raise CircularTrackSlotParseError(str(exc), original) from exc
     return slot
@@ -480,7 +483,7 @@ def parse_circular_track_slots(
                     legacy_spacing=legacy_spacing,
                 )
             try:
-                _normalize_circular_track_slots([slot], validate_anchor_references=False)
+                _normalize_circular_track_slots([slot])
             except Exception as exc:
                 raise CircularTrackSlotParseError(str(exc), str(slot.id)) from exc
         else:
@@ -492,7 +495,7 @@ def parse_circular_track_slots(
             raise CircularTrackSlotParseError("duplicate circular track slot id", slot.id)
         seen.add(slot.id)
         out.append(slot)
-    normalize_circular_track_slots(out)
+    normalize_listed_circular_track_slots(out)
     return out
 
 
@@ -618,10 +621,8 @@ def _reject_retired_tick_params(params: Mapping[str, object]) -> None:
 
 def _normalize_circular_track_slots(
     slots: Sequence[CircularTrackSlot],
-    *,
-    validate_anchor_references: bool,
 ) -> list[NormalizedCircularTrackSlot]:
-    """Normalize slots, optionally deferring aggregate anchor validation."""
+    """Normalize each slot; the callers check the overlay references between slots."""
 
     normalized: list[NormalizedCircularTrackSlot] = []
     seen: set[str] = set()
@@ -762,11 +763,6 @@ def _normalize_circular_track_slots(
                 ),
             )
         )
-    if validate_anchor_references:
-        validate_overlay_annotation_anchors(
-            normalized,
-            anchorless_renderers={"ticks", "spacer"},
-        )
     return normalized
 
 
@@ -775,7 +771,31 @@ def normalize_circular_track_slots(
 ) -> list[NormalizedCircularTrackSlot]:
     """Validate and normalize a complete circular track-slot list."""
 
-    return _normalize_circular_track_slots(slots, validate_anchor_references=True)
+    normalized = _normalize_circular_track_slots(slots)
+    validate_overlay_annotation_anchors(normalized, anchorless_renderers=_ANCHORLESS_RENDERERS)
+    return normalized
+
+
+def normalize_listed_circular_track_slots(
+    slots: Sequence[CircularTrackSlot],
+    axis_index: int | None = None,
+) -> list[NormalizedCircularTrackSlot]:
+    """Validate and normalize a slot list as given, before the drawing adds its comparison rings.
+
+    An overlay reference to a slot id the list does not hold is checked when
+    the drawing's list is complete (``normalize_circular_track_slots``), so it
+    may name a ring the drawing adds (OV-2810).
+    """
+
+    if axis_index is not None:
+        slots = circular_track_slots_with_axis_side(slots, axis_index)
+    normalized = _normalize_circular_track_slots(slots)
+    validate_overlay_annotation_anchors(
+        normalized,
+        anchorless_renderers=_ANCHORLESS_RENDERERS,
+        listed_ids={str(slot.id) for slot in slots},
+    )
+    return normalized
 
 
 def normalize_circular_track_slots_with_axis(
@@ -911,6 +931,7 @@ __all__ = [
     "default_circular_track_slots",
     "normalize_circular_track_slots",
     "normalize_circular_track_slots_with_axis",
+    "normalize_listed_circular_track_slots",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
 ]

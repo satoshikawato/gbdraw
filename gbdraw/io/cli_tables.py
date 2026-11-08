@@ -15,7 +15,7 @@ from ..exceptions import ValidationError
 from ..io.input_text import GZIP_ERRORS, open_input_text
 from ..io.regions import parse_region_spec
 from ..tracks import (
-    normalize_circular_track_slots_with_axis,
+    normalize_listed_circular_track_slots,
     parse_circular_track_slots,
 )
 from ..tracks.circular import _LEGACY_SPACING_PARAM
@@ -501,7 +501,7 @@ def read_circular_track_table(
             specs,
             _allow_legacy_transport=_allow_legacy_transport,
         )
-        normalize_circular_track_slots_with_axis(slots, axis_index)
+        normalize_listed_circular_track_slots(slots, axis_index)
     except Exception as exc:
         raise ValidationError(f"{table_path}: invalid circular track table: {exc}") from exc
     return CircularTrackTable(
