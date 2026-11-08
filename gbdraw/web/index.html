@@ -2955,7 +2955,7 @@
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-circular-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
-                                                <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
+                                                <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track)" :text="autoValueText('depthTickFont', track)">
                                                     <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
@@ -3513,7 +3513,7 @@
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px]">{{ t('Tick Font Size') }} <help-tip :id="`help-linear-depth-tick-font-${track.index}`" :text="t('Font size for this track\'s depth tick labels. Leave blank for auto.')"></help-tip></span>
-                                                <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
+                                                <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track)" :text="autoValueText('depthTickFont', track)">
                                                     <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>

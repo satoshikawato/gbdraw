@@ -19,7 +19,7 @@ from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
-from gbdraw.tracks.parsing import parse_nonnegative_integer, slot_legend_label
+from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
 
 if TYPE_CHECKING:
     from gbdraw.api.options import DepthTrackInput
@@ -819,11 +819,7 @@ def sync_depth_track_legend_entries(
     for slot in slots:
         if slot.renderer != "depth":
             continue
-        track_index = parse_nonnegative_integer(
-            slot.params.get("track_index", 0),
-            field_name=f"depth slot '{slot.id}' track_index",
-        )
-        track = tracks_by_index.get(track_index)
+        track = tracks_by_index.get(depth_slot_track_index(slot.id, slot.params))
         if track is None:
             continue
         out.add_source(slot_legend_label(slot, depth_track_legend_name(track, track_count)), {

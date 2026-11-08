@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
+/** @import { TrackSlotRow } from '../services/track-slot-validation.js' */
 import {
   linearLabelSizeLengths,
   normalizeOptionalText,
@@ -7,7 +8,9 @@ import {
   sizeClassForRecordLengths
 } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
+import { depthSlotTrackIndex } from '../services/depth-track-state.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
+import { parseOptionalCircularScalar } from '../services/track-slot-validation.js';
 import { t } from '../utils/i18n.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
@@ -164,8 +167,9 @@ const normalizeLengthParam = (value) => {
  */
 
 /**
- * The track whose Auto text is asked for: only a Linear Depth track's height is read.
- * @typedef {{ height?: unknown }} AutoValueContext
+ * The Depth series whose Auto text is asked for (a row of the Depth panel): its index, and its config, of which only
+ * a Linear series' height is read.
+ * @typedef {{ index: number, config: { height?: unknown } }} AutoValueContext
  */
 
 /**
@@ -401,11 +405,60 @@ const circularRadiusText = (state, drawing, renderer) => {
     : formatShortLong(value, formatFactor, null);
 };
 
-/** @param {RecordLengthState} state @param {DrawingState} drawing */
-const circularDepthWidthPx = (state, drawing) => (
-  parsePositiveNumber(drawing?.adv?.depth_width_circular)
-    ?? circularWidthForRenderer('depth', activeCircularLengthParam(state, drawing) || 'long')
-);
+/**
+ * The first enabled Circular Depth row of the custom stack that draws Depth series `trackIndex` (by the series it
+ * references), or the first that draws a series when `trackIndex` is null; null when the stack is off or has none.
+ * @param {DrawingState} drawing
+ * @param {number | null} trackIndex
+ */
+const customStackDepthSlot = ({ adv }, trackIndex) => {
+  if (!adv.circular_track_slots_enabled || !Array.isArray(adv.circular_track_slots)) return null;
+  /** @type {TrackSlotRow[]} */
+  const slots = adv.circular_track_slots;
+  return slots.find((slot) => (
+    Boolean(slot)
+    && slot?.enabled !== false
+    && slot?.renderer === 'depth'
+    && (trackIndex === null ? depthSlotTrackIndex(slot) !== null : depthSlotTrackIndex(slot) === trackIndex)
+  )) ?? null;
+};
+
+/**
+ * The width (px) a Circular Depth track of series `trackIndex` is drawn at, as Python sizes its tick font from it (the
+ * slot's `requested_width_px`): with Use custom stack on, the width of the series' first Depth row (a ×R width of the
+ * packaged radius); otherwise the Depth Width shortcut; else the Auto width.
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {number} trackIndex
+ */
+const circularDepthWidthPx = (state, drawing, trackIndex) => {
+  const autoWidth = circularWidthForRenderer('depth', activeCircularLengthParam(state, drawing) || 'long');
+  if (!drawing.adv.circular_track_slots_enabled) return parsePositiveNumber(drawing.adv.depth_width_circular) ?? autoWidth;
+  const slot = customStackDepthSlot(drawing, trackIndex);
+  let width = null;
+  try {
+    width = slot ? parseOptionalCircularScalar(slot.width) : null;
+  } catch {
+    // A width the row cannot use draws nothing; the note keeps the Auto width.
+  }
+  if (width === null) return autoWidth;
+  return width.unit === 'px' ? width.value : width.value * DEFAULTS.circular.radiusPx;
+};
+
+/**
+ * The tick font Circular Depth series `trackIndex` draws its numbers in: its own Tick Font Size, else the drawing's
+ * Depth tick font, else the Auto size of its track's width (Python's `depth_track_config` and
+ * `depth_axis_tick_font_size_px`).
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ * @param {number} trackIndex
+ */
+const circularDepthSeriesTickFontPx = (state, drawing, trackIndex) => {
+  const series = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
+  return parsePositiveNumber(series?.tick_font_size)
+    ?? parsePositiveNumber(drawing.adv.depth_tick_font_size)
+    ?? scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing, trackIndex));
+};
 
 /**
  * @param {RecordLengthState} state
@@ -414,18 +467,20 @@ const circularDepthWidthPx = (state, drawing) => (
  */
 const depthTickFontSize = (state, drawing, trackConfig = null) => {
   if (shownMode(state) === 'linear') {
-    const trackHeight = parsePositiveNumber(trackConfig?.height)
+    const trackHeight = parsePositiveNumber(trackConfig?.config.height)
       ?? parsePositiveNumber(drawing?.adv?.depth_height)
       ?? DEFAULTS.linear.depthHeightPx;
     return scalarAxisTickFontSize('linear', trackHeight);
   }
-  return scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing));
+  // The Auto value of the series' own Tick Font Size: the size of its track's width.
+  return scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing, trackConfig?.index ?? 0));
 };
 
 /**
  * The font a Percent GC axis takes from the depth axis drawn with ticks beside it, as Python's
- * `gc_axis_tick_font_size_of_depth` draws it (pinned by `gcAxisTickFonts` of tests/fixtures/auto_size_vectors.json);
- * null when the GC axis keeps the Auto size of its own track.
+ * `CircularScalarAxes.gc_tick_font_size` draws it: the font of the first Depth track the stack draws (pinned by
+ * `gcAxisTickFonts` of tests/fixtures/auto_size_vectors.json); null when the GC axis keeps the Auto size of its own
+ * track.
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing
  */
@@ -433,8 +488,8 @@ const gcTickFontOfDepth = (state, drawing) => {
   const { adv } = drawing;
   if (adv.gc_content_mode !== 'percent' || !draftDrawsDepth('circular', drawing)) return null;
   if (!(adv.depth_show_axis && adv.depth_show_ticks)) return null;
-  return parsePositiveNumber(adv.depth_tick_font_size)
-    ?? scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing));
+  const firstSlot = customStackDepthSlot(drawing, null);
+  return circularDepthSeriesTickFontPx(state, drawing, (firstSlot && depthSlotTrackIndex(firstSlot)) ?? 0);
 };
 
 /**

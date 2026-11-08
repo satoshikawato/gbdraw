@@ -60,7 +60,18 @@ test('the Circular GC tick font note follows the depth axis beside it, as the sh
         depth_show_ticks: entry.config['objects.depth.show_ticks'],
         depth_tick_font_size: entry.config['objects.depth.tick_font_size'] ?? null,
         depth_width_circular: thickness.depth ?? null,
-        gc_content_width_circular: thickness.gc_content ?? null
+        gc_content_width_circular: thickness.gc_content ?? null,
+        // A series' own font, by series index; a custom stack's Depth rows, in stack order (OV-2875, OV-2876).
+        depth_tracks: (entry.depthTracks ?? []).map((/** @type {{ tickFontSize: number | null }} */ track) => ({
+          tick_font_size: track.tickFontSize
+        })),
+        circular_track_slots_enabled: Boolean(entry.circularDepthSlots),
+        circular_track_slots: (entry.circularDepthSlots ?? []).map(
+          (/** @type {{ trackIndex: number, widthPx: number }} */ slot, /** @type {number} */ index) => ({
+            id: `depth_${index + 1}`, renderer: 'depth', enabled: true,
+            width: { value: slot.widthPx, unit: 'px' }, params: { track_index: slot.trackIndex }
+          })
+        )
       }
     }), { circularDiagramLengths: () => [entry.recordLengths] });
     const px = (/** @type {number} */ value) => `${Number(value.toFixed(1))} px (auto)`;
