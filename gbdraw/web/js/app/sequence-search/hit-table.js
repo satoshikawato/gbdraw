@@ -49,6 +49,12 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
     return outcome.setId === null || drawing.annotationSets.some((set) => set.id === outcome.setId) ? outcome : null;
   });
   const hitRows = computed(() => (shownOutcome.value?.hits ?? []).filter((hit) => !panel.chip || hit.query === panel.chip));
+  // The aligned length of a hit as its row shows it: bases for a nucleotide query, residues (aa) for a protein query.
+  const programs = computed(() => new Map((shownOutcome.value?.queries ?? []).map(({ name, program }) => [name, program])));
+  /** @param {SearchHit} hit */
+  const hitLengthText = (hit) => (programs.value.get(hit.query) === 'tblastn'
+    ? t('{length} aa', { length: String(hit.alignmentLength) })
+    : String(hit.alignmentLength));
   const chips = computed(() => (shownOutcome.value?.queries ?? []).map(({ name }) => ({
     name, count: (shownOutcome.value?.hits ?? []).filter((hit) => hit.query === name).length
   })));
@@ -81,5 +87,5 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
     downloadTextFile(`${(outcome.setId ?? 'sequence_search').replace(/\s+/g, '_')}.${programs}.tsv`, outcome.rawText);
   };
   const hitOutline = createSearchHitOutline({ shownRoot, target: () => outline.value });
-  return { shownOutcome, hitRows, chips, noHitText, outline, recordOf, chooseChip, selectHit, saveRawTsv, hitOutline };
+  return { shownOutcome, hitRows, hitLengthText, chips, noHitText, outline, recordOf, chooseChip, selectHit, saveRawTsv, hitOutline };
 };

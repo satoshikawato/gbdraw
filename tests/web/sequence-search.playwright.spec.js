@@ -371,6 +371,7 @@ test('a query that is no sequence, Cancel, dc-megablast in Serial and a search w
 // PD-OI-117: a protein query is searched with tblastn against the same records, beside a nucleotide query searched
 // with blastn, and its hit is drawn in genome coordinates on the strand of its gene. Here the cI repressor of lambda,
 // whose gene lies on the minus strand at 37227..37940 (the stop codon is not in the protein).
+// The protein query is pasted first; blastn still runs first, so its rows lead the raw table and its name.
 test('Linear: a protein query is searched with tblastn and its hit is drawn on its gene, beside a blastn hit', async ({ page }) => {
   test.setTimeout(600_000);
   await openFresh(page);
@@ -379,7 +380,7 @@ test('Linear: a protein query is searched with tblastn and its hit is drawn on i
   const lambdaText = readFileSync('tests/test_inputs/NC_001416.gb', 'utf8');
   const cI = lambdaText.match(/\/gene="cI"\n(?:\s+\/[^\n]*\n)*?\s+\/translation="([^"]+)"/)[1].replace(/\s+/g, '');
   const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
-  await searchFromPanel(page, fasta([{ name: 'cosL', bases: span(lambda, 5001, 5400) }, { name: 'cI', bases: cI }]), { task: 'blastn' });
+  await searchFromPanel(page, fasta([{ name: 'cI', bases: cI }, { name: 'cosL', bases: span(lambda, 5001, 5400) }]), { task: 'blastn' });
   const { outcome, searchError } = await searchOutcome(page);
   expect(searchError).toBeNull();
   expect(outcome.setId).toBe('Search 1');
@@ -390,6 +391,12 @@ test('Linear: a protein query is searched with tblastn and its hit is drawn on i
   const hit = (name) => outcome.hits.filter((entry) => entry.query === name).map(({ start, end, strand, qstart, qend }) => ({ start, end, strand, qstart, qend }));
   expect(hit('cI')).toEqual([{ start: 37230, end: 37940, strand: '-', qstart: 1, qend: cI.length }]);
   expect(hit('cosL')).toEqual([{ start: 5001, end: 5400, strand: '+', qstart: 1, qend: 400 }]);
+  expect(outcome.rawText.split('\t', 1)[0]).toBe('cosL');
+  const [proteinHit] = outcome.hits.filter((entry) => entry.query === 'cI');
+  await expect(section.locator('[data-sequence-search-hit]', { hasText: 'cI' }).locator('td').nth(4)).toHaveText(`${proteinHit.alignmentLength} aa`);
+  await expect(section.locator('[data-sequence-search-hit]', { hasText: 'cosL' }).locator('td').nth(4)).toHaveText('400');
+  const [saved] = await Promise.all([page.waitForEvent('download'), section.getByRole('button', { name: 'Save Raw LOSAT TSV' }).click()]);
+  expect(saved.suggestedFilename()).toBe('Search_1.losatn-tlosatn.tsv');
   const { rows } = await setRows(page, 'Search 1');
   expect(rows.map(({ start, end, strand }) => ({ start, end, strand }))).toEqual(expect.arrayContaining([
     { start: 37230, end: 37940, strand: '-' }, { start: 5001, end: 5400, strand: '+' }

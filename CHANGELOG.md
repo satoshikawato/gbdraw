@@ -22,7 +22,10 @@ write-up of a release.
   a click on the Result's background does.
 - Changed: the Web app's LOSAT is built from LOSAT `a20ad436a`, which runs
   tblastn in every LOSAT execution mode; the blastn, tblastx and blastp
-  results of the app are unchanged.
+  results of the app are unchanged. A saved Session whose LOSAT comparisons
+  the previous build ran runs them once more at its first Generate, because a
+  saved LOSAT result is reused only by the LOSAT build that wrote it; the
+  results are the same.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

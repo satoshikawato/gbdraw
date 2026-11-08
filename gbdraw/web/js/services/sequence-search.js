@@ -8,14 +8,14 @@
 // searched sequences from the records the shown drawing draws, and names the set
 // a search adds. It reads no sequence and decides no program or hit itself.
 import { diagnosticError } from '../utils/error-normalization.js';
-import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.js';
+import { SEARCH_PROGRAMS, SEARCH_QUERY_COLORS } from '../utils/sequence-search.generated.js';
 
 /** @import { DrawnRecordInput, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 /** @import { LosatJob } from './losat.js' */
 /** @import { HistoryIntentChange } from './history.js' */
 
-/** The program that searches a query, as Python decides it: blastn for a nucleotide query, tblastn for a protein query. @typedef {'blastn' | 'tblastn'} SearchProgram */
+/** The program that searches a query, as Python decides it: blastn for a nucleotide query, tblastn for a protein query. @typedef {import('../utils/sequence-search.generated.js').SearchProgram} SearchProgram */
 /**
  * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length (bases, or residues for a protein query),
  * the program that searches it, the most subject bases one of its hits covers (`SearchQuery.reach`, three per residue
@@ -121,7 +121,7 @@ export const readSearchQueriesReply = (result) => {
   if (!isRecord(result) || !Array.isArray(result.queries)
     || !result.queries.every((query) => isRecord(query) && strings(query, ['name', 'fasta'])
       && Number.isSafeInteger(query.length) && Number.isSafeInteger(query.reach)
-      && (query.program === 'blastn' || query.program === 'tblastn'))) {
+      && SEARCH_PROGRAMS.some((program) => program === query.program))) {
     throw invalid('readSearchQueries');
   }
   return /** @type {SearchQueryRead[]} */ (result.queries);
@@ -174,11 +174,12 @@ export const searchSpans = (records, queries) => {
 };
 
 /**
- * The programs of a search's queries, each once, in the order of the queries that need them.
+ * The programs of a search's queries, each once, in Python's order (blastn, then tblastn) whatever the order of the
+ * queries: the order of the jobs, of their rows in the raw table, of the programs in its name, and in the panel.
  * @param {readonly { program: SearchProgram }[]} queries
  * @returns {SearchProgram[]}
  */
-export const searchPrograms = (queries) => [...new Set(queries.map((query) => query.program))];
+export const searchPrograms = (queries) => SEARCH_PROGRAMS.filter((program) => queries.some((query) => query.program === program));
 
 /**
  * The selector of the Result record `recordKey` in the committed request; a span of a record the Result does not draw

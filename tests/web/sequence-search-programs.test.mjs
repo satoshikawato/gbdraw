@@ -5,10 +5,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { pathToFileURL } from 'node:url';
 
 const search = await import('../../gbdraw/web/js/services/sequence-search.js');
 const runtime = await import('../../gbdraw/web/js/services/losat-runtime.js');
+const generated = await import('../../gbdraw/web/js/utils/sequence-search.generated.js');
 
 const nucleotide = { name: 'n1', length: 40, program: 'blastn', reach: 40, fasta: '>n1\nACGT\n' };
 const protein = { name: 'p1', length: 30, program: 'tblastn', reach: 90, fasta: '>p1\nMKV\n' };
@@ -25,6 +25,10 @@ test('a search plans one LOSAT job per program, blastn with the panel task and t
     ['search-query-blastn', '>n1\nACGT\n>n2\nTTTT\n'],
     ['search-query-tblastn', '>p1\nMKV\n']
   ]);
+  // A protein query pasted first changes nothing: blastn runs first, so its rows lead the raw table and its name.
+  const pastedFirst = search.searchLosatPlan({ queries: [protein, nucleotide], subjectFasta: '>s\nA\n', task: 'blastn' });
+  assert.deepEqual(pastedFirst.jobs.map(({ program }) => program), ['blastn', 'tblastn']);
+  assert.deepEqual(search.searchPrograms([protein, second, nucleotide]), ['blastn', 'tblastn']);
   // Protein queries only: one tblastn job.
   assert.deepEqual(search.searchLosatPlan({ queries: [protein], subjectFasta: '>s\nA\n', task: 'blastn' }).jobs.map(({ program }) => program), ['tblastn']);
 });
@@ -37,6 +41,12 @@ test('the origin window reaches as far as the query that covers the most bases: 
 
 test('the raw rows of the jobs are one table in job order', () => {
   assert.equal(search.searchRawText([{ text: 'a\t1\n' }, { text: '' }, { text: 'b\t2' }]), 'a\t1\nb\t2\n');
+});
+
+test('the programs and their order come from Python through the generated module', async () => {
+  assert.deepEqual([...generated.SEARCH_PROGRAMS], ['blastn', 'tblastn']);
+  const source = await readFile(new URL('../../gbdraw/web/js/services/sequence-search.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /=== 'tblastn'/, 'the reply check keeps no program list of its own');
 });
 
 test('a query read without its program or reach is refused', () => {
@@ -81,8 +91,8 @@ test('the panel names the programs of its queries, and the task applies to blast
   await panel.readQueries('>p1\nMKV\n');
   assert.deepEqual([panel.programs.value, panel.taskApplies.value, panel.programText.value], [['tblastn'], false, 'tblastn']);
   assert.equal(panel.queryLengthText(protein), '30 aa');
-  reply = [nucleotide, protein];
-  await panel.readQueries('>n1\nACGT\n>p1\nMKV\n');
+  reply = [protein, nucleotide];
+  await panel.readQueries('>p1\nMKV\n>n1\nACGT\n');
   assert.deepEqual([panel.programs.value, panel.taskApplies.value, panel.programText.value], [['blastn', 'tblastn'], true, 'blastn, task megablast · tblastn']);
   await panel.search();
   assert.deepEqual(sent, [[{ recordKey: 'r', originWindow: 90 }], ['blastn', 'tblastn']]);
@@ -117,5 +127,25 @@ test('the vendored serial LOSAT runs tblastn: a protein query hits its gene on t
   assert.deepEqual(row.slice(0, 2), ['prot', 'rec:1-900']);
   // qstart qend sstart send: the whole protein, read on the minus strand (sstart > send) over the gene's codons.
   assert.deepEqual(row.slice(6, 10).map(Number), [1, 60, 300 + reverse.length, 304]);
-  assert.equal(pathToFileURL('.').protocol, 'file:');
+});
+
+test('the hit table writes "aa" after the length of a protein query\'s hit; a nucleotide hit keeps its number', async () => {
+  globalThis.window ??= {
+    Vue: {
+      ref: (value) => ({ value }), reactive: (value) => value,
+      computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
+    }
+  };
+  const { createSearchHitTable } = await import('../../gbdraw/web/js/app/sequence-search/hit-table.js');
+  const hit = (query, alignmentLength) => ({ annotationId: query, query, alignmentLength });
+  const panel = {
+    chip: '', selectedHit: '',
+    outcome: {
+      drawingId: 'linear', setId: null, rowsLeftOut: 0, recordIds: {}, rawText: '',
+      hits: [hit('n1', 1234), hit('p1', 237)],
+      queries: [{ ...nucleotide, color: '#000' }, { ...protein, color: '#111' }]
+    }
+  };
+  const table = createSearchHitTable(panel, { activeDrawing: () => ({ id: 'linear', annotationSets: [] }), shownRoot: () => null });
+  assert.deepEqual(table.hitRows.value.map((row) => table.hitLengthText(row)), ['1234', '237 aa']);
 });

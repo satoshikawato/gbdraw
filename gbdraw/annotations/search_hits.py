@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from pandas import DataFrame
 
@@ -38,6 +38,9 @@ from gbdraw.linear_comparison import table_id_index, table_id_matches
 from .models import AnnotationGradient, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
 
 SearchProgram = Literal["blastn", "tblastn"]
+# The programs in the order a search runs them, which is the order of their rows in the raw LOSAT table and of the
+# programs in its file name. The Web reads them from utils/sequence-search.generated.js.
+SEARCH_PROGRAMS: tuple[SearchProgram, ...] = get_args(SearchProgram)
 # The program that searches a query of each molecule (PD-OI-117), and the subject bases one query letter covers.
 _SEARCH_PROGRAMS: Mapping[SequenceMolecule, SearchProgram] = {"nucleotide": "blastn", "protein": "tblastn"}
 _BASES_PER_QUERY_LETTER: Mapping[SearchProgram, int] = {"blastn": 1, "tblastn": 3}
@@ -45,7 +48,7 @@ SearchColorMode = Literal["query", "gradient"]
 
 # The default hit colours, one per query in query order (repeated past the last), and the
 # gradient by query position from its pale start to its dark end. Moderate chroma: a hit is
-# a large area on a short record. The Web reads them from utils/sequence-search-colors.generated.js.
+# a large area on a short record. The Web reads them from utils/sequence-search.generated.js.
 SEARCH_QUERY_COLORS: tuple[str, ...] = (
     "#c8607e", "#8670c4", "#3f9688", "#c08a3e", "#4f7fb8", "#7f9a4a", "#a0705a", "#6b7a8f",
 )
@@ -154,7 +157,7 @@ class SearchQuery:
                 "A search query's length must be a positive integer.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE_INTEGER"},
             )
-        if self.program not in _BASES_PER_QUERY_LETTER:
+        if self.program not in SEARCH_PROGRAMS:
             raise ValidationError("A search program is blastn or tblastn.", diagnostic={"code": "INPUT_INVALID", "reason": "LOSAT_OPTION_PROGRAM"})
 
     @property
@@ -443,6 +446,7 @@ __all__ = [
     "SearchAnnotationResult",
     "SearchColorMode",
     "SearchHit",
+    "SEARCH_PROGRAMS",
     "SearchProgram",
     "SearchQuery",
     "SearchSubject",

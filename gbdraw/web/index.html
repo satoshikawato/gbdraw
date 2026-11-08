@@ -4225,7 +4225,7 @@
                                                 <td class="pr-0.5">{{ hit.start.toLocaleString() }}–{{ hit.end.toLocaleString() }}</td>
                                                 <td class="pr-0.5 text-center">{{ hit.strand }}</td>
                                                 <td class="pr-0.5 text-right" :title="String(hit.identity)">{{ hit.identity.toFixed(1) }}</td>
-                                                <td class="pr-0.5 text-right">{{ hit.alignmentLength }}</td>
+                                                <td class="pr-0.5 text-right whitespace-nowrap">{{ sequenceSearch.hitLengthText(hit) }}</td>
                                                 <td class="pr-0.5 text-right whitespace-nowrap">{{ hit.evalue }}</td>
                                                 <td class="text-right">{{ hit.bitscore }}</td>
                                             </tr>
