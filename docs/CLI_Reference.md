@@ -1062,11 +1062,14 @@ color to the color; a ring without one (`same`) draws the default gradient
 (`objects.conservation.min_color` to `max_color`). The config key is
 `objects.conservation.color_scheme`.
 
-The legend lists the drawn rings by name from `outer` to `inner`, then one
-`identity` band with the minimum identity and `100%`. When the drawn rings
-differ in color, each name shows a swatch of its ring color and the band is
-grey; otherwise the names have no swatch and the band is the outermost ring's
-gradient. A ring without a color counts as `objects.conservation.max_color`.
+When every drawn ring has one color, the legend lists the rings by name from
+`outer` to `inner`, then one `identity` band, the outermost ring's gradient,
+with the minimum identity and `100%`. When the drawn rings are not all one
+color, each name has its ring's own identity ramp beside it, and one scale line
+(the minimum identity, `identity`, and `100%`) stands under the last ramp;
+`outer` and `inner` stand above and below the names only when two or more
+rings share a color. A ring without a color counts as
+`objects.conservation.max_color`.
 
 The single-track geometry options `--feature_width`, `--depth_width`,
 `--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and

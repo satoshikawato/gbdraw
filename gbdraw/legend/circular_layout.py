@@ -22,11 +22,11 @@ from .table import DrawnLegendName, LegendRowKey, as_legend_table
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
-# The similarity-ring block (PD-OI-110): its captions, and the label of its identity band.
+# The similarity-ring block (PD-OI-110): its captions, and the label of its identity scale.
 RING_OUTER_CAPTION = "outer"
 RING_INNER_CAPTION = "inner"
 RING_BAND_LABEL = "identity"
-# The band sits this many lines below the ``inner`` caption.
+# One colour: the band sits this many lines below the ``inner`` caption.
 RING_BAND_LINE_GAP = 1.5
 
 
@@ -98,34 +98,63 @@ class CircularGradientLegendLayout:
 
 @dataclass(frozen=True)
 class CircularRingRowLayout:
-    """One drawn ring's row: its swatch (when the block shows swatches) and its name, centred on ``y``."""
+    """One drawn ring's row: its name at the block's left edge and, when the rings differ in colour, its own
+    identity ramp at the block's ``bar_x``, both centred on ``y``."""
 
     key: LegendRowKey
     properties: Mapping[str, object]
-    swatch_x: float
-    text_x: float
     y: float
 
 
 @dataclass(frozen=True)
 class CircularRingLegendLayout:
-    """The similarity-ring block (PD-OI-110): caption ``outer``, the drawn rings outermost first, caption
-    ``inner``, then the identity band labelled ``identity`` with its minimum and 100% labels below it."""
+    """The similarity-ring block (PD-OI-110, scenario revision 2), in one of two forms.
+
+    - One colour: caption ``outer``, the drawn rings' names outermost first, caption
+      ``inner``, then one identity band at ``band_y``, labelled ``identity`` at its right, with its minimum and 100%
+      labels below it.
+    - Colours that differ (``per_ring_ramps``): each row is the ring's name and its own identity ramp at
+      ``bar_x``; one scale line (the minimum, ``identity`` centred, 100%) sits under the last ramp, and no band
+      (``band_y`` is None). The captions stand above and below the names only when two or more drawn rings share a
+      colour (``show_captions``).
+
+    ``identity_label_x`` and ``identity_label_y`` place the ``identity`` label of either form."""
 
     width: float
     height: float
-    show_swatches: bool
+    show_captions: bool
     outer_caption_y: float
     inner_caption_y: float
     rows: tuple[CircularRingRowLayout, ...]
+    bar_x: float
     bar_width: float
-    band_y: float
-    band_label_x: float
+    band_y: float | None
+    identity_label_x: float
+    identity_label_y: float
     min_label_text: str
     max_label_text: str
     min_label_x: float
     max_label_x: float
     scale_label_y: float
+
+    @property
+    def per_ring_ramps(self) -> bool:
+        """Whether each ring draws its own ramp (the rings differ in colour) instead of the one band."""
+
+        return self.band_y is None
+
+    @property
+    def bar_ys(self) -> tuple[float, ...]:
+        """The centre of each bar the block draws at ``bar_x``: every ring's own ramp, or the one band."""
+
+        return (self.band_y,) if self.band_y is not None else tuple(row.y for row in self.rows)
+
+    @property
+    def lines(self) -> int:
+        """The block's lines in a vertical Legend: the captions, the rings, and the band and its scale labels (one
+        colour) or the one scale line (colours that differ)."""
+
+        return (2 if self.show_captions else 0) + len(self.rows) + (1 if self.per_ring_ramps else 2)
 
 
 @dataclass(frozen=True)
@@ -212,50 +241,65 @@ def _build_ring_layout(
     font_size: float,
     color_rect_size: float,
 ) -> CircularRingLegendLayout | None:
+    """The similarity-ring block. A row's ``fill`` is its ring's colour when the drawn rings differ in colour
+    (``_add_conservation_ring_rows``), else None: rows with a colour draw their own ramps, and rows that share
+    a colour (one colour included) keep the captions that give the order outer to inner."""
+
     if not ring_entries:
         return None
     rect = float(color_rect_size)
     line = legend_line_height(rect)
-    show_swatches = any(entry.properties.get("fill") for entry in ring_entries)
-    text_x = legend_text_x_offset(rect) if show_swatches else 0.0
+    fills = [entry.properties.get("fill") for entry in ring_entries]
+    per_ring_ramps = any(fills)
+    show_captions = not per_ring_ramps or len(set(fills)) < len(fills)
     bar_width = GRADIENT_BAR_WIDTH_RATIO * rect
-    band_label_x = bar_width + (legend_text_x_offset(rect) - rect)
     outer_caption_y = rect / 2
+    # The rows start a line below ``outer`` when it is drawn; ``inner`` stands a line below the last row.
+    lead = 1 if show_captions else 0
     rows = tuple(
-        CircularRingRowLayout(
-            key=entry.key,
-            properties=entry.properties,
-            swatch_x=0.0,
-            text_x=text_x,
-            y=outer_caption_y + ((index + 1) * line),
-        )
+        CircularRingRowLayout(key=entry.key, properties=entry.properties, y=outer_caption_y + ((index + lead) * line))
         for index, entry in enumerate(ring_entries)
     )
-    inner_caption_y = outer_caption_y + ((len(ring_entries) + 1) * line)
-    band_y = inner_caption_y + (RING_BAND_LINE_GAP * line)
-    scale_label_y = band_y + (rect / 2) + 2
+    inner_caption_y = outer_caption_y + ((len(ring_entries) + lead) * line)
     _, label_height = drawn_text_box("100%", font_family, font_size)
-    caption_width = max(
-        float(drawn_text_box(text, font_family, font_size)[0]) for text in (RING_OUTER_CAPTION, RING_INNER_CAPTION)
+    caption_width = (
+        max(float(drawn_text_box(text, font_family, font_size)[0]) for text in (RING_OUTER_CAPTION, RING_INNER_CAPTION))
+        if show_captions
+        else 0.0
     )
-    band_width = band_label_x + float(drawn_text_box(RING_BAND_LABEL, font_family, font_size)[0])
-    width = max(caption_width, band_width, *(text_x + entry.text_width for entry in ring_entries))
-    height = scale_label_y + float(label_height)
+    names_width = max(caption_width, *(entry.text_width for entry in ring_entries))
+    band_y: float | None
+    if per_ring_ramps:
+        bar_x = names_width + rect
+        band_y = None
+        scale_label_y = rows[-1].y + (rect / 2) + 2
+        identity_label_x, identity_label_y = bar_x + (bar_width / 2), scale_label_y
+        width = bar_x + bar_width
+        height = max(scale_label_y + float(label_height), inner_caption_y + (rect / 2) if show_captions else 0.0)
+    else:
+        bar_x = 0.0
+        band_y = inner_caption_y + (RING_BAND_LINE_GAP * line)
+        scale_label_y = band_y + (rect / 2) + 2
+        identity_label_x, identity_label_y = bar_width + (legend_text_x_offset(rect) - rect), band_y
+        width = max(names_width, identity_label_x + float(drawn_text_box(RING_BAND_LABEL, font_family, font_size)[0]))
+        height = scale_label_y + float(label_height)
     min_label_text, max_label_text = gradient_scale_texts(ring_entries[0].properties)
     return CircularRingLegendLayout(
         width=width,
         height=height,
-        show_swatches=show_swatches,
+        show_captions=show_captions,
         outer_caption_y=outer_caption_y,
         inner_caption_y=inner_caption_y,
         rows=rows,
+        bar_x=bar_x,
         bar_width=bar_width,
         band_y=band_y,
-        band_label_x=band_label_x,
+        identity_label_x=identity_label_x,
+        identity_label_y=identity_label_y,
         min_label_text=min_label_text,
         max_label_text=max_label_text,
-        min_label_x=0.0,
-        max_label_x=bar_width,
+        min_label_x=bar_x,
+        max_label_x=bar_x + bar_width,
         scale_label_y=scale_label_y,
     )
 
@@ -390,8 +434,7 @@ def _build_side_block(
     )
     if ring is None and rows is None:
         return None
-    # outer, the rings, inner, the band and its scale labels
-    lines = len(ring_entries) + 4 if ring is not None else 0
+    lines = ring.lines if ring is not None else 0
     if rows is not None:
         # the rows and one scale line per group, or a title, its bar and its scale line
         lines += len(gradient_entries) + (len(rows.scales) if rows.compact else 2)
@@ -651,25 +694,16 @@ def build_circular_legend_layout(
             float(side_block.width) if side_block is not None else 0.0,
         )
     )
-    alignment_width = max(
-        width,
-        feature_block_width,
-        float(side_block.width) if side_block is not None else 0.0,
-    )
-    feature_x_offset = (
-        max(0.0, (alignment_width - feature_block_width) / 2.0)
-        if side_block is not None and feature_block_width > 0
-        else 0.0
-    )
+    # Every block of a vertical Legend starts at its left edge (OV-2835).
     laid_out_entries = tuple(
         CircularLegendEntryLayout(
             key=entry.key,
             properties=entry.properties,
             text_width=entry.text_width,
             entry_width=entry.entry_width,
-            rect_x=feature_x_offset,
+            rect_x=0.0,
             rect_y=idx * line_margin,
-            text_x=feature_x_offset + x_margin,
+            text_x=x_margin,
             text_y=idx * line_margin,
         )
         for idx, entry in enumerate(solid_entries)
@@ -679,10 +713,8 @@ def build_circular_legend_layout(
         if solid_entries
         else 0.0
     )
-    gradient_x = 0.0
     gradient_y = 0.0
     if side_block is not None:
-        gradient_x = max(0.0, (alignment_width - float(side_block.width)) / 2.0)
         gradient_y = len(solid_entries) * line_margin + (
             line_margin * 0.5 if solid_entries else 0.0
         )
@@ -708,7 +740,7 @@ def build_circular_legend_layout(
         num_items_per_line=1 if solid_entries else 0,
         solid_entries=laid_out_entries,
         gradient=ring_layout,
-        gradient_x=gradient_x,
+        gradient_x=0.0,
         gradient_y=gradient_y,
         gradient_rows=gradient_rows,
     )

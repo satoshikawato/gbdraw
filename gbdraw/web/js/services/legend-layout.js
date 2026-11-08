@@ -87,7 +87,8 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {string} [minLabel] A gradient row that names its scale's ends (an annotation gradient: `start`, `end`;
  *   Python's `min_label`, `max_label`, drawn as `data-legend-min-label`, `data-legend-max-label`).
  * @property {string} [maxLabel]
- * @property {boolean} [swatch] Ring rows: whether the row shows its ring's color (the rings differ in color).
+ * @property {string | null} [color] Ring rows: the ring's color, which its own identity ramp ends at, when the
+ *   drawn rings differ in color (Python's `fill`); null when they are one color.
  */
 
 /**
@@ -805,28 +806,32 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  */
 
 /**
- * One drawn ring's row of the ring block: its swatch (when the block shows swatches) and name, centred on `y`.
+ * One drawn ring's row of the ring block: its name at the block's left edge and, when the rings differ in color,
+ * its own identity ramp at the block's `barX`, both centred on `y`.
  * @typedef {object} CircularRingRowLayout
  * @property {string} key
  * @property {LegendLayoutRow} row
- * @property {number} swatchX
- * @property {number} textX
  * @property {number} y
  */
 
 /**
- * The similarity-ring block (Python's `CircularRingLegendLayout`): caption `outer`, the drawn rings outermost
- * first, caption `inner`, and the identity band labelled `identity` with its scale labels below it.
+ * The similarity-ring block (Python's `CircularRingLegendLayout`, PD-OI-110 scenario revision 2). One color:
+ * caption `outer`, the drawn rings outermost first, caption `inner`, and the identity band at `bandY` labelled
+ * `identity` with its scale labels below it. Colors that differ (`bandY` null): each row's name and its own ramp at
+ * `barX`, one scale line (the minimum, `identity` centred, 100%) under the last ramp, and the captions only when two
+ * or more drawn rings share a color (`showCaptions`).
  * @typedef {object} CircularRingLayout
  * @property {number} width
  * @property {number} height
- * @property {boolean} showSwatches
+ * @property {boolean} showCaptions
  * @property {number} outerCaptionY
  * @property {number} innerCaptionY
  * @property {CircularRingRowLayout[]} rows
+ * @property {number} barX
  * @property {number} barWidth
- * @property {number} bandY
- * @property {number} bandLabelX
+ * @property {number | null} bandY
+ * @property {number} identityLabelX
+ * @property {number} identityLabelY
  * @property {string} minLabelText
  * @property {number} minLabelX
  * @property {number} maxLabelX
@@ -856,7 +861,8 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 /** @typedef {{ row: LegendLayoutRow, key: string, textWidth: number, entryWidth: number }} MeasuredCircularEntry */
 
 /**
- * Python's `_build_ring_layout`.
+ * Python's `_build_ring_layout`: rows with a color draw their own ramps, and rows that share a color (one color
+ * included) keep the captions.
  * @param {readonly MeasuredCircularEntry[]} rings
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
@@ -866,36 +872,51 @@ const circularRingLayout = (rings, measure, rect) => {
   if (rings.length === 0) return null;
   const line = LEGEND_LINE_HEIGHT_RATIO * rect;
   const xMargin = LEGEND_TEXT_OFFSET_RATIO * rect;
-  const showSwatches = rings.some((entry) => Boolean(entry.row.swatch));
-  const textX = showSwatches ? xMargin : 0.0;
+  const colors = rings.map((entry) => entry.row.color ?? null);
+  const perRingRamps = colors.some(Boolean);
+  const showCaptions = !perRingRamps || new Set(colors).size < colors.length;
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
-  const bandLabelX = barWidth + (xMargin - rect);
   const outerCaptionY = rect / 2;
-  const rows = rings.map((entry, index) => ({
-    key: entry.key, row: entry.row, swatchX: 0.0, textX, y: outerCaptionY + ((index + 1) * line)
-  }));
-  const innerCaptionY = outerCaptionY + ((rings.length + 1) * line);
+  // The rows start a line below `outer` when it is drawn; `inner` stands a line below the last row.
+  const lead = showCaptions ? 1 : 0;
+  const rows = rings.map((entry, index) => ({ key: entry.key, row: entry.row, y: outerCaptionY + ((index + lead) * line) }));
+  const lastRowY = rows[rows.length - 1].y;
+  const innerCaptionY = outerCaptionY + ((rings.length + lead) * line);
+  const labelHeight = measure('100%').height;
+  const captionWidth = showCaptions
+    ? Math.max(measure(RING_OUTER_CAPTION).width, measure(RING_INNER_CAPTION).width)
+    : 0.0;
+  const namesWidth = Math.max(captionWidth, ...rings.map((entry) => entry.textWidth));
+  const minLabelText = minGradientLabelText(rings[0].row.minValue ?? 0);
+  if (perRingRamps) {
+    const barX = namesWidth + rect;
+    const scaleLabelY = lastRowY + (rect / 2) + 2;
+    return {
+      width: barX + barWidth,
+      height: Math.max(scaleLabelY + labelHeight, showCaptions ? innerCaptionY + (rect / 2) : 0.0),
+      showCaptions, outerCaptionY, innerCaptionY, rows, barX, barWidth, bandY: null,
+      identityLabelX: barX + (barWidth / 2), identityLabelY: scaleLabelY,
+      minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
+    };
+  }
   const bandY = innerCaptionY + (RING_BAND_LINE_GAP * line);
   const scaleLabelY = bandY + (rect / 2) + 2;
-  const labelHeight = measure('100%').height;
-  const captionWidth = Math.max(measure(RING_OUTER_CAPTION).width, measure(RING_INNER_CAPTION).width);
-  const bandWidth = bandLabelX + measure(RING_BAND_LABEL).width;
+  const identityLabelX = barWidth + (xMargin - rect);
   return {
-    width: Math.max(captionWidth, bandWidth, ...rings.map((entry) => textX + entry.textWidth)),
+    width: Math.max(namesWidth, identityLabelX + measure(RING_BAND_LABEL).width),
     height: scaleLabelY + labelHeight,
-    showSwatches,
-    outerCaptionY,
-    innerCaptionY,
-    rows,
-    barWidth,
-    bandY,
-    bandLabelX,
-    minLabelText: minGradientLabelText(rings[0].row.minValue ?? 0),
-    minLabelX: 0.0,
-    maxLabelX: barWidth,
-    scaleLabelY
+    showCaptions, outerCaptionY, innerCaptionY, rows, barX: 0.0, barWidth, bandY,
+    identityLabelX, identityLabelY: bandY,
+    minLabelText, minLabelX: 0.0, maxLabelX: barWidth, scaleLabelY
   };
 };
+
+/**
+ * The lines of the ring block in a vertical Legend (Python's `CircularRingLegendLayout.lines`): the captions, the
+ * rings, and the band and its scale labels (one color) or the one scale line (colors that differ).
+ * @param {CircularRingLayout} rings
+ */
+const circularRingLines = (rings) => (rings.showCaptions ? 2 : 0) + rings.rows.length + (rings.bandY === null ? 1 : 2);
 
 /**
  * Python's `_build_gradient_layout`: the gradient rows, their first row `top` below the side block's origin.
@@ -976,9 +997,8 @@ const circularSideBlock = (ringEntries, gradients, measure, rect) => {
   const gradientReserved = gradients.length === 0 ? 0.0 : gradients.length > 1
     ? barWidth + (Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin)
     : singleGradientBlockX(barWidth, gradients[0].textWidth).width;
-  // outer, the rings, inner, the band and its scale labels; the rows and one scale line per group, or a title,
-  // its bar and its scale line
-  const lines = (rings ? ringEntries.length + 4 : 0)
+  // the ring block's lines; the rows and one scale line per group, or a title, its bar and its scale line
+  const lines = (rings ? circularRingLines(rings) : 0)
     + (rows ? gradients.length + (rows.compact ? 1 + rows.moreScales.length : 2) : 0);
   return {
     rings,
@@ -1097,18 +1117,16 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
 
   const featureBlockWidth = solids.length ? Math.max(...solids.map((entry) => xMargin + entry.textWidth)) : 0.0;
   const width = Math.max(featureBlockWidth, pairwiseLegendWidth, gradient ? gradient.width : 0.0);
-  const alignmentWidth = Math.max(width, featureBlockWidth, gradient ? gradient.width : 0.0);
-  const featureXOffset = gradient && featureBlockWidth > 0 ? Math.max(0.0, (alignmentWidth - featureBlockWidth) / 2.0) : 0.0;
+  // Every block of a vertical Legend starts at its left edge (OV-2835).
   const entries = solids.map((entry, index) => ({
     key: entry.key, row: entry.row,
-    rectX: featureXOffset, rectY: index * lineMargin, textX: featureXOffset + xMargin, textY: index * lineMargin
+    rectX: 0.0, rectY: index * lineMargin, textX: xMargin, textY: index * lineMargin
   }));
   const featureHeight = solids.length ? rect + ((solids.length - 1) * lineMargin) : 0.0;
-  let gradientX = 0.0;
+  const gradientX = 0.0;
   let gradientY = 0.0;
   let height = featureHeight;
   if (gradient) {
-    gradientX = Math.max(0.0, (alignmentWidth - gradient.width) / 2.0);
     gradientY = solids.length * lineMargin + (solids.length ? lineMargin * 0.5 : 0.0);
     height = Math.max(featureHeight, gradientY + gradient.height) + (rect / 2.0);
   }
@@ -1136,14 +1154,13 @@ export const circularLegendLocalBounds = (layout, colorRectSize) => {
   }
   const rings = layout.rings;
   if (rings) {
-    const x = layout.gradientX;
+    // Each ring's own ramp (colors that differ), or the one band (one color).
+    const x = layout.gradientX + rings.barX;
     const y = layout.gradientY;
-    if (rings.showSwatches) {
-      for (const row of rings.rows) {
-        boxes.push(layoutBox(x + row.swatchX, y + row.y - (0.5 * rect), x + row.swatchX + rect, y + row.y + (0.5 * rect)));
-      }
+    const barYs = rings.bandY === null ? rings.rows.map((row) => row.y) : [rings.bandY];
+    for (const barY of barYs) {
+      boxes.push(layoutBox(x, y + barY - (0.5 * rect), x + rings.barWidth, y + barY + (0.5 * rect)));
     }
-    boxes.push(layoutBox(x, y + rings.bandY - (0.5 * rect), x + rings.barWidth, y + rings.bandY + (0.5 * rect)));
   }
   const gradient = layout.gradient;
   if (gradient) {

@@ -260,9 +260,6 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-# The legend's identity band when the drawn rings differ in colour: a neutral grey with the OKLab lightness of the
-# default ring colour, drawn with the ring gradient rule (PD-OI-110, D-07).
-CONSERVATION_MIXED_BAND_COLOR = "#9c9c9c"
 # The colours of the rings without a colour of their own, by drawn position (outermost first), repeating
 # (PD-OI-110). ``same`` draws the configured default gradient (``objects.conservation`` min/max colours).
 _PER_FIVE_HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
@@ -686,7 +683,6 @@ def normalize_conservation_tracks_for_record(
 
 __all__ = [
     "CONSERVATION_COLOR_SCHEMES",
-    "CONSERVATION_MIXED_BAND_COLOR",
     "ConservationInput",
     "ConservationLegendSource",
     "ConservationLoadResult",

@@ -93,7 +93,7 @@ const circularResult = (layout) => ({
   entries: entries(layout.entries),
   rings: layout.rings && {
     ...layout.rings,
-    rows: layout.rings.rows.map(({ key, swatchX, textX, y }) => ({ key, swatchX, textX, y }))
+    rows: layout.rings.rows.map(({ key, y }) => ({ key, y }))
   },
   gradient: layout.gradient && {
     compact: layout.gradient.compact,

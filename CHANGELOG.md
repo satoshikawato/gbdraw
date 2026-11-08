@@ -92,6 +92,16 @@ write-up of a release.
   which the custom stack does not use, instead of the width of the Depth row
   (for example 8 px shown, 5.5 px drawn for a 25 px row). They now show the
   size the figure draws (OV-2876).
+- Changed: when the Circular similarity rings are not all one color, each
+  Legend row now shows the ring's name with that ring's own identity ramp
+  (white to its color), with one scale line under the last ramp, instead of a
+  color swatch per row and one gray band. The captions `outer` and `inner`
+  show only when two or more rings share a color. The Legend of rings of one
+  color is unchanged (PD-OI-110 scenario revision 2).
+- Fixed: a Circular Legend on the left or right started the feature rows and
+  the block of similarity rings and gradient bars at different left edges,
+  each centred on its own; every block now starts at the same left edge
+  (OV-2835).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while

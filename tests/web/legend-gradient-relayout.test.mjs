@@ -169,57 +169,91 @@ test('OV-1741: a Circular compact gradient block laid out again takes Python\'s 
 
 // PD-OI-110: the similarity-ring block, as Python writes it (render/groups/circular/legend.py), laid out again
 // from wrong positions, takes the positions Python's layout gives (tests/fixtures/legend_layout_vectors.json).
-const ringBlockSvg = (options, rows, minLabel, tail = '') => {
+// `captions`: whether Python drew `outer` and `inner`; a ring row with a color draws its own ramp (gradient, bar,
+// name), a row with `swatch` the solid swatch of scenario revision 1, and the identity scale draws the one band only
+// when no row has a color.
+const ringBlockSvg = (options, rows, minLabel, tail = '', captions = true) => {
   const svg = circularGradientSvg(options, [], minLabel);
   const text = (content, anchor = 'start') => `<text font-family="${options.fontFamily}" font-size="${options.fontSize}" `
     + `text-anchor="${anchor}" transform="translate(3,4)">${content}</text>`;
-  const swatch = '<path d="M 0,0 z" fill="#123456" stroke="none" stroke-width="0" transform="translate(3,4)" />';
+  const ramp = (index, color) => `<linearGradient id="ramp${index}"><stop offset="0%" stop-color="#fff" />`
+    + `<stop offset="100%" stop-color="${color}" /></linearGradient>`
+    + `<path d="M 0,0 z" fill="url(#ramp${index})" stroke="none" stroke-width="0" transform="translate(3,4)" />`;
+  const swatch = (fill) => `<path d="M 0,0 z" fill="${fill}" stroke="none" stroke-width="0" transform="translate(3,4)" />`;
   const solids = rows.filter((row) => row.type === 'solid').map((row) => `<g data-legend-key="${row.key}">`
     + `<path d="M 0,0 z" fill="#000" stroke="${row.stroke}" stroke-width="${row.strokeWidth}" transform="translate(3,4)" />`
     + `${text(row.name)}</g>`).join('');
-  const rings = rows.filter((row) => row.type === 'ring').map((row, index) => `<g data-legend-key="${row.key}" `
-    + `data-source-index="${index}" data-track-index="${index + 1}">${row.swatch ? swatch : ''}${text(row.name)}</g>`).join('');
-  const band = '<g data-gbdraw-role="conservation-identity-band"><linearGradient id="band"><stop offset="0%" stop-color="#fff" />'
-    + '</linearGradient><path d="M 0,0 z" fill="url(#band)" stroke="none" stroke-width="0" transform="translate(3,4)" />'
-    + `${text('identity')}${text(minLabel)}${text('100%', 'end')}</g>`;
+  const ringRows = rows.filter((row) => row.type === 'ring');
+  const rings = ringRows.map((row, index) => `<g data-legend-key="${row.key}" `
+    + `data-source-index="${index}" data-track-index="${index + 1}">`
+    + `${row.color ? ramp(index, row.color) : ''}${row.swatch ? swatch(row.swatch) : ''}${text(row.name)}</g>`).join('');
+  const band = ringRows.some((row) => row.color) ? '' : '<linearGradient id="band"><stop offset="0%" stop-color="#fff" />'
+    + '</linearGradient><path d="M 0,0 z" fill="url(#band)" stroke="none" stroke-width="0" transform="translate(3,4)" />';
+  const scale = `<g data-gbdraw-role="conservation-identity-band">${band}${text('identity')}${text(minLabel)}${text('100%', 'end')}</g>`;
   const content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="legend"><path d="M 0,0 z" fill="none" stroke="none" stroke-width="0" />'
     + `${solids ? `<g id="feature_legend">${solids}</g>` : ''}`
     + '<g id="conservation_identity_legend" data-gbdraw-role="comparison-legend" data-gbdraw-orientation="circular">'
-    + `${text('outer')}${rings}${text('inner')}${band}${tail}</g></g></svg>`;
+    + `${captions ? text('outer') : ''}${rings}${captions ? text('inner') : ''}${scale}${tail}</g></g></svg>`;
   const ringSvg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   ringSvg.setAttribute(COMPOSITION, svg.getAttribute(COMPOSITION));
   ringSvg.setAttribute(SCHEMA, svg.getAttribute(SCHEMA) || '');
   return ringSvg;
 };
 
-for (const edit of ['solid rows and rings of several colors, left', 'solid rows and one-color rings, top']) {
+for (const edit of [
+  'solid rows and rings of several colors, left',
+  'solid rows and rings that share colors, left',
+  'solid rows and one-color rings, top'
+]) {
   test(`PD-OI-110: a similarity-ring block laid out again takes Python's positions (${edit})`, async () => {
     const source = vector('synthetic circular', edit);
     const rings = source.expected.rings;
-    const svg = ringBlockSvg(source.options, source.rows.map((row) => ({ ...row, name: row.key })), rings.minLabelText);
+    const svg = ringBlockSvg(
+      source.options, source.rows.map((row) => ({ ...row, name: row.key })), rings.minLabelText, '', rings.showCaptions
+    );
     const actions = layOut();
     await actions.prepareLegendLayout();
     assert.ok(actions.layOutLegend(svg));
     const block = svg.querySelector('#conservation_identity_legend');
     assert.deepEqual(translateOf(block), [source.expected.gradientX, source.expected.gradientY]);
-    const [outer, inner] = block.children.filter((child) => child.localName === 'text');
-    assert.deepEqual(translateOf(outer), [0, rings.outerCaptionY]);
-    assert.deepEqual(translateOf(inner), [0, rings.innerCaptionY]);
+    const captions = block.children.filter((child) => child.localName === 'text');
+    if (rings.showCaptions) {
+      assert.deepEqual(captions.map((caption) => translateOf(caption)), [[0, rings.outerCaptionY], [0, rings.innerCaptionY]]);
+    } else {
+      assert.deepEqual(captions, []);
+    }
     const rows = block.children.filter((child) => child.localName === 'g' && child.hasAttribute('data-legend-key'));
     assert.equal(rows.length, rings.rows.length);
     rings.rows.forEach((expected, index) => {
       assert.equal(rows[index].getAttribute('data-legend-key'), expected.key);
-      assert.deepEqual(translateOf(rows[index].querySelector('text')), [expected.textX, expected.y], `${expected.key} name`);
-      if (rings.showSwatches) assert.deepEqual(translateOf(rows[index].querySelector('path')), [expected.swatchX, expected.y]);
+      assert.deepEqual(translateOf(rows[index].querySelector('text')), [0, expected.y], `${expected.key} name`);
+      const ramp = rows[index].querySelector('path');
+      assert.equal(Boolean(ramp), rings.bandY === null, `${expected.key} ramp`);
+      if (ramp) assert.deepEqual(translateOf(ramp), [rings.barX, expected.y], `${expected.key} ramp`);
     });
-    const band = block.querySelector('[data-gbdraw-role="conservation-identity-band"]');
-    assert.deepEqual(translateOf(band.querySelector('path')), [0, rings.bandY]);
-    const [label, minLabel, maxLabel] = band.children.filter((child) => child.localName === 'text');
-    assert.deepEqual(translateOf(label), [rings.bandLabelX, rings.bandY]);
+    const scale = block.querySelector('[data-gbdraw-role="conservation-identity-band"]');
+    const band = scale.querySelector('path');
+    assert.equal(Boolean(band), rings.bandY !== null);
+    if (band) assert.deepEqual(translateOf(band), [0, rings.bandY]);
+    const [label, minLabel, maxLabel] = scale.children.filter((child) => child.localName === 'text');
+    assert.deepEqual(translateOf(label), [rings.identityLabelX, rings.identityLabelY]);
     assert.deepEqual(translateOf(minLabel), [rings.minLabelX, rings.scaleLabelY]);
     assert.deepEqual(translateOf(maxLabel), [rings.maxLabelX, rings.scaleLabelY]);
   });
 }
+
+// A Result drawn before PD-OI-110 scenario revision 2 shows a color swatch on each ring row of rings that differ
+// in color; Python's layout no longer gives that form, so the Web leaves the Legend where Python drew it.
+test('PD-OI-110: a ring block drawn with swatches (scenario revision 1) is left where Python drew it', async () => {
+  const source = vector('synthetic circular', 'solid rows and rings of several colors, left');
+  const rows = source.rows.map((row) => ({ ...row, name: row.key, color: null, swatch: row.color }));
+  const svg = ringBlockSvg(source.options, rows, '90%');
+  const ring = svg.querySelector('#conservation_identity_legend g[data-track-index]');
+  const actions = layOut();
+  await actions.prepareLegendLayout();
+  assert.equal(actions.layOutLegend(svg), null);
+  assert.deepEqual(translateOf(ring.querySelector('text')), [3, 4]);
+});
 
 // The Circular side block as Python writes it now: the ring block, then the gradient rows (an annotation
 // gradient names its scale's ends on its entry), then one scale line per group of rows that share scale texts.

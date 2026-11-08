@@ -127,12 +127,10 @@ def _circular_legend_local_bounds(
     gradient = layout.gradient
     gx, gy = float(layout.gradient_x), float(layout.gradient_y)
     if gradient is not None:
-        if gradient.show_swatches:
-            for row in gradient.rows:
-                x, y = gx + row.swatch_x, gy + row.y
-                bounds.append(Aabb(x, y - (0.5 * rect_size), x + rect_size, y + (0.5 * rect_size)))
-        band_y = gy + gradient.band_y
-        bounds.append(Aabb(gx, band_y - (0.5 * rect_size), gx + gradient.bar_width, band_y + (0.5 * rect_size)))
+        x = gx + gradient.bar_x
+        for bar_y in gradient.bar_ys:
+            y = gy + bar_y
+            bounds.append(Aabb(x, y - (0.5 * rect_size), x + gradient.bar_width, y + (0.5 * rect_size)))
     gradient_rows = layout.gradient_rows
     if gradient_rows is not None:
         gradient_entries: tuple[CircularCompactGradientEntryLayout | CircularSingleGradientEntryLayout, ...] = (

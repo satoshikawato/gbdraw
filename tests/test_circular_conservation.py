@@ -588,7 +588,8 @@ def test_circular_multi_record_auto_conservation_inserts_at_explicit_axis(
 
 
 def _ring_rows(names: list[str], fills: list[str] | None = None) -> dict[str, dict[str, object]]:
-    """Similarity-ring Legend rows as the assembler writes them (one colour: no swatch fill)."""
+    """Similarity-ring Legend rows as the assembler writes them (one colour: no fill; colours that differ: each
+    ring's colour, which its own ramp ends at)."""
 
     return {
         name: {
@@ -599,7 +600,7 @@ def _ring_rows(names: list[str], fills: list[str] | None = None) -> dict[str, di
             "stroke": "none",
             "width": 0,
             "min_color": "#f0f1f5",
-            "max_color": "#8b9cc1",
+            "max_color": "#8b9cc1" if fills is None else fills[index],
             "min_value": 0,
             "max_value": 100,
         }
@@ -641,28 +642,33 @@ def test_circular_ring_legend_lists_ring_names_and_one_scale(fills: list[str] | 
         "barcode15.draft",
     ]
 
-    # Names start at the block's left edge, or after a swatch when the ring colours differ.
+    # Names start at the block's left edge. One colour: one band below the names; colours that differ: each
+    # name's own ramp to its right, and no band.
     first_label = entries[0].find("svg:text", ns)
     assert first_label is not None
     label_x, _ = _translate_xy(first_label.get("transform"))
-    swatches = [entry.find("svg:path", ns) for entry in entries]
-    if fills is None:
-        assert label_x == pytest.approx(0.0)
-        assert swatches == [None, None]
-    else:
-        assert label_x == pytest.approx((22 / 14) * legend_config.color_rect_size)
-        assert [swatch.get("fill") for swatch in swatches if swatch is not None] == fills
-
+    assert label_x == pytest.approx(0.0)
+    ramps = [entry.find("svg:path", ns) for entry in entries]
     band = legend.find("svg:g[@data-gbdraw-role='conservation-identity-band']", ns)
     assert band is not None
-    assert [path.get("fill", "").startswith("url(") for path in band.findall("svg:path", ns)] == [True]
+    if fills is None:
+        assert ramps == [None, None]
+        assert [path.get("fill", "").startswith("url(") for path in band.findall("svg:path", ns)] == [True]
+    else:
+        assert all(ramp is not None and ramp.get("fill", "").startswith("url(") for ramp in ramps)
+        assert band.findall("svg:path", ns) == []
     legend_texts = [text.text for text in legend.findall(".//svg:text", ns)]
     assert legend_texts.count("0%") == 1
     assert legend_texts.count("100%") == 1
 
 
-def test_circular_vertical_conservation_legend_centers_feature_and_ring_blocks() -> None:
-    canvas_config = SimpleNamespace(legend_position="right", dpi=96)
+@pytest.mark.parametrize("side", ["left", "right"])
+@pytest.mark.parametrize("fills", [None, ["#4e79a7", "#f28e2b"]], ids=["one-colour", "colours-differ"])
+def test_circular_vertical_legend_blocks_share_the_left_edge(side: str, fills: list[str] | None) -> None:
+    """OV-2835: a vertical Circular legend starts the feature rows and the similarity-ring block at the same left
+    edge, whichever block is wider."""
+
+    canvas_config = SimpleNamespace(legend_position=side, dpi=96)
     legend_config = SimpleNamespace(
         font_family="'Liberation Sans', 'Arial', sans-serif",
         font_size=10.0,
@@ -674,7 +680,7 @@ def test_circular_vertical_conservation_legend_centers_feature_and_ring_blocks()
     legend_table = {
         "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
         "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
-        **_ring_rows(["barcode07.draft", "barcode15.draft"]),
+        **_ring_rows(["barcode07.draft", "barcode15.draft"], fills),
     }
 
     drawing = Drawing(debug=False)
@@ -697,21 +703,6 @@ def test_circular_vertical_conservation_legend_centers_feature_and_ring_blocks()
         if entry.get("data-legend-key") in {"CDS", "tRNA"}
     ]
     assert len(feature_entries) == 2
-    feature_bounds = [
-        _element_x_bounds(entry)
-        for entry in feature_entries
-    ]
-    feature_left = min(bound[0] for bound in feature_bounds)
-    feature_right = max(bound[1] for bound in feature_bounds)
-
-    gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
-    assert gradient_legend is not None
-    gradient_left, gradient_right = _element_x_bounds(gradient_legend)
-
-    feature_center = (feature_left + feature_right) / 2.0
-    gradient_center = (gradient_left + gradient_right) / 2.0
-    assert feature_center == pytest.approx(gradient_center, abs=1.0)
-
     first_feature_text = feature_entries[0].find("./svg:text", ns)
     first_feature_rect = feature_entries[0].find("./svg:path", ns)
     assert first_feature_text is not None
@@ -720,10 +711,16 @@ def test_circular_vertical_conservation_legend_centers_feature_and_ring_blocks()
     rect_x, _ = _translate_xy(first_feature_rect.get("transform"))
     assert text_x - rect_x == pytest.approx((22 / 14) * legend_config.color_rect_size)
 
-    first_gradient_label = gradient_legend.find(".//svg:g[@data-legend-key]/svg:text", ns)
-    assert first_gradient_label is not None
-    label_x, _ = _translate_xy(first_gradient_label.get("transform"))
-    assert label_x == pytest.approx(0.0)
+    feature_legend = root.find(".//svg:g[@id='feature_legend']", ns)
+    ring_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert feature_legend is not None and ring_legend is not None
+    feature_x = _translate_xy_or_zero(feature_legend.get("transform"))[0]
+    ring_x = _translate_xy_or_zero(ring_legend.get("transform"))[0]
+    first_ring_label = ring_legend.find(".//svg:g[@data-legend-key]/svg:text", ns)
+    assert first_ring_label is not None
+    label_x, _ = _translate_xy(first_ring_label.get("transform"))
+    assert feature_x + rect_x == pytest.approx(0.0)
+    assert ring_x + label_x == pytest.approx(0.0)
 
 
 def test_circular_bottom_conservation_legend_centers_feature_and_ring_blocks_vertically() -> None:

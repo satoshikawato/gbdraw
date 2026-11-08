@@ -1,4 +1,4 @@
-"""Similarity-ring colour schemes (PD-OI-110, ``tracks.circular-conservation-ring-colors`` revision 1).
+"""Similarity-ring colour schemes (PD-OI-110, ``tracks.circular-conservation-ring-colors`` revision 2).
 
 One setting picks the colour of every ring without a colour of its own: ``same`` (the configured default
 gradient), ``ten`` (ten colours, repeating from ring 11) or ``per_five`` (one colour per five rings, repeating from
@@ -293,17 +293,17 @@ def _ring_block(svg: str) -> ET.Element:
     return block
 
 
-def _block_rows(block: ET.Element) -> list[tuple[str | None, str | None, str | None, str | None]]:
-    """(name, source index, track index, swatch fill) of each ring row, top to bottom."""
+def _block_rows(block: ET.Element) -> list[tuple[str | None, str | None, str | None, list[str | None] | None]]:
+    """(name, source index, track index, the stops of its own identity ramp) of each ring row, top to bottom."""
 
     rows = []
     for row in block.findall("svg:g[@data-legend-key]", _SVG):
-        swatch = row.find("svg:path", _SVG)
+        ramp = row.find("svg:path", _SVG)
         rows.append((
             row.findtext("svg:text", namespaces=_SVG),
             row.get("data-source-index"),
             row.get("data-track-index"),
-            None if swatch is None else swatch.get("fill"),
+            None if ramp is None else [stop.get("stop-color") for stop in row.iter(f"{{{_SVG['svg']}}}stop")],
         ))
     return rows
 
@@ -312,22 +312,41 @@ def _block_texts(block: ET.Element) -> list[str | None]:
     return [text.text for text in block.iter("{http://www.w3.org/2000/svg}text")]
 
 
+def _translate_xy(transform: str | None) -> tuple[float, float]:
+    assert transform is not None and transform.startswith("translate(")
+    x, y = transform.removeprefix("translate(").removesuffix(")").replace(",", " ").split()
+    return float(x), float(y)
+
+
+def _scale(block: ET.Element) -> ET.Element:
+    scale = block.find("svg:g[@data-gbdraw-role='conservation-identity-band']", _SVG)
+    assert scale is not None
+    return scale
+
+
 def _band_stops(block: ET.Element) -> list[str | None]:
-    return [stop.get("stop-color") for stop in block.iter("{http://www.w3.org/2000/svg}stop")]
+    return [stop.get("stop-color") for stop in _scale(block).iter("{http://www.w3.org/2000/svg}stop")]
 
 
-def _draw_legend(scheme: str, colors: list[str] | None = None, *, slots: list[CircularTrackSlot] | None = None) -> str:
+def _draw_legend(
+    scheme: str,
+    colors: list[str] | None = None,
+    *,
+    slots: list[CircularTrackSlot] | None = None,
+    count: int = 3,
+    legend: str = "right",
+) -> str:
     return assemble_circular_diagram_from_record(
         _record(),
         CircularAssemblyInputs(
             cfg=apply_config_overrides(None, {SCHEME_PATH: scheme}),
-            conservation_dataframes=[_frame(), _frame(), _frame()],
+            conservation_dataframes=[_frame() for _ in range(count)],
             conservation_reference="subject",
-            conservation_labels=["A", "B", "C"],
+            conservation_labels=["A", "B", "C", "D", "E", "F"][:count],
             conservation_colors=colors,
             circular_track_slots=slots,
             identity=90,
-            legend="right",
+            legend=legend,
         ),
     ).tostring()
 
@@ -341,14 +360,14 @@ def test_one_colour_legend_lists_the_drawn_rings_without_swatches() -> None:
 
 
 def test_captions_and_scale_labels_are_muted_and_ring_names_keep_the_legend_text_colour() -> None:
-    block = _ring_block(_draw_legend("ten", ["", "#123456", ""]))
+    block = _ring_block(_draw_legend("per_five", count=6))
     font_sizes = {text.get("font-size") for text in block.iter("{http://www.w3.org/2000/svg}text")}
     names = [row.find("svg:text", _SVG) for row in block.findall("svg:g[@data-legend-key]", _SVG)]
     muted = [text for text in block.iter("{http://www.w3.org/2000/svg}text") if text not in names]
 
     assert [text.text for text in muted] == ["outer", "inner", "identity", "90%", "100%"]
     assert {text.get("fill") for text in muted} == {"#5a6273"}
-    assert [text.get("fill") for text in names] == [None, None, None]
+    assert [text.get("fill") for text in names] == [None] * 6
     assert len(font_sizes) == 1
 
 @pytest.mark.parametrize(
@@ -364,13 +383,61 @@ def test_a_ring_coloured_like_the_default_keeps_the_one_colour_legend(colors: li
     assert _band_stops(block) == [tint_color("#8b9cc1") if band_min == "tint" else band_min, "#8b9cc1"]
 
 
-def test_mixed_colour_legend_shows_swatches_and_the_grey_band() -> None:
+def test_rings_of_different_colours_draw_their_own_ramps_without_captions() -> None:
+    """Three rings of three colours: each row is the ring's name and its own identity ramp (light tint to its
+    colour); one scale line (minimum, ``identity``, 100%) sits under the last ramp, and no ``outer``/``inner``."""
     from gbdraw.core.color import tint_color
 
-    block = _ring_block(_draw_legend("ten", ["", "#123456", ""]))
+    colors = ["#6e91b7", "#f4a251", "#77b26f"]
+    block = _ring_block(_draw_legend("same", colors))
 
-    assert [row[3] for row in _block_rows(block)] == [TEN[0], "#123456", TEN[2]]
-    assert _band_stops(block) == [tint_color("#9c9c9c"), "#9c9c9c"]
+    assert _block_rows(block) == [
+        (name, str(index), str(index + 1), [tint_color(color), color])
+        for index, (name, color) in enumerate(zip("ABC", colors))
+    ]
+    assert _block_texts(block) == ["A", "B", "C", "identity", "90%", "100%"]
+    scale = _scale(block)
+    assert scale.find("svg:path", _SVG) is None
+    assert _band_stops(block) == []
+    ramp_ids = [row.find("svg:linearGradient", _SVG).get("id") for row in block.findall("svg:g[@data-legend-key]", _SVG)]
+    assert len(set(ramp_ids)) == 3
+    assert [row.find("svg:path", _SVG).get("fill") for row in block.findall("svg:g[@data-legend-key]", _SVG)] == [
+        f"url(#{ramp_id})" for ramp_id in ramp_ids
+    ]
+
+
+def test_ramps_share_one_column_and_the_scale_line_sits_under_the_last_ramp() -> None:
+    block = _ring_block(_draw_legend("ten", ["", "#123456", ""]))
+    rows = block.findall("svg:g[@data-legend-key]", _SVG)
+    ramps = [_translate_xy(row.find("svg:path", _SVG).get("transform")) for row in rows]
+    names = [_translate_xy(row.find("svg:text", _SVG).get("transform")) for row in rows]
+    identity, minimum, maximum = _scale(block).findall("svg:text", _SVG)
+
+    assert len({x for x, _ in ramps}) == 1
+    assert {x for x, _ in names} == {0.0}
+    assert [y for _, y in ramps] == [y for _, y in names]
+    ramp_x, last_y = ramps[-1]
+    assert _translate_xy(minimum.get("transform"))[0] == pytest.approx(ramp_x)
+    assert _translate_xy(minimum.get("transform"))[1] > last_y
+    assert _translate_xy(identity.get("transform"))[1] == _translate_xy(minimum.get("transform"))[1]
+    assert _translate_xy(maximum.get("transform"))[1] == _translate_xy(minimum.get("transform"))[1]
+    assert identity.get("text-anchor") == "middle"
+    assert maximum.get("text-anchor") == "end"
+    assert ramp_x < _translate_xy(identity.get("transform"))[0] < _translate_xy(maximum.get("transform"))[0]
+
+
+def test_rings_that_share_a_colour_draw_ramps_with_the_captions() -> None:
+    """``per_five`` with six rings: rings 1-5 share a colour, ring 6 has the next; every row draws its own ramp,
+    and ``outer``/``inner`` stand above and below the names."""
+    from gbdraw.core.color import tint_color
+
+    block = _ring_block(_draw_legend("per_five", count=6))
+
+    assert [row[3] for row in _block_rows(block)] == [[tint_color(HUES[0]), HUES[0]]] * 5 + [
+        [tint_color(HUES[1]), HUES[1]]
+    ]
+    assert _block_texts(block) == ["outer", "A", "B", "C", "D", "E", "F", "inner", "identity", "90%", "100%"]
+    assert _scale(block).find("svg:path", _SVG) is None
 
 
 def test_legend_lists_rings_in_drawn_order() -> None:
@@ -382,8 +449,13 @@ def test_legend_lists_rings_in_drawn_order() -> None:
         ],
     ]
     block = _ring_block(_draw_legend("ten", slots=slots))
+    from gbdraw.core.color import tint_color
 
-    assert _block_rows(block) == [("C", "2", "3", TEN[0]), ("A", "0", "1", TEN[1]), ("B", "1", "2", TEN[2])]
+    assert _block_rows(block) == [
+        ("C", "2", "3", [tint_color(TEN[0]), TEN[0]]),
+        ("A", "0", "1", [tint_color(TEN[1]), TEN[1]]),
+        ("B", "1", "2", [tint_color(TEN[2]), TEN[2]]),
+    ]
 
 
 def test_multi_record_canvas_draws_the_same_ring_block() -> None:
