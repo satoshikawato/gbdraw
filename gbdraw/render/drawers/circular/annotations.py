@@ -571,6 +571,42 @@ def circular_annotation_labels(
     return CircularAnnotationLabels(tuple(placed), without_letters)
 
 
+def circular_annotation_lanes_meeting(
+    track: ResolvedAnnotationTrack,
+    params: AnnotationTrackParams,
+    extent_px: float,
+    *,
+    font_family: str,
+    record_length: int,
+    lanes_from_px: float,
+    outward: bool,
+    clearance_px: float,
+) -> frozenset[tuple[int, int, int]]:
+    """The lanes (record index, row, lane) in which ``circular_annotation_labels`` draws two of ``track``'s labels over
+    each other, the lanes taking ``extent_px`` from ``lanes_from_px``, the radius they stack from (away from the
+    centre, or toward it when not ``outward``), with the track's own labels as the only obstacles, kept
+    ``clearance_px`` apart as where the drawing places them (``CircularLabelObstacles.clearance``): each label moved
+    along its region where it comes that near one placed before it. The lane packer's measure (``LabelSizing.meet``)."""
+
+    inner, outer = (lanes_from_px, lanes_from_px + extent_px) if outward else (lanes_from_px - extent_px, lanes_from_px)
+    met: set[tuple[int, int, int]] = set()
+    for record_index in sorted({item.annotation.record_index for item in track.placements}):
+        lanes = {item.annotation.id: item.lane for item in track.placements if item.annotation.record_index == record_index}
+        drawn = circular_annotation_labels(
+            track, record_index=record_index, record_length=record_length, inner_radius_px=max(0.0, inner),
+            outer_radius_px=outer, side="outside" if outward else "inside", font_family=font_family, params=params,
+            obstacles=CircularLabelObstacles(clearance=clearance_px),
+        ).drawn
+        for index, first in enumerate(drawn):
+            for second in drawn[index + 1 :]:
+                lane = lanes[first.annotation_id]
+                if lanes[second.annotation_id] == lane and any(
+                    convex_polygons_intersect(one, other) for one in first.parts for other in second.parts
+                ):
+                    met.add((record_index, 0, lane))
+    return frozenset(met)
+
+
 def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk:
     """How a label's ink box is measured around its anchor (``_label_at``)."""
 

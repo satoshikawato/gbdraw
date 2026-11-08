@@ -42,7 +42,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.render.drawers.annotation_marks import label_ink_offsets
 from gbdraw.layout.text_geometry import SECTOR_PART_DEG
-from gbdraw.render.drawers.circular.annotations import _label_at
+from gbdraw.render.drawers.circular.annotations import CircularAnnotationLabel, _label_at
 
 _SVG = "{http://www.w3.org/2000/svg}"
 _OFFSET = RegionAnnotationStyle().label_offset
@@ -378,7 +378,8 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
     # The scan's assemblies differ in the definition font only (OV-2664): a slot packed from the same edge with the
     # same rooms is packed once, and its labels drawn at the same radii among the same obstacles are placed once,
     # however many rows the check verifies. Placing a track's labels counts each label against one obstacle index
-    # that takes every label placed before it, not an index made again for each label.
+    # that takes every label placed before it, not an index made again for each label. (The lane packer places a
+    # track's labels among no other obstacles where it packs them, ``circular_annotation_lanes_meeting``.)
     import gbdraw.diagrams.circular.assemble as assemble_module
     import gbdraw.render.drawers.circular.annotations as drawer
     from gbdraw.api.diagram import label_fit_report
@@ -399,13 +400,20 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
         packed.append((slot_id, tuple(sorted(labels.extent.keywords.items())), kwargs["room_bounds"]))
         return pack(slot_id, set_id, annotations, **kwargs)
 
+    placing: list[bool] = []
+
     def counting_place(track: object, **kwargs: object) -> object:
         if kwargs.get("obstacles") is not None:
             placed.append((kwargs["inner_radius_px"], kwargs["outer_radius_px"], kwargs["obstacles"]))
-        return place(track, **kwargs)
+        placing.append(True)
+        try:
+            return place(track, **kwargs)
+        finally:
+            placing.pop()
 
     def counting_index(self: object, obstacles: object) -> None:
-        indexes.append(1)
+        if placing:
+            indexes.append(1)
         index_init(self, obstacles)
 
     monkeypatch.setattr(assemble_module, "layout_annotation_track", counting_pack)
@@ -1075,24 +1083,33 @@ class _LeftOut(NamedTuple):
     without_letters: frozenset[str]
     messages: list[str]
     items: dict[str, ElementTree.Element]
+    # The labels drawn where the drawer last placed the slot's labels among their obstacles.
+    drawn: tuple[CircularAnnotationLabel, ...]
 
 
 def _bands_and_left_out(
-    regions: tuple[tuple[str, int, int, str], ...], slot: str, orientation: str, empty: frozenset[str] = frozenset()
+    regions: tuple[tuple[str, int, int, str], ...],
+    slot: str,
+    orientation: str,
+    empty: frozenset[str] = frozenset(),
+    size: float = 60,
 ) -> _LeftOut:
-    """The band radii of ``regions`` (id, start, end, label) labelled at 60 pt in ``orientation`` in an inside slot
-    (``slot`` adds settings), the labels of ``empty`` without text, the labels left out because no letter of them
-    fits their circle (``CircularAnnotationLabels.without_letters``), as the assembler gets them, the warnings and
-    each annotation's group."""
+    """The band radii of ``regions`` (id, start, end, label) labelled at ``size`` pt in ``orientation`` in an inside
+    slot (``slot`` adds settings), the labels of ``empty`` without text, the labels left out because no letter of them
+    fits their circle (``CircularAnnotationLabels.without_letters``), as the assembler gets them, the warnings, each
+    annotation's group and the labels drawn."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     left_out: list[str] = []
+    drawn: list[tuple[CircularAnnotationLabel, ...]] = []
     place = assemble_module.circular_annotation_labels
 
     def spying(track: object, **kwargs: object) -> object:
         labels = place(track, **kwargs)
         left_out.extend(label.annotation_id for label in labels.without_letters)
+        if kwargs.get("obstacles") is not None:
+            drawn.append(labels.drawn)
         return labels
 
     annotations = tuple(
@@ -1101,7 +1118,7 @@ def _bands_and_left_out(
             CoordinateSpan(None, start, end),
             label="" if identity in empty else label,
             mark="band",
-            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=60),
+            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=size),
         )
         for identity, start, end, label in regions
     )
@@ -1114,7 +1131,7 @@ def _bands_and_left_out(
         warnings.simplefilter("always")
         items = _groups(gbdraw.draw_circular(_record(), options=options)._drawing.tostring())
     bands = {identity: _signed_radii(items[identity]) for identity, *_rest in regions}
-    return _LeftOut(bands, frozenset(left_out), [str(item.message) for item in caught], items)
+    return _LeftOut(bands, frozenset(left_out), [str(item.message) for item in caught], items, drawn[-1] if drawn else ())
 
 
 _SEVEN_NESTED = tuple((f"r{index}", 1501 + 100 * index, 3500 - 100 * index, f"Region {index + 1} label text") for index in range(7))
@@ -1149,6 +1166,57 @@ def test_a_label_that_keeps_no_letter_moves_no_band(
     assert _bands_and_left_out(regions, slot, orientation, drawn.without_letters).bands == drawn.bands
 
 
+# Reviewer probe figures (``random.Random(7)``, 48 pt, inside slot without a set width): figure 29, where the lane
+# packer put r0 and r1 in one lane, measured where that lane stands before the rooms between the lanes are known
+# (OV-2849), and figure 72, with ``w=600px,overflow=error``, where r4 was left out in an early packing round and stayed
+# out although the last packing gives it letters (OV-2850).
+_SHARED_LANE = (
+    ("r0", 4802, 5087, "Region 0 xxxxxxxxxxxxxx"), ("r1", 3037, 3782, "Region 1 xxxxxxxx"),
+    ("r2", 7305, 7419, "Region 2 xxxxxxxx"), ("r3", 5967, 7414, "Region 3 xxxxxxxxxxxxxxxxx"),
+    ("r4", 5301, 6402, "Region 4 x"), ("r5", 5072, 6064, "Region 5 xxxxxxxxxxx"),
+    ("r6", 2998, 3102, "Region 6 xxxxxxxxxx"), ("r7", 6253, 6696, "Region 7 xxxxxxxxxxxxxxx"),
+)
+_LEFT_OUT_EARLY = (
+    ("r0", 5750, 8350, "Region 0 xxxxxxxx"), ("r1", 2602, 4028, "Region 1 xxxxxxxxxxxxxxxxxxx"),
+    ("r2", 4506, 8313, "Region 2 xxxxxxxxxxxxxx"), ("r3", 2353, 3494, "Region 3 xxxxxxxxxxxxxxxx"),
+    ("r4", 7867, 8820, "Region 4 xxxxxxxxxxxxxxxxxx"), ("r5", 4307, 6929, "Region 5 xxxxxxxxxxxxxxxx"),
+    ("r6", 3890, 5296, "Region 6 xxxxxxxxxxx"), ("r7", 604, 1518, "Region 7 xxxxx"),
+    ("r8", 6611, 7371, "Region 8 xxxxxxxxxxxxxxxxxxxx"),
+)
+
+
+@pytest.mark.parametrize(
+    ("regions", "slot", "size"),
+    ((_DODGING_INWARD, ",w=600px,overflow=error", 60), (_SHARED_LANE, "", 48)),
+)
+def test_labels_that_share_a_lane_stay_apart_where_the_rooms_carry_that_lane(
+    regions: tuple[tuple[str, int, int, str], ...], slot: str, size: float
+) -> None:
+    # OV-2849: the rooms between lanes carry an inside slot's inner lanes toward the centre, and a set width shares
+    # its extent among the lanes; there a label's letters span more of the circle than where the lane packer first
+    # measured them. The packer measures each lane's letters where the drawer draws that lane, so the labels it puts
+    # in one lane do not meet.
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    drawn = _bands_and_left_out(regions, slot, "auto", size=size).drawn
+    met = [
+        (first.annotation_id, second.annotation_id)
+        for index, first in enumerate(drawn)
+        for second in drawn[index + 1 :]
+        if any(convex_polygons_intersect(one, other) for one in first.parts for other in second.parts)
+    ]
+
+    assert len(drawn) > 1 and not met, met
+
+
+def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gives_it_letters() -> None:
+    # OV-2850: r4 keeps no letter in the lane an early packing round puts it in, so that round packs it without text;
+    # the last packing puts it in the outer lane, where its letters fit, and it is drawn there, as before.
+    drawn = _bands_and_left_out(_LEFT_OUT_EARLY, ",w=600px,overflow=error", "auto", size=48)
+
+    assert "r4" in {label.annotation_id for label in drawn.drawn}, drawn.messages
+
+
 def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() -> None:
     # OV-2848: four nested bands at 60 pt in an inside slot without a set width. Further in, where the letters of the
     # other labels find more room, the innermost label keeps no letter; the slot does not move there, so every label
@@ -1181,10 +1249,10 @@ def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() 
 def test_a_label_left_out_for_want_of_a_letter_keeps_its_band_where_it_stands_without_text() -> None:
     # OV-2805: r1's letters meet r2's in r2's lane, and the lane further in lies so near the centre that no letter
     # of r1 fits there. r1's band stays in r2's lane, beside r2's mark, not at the centre.
-    bands, without_letters, _messages, _items = _bands_and_left_out(_DODGING_INWARD, ",w=600px,overflow=error", "auto")
+    drawn = _bands_and_left_out(_DODGING_INWARD, ",w=600px,overflow=error", "auto")
 
-    assert "r1" in without_letters
-    assert bands["r1"] == pytest.approx(bands["r2"], abs=0.01), bands
+    assert "r1" in drawn.without_letters
+    assert drawn.bands["r1"] == pytest.approx(drawn.bands["r2"], abs=0.01), drawn.bands
 
 
 def test_a_label_without_letters_in_a_clipped_slot_is_counted_once_as_without_letters() -> None:
