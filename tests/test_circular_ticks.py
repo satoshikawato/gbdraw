@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 import gbdraw
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
+from gbdraw.auto_sizes import tick_and_window_tiers
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.circular_ink import CircularInkRing
+from gbdraw.render.groups.circular.ticks import TickGroup
 from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
     generate_circular_tick_labels,
@@ -207,7 +213,6 @@ def test_linear_tick_labels_resolve_their_interval(
         format_linear_tick_label(position, context_length=context_length, tick_interval=interval)
         == expected
     )
-from gbdraw.api.config import apply_config_overrides
 
 
 @pytest.mark.parametrize(("radius", "label_side"), [(5.0, "outside"), (20.0, "inside")])
@@ -279,3 +284,92 @@ def test_radial_labels_refuse_scale_labels_longer_than_their_circle_when_the_slo
     assert track_layout_reason(caught.value) == "CANNOT_FIT"
     assert caught.value.diagnostic["slotIndex"] == 1
     assert caught.value.diagnostic["slotTrack"] == "ticks"
+
+
+# OV-2747: a 112,934,049 bp record took 1 Mbp ticks, and its 112 labels merged into a black band.
+_LONG_RECORD_BP = 112_934_049
+
+
+@pytest.fixture(scope="module")
+def long_record_tick_group() -> tuple[TickGroup, tuple, dict]:
+    """The tick group of the default Circular figure of a 112,934,049 bp record, with the arguments it was made
+    with: the default figure gives every long record the same tick slot."""
+
+    made: list[tuple[TickGroup, tuple, dict]] = []
+    record = SeqRecord(Seq("A" * _LONG_RECORD_BP), id="long", annotations={"molecule_type": "DNA"})
+    original_init = TickGroup.__init__
+
+    def recording_init(self: TickGroup, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)
+        made.append((self, args, kwargs))
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(TickGroup, "__init__", recording_init)
+        gbdraw.draw_circular(
+            [record],
+            options=gbdraw.CircularOptions(tracks=gbdraw.CircularTrackOptions(slots=["features:features", "ticks:ticks"])),
+        )
+    return made[-1]
+
+
+def _label_arcs(group: TickGroup) -> list[CircularInkRing]:
+    return sorted((ink for ink in group.ink() if isinstance(ink, CircularInkRing)), key=lambda ring: ring.start_turn)
+
+
+def _smallest_label_gap_turns(group: TickGroup) -> float:
+    """The smallest gap, in turns, between the drawn boxes of two neighbouring large tick labels (negative: they
+    overlap)."""
+
+    arcs = _label_arcs(group)
+    assert len(arcs) > 1
+    gaps = [right.start_turn - left.end_turn for left, right in zip(arcs, arcs[1:])]
+    return min([*gaps, arcs[0].start_turn + 1.0 - arcs[-1].end_turn])
+
+
+def _tick_group_of_length(captured: tuple[TickGroup, tuple, dict], length: int, interval: int | None = None) -> TickGroup:
+    """The captured default tick group rebuilt for a record of ``length`` bp (the group reads only the length),
+    with Auto ticks or a forced large ``interval``."""
+
+    _group, args, kwargs = captured
+    kwargs = {**kwargs, "record_transform": None}
+    if interval is not None:
+        profile = kwargs["profile"]
+        cfg = profile.config
+        scale = replace(cfg.objects.scale, interval=interval)
+        kwargs["profile"] = replace(profile, config=replace(cfg, objects=replace(cfg.objects, scale=scale)))
+    return TickGroup(SeqRecord(Seq(None, length=length), id="long"), *args[1:], **kwargs)
+
+
+def test_the_tick_labels_of_a_113_mbp_record_do_not_overlap(long_record_tick_group) -> None:
+    group = long_record_tick_group[0]
+
+    assert len(_label_arcs(group)) < 40
+    assert _smallest_label_gap_turns(group) >= 0.0
+
+
+_TIERS = tick_and_window_tiers(apply_config_overrides(None, None))["circularTicks"]
+
+
+@pytest.mark.parametrize(("at_most", "large", "_small"), _TIERS["tiers"])
+def test_the_tick_labels_of_every_tier_fit_at_its_longest_record(long_record_tick_group, at_most, large, _small) -> None:
+    group = _tick_group_of_length(long_record_tick_group, at_most)
+
+    assert group.tick_large == large
+    assert _smallest_label_gap_turns(group) >= 0.0
+
+
+@pytest.mark.parametrize(
+    ("at_most", "large"), [(at_most, large) for at_most, large, _small in _TIERS["tiers"] if at_most > 10_000_000]
+)
+def test_a_tier_above_10_mbp_ends_where_its_tick_labels_start_to_overlap(long_record_tick_group, at_most, large) -> None:
+    """The rows above 10 Mbp are measured, not chosen: each ends at the longest record whose labels fit, so a
+    figure whose labels fit keeps its interval and only figures whose labels would overlap take a coarser one."""
+
+    assert _smallest_label_gap_turns(_tick_group_of_length(long_record_tick_group, at_most + 1, large)) < 0.0
+
+
+def test_the_ticks_above_the_last_tier_fit_records_of_10_gbp(long_record_tick_group) -> None:
+    group = _tick_group_of_length(long_record_tick_group, 10_000_000_000)
+
+    assert group.tick_large == _TIERS["above"][0]
+    assert _smallest_label_gap_turns(group) >= 0.0
