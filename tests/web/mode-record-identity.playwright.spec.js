@@ -96,7 +96,7 @@ for (const committed of [false, true]) {
       expect(before.feature).toEqual({ recordKey: 'record-1', biologicalFeatureId: 'fb8ff22d9' });
       expect(Object.values(before.placements)).toEqual([{ ...before.feature,
         placement: { kind: 'lane', side: 'outward', level: 1 } }]);
-      await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb; });
+      await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb; });
       const checkReturned = async () => {
         await expect.poll(async () => (await snapshot(page)).feature).toEqual(before.feature);
         const returned = await snapshot(page);
@@ -104,7 +104,7 @@ for (const committed of [false, true]) {
         expect(returned.placements).toEqual(before.placements);
         expect(returned.featureCount).toBe(before.featureCount);
         expect(returned.results).toEqual(before.results);
-        expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb === window.__MODE_SOURCE__)).toBe(true);
+        expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb === window.__MODE_SOURCE__)).toBe(true);
         await placement(page);
       };
       await switchMode(page, 'linear');
@@ -188,9 +188,9 @@ for (const operation of ['replacement', 'removal']) {
       expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        window.__MODE_SOURCE__ = state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb;
+        window.__MODE_SOURCE__ = state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb;
         window.__MODE_FEATURE__ = state.extractedFeatures.value[0];
-        return (await import('./js/services/file-content-cache.js')).readFileText(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb));
+        return (await import('./js/services/file-content-cache.js')).readFileText(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb));
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');
@@ -208,7 +208,7 @@ for (const operation of ['replacement', 'removal']) {
       }
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        return { sameSource: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb === window.__MODE_SOURCE__,
+        return { sameSource: state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0].gb === window.__MODE_SOURCE__,
           choices: window.__GBDRAW_APP__.featurePlacementActions.choices([window.__MODE_FEATURE__]) };
       });
       expect(invalidation.sameSource).toBe(false);

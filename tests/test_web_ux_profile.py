@@ -136,7 +136,15 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
         'v-for="displayRow in linearComparisonTimeline.rows"' in index
     )
     assert 'v-for="(source, sourceIndex) in linearSourceGroups"' in index
-    assert ':data-linear-source-card="source.uid"' in index
+    # Each Linear source group is a File card (the shared shell, app/file-card.js) that
+    # carries its uid as `data-linear-source-card`.
+    linear_card = index[index.index('v-for="(source, sourceIndex) in linearSourceGroups"'):]
+    linear_card = linear_card[:linear_card.index(">")]
+    assert 'mode="linear"' in linear_card
+    assert ':uid="source.uid"' in linear_card
+    assert "v-bind=\"dataOf('card')\"" in index
+    file_card = (WEB_INDEX.parent / "js" / "app" / "file-card.js").read_text(encoding="utf-8")
+    assert "dataOf: (part) => ({ [`data-${props.mode}-source-${part}`]: props.uid })" in file_card
     assert (
         'v-for="({ sequence: seq, index: idx }) in source.records"'
         in index
@@ -224,7 +232,13 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
         '<details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" '
         'data-linear-depth-settings' in index
     )
-    assert 'v-if="linearSourceGroups.length > 1" class="flex shrink-0' in index
+    # A File card shows its move buttons only while its list holds more than one
+    # file; a Linear card is never removable from its header.
+    assert '<template v-if="count > 1">' in index
+    linear_card = index[index.index('v-for="(source, sourceIndex) in linearSourceGroups"'):]
+    linear_card = linear_card[:linear_card.index(">")]
+    assert ':count="linearSourceGroups.length"' in linear_card
+    assert "removable" not in linear_card
     assert (
         '<button v-if="linearSourceGroups.length > 1" type="button" '
         'aria-label="Remove last sequence"' in index
