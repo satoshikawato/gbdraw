@@ -531,6 +531,14 @@ const requirePayloadObject = (payload, operation) => {
   return payload;
 };
 
+// The record's display topology an extraction reads (`display.isCircular` of its request record): true, false, or
+// null for the topology its file states.
+/** @param {unknown} value @param {string} operation @returns {boolean | null} */
+const displayCircularArgument = (value, operation) => {
+  if (value === null || typeof value === 'boolean') return value;
+  throw new TypeError(`Diagram helper '${operation}' requires 'isCircular' to be true, false or null.`);
+};
+
 const assertAllowedPayloadKeys = (payload, operation, allowedKeys) => {
   const allowed = new Set(allowedKeys);
   Object.keys(payload).forEach((key) => {
@@ -905,7 +913,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA]: {
-    keys: ['files', 'format', 'regionSpec', 'recordSelector', 'reverseFlag'],
+    keys: ['files', 'format', 'regionSpec', 'recordSelector', 'reverseFlag', 'isCircular'],
     fileRoles: ['source'],
     run: (pyodide, payload, paths, operation) => callJsonHelper(
       pyodide,
@@ -915,7 +923,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         String(payload.format || 'genbank').trim().toLowerCase(),
         payload.regionSpec ?? null,
         payload.recordSelector ?? null,
-        payload.reverseFlag ? '1' : '0'
+        payload.reverseFlag ? '1' : '0',
+        displayCircularArgument(payload.isCircular, operation)
       ]
     )
   },
@@ -935,6 +944,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'regionSpec',
       'recordSelector',
       'reverseFlag',
+      'isCircular',
       'recordIndex',
       'recordInstanceKey',
       'featureOverrides',
@@ -968,6 +978,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         // This record's canonical featureOverrides rows (design Q4, 3.3).
         payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides),
         payload.windowOf ?? null,
+        displayCircularArgument(payload.isCircular, operation),
         jsonArgument(staged, {}),
         jsonArgument(staged && buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]);

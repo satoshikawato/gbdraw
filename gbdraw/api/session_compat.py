@@ -1642,6 +1642,7 @@ def _adapt_session_plan(
                 request,
                 plan.records,
                 plan.inputs,
+                plan.provenance,
             )
             extracted_manifest = extraction.identity_manifest
             assert extracted_manifest is not None

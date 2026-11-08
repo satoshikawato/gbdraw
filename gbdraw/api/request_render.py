@@ -2718,7 +2718,11 @@ def _extract_linear_request_proteins(
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
     inputs: PreparedDiagramInputs,
+    provenance: Sequence[ResolvedRecordProvenance],
 ) -> ProteinExtractionResult:
+    """The proteins of the drawn units of a planned request; each unit of a window names the region its search
+    reads (``ResolvedWindow.search_region``), as the Web's extraction of that unit names it."""
+
     record_instance_keys = _request_record_instance_keys(request)
     extraction = render_stage(
         "protein_extraction",
@@ -2731,8 +2735,8 @@ def _extract_linear_request_proteins(
             for record_input in request.records
         ),
         regions=tuple(
-            ";".join(window.region().raw for window in record_input.windows) or None
-            for record_input in request.records
+            item.window.search_region if item.window is not None else None
+            for item, _record in zip(provenance, records, strict=True)
         ),
         feature_visibility_rules=inputs.features.feature_visibility_rules,
         feature_overrides=tuple(item.overrides for item in inputs.record_features) or None,
@@ -2747,6 +2751,7 @@ def _prepare_linear_artifacts(
     records: tuple[SeqRecord, ...],
     artifacts: CurrentRequestArtifacts,
     inputs: PreparedDiagramInputs,
+    provenance: Sequence[ResolvedRecordProvenance],
     *,
     extraction: ProteinExtractionResult | None,
 ) -> _PreparedLinearArtifacts:
@@ -2781,7 +2786,7 @@ def _prepare_linear_artifacts(
         )
 
     if extraction is None:
-        extraction = _extract_linear_request_proteins(request, records, inputs)
+        extraction = _extract_linear_request_proteins(request, records, inputs, provenance)
     manifest = extraction.identity_manifest
     assert manifest is not None
     reusable_current = tuple(
@@ -3223,6 +3228,7 @@ def _build_request_plan_diagram(
                 records,
                 current_artifacts,
                 plan.inputs,
+                plan.provenance,
                 extraction=protein_extraction,
             )
         with _request_render_diagnostic_phase("drawing"):

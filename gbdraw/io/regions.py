@@ -24,7 +24,7 @@ from ..core.record_metadata import (
 )
 from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
-from ..layout.record_transform import detected_topology
+from ..layout.record_transform import detected_topology, drawn_circular
 from .record_select import RecordSelector, reverse_records
 
 logger = logging.getLogger(__name__)
@@ -613,7 +613,9 @@ def apply_region_specs(
 
     if not specs:
         return list(records)
-    windows, _cropped = crop_then_reverse_records(records, specs, [False] * len(records), log=log)
+    windows, _cropped = crop_then_reverse_records(
+        records, specs, [False] * len(records), is_circular=None, source_kind="memory", log=log
+    )
     return [unit for units in windows for unit in units]
 
 
@@ -658,14 +660,17 @@ def crop_then_reverse_records(
     specs: Sequence[RegionSpec],
     reverse: Sequence[bool],
     *,
+    is_circular: bool | None,
+    source_kind: str,
     log: logging.Logger | None = None,
 ) -> tuple[list[tuple[SeqRecord, ...]], frozenset[int]]:
     """Crop each record to the windows the specs select, then orient them (:func:`crop_record_windows`).
 
     Returns each record's drawn windows (one record when no spec selects it)
-    and the indexes of the cropped records. A record in memory is circular
-    when its ``topology`` annotation says so, which a window across the origin
-    (``:origin``) needs.
+    and the indexes of the cropped records. A window across the origin
+    (``:origin``) needs the record drawn as circular, decided as the drawing
+    decides it (:func:`drawn_circular`): by its display option ``is_circular``,
+    else by the topology its file of ``source_kind`` states.
     """
 
     assignments = assign_region_specs(records, specs) if specs else {}
@@ -675,7 +680,7 @@ def crop_then_reverse_records(
             assignments.get(index, ()),
             flag,
             log=log,
-            circular=detected_topology(record, "memory") == "circular",
+            circular=drawn_circular(is_circular, detected_topology(record, source_kind)),
         )
         for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
     ]

@@ -10,7 +10,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { LinearUnitSearch, LinearUnitWindow } from '../services/linear-units.js' */
-/** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { CommittedCanonicalSession, RequestRecordDisplayRow } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
@@ -58,6 +58,7 @@ import {
 import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
+  linearCardRequestedCircular,
   requestRecordPlan,
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
@@ -1231,17 +1232,20 @@ const requestRecordSource = (resources, sourceKind, sourceFile, fastaFile) => {
 /**
  * A record's LOSAT FASTA read by the diagram Worker (`extractFirstFasta`).
  * @param {FileLike} sourceFile
- * @param {{ fmt: string, regionSpec: string | null, recordSelector: string, reverseFlag: boolean }} read
+ * `isCircular` is the record's display topology (`linearCardRequestedCircular`), by which Python crops a window across
+ * the origin as the drawing does.
+ * @param {{ fmt: string, regionSpec: string | null, recordSelector: string, reverseFlag: boolean, isCircular: boolean | null }} read
  * @param {number} idx
  * @returns {Promise<LosatSeqEntry>}
  */
-const extractFirstFastaWithWorker = async (sourceFile, { fmt, regionSpec, recordSelector, reverseFlag }, idx) => {
+const extractFirstFastaWithWorker = async (sourceFile, { fmt, regionSpec, recordSelector, reverseFlag, isCircular }, idx) => {
   const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA, {
     files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(sourceFile) }],
     format: fmt,
     regionSpec,
     recordSelector,
-    reverseFlag
+    reverseFlag,
+    isCircular
   });
   const res = response.result;
   if (res.error) throw res.error;
@@ -1651,7 +1655,7 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
  *   The record discovery owner's record lists of a drawing's inputs, awaited (DESIGN A4): the sources
  *   `readDrawingRecordIdentities` returns, from which a request's record identities are read (`drawnRecordIdentities`).
- * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
+ * @property {{ value: RequestRecordDisplayRow[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
  *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
@@ -3028,7 +3032,9 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
-      /** @type {({ file: string, acrossOrigin: boolean } | null)[]} */
+      // A record's region a search reads, whether it runs across the origin, and the record's display topology the
+      // request writes (`linearCardRequestedCircular`), by which Python crops a window across the origin.
+      /** @type {({ file: string, acrossOrigin: boolean, isCircular: boolean | null } | null)[]} */
       let regionSpecs = [];
       /** @type {string[]} */
       let recordSelectors = [];
@@ -3729,20 +3735,27 @@ export const createRunAnalysis = ({
         const buildRegionSpec = (seq, card, window) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           recordSelectors.push(recordIdRaw || '');
+          const cardIndex = drawing.linearSeqs.indexOf(card);
           if (window) {
             viewTransformSpecs.push({ reverse: window.reverseComplement });
-            return { file: window.searchRegion, acrossOrigin: window.start > window.end };
+            // The unit's record is drawn: its display topology is the one the request writes for it.
+            const isCircular = linearCardRequestedCircular({
+              drawing: requestDrawing, card, index: cardIndex, recordDisplayRows: recordDisplayRows?.value || []
+            });
+            return { file: window.searchRegion, acrossOrigin: window.start > window.end, isCircular };
           }
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
-          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(card));
+          const bounds = resolveLinearRegionBounds(seq, cardIndex);
 
           if (bounds) {
             const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
             viewTransformSpecs.push({ reverse: wantsReverse || start > end });
-            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false };
+            // This crop runs from its start to its end (a drawn record's crop is its window above): no topology
+            // changes it, so its file's stands.
+            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false, isCircular: null };
           }
 
           viewTransformSpecs.push({ reverse: wantsReverse });
@@ -3878,6 +3891,8 @@ export const createRunAnalysis = ({
           const proteinPair = useProteinBlastp && inputSpec.paired !== null;
           const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
+          // A record without a region has no window to cross the origin: its file's topology stands.
+          const isCircular = regionSpecs[idx]?.isCircular ?? null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && inputSpec.paired !== null
             ? await gffFastaReaderSelector({
@@ -3959,6 +3974,7 @@ export const createRunAnalysis = ({
                   regionSpec,
                   recordSelector,
                   reverseFlag: reverseFlag === '1',
+                  isCircular,
                   recordIndex: idx,
                   recordInstanceKey,
                   windowOf,
@@ -3979,7 +3995,7 @@ export const createRunAnalysis = ({
               /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
               const extractWithWorker = async (reason) => {
                 const entry = await extractFirstFastaWithWorker(
-                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1' }, idx
+                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1', isCircular }, idx
                 );
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;

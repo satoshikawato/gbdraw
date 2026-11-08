@@ -67,7 +67,7 @@ from gbdraw.io.regions import (
 )
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_transform import detected_topology, drawn_circular
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -161,11 +161,7 @@ def resolve_record_display(
         raise ValidationError("Resolved crop flags must be booleans.")
     if options.start_coordinate is not None and any(crop_flags):
         raise ValidationError("An explicit display start cannot be combined with a crop.")
-    is_circular = (
-        detected_topology == "circular"
-        if options.is_circular is None
-        else options.is_circular
-    )
+    is_circular = drawn_circular(options.is_circular, detected_topology)
     # The transform owns length, affine-domain, orientation and anchor validation.
     RecordDisplayTransform(
         source_length, source_base, source_step, options.start_coordinate, is_circular,
@@ -207,6 +203,13 @@ class ResolvedWindow:
     def window_of(self) -> str | None:
         """The key of the record this unit is one of several windows of; ``None`` when the record draws one unit."""
         return self.record_key if self.is_one_of_several else None
+
+    @property
+    def search_region(self) -> str:
+        """The region a comparison search of this unit reads: the window's crop before its reverse complement
+        (``region_text``). The Web's extraction crops by it (``LinearUnitWindow.searchRegion``), and a protein record
+        analysis names it on the CLI and on the Web alike."""
+        return region_text(self.span.start, self.span.end, False)
 
 
 def record_drawn_windows(record_key: str, windows: Sequence[RecordWindow]) -> tuple[ResolvedWindow | None, ...]:
@@ -1788,12 +1791,6 @@ def _apply_provenance_annotations(
         ).name
 
 
-def _drawn_circular(display: RecordDisplayOptions, topology: str) -> bool:
-    """Whether a record is drawn as circular: its display option, else the topology its file states (D-28)."""
-
-    return display.is_circular if display.is_circular is not None else topology == "circular"
-
-
 @dataclass
 class _PendingRecord:
     """One resolved record before its windows expand: its drawn records so far and how to finish them."""
@@ -1851,7 +1848,7 @@ def _expand_record_windows(
                     specs,
                     item.pending_reverse,
                     log=logger,
-                    circular=_drawn_circular(item.provenance.display, item.provenance.detected_topology),
+                    circular=drawn_circular(item.provenance.display.is_circular, item.provenance.detected_topology),
                 )
             except ValueError as exc:
                 raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
@@ -1978,7 +1975,7 @@ def resolve_record_inputs(
                         [window.region() for window in record_input.windows],
                         reverse,
                         log=logger,
-                        circular=_drawn_circular(record_input.display, detected_topology(source_record, source_kind)),
+                        circular=drawn_circular(record_input.display.is_circular, detected_topology(source_record, source_kind)),
                     )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc

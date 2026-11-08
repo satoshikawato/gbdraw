@@ -3,9 +3,10 @@
 ``record_coordinates`` stays free of record objects; this module reads a
 record's coordinate map and annotations. ``detected_topology`` is the one
 reading of a record's ``topology`` annotation (the record planner's and this
-module's); ``unset_record_transform`` is the transform the planner binds to a
-record given in memory with no display option, the one transform of a record
-no plan bound one to.
+module's), and ``drawn_circular`` the one decision whether a record is drawn
+as circular (the drawing's and the Worker extractions'); ``unset_record_transform``
+is the transform the planner binds to a record given in memory with no display
+option, the one transform of a record no plan bound one to.
 """
 
 from __future__ import annotations
@@ -34,6 +35,14 @@ def detected_topology(record: SeqRecord, source_kind: str) -> DetectedTopology:
     return "unknown"
 
 
+def drawn_circular(is_circular: bool | None, topology: str) -> bool:
+    """Whether a record is drawn as circular: its display option ``is_circular`` (a request record's
+    ``display.isCircular``, the card's topology), else the topology its file states (``detected_topology``; D-28).
+    Only a record drawn as circular has a window across its origin."""
+
+    return is_circular if is_circular is not None else topology == "circular"
+
+
 def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
     """The transform of a record no plan bound one to: the one the record planner binds to the record given in
     memory with no display option (its coordinate map, the complete source length a crop recorded, and circular
@@ -41,7 +50,7 @@ def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
 
     base, step = _read_coord_map(record)
     length = len(record.seq)
-    is_circular = detected_topology(record, "memory") == "circular"
+    is_circular = drawn_circular(None, detected_topology(record, "memory"))
     source_length = record.annotations.get("gbdraw_source_length")
     if record.annotations.get("gbdraw_region_applied") and isinstance(source_length, int):
         return RecordDisplayTransform(

@@ -4488,6 +4488,73 @@ const buildKeptTrackParts = ({ drawing, filesData, recordCount, resolvedCircular
 const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow ?? cardIndex + 1 : null);
 
 /**
+ * A record display row as the request writer reads it (`buildRecordDisplayRows`): its record ID is text.
+ * @typedef {RecordDisplayRow & { recordId: string }} RequestRecordDisplayRow
+ */
+/**
+ * A record of the record plan as the request writer reads its display: its selector, its windows and its own
+ * display and orientation.
+ * @typedef {Pick<RequestDraftRecord, 'selector' | 'windows' | 'display'> & { presentation: { reverseComplement: boolean } }} RequestDisplayRecord
+ */
+/**
+ * The display and orientation the request writes for one record of the record plan: the display rows of its source
+ * that its selector selects (`selectedRows`), the transform of each (`transformFor`, its draft's
+ * `requestedRecordTransform`), and the transform of the record drawn as one record (`wholeTransform`): its first
+ * selected row's, else its own display, else the draft saved for its source and selector. The one owner of a request
+ * record's `display` (`projectCanonicalRenderInput`, `linearCardRequestedCircular`).
+ * @param {{ mode: string, sourceUid: string, record: RequestDisplayRecord, recordDisplayRows: readonly RequestRecordDisplayRow[],
+ *   drafts: readonly (RecordDisplayDraftIdentity & Partial<RecordDisplayDraft>)[] }} input
+ */
+const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, drafts }) => {
+  const sourceRows = recordDisplayRows.filter((row) => row.scope === mode && row.sourceUid === sourceUid);
+  const selector = requestRecordSelector(record);
+  const selectedRows = sourceRows.filter((row) => !selector
+    || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
+  /** @param {RecordDisplayRow} row */
+  const transformFor = (row) => requestedRecordTransform(row,
+    drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: record.windows.length > 0 });
+  const wholeTransform = () => {
+    const selected = selectedRows[0];
+    if (selected) return transformFor(selected);
+    const savedDraft = drafts.find((draft) => draft.sourceUid === sourceUid
+      && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
+        : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
+    return {
+      display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
+        startCoordinate: savedDraft?.startCoordinate ?? null },
+      reverseComplement: record.windows.length
+        ? false
+        : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation.reverseComplement)
+    };
+  };
+  return { selectedRows, transformFor, wholeTransform };
+};
+
+/**
+ * The record's display option `display.isCircular` the request writes for the record a Linear card draws (true,
+ * false, or null for the topology its file states), read from the request writer (`requestRecordTransforms`). A
+ * comparison search's extraction sends it with the card's window, so Python crops a window across the origin as the
+ * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py).
+ * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[], linearRecordLayoutEnabled?: { value: unknown } },
+ *   card: RequestLinearSeq, index: number, recordDisplayRows: RequestRecordDisplayRow[] }} input
+ * @returns {boolean | null}
+ */
+export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows }) => {
+  const windows = linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+  return requestRecordTransforms({
+    mode: 'linear',
+    sourceUid: linearSeqRecordKey(card, index),
+    record: {
+      selector: linearCardSelector(card),
+      windows,
+      presentation: { reverseComplement: windows.length ? false : Boolean(card.region_reverse) }
+    },
+    recordDisplayRows,
+    drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows)
+  }).wholeTransform().display.isCircular;
+};
+
+/**
  * @param {Record<string, any>} input
  * @returns {CanonicalRenderEnvelope}
  */
@@ -4543,37 +4610,24 @@ const projectCanonicalRenderInput = ({
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = mode === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === mode && row.sourceUid === sourceUid);
-    const selector = requestRecordSelector(record);
-    const selectedRows = sourceRows.filter((/** @type {RecordDisplayRow} */ row) => !selector
-      || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
-    /** @param {RecordDisplayRow} row */
-    const transformFor = (row) => requestedRecordTransform(row,
-      drafts.find((/** @type {RecordDisplayDraftIdentity} */ draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: record.windows.length > 0 });
+    const { selectedRows, transformFor, wholeTransform } = requestRecordTransforms({
+      mode, sourceUid, record, recordDisplayRows, drafts
+    });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
       const transforms = selectedRows.map(transformFor);
       if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((/** @type {RecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
           recordKey: expandedRecordKey(record.recordKey, Number(row.selector.slice(1))),
-          cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
+          cardinality: /** @type {const} */ ('exactly_one'),
+          selector: /** @type {CanonicalRecord['selector']} */ ({ kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 }),
           presentation: { ...record.presentation,
             reverseComplement: record.windows.length ? false : transforms[rowIndex].reverseComplement,
             gridRow: splitMemberGridRow(record.presentation.gridRow, index, arrangedRows) },
           display: transforms[rowIndex].display }));
       }
     }
-    const selected = selectedRows[0];
-    const savedDraft = drafts.find((/** @type {RecordDisplayDraftIdentity & Partial<RecordDisplayDraft>} */ draft) => draft.sourceUid === sourceUid
-      && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
-        : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
-    const transform = selected ? transformFor(selected) : {
-      display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
-        startCoordinate: savedDraft?.startCoordinate ?? null },
-      reverseComplement: record.windows.length
-        ? false
-        : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation?.reverseComplement)
-    };
+    const transform = wholeTransform();
     sourceInputIndexes.push(index);
     return [{ ...record,
       presentation: { ...record.presentation,

@@ -98,3 +98,38 @@ def test_a_malformed_plan_request_is_a_helper_protocol_error(records: list, pair
     with pytest.raises(ValidationError) as caught:
         plan_linear_units(records, pairs)
     assert caught.value.diagnostic == {"code": "HELPER_PROTOCOL"}
+
+
+def test_the_cli_and_the_web_write_one_protein_identity_for_each_window_unit() -> None:
+    """A record analysis names the span its unit's search reads (``searchRegion``), on the CLI as on the Web, so a
+    Session saved by either reuses the other's protein results; a record drawn whole names none (PD-OI-122)."""
+
+    from gbdraw.api.request_render import _extract_linear_request_proteins, plan_linear_request
+    from tests.test_origin_crossing_comparisons import _web_helpers
+
+    windows = (RecordWindow(3000, 6000), RecordWindow(7000, 12000, True), RecordWindow(14000, 4300))
+    request = LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(MITO), windows=windows, record_key="mito"),
+        RecordInput(GenBankInputSource(MITO), record_key="other"),
+    ))
+    plan = plan_linear_request(request)
+    cli = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance).identity_manifest
+    assert cli is not None
+    units = plan_linear_units(
+        [{"recordKey": "mito", "windows": [
+            {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None} for w in windows
+        ]}, {"recordKey": "other", "windows": []}],
+        [],
+    )["units"]
+    helpers = _web_helpers()
+    for index, unit in enumerate(units):
+        window = unit["window"]
+        web = json.loads(str(helpers["extract_cds_protein_fasta"](
+            str(MITO), "genbank", None, None if window is None else window["searchRegion"], None, "0", index,
+            unit["unitKey"], None, None, unit["windowOf"],
+        )))
+        assert "error" not in web, web.get("error")
+        analysis = cli["recordAnalyses"][cli["recordInstances"][unit["unitKey"]]["recordAnalysisId"]]
+        assert analysis["region"] == (None if window is None else window["searchRegion"]), unit["unitKey"]
+        assert web["record_analysis_id"] == cli["recordInstances"][unit["unitKey"]]["recordAnalysisId"], unit["unitKey"]
+        assert web["runtime_binding_hash"] == cli["recordInstances"][unit["unitKey"]]["runtimeBindingHash"]

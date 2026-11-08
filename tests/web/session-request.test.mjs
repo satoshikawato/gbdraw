@@ -20,6 +20,7 @@ const {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest: buildDrawingRenderRequest,
   bindCanonicalTypedResource,
+  linearCardRequestedCircular,
   canonicalLinearRecordLayout,
   decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
@@ -2602,6 +2603,33 @@ assert.equal(
     [['AAA.1', 7], ['BBB.1', 11]],
     'OV-278: Load then Generate keeps the display start of a record selected by ID'
   );
+}
+
+// A comparison search's extraction reads the display topology the request writes for the card's record
+// (`linearCardRequestedCircular`), so Python crops a window across the origin as the drawing does: the card's
+// topology draft when its File card lists the record, else the draft saved for its source and selector, else none.
+{
+  const card = {
+    uid: 'origin-card', gb: genbank, cardinality: 'exactly_one', losat_gencode: 1,
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false,
+    windows: [{ start: 4, end: 1, reverseComplement: false, column: null }]
+  };
+  const filesData = { linearSeqs: [card], linearComparisons: [] };
+  const rows = [{
+    key: JSON.stringify(['origin-card', '#1']), scope: 'linear', sourceUid: 'origin-card', selector: '#1',
+    recordId: 'WEBTEST', recordLength: 4, detectedTopology: 'linear', reverse: false, cropped: true
+  }];
+  const snapshot = resolveLinearComparisonPlan({ plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: [card] });
+  for (const [topologyOverride, recordDisplayRows] of [[true, rows], [false, rows], [null, rows], [true, []]]) {
+    const drawing = { ...state, recordDisplayDrafts: [{ sourceUid: 'origin-card', selector: '#1', recordId: 'WEBTEST',
+      topologyOverride, startCoordinate: null, reverseComplementOverride: null, anchorIntent: null }] };
+    const written = buildDrawingRenderRequest({
+      state: drawing, drawing, filesData, recordDisplayRows, comparisonPlanSnapshot: snapshot
+    });
+    const sent = linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows });
+    assert.equal(sent, topologyOverride, `the card's topology draft ${topologyOverride}`);
+    assert.equal(sent, written.renderRequest.records[0].display.isCircular, 'the extraction reads what the request writes');
+  }
 }
 
 // Align at feature's Apply (PD-OI-113 scenario revision 3): the placement candidate writes Python's display start of

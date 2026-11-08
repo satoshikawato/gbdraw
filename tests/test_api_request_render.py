@@ -519,7 +519,7 @@ def test_api_builds_no_derived_entry_without_one_raw_entry_per_search(
     plan = plan_request(request)
     built = build_request_diagram(request)
     linear_artifacts = request_render_module._prepare_linear_artifacts(
-        plan.request, plan.records, CurrentRequestArtifacts(), plan.inputs, extraction=None,
+        plan.request, plan.records, CurrentRequestArtifacts(), plan.inputs, plan.provenance, extraction=None,
     )
     raw = tuple(built.losat_cache_entries)
 
