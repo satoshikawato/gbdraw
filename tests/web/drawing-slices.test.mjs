@@ -323,7 +323,10 @@ const SAMPLES = {
     const file = state.inputFiles.registerFile(new File([`LOCUS       sample_${mode}\n//\n`], `sample-${mode}.gb`, { lastModified: 1 }));
     return mode === 'linear'
       ? { ...inputs, linearSeqs: [createLinearSeq({ uid: 'sample-row', gb: file })] }
-      : { ...inputs, circularSources: [{ uid: 'sample-card', gb: file, gff: null, fasta: null }] };
+      // The card's record read waits, as after the Load of a Circular request (OV-2881).
+      : { ...inputs, circularSources: [{ uid: 'sample-card', gb: file, gff: null, fasta: null }],
+        circularRecordDiscovery: { status: 'deferred', error: '', inputType: inputs.inputType,
+          sources: [{ uid: 'sample-card', primaryFile: file, pairedFile: null, error: '' }] } };
   },
   canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
   // Load keeps the rows `canonicalFeatureOverrides` and the placement reader
