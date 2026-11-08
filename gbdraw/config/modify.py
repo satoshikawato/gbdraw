@@ -11,7 +11,7 @@ from collections.abc import Callable, Collection, Iterable, Mapping as MappingAB
 from dataclasses import asdict, fields, is_dataclass, replace
 from functools import lru_cache
 from numbers import Integral, Real
-from types import UnionType
+from types import MappingProxyType, UnionType
 from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get_type_hints
 
 from gbdraw.exceptions import ValidationError
@@ -34,6 +34,13 @@ _CIRCULAR_DEFINITION_FONT = "objects.definition.circular.font_size"
 _CIRCULAR_DEFINITION_INTERVAL = "objects.definition.circular.interval"
 _LINEAR_RULER_ON_AXIS = "canvas.linear.ruler_on_axis"
 _LINEAR_AXIS_COLOR = "objects.axis.linear.stroke_color"
+# Leaves an earlier gbdraw accepted that never changed a figure and are gone, with the type each one took. An
+# override of one is checked against that type and dropped; a stored full config may still hold one, and
+# ``GbdrawConfig.from_dict`` reads named keys only.
+RETIRED_CONFIG_LEAVES: Mapping[str, object] = MappingProxyType({
+    # ``canvas.padding`` is the canvas padding (``--canvas_padding``).
+    "canvas.linear.canvas_padding": float,
+})
 
 
 def _assert_safe_config_value(value: object, *, path: str) -> None:
@@ -410,16 +417,38 @@ def _set_raw_config_path(
     target[keys[-1]] = deepcopy(value)
 
 
+def checked_config_overrides(
+    overrides: Mapping[str, object] | None,
+) -> Mapping[str, object] | None:
+    """``overrides`` validated, without the ``RETIRED_CONFIG_LEAVES`` it names (itself when it names none).
+
+    Typed options keep this, so the requests written from them never carry a retired leaf.
+    """
+
+    validate_config_overrides(overrides)
+    if overrides is None or not any(path in RETIRED_CONFIG_LEAVES for path in overrides):
+        return overrides
+    return {path: value for path, value in overrides.items() if path not in RETIRED_CONFIG_LEAVES}
+
+
 def validate_config_overrides(
     overrides: Mapping[str, object] | None,
 ) -> tuple[tuple[str, object], ...]:
-    """Validate a canonical override mapping without applying it."""
+    """Validate a canonical override mapping without applying it; a retired leaf is checked and left out."""
 
     if overrides is not None and not isinstance(overrides, Mapping):
         raise ValidationError("config overrides must be a mapping or None.")
 
     validated: list[tuple[str, object]] = []
     for raw_path, value in dict(overrides or {}).items():
+        retired = RETIRED_CONFIG_LEAVES.get(raw_path) if isinstance(raw_path, str) else None
+        if retired is not None:
+            if not _matches_annotation(retired, value):
+                raise ValidationError(
+                    f"Invalid value for config override {raw_path!r}; expected {retired!r}.",
+                    diagnostic=_invalid_leaf(raw_path, retired),
+                )
+            continue
         path, annotation = _validate_override_path(raw_path)
         _assert_safe_config_value(value, path=path)
         leaf_validator = _leaf_validators().get(path)
@@ -546,6 +575,7 @@ def modify_config_dict(
 
 __all__ = [
     "canonical_config_override_paths",
+    "checked_config_overrides",
     "config_paths_reading_unset_spellings",
     "config_to_raw_dict",
     "modify_config_dict",

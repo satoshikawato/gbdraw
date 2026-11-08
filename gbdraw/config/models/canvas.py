@@ -246,7 +246,6 @@ class LinearCanvasConfig:
     vertical_padding: float
     track_spacing: float
     comparison_height: float
-    canvas_padding: float
     definition_gap: float
     default_gc_height: float
     depth_height: float
@@ -312,7 +311,6 @@ class LinearCanvasConfig:
             comparison_height=_positive_finite_float(
                 d["comparison_height"], field_name="comparison_height"
             ),
-            canvas_padding=ascii_float(d["canvas_padding"]),
             definition_gap=max(0.0, ascii_float(d.get("definition_gap", 20))),
             default_gc_height=ascii_float(d["default_gc_height"]),
             depth_height=ascii_float(d.get("depth_height", d.get("default_gc_height", 20))),

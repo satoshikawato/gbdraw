@@ -51,7 +51,6 @@ def _canvas_config(
         else load_config_toml("gbdraw.data", "config.toml")
     )
     return SimpleNamespace(
-        canvas_padding=50,
         definition_gap=definition_gap,
         definition_column_gap=definition_gap,
         horizontal_offset=horizontal_offset,
