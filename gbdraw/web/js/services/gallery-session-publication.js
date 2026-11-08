@@ -7,7 +7,9 @@ import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
 import { validateModeSliceFields } from './mode-scoped-migration.js';
-import { drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
+import {
+  circularSourcesOfModeScoped, drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey
+} from './session-drawings-upgrade.js';
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -352,16 +354,16 @@ const withPromotedRequest = async (session, readRequest) => {
 /**
  * Save writes each Linear File card's own state into `webFiles.bindings.linearSeqs`, among it a record's typed
  * name apart from its inferred one. A published Session keeps those rows, so Load and Reset Settings read the
- * names as after that Save (OV-1701). The imported table files stay unpublished (OV-367): only the card rows and
- * the Circular input are kept, and Session validation rejects a row that binds a file the Session does not hold.
+ * names as after that Save (OV-1701). The imported table files stay unpublished (OV-367): only the card rows are
+ * kept, and Session validation rejects a row that binds a file the Session does not hold.
  * A CLI-written Session's rows are only initial values that its request overrides, so it publishes none.
  * @param {PublicationSession} session
- * @returns {{ schema: unknown, c_gb: unknown, linearSeqs: unknown[] } | null}
+ * @returns {{ schema: unknown, linearSeqs: unknown[] } | null}
  */
 const publishedCardBindings = (session) => {
   const bindings = !isCliWritten(session) && isObject(session.webFiles) ? session.webFiles.bindings : null;
   if (!isObject(bindings) || !Array.isArray(bindings.linearSeqs)) return null;
-  return { schema: bindings.schema, c_gb: bindings.c_gb ?? null, linearSeqs: bindings.linearSeqs };
+  return { schema: bindings.schema, linearSeqs: bindings.linearSeqs };
 };
 /**
  * @param {PublicationSession} session
@@ -530,11 +532,14 @@ export const createGallerySessionPublication = (owners) => {
         + 'tools/refresh_gallery_sessions.py.');
     }
     if (version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION) {
-      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame. A request of an
+      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame; a Session 46-50
+      // binds its Circular input in `c_gb`, `c_gff` and `c_fasta`, which become File cards as at Load. A request of an
       // earlier schema (saved before windows) is read as Load reads it, promoted by the one request reader
       // (`readRequest`); the publication writes the current schema only.
-      const stored = version === CURRENT_VERSION
-        ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
+      const legacy = sessionLegendEditsByRowKey(session, version).session;
+      // The migration changes only the bindings and the Circular slice; `validateCurrentFields` checks the result.
+      const stored = version === CURRENT_VERSION ? session : /** @type {PublicationSession} */ (
+        { ...legacy, ...circularSourcesOfModeScoped(legacy), version: CURRENT_VERSION });
       const current = isObject(stored.renderRequest) && Number(stored.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA
         ? await withPromotedRequest(stored, owners.readRequest) : stored;
       validateCurrentFields(current);

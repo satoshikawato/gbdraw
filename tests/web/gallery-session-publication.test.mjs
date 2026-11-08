@@ -586,12 +586,12 @@ assert.rejects(
   savedDefaultColors.resources['resource-0001'] = source.resources['colors-default-colors-file'];
   savedDefaultColors.resources['colors-default-colors-file'] = tsvResource('colors-default-colors-file',
     'colors-default-colors-file-default-colors.tsv', generatedDefaultColors);
-  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
+  savedDefaultColors.webFiles.bindings = { schema: 2, linearSeqs, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
   const sourceColors = source.renderRequest.diagramOptions.colors;
   const importedRules = `${tableText(source, sourceColors.colorTable || sourceColors.colorTableFile)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
   const savedRules = structuredClone(source);
   savedRules.resources['resource-0002'] = tsvResource('colors-color-table-file', 'resource-0002-specific-colors.tsv', importedRules);
-  savedRules.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, t_color: binding('resource-0002', 'specific-colors.tsv') };
+  savedRules.webFiles.bindings = { schema: 2, linearSeqs, t_color: binding('resource-0002', 'specific-colors.tsv') };
   for (const [name, saved] of Object.entries({ savedDefaultColors, savedRules })) {
     const { session, equivalence } = await prepareGallerySessionForPublication(saved);
     assert.deepEqual(equivalence.differences, [], name);
@@ -622,11 +622,11 @@ assert.rejects(
     region_record_id: '', region_start: null, region_end: null,
     region_reverse: Boolean(record.presentation.reverseComplement)
   }));
-  saved.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs: cardRows,
+  saved.webFiles.bindings = { schema: 2, linearSeqs: cardRows,
     d_color: { resourceId: 'record-1-genbank', name: 'imported-colors.tsv', type: 'text/plain', lastModified: 0 } };
   const { session, equivalence } = await prepareGallerySessionForPublication(saved);
   assert.deepEqual(equivalence.differences, []);
-  assert.deepEqual(session.webFiles.bindings, { schema: 2, c_gb: null, linearSeqs: cardRows });
+  assert.deepEqual(session.webFiles.bindings, { schema: 2, linearSeqs: cardRows });
 }
 
 // A Session the CLI writes publishes as the Gallery entry of its command: a
