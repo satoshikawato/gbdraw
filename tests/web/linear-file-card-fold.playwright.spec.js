@@ -548,8 +548,8 @@ test('a folded card that TLOSATX cannot search says Gencode required, as its ope
   // On the narrowest pane the mark wraps inside the line and stays clear of the move buttons (OV-602).
   const paneWidth = await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
   await page.evaluate(() => { window.__GBDRAW_APP__.sidebarWidth = 240; });
-  await expect.poll(() => header(card).evaluate((summary) => summary.querySelector('[id^="linear-file-gencode-"]').getBoundingClientRect().right
-    <= summary.querySelector('[data-linear-source-move]').getBoundingClientRect().left)).toBe(true);
+  await expect.poll(() => card.evaluate((element) => element.querySelector('summary [id^="linear-file-gencode-"]').getBoundingClientRect().right
+    <= element.querySelector('.file-card-actions > [data-linear-source-move]').getBoundingClientRect().left)).toBe(true);
   await page.evaluate((value) => { window.__GBDRAW_APP__.sidebarWidth = value; }, paneWidth);
   // The open card says it on its record options, from the same predicate, and the header line no longer does.
   await header(card).click();

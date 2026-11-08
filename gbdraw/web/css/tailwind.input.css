@@ -71,11 +71,22 @@
     .linear-file-names-unused:not(:focus-within),
     .linear-file-names-unused:focus-within + [data-linear-record-names] { display: none; }
     /* A File card (Linear and Circular) folds to its header line: File N, the file names in the uploader's
-       ready or failed look, the problems the card marks, the move buttons, the caret.
-       An open card shows the same line without the names and the marks. */
+       ready or failed look, the problems the card marks, the move and Remove buttons, the caret.
+       An open card shows the same line without the names and the marks. The buttons are not in the
+       summary (a control inside a summary is nested interactive content, OV-2898): they lie over the
+       room the summary's ::after keeps for them, before the caret (the card's inline padding, the caret's
+       1rem and the summary's 0.5rem gap from the end), centered on the folded line. */
+    .file-card { position: relative; --file-card-action-width: 1.625rem; --file-card-action-gap: 0.25rem; --file-card-actions: 0; }
     .file-card:has(> .file-card-fold:not([open])) { padding-block: 6px; }
     .file-card-fold > summary { min-height: 1.25rem; }
     .file-card-fold > summary::before { order: 1; }
+    .file-card:has(> .file-card-actions > :nth-child(1)) { --file-card-actions: 1; }
+    .file-card:has(> .file-card-actions > :nth-child(2)) { --file-card-actions: 2; }
+    .file-card:has(> .file-card-actions > :nth-child(3)) { --file-card-actions: 3; }
+    .file-card:has(> .file-card-actions) > .file-card-fold > summary::after { content: ''; flex: none; width: calc(var(--file-card-actions) * (var(--file-card-action-width) + var(--file-card-action-gap)) - var(--file-card-action-gap)); }
+    .file-card-actions { @apply absolute flex items-center; inset-inline-end: 2.25rem; top: 0.75rem; height: 1.25rem; gap: var(--file-card-action-gap); }
+    .file-card:has(> .file-card-fold:not([open])) > .file-card-actions { top: 6px; bottom: 6px; height: auto; }
+    .file-card-actions > button { width: var(--file-card-action-width); height: 1.125rem; }
     .file-card-fold > summary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 4px; }
     .file-card-fold-line { @apply flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1; flex: 1 1 0; }
     .file-card-fold[open] > summary > .file-card-fold-line > * { display: none; }

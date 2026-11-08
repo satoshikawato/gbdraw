@@ -9854,26 +9854,26 @@
                 <span v-if="failed" :id="failedId()" class="sr-only">{{ t('This file could not be read.') }}</span>
                 <slot name="status"></slot>
             </span>
-            <!-- A press on or between the buttons never folds the card. -->
-            <div v-if="count > 1 || removable" class="flex shrink-0 items-center gap-1" @click.prevent>
-                <template v-if="count > 1">
-                    <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-xs" @click="$emit('move', -1)" :disabled="disabled || !canMoveUp"
-                            :aria-label="t('Move File {n} up', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} up', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'up' }">
-                        <i class="ph ph-arrow-up" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-xs" @click="$emit('move', 1)" :disabled="disabled || !canMoveDown"
-                            :aria-label="t('Move File {n} down', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} down', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'down' }">
-                        <i class="ph ph-arrow-down" aria-hidden="true"></i>
-                    </button>
-                </template>
-                <button v-if="removable" type="button" data-history-managed class="btn btn-secondary px-1.5 py-0.5 text-xs" @click="$emit('remove', $event.currentTarget)" :disabled="disabled"
-                        :aria-label="t('Remove File {n}', { n: index + 1 })" :title="t('Remove File {n}', { n: index + 1 })" v-bind="dataOf('remove')">
-                    <i class="ph ph-trash" aria-hidden="true"></i>
-                </button>
-            </div>
         </summary>
         <slot></slot>
     </details>
+    <!-- The header's buttons follow the disclosure, outside its summary; tailwind.input.css lays them over the header line. -->
+    <div v-if="count > 1 || removable" class="file-card-actions">
+        <template v-if="count > 1">
+            <button type="button" class="btn btn-secondary p-0 text-xs" @click="$emit('move', -1)" :disabled="disabled || !canMoveUp"
+                    :aria-label="t('Move File {n} up', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} up', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'up' }">
+                <i class="ph ph-arrow-up" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="btn btn-secondary p-0 text-xs" @click="$emit('move', 1)" :disabled="disabled || !canMoveDown"
+                    :aria-label="t('Move File {n} down', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} down', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'down' }">
+                <i class="ph ph-arrow-down" aria-hidden="true"></i>
+            </button>
+        </template>
+        <button v-if="removable" type="button" data-history-managed class="btn btn-secondary p-0 text-xs" @click="$emit('remove', $event.currentTarget)" :disabled="disabled"
+                :aria-label="t('Remove File {n}', { n: index + 1 })" :title="t('Remove File {n}', { n: index + 1 })" v-bind="dataOf('remove')">
+            <i class="ph ph-trash" aria-hidden="true"></i>
+        </button>
+    </div>
     </section>
 </script>
 

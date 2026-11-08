@@ -128,6 +128,22 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
     assert index.count('aria-label="Add sequence"') == 1
 
 
+def test_file_card_header_actions_sit_outside_the_summary() -> None:
+    # The File card header's actions (Move, Remove) are siblings of the
+    # disclosure, never inside its <summary>: a control inside a summary is
+    # nested interactive content (axe nested-interactive, OV-2898).
+    index = read_english_index(WEB_INDEX)
+    start = index.index('id="file-card-template"')
+    template = index[start : index.index("</script>", start)]
+    summary = template[template.index("<summary") : template.index("</summary>")]
+    for tag in ("<button", "<input", "<select", "<a ", "tabindex"):
+        assert tag not in summary, tag
+    actions = template[template.index("</details>") :]
+    assert "$emit('move', -1)" in actions
+    assert "$emit('move', 1)" in actions
+    assert "$emit('remove', $event.currentTarget)" in actions
+
+
 def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order() -> None:
     index = read_english_index(WEB_INDEX)
 
