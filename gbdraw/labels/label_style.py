@@ -62,7 +62,9 @@ UNDERLINE_TRIM_EM = 0.12
 # A leader that would reach the underline through the letters stops this many font sizes above them.
 GAP_STOP_EM = 0.20
 # Neighbouring Linear feature labels in one label row keep at least this many font sizes between them
-# (each label half of it on each side, of its own font size), so two names never read as one word.
+# (each label half of it on each side, of its own font size), so two names never read as one word (LP-D104).
+# Scale tick labels keep it too: the ruler drops its end label closer than this, and the Auto tick tiers
+# above 10 Mbp (Circular) and 5 Mbp (Linear) end where their labels would come closer (OV-2748).
 ROW_LABEL_GAP_EM = 0.25
 # Feature labels are laid out in the box their text is drawn in (``core.text.drawn_text_box``: the drawn
 # width, the face's line box) plus these margins, in font sizes (OV-165).

@@ -9,11 +9,11 @@ from ....auto_sizes import SizeClass, linear_tick_interval
 from ....core.numeric import scaled_tick_text
 from ....core.text import drawn_text_box
 from ....config.models.objects import ObjectsScaleConfig
+from ....labels.label_style import ROW_LABEL_GAP_EM
 from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
 RULER_LABEL_OFFSET = 15.0
-RULER_LABEL_COLLISION_PADDING = 2.0
 
 
 def format_linear_tick_label(
@@ -54,7 +54,7 @@ def _label_bounds_overlap(
     left_bounds: tuple[float, float],
     right_bounds: tuple[float, float],
     *,
-    padding: float = RULER_LABEL_COLLISION_PADDING,
+    padding: float,
 ) -> bool:
     return float(left_bounds[1]) + float(padding) > float(right_bounds[0])
 
@@ -194,7 +194,9 @@ class LengthBarGroup:
             )
             current_bounds = _label_bounds(x_pos, bbox_width)
             is_terminal_extra_tick = terminal_tick_is_extra and index == len(tick_positions) - 1
-            if is_terminal_extra_tick and label_bounds and _label_bounds_overlap(label_bounds[-1], current_bounds):
+            if is_terminal_extra_tick and label_bounds and _label_bounds_overlap(
+                label_bounds[-1], current_bounds, padding=ROW_LABEL_GAP_EM * self.ruler_label_font_size
+            ):
                 continue
 
             tick_line = Line(

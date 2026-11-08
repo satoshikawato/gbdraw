@@ -107,9 +107,9 @@ def test_depth_window_follows_the_gc_window(window: int, step: int, expected: tu
         (1_000_001, (500_000, 100_000)),
         (10_000_000, (500_000, 100_000)),
         (10_000_001, (1_000_000, 200_000)),
-        # OV-2747: above 10 Mbp the intervals coarsen where the default labels start to overlap.
-        (35_868_344, (1_000_000, 200_000)),
-        (35_868_345, (2_000_000, 400_000)),
+        # OV-2747, OV-2748: above 10 Mbp the intervals coarsen where the default labels come closer than a quarter em.
+        (33_839_331, (1_000_000, 200_000)),
+        (33_839_332, (2_000_000, 400_000)),
         (112_934_049, (5_000_000, 1_000_000)),
     ],
 )
@@ -142,9 +142,9 @@ def test_circular_manual_tick_interval_bypasses_the_tiers() -> None:
         (2_000_000, 500_000),
         (4_999_999, 500_000),
         (5_000_000, 1_000_000),
-        # OV-2747: above 5 Mbp the intervals coarsen where the default ruler labels start to overlap.
-        (49_968_281, 1_000_000),
-        (49_968_282, 2_000_000),
+        # OV-2747, OV-2748: above 5 Mbp the intervals coarsen where the default ruler labels come closer than a quarter em.
+        (46_484_179, 1_000_000),
+        (46_484_180, 2_000_000),
         (112_934_049, 5_000_000),
     ],
 )
