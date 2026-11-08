@@ -10,7 +10,6 @@ from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
     DEPTH_AXIS_STROKE_WIDTH_PX,
     DEPTH_AXIS_TICK_SIZE_PX,
-    SCALAR_AXIS_LABEL_GAP_PX,
     CircularRangeLabel,
     ScalarAxisTick,
     circular_range_label,

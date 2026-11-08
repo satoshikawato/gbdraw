@@ -116,30 +116,56 @@ def scalar_axis_footprint(
     return ScalarAxisFootprint(extra, extra)
 
 
+def gc_axis_tick_font_size_of_depth(
+    gc: TickFontSource, depth: ScalarAxisStyle | None, depth_track_width_px: float | None
+) -> float | None:
+    """The tick font a Percent GC axis without its own size takes from the depth axis beside it, so the two axes
+    read alike: the depth axis's size on its track ``depth_track_width_px`` wide (as requested, before any
+    narrowing). None when the GC axis sets its own size or no depth axis with ticks is drawn; the GC axis then
+    keeps its own size or the Auto size of its own track. The radial layout keeps the GC axis's room in this font
+    and the drawing draws it in it."""
+
+    if (
+        gc.tick_font_size is not None
+        or depth is None
+        or not (depth.show_axis and depth.show_ticks)
+        or depth_track_width_px is None
+        or depth_track_width_px <= 0
+    ):
+        return None
+    return depth_axis_tick_font_size_px(depth, depth_track_width_px)
+
+
 @dataclass(frozen=True)
 class CircularScalarAxes:
-    """The axes of a Circular record's scalar tracks, which the radial layout keeps room for and the drawers draw:
-    the depth track's and, in percent mode, the GC content track's (a deviation GC track draws no axis)."""
+    """The axes of a Circular record's scalar tracks that the radial layout keeps room for: the depth track's,
+    and the Percent GC content track's while it draws numbered labels (``of``)."""
 
     depth: ScalarAxisStyle | None = None
     gc_content: ScalarAxisStyle | None = None
 
-    def with_gc_font_of_depth(self, depth_track_width_px: float | None) -> CircularScalarAxes:
-        """These axes with the GC content axis's tick font set as drawn: a GC axis without its own size beside a
-        depth axis with ticks, on a track ``depth_track_width_px`` wide (requested, before any narrowing), takes the
-        depth axis's size, so the two axes read alike; otherwise it keeps the Auto size of its own track."""
+    @classmethod
+    def of(cls, depth: ScalarAxisSource | None, gc_content: ScalarAxisSource | None) -> CircularScalarAxes:
+        """The axes of a drawn depth track and a Percent GC content track. A GC axis without numbered labels keeps
+        no room past its band, so it is left out: its other settings then do not replan the layout."""
 
-        gc, depth = self.gc_content, self.depth
-        if (
-            gc is None
-            or gc.tick_font_size is not None
-            or depth is None
-            or not (depth.show_axis and depth.show_ticks)
-            or depth_track_width_px is None
-            or depth_track_width_px <= 0
-        ):
-            return self
-        return replace(self, gc_content=replace(gc, tick_font_size=depth_axis_tick_font_size_px(depth, depth_track_width_px)))
+        keeps_room = (
+            gc_content is not None
+            and bool(gc_content.show_axis)
+            and bool(gc_content.show_ticks)
+            and gc_content.axis_labels == "numbered"
+        )
+        return cls(
+            depth=None if depth is None else ScalarAxisStyle.of(depth),
+            gc_content=ScalarAxisStyle.of(gc_content) if keeps_room and gc_content is not None else None,
+        )
+
+    def with_gc_font_of_depth(self, depth_track_width_px: float | None) -> CircularScalarAxes:
+        """These axes with the GC axis in the font it is drawn in (``gc_axis_tick_font_size_of_depth``)."""
+
+        gc = self.gc_content
+        size = None if gc is None else gc_axis_tick_font_size_of_depth(gc, self.depth, depth_track_width_px)
+        return self if gc is None or size is None else replace(self, gc_content=replace(gc, tick_font_size=size))
 
     def footprint(self, renderer: str, track_width_px: float) -> ScalarAxisFootprint | None:
         """How far the axis of a ``renderer`` track paints past its band; none for a track without an axis. The
@@ -238,6 +264,7 @@ def scalar_axis_ink(
 __all__ = [
     "CircularRangeLabel",
     "CircularScalarAxes",
+    "gc_axis_tick_font_size_of_depth",
     "circular_range_label",
     "ScalarAxisSource",
     "TickFontSource",

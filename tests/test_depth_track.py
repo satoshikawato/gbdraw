@@ -1000,7 +1000,8 @@ def test_circular_depth_ticks_use_right_side_and_small_ticks_are_unlabeled() -> 
         ),
     ).tostring()
 
-    depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 1400]
+    depth_axis_start = svg.index('id="depth_axis"')
+    depth_axis_svg = svg[depth_axis_start : svg.index("</g>", depth_axis_start)]
     assert 'x1="-3.0"' not in depth_axis_svg
     assert re.search(r'<line[^>]*x1="0" x2="3.0" y1="-[^"]+" y2="-[^"]+"', depth_axis_svg)
     assert re.search(r'<line[^>]*x1="0" x2="2.0" y1="-[^"]+" y2="-[^"]+"', depth_axis_svg)

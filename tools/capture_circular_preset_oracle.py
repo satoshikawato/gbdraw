@@ -21,6 +21,7 @@ from gbdraw.configurators import DepthConfigurator
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_radial_plan_for_preset
 from gbdraw.diagrams.circular.radial_layout import RadialBand, resolve_circular_radial_layout
 from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.layout.circular_depth_axis import CircularScalarAxes
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.features.shapes import resolve_directional_feature_types
 from gbdraw.io.colors import load_default_colors
@@ -147,7 +148,7 @@ def capture_case(
         slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
         preferred_anchor_slot_ids=radial_plan.preferred_anchor_slot_ids,
-        depth_config=depth_config,
+        scalar_axes=CircularScalarAxes.of(depth_config, None),
     )
     return {
         "input": str(input_path),

@@ -690,14 +690,14 @@ def test_a_percent_gc_slot_reserves_half_its_numbered_label_line_in_the_font_it_
 
     numbered = layout("numbered")
     gc = next(slot for slot in numbered.tracks if slot.id == "gc")
-    assert numbered.scalar_axes is not None and numbered.scalar_axes.gc_content is not None
-    assert numbered.scalar_axes.gc_content.tick_font_size == pytest.approx(expected_font)
     assert gc.draw_band_px is not None and gc.reserved_band_px is not None
     assert gc.reserved_band_px.outer_px - gc.draw_band_px.outer_px == pytest.approx(0.5 * expected_font)
     assert gc.draw_band_px.inner_px - gc.reserved_band_px.inner_px == pytest.approx(0.5 * expected_font)
     # The range label sits inside the band: the band keeps no room past it.
     ranged = next(slot for slot in layout("range").tracks if slot.id == "gc")
     assert ranged.reserved_band_px == ranged.draw_band_px
+    # A GC axis without numbered labels is left out of the axes the layout reads.
+    assert CircularScalarAxes.of(None, axis(gc_font, "range")).gc_content is None
 
 
 @pytest.mark.parametrize("side", ["inside", "outside"])

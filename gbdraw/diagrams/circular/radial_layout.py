@@ -2574,6 +2574,7 @@ def _resolve_circular_radial_layout(
         annotation_label_rooms=annotation_label_rooms,
     )
     if scalar_axes is not None:
+        # The GC axis keeps its room in the font it is drawn in (``_gc_content_axis_font_size`` in the assembly).
         scalar_axes = scalar_axes.with_gc_font_of_depth(
             next((float(intent.width_px) for intent in intents if intent.renderer == "depth" and intent.width_px > 0), None)
         )
@@ -2931,7 +2932,6 @@ def _resolve_circular_radial_layout(
         slots=resolved_slots,
         definition_reserved_band_px=definition_band,
         outer_content_radius_px=float(outer_content_radius),
-        scalar_axes=scalar_axes,
     )
 
 
