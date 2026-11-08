@@ -4,6 +4,7 @@
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle, Group, Path
 
+from ....auto_sizes import depth_axis_tick_font_size_px
 from ....analysis.gc import gc_content_percent_df
 from ....layout.circular import RadialBand
 from ....layout.circular_depth_axis import (
@@ -13,7 +14,6 @@ from ....layout.circular_depth_axis import (
     CircularRangeLabel,
     ScalarAxisTick,
     circular_range_label,
-    depth_axis_tick_font_size_px,
     scalar_axis_ink,
 )
 from ....layout.scalar_axis import (
