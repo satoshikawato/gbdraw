@@ -94,7 +94,7 @@ def test_definition_over_a_track_warns_with_the_mildest_definition_font(monkeypa
     # The font is scanned down one step at a time with the full assembly.
     assert [call[DEFINITION_FONT_PATH] for call in calls] == [17.5, 17.0, 16.5]
     assert str(caught[0].message) == (
-        "rec: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+        "rec: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
         "  --definition_font_size 16.5   (smaller definition font)\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
@@ -131,7 +131,7 @@ def test_one_definition_font_fits_every_record(monkeypatch: pytest.MonkeyPatch) 
     assert checked[0].rows[0].values == {DEFINITION_FONT_PATH: 15.0}
     assert str(caught[0].message).startswith(
         "Definition lines do not fit in 2 records: A (1 line at 18 pt: 1 line overlaps a track); "
-        "B (1 line at 18 pt: 1 line overlaps a track). Drawn anyway.\n"
+        "B (1 line at 18 pt: 1 line overlaps a track). The figure is drawn.\n"
     )
 
 
@@ -154,7 +154,7 @@ def test_the_notice_names_the_definition_text_over_a_track() -> None:
 
     assert label_fit_notice(report) == ("The definition text overlaps a track (2 lines).",)
     assert format_label_fit_report(report).startswith(
-        "rec: 2 definition lines do not fit at 18 pt (2 lines overlap a track). Drawn anyway."
+        "rec: 2 definition lines do not fit at 18 pt (2 lines overlap a track). The figure is drawn."
     )
 
 
@@ -184,7 +184,7 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
         return capsys.readouterr().err
 
     assert draw("mers") == (
-        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
         "  --definition_font_size 17   (smaller definition font)\n"
         "Narrowing the inside tracks does not fit this map.\n"
@@ -193,11 +193,11 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     assert draw("mers_font", "--definition_font_size", "17") == ""
     # The size above it does not clear the one line: the row offers the mildest size.
     assert draw("mers_font_17_5", "--definition_font_size", "17.5").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 17.5 pt (1 line overlaps a track). Drawn anyway.\n"
+        "WARNING: NC_019843.3: 1 definition line does not fit at 17.5 pt (1 line overlaps a track). The figure is drawn.\n"
     )
 
     assert draw("mers_off", "--no_track_narrowing") == (
-        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
         "  --definition_font_size 13   (smaller definition font)\n"
         "Narrowing the inside tracks does not fit this map.\n"
@@ -205,7 +205,7 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     )
     assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "13") == ""
     assert draw("mers_off_font_13_5", "--no_track_narrowing", "--definition_font_size", "13.5").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 13.5 pt (1 line overlaps a track). Drawn anyway.\n"
+        "WARNING: NC_019843.3: 1 definition line does not fit at 13.5 pt (1 line overlaps a track). The figure is drawn.\n"
     )
 
 
@@ -413,7 +413,7 @@ def test_mjenmv_full_name_is_drawn_on_one_line_and_warns_only_without_narrowing(
     monkeypatch.setattr(sys, "argv", [*argv, "--no_track_narrowing", "--overwrite"])
     cli.main()
     assert capsys.readouterr().err.endswith(
-        "WARNING: LC738868.1: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+        "WARNING: LC738868.1: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
         "  --definition_font_size 14.5       (smaller definition font)\n"
         "  --center_reserved_radius 233.39   (narrow the inside tracks)\n"

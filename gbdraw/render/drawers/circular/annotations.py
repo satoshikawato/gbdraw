@@ -24,7 +24,14 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_count_of, lane_edge_px, lane_width_px
+from gbdraw.annotations.layout import (
+    LANE_EXTENT_PX,
+    LabelExtent,
+    PlacedRegionAnnotation,
+    lane_count_of,
+    lane_edge_px,
+    lane_width_px,
+)
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -39,6 +46,7 @@ from gbdraw.layout.text_geometry import (
 from gbdraw.render.drawers.annotation_marks import (
     ANNOTATION_ID_ATTRIBUTE,
     ANNOTATION_SET_ID_ATTRIBUTE,
+    MarkReach,
     annotation_dom_id,
     cap_size,
     gradient_fill_group,
@@ -162,7 +170,7 @@ def _record_lanes(
     width = lane_width_px(
         outer_radius_px - inner_radius_px, padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
     )
-    return placements, 14.0 if track.clipped else width
+    return placements, LANE_EXTENT_PX if track.clipped else width
 
 
 def _lane_radii(
@@ -469,7 +477,8 @@ def circular_annotation_labels(
     entries: list[tuple[ResolvedRegionAnnotation, Callable[[float], CircularAnnotationLabel]]] = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label:
+        # A label the track leaves out (no room, or cut by its clip) is not drawn, placed or given room.
+        if not track.draws_label(annotation):
             continue
         style = effective_annotation_style(annotation, params)
         lane_inner, lane_outer = _lane_radii(
@@ -481,8 +490,7 @@ def circular_annotation_labels(
             outer_radius_px=outer_radius_px,
             params=params,
         )
-        # A Circular band fills its whole lane; an arrow cap is drawn as a straight cap.
-        reach = mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False)
+        reach = circular_annotation_mark_reach(annotation, style, lane_width)
         if covers_slots:
             inset = outer_radius_px - lane_outer if outward else lane_inner - inner_radius_px
             beyond = past_span_edge(reach, inset)
@@ -541,6 +549,25 @@ def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk
         anchor="middle",
         baseline="alphabetic" if orientation in CURVED_LABEL_ORIENTATIONS else "central",
     )
+
+
+def circular_annotation_mark_reach(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_width: float
+) -> MarkReach:
+    """How far a Circular mark paints across its lane on its label's side (``MarkReach``), where its label stands
+    ``label_offset`` beyond: a band fills its whole lane, and an arrow cap is drawn as a straight cap. The lane
+    packer measures the same paint (``LabelSizing.reach``, ``circular_annotation_mark_past_lane``)."""
+
+    return mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False)
+
+
+def circular_annotation_mark_past_lane(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_width: float
+) -> float:
+    """How far a Circular mark paints past its lane's edge on its label's side (``circular_annotation_mark_reach``):
+    the lane packer's ``MarkReachMeasure``."""
+
+    return circular_annotation_mark_reach(annotation, style, lane_width).past_lane_edge
 
 
 def circular_annotation_label_extent(
@@ -1098,6 +1125,8 @@ __all__ = [
     "CircularLabelObstacles",
     "LeaderSegment",
     "circular_annotation_label_extent",
+    "circular_annotation_mark_past_lane",
+    "circular_annotation_mark_reach",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

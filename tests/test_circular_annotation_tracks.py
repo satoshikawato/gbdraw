@@ -37,6 +37,12 @@ from gbdraw.tracks import (
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
 
+def _half_stroke_reach(_annotation, style, _lane_width: float) -> float:
+    # The packer tests' own mark paint (``LabelSizing.reach``): half the stroke past the lane's edge.
+    return 0.5 * float(style.stroke_width)
+
+
+
 def test_circular_annotation_renderer_parses_width() -> None:
     slot = parse_circular_track_slot("regions:annotations@set_id=s,w=28px")
     assert slot.renderer == "annotations"
@@ -1241,7 +1247,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
         "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
-        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
     )
 
     def labels(*polygons):
@@ -1567,7 +1573,7 @@ def test_circular_rings_that_cannot_make_the_room_of_split_lanes_draw_and_warn()
         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
         "gc:dinucleotide_content@side=inside",
     )
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     bands = _slot_bands(drawing)
     axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
@@ -1610,7 +1616,7 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
         "in:annotations@side=inside,set_id=regions,w=20px",
         "gc:dinucleotide_content@side=inside,r=0.8",
     )
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     gc_inner, gc_outer = _slot_bands(drawing)["gc"]
     axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
@@ -1652,7 +1658,7 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
          "overlay-spanning-nothing"],
 )
 def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
 
 

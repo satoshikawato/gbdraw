@@ -141,6 +141,19 @@ write-up of a release.
   `AnnotationGradient` and `search_hit_annotation_set` (with `SearchQuery`,
   `SearchSubject`, `SearchHit` and `SearchAnnotationResult`), which turns
   LOSAT outfmt 6 rows of a search into such an annotation set.
+- Changed: a region label that cannot get room between annotation lanes is
+  left out instead of being drawn over the next lane's mark: in a Circular
+  `inside` slot whose room stops at the centre of the circle, and in a slot
+  whose `h` (Linear) or `w` (Circular) is set with `overflow=clip`. Every mark
+  is still drawn. A clipped slot also leaves out a label whose letters its
+  edge would cut and a label whose own mark the clip hides, and it no longer
+  cuts a label's letters past the ends of the record bar. The warning counts the labels left out
+  (`N region labels left out in clipped slots`, `N region labels left out for
+  want of room before the centre`) at their own font size. A label given lane
+  room now keeps `label_offset` before the mark it would cross as well as
+  beside its own, so figures with lane rooms grow slightly. Every label
+  warning of a drawn figure now ends "The figure is drawn." instead of
+  "Drawn anyway.".
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest

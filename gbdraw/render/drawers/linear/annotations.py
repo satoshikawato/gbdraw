@@ -29,6 +29,7 @@ from gbdraw.annotations.layout import (
     PlacedRegionAnnotation,
     lane_count_of,
     lane_edge_px,
+    LANE_EXTENT_PX,
     lane_width_px,
 )
 from gbdraw.layout.linear import VerticalBand
@@ -37,6 +38,7 @@ from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.drawers.annotation_marks import (
     ANNOTATION_ID_ATTRIBUTE,
     ANNOTATION_SET_ID_ATTRIBUTE,
+    MarkReach,
     annotation_dom_id,
     cap_size,
     dom_token,
@@ -120,15 +122,24 @@ class AnnotationSlotFrame:
     row_frames: tuple[AnnotationRowFrame, ...] = ()
     strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
 
-    def clip_path(self, clip_id: str, *, y_offset_px: float, bar_length_px: float) -> ClipPath:
-        """The clip of a clipped track: one rectangle per row, the slot's height on each of them."""
+    def clip_path(
+        self, clip_id: str, *, y_offset_px: float, bar_length_px: float, labels: Sequence[LinearAnnotationLabel]
+    ) -> ClipPath:
+        """The clip of a clipped track: one rectangle per row, the slot's height on each of them.
+
+        The set size bounds the slot across its lanes only. Along the bar each rectangle holds the bar and the
+        letters of ``labels``, which may hang past the bar's ends (the figure grows to hold them); the packer
+        leaves out the labels the set size would cut.
+        """
 
         clip_path = ClipPath(id=clip_id)
+        start: float = min((0, *(label.ink.min_x for label in labels)))  # an int 0 keeps the bytes of x="0"
+        end = max((float(bar_length_px), *(label.ink.max_x for label in labels)))
         for frame in self.row_frames or (AnnotationRowFrame(0.0, float(self.height_px)),):
             clip_path.add(
                 Rect(
-                    insert=(0, float(y_offset_px) + frame.shift_y),
-                    size=(float(bar_length_px), frame.height_px),
+                    insert=(start, float(y_offset_px) + frame.shift_y),
+                    size=(float(end) - float(start), frame.height_px),
                 )
             )
         return clip_path
@@ -261,7 +272,7 @@ def _lane_height(
 
     lane_count = lane_count_of(placements)
     return (
-        14.0
+        LANE_EXTENT_PX
         if track.clipped
         else lane_width_px(
             float(height_px), padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
@@ -326,7 +337,8 @@ def _label_rows(
     rows = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label:
+        # A label the track leaves out (no room, or cut by its clip) is not drawn, placed or given room.
+        if not track.draws_label(annotation):
             continue
         style = effective_annotation_style(annotation, params)
         row = annotation.label_anchor(style.label_position, join_origin=track.join_origin).part.row
@@ -335,10 +347,7 @@ def _label_rows(
         size = annotation_label_font_size(style, track.label_font_size)
         offsets = label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
-        # A Linear band fills _band_height_factor of its lane; an arrow cap is a head of two diagonals.
-        reach = mark_reach(
-            annotation, style, lane_height, fill_share=_band_height_factor(annotation.mark), arrow_heads=True
-        )
+        reach = linear_annotation_mark_reach(annotation, style, lane_height)
         if covers_slots:
             # Beyond the slot edge, or beyond the mark's paint where it passes that edge.
             lane_top = _lane_top(track, placement, row, lane_height, params.padding_px)
@@ -386,6 +395,25 @@ def linear_annotation_label_room(
         far = -(y + top) if above else y + bottom - float(height_px)
         room = max(room, far + float(style.label_offset))
     return room
+
+
+def linear_annotation_mark_reach(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float
+) -> MarkReach:
+    """How far a Linear mark paints across its lane on its label's side (``MarkReach``), where its label stands
+    ``label_offset`` beyond: a band fills ``_band_height_factor`` of its lane, and an arrow cap is a head of two
+    diagonals. The lane packer measures the same paint (``LabelSizing.reach``, ``linear_annotation_mark_past_lane``)."""
+
+    return mark_reach(annotation, style, lane_height, fill_share=_band_height_factor(annotation.mark), arrow_heads=True)
+
+
+def linear_annotation_mark_past_lane(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float
+) -> float:
+    """How far a Linear mark paints past its lane's edge on its label's side (``linear_annotation_mark_reach``):
+    the lane packer's ``MarkReachMeasure``."""
+
+    return linear_annotation_mark_reach(annotation, style, lane_height).past_lane_edge
 
 
 def linear_annotation_label_extent(
@@ -690,7 +718,7 @@ def linear_annotation_track_content(
             if dom_group_id
             else f"gbdraw-annotation-clip-{dom_token(track.slot_id)}-{record_index + 1}"
         )
-        clip_paths.append(frame.clip_path(clip_id, y_offset_px=y_offset_px, bar_length_px=bar_length_px))
+        clip_paths.append(frame.clip_path(clip_id, y_offset_px=y_offset_px, bar_length_px=bar_length_px, labels=labels))
         group.attribs["clip-path"] = f"url(#{clip_id})"
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
@@ -734,6 +762,8 @@ __all__ = [
     "AnnotationSlotFrame",
     "LinearAnnotationLabel",
     "linear_annotation_label_extent",
+    "linear_annotation_mark_past_lane",
+    "linear_annotation_mark_reach",
     "linear_annotation_label_room",
     "linear_annotation_labels",
     "linear_annotation_track_content",

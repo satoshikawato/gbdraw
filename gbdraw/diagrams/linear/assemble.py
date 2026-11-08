@@ -194,6 +194,7 @@ from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import (
     linear_annotation_label_extent,
     linear_annotation_label_room,
+    linear_annotation_mark_past_lane,
     linear_annotation_track_content,
     linear_region_label_front_content,
 )
@@ -410,6 +411,7 @@ def _layout_linear_annotation_tracks(
             labels=LabelSizing(
                 font_size=label_font_size,
                 extent=partial(linear_annotation_label_extent, font_family=font_family, bp_per_px=bp_per_px),
+                reach=linear_annotation_mark_past_lane,
                 bp_per_px=bp_per_px,
                 # A disabled slot is not drawn.
                 labels_above=side is not None and linear_annotation_labels_above(side, params),
