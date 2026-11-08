@@ -128,23 +128,20 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({gridColumn: null, gridRow: null, label: null, reverseComplement: false, subtitle: null})
     }),
-    CanonicalRecordRegion: Object.freeze({
+    CanonicalRecordWindow: Object.freeze({
       kind: "object",
       fields: Object.freeze({
-        selector: Object.freeze({
+        start: Object.freeze({kind: "integer", minimum: 1}),
+        end: Object.freeze({kind: "integer", minimum: 1}),
+        reverseComplement: Object.freeze({kind: "boolean"}),
+        column: Object.freeze({
           kind: "union",
-          options: Object.freeze([
-            Object.freeze({kind: "ref", name: "CanonicalRecordSelector"}),
-            Object.freeze({kind: "null"})
-          ])
-        }),
-        start: Object.freeze({kind: "integer"}),
-        end: Object.freeze({kind: "integer"}),
-        reverseComplement: Object.freeze({kind: "boolean"})
+          options: Object.freeze([Object.freeze({kind: "integer", minimum: 1}), Object.freeze({kind: "null"})])
+        })
       }),
       optional: Object.freeze([]),
       open: false,
-      defaults: Object.freeze({selector: null})
+      defaults: Object.freeze({column: null})
     }),
     CanonicalRecord: Object.freeze({
       kind: "object",
@@ -157,17 +154,14 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "null"})
           ])
         }),
-        region: Object.freeze({
-          kind: "union",
-          options: Object.freeze([Object.freeze({kind: "ref", name: "CanonicalRecordRegion"}), Object.freeze({kind: "null"})])
-        }),
         presentation: Object.freeze({kind: "ref", name: "CanonicalRecordPresentation"}),
         recordKey: Object.freeze({
           kind: "string",
           pattern: "[^\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]"
         }),
         cardinality: Object.freeze({kind: "literal", values: Object.freeze(["exactly_one", "first", "all"])}),
-        display: Object.freeze({kind: "ref", name: "CanonicalRecordDisplayOptions"})
+        display: Object.freeze({kind: "ref", name: "CanonicalRecordDisplayOptions"}),
+        windows: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecordWindow"})})
       }),
       optional: Object.freeze([]),
       open: false,
@@ -175,8 +169,8 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         cardinality: "exactly_one",
         display: Object.freeze({isCircular: null, startCoordinate: null}),
         presentation: Object.freeze({label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null}),
-        region: null,
-        selector: null
+        selector: null,
+        windows: Object.freeze([])
       })
     }),
     CanonicalRequestOutput: Object.freeze({
@@ -1537,7 +1531,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
     CanonicalCircularRenderRequest: Object.freeze({
       kind: "object",
       fields: Object.freeze({
-        schema: Object.freeze({kind: "literal", values: Object.freeze([9])}),
+        schema: Object.freeze({kind: "literal", values: Object.freeze([10])}),
         mode: Object.freeze({kind: "literal", values: Object.freeze(["circular"])}),
         grouping: Object.freeze({
           kind: "union",
@@ -1583,7 +1577,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
     CanonicalLinearRenderRequest: Object.freeze({
       kind: "object",
       fields: Object.freeze({
-        schema: Object.freeze({kind: "literal", values: Object.freeze([9])}),
+        schema: Object.freeze({kind: "literal", values: Object.freeze([10])}),
         mode: Object.freeze({kind: "literal", values: Object.freeze(["linear"])}),
         grouping: Object.freeze({kind: "literal", values: Object.freeze(["single"])}),
         records: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalRecord"}), minItems: 1}),

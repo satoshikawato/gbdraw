@@ -1444,6 +1444,49 @@ def _decode_selector(value: object, *, path: str) -> RecordSelector | None:
     raise CanonicalRequestDecodingError(f"Unsupported selector kind at {path}: {kind!r}.")
 
 
+class StoredRecordWindow(TypedDict):
+    """One window of a stored request record, as schema 10 writes it."""
+
+    start: object
+    end: object
+    reverseComplement: object
+    column: object
+
+
+def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]:
+    """The windows of a stored request record of any schema, as schema 10 writes them.
+
+    The one reader of a record's spans in a stored payload that is not decoded
+    (Session hash and receipt readers): schema 10 writes ``windows``; a schema
+    <= 9 ``region`` is one window, read as :func:`_decode_record` reads it. The
+    values are as stored; the request decode validates them.
+    """
+
+    windows = record.get("windows")
+    if isinstance(windows, list):
+        return [
+            StoredRecordWindow(
+                start=item.get("start"),
+                end=item.get("end"),
+                reverseComplement=item.get("reverseComplement"),
+                column=item.get("column"),
+            )
+            for item in windows
+            if isinstance(item, Mapping)
+        ]
+    region = record.get("region")
+    if isinstance(region, Mapping):
+        return [
+            StoredRecordWindow(
+                start=region.get("start"),
+                end=region.get("end"),
+                reverseComplement=region.get("reverseComplement"),
+                column=None,
+            )
+        ]
+    return []
+
+
 def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     if value is None:
         return None
@@ -6113,6 +6156,8 @@ def describe_canonical_request() -> dict[str, Any]:
 
 
 __all__ = [
+    "StoredRecordWindow",
+    "stored_record_windows",
     "decode_record_selector",
     "encode_annotation_set",
     "CANONICAL_REQUEST_SCHEMA",

@@ -763,10 +763,8 @@ def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query
     options = LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, evidence),))
     baseline = replace(baseline, options=options)
     assert plan_linear_request(baseline).request.options.linear_comparisons[0].matches is evidence
-    reversed_request = replace(baseline, records=tuple(replace(item,
-        region=replace(item.region, reverse_complement=reverse) if item.region else None,
-        presentation=RecordPresentation(reverse_complement=reverse if not item.region else False))
-        for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
+    reversed_request = replace(baseline, records=tuple(
+        item.oriented(reverse) for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
     after = plan_linear_request(reversed_request)
     assert after.request.options.linear_comparisons[0].matches is evidence
     projected = project_source_bound_results(

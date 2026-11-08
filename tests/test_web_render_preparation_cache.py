@@ -828,12 +828,7 @@ def test_semantic_changes_invalidate_only_the_dependent_layers(
     record = records[0]
     assert isinstance(record, dict)
     if "region" in kwargs:
-        record["region"] = {
-            "selector": None,
-            "start": 20,
-            "end": 400,
-            "reverseComplement": False,
-        }
+        record["windows"] = [{"start": 20, "end": 400, "reverseComplement": False, "column": None}]
     if "reverse" in kwargs:
         presentation = record["presentation"]
         assert isinstance(presentation, dict)

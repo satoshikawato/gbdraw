@@ -49,6 +49,7 @@ from gbdraw.api.session_compat import (
 )
 from gbdraw.exceptions import ValidationError
 from tests.utils.session_drawing_view import build_mode_scoped_session_document, build_mode_scoped_session_json, drawing_view, session_view
+from tests.test_session_request_codec import _windows_as_region
 from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
@@ -546,6 +547,7 @@ def _released_canonical_session(
     payload = data["renderRequest"]
     assert isinstance(payload, dict)
     payload["schema"] = request_schema
+    _windows_as_region(payload, request_schema)
     payload["diagramOptions"].pop("featureOverrides", None)
     if request_schema < 7:
         for record in payload["records"]:

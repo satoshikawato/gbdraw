@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
@@ -52,7 +53,8 @@ def test_raw_defaults_frozen_export_and_positional_compatibility():
     assert record.cardinality is RecordCardinality.ALL
     assert record.display == options
     assert record.display is not RecordInput(source).display
-    assert [f.name for f in fields(RecordInput)] == [
+    # ``region`` is the input of one window, so it is a parameter in its old place, not a field.
+    assert list(inspect.signature(RecordInput).parameters) == [
         "source",
         "selector",
         "region",
@@ -60,6 +62,16 @@ def test_raw_defaults_frozen_export_and_positional_compatibility():
         "record_key",
         "cardinality",
         "display",
+        "windows",
+    ]
+    assert [f.name for f in fields(RecordInput)] == [
+        "source",
+        "selector",
+        "presentation",
+        "record_key",
+        "cardinality",
+        "display",
+        "windows",
     ]
     explicit = RecordDisplayOptions(True, 5)
     assert RecordInput(source, display=explicit).display is explicit

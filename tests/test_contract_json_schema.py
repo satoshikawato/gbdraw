@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -35,12 +35,37 @@ READ_AS_THE_WEB_READS = {"integral-fraction-at-an-integer"}
 RETIRED_SESSIONS = sorted((REPO_ROOT / "tests" / "retired_sessions").glob("*.gbdraw-session.json*"))
 
 
+def _as_schema_10(value: object) -> object:
+    """A stored schema 9 request as the decoder reads it: each record's ``region`` is one of its ``windows``."""
+
+    if isinstance(value, dict):
+        if value.get("schema") == 9 and "diagramOptions" in value and isinstance(value.get("records"), list):
+            value = {**value, "schema": 10, "records": [
+                {
+                    **{key: item for key, item in record.items() if key != "region"},
+                    "windows": [] if record.get("region") is None else [{
+                        **{key: record["region"][key] for key in ("start", "end", "reverseComplement")},
+                        "column": None,
+                    }],
+                }
+                for record in value["records"]
+            ]}
+        return {key: _as_schema_10(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_as_schema_10(item) for item in value]
+    return value
+
+
 def _sessions() -> list[tuple[str, dict[str, Any]]]:
     found = []
     for path in [*stored_json_files(), *RETIRED_SESSIONS]:
         document = load_json(path)
         if isinstance(document, dict) and document.get("format") == "gbdraw-session":
-            found.append((str(path.relative_to(REPO_ROOT)), document))
+            # A retired Session stores the schema 9 request of its time (its region selectors are null).
+            found.append((
+                str(path.relative_to(REPO_ROOT)),
+                cast(dict[str, Any], _as_schema_10(document)) if path in RETIRED_SESSIONS else document,
+            ))
     return found
 
 

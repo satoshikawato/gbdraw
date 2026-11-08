@@ -13,7 +13,7 @@ only on `dev`. A Session version changes when a breaking change enters `main`;
 a later breaking change made before that version reaches `main` goes into its
 entry ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 51 stores drawings
+## Unreleased: Session 51 stores drawings; request schema 10 writes record windows
 
 Session version 51 replaces the two diagram-mode slices of Sessions 46 to 50
 with a list of drawings, so a project can hold several drawings of one mode
@@ -53,7 +53,7 @@ given without GFF3, named by `fastaResourceId` and stored as a resource of kind
 topology claim. The Web app writes it for the input type `fasta` (the third
 source choice, `config.inputType` / `webFiles.bindings.c_fasta` or a Linear
 card's `fasta` slot), and the CLI writes it for `--fasta` without `--gff` and for
-a records table row with only a `fasta` path. Request schema 9 is unchanged:
+a records table row with only a `fasta` path. This adds no request schema:
 the kind is a new value of the record source's `kind`. Fixture:
 `tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz`.
 
@@ -78,7 +78,7 @@ The full `config` that the CLI and Python store in a Session 51 request no longe
 a Linear canvas leaf that no code read (the canvas padding is `canvas.padding`). Readers still load a stored config
 that has it (`GbdrawConfig.from_dict` reads named keys only) and draw the same figure; an override of that path is
 checked as a number and dropped (`RETIRED_CONFIG_LEAVES` in `gbdraw/config/modify.py`). The generated contracts, the
-Session version and request schema 9 do not change. 0.14.5 requires the key in a stored config, but it refuses a
+Session version and the request schema do not change for it. 0.14.5 requires the key in a stored config, but it refuses a
 Session 51 by its version before it reads the config. Fixtures that store the key stay as they are, for example
 `tests/fixtures/sessions/cli-linear-wrapped.v50.gbdraw-session.json.gz`.
 
@@ -112,7 +112,7 @@ fractions from 0 to 1 in query order (a hit over a part of its query), written o
 `direction`, `forward` or `reverse`, which way that order runs on the record's source strand. A `band` or `highlight` mark draws it along the region in place of its fill (`gbdraw/render/drawers/annotation_marks.py`,
 `gradient_steps`), and the Legend draws one bar per caption and pair of colours, from "start" to "end". The writer
 writes the key only when a style has a gradient, so every request without one encodes byte for byte as before; the
-reader reads an absent or null key as no gradient. Request schema 9 is unchanged: the key is a new optional field
+reader reads an absent or null key as no gradient. This adds no request schema: the key is a new optional field
 of the request description (`CanonicalAnnotationGradient`). Session 51 has not reached `main`, so the version does
 not change; `main`'s build (0.14.5) refuses every Session 51 file. Positive fixture:
 `tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz` (Python `save_session_document`).
@@ -124,7 +124,7 @@ the feature track, covering its features, also in an explicit track stack (Use c
 set: `prepare_annotation_track_slots` adds the set's automatic highlight overlay after the stack's slots, in front of
 the stack's feature track. A slot that names the set takes its place; other sets keep following the stack. The writer
 writes the key only when it is true, so every other set encodes as before; the reader reads an absent key as false.
-Request schema 9 is unchanged (a new optional field of `CanonicalAnnotationSet`). The same positive fixture holds it.
+This adds no request schema (a new optional field of `CanonicalAnnotationSet`). The same positive fixture holds it.
 
 Session 51 also adds an optional `strand` (`"+"` or `"-"`) to an annotation row (`diagramOptions.annotations.sets[].annotations[]`,
 and the Web draft `config.annotationSets[].annotations[]`; the same receipt, its strand line): the strand on the
@@ -132,8 +132,19 @@ record's source that a Sequence search hit lies on (`gbdraw/annotations/search_h
 row's highlight covers a feature track that separates the strands (`cover_anchor`), it covers that strand's lane as
 the record is drawn (a reverse-complemented record draws the source's plus strand as its minus strand); a row without
 it covers the whole feature track, as before. The writer writes the key only when it is set, so every other row
-encodes as before; the reader reads an absent key as no strand. Request schema 9 is unchanged (a new optional field of
+encodes as before; the reader reads an absent key as no strand. This adds no request schema (a new optional field of
 `CanonicalRegionAnnotation`). The same positive fixture holds it.
+
+Request schema 10 writes a record's spans as `windows`, a list of `{start, end, reverseComplement, column}` in the
+record's source coordinates, in place of `region` (`{selector, start, end, reverseComplement}` or null). A record
+drawn as one span has one window with a null `column` (the presentation's `gridColumn` places it), and a record
+with no crop has none. A crop names its record in the record's own `selector`, not in the region. Schemas 1 to 9
+write `region`; the decoder reads it as one window and a selector inside it as the record's selector, and a stored
+`region` is read the same way wherever a payload is read undecoded (`stored_record_windows` in
+`gbdraw/session_request_codec.py`). Session 51 has not reached `main`, so the version does not change and its
+requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*` and the documentation and Gallery
+Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
+refuses every Session 51 file by its version.
 
 ## Unreleased: the Web reads request text patterns as Python does
 

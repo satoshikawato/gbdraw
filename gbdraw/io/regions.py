@@ -111,18 +111,6 @@ class RecordWindow:
         )
 
 
-def check_disjoint_windows(spans: Sequence[tuple[int, int]], record_name: str) -> None:
-    """Refuse windows of one record that share a base (each base is drawn once)."""
-
-    ordered = sorted(spans)
-    for (start, end), (next_start, next_end) in zip(ordered, ordered[1:]):
-        if next_start <= end:
-            raise ValueError(
-                f"Windows {start}-{end} and {next_start}-{next_end} of record {record_name} overlap; "
-                "windows of one record must not share a base."
-            )
-
-
 def _extract_parenthetical(selector: str) -> str | None:
     match = re.search(r"\(([^()]+)\)\s*$", selector)
     if not match:
@@ -447,7 +435,7 @@ def crop_record_windows(
     The one owner of that order: a record's ``reverse`` flag applies after its
     crop, as the spec's own ``:rc`` does, so both spellings draw one window and
     asking for both reverses once. A record without a window is only reversed.
-    Windows of one record must not overlap, and a record with several windows
+    Windows of one record may overlap (D-18); a record with several windows
     orients each window by its own flag (D-01).
     """
 
@@ -459,7 +447,6 @@ def crop_record_windows(
             raise ValueError(
                 f"Record {record.id} has several windows; reverse-complement each window, not the record."
             )
-        check_disjoint_windows([(spec.start, spec.end) for spec in specs], str(record.id))
     return tuple(
         crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or reverse), log=log)
         for spec in specs
@@ -492,7 +479,6 @@ __all__ = [
     "RegionSpec",
     "apply_region_specs",
     "assign_region_specs",
-    "check_disjoint_windows",
     "crop_record_to_region",
     "crop_record_windows",
     "crop_then_reverse_records",

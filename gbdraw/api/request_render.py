@@ -92,7 +92,7 @@ from gbdraw.features.placement import (
 )
 from gbdraw.features.source import (
     FeatureIdentity,
-    IdentityBinding,
+    IdentityBindings,
     SourceFeatureIdentity,
     capture_source_features,
 )
@@ -516,7 +516,7 @@ class PreparedDiagramInputs:
     record_features: tuple[ResolvedRecordFeatureInputs, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
     # Annotation featureIdentity targets, keyed by (record key, feature ID).
-    feature_bindings: Mapping[tuple[str, str], IdentityBinding] | None = None
+    feature_bindings: Mapping[tuple[str, str], IdentityBindings] | None = None
     # Source parses shared by the loads of one ``_load_request_records`` call.
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = field(default=None, repr=False, compare=False)
 
@@ -1382,7 +1382,7 @@ def _identity_table_context(collection: ResolvedRecordCollection) -> _IdentityTa
     """The records an identity table names: ``#index`` and record IDs select among them."""
     return {
         "records": collection.records,
-        "record_keys": tuple(item.record_key for item in collection.provenance),
+        "record_keys": tuple(item.record_identity_key for item in collection.provenance),
         "source_record_ids": tuple(item.source_record_id for item in collection.provenance),
         "source_catalogs": _source_catalogs(collection),
     }
@@ -1887,7 +1887,7 @@ def _materialize_feature_inputs(
         return inputs
     resolution = resolve_record_feature_inputs(
         records=collection.records,
-        record_keys=tuple(item.record_key for item in collection.provenance),
+        record_keys=tuple(item.record_identity_key for item in collection.provenance),
         source_catalogs=_source_catalogs(collection), placements=options.feature_placements,
         mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
         feature_overrides=options.feature_overrides,

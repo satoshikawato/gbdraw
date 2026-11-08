@@ -333,7 +333,7 @@ def test_an_upgrade_replaces_the_removed_anchor_mode_in_both_copies(caplog: pyte
 
     from gbdraw.session import upgrade_session_document
     from gbdraw.session_drawings import checked_drawing_views
-    from tests.test_session_contract import _admission_problems, _problems
+    from tests.test_session_contract import _admission_problems, _problems, _with_current_request
 
     with caplog.at_level("WARNING"):
         upgraded = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
@@ -342,7 +342,8 @@ def test_an_upgrade_replaces_the_removed_anchor_mode_in_both_copies(caplog: pyte
     assert _stored_anchor_modes(upgraded) == ["rbh", "rbh"]
     # The description describes each drawing's one-drawing view; the band, the project.
     assert _admission_problems(upgraded) == []
-    assert [_problems(view) for view in checked_drawing_views(upgraded)] == [[]]
+    # An upgrade keeps the request's schema 9 (the readers read it); the description is of the current one.
+    assert [_problems(_with_current_request(view)) for view in checked_drawing_views(upgraded)] == [[]]
     warnings = [record.getMessage() for record in caplog.records if "was removed" in record.getMessage()]
     assert [warning.split(":")[0] for warning in warnings] == [
         "renderRequest.comparisons[0].settings.collinearityAnchorMode",

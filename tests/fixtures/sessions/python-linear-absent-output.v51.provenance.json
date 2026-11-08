@@ -8,8 +8,8 @@
     "tests/test_inputs/NC_001416.gb": "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"
   },
   "values": "drawings[0].renderRequest.diagramOptions has no output; plotTitle 'Enterobacteria phage lambda'",
-  "decompressedSha256": "599952a99b445c5ef990188988c42906d14b4be37e31a04acbf8b1517c2fa79d",
+  "decompressedSha256": "85f7e31ed636d27cbf89137e44056a259a3ec05f6227f9331b8a3a5079f5956e",
   "compression": "gzip level 9, mtime 0 (Python gzip.compress)",
   "sessionVersion": 51,
-  "requestSchema": 9
+  "requestSchema": 10
 }

@@ -282,6 +282,12 @@ def record_identity_key(record: object) -> str | None:
     return None if key is None else str(key)
 
 
+def is_window_of(record: object, record_key: str) -> bool:
+    """Whether ``record`` is a drawn unit that is one of several windows of the record ``record_key``."""
+
+    return (getattr(record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION) == record_key
+
+
 def _read_coord_map(record: object) -> tuple[int, int]:
     annotations = getattr(record, "annotations", None) or {}
     try:

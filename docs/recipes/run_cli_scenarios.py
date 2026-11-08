@@ -1536,7 +1536,7 @@ def _assert_table_inputs(workdir: Path) -> None:
     ]
     if (
         records.record_ids != expected_ids
-        or records.multi_record_positions() != ["#1@1", "#2@1", "#3@2", "#4@2"]
+        or [row.row for row in records.rows] != [1, 1, 2, 2]
         or [row.column for row in records.rows] != [1, 2, 1, 2]
     ):
         raise RecipeContractError("H-CLI-02 records table semantics changed.")

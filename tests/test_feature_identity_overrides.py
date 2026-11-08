@@ -88,7 +88,7 @@ def _drawn_id(plan, record_index: int, biological_feature_id: str) -> str:
 def _drawn_location_hash(plan, record_index: int, biological_feature_id: str) -> str:
     """The hash of the location a feature is drawn at in its cropped record."""
     identity = FeatureIdentity(plan.provenance[record_index].record_key, biological_feature_id)
-    binding = resolve_feature_identities(
+    (binding,) = resolve_feature_identities(
         records=plan.records,
         record_keys=tuple(item.record_key for item in plan.provenance),
         source_catalogs=tuple(item.source_feature_catalog for item in plan.provenance),
@@ -561,7 +561,7 @@ def test_override_binding_reads_each_record_catalog_once():
 
     rows = tuple(FeatureOverride("k", entry.biological_feature_id, label_text="x") for entry in catalog[:3])
     bindings = {
-        row.identity: IdentityBinding(0, entry.source_feature_index, "present")
+        row.identity: (IdentityBinding(0, entry.source_feature_index, "present"),)
         for row, entry in zip(rows, catalog, strict=False)
     }
     [resolved] = bind_feature_overrides(rows, bindings, (CountingCatalog(catalog),))

@@ -1542,7 +1542,7 @@
      "resourceId": "record-1-genbank"
     },
     "selector": null,
-    "region": null,
+    "windows": [],
     "presentation": {
      "label": null,
      "subtitle": null,
@@ -1573,7 +1573,7 @@
      "resourceId": "record-1-genbank"
     },
     "selector": null,
-    "region": null,
+    "windows": [],
     "presentation": {
      "label": null,
      "subtitle": null,

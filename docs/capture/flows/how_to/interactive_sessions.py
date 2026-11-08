@@ -70,7 +70,7 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_RENDER_REQUEST_SCHEMA = 9
+CURRENT_RENDER_REQUEST_SCHEMA = 10
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
     -webkit-backdrop-filter: none !important;

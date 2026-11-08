@@ -3672,25 +3672,25 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
         args = ["--gbk", str(single), str(multi),
                 "--region", "cli_single:21-300", "--region", "cli_multi_b:21-300",
                 "--reverse_complement", "0", "--reverse_complement", "1"]
-        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": False}
+        single_region = [{"start": 21, "end": 300, "reverseComplement": False, "column": None}]
     else:
         args = ["--records_table", str(_write_records_table(tmp_path))]
-        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": True}
+        single_region = [{"start": 21, "end": 300, "reverseComplement": True, "column": None}]
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [
-        (record["source"]["resourceId"], record["selector"], record["region"],
+        (record["source"]["resourceId"], record["selector"], record["windows"],
          record["presentation"]["reverseComplement"])
         for record in records
     ] == [
         (first, None, single_region, False),
-        (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
+        (second, {"kind": "recordId", "value": "cli_multi_a"}, [], True),
         # Cropped to source 21..300, then reversed.
-        (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
-                        "start": 21, "end": 300, "reverseComplement": True}, False),
+        (second, {"kind": "recordId", "value": "cli_multi_b"},
+         [{"start": 21, "end": 300, "reverseComplement": True, "column": None}], False),
     ]
     assert _resource_bytes(session, first) == single.read_bytes()
     assert _resource_bytes(session, second) == multi.read_bytes()
@@ -3742,9 +3742,9 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
-    assert [(record["source"]["resourceId"], record["selector"], record["region"])
+    assert [(record["source"]["resourceId"], record["selector"], record["windows"])
             for record in records] == [
-        (first, None, None), *((second, selector, None) for selector in selected)
+        (first, None, []), *((second, selector, []) for selector in selected)
     ]
     assert sorted(session["resources"]) == sorted({first, second})
     assert _resource_bytes(session, first) == single.read_bytes()
@@ -3781,8 +3781,8 @@ def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
-    assert [(record["region"], record["presentation"]["reverseComplement"])
-            for record in records] == [(None, False)] * 3
+    assert [(record["windows"], record["presentation"]["reverseComplement"])
+            for record in records] == [([], False)] * 3
     assert {
         _resource_bytes(session, record["source"]["resourceId"]) for record in records
     }.isdisjoint({single.read_bytes(), multi.read_bytes()})
@@ -3816,8 +3816,8 @@ def test_single_circular_session_records_crop_on_the_unchanged_input_file(
     document = drawing_view(document)
 
     [record] = document["renderRequest"]["records"]
-    assert (record["selector"], record["region"], record["presentation"]["reverseComplement"]) == (
-        None, {"selector": None, "start": 21, "end": 300, "reverseComplement": True}, False
+    assert (record["selector"], record["windows"], record["presentation"]["reverseComplement"]) == (
+        None, [{"start": 21, "end": 300, "reverseComplement": True, "column": None}], False
     )
     assert _resource_bytes(document, record["source"]["resourceId"]) == single.read_bytes()
 

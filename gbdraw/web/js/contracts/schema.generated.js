@@ -43,7 +43,7 @@ export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
 export const DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION = 47;
 
 // gbdraw/session_request_codec.py: CANONICAL_REQUEST_SCHEMA
-export const CANONICAL_REQUEST_SCHEMA = 9;
+export const CANONICAL_REQUEST_SCHEMA = 10;
 
 // gbdraw/session_request_codec.py: DISPLAY_PLACEMENT_SCHEMA
 export const DISPLAY_PLACEMENT_SCHEMA = 7;
@@ -53,7 +53,7 @@ export const FEATURE_OVERRIDE_SCHEMA = 9;
 
 // gbdraw/session_request_codec.py: SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 /** @type {readonly number[]} */
-export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9]);
+export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9, 10]);
 
 // gbdraw/layout/similarity_alignment.py: SIMILARITY_ALIGNMENT_PLAN_SCHEMA
 export const SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2;
@@ -190,8 +190,8 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
   renderProtocol: 4,
   request: Object.freeze({
-    currentSchema: 9,
-    supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9]),
+    currentSchema: 10,
+    supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9, 10]),
     unknownFieldPolicy: 'reject'
   }),
   resources: Object.freeze({

@@ -966,7 +966,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help=(
             'Crop a region (repeatable). Format: record_id:start-end[:rc], #index:start-end[:rc], '
             'or file:record_selector:start-end[:rc]. '
-            'Coordinates are 1-based inclusive. For multiple records without selectors, provide one spec per record in input order (file order, then record order within each file). Repeat --region for one record to draw several windows of it side by side in one row; the windows must not overlap.'
+            'Coordinates are 1-based inclusive. For multiple records without selectors, provide one spec per record in input order (file order, then record order within each file). Repeat --region for one record to draw several windows of it side by side in one row; windows may overlap.'
         ),
         type=str,
         action='append',

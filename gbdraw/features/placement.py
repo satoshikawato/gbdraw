@@ -25,7 +25,7 @@ from .ids import feature_instances
 from .shapes import resolve_feature_rendering
 from .source import (
     FeatureIdentity,
-    IdentityBinding,
+    IdentityBindings,
     SourceFeatureIdentity,
     read_identity_table,
     resolve_feature_identities,
@@ -176,8 +176,8 @@ class RecordFeatureResolution:
 
     records: tuple[ResolvedRecordFeatureInputs, ...]
     notices: tuple[FeatureIdentityNotice, ...]
-    # Every requested identity, including annotation targets.
-    bindings: Mapping[FeatureIdentity, IdentityBinding]
+    # Every requested identity, including annotation targets, in each unit that draws it.
+    bindings: Mapping[FeatureIdentity, IdentityBindings]
 
 
 _PLACEMENT_TABLE = "Feature placement table"
@@ -278,11 +278,15 @@ def resolve_record_feature_inputs(
     # Nested source features are never foreground placement units.
     top_level = {
         index: {id(feature) for feature in records[index].features}
-        for index in {bindings[item.identity].record_index for item in exact}
+        for index in {binding.record_index for item in exact for binding in bindings[item.identity]}
     }
     instances = {index: feature_instances(records[index]) for index in top_level}
-    for placement_index, item in enumerate(exact):
-        binding = bindings[item.identity]
+    # A placement applies in every unit that draws its feature (one instance, D-18).
+    for placement_index, item, binding in (
+        (placement_index, item, binding)
+        for placement_index, item in enumerate(exact)
+        for binding in bindings[item.identity]
+    ):
         if binding.status == "unresolved":
             continue
         record = records[binding.record_index]
@@ -327,17 +331,17 @@ def resolve_record_feature_inputs(
         FeatureIdentityNotice(
             identity.record_key, identity.biological_feature_id,
             # Present identities are filtered out below.
-            cast("Literal['crop_excluded', 'absent', 'unresolved']", bindings[identity].status),
+            cast("Literal['crop_excluded', 'absent', 'unresolved']", bindings[identity][0].status),
             tuple(edit_kinds),
-            bindings[identity].record_index,
+            bindings[identity][0].record_index,
         )
         for identity, edit_kinds in sorted(
             kinds.items(),
             key=lambda item: (
-                bindings[item[0]].record_index, item[0].biological_feature_id
+                bindings[item[0]][0].record_index, item[0].biological_feature_id
             ),
         )
-        if bindings[identity].status != "present"
+        if bindings[identity][0].status != "present"
     )
     return RecordFeatureResolution(
         tuple(

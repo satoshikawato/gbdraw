@@ -40,9 +40,12 @@ write-up of a release.
   `RecordInput.windows`. The windows keep one record identity, so a feature
   cut by a window edge keeps one colour. A new drawing from regions accepts several
   regions of one record. Request schema 10 writes a record's `windows`; older
-  requests read their `region` as one window. Overlapping windows, a record-wide
-  reverse complement with several windows, and several windows in Circular are
-  refused.
+  requests read their `region` as one window. Windows of one record may
+  overlap: a feature in two windows is drawn in both and edited as one. A
+  record-wide reverse complement with several windows, several windows in
+  Circular, and (Python API) a `RecordCollectionOptions` region on a record
+  that already has windows or a region are refused; no command line, Web, or
+  Session request writes both.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

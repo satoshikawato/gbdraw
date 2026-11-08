@@ -1534,11 +1534,17 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
                 identity[key] = fingerprints[value]
         return identity
 
+    from .session_request_codec import stored_record_windows
+
+    def region_binding(record: Mapping[str, Any]) -> object:
+        # One window binds as the region it was before windows (request schema 10), so stored receipts still match.
+        spans = [{"start": window["start"], "end": window["end"]} for window in stored_record_windows(record)]
+        return spans[0] if len(spans) == 1 else spans or None
+
     records = [{
         "recordKey": record["recordKey"], "source": source_identity(record["source"]),
         "selector": record["selector"],
-        "region": ({"start": record["region"]["start"], "end": record["region"]["end"]}
-                   if record.get("region") else None), "display": record["display"],
+        "region": region_binding(record), "display": record["display"],
     } for record in request["records"]]
     binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"].encode("utf-16be"))},
                "records": sorted(records, key=lambda item: item["recordKey"].encode("utf-16be"))}
@@ -2511,15 +2517,14 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     rotation or a region that only selects a record changes no hash).
     """
 
-    region = record.get("region")
+    from .session_request_codec import stored_record_windows
+
     presentation = record.get("presentation")
-    return (
-        isinstance(region, Mapping)
-        and (
-            _nonnegative_integer(region.get("start")) is not None
-            or _nonnegative_integer(region.get("end")) is not None
-            or _js_truthy(region.get("reverseComplement"))
-        )
+    return any(
+        _nonnegative_integer(window["start"]) is not None
+        or _nonnegative_integer(window["end"]) is not None
+        or _js_truthy(window["reverseComplement"])
+        for window in stored_record_windows(record)
     ) or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
 
 
@@ -2798,10 +2803,14 @@ def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped, reverse-complemented, or rotated.
     """
 
+    from .session_request_codec import stored_record_windows
+
     presentation = record.get("presentation")
     display = record.get("display")
     return (
+        # A schema <= 9 region counts by JavaScript truthiness, as the Web reader reads it.
         _js_truthy(record.get("region"))
+        or bool(stored_record_windows(record))
         or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
         or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
     )

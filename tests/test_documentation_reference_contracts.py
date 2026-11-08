@@ -95,9 +95,9 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50, 51}
     )
-    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})
+    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9, 10})
     assert "27–33, 39–42, 44, and 46–51" in source
-    assert "1, 2, 5, 6, 7, 8, and 9" in source
+    assert "1, 2, 5, 6, 7, 8, 9, and 10" in source
 
 
 def test_reference_pages_name_the_current_session_version() -> None:

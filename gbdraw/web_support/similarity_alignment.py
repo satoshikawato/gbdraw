@@ -402,7 +402,10 @@ def _serialize_projection(context, candidates, raw_request):
         record_raw = raw["canonicalRequest"]["records"][index]
         binding_records.append({
             "record": {"recordKey": key, "source": record_raw["source"],
-                       "selector": record_raw["selector"], "region": record_raw["region"],
+                       "selector": record_raw["selector"],
+                       # Request schema 10 binds a record's windows; an older request its region, as it bound before.
+                       **({"windows": record_raw["windows"]} if "windows" in record_raw
+                          else {"region": record_raw["region"]}),
                        "display": {"isCircular": provenance.display.is_circular,
                                    "startCoordinate": provenance.display.start_coordinate},
                        "cardinality": provenance.cardinality.value},

@@ -62,6 +62,7 @@ from ...configurators import (
 from ...configurators.bundle import DiagramConfigurators
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
+from ...core.record_metadata import WINDOW_OF_ANNOTATION
 from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
     GroupContent,
@@ -611,6 +612,8 @@ def _serialize_linear_track_slot_geometry(
 
     base_by_id = {slot.id: slot for slot in layout.slots}
     records_payload: list[dict[str, Any]] = []
+    # The windows of a record drawn so far: a window's entry names its record and its place among the record's windows.
+    window_counts: dict[str, int] = {}
     for record_index, drawn in enumerate(record_axes):
         axis_y = float(record_offsets[record_index]) if record_index < len(record_offsets) else 0.0
         placement = record_placements[record_index]
@@ -637,12 +640,19 @@ def _serialize_linear_track_slot_geometry(
             )
         record_id = str(getattr(drawn.record, "id", "") or "")
         row_bands = [(row.axis_offset_y, row.plan.feature_lanes_band.translate(row.axis_offset_y)) for row in plan.rows]
+        window_of = (getattr(drawn.record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION)
+        window_entry: dict[str, Any] = {}
+        if window_of is not None:
+            window_entry = {"windowIndex": window_counts.get(str(window_of), 0)}
+            window_counts[str(window_of)] = window_entry["windowIndex"] + 1
         records_payload.append(
             {
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
-                "recordKey": drawn.record_key,
+                # A window of a record with several names its record and its window (D-01); any other names itself.
+                "recordKey": drawn.record_key if window_of is None else str(window_of),
+                **window_entry,
                 "axis": linear_axis_geometry(
                     drawn,
                     rows=[(axis, band.top_y, band.bottom_y) for axis, band in row_bands],

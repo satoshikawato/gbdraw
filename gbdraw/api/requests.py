@@ -6,7 +6,7 @@ They intentionally do not parse session documents or expose CLI argument names.
 
 from __future__ import annotations
 
-from dataclasses import InitVar, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PureWindowsPath
 from typing import Literal, Sequence, TypeAlias, cast
@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.io.regions import RecordWindow, RegionSpec, check_disjoint_windows
+from gbdraw.io.regions import RecordWindow, RegionSpec
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentPlan,
     SimilarityAlignmentReference,
@@ -215,28 +215,78 @@ class RecordDisplayOptions:
                 raise ValidationError("An explicit display start requires a circular record.")
 
 
-@dataclass(frozen=True)
+# The defaults of ``RecordInput``'s presentation and display: an input left at them gets a new value of its own.
+_NEW_PRESENTATION = RecordPresentation()
+_NEW_DISPLAY = RecordDisplayOptions()
+
+
+@dataclass(frozen=True, init=False)
 class RecordInput:
     """A record source plus selection, windows, and presentation metadata.
 
     ``windows`` are the spans of the record drawn, each its own unit of a
     Linear row (D-01); none draws the whole record. A record drawn as one unit
     is placed by its presentation's ``grid_column``; the windows of a record
-    with several are placed by their own ``column``. ``region`` is input only
-    (not a field): a region, with its optional record selector, is read as one
-    window at construction (D-09).
+    with several are placed by their own ``column``. ``region`` is not a
+    field: a region given at construction, with its optional record selector,
+    is read as one window (D-09); read back, ``region`` is that one window
+    named by the record's selector, ``None`` without windows, and an error
+    with several (D-20). Windows of one record may overlap (D-18).
+    ``dataclasses.replace`` copies ``windows``, never ``region``.
     """
 
     source: RecordInputSource
     selector: RecordSelector | None = None
-    region: InitVar[RegionSpec | None] = None
     presentation: RecordPresentation = field(default_factory=RecordPresentation)
     record_key: str | None = None
     cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE
     display: RecordDisplayOptions = field(default_factory=RecordDisplayOptions)
     windows: Sequence[RecordWindow] = ()
 
-    def __post_init__(self, region: RegionSpec | None) -> None:
+    def __init__(
+        self,
+        source: RecordInputSource,
+        selector: RecordSelector | None = None,
+        region: RegionSpec | None = None,
+        presentation: RecordPresentation = _NEW_PRESENTATION,
+        record_key: str | None = None,
+        cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE,
+        display: RecordDisplayOptions = _NEW_DISPLAY,
+        windows: Sequence[RecordWindow] = (),
+    ) -> None:
+        # The positional order of the fields before windows (D-09): ``region`` stays third. Each input left at its
+        # default gets its own presentation and display, as the fields' default factories give.
+        presentation = RecordPresentation() if presentation is _NEW_PRESENTATION else presentation
+        display = RecordDisplayOptions() if display is _NEW_DISPLAY else display
+        for name, value in (
+            ("source", source), ("selector", selector), ("presentation", presentation),
+            ("record_key", record_key), ("cardinality", cardinality), ("display", display), ("windows", windows),
+        ):
+            object.__setattr__(self, name, value)
+        self._validate(region)
+
+    @property
+    def region(self) -> RegionSpec | None:
+        """The one window as the region that gives it, named by the record's selector; ``None`` without windows."""
+
+        if not self.windows:
+            return None
+        if len(self.windows) > 1:
+            raise ValidationError(
+                "This record has several windows; read RecordInput.windows instead of region.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        span = self.windows[0].region()
+        if self.selector is None:
+            return span
+        return replace(
+            span,
+            raw=f"{self.selector.raw}:{span.raw}",
+            record_id=self.selector.record_id,
+            record_index=self.selector.record_index,
+        )
+
+    def _validate(self, region: RegionSpec | None) -> None:
         if not isinstance(
             self.source,
             (GenBankInputSource, GffFastaInputSource, FastaInputSource, InMemoryRecordSource),
@@ -353,13 +403,6 @@ class RecordInput:
                 else "A record with several windows reverse-complements each window, not the record.",
                 diagnostic={"code": "INPUT_INVALID"},
             )
-        try:
-            check_disjoint_windows(
-                [(window.start, window.end) for window in windows],
-                self.record_key or "of this input",
-            )
-        except ValueError as exc:
-            raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
 
 
 @dataclass(frozen=True)
