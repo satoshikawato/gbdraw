@@ -851,12 +851,16 @@ def project_similarity_alignment_centers(
         if decision.status is AlignmentDecisionStatus.SKIPPED:
             continue
         if decision.anchor is None:
-            raise ValidationError(f"Similarity alignment record {decision.record_key!r} has no anchor.")
+            raise ValidationError(
+                f"Similarity alignment record {decision.record_key!r} has no anchor.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
         index, center = alignment_anchor_unit(collection, decision.anchor)
         if center is None:
             raise ValidationError(
                 "Similarity alignment anchor is outside the current crop for record "
-                f"{decision.record_key!r}."
+                f"{decision.record_key!r}.",
+                diagnostic={"code": "INPUT_INVALID"},
             )
         centers[index] = center
     return tuple(centers)
@@ -874,7 +878,7 @@ def alignment_anchor_unit(
 
     units = [index for index, item in enumerate(collection.provenance) if item.record_identity_key == anchor.record_key]
     if not units:
-        raise ValidationError("Alignment anchor record coverage is invalid.")
+        raise ValidationError("Alignment anchor record coverage is invalid.", diagnostic={"code": "INPUT_INVALID"})
     for index in units:
         feature = _alignment_source_feature(anchor, collection.provenance[index])
         projected = _source_feature_display_center(feature, collection.transforms[index])

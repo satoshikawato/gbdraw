@@ -397,7 +397,7 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
     before = plan_linear_request(request)
     before_collection = ResolvedRecordCollection(before.records, before.provenance)
     if alignment_record_keys(before_collection) != tuple(keys):
-        raise ValidationError("Alignment projection record binding changed.")
+        raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
     # Counterfactual source transforms are always available for local direction edits.
     flipped_orientations = {key: not _drawn_reverse(before, key) for key in keys}
     orientations = raw["orientations"]
@@ -594,7 +594,7 @@ def resolve_similarity_alignment_payload(
         context = _projection_context(projection, resource_paths or {}, output_directory)
         collection = context[2]
         if alignment_record_keys(collection) != tuple(record_keys):
-            raise ValidationError("Alignment projection record binding changed.")
+            raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
         verified = []
         for candidate, member in zip(candidates, raw["members"], strict=True):
             fact = project_similarity_alignment_anchor_fact(collection, candidate.anchor)
