@@ -84,6 +84,23 @@ def test_cli_names_the_types_a_record_has_when_none_is_drawn(tmp_path: Path) -> 
     ) in _lines(run)
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_says_a_track_stack_without_a_features_slot_draws_no_feature(tmp_path: Path, mode: str) -> None:
+    """The stack draws no feature, so the line claims none and no input warning is raised (OV-2797)."""
+    slot = f"--{mode}_track_slot"
+    run = _gbdraw(
+        mode, "--gbk", str(QUERY), slot, "gc:gc_content", slot, "skew:gc_skew", "-o", "out", "-f", "svg", cwd=tmp_path
+    )
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert (
+        "INFO: Record PROKKA01.1 (prokka_locus_tag_only.gb), record 1 of 1, 3,000 bp: "
+        "drew no features (no enabled features track slot)."
+    ) in lines
+    assert not any(line.startswith("WARNING:") for line in lines), lines
+
+
 def test_cli_warns_when_the_thresholds_leave_out_every_comparison_row(tmp_path: Path) -> None:
     run = _gbdraw(
         "linear", "--gbk", str(QUERY), str(SUBJECT), "-b", str(ROWS_BELOW_IDENTITY), "--identity", "70",

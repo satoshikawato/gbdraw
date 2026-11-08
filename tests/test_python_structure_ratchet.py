@@ -240,7 +240,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/circular.py::run_circular_from_namespace": 578,
     "gbdraw/diagrams/circular/assemble.py::_draw_resolved_circular_slot": 297,
     "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 155,
-    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 644,
+    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 642,
     "gbdraw/diagrams/circular/assemble.py::circular_labels": 228,
     "gbdraw/diagrams/circular/radial_layout.py::_resolve_circular_radial_layout": 405,
     "gbdraw/diagrams/linear/assemble.py::_build_linear_record_vertical_plans": 160,

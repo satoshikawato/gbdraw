@@ -181,7 +181,7 @@ from ...render.groups.circular.legend import circular_legend_content
 from ...svg.ids import track_slot_svg_id
 from .positioning import center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
-from ...tracks.parsing import slot_dinucleotide, slot_legend_label
+from ...tracks.parsing import slot_dinucleotide, slot_legend_label, slots_draw_features
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -3157,9 +3157,9 @@ def add_record_on_circular_canvas(
         show_skew_track = profile.show_skew
         show_ticks_track = simple_show_ticks
     circular_preset = normalize_circular_track_preset(cfg.canvas.circular.track_type)
+    show_features = slots_draw_features(effective_circular_track_slots)
 
     if user_slot_mode:
-        show_features = "features" in user_active_slot_renderers
         radial_plan = circular_track_slots_from_preset_order(
             list(effective_circular_track_slots or []),
             circular_preset,
@@ -3181,7 +3181,6 @@ def add_record_on_circular_canvas(
         layout_slots = list(radial_plan.slots)
         preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
     else:
-        show_features = True
         radial_plan = circular_radial_plan_for_preset(
             circular_preset,
             CircularPresetContext(
@@ -3829,7 +3828,7 @@ def build_circular_legend_table(
     """
 
     features_present, used_color_rules, default_used_features = feature_legend_presence(
-        records, sources.features
+        records, sources.features, slots
     )
     singleton_depth = bool(
         show_depth

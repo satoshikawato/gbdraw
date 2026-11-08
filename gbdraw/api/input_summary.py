@@ -88,6 +88,9 @@ class RecordInputSummary:
     # The region of the source record the request asked for (1-based, inclusive, as asked: its end may run past the
     # record), ``None`` when it asked for none. The Web compares it with the record's card.
     requested_region: tuple[int, int] | None = None
+    # False when the track stack has no features track (``slots_draw_features``): no feature is drawn, and
+    # ``features`` is empty.
+    features_track: bool = True
 
     @property
     def drawn_features(self) -> int:
@@ -211,11 +214,13 @@ def summarize_inputs(
     specific_color_rules: Mapping[str, object] | None,
     record_features: Sequence[ResolvedRecordFeatureInputs] = (),
     comparisons: Sequence[ComparisonTableTally] = (),
+    draws_features: bool = True,
 ) -> InputSummary:
     """The input summary of the drawn ``records`` (aligned with their ``provenance``).
 
     ``record_features`` is empty or aligned with ``records``; the other feature
-    arguments are the ones the drawing reads.
+    arguments are the ones the drawing reads. ``draws_features`` is false when
+    the track stack has no features track: no feature is counted as drawn.
     """
 
     summaries = []
@@ -238,7 +243,8 @@ def summarize_inputs(
                 specific_color_rules=specific_color_rules,
                 record_features=record_features[index] if record_features else None,
                 types_left_out_at_load=item.feature_types_left_out_at_load,
-            ),
+            ) if draws_features else (),
+            features_track=draws_features,
         ))
     return InputSummary(records=tuple(summaries), comparisons=tuple(comparisons))
 
@@ -280,6 +286,8 @@ def _record_line(record: RecordInputSummary) -> str:
         if record.region is not None
         else f"{record.drawn_length:,} bp"
     )
+    if not record.features_track:
+        return f"{_record_label(record)}, {place}, {extent}: drew no features (no enabled features track slot)."
     drawn = [(item.feature_type, item.drawn) for item in record.features if item.drawn]
     line = f"{_record_label(record)}, {place}, {extent}: drew {_count(record.drawn_features, 'feature')}"
     if drawn:
@@ -363,7 +371,8 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
             f"{_record_label(record)} has no feature to draw: {_no_feature_reason(record)}.",
         )
         for record in summary.records
-        if record.drawn_features == 0
+        # A stack without a features track draws none by request; the inputs are not the reason.
+        if record.features_track and record.drawn_features == 0
     ]
     for table in summary.comparisons:
         tally = table.tally
