@@ -156,7 +156,9 @@ class LabelFit:
     """Overlapping label pairs, crossing leader pairs, labels over the definition text,
     Linear region labels over other labels or lines (``region_overlaps``: pairs of a
     region label and what it covers, LP-D68), Circular region labels cut to fit
-    their circle (``region_cuts``, LP-D87), Circular region labels whose letters
+    their circle (``region_cuts``, LP-D87), Circular region labels left out because
+    that cut would keep no letter (``region_cuts_left_out``, RGN-CUT-EMPTY-OMIT),
+    Circular region labels whose letters
     lie on another track's band (``region_track_overlaps``, LP-D86), Circular region
     labels left out for want of room before the centre (``region_rooms_past_centre``,
     LBL-ROOM-STOP-AT-CENTRE-OMIT), region labels of either mode left out in a clipped
@@ -165,7 +167,7 @@ class LabelFit:
     Circular record's centre definition text that meet what a track paints, its
     ink (``definition_track_overlaps``, D-12).
 
-    The labels fit when all nine are 0.
+    The labels fit when all ten are 0.
     """
 
     overlap_pairs: int
@@ -177,12 +179,13 @@ class LabelFit:
     definition_track_overlaps: int = 0
     region_rooms_past_centre: int = 0
     region_rooms_clipped: int = 0
+    region_cuts_left_out: int = 0
 
     @property
     def region_left_out(self) -> int:
         """The region labels left out, and so not among the drawn ones a record counts."""
 
-        return self.region_rooms_past_centre + self.region_rooms_clipped
+        return self.region_rooms_past_centre + self.region_rooms_clipped + self.region_cuts_left_out
 
     @property
     def fits(self) -> bool:
@@ -196,6 +199,7 @@ class LabelFit:
             and self.definition_track_overlaps == 0
             and self.region_rooms_past_centre == 0
             and self.region_rooms_clipped == 0
+            and self.region_cuts_left_out == 0
         )
 
     def __add__(self, other: LabelFit) -> LabelFit:
@@ -209,6 +213,7 @@ class LabelFit:
             self.definition_track_overlaps + other.definition_track_overlaps,
             self.region_rooms_past_centre + other.region_rooms_past_centre,
             self.region_rooms_clipped + other.region_rooms_clipped,
+            self.region_cuts_left_out + other.region_cuts_left_out,
         )
 
 
@@ -223,10 +228,10 @@ class RegionLabelWarnings:
     fit: LabelFit
     left_out_font_sizes: tuple[float, ...] = ()
 
-    def adding(self, other: LabelFit) -> RegionLabelWarnings:
-        """These warnings with ``other``'s counts added."""
+    def adding(self, other: LabelFit, left_out_font_sizes: tuple[float, ...] = ()) -> RegionLabelWarnings:
+        """These warnings with ``other``'s counts added, and the font sizes of the labels it leaves out."""
 
-        return replace(self, fit=self.fit + other)
+        return replace(self, fit=self.fit + other, left_out_font_sizes=(*self.left_out_font_sizes, *left_out_font_sizes))
 
 
 def region_rooms_left_out(tracks: Iterable[ResolvedAnnotationTrack], record_index: int) -> RegionLabelWarnings:
@@ -581,6 +586,10 @@ class LabelFitReport:
         return sum(record.fit.region_cuts for record in self.records)
 
     @property
+    def region_cuts_left_out(self) -> int:
+        return sum(record.fit.region_cuts_left_out for record in self.records)
+
+    @property
     def region_track_overlaps(self) -> int:
         return sum(record.fit.region_track_overlaps for record in self.records)
 
@@ -683,11 +692,13 @@ def _counted(count: int, singular: str, plural: str) -> str:
 
 def fit_counts(fit: LabelFit) -> str:
     counts: list[str] = []
-    # Region labels (LP-D68, LP-D87, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT, LBL-ROOM-CLIP-FIT-OMIT) and the
-    # definition text over a track (D-12) are counted on their own record, which has no other counts.
+    # Region labels (LP-D68, LP-D87, RGN-CUT-EMPTY-OMIT, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT,
+    # LBL-ROOM-CLIP-FIT-OMIT) and the definition text over a track (D-12) are counted on their own record, which has
+    # no other counts.
     if fit.overlap_pairs or fit.crossing_pairs or not (
         fit.region_overlaps
         or fit.region_cuts
+        or fit.region_cuts_left_out
         or fit.region_track_overlaps
         or fit.region_rooms_past_centre
         or fit.region_rooms_clipped
@@ -710,6 +721,11 @@ def fit_counts(fit: LabelFit) -> str:
         )
     if fit.region_rooms_clipped:
         counts.append(_counted(fit.region_rooms_clipped, "region label", "region labels") + " left out in clipped slots")
+    if fit.region_cuts_left_out:
+        counts.append(
+            _counted(fit.region_cuts_left_out, "region label left out: no letter fits its circle",
+                     "region labels left out: no letter fits their circles")
+        )
     if fit.definition_track_overlaps:
         counts.append(_counted(fit.definition_track_overlaps, "line overlaps a track", "lines overlap a track"))
     return ", ".join(counts)
@@ -766,6 +782,8 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
             "Region labels are left out: their clipped slots have no room for them, would cut their letters, "
             f"or hide their marks ({report.region_rooms_clipped})."
         )
+    if report.region_cuts_left_out:
+        sentences.append(f"Region labels are left out: no letter of them fits their circle ({report.region_cuts_left_out}).")
     if report.definition_track_overlaps:
         sentences.append(
             f"The definition text overlaps a track ({_counted(report.definition_track_overlaps, 'line', 'lines')})."

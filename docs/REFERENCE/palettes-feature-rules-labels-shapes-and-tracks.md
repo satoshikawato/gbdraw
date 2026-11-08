@@ -364,7 +364,7 @@ affected.
 - If leader lines cross, labels cover the definition text, Linear region
   (annotation) labels overlap other labels or lines, Circular region labels
   are cut to fit their circle, lie on other tracks, or are left out for want of
-  room before the centre, region labels of either mode are left out for want of
+  room before the centre or because no letter of them fits their circle, region labels of either mode are left out for want of
   room in a clipped slot, or the definition text
   in the centre of a Circular record overlaps a track, but no labels overlap,
   the figure is drawn as before. The command line prints the same
@@ -443,8 +443,12 @@ A Circular region label with `label_orientation` `auto` or `arc` is drawn
 along its circle and can take just under a whole turn, less 1 em at each
 end. A longer label keeps its start followed by `…`, centred on the same
 place, and
-each such label counts as one cut region label (`1 region label cut`). This
+each such label counts as one cut region label (`1 region label cut`). A label
+so long for its circle that not even its first letter fits before `…` is not
+drawn; its mark is drawn, and it counts as a region label left out
+(`1 region label left out: no letter fits its circle`). This
 only warns: the Web app shows "Region labels are cut to fit their circle (N)."
+or "Region labels are left out: no letter of them fits their circle (N)."
 over the figure, with no **Choose a fix** button. A label that meets another
 label or line in Circular is still drawn without a warning.
 
