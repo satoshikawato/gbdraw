@@ -41,6 +41,7 @@ from gbdraw.layout.text_geometry import (
     Point,
     annular_sector_parts,
     convex_polygons_intersect,
+    glyphs_half_turn_on_circle,
     glyphs_meet_on_circle,
     grown_convex_polygon,
     segment_intersects_polygon,
@@ -834,6 +835,13 @@ def _curved_label(
 
     shown = runs if fits(runs) else _cut_to(runs, fits)
     left, right, near, far, radius = placed(shown)
+    # The letters' shape turns as far each way as their ink box along the baseline; nearer the centre than the
+    # baseline it turns as far as their ink does where that is further: a glyph does not bend to the circle, so there
+    # it spans a wider turn than its arc on the baseline (OV-2851). Where no glyph is known, the ink box is measured
+    # at the circle the letters come nearest the centre on.
+    half_turn = 0.5 * (right - left) / radius
+    ink_turn = glyphs_half_turn_on_circle(glyphs(shown), radius, tops_in=flipped)
+    inner_turn = 0.5 * (right - left) / near if ink_turn is None else ink_turn
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0
     centre = angle + sign * math.degrees(0.5 * (left + right) / radius)
@@ -845,7 +853,14 @@ def _curved_label(
         rotation=0.0,
         ink_radii=(near, far),
         # Letters near the centre cover at most one turn (OV-2665: an inside lane that rooms carry past the centre).
-        parts=annular_sector_parts(near, far, centre, min(180.0, math.degrees(0.5 * (right - left) / radius))),
+        parts=(
+            *annular_sector_parts(near, far, centre, min(180.0, math.degrees(half_turn))),
+            *(
+                annular_sector_parts(near, min(radius, far), centre, min(180.0, math.degrees(inner_turn)))
+                if inner_turn > half_turn and near < radius
+                else ()
+            ),
+        ),
         arc=CircularLabelArc(
             radius=radius,
             angle=angle,
