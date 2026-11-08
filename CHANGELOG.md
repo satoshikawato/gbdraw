@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed (Web app): a pan of the Result made with the left button while
+  another button was held (for example the right button) could end by opening
+  the popup of the element under the pointer, or by clearing the feature
+  selection, when it ended near where the other button was pressed. Such a pan
+  now opens and clears nothing, like any other pan. With Select region on, a
+  click on a record's tracks that selects nothing left an open settings popup
+  open unless the previous press was at the same place; it now closes it, as
+  a click on the Result's background does.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

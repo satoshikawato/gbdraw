@@ -78,6 +78,19 @@ const CLICK_SLOP_PX = 4;
 export const isClickAtPress = (press, release) =>
   !press || Math.hypot(release.clientX - press.clientX, release.clientY - press.clientY) <= CLICK_SLOP_PX;
 
+/**
+ * Where the press a click is measured from began, after a pointer event: the
+ * press of the primary button, which is the one that clicks. Pointer Events
+ * send a pointerdown for it or, when another button is already held, a
+ * pointermove that adds it (OV-2704). Any other event keeps `press`.
+ * @param {PressPoint | null} press @param {PointerEvent} event @returns {PressPoint | null}
+ */
+export const primaryPressAfter = (press, event) => (
+  event.button === 0 && (event.type === 'pointerdown' || (event.buttons & 1) !== 0)
+    ? { clientX: event.clientX, clientY: event.clientY }
+    : press
+);
+
 const clamp = (/** @type {number} */ value, /** @type {number} */ min, /** @type {number} */ max) => (
   Math.min(Math.max(value, min), Math.max(min, max))
 );

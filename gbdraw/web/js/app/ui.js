@@ -2,7 +2,7 @@
 /** @import { PersistedPreviewViewport, StoredFigurePreview } from '../services/config.js' */
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
-import { isClickAtPress } from '../utils/popup-bounds.js';
+import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
@@ -581,11 +581,15 @@ export const setupGlobalUiEvents = ({
   let pressStartedInPopup = false;
   /** @type {PressPoint | null} */
   let pressPoint = null;
-  /** @param {MouseEvent} e */
+  // Only the press of the primary button, which clicks, counts (`primaryPressAfter`): from Pointer
+  // Events, so a press whose pointerdown a tool cancelled (no mousedown follows) counts too (OV-2705).
+  /** @param {PointerEvent} e A pointerdown or a pointermove. */
   const rememberPressTarget = (e) => {
+    const press = primaryPressAfter(pressPoint, e);
+    if (press === pressPoint) return;
+    pressPoint = press;
     pressStartedInPopup = e.target instanceof Element
       && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
-    pressPoint = { clientX: e.clientX, clientY: e.clientY };
   };
 
   /** @param {MouseEvent & { target: Element }} e A click; the popups and dialogs are elements. */
@@ -632,13 +636,15 @@ export const setupGlobalUiEvents = ({
   // A click that reaches the document comes from an element, as `closeFeaturePopup` reads it:
   // the cast to EventListener widens its parameter back to Event.
   onMounted(() => {
-    document.addEventListener('mousedown', rememberPressTarget, true);
+    document.addEventListener('pointerdown', rememberPressTarget, true);
+    document.addEventListener('pointermove', rememberPressTarget, true);
     document.addEventListener('click', /** @type {EventListener} */ (closeFeaturePopup));
     document.addEventListener('keydown', handleEscapeKey);
   });
 
   onUnmounted(() => {
-    document.removeEventListener('mousedown', rememberPressTarget, true);
+    document.removeEventListener('pointerdown', rememberPressTarget, true);
+    document.removeEventListener('pointermove', rememberPressTarget, true);
     document.removeEventListener('click', /** @type {EventListener} */ (closeFeaturePopup));
     document.removeEventListener('keydown', handleEscapeKey);
   });

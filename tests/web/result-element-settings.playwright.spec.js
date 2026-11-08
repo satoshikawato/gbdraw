@@ -723,6 +723,49 @@ test('Circular, a first Result: the popup gives the focus back, follows a window
   expect(await inPane()).toBe(1);
 });
 
+// OV-2705: with Select region on, a press on a record's tracks is the tool's,
+// which cancels its pointerdown, so Chrome sends no mousedown for it. A still
+// click there that nothing takes is a click on the canvas, measured from its
+// own press, not from an earlier one elsewhere: it closes the popup.
+test('Select region: a still click on a record\'s tracks closes the settings popup', async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await openApp(page);
+  await loadSession(page, DEFAULT_CIRCULAR_SESSION);
+  await figureSettled(page);
+  const toggle = page.locator('[data-region-select-toggle]');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  // The earlier press elsewhere: the click on a tick label that opens the popup.
+  await clickInk(page, TICKS);
+  await expectPopup(page, 'circular-axis', AXIS);
+  // A point on the middle of the record's feature tracks that no feature covers.
+  const point = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { readRegionAxisRecords, regionAxisFrame } = await import('./js/services/region-axis.js');
+    const [{ axis, recordIndex }] = readRegionAxisRecords(state.trackSlotResolvedGeometry.value, state.selectedResultIndex.value);
+    const svg = state.svgContainer.value.querySelector('svg');
+    const frame = regionAxisFrame(svg, recordIndex);
+    const radius = (axis.bandInnerPx + axis.bandOuterPx) / 2;
+    for (let step = 0; step < 720; step += 1) {
+      const angle = (axis.startAngleDeg + step / 2) * Math.PI / 180;
+      const { x, y } = new DOMPoint(radius * Math.cos(angle), radius * Math.sin(angle)).matrixTransform(frame.getScreenCTM());
+      const hit = document.elementFromPoint(x, y);
+      if (hit && svg.contains(hit) && !hit.closest('[data-gbdraw-feature-id]')) return { x, y };
+    }
+    return null;
+  });
+  expect(point, 'a point of the tracks without a feature').not.toBeNull();
+  await page.evaluate(() => {
+    window.__trackMousedowns = 0;
+    document.addEventListener('mousedown', () => { window.__trackMousedowns += 1; }, { capture: true });
+  });
+  await page.mouse.click(point.x, point.y);
+  expect(await page.evaluate(() => window.__trackMousedowns), 'Select region took the press').toBe(0);
+  await expectNoPopup(page, 'a still click on the tracks');
+  await expect(featurePopup(page)).toHaveCount(0);
+});
+
 test('phone width: a tick label shows Axis & Scale in a popup inside the Result', async ({ page }) => {
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 390, height: 844 });
