@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 import random
 import sys
 from pathlib import Path
@@ -219,12 +220,16 @@ ONE_WINDOW = (RecordWindow(1501, 8100),)
 TWO_WINDOWS = (RecordWindow(1501, 4500), RecordWindow(4501, 8100, column=2))
 
 
+# The key `gbdraw linear` and the record planner give the record of a drawing's first input.
+SOURCE_KEY = "record-1"
+
+
 def _plan(
     paths: dict[str, Path], losat: str, targets: tuple[str, ...], windows: tuple[RecordWindow, ...] = ONE_WINDOW
 ) -> LocatePlan:
     [reference] = _files(paths, "ref")
     search = prepare_locate_search(
-        reference, _files(paths, *targets), record=None, windows=list(windows), program="tlosatn"
+        reference, _files(paths, *targets), record=None, record_key=SOURCE_KEY, windows=list(windows), program="tlosatn"
     )
     outcomes = [
         LocateSearchResult(job.file_key, run_losat_search("tlosatn", job.query_fasta, job.subject_fasta, losat_bin=losat))
@@ -280,7 +285,7 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(
     (tmp_path / "p.comparisons.tsv").write_text(comparisons_text, encoding="utf-8")
 
     from_table = record_input_manifest_from_table(str(tmp_path / "p.records.tsv")).records
-    source = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(str(paths["ref"])), record_key="reference"),))
+    source = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(str(paths["ref"]))),))
     files = {key: LocateFile(GenBankInputSource(key), Path(key).name) for key in inputs}
     derived = derive_locate_request(source, plan, files).request
 
@@ -310,6 +315,37 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(
     assert derived.options.losat_search is not None
     assert tuple(derived.options.losat_search.pairs or ()) == table_pairs == locate_unit_pairs(drawing)
     assert derived.options.losat_search.losatp_mode == "pairwise"
+
+
+def test_the_new_drawing_carries_the_edits_of_the_reference_record(tmp_path: Path) -> None:
+    from gbdraw.annotations.models import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+    from gbdraw.features.overrides import FeatureOverride
+
+    paths = _genomes(tmp_path)
+    plan = _plan(paths, _fake_losat(tmp_path), ("a",))
+    plain = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(str(paths["ref"]))),))
+    [provenance] = resolve_request_records(plain).provenance
+    assert provenance.record_identity_key == SOURCE_KEY
+    catalog = {feature.location_parts[0][0]: feature for feature in provenance.source_feature_catalog}
+    inside, outside = catalog[3000], catalog[1000]  # g2 lies inside 1501-8100, g0 outside it (0-based starts).
+    source = replace(plain, options=LinearDiagramOptions(
+        feature_overrides=(
+            FeatureOverride(SOURCE_KEY, inside.biological_feature_id, label_text="kept"),
+            FeatureOverride(SOURCE_KEY, outside.biological_feature_id, label_text="dropped"),
+        ),
+        annotations=AnnotationOptions(sets=(AnnotationSet(id="marks", annotations=(
+            RegionAnnotation("in", CoordinateSpan(None, 3001, 3300)),
+            RegionAnnotation("out", CoordinateSpan(None, 9001, 9300)),
+        )),)),
+    ))
+    files = {str(path): LocateFile(GenBankInputSource(str(path)), path.name) for path in paths.values()}
+    derived = derive_locate_request(source, plan, files)
+
+    assert [(row.record_key, row.label_text) for row in derived.request.options.feature_overrides] == [(SOURCE_KEY, "kept")]
+    assert derived.request.records[0].record_key == SOURCE_KEY
+    assert derived.request.options.annotations is not None
+    assert [item.id for item in derived.request.options.annotations.sets[0].annotations] == ["in"]
+    assert [(item.kind, item.count) for item in derived.not_carried] == [("ANNOTATIONS_OUTSIDE", 1)]
 
 
 def test_the_command_writes_the_tables_the_plan_and_a_report(
@@ -352,28 +388,47 @@ if sys.argv[1:] == ["--version"]:
 sys.exit(2 if sys.argv[1:2] == ["tblastn"] else 0)
 """
 
+# A LOSAT with tblastn whose every search fails.
+_FAILS = """#!{python}
+import sys
+if sys.argv[1:] == ["--version"]:
+    print("losat 0.2.0")
+    sys.exit(0)
+if sys.argv[2:] == ["--help"]:
+    sys.exit(0)
+print("out of memory", file=sys.stderr)
+sys.exit(3)
+"""
+
 
 @pytest.mark.parametrize(
     ("change", "message"),
     [
         (lambda args, paths: args + ["--reference_record", "NOPE"], "has no record 'NOPE'"),
         (lambda args, paths: args + ["--reference_region", "7000-9000"], "Reference windows overlap."),
+        (lambda args, paths: args + ["--reference_region", "11001-13000"], "runs past the record end (12000)"),
         (lambda args, paths: [*args[:3], "9500-9900", *args[4:]], "holds no whole CDS"),
         (lambda args, paths: args + ["--targets", str(paths["ref"])], "is the reference file"),
         (lambda args, paths: args + ["--ncbi_blast_bin", "/opt/tblastn"], "not both"),
         (lambda args, paths: [*args[:-2], "-o", args[-1], "--losat_bin", "NO_TBLASTN"], "(0.1.0) has no tblastn"),
         (lambda args, paths: [*args[:5], str(paths["c"]), *args[6:]], "No target file has a window"),
+        (lambda args, paths: [*args[:-2], "-o", args[-1], "--losat_bin", "FAILS"], "Every search failed: "),
     ],
-    ids=["unknown-record", "overlap", "no-cds", "reference-target", "two-runtimes", "no-tblastn", "no-window"],
+    ids=[
+        "unknown-record", "overlap", "outside", "no-cds", "reference-target", "two-runtimes", "no-tblastn", "no-window",
+        "searches-failed",
+    ],
 )
 def test_the_command_stops_with_a_message(
     change, message: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     paths = _genomes(tmp_path)
-    no_tblastn = tmp_path / "losat-0.1.0"
-    no_tblastn.write_text(_NO_TBLASTN.format(python=sys.executable), encoding="utf-8")
-    no_tblastn.chmod(0o755)
-    args = [str(no_tblastn) if item == "NO_TBLASTN" else item
+    scripts = {}
+    for name, text in (("NO_TBLASTN", _NO_TBLASTN), ("FAILS", _FAILS)):
+        scripts[name] = tmp_path / name.lower()
+        scripts[name].write_text(text.format(python=sys.executable), encoding="utf-8")
+        scripts[name].chmod(0o755)
+    args = [str(scripts[item]) if item in scripts else item
             for item in change(_locate_args(paths, _fake_losat(tmp_path), tmp_path / "p", "a"), paths)]
 
     assert _run(args, monkeypatch) == 1
@@ -381,6 +436,8 @@ def test_the_command_stops_with_a_message(
     assert message in error
     if "tblastn" in message:
         assert "--losat (losatn)" in error and "--ncbi_blast_bin" in error
+    if message.startswith("Every search failed"):
+        assert "the search failed" in error and "Lower the thresholds" not in error
     assert not (tmp_path / "p.records.tsv").exists()
 
 
@@ -425,7 +482,7 @@ def test_the_worker_payload_gives_the_plan_the_command_writes(tmp_path: Path, mo
         return {"key": str(paths[name]), "gbk": str(paths[name]), "gff": None, "fasta": None}
 
     search: LocateSearchInput = {
-        "reference": file("ref"), "recordId": None, "windows": [{"start": 1501, "end": 8100, "reverseComplement": False}],
+        "reference": file("ref"), "recordId": None, "recordKey": SOURCE_KEY, "windows": [{"start": 1501, "end": 8100, "reverseComplement": False}],
         "targets": [file("a"), file("b"), file("c")], "program": "tlosatn",
     }
     jobs = locate_search_plan_json(search)
@@ -447,7 +504,7 @@ def test_the_worker_payload_gives_the_plan_the_command_writes(tmp_path: Path, mo
     # The window pairs the new drawing compares are the pairs the command writes as its comparisons table.
     a, b = (str(paths[name]) for name in ("a", "b"))
     assert [(pair["query"]["recordKey"], pair["subject"]["recordKey"]) for pair in reply["pairs"]] == [
-        ("reference", f"{a}#1"), (f"{a}#1", f"{b}#1"), (f"{a}#1", f"{b}#2"),
+        (SOURCE_KEY, f"{a}#1"), (f"{a}#1", f"{b}#1"), (f"{a}#1", f"{b}#2"),
     ]
     assert [(row.query, row.subject) for row in read_comparisons_table(str(prefix) + ".comparisons.tsv").rows] == [
         ("REF", "A1"), ("A1", "B1"), ("A1", "B2"),
@@ -456,7 +513,7 @@ def test_the_worker_payload_gives_the_plan_the_command_writes(tmp_path: Path, mo
     assert all(
         (side["start"], side["end"]) == (windows[(side["fileKey"], side["recordKey"])]["start"],
                                          windows[(side["fileKey"], side["recordKey"])]["end"])
-        for pair in reply["pairs"] for side in (pair["query"], pair["subject"]) if side["recordKey"] != "reference"
+        for pair in reply["pairs"] for side in (pair["query"], pair["subject"]) if side["recordKey"] != SOURCE_KEY
     )
 
 
@@ -554,3 +611,48 @@ def test_a_comparisons_table_names_a_window_by_its_record_and_span(tmp_path: Pat
     layout = LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2", "#5@3"))
     with pytest.raises(ValidationError, match="drawn in several windows"):
         resolve_linear_options(LinearDiagramOptions(comparison_table_file=str(table)), records=units, layout=layout)
+
+
+def _write_genbank(path: Path, record: SeqRecord, record_id: str) -> Path:
+    record.id = record.name = record_id
+    record.annotations = {"molecule_type": "DNA", "topology": "linear"}
+    SeqIO.write([record], path, "genbank")
+    return path
+
+
+@pytest.mark.parametrize("case", ["id-with-colon", "id-of-another-window"])
+def test_a_window_whose_record_id_would_not_read_back_is_named_by_its_number(
+    case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A record drawn in two windows (g1..g3 and g4..g6, 20 kb apart). "ctg:1:START-END" would read as file "ctg",
+    # record "1"; "chr1:START-END" would name the other drawn record whose ID is literally that text.
+    paths = _genomes(tmp_path)
+    reference = SeqIO.read(paths["ref"], "genbank")
+    rng = random.Random(11)
+    split = reference[1900:4400] + _record("x", _filler(rng, 20_000)) + reference[4900:7400] + _record("x", _filler(rng, 2000))
+    split_id = "ctg:1" if case == "id-with-colon" else "chr1"
+    paths["x"] = _write_genbank(tmp_path / "x.gb", split, split_id)
+    targets = ["x"]
+    if case == "id-of-another-window":
+        first = next(w for w in _plan(paths, _fake_losat(tmp_path), ("x",)).files[0].windows if w.window.column == 1)
+        paths["y"] = _write_genbank(tmp_path / "y.gb", reference[1500:8000], f"chr1:{first.window.start}-{first.window.end}")
+        targets.append("y")
+    prefix = tmp_path / "P"
+    assert _run(_locate_args(paths, _fake_losat(tmp_path), prefix, *targets), monkeypatch) == 0
+
+    rows = [(row.query, row.subject) for row in read_comparisons_table(f"{prefix}.comparisons.tsv").rows]
+    assert [query for query, _subject in rows[:2]] == ["REF", "REF"]
+    if case == "id-with-colon":
+        assert all(subject.startswith("#2:") for _query, subject in rows)
+    else:
+        # The first window takes its number; the second keeps its ID; the other record keeps its literal ID.
+        assert rows[0][1] == f"#2:{first.window.start}-{first.window.end}"
+        assert rows[1][1].startswith("chr1:") and rows[2] == (rows[0][1], f"chr1:{first.window.start}-{first.window.end}")
+    _losatp_runtime(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    command = "--records_table P.records.tsv --comparisons_table P.comparisons.tsv --losat losatp -o FIG --save_session"
+    assert _run(command.split(), monkeypatch, "linear") == 0
+    session = drawing_view(json.loads((tmp_path / "FIG.gbdraw-session.json").read_text(encoding="utf-8")))
+    [protein] = [item for item in session["renderRequest"]["comparisons"] if item["kind"] == "generatedProteinComparison"]
+    expected = [(0, 1), (0, 2)] + ([(1, 3), (2, 3)] if case == "id-of-another-window" else [])
+    assert [(pair["queryRecordIndex"], pair["subjectRecordIndex"]) for pair in protein["pairs"]] == expected

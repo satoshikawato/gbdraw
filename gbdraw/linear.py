@@ -158,7 +158,7 @@ from .cli_utils.losat_output import (
 )
 from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
-from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, NUCLEOTIDE_LOSAT_PROGRAMS
 from .core.numeric import (
     argparse_float,
     argparse_integer,
@@ -1027,7 +1027,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--losat cannot be used with -b/--blast")
     if args.losatp_mode is not None and not args.losat:
         parser.error("--losatp_mode requires --losat losatp")
-    if args.losat in {"losatn", "tlosatx"}:
+    if args.losat in NUCLEOTIDE_LOSAT_PROGRAMS:
         collinear_flags = sorted(
             {
                 str(token).split("=", 1)[0]

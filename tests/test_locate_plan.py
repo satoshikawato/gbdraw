@@ -333,11 +333,25 @@ def test_max_windows_keeps_the_best_clusters_and_warns() -> None:
     assert [w.window.start for w in file_plan.windows] == [999_001]
     assert [(w.window.start, w.reason, w.window.column) for w in file_plan.candidates] == [(499_001, "MAX_WINDOWS", 1)]
     assert [(w.code, w.args) for w in file_plan.warnings] == [
-        ("MAX_WINDOWS", (("max_windows", 1), ("clusters", 1))),
+        ("MAX_WINDOWS", (("max_windows", 1), ("windows", 1))),
         ("GENES_ABSENT", (("count", 1),)),
     ]
     assert file_plan.coverage.absent == ("g0_0",)
     assert file_plan.coverage.reference_not_found == ((1, 900),)
+
+
+def test_the_max_windows_warning_counts_the_windows_left_out() -> None:
+    # A stored rotation splits one cluster into two windows; both are left out, and the warning says 2 windows.
+    reference = _reference((10, 10))
+    target = (_Target(("c1", 5_000_000, False))
+              .place(_genes(1, range(10)), "c1", 1_000_001, bits=900.0)
+              .place(_genes(0, range(5, 10)), "c1", 3_000_001)
+              .place(_genes(0, range(5)), "c1", 3_005_001))
+    file_plan = target.plan(reference, replace(OPTIONS, max_windows=2)).files[0]
+
+    left_out = [w for w in file_plan.candidates if w.reason == "MAX_WINDOWS"]
+    assert len(left_out) == 2
+    assert ("MAX_WINDOWS", (("max_windows", 2), ("windows", 2))) in [(w.code, w.args) for w in file_plan.warnings]
 
 
 def test_equal_clusters_rank_by_record_order_whatever_the_row_order() -> None:
@@ -448,13 +462,41 @@ def test_a_linear_record_does_not_join_its_ends() -> None:  # the circular case 
 # Rule 7: flank, record ends and columns.
 
 
-@pytest.mark.parametrize(("start", "window_start"), [(2001, 1), (2002, 1002)])
-def test_a_window_takes_the_record_end_when_at_most_the_flank_remains(start: int, window_start: int) -> None:
+# PD-OI-123: "1 kb on each side, or to the end of the record when less than 1 kb remains".
+@pytest.mark.parametrize(("start", "window_start"), [(1801, 801), (2001, 1001), (1001, 1), (600, 1)])
+def test_a_window_takes_the_flank_or_runs_to_the_record_end_when_less_remains(start: int, window_start: int) -> None:
     reference = _reference((2,))
     plan = _Target(("c1", 200_000, False)).place(_genes(0, range(2)), "c1", start).plan(reference)
     window = plan.files[0].windows[0]
 
     assert (window.window.start, window.touches_start) == (window_start, window_start == 1)
+
+
+def test_a_window_on_a_circular_record_reaches_no_contig_end() -> None:
+    reference = _reference((2,))
+    circular = _Target(("p1", 10_000, True)).place(_genes(0, range(2)), "p1", 1001).plan(reference)
+    linear = _Target(("c1", 10_000, False)).place(_genes(0, range(2)), "c1", 1001).plan(reference)
+
+    # PD-OI-123: "contig start" or "contig end" where a window reaches the end of a linear record (D-28).
+    [window] = circular.files[0].windows
+    assert (window.window.start, window.touches_start, window.touches_end) == (1, False, False)
+    assert (linear.files[0].windows[0].window.start, linear.files[0].windows[0].touches_start) == (1, True)
+
+
+@pytest.mark.parametrize(("opposite", "same", "reversed_"), [(3, 2, True), (2, 2, False), (2, 3, False)])
+def test_a_window_is_reversed_when_most_of_its_genes_lie_on_the_opposite_strand(
+    opposite: int, same: int, reversed_: bool
+) -> None:
+    # PD-OI-123: "A window is reverse-complemented when most of its matching genes lie on the opposite strand of
+    # the reference as drawn." Weak opposite hits count as much as strong same-strand ones; a tie stays as drawn.
+    reference = _reference((opposite + same,))
+    target = _Target(("c1", 200_000, False))
+    target.place(_genes(0, range(opposite)), "c1", 10_001, strand="-", bits=60.0)
+    target.place(_genes(0, range(opposite, opposite + same)), "c1", 10_001 + 1000 * opposite, bits=500.0)
+    [window] = target.plan(reference).files[0].windows
+
+    assert window.window.reverse_complement is reversed_
+    assert len(window.genes) == opposite + same
 
 
 def test_a_gene_at_a_contig_end_is_partial() -> None:
@@ -718,3 +760,26 @@ def test_locate_target_reads_cds_parts_and_topology() -> None:
     assert target == LocateTarget("t.gbk", (LocateRecord(
         "t#1", "c1", 0, 100, True, (CdsExtent(11, 40, "+"), CdsExtent(51, 80, "-")),
     ),))
+
+
+def test_the_plan_json_types_name_every_field_of_the_plan() -> None:
+    import dataclasses
+    import typing
+
+    from gbdraw.comparisons import locate
+    from gbdraw.io.comparisons import ComparisonRowTally, ComparisonThresholdTally
+    from gbdraw.mode_profiles import ComparisonThresholds
+
+    shapes = {
+        locate.LocatePlan: locate.LocatePlanJson, locate.LocateReference: locate.LocateReferenceJson,
+        RecordWindow: locate.RecordWindowJson, locate.ReferenceGene: locate.ReferenceGeneJson,
+        ReferenceCds: locate.ReferenceCdsJson, LocateOptions: locate.LocateOptionsJson,
+        ComparisonThresholds: locate.ComparisonThresholdsJson, locate.FilePlan: locate.FilePlanJson,
+        PlannedWindow: locate.PlannedWindowJson, locate.WindowGene: locate.WindowGeneJson,
+        locate.GeneCoverage: locate.GeneCoverageJson, ComparisonRowTally: locate.ComparisonRowTallyJson,
+        ComparisonThresholdTally: locate.ComparisonThresholdTallyJson, locate.LocateWarning: locate.LocateWarningJson,
+    }
+    for dataclass, shape in shapes.items():
+        assert [field.name for field in dataclasses.fields(dataclass)] == list(typing.get_type_hints(shape)), dataclass
+    plan = _Target(("c1", 200_000, False)).place(_genes(0, range(2)), "c1", 10_001).plan(_reference((2,)))
+    assert list(plan.to_json()) == list(typing.get_type_hints(locate.LocatePlanJson))

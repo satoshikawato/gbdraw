@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
+from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.collinearity import (
@@ -2277,6 +2278,32 @@ def _resolve_linear_comparison_selector(
     raise ValidationError(f"{where}: unresolved record selector {selector!r}.", diagnostic=diagnostic)
 
 
+class DrawnUnitName(NamedTuple):
+    """What a comparisons-table selector reads of a drawn unit: its record ID, the key of the record it draws
+    (shared by the windows of one record), and its window span (``None`` for a record drawn whole)."""
+
+    record_id: str
+    record_key: str
+    window_span: tuple[int, int] | None
+
+
+def comparison_selector_units(units: Sequence[DrawnUnitName], selector: str) -> tuple[int, ...] | None:
+    """The units ``selector`` names among ``units`` as the comparisons table reader resolves it
+    (:func:`_resolve_linear_comparison_selector`), or ``None`` when it names none: a writer checks a selector
+    with it before writing one."""
+
+    records = []
+    for unit in units:
+        annotations: dict[str, object] = {WINDOW_OF_ANNOTATION: unit.record_key}
+        if unit.window_span is not None:
+            annotations[WINDOW_SPAN_ANNOTATION] = unit.window_span
+        records.append(SeqRecord(Seq(""), id=unit.record_id, annotations=annotations))
+    try:
+        return _resolve_linear_comparison_selector(records, selector, table_path="", row_number=0, column="")
+    except ValidationError:
+        return None
+
+
 def _comparison_window_selector(selector: str) -> tuple[RecordSelector, int, int] | None:
     """The record and span of a window selector ``RECORD:START-END[:origin]``, or ``None`` when ``selector`` is
     not one. Orientation is not part of a window's name, so ``:rc`` and a reversed span are not window selectors."""
@@ -2569,6 +2596,7 @@ def resolve_implicit_record_output_prefix(record_id: object) -> str:
 
 
 __all__ = [
+    "DrawnUnitName",
     "RecordInputManifest",
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
@@ -2577,6 +2605,7 @@ __all__ = [
     "prepared_parsed_source",
     "feature_drawn_start",
     "resolve_anchor_feature",
+    "comparison_selector_units",
     "project_origin_feature_starts",
     "resolve_origin_feature_start",
     "with_origin_feature_starts",

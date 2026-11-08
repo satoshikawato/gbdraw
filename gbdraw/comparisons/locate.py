@@ -30,16 +30,18 @@ over a sorted sequence):
 5. Clusters, ranked by evidence, are selected while they add enough reference
    genes not covered yet (:func:`_genes_needed`), at most ``max_windows``
    windows; the others stay candidates.
-6. A cluster reads in its orientation (reversed when the opposite strand
-   outweighs); it splits where the reference order falls back by a jump
+6. A cluster reads in its orientation (reversed when most of its genes lie on
+   the opposite strand); it splits where the reference order falls back by a jump
    (:func:`_jump`, :func:`_split_runs`). On a linear record a stored rotation
    of the reference gives abutting windows in reference order. A circular
    record has no ends: a cluster around the whole record is read from where
    the reference order starts (:func:`_circular_frame`), and a window across
    the origin is one window with ``start > end`` (Owner D-28, 2026-11-08).
-7. A window is its genes plus ``flank`` on each side; on a linear record it
-   takes the record end when at most ``flank`` remains. Windows are ordered by
-   the reference order of their genes.
+7. A window is its genes plus ``flank`` on each side, or to the end of a
+   linear record when less than ``flank`` remains (PD-OI-123). It is
+   reverse-complemented when most of its genes lie on the opposite strand of
+   the reference as drawn; a tie keeps it as drawn (PD-OI-123). Windows are
+   ordered by the reference order of their genes.
 """
 
 from __future__ import annotations
@@ -47,7 +49,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields, is_dataclass
 import io
 import math
-from typing import Literal, Mapping, NamedTuple, Sequence, Union, get_args
+from typing import Literal, Mapping, NamedTuple, Sequence, TypedDict, Union, cast, get_args
 
 from Bio.SeqRecord import SeqRecord
 
@@ -96,8 +98,6 @@ LocateWarningCode = Literal[
 ]
 LocateArg = Union[str, int, float]
 
-# The record key of the reference record in a plan read from files.
-REFERENCE_RECORD_KEY = "reference"
 # A gene found with at least this share of its query aligned, away from a record end, is complete.
 COMPLETE_QUERY_COVERAGE = 0.9
 _INVALID = {"code": "INPUT_INVALID", "reason": "FIELDS"}
@@ -115,9 +115,8 @@ def _positive_int(value: object) -> bool:
 def locate_default_thresholds(program: LocateProgramName) -> ComparisonThresholds:
     """The row thresholds of a locate search with ``program``.
 
-    Protein queries use the Linear comparison defaults too (Owner question Q1
-    open on 2026-11-08: one threshold set for both programs is assumed). A
-    different default for protein queries changes this function only.
+    Protein queries (tblastn) use the Linear mode's comparison thresholds
+    too, with no separate protein set (Owner, 2026-11-08).
     """
 
     _require(program in LOCATE_PROGRAMS, f"Unknown locate program {program!r}.")
@@ -404,7 +403,9 @@ class PlannedWindow:
     ``gap_to_next_same_record`` is the number of bases left out between this
     window and the next selected window when that one is of the same record
     (0 when they abut), else None. ``ref_span`` is the first and last
-    reference coordinate of its genes.
+    reference coordinate of its genes. ``touches_start`` and ``touches_end``
+    say the window reaches the start or end of a linear record (a contig
+    end); a circular record has none.
     """
 
     record_key: str
@@ -464,12 +465,144 @@ class LocatePlan:
     files: tuple[FilePlan, ...]
     warnings: tuple[LocateWarning, ...]
 
-    def to_json(self) -> dict[str, object]:
-        """The plan as JSON data with stable keys."""
+    def to_json(self) -> LocatePlanJson:
+        """The plan as JSON data with stable keys: each dataclass as an object of its fields (``LocatePlanJson``),
+        a warning's ``args`` as an object."""
 
         value = _json_value(self)
         assert isinstance(value, dict)
-        return value
+        return cast("LocatePlanJson", value)
+
+
+# The plan as JSON (``LocatePlan.to_json``): one object type per dataclass, with its field names.
+
+
+class RecordWindowJson(TypedDict):
+    start: int
+    end: int
+    reverse_complement: bool
+    column: int | None
+
+
+class ReferenceCdsJson(TypedDict):
+    protein_id: str
+    locus_tag: str | None
+    gene: str | None
+    product: str | None
+    start: int
+    end: int
+    strand: Strand
+    length_aa: int
+    length_nt: int
+
+
+class ReferenceGeneJson(TypedDict):
+    cds: ReferenceCdsJson
+    window_index: int
+    order: int
+
+
+class LocateReferenceJson(TypedDict):
+    file_key: str
+    record_key: str
+    record_id: str
+    record_length: int
+    circular: bool
+    windows: list[RecordWindowJson]
+    genes: list[ReferenceGeneJson]
+    cut_genes: list[ReferenceCdsJson]
+
+
+class ComparisonThresholdsJson(TypedDict):
+    evalue: float
+    bitscore: float
+    identity: float
+    alignment_length: int
+
+
+class LocateOptionsJson(TypedDict):
+    program: LocateProgramName
+    thresholds: ComparisonThresholdsJson
+    best_ratio: float
+    merge_distance: int
+    flank: int
+    min_genes: int
+    min_share: float
+    jump_min: int
+    jump_share: float
+    max_windows: int
+
+
+class WindowGeneJson(TypedDict):
+    protein_id: str
+    order: int
+    window_index: int
+    start: int
+    end: int
+    strand: Strand
+    query_coverage: float
+    bits: float
+    status: GeneStatus
+
+
+class PlannedWindowJson(TypedDict):
+    record_key: str
+    record_id: str
+    record_index: int
+    record_length: int
+    window: RecordWindowJson
+    selected: bool
+    reason: CandidateReason | None
+    cluster: int
+    touches_start: bool
+    touches_end: bool
+    across_origin: bool
+    gap_to_next_same_record: int | None
+    evidence_bits: float
+    genes: list[WindowGeneJson]
+    ref_span: list[int]
+
+
+class GeneCoverageJson(TypedDict):
+    complete: list[str]
+    partial: list[str]
+    absent: list[str]
+    reference_not_found: list[list[int]]
+
+
+class ComparisonThresholdTallyJson(TypedDict):
+    name: str
+    threshold: float
+    rows_left_out: int
+    best_value: float
+
+
+class ComparisonRowTallyJson(TypedDict):
+    rows_read: int
+    rows_kept: int
+    thresholds: list[ComparisonThresholdTallyJson]
+
+
+class LocateWarningJson(TypedDict):
+    code: LocateWarningCode
+    args: dict[str, LocateArg]
+
+
+class FilePlanJson(TypedDict):
+    file_key: str
+    windows: list[PlannedWindowJson]
+    candidates: list[PlannedWindowJson]
+    coverage: GeneCoverageJson
+    tally: ComparisonRowTallyJson
+    warnings: list[LocateWarningJson]
+
+
+class LocatePlanJson(TypedDict):
+    reference: LocateReferenceJson
+    options: LocateOptionsJson
+    runtime: LosatRuntimeRecord | None
+    files: list[FilePlanJson]
+    warnings: list[LocateWarningJson]
 
 
 def _json_value(value: object) -> object:
@@ -721,10 +854,13 @@ def _jump(window_genes: int, options: LocateOptions) -> float:
     return max(options.jump_min, options.jump_share * window_genes)
 
 
-def _reversed(cluster: _Cluster) -> bool:
-    opposite = math.fsum(anchor.locus.bits for anchor in cluster.anchors if anchor.opposite)
-    same = math.fsum(anchor.locus.bits for anchor in cluster.anchors if not anchor.opposite)
-    return opposite > same
+def _reversed(anchors: Sequence[_Anchor]) -> bool:
+    """Whether most of the genes of ``anchors`` lie on the opposite strand of the reference as drawn (PD-OI-123,
+    rules 6 and 7); a tie keeps them as drawn."""
+
+    opposite = {anchor.locus.gene.protein_id for anchor in anchors if anchor.opposite}
+    same = {anchor.locus.gene.protein_id for anchor in anchors if not anchor.opposite}
+    return len(opposite) > len(same)
 
 
 def _split_runs(cluster: _Cluster, jump: float, reverse: bool) -> list[list[_Anchor]]:
@@ -809,12 +945,11 @@ def _run_spans(runs: Sequence[Sequence[_Anchor]], flank: int, closed_length: int
     return [(edges[index] + 1, edges[index + 1]) for index in range(len(runs))]
 
 
-def _record_span(start: int, end: int, record: LocateRecord, flank: int) -> tuple[int, int]:
+def _record_span(start: int, end: int, record: LocateRecord) -> tuple[int, int]:
     """A span of the cluster frame as record coordinates (rule 7).
 
     A circular record has no ends: the span wraps, crossing the origin when
-    it must. A linear record clamps it, and takes an end when at most
-    ``flank`` remains.
+    it must. A linear record clamps it at its ends.
     """
 
     length = record.length
@@ -823,23 +958,18 @@ def _record_span(start: int, end: int, record: LocateRecord, flank: int) -> tupl
             low = (start - 1) % length + 1
             return low, low - 1 if low > 1 else length
         return (start - 1) % length + 1, (end - 1) % length + 1
-    low, high = max(1, start), min(length, end)
-    return (1 if low - 1 <= flank else low), (length if length - high <= flank else high)
+    return max(1, start), min(length, end)
 
 
-def _pieces(rank: int, cluster: _Cluster, reverse: bool, runs: Sequence[Sequence[_Anchor]], flank: int, closed: bool) -> list[_Piece]:
-    """The windows of one cluster: one per part (rule 7)."""
+def _pieces(rank: int, cluster: _Cluster, runs: Sequence[Sequence[_Anchor]], flank: int, closed: bool) -> list[_Piece]:
+    """The windows of one cluster: one per part, each oriented by its own genes (rule 7)."""
 
     record = cluster.record
     pieces = []
     for run, (start, end) in zip(runs, _run_spans(runs, flank, record.length if closed else None)):
         # A cut between parts is not a record end: only the outer edges take one.
-        low, high = _record_span(start, end, record, flank)
-        if not record.circular and run is not runs[0]:
-            low = max(1, start)
-        if not record.circular and run is not runs[-1]:
-            high = min(record.length, end)
-        pieces.append(_Piece(rank, cluster, low, high, tuple(run), reverse))
+        low, high = _record_span(start, end, record)
+        pieces.append(_Piece(rank, cluster, low, high, tuple(run), _reversed(run)))
     return pieces
 
 
@@ -877,7 +1007,7 @@ def _select(
     reference: LocateReference,
     options: LocateOptions,
 ) -> tuple[dict[int, CandidateReason | None], int]:
-    """Which clusters become windows (rule 5), and how many were left out by ``max_windows``."""
+    """Which clusters become windows (rule 5), and how many windows ``max_windows`` left out."""
 
     counts = _window_gene_counts(reference)
     covered: set[int] = set()
@@ -892,7 +1022,7 @@ def _select(
             chosen[rank] = "COVERED_BY_OTHER_WINDOW"
         elif windows + len(pieces) > options.max_windows:
             chosen[rank] = "MAX_WINDOWS"
-            capped += 1
+            capped += len(pieces)
         else:
             chosen[rank] = None
             covered |= cluster.genes
@@ -938,8 +1068,9 @@ def _planned_windows(
             selected=reasons[piece.cluster_rank] is None,
             reason=reasons[piece.cluster_rank],
             cluster=piece.cluster_rank + 1,
-            touches_start=piece.start == 1,
-            touches_end=piece.end == record.length,
+            # A circular record has no ends (D-28).
+            touches_start=not record.circular and piece.start == 1,
+            touches_end=not record.circular and piece.end == record.length,
             across_origin=piece.across_origin,
             gap_to_next_same_record=gaps.get(id(piece)),
             evidence_bits=math.fsum(anchor.locus.bits for anchor in piece.anchors),
@@ -997,7 +1128,7 @@ def _file_warnings(
         ))
         return tuple(warnings)
     if capped:
-        warnings.append(LocateWarning("MAX_WINDOWS", (("max_windows", options.max_windows), ("clusters", capped))))
+        warnings.append(LocateWarning("MAX_WINDOWS", (("max_windows", options.max_windows), ("windows", capped))))
     if coverage.partial:
         warnings.append(LocateWarning("GENES_PARTIAL", (("count", len(coverage.partial)),)))
     if coverage.absent:
@@ -1014,12 +1145,12 @@ def _plan_file(
     counts = _window_gene_counts(reference)
     ranked: list[tuple[_Cluster, list[_Piece]]] = []
     for rank, cluster in enumerate(clusters):
-        reverse = _reversed(cluster)
+        reverse = _reversed(cluster.anchors)
         jump = _jump(counts[_majority_window(cluster)], options)
         framed, runs, closed = _circular_frame(
             cluster, _split_runs(cluster, jump, reverse), jump, reverse, options.merge_distance
         )
-        ranked.append((cluster, _pieces(rank, framed, reverse, runs, options.flank, closed)))
+        ranked.append((cluster, _pieces(rank, framed, runs, options.flank, closed)))
     reasons, capped = _select(ranked, reference, options)
     planned = _planned_windows([piece for _cluster, pieces in ranked for piece in pieces], reasons, reference)
     windows = tuple(window for window in planned if window.selected)
@@ -1448,15 +1579,20 @@ def prepare_locate_search(
     targets: Sequence[LocateInputFile],
     *,
     record: str | None,
+    record_key: str,
     windows: Sequence[RecordWindow],
     program: LocateProgramName,
 ) -> LocateSearch:
     """Read the reference record (``record``: an ID or ``#index``, required when the file holds several) and its
-    windows (none: the whole record), and plan one search per target File."""
+    windows (none: the whole record), and plan one search per target File.
+
+    ``record_key`` is the reference record's key in the drawing it was chosen from, so the new drawing carries
+    that record's edits (:func:`gbdraw.api.locate_drawing.derive_locate_request`).
+    """
 
     chosen = _reference_record(read_locate_file(reference), record, reference.key)
     query = locate_query(
-        chosen, file_key=reference.key, record_key=REFERENCE_RECORD_KEY,
+        chosen, file_key=reference.key, record_key=record_key,
         windows=windows or [RecordWindow(1, len(chosen.seq))], program=program,
     )
     files = [
@@ -1505,7 +1641,6 @@ __all__ = [
     "LocateDrawing",
     "LocateInputFile",
     "LocateSearch",
-    "REFERENCE_RECORD_KEY",
     "finish_locate",
     "locate_results",
     "prepare_locate_search",
@@ -1514,6 +1649,7 @@ __all__ = [
     "LocateDrawnRow",
     "LocateOptions",
     "LocatePlan",
+    "LocatePlanJson",
     "LocateProgramName",
     "LocateQuery",
     "LocateRecord",

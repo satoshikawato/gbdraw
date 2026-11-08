@@ -19,6 +19,7 @@ from gbdraw.comparisons.locate import (
     LocateDrawing,
     LocateInputFile,
     LocateOptions,
+    LocatePlanJson,
     LocateProgramName,
     LocateSearch,
     LocateSearchResult,
@@ -50,11 +51,12 @@ class LocateWindowInput(TypedDict):
 
 
 class LocateSearchInput(TypedDict):
-    """The reference File, its record (``None`` for its only record), its windows in column order (none: the whole
-    record), the target Files and the program."""
+    """The reference File, its record (``None`` for its only record) and that record's key in the drawing it was
+    chosen from, its windows in column order (none: the whole record), the target Files and the program."""
 
     reference: LocateFileInput
     recordId: str | None
+    recordKey: str
     windows: list[LocateWindowInput]
     targets: list[LocateFileInput]
     program: LocateProgramName
@@ -118,7 +120,7 @@ class LocateWindowsReply(TypedDict):
     """The plan as ``LocatePlan.to_json`` writes it (``gbdraw locate`` writes the same as ``PREFIX.plan.json``),
     and the window pairs of its drawing (``locate_drawing``)."""
 
-    plan: dict[str, object]
+    plan: LocatePlanJson
     pairs: list[LocateWindowPairReply]
 
 
@@ -138,6 +140,7 @@ def _search(payload: LocateSearchInput) -> LocateSearch:
         _file(payload["reference"]),
         [_file(target) for target in payload["targets"]],
         record=payload["recordId"],
+        record_key=payload["recordKey"],
         windows=[
             RecordWindow(int(window["start"]), int(window["end"]), bool(window["reverseComplement"]), column)
             for column, window in enumerate(payload["windows"], start=1)

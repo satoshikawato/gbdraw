@@ -176,6 +176,11 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
 COMPARISON_LOSAT_PROGRAMS: tuple[str, ...] = tuple(
     name for name, spec in LOSAT_PROGRAMS.items() if spec.molecules[0] == spec.molecules[1]
 )
+# The comparison programs that read nucleotide records on both sides: Circular similarity rings, collinear
+# chaining, and the Linear comparisons that can drop to a nucleotide search.
+NUCLEOTIDE_LOSAT_PROGRAMS: frozenset[str] = frozenset(
+    name for name, spec in LOSAT_PROGRAMS.items() if spec.molecules == ("nucleotide", "nucleotide")
+)
 # The ``losatn`` task when none is chosen.
 DEFAULT_LOSATN_TASK = "megablast"
 

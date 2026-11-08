@@ -38,7 +38,12 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
 )
-from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN, COMPARISON_LOSAT_PROGRAMS, DEFAULT_LOSATN_TASK
+from gbdraw.comparisons.losat_runtime import (
+    AUTOMATIC_LOSAT_BIN,
+    COMPARISON_LOSAT_PROGRAMS,
+    DEFAULT_LOSATN_TASK,
+    NUCLEOTIDE_LOSAT_PROGRAMS,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
@@ -1316,7 +1321,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 "losat_search must be LosatSearchOptions or None.",
                 diagnostic={"code": "COMPARISON_INPUT", "field": "losat_search"},
             )
-        if search.program not in {"losatn", "tlosatx"}:
+        if search.program not in NUCLEOTIDE_LOSAT_PROGRAMS:
             raise ValidationError(
                 "Circular similarity rings run LOSATN or TLOSATX; "
                 f"{search.program} is not available for rings.",

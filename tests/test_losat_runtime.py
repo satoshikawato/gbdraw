@@ -723,3 +723,20 @@ def test_program_table_gives_each_side_its_molecule() -> None:
         "tlosatn": (".faa", ".fna"),
         "losatp": (".faa", ".faa"),
     }
+
+
+def test_program_subsets_and_their_public_literals_follow_the_program_table() -> None:
+    """The subsets are derived from ``molecules``; the public ``Literal`` types, which cannot be, must match."""
+
+    from typing import get_args, get_type_hints
+
+    from gbdraw.api.options import LosatProgram as PublicComparisonProgram
+    from gbdraw.comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, NUCLEOTIDE_LOSAT_PROGRAMS
+    from gbdraw.interface import ComparisonRingOptions
+
+    assert COMPARISON_LOSAT_PROGRAMS == ("losatn", "tlosatx", "losatp")
+    assert NUCLEOTIDE_LOSAT_PROGRAMS == {"losatn", "tlosatx"}
+    assert get_args(PublicComparisonProgram) == COMPARISON_LOSAT_PROGRAMS
+    ring_literal, unset = get_args(get_type_hints(ComparisonRingOptions)["losat"])
+    assert unset is type(None)
+    assert set(get_args(ring_literal)) == NUCLEOTIDE_LOSAT_PROGRAMS

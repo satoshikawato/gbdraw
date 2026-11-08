@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from gbdraw.api.input_summary import _threshold_text
+from gbdraw.api.record_planning import CLI_RECORD_KEY_PREFIX, DrawnUnitName, comparison_selector_units
 from gbdraw.cli_utils.common import setup_logging
 from gbdraw.cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from gbdraw.comparisons.locate import (
@@ -191,22 +192,35 @@ def _records_table(drawing: LocateDrawing, files: Mapping[str, LocateInputFile],
 
 
 def _comparisons_table(drawing: LocateDrawing) -> str:
-    """The window pairs of adjacent rows that share a reference gene. A record is named by its record ID (``#n``
-    for a repeated ID), and a window of a record drawn in several windows by the record and its span as the
-    records table writes it (``NC_009725.2:1911335-1989004``)."""
+    """The window pairs of adjacent rows that share a reference gene. A record is named by its record ID, and a
+    window of a record drawn in several windows by the record and its span as the records table writes it
+    (``NC_009725.2:1911335-1989004``); ``#n`` takes the place of the ID wherever the comparisons table reader
+    would not read the ID back as that record (a repeated ID, an ID that reads as a region or a file selector)."""
 
-    places = [(row_index, index) for row_index, row in enumerate(drawing.rows) for index in range(len(row.records))]
-    numbers = {place: number for number, place in enumerate(places, start=1)}
-    ids = [drawing.rows[row].records[index].record_id for row, index in places]
+    records = [record for row in drawing.rows for record in row.records]
+    units = [
+        DrawnUnitName(record.record_id, record.record_key, None if record.whole else (window.start, window.end))
+        for record in records
+        for window in record.windows
+    ]
+    first_unit: dict[str, int] = {}
+    for index, unit in enumerate(units):
+        first_unit.setdefault(unit.record_key, index)
+    numbers = {key: number for number, key in enumerate(first_unit, start=1)}
 
     def selector(place: LocateWindowPlace) -> str:
         row, index, window_index = place
         record = drawing.rows[row].records[index]
-        name = record.record_id if ids.count(record.record_id) == 1 else f"#{numbers[(row, index)]}"
-        if len(record.windows) == 1:
-            return name
         window = record.windows[window_index]
-        return f"{name}:{region_text(window.start, window.end, False)}"
+        wanted = (first_unit[record.record_key] + window_index,)
+        span = "" if len(record.windows) == 1 else ":" + region_text(window.start, window.end, False)
+        for name in (record.record_id + span, f"#{numbers[record.record_key]}{span}"):
+            if comparison_selector_units(units, name) == wanted:
+                return name
+        raise ValidationError(
+            f"Window {span[1:] or 'of record'} {record.record_id} cannot be named in a comparisons table.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
 
     return comparisons_table_text([ComparisonsTableEntry(selector(upper), selector(lower)) for upper, lower in drawing.pairs])
 
@@ -233,7 +247,7 @@ def _warning_text(file_key: str, warning: LocateWarning, file_plan: FilePlan) ->
         "GENES_ABSENT": lambda: f"{file_key}: {args.get('count')} gene(s) not found.",
         "GENES_PARTIAL": lambda: f"{file_key}: {args.get('count')} gene(s) found in part.",
         "MAX_WINDOWS": lambda: (
-            f"{file_key}: {args.get('clusters')} window(s) over --max_windows {args.get('max_windows')} are not selected."
+            f"{file_key}: {args.get('windows')} window(s) over --max_windows {args.get('max_windows')} are not selected."
         ),
         "TARGET_NOT_ANNOTATED": lambda: f"{file_key} has no CDS annotation; a window may cut a gene.",
     }[warning.code]()
@@ -306,7 +320,10 @@ def locate_main(cmd_args: Sequence[str]) -> None:
         overwrite=bool(args.overwrite),
     )
     search = prepare_locate_search(
-        reference, targets, record=args.reference_record, windows=_reference_windows(args.reference_region), program=program
+        reference, targets, record=args.reference_record,
+        # The key `gbdraw linear` gives the record of its first input.
+        record_key=f"{CLI_RECORD_KEY_PREFIX}1",
+        windows=_reference_windows(args.reference_region), program=program,
     )
     require_losat_program(
         program, losat_bin=args.losat_bin, ncbi_blast_bin=args.ncbi_blast_bin,
@@ -334,10 +351,15 @@ def locate_main(cmd_args: Sequence[str]) -> None:
     plan = finish_locate(search, results, options, runtime=runtimes[0] if runtimes else None)
     _report(plan)
     if not any(file_plan.windows for file_plan in plan.files):
+        failed = {fp.file_key: dict(w.args)["error"] for fp in plan.files for w in fp.warnings if w.code == "FILE_SEARCH_FAILED"}
         raise ValidationError(
-            "No target file has a window: "
-            + "; ".join(f"{fp.file_key} kept {fp.tally.rows_kept:,} of {fp.tally.rows_read:,} rows" for fp in plan.files)
-            + ". Lower the thresholds or choose another reference span.",
+            ("Every search failed: " if len(failed) == len(plan.files) else "No target file has a window: ")
+            + "; ".join(
+                f"{fp.file_key}: the search failed: {failed[fp.file_key]}" if fp.file_key in failed
+                else f"{fp.file_key} kept {fp.tally.rows_kept:,} of {fp.tally.rows_read:,} rows"
+                for fp in plan.files
+            )
+            + ("." if len(failed) == len(plan.files) else ". Lower the thresholds or choose another reference span."),
             diagnostic={"code": "INPUT_INVALID"},
         )
     files = {item.key: item for item in (reference, *targets)}
