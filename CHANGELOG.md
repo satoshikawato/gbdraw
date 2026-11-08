@@ -24,6 +24,11 @@ write-up of a release.
   logs no longer begin with a level word, so a log format with
   `%(levelname)s` shows the level once, and importing `gbdraw.circular` or
   `gbdraw.linear` no longer sets up logging.
+- Fixed (Web app): a loaded Session's figure appears already fitted to the
+  Preview, instead of showing large for a moment and then shrinking to fit.
+  A Session file from an older gbdraw, whose saved figure shows while the
+  file is converted (several seconds on a first Load), shows that figure
+  fitted too, instead of at full size.
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

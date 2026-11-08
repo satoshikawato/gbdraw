@@ -6628,10 +6628,31 @@ const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
   return { candidateMode, generatedMode, formIsResultMode: generatedMode === candidateMode || canonical };
 };
 /**
- * The Results a Session 27-44's stored figure replaced while Python upgrades
- * it (DESIGN 4.3); a Load that does not end ok puts them back.
- * @typedef {{ results: unknown[], selectedResultIndex: number, failedGeneratePreservedResult: boolean }} StoredFigureWithdrawal
+ * The Results and the view a Session 27-44's stored figure replaced while
+ * Python upgrades it (DESIGN 4.3); a Load that does not end ok puts them back.
+ * @typedef {{ results: unknown[], selectedResultIndex: number, failedGeneratePreservedResult: boolean,
+ *   view: PersistedPreviewViewport }} StoredFigureWithdrawal
  */
+/**
+ * The pan and zoom owner's port for the stored figure (OV-2703; `storedFigurePreview` of the Load options):
+ * `hide` before it mounts, `show` once it is mounted (fitted, as the end of the Load shows its Result), and
+ * `restore` shows the view from before it again when the Load withdraws it.
+ * @typedef {{ hide(): void, show(options: { fit: boolean }): void, restore(view: PersistedPreviewViewport): void }} StoredFigurePreview
+ */
+/** @returns {StoredFigureWithdrawal} What the stored figure about to be shown replaces. */
+const storedFigureReplacement = () => ({
+  results: previewRuntimePorts.currentResults(),
+  selectedResultIndex: state.selectedResultIndex.value,
+  failedGeneratePreservedResult: state.failedGeneratePreservedResult.value,
+  view: { zoom: state.zoom.value, canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y } }
+});
+/** @param {StoredFigureWithdrawal} withdrawal @param {StoredFigurePreview | undefined} preview */
+const withdrawStoredFigure = (withdrawal, preview) => {
+  state.skipCaptureBaseConfig.value = true;
+  applyResultsData(withdrawal.results, { selectedResultIndex: withdrawal.selectedResultIndex });
+  state.failedGeneratePreservedResult.value = withdrawal.failedGeneratePreservedResult;
+  preview?.restore(withdrawal.view);
+};
 /** @param {string} at @param {string} field The field's place in the file under the part at `at`. */
 const pathIn = (at, field) => (at ? `${at}.${field}` : field);
 /**
@@ -7053,6 +7074,7 @@ const importSessionDocument = async (e, options = {}) => {
   // (DESIGN 4.3): the Results it replaced, put back unless the Load ends ok.
   /** @type {StoredFigureWithdrawal | null} */
   let storedFigureWithdrawal = /** @type {StoredFigureWithdrawal | undefined} */ (options.storedFigureWithdrawal) ?? null;
+  /** @type {SessionLoadOptions['storedFigurePreview']} */ const storedFigurePreview = options.storedFigurePreview;
   let loadedOk = false;
   /** @type {LegacySessionRead | null} A Session 27-44 as Load's readers read it and Python converted it (below). */
   let legacyRead = null;
@@ -7114,11 +7136,7 @@ const importSessionDocument = async (e, options = {}) => {
       // with its catalog, a 27-39's by legacy repair (`applyResultsData`).
       // One Load cannot admit drops the file's one set (at its top level) as A20 does.
       if (!storedFigureWithdrawal) {
-        storedFigureWithdrawal = {
-          results: previewRuntimePorts.currentResults(),
-          selectedResultIndex: state.selectedResultIndex.value,
-          failedGeneratePreservedResult: state.failedGeneratePreservedResult.value
-        };
+        storedFigureWithdrawal = storedFigureReplacement();
         const { results: storedResults, ui: storedUi } = /** @type {{ results?: unknown, ui?: { selectedResultIndex?: unknown } }} */ (fileParts.data);
         const storedRequest = fileParts.adoptedSession?.canonical?.renderRequest ?? null;
         const storedCatalog = fileParts.validatedFeatureCatalog;
@@ -7130,7 +7148,10 @@ const importSessionDocument = async (e, options = {}) => {
               savedEdits: null
             })
           : storedLogicalResults(storedResults), storedUi ?? {}));
+        // It shows fitted from its first frame (OV-2703); a set Load cannot admit leaves the shown figure as it is.
+        storedFigurePreview?.hide();
         await nextTick();
+        storedFigurePreview?.show({ fit: true });
       }
       // What its Result was drawn with, at the file's own paths: its
       // request's mode, else a Session 27-30's last Generate's or `ui.mode`
@@ -8433,11 +8454,7 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
     // A Load that did not end ok withdraws the stored figure it showed.
-    if (storedFigureWithdrawal && !loadedOk) {
-      state.skipCaptureBaseConfig.value = true;
-      applyResultsData(storedFigureWithdrawal.results, { selectedResultIndex: storedFigureWithdrawal.selectedResultIndex });
-      state.failedGeneratePreservedResult.value = storedFigureWithdrawal.failedGeneratePreservedResult;
-    }
+    if (storedFigureWithdrawal && !loadedOk) withdrawStoredFigure(storedFigureWithdrawal, storedFigurePreview);
   }
 };
 
@@ -8631,10 +8648,12 @@ export const exportSession = (titleOverride = null, options) => {
  * before the Load starts, both read here; the required Load ports `rollbackState` (the composition root's
  * `createSessionImportRollbackState`) and
  * `confirmLoadRepairs`, which shows the list of what the file cannot fully restore and answers [Load] or
- * [Cancel] (every caller that loads decides; there is no default); every other option is passed on to
- * `importSessionDocument` unread.
+ * [Cancel] (every caller that loads decides; there is no default); the pan and zoom owner's
+ * `storedFigurePreview` port (a caller without it shows the stored figure as it is); every other option is
+ * passed on to `importSessionDocument` unread.
  * @typedef {Pick<SessionSaveOptions, 'availability' | 'shownDrawing'> & { beforeImport?: () => void | Promise<void>,
- *   confirmLoadRepairs: ConfirmLoadRepairs, rollbackState: SessionImportRollbackState } & Record<string, unknown>} SessionLoadOptions
+ *   confirmLoadRepairs: ConfirmLoadRepairs, rollbackState: SessionImportRollbackState,
+ *   storedFigurePreview?: StoredFigurePreview } & Record<string, unknown>} SessionLoadOptions
  */
 /**
  * @param {SessionFileInput} event

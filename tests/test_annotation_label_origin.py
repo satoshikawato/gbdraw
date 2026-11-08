@@ -413,12 +413,23 @@ def test_joined_arc_gradient_of_three_segments_across_the_origin_takes_the_first
     assert [steps[0][1], dict(steps)[10_000.0], steps[-1][1]] == ["#0000fe", "#2800d6", "#4d00b1"]
 
 
+def _letters_6px_each(annotation, style, font_size, _place_bp, _mark_offset):
+    """A stand-in for the drawer's measure (``LabelSizing.extent``): letters 0.6 em wide each, at 1 bp per px, running
+    right from a start label's place, left from an end label's, both ways from a centred one's; 10 px deep."""
+
+    from gbdraw.annotations import LabelExtent
+
+    width = 0.6 * len(annotation.label) * font_size
+    lead = {"start": 0.0, "end": 1.0}.get(style.label_position, 0.5) * width
+    return LabelExtent(-lead, width - lead, 10.0)
+
+
 @pytest.mark.parametrize(("position", "lanes"), (("center", {"a": 0, "b": 0}), ("start", {"a": 0, "b": 1})))
 def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes: dict[str, int]) -> None:
     # A's label is 60 bp wide (10 letters of 6 px at 1 bp per px), wider than its 10 bp region. Centred on bp 105
     # it ends at bp 135, before B at bp 150; standing at A's first base (bp 100) it reaches bp 160, so B takes the
     # next lane (OV-2659).
-    from gbdraw.annotations import LabelExtent, LabelSizing, layout_annotation_track
+    from gbdraw.annotations import LabelSizing, layout_annotation_track
 
     style = RegionAnnotationStyle(label_position=position)
     annotations = tuple(
@@ -429,7 +440,7 @@ def test_the_lane_packer_keeps_room_where_the_label_stands(position: str, lanes:
         for identity, segment, label in (("a", (100, 110), "X" * 10), ("b", (150, 160), ""))
     )
     track = layout_annotation_track(
-        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)),
+        "regions", "s", annotations, record_lengths={0: 1000}, labels=LabelSizing(font_size=10.0, extent=_letters_6px_each),
         join_origin=False
     )
 
@@ -441,7 +452,7 @@ def _packed_lanes(
 ) -> dict[str, int]:
     """The lanes of ``labelled`` (its label 25 letters, 150 bp at 1 bp per px) and an unlabelled ``neighbour``."""
 
-    from gbdraw.annotations import LabelExtent, LabelSizing, layout_annotation_track
+    from gbdraw.annotations import LabelSizing, layout_annotation_track
 
     other = ResolvedRegionAnnotation(
         id="n", set_id="s", record_index=0, segments=(neighbour,), midpoint_bp=sum(neighbour) / 2,
@@ -450,7 +461,7 @@ def _packed_lanes(
     )
     track = layout_annotation_track(
         "regions", "s", (labelled, other), record_lengths={0: row_length or length},
-        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=False,
+        labels=LabelSizing(font_size=10.0, extent=_letters_6px_each), join_origin=False,
     )
     return {placement.annotation.id: placement.lane for placement in track.placements}
 

@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { PersistedPreviewViewport } from '../services/config.js' */
+/** @import { PersistedPreviewViewport, StoredFigurePreview } from '../services/config.js' */
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { isClickAtPress } from '../utils/popup-bounds.js';
@@ -33,6 +33,34 @@ const editorReserveWidth = (container) => {
   return width;
 };
 
+// The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
+/** @param {HTMLElement} container The preview canvas. */
+const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
+
+// A press on these starts no pan: a form control, or a figure element that its own editing owns.
+/** @param {Element | null | undefined} target */
+const isFormControlTarget = (target) =>
+  Boolean(target?.closest?.('button, input, textarea, select, a, [role="button"]'));
+
+/** @param {Element | null | undefined} target */
+const isSvgEditingTarget = (target) =>
+  Boolean(
+    target?.closest?.(
+      [
+        'text[data-label-editable="true"]',
+        '[data-gbdraw-feature-id]',
+        'path[id^="f"]',
+        'polygon[id^="f"]',
+        'rect[id^="f"]',
+        '[data-gbdraw-match-id]',
+        '[data-match-kind]',
+        '[data-pairwise-match-style]',
+        '[data-collinearity-block-id]',
+        '[data-collinear-group-scope]'
+      ].join(', ')
+    )
+  );
+
 /**
  * What a preview transform interaction (wheel zoom or pan) tells its subscribers when it starts or ends.
  * @typedef {object} PreviewTransformInteractionChange
@@ -44,9 +72,49 @@ const editorReserveWidth = (container) => {
 
 /** @typedef {(change: PreviewTransformInteractionChange) => void} PreviewTransformInteractionListener */
 
+/**
+ * The figure a file Session Load mounts stays hidden until the Load ends, and is then shown, fitted at once
+ * to the Preview the Load's notice and phone pane switch sized, or as it is (OV-2702). The stored figure a
+ * Session 27-44 Load shows while Python converts the file is hidden and shown fitted in the same way, and a
+ * Load that withdraws it shows the view from before it (OV-2703). A figure to show fitted while its canvas
+ * has no room (a phone shows the Settings pane) stays hidden until the canvas gets one, and is then fitted
+ * and shown; hiding a figure again, or showing it without the Fit, drops that wait.
+ * @param {{ hidden: { value: boolean }, canvas: { value: HTMLElement | null }, fitAtOnce: () => void,
+ *   setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The pan and zoom
+ *   owner's hold, canvas, Fit shown at once, and whole-view setter.
+ */
+const createHiddenPreview = ({ hidden, canvas, fitAtOnce, setPreviewViewport }) => {
+  /** @param {HTMLElement | null} container */
+  const hasRoom = (container) => Boolean(container?.offsetWidth && container.offsetHeight);
+  const roomObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(() => { if (hasRoom(canvas.value)) showHiddenPreview({ fit: true }); }) : null;
+  const hidePreviewUntilShown = () => {
+    roomObserver?.disconnect();
+    hidden.value = true;
+  };
+  /** @param {{ fit: boolean }} options `fit` shows the figure fitted, with no transition to the fitted view. */
+  const showHiddenPreview = ({ fit }) => {
+    roomObserver?.disconnect();
+    if (fit && roomObserver && canvas.value && !hasRoom(canvas.value)) {
+      roomObserver.observe(canvas.value);
+      return;
+    }
+    if (fit) fitAtOnce();
+    hidden.value = false;
+  };
+  /** @type {StoredFigurePreview} */
+  const storedFigurePreview = Object.freeze({
+    hide: hidePreviewUntilShown, show: showHiddenPreview,
+    restore: (/** @type {PersistedPreviewViewport} */ view) => setPreviewViewport(view.canvasPan, view.zoom)
+  });
+  return { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview: () => roomObserver?.disconnect() };
+};
+
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createPanZoom = (state) => {
-  const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
+  const {
+    zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown
+  } = state;
   /** @type {number | null} */
   let panFrameId = null;
   /** @type {{ x: number, y: number } | null} */
@@ -194,29 +262,6 @@ export const createPanZoom = (state) => {
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
-  /** @param {Element | null | undefined} target */
-  const isFormControlTarget = (target) =>
-    Boolean(target?.closest?.('button, input, textarea, select, a, [role="button"]'));
-
-  /** @param {Element | null | undefined} target */
-  const isSvgEditingTarget = (target) =>
-    Boolean(
-      target?.closest?.(
-        [
-          'text[data-label-editable="true"]',
-          '[data-gbdraw-feature-id]',
-          'path[id^="f"]',
-          'polygon[id^="f"]',
-          'rect[id^="f"]',
-          '[data-gbdraw-match-id]',
-          '[data-match-kind]',
-          '[data-pairwise-match-style]',
-          '[data-collinearity-block-id]',
-          '[data-collinear-group-scope]'
-        ].join(', ')
-      )
-    );
-
   const cancelPanFrame = () => {
     if (panFrameId !== null) {
       cancelAnimationFrame(panFrameId);
@@ -262,10 +307,7 @@ export const createPanZoom = (state) => {
    */
   const setPreviewViewport = (pan, zoomLevel) => {
     cancelPreviewTransformInteraction({ reconcile: false });
-    panStart.x = 0;
-    panStart.y = 0;
-    panStart.panX = 0;
-    panStart.panY = 0;
+    Object.assign(panStart, { x: 0, y: 0, panX: 0, panY: 0 });
     canvasPan.x = pan.x;
     canvasPan.y = pan.y;
     zoom.value = zoomLevel;
@@ -278,9 +320,6 @@ export const createPanZoom = (state) => {
     resetZoom ? 1.0 : zoom.value
   );
 
-  // The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
-  /** @param {HTMLElement} container The preview canvas. */
-  const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
   // The room the last Fit measured.
   let fittedRoom = '';
 
@@ -395,10 +434,7 @@ export const createPanZoom = (state) => {
 
     pendingPanPointer = null;
     isPanning.value = false;
-    const container = canvasContainerRef.value;
-    if (container) {
-      container.style.cursor = 'grab';
-    }
+    if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
     if (wasPanning) endPreviewTransformInteraction('pan');
   };
@@ -438,8 +474,22 @@ export const createPanZoom = (state) => {
   };
   const heldPreviewViewport = () => held;
 
+  // The Fit shown at once: no transition runs to the fitted view, and the browser takes that view
+  // as shown before the transition comes back.
+  const fitAtOnce = () => {
+    if (!svgContainer.value) return;
+    fitPreviewToViewport();
+    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
+    void getComputedStyle(svgContainer.value).transform;
+    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
+  };
+  const { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview } = createHiddenPreview({
+    hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
+  });
+
   const disposePanZoom = () => {
     heldRoomObserver?.disconnect();
+    disposeHiddenPreview();
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
   };
@@ -454,6 +504,9 @@ export const createPanZoom = (state) => {
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport,
+    hidePreviewUntilShown,
+    showHiddenPreview,
+    storedFigurePreview,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
