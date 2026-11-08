@@ -372,14 +372,14 @@ test('neutral cached conservation session regenerates three ordered rings offlin
       ];
       const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
       const resources = [
-        state.activeDrawing().files.c_gb,
+        state.activeDrawing().circularSources[0].gb,
         ...state.activeDrawing().files.c_conservation_fastas,
         ...state.activeDrawing().files.c_conservation_blasts
       ].map((ref) => state.inputFiles.fileOf(ref));
       return {
         status: result?.status,
         content: String(selected?.content || ''),
-        referenceName: state.activeDrawing().files.c_gb?.name,
+        referenceName: state.activeDrawing().circularSources[0]?.gb?.name,
         comparisonNames: state.activeDrawing().files.c_conservation_fastas.map(({ name }) => name),
         cachedResultNames: state.activeDrawing().files.c_conservation_blasts.map(({ name }) => name),
         cachedResultSource: state.activeDrawing().files.c_conservation_blasts_source,
@@ -781,7 +781,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         runtimes: Array.from(state.losatCache.value.values()).map(({ runtime }) => runtime),
         runInfo: JSON.parse(JSON.stringify(app.lastRunInfo)),
         files: {
-          'reference-a.gb': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_gb)),
+          'reference-a.gb': await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb)),
           'comparison-b.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[0])),
           'comparison-c.gbk': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1])),
           'comparison-d.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[2]))
@@ -1540,10 +1540,11 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   test.setTimeout(180_000);
   await openInstrumentedApp(page);
   expect(await loadSyntheticSession(page)).toMatchObject({ status: 'ok' });
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
     window.__GBDRAW_LAZY_ROLLBACK_BASELINE__ = {
-      file: app.files.c_gb,
+      file: state.activeDrawing().circularSources[0].gb,
       content: app.currentResults()[app.selectedResultIndex].content,
       selectedResultIndex: app.selectedResultIndex,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
@@ -1557,11 +1558,12 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'SESSION_TOO_NEW', latestSessionVersion: expect.any(Number) }
   });
   expect(rejected.message).not.toContain('unused-lazy-contract');
-  expect(await page.evaluate(() => {
+  expect(await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
     const baseline = window.__GBDRAW_LAZY_ROLLBACK_BASELINE__;
     return {
-      sameFile: app.files.c_gb === baseline.file,
+      sameFile: state.activeDrawing().circularSources[0].gb === baseline.file,
       sameContent: app.currentResults()[app.selectedResultIndex].content === baseline.content,
       selectedResultIndex: app.selectedResultIndex,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
@@ -1587,12 +1589,12 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     let first = '';
     let second = '';
     try {
-      await readFileText(state.inputFiles.fileOf(app.files.c_gb));
+      await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb));
     } catch (error) {
       first = String(error?.message || error);
     }
     try {
-      await readFileText(state.inputFiles.fileOf(app.files.c_gb));
+      await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb));
     } catch (error) {
       second = String(error?.message || error);
     }
