@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: in the Python API, a new drawing from a region ignored a Circular
+  track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
+  width was neither kept nor returned to Auto as the same slot given as a
+  `CircularTrackSlot` was. Both spellings are now read the same way (OV-2935).
 - Fixed: in a Linear row that draws several records or several windows of one
   record side by side, a label's leader from a record drawn later could be
   drawn over the letters of a label from a record drawn before it (with

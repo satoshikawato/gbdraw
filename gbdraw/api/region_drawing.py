@@ -660,12 +660,17 @@ def _explicit_values(options: _ModeDiagramOptions, size_class: str) -> dict[str,
         value = getattr(options, option)
         if value is not None:
             explicit[option] = value
-    tracks = getattr(options, "tracks", None)
-    if isinstance(tracks, CircularRequestTrackOptions):
-        for slot in tracks.circular_track_slots or ():
-            if isinstance(slot, CircularTrackSlot) and slot.width is not None and slot.width.unit == "px":
-                explicit[f"circularSlot.{slot.id}.width"] = slot.width.value
+    for slot in _stated_slots(getattr(options, "tracks", None)) or ():
+        if slot.width is not None and slot.width.unit == "px":
+            explicit[f"circularSlot.{slot.id}.width"] = slot.width.value
     return explicit
+
+
+def _stated_slots(tracks: object) -> list[CircularTrackSlot] | None:
+    """The Circular track slots a request states, as the drawing reads them: a slot given as a string (the CLI
+    spelling) is the slot parsed from it. ``None`` where the request states none."""
+    slots = tracks.circular_track_slots if isinstance(tracks, CircularRequestTrackOptions) else None
+    return None if slots is None else parse_circular_track_slots(slots)
 
 
 def _drawn_depth_rows(
@@ -679,10 +684,11 @@ def _drawn_depth_rows(
     tick font over the Depth settings of ``cfg``, as the drawing configures it) and its width as stated."""
     if mode != "circular" or not depth_tracks:
         return ()
-    tracks = getattr(options, "tracks", None)
-    stated = tracks.circular_track_slots if isinstance(tracks, CircularRequestTrackOptions) else None
-    slots: Sequence[str | CircularTrackSlot] = (
-        stated if stated is not None else default_circular_track_slots(show_depth=True, depth_track_count=len(depth_tracks))
+    stated = _stated_slots(getattr(options, "tracks", None))
+    slots = (
+        stated
+        if stated is not None
+        else default_circular_track_slots(show_depth=True, depth_track_count=len(depth_tracks))
     )
     base = DepthConfigurator(1, 1, CircularRenderProfile(cfg))
     axes = {
@@ -690,13 +696,13 @@ def _drawn_depth_rows(
         for index, track in enumerate(depth_tracks)
     }
     rows: list[DrawnDepthRow] = []
-    for item, slot in zip(slots, parse_circular_track_slots(slots)):
+    for slot in slots:
         track_index = depth_slot_track_index(slot.id, slot.params) if slot.renderer == "depth" else -1
         axis = axes.get(track_index) if slot.enabled else None
         if axis is None:
             continue
         # The Depth row's hand-set width is the size setting circularSlot.depth.width (_explicit_values).
-        depth_width = slot.id == "depth" and isinstance(item, CircularTrackSlot) and (slot.width is None or slot.width.unit == "px")
+        depth_width = slot.id == "depth" and (slot.width is None or slot.width.unit == "px")
         width = None if slot.width is None or depth_width else slot.width.resolve(cfg.canvas.circular.radius)
         rows.append(DrawnDepthRow(axis, track_index, width, depth_width))
     return tuple(rows)
@@ -843,15 +849,13 @@ def _linear_comparisons(
 
 def _circular_tracks(tracks: CircularRequestTrackOptions, returned: set[str]) -> CircularRequestTrackOptions:
     """Track widths whose Auto value changed return to Auto."""
-    if tracks.circular_track_slots is None:
+    slots = _stated_slots(tracks)
+    if slots is None:
         return tracks
     return replace(
         tracks,
         circular_track_slots=[
-            replace(slot, width=None)
-            if isinstance(slot, CircularTrackSlot) and f"circularSlot.{slot.id}.width" in returned
-            else slot
-            for slot in tracks.circular_track_slots
+            replace(slot, width=None) if f"circularSlot.{slot.id}.width" in returned else slot for slot in slots
         ],
     )
 
