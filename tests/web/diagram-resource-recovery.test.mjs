@@ -365,7 +365,7 @@ test('the blastp extraction stages one record source by its resource id (OV-1555
   const worker = current();
   const { resources } = payload({ first: 'A' });
   const reply = await runDiagramHelperOperation('extractCdsProteinFasta', {
-    recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank', resources
+    recordSource: { kind: 'genbank', resourceId: 'first' }, format: 'genbank', isCircular: null, resources
   });
   assert.deepEqual(reply.result, { source: 'A', format: 'genbank', fasta: null });
   assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
@@ -383,7 +383,7 @@ test('the blastp extraction reads a staged GFF3 and FASTA pair in their roles (O
   const recordSource = { kind: 'gffFasta', gffResourceId: 'pair-gff3', fastaResourceId: 'pair-fasta' };
   await runDiagramGeneration({ request: { records: [{ source: recordSource }] }, resources });
   const worker = current();
-  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', { recordSource, format: 'gff', resources });
+  const reply = await runDiagramHelperOperation('extractCdsProteinFasta', { recordSource, format: 'gff', isCircular: null, resources });
   assert.deepEqual(reply.result, { source: '##gff-version 3\n', format: 'gff', fasta: '>G1\nATG\n' });
   assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
 });

@@ -7052,8 +7052,7 @@ export const projectCanonicalSessionRequest = ({
     renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
   ) ? records[0] : null;
   // The crop the Start/End fields hold, or the window across the origin the list holds (D-45).
-  const circularPresentationCrop = cropFieldsOfWindows(circularPresentationRecord);
-  const circularPresentationRegion = circularPresentationCrop.only;
+  const { only: circularPresentationRegion, listed: circularWindows } = cropFieldsOfWindows(circularPresentationRecord);
   const form = {
     prefix: projectedOutputPrefix(
       renderRequest,
@@ -7072,11 +7071,9 @@ export const projectCanonicalSessionRequest = ({
       : '',
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,
-    circular_windows: circularPresentationCrop.listed,
-    circular_reverse: Boolean(
-      circularPresentationRegion?.reverseComplement ||
-      circularPresentationRecord?.presentation?.reverseComplement
-    ),
+    circular_windows: circularWindows,
+    circular_reverse: Boolean(circularPresentationRegion?.reverseComplement
+      || circularPresentationRecord?.presentation?.reverseComplement),
     circular_record_label: circularPresentationRecord?.presentation?.label || '',
     circular_record_subtitle: circularPresentationRecord?.presentation?.subtitle || '',
     suppress_gc: renderRequest.mode === 'circular' ? overrides.show_gc === false : false,

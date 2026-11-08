@@ -166,8 +166,9 @@ test('A Circular Session whose record has one window across the origin loads it,
   await generate(page);
   const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
   expect(drawn).toHaveLength(1);
-  expect(drawn[0]).toContain('data-gbdraw-record-source-start="16000"');
-  expect(drawn[0]).toContain('data-gbdraw-record-source-end="100"');
+  // A Circular drawing prints its drawn length in the center: 670 bp, not the record's 16,569 bp.
+  expect(drawn[0]).toMatch(/>670 bp<\/text>/);
+  expect(drawn[0]).not.toContain('16,569 bp');
   // The drawing holds the window in its read-only list, not in the Start/End fields, which would refuse 16,000-100.
   const originWindow = { start: 16000, end: 100, reverseComplement: false, column: null };
   expect(await page.evaluate(() => {

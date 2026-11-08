@@ -3032,8 +3032,7 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
-      // A record's region a search reads, whether it runs across the origin, and the record's display topology the
-      // request writes (`linearCardRequestedCircular`), by which Python crops a window across the origin.
+      // Each region a search reads, and the display topology the request writes, by which Python crops it.
       /** @type {({ file: string, acrossOrigin: boolean, isCircular: boolean | null } | null)[]} */
       let regionSpecs = [];
       /** @type {string[]} */
@@ -3041,9 +3040,7 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       // The comparison plan the request writes: over drawn units in Linear mode (OV-2738).
       let requestComparisonPlan = activeComparisonPlanSnapshot;
-      // The drawn units the request's comparison indexes count, as Python planned them (the Source recipe's records).
-      /** @type {LinearUnitSearch | null} */
-      let requestDrawnUnits = null;
+      let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
@@ -3735,27 +3732,22 @@ export const createRunAnalysis = ({
         const buildRegionSpec = (seq, card, window) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           recordSelectors.push(recordIdRaw || '');
-          const cardIndex = drawing.linearSeqs.indexOf(card);
           if (window) {
             viewTransformSpecs.push({ reverse: window.reverseComplement });
-            // The unit's record is drawn: its display topology is the one the request writes for it.
-            const isCircular = linearCardRequestedCircular({
-              drawing: requestDrawing, card, index: cardIndex, recordDisplayRows: recordDisplayRows?.value || []
-            });
+            const isCircular = linearCardRequestedCircular(
+              { drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card), recordDisplayRows: recordDisplayRows?.value || [] });
             return { file: window.searchRegion, acrossOrigin: window.start > window.end, isCircular };
           }
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
-          const bounds = resolveLinearRegionBounds(seq, cardIndex);
+          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(card));
 
           if (bounds) {
             const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
             viewTransformSpecs.push({ reverse: wantsReverse || start > end });
-            // This crop runs from its start to its end (a drawn record's crop is its window above): no topology
-            // changes it, so its file's stands.
-            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false, isCircular: null };
+            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false, isCircular: null }; // An OFF card's crop.
           }
 
           viewTransformSpecs.push({ reverse: wantsReverse });
@@ -3891,8 +3883,6 @@ export const createRunAnalysis = ({
           const proteinPair = useProteinBlastp && inputSpec.paired !== null;
           const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
-          // A record without a region has no window to cross the origin: its file's topology stands.
-          const isCircular = regionSpecs[idx]?.isCircular ?? null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && inputSpec.paired !== null
             ? await gffFastaReaderSelector({
@@ -3974,7 +3964,7 @@ export const createRunAnalysis = ({
                   regionSpec,
                   recordSelector,
                   reverseFlag: reverseFlag === '1',
-                  isCircular,
+                  isCircular: regionSpecs[idx]?.isCircular ?? null, // Without a region, the file's topology stands.
                   recordIndex: idx,
                   recordInstanceKey,
                   windowOf,
@@ -3995,7 +3985,7 @@ export const createRunAnalysis = ({
               /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
               const extractWithWorker = async (reason) => {
                 const entry = await extractFirstFastaWithWorker(
-                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1', isCircular }, idx
+                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1', isCircular: regionSpecs[idx]?.isCircular ?? null }, idx
                 );
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;

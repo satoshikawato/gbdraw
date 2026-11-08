@@ -480,14 +480,9 @@ const mergeReplayResources = (prepared, replayed) => {
  * @param {GallerySessionPublicationOwners} owners
  */
 export const createGallerySessionPublication = (owners) => {
-  /** @param {PublicationSession} source */
-  const admit = (source) => {
-    const version = Number(source?.version);
-    // A request of an earlier schema (a Session saved before windows) is read as Load reads it, promoted by the
-    // one request reader (`readRequest`); the publication writes the current schema only.
-    const session = isObject(source?.renderRequest) && Number(source.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA
-      && version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION
-      ? { ...source, renderRequest: publicationCanonicalRequest(source, owners.readRequest) } : source;
+  /** @param {PublicationSession} session */
+  const admit = (session) => {
+    const version = Number(session?.version);
     // Only Python converts the protein results these Sessions stored in the drawn frame (OV-1145).
     if (storesDrawnFrameProteinResults(session)) {
       throw new Error(`Gallery publication cannot convert the protein results that Session ${version} stored for a `
@@ -495,9 +490,13 @@ export const createGallerySessionPublication = (owners) => {
         + 'tools/refresh_gallery_sessions.py.');
     }
     if (version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION) {
-      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame.
-      const current = version === CURRENT_VERSION
+      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame. A request of an
+      // earlier schema (saved before windows) is read as Load reads it, promoted by the one request reader
+      // (`readRequest`); the publication writes the current schema only.
+      const stored = version === CURRENT_VERSION
         ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
+      const current = isObject(stored.renderRequest) && Number(stored.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA
+        ? { ...stored, renderRequest: publicationCanonicalRequest(stored, owners.readRequest) } : stored;
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
