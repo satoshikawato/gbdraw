@@ -199,6 +199,7 @@ class RecordDisplayTransform:
     display_length: int | None = None
     # A crop of a circular record across its origin (D-28): its axis runs from
     # ``source_base`` round the origin, so the source maps onto it modulo ``length``.
+    # A crop takes no display start (``resolve_record_display``), so the two never meet.
     crosses_origin: bool = False
     _anchor_boundary: int = field(init=False, repr=False)
 
@@ -233,10 +234,6 @@ class RecordDisplayTransform:
             _integer(self.wrap_length, "Wrap length", 1, self.wrap_length)
         if self.display_length is not None:
             _integer(self.display_length, "Display length", 1, self.length)
-        if not isinstance(self.crosses_origin, bool):
-            raise ValidationError("Crossing the origin must be a boolean.")
-        if self.crosses_origin and self.start_coordinate is not None:
-            raise ValidationError("A crop across the origin takes no display start.")
 
     @property
     def _source_extent(self) -> int:

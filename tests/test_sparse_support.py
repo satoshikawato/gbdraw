@@ -260,8 +260,8 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
 def sequential_related_edges(ranked_hits, pm, group_by_protein, member_roles, membership, related, cap):
     """The related-edge pass as one loop over ranked records, as it ran before the table."""
     def canonical(hit):
-        if hit.query_record_index != hit.subject_record_index:
-            forward = hit.query_record_index < hit.subject_record_index
+        if hit.query_record != hit.subject_record:
+            forward = hit.query_record < hit.subject_record
             return (hit.query, hit.subject) if forward else (hit.subject, hit.query)
         # One record: the endpoints in CDS order, as the live owner orders them (OV-2370).
         return tuple(sorted((hit.query, hit.subject), key=lambda protein_id: pc._protein_sort_key(pm[protein_id])))
