@@ -388,7 +388,8 @@ for (const mode of ['circular', 'linear']) {
       const fold = page.locator('[data-linear-source-fold]').first();
       await fold.locator(':scope > summary').click();
       await expect(fold).toHaveJSProperty('open', false);
-      await expect(fold.locator(':scope > summary button')).toHaveCount(2);
+      // The header line's move buttons follow its disclosure (outside the summary).
+      await expect(fold.locator('xpath=following-sibling::div[contains(concat(" ", @class, " "), " file-card-actions ")]//button[@data-linear-source-move]')).toHaveCount(2);
       enabledFolded = await enabledControls();
     }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
