@@ -3311,14 +3311,26 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
+                                        <label v-if="seq.windows.length < 2" class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
                                             <input type="checkbox"
                                                    v-model="seq.region_reverse"
                                                    :aria-label="t('Reverse complement for sequence {n}', { n: idx + 1 })"
                                                    class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Reverse complement') }}
                                         </label>
                                     </div>
-                                    <div class="grid grid-cols-2 gap-2">
+                                    <div v-if="seq.windows.length > 1" data-record-windows class="space-y-1">
+                                        <div class="flex items-center justify-between text-[10px] text-slate-600">
+                                            <span class="font-semibold">{{ t('Windows') }}</span>
+                                            <span>{{ t('{n} windows of this record', { n: seq.windows.length }) }}</span>
+                                        </div>
+                                        <ol class="space-y-0.5" :aria-label="t('Windows of sequence {n}', { n: idx + 1 })">
+                                            <li v-for="row in linearRecordWindowRows(seq.windows)" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
+                                                <span>{{ row.number }}. {{ row.span }}<span v-if="row.reverseComplement" class="text-[10px] text-slate-500"> ({{ t('Reverse complement') }})</span></span>
+                                                <span class="text-[10px] text-slate-500">{{ row.length }}</span>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                    <div v-else class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">{{ t('Start') }}</label>
                                             <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="t('Region start for sequence {n}', { n: idx + 1 })" :aria-describedby="`help-linear-region-${seq.uid}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">

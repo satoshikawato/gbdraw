@@ -205,6 +205,31 @@ export const regionWithinRecord = (start, end, recordLength) => {
 };
 
 /**
+ * One row of the read-only window list of a record drawn in several windows (D-10): its number (1-based, in column
+ * order), its span in source coordinates, its length, and whether it is drawn reverse-complemented.
+ * @typedef {{ number: number, span: string, length: string, reverseComplement: boolean }} LinearRecordWindowRow
+ */
+/**
+ * The rows of a record card's window list, in column order (D-08; windows without a column keep the request's
+ * order after those with one, as the layout places them).
+ * @param {readonly { start: number | null, end: number | null, reverseComplement: boolean, column: number | null }[]} windows
+ * @returns {LinearRecordWindowRow[]}
+ */
+export const linearRecordWindowRows = (windows) => windows
+  .map((window, index) => ({ window, index }))
+  .sort((a, b) => (a.window.column ?? Infinity) - (b.window.column ?? Infinity) || a.index - b.index)
+  .map(({ window }, order) => {
+    const { start, end } = window;
+    const stated = start !== null && end !== null;
+    return {
+      number: order + 1,
+      span: stated ? `${formatGroupedNumber(start)}\u2013${formatGroupedNumber(end)}` : '',
+      length: stated ? `${formatGroupedNumber(Math.abs(end - start) + 1)} bp` : '',
+      reverseComplement: window.reverseComplement
+    };
+  });
+
+/**
  * The region a Linear record card's fields state, for what Generate draws (the
  * analysis inputs, the match sequences, the note); the request projection
  * `linearRegionPayload` parses them itself and sends them as typed. null

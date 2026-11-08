@@ -74,7 +74,8 @@ export const isPristineLinearSource = (source) => {
     String(sequence.region_record_id || '') === '' &&
     sequence.region_start == null &&
     sequence.region_end == null &&
-    !sequence.region_reverse
+    !sequence.region_reverse &&
+    !(Array.isArray(sequence.windows) && sequence.windows.length)
   );
 };
 

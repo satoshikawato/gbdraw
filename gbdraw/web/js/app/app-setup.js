@@ -239,7 +239,8 @@ import {
   buildDisambiguatedRecordEntries,
   circularEstimateLengths,
   circularRequestDiagrams,
-  formatRecordLength
+  formatRecordLength,
+  linearRecordWindowRows
 } from '../services/record-options.js';
 import {
   setLinearRecordRow as updateLinearRecordRow
@@ -4261,6 +4262,7 @@ export const createAppSetup = () => {
     submitChoicePromptField: choicePrompt.submitField,
     circularRegionNote,
     linearRegionNote,
+    linearRecordWindowRows,
     notice: noticeBanner.notice,
     dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,

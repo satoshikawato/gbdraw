@@ -480,7 +480,8 @@ export const recordListRows = ({ records, recordsOff, query = '', sort = 'file' 
 // settings removes. The card fields return to these values (the record
 // fields Reset Settings resets, plus LOSAT Gencode).
 export const RECORD_SETTINGS_DEFAULTS = Object.freeze({
-  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, losat_gencode: 1
+  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, windows: [],
+  losat_gencode: 1
 });
 
 /**

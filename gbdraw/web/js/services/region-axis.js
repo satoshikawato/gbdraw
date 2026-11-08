@@ -55,11 +55,14 @@ import { t } from '../utils/i18n.js';
 /** @typedef {CircularAxisGeometry | LinearAxisGeometry} RegionAxis */
 
 /**
- * One drawn record that a region can be selected on.
+ * One drawn record that a region can be selected on: a record drawn whole or in one window, or one window of a record
+ * drawn in several. Each window of such a record names the record's key and its window index (D-01), so a drawn unit
+ * is found by `recordKey` and `windowIndex`, never by its place in the Result.
  * @typedef {object} RegionAxisRecord
  * @property {number} resultIndex
- * @property {number} recordIndex
- * @property {string} recordKey
+ * @property {number} recordIndex The drawn unit's index in the Result.
+ * @property {string} recordKey The key of the request record the unit draws.
+ * @property {number | null} windowIndex The unit's window of a record drawn in several; null for any other unit.
  * @property {string} recordId
  * @property {RegionAxis} axis
  */
@@ -76,13 +79,14 @@ import { t } from '../utils/i18n.js';
  */
 
 /**
- * A selected span, as the Region popup holds it: which record of which Result, the drawn bases, and their source
- * coordinates.
+ * A selected span, as the Region popup holds it: which record of which Result (its window, of a record drawn in
+ * several), the drawn bases, and their source coordinates.
  * @typedef {object} RegionSelection
  * @property {'region'} kind
  * @property {number} resultIndex
  * @property {number} recordIndex
  * @property {string} recordKey
+ * @property {number | null} windowIndex
  * @property {string} recordId
  * @property {DisplaySpan} span
  * @property {SourceSpan} source
@@ -165,9 +169,14 @@ export const readRegionAxisRecords = (trackSlotGeometry, resultIndex) => {
   for (const record of trackSlotGeometry.records) {
     if (!isObject(record) || record.resultIndex !== resultIndex) continue;
     const axis = readAxis(record.axis);
-    const { recordIndex, recordKey, recordId } = record;
+    const { recordIndex, recordKey, recordId, windowIndex } = record;
     if (!axis || !whole(recordIndex) || typeof recordKey !== 'string' || !recordKey) continue;
-    records.push({ resultIndex, recordIndex, recordKey, recordId: typeof recordId === 'string' ? recordId : '', axis });
+    // Python writes `windowIndex` only on the windows of a record drawn in several.
+    if (windowIndex !== undefined && !(whole(windowIndex) && windowIndex >= 0)) continue;
+    records.push({
+      resultIndex, recordIndex, recordKey, windowIndex: windowIndex ?? null,
+      recordId: typeof recordId === 'string' ? recordId : '', axis
+    });
   }
   return records;
 };

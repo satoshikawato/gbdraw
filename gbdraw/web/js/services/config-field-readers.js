@@ -244,12 +244,19 @@ const readRegionReverse = (value) => (typeof value === 'boolean'
   ? { value, lost: false } : { value: false, lost: !isUnsetValue(value) });
 /** A Linear card's text: text, else none (OV-568). @type {FieldReader<string>} */
 const readCardText = (value) => (typeof value === 'string' ? { value, lost: false } : { value: '', lost: !isUnsetValue(value) });
-/** A Linear card's genetic code, crop and texts. @type {readonly FieldRow[]} */
+/**
+ * The windows of a record drawn in several: a list, which `createLinearSeq` reads entry by entry; else none.
+ * @type {FieldReader<unknown[]>}
+ */
+const readCardWindows = (value) => (Array.isArray(value)
+  ? { value, lost: false } : { value: [], lost: !isUnsetValue(value) });
+/** A Linear card's genetic code, crop, windows and texts. @type {readonly FieldRow[]} */
 const LINEAR_SEQ_ROWS = Object.freeze([
   row('losat_gencode', readGencode),
   row('region_start', readRegionEndpoint),
   row('region_end', readRegionEndpoint),
   row('region_reverse', readRegionReverse),
+  row('windows', readCardWindows),
   ...['definition', 'record_subtitle', 'file_definition', 'file_subtitle', 'inferred_definition', 'region_record_id']
     .map((field) => row(field, readCardText))
 ]);
@@ -260,7 +267,7 @@ export const LINEAR_SEQ_READ_FIELDS = Object.freeze(LINEAR_SEQ_ROWS.map(({ field
  * (`files.linearSeqs[i]` of a Session 27-30, `webFiles.bindings.linearSeqs[i]`
  * after), with the rows of what they cannot restore at `path` (OV-568).
  * @typedef {{ losat_gencode: number, region_start: number | null, region_end: number | null, region_reverse: boolean,
- *   definition: string, record_subtitle: string, file_definition: string, file_subtitle: string,
+ *   windows: unknown[], definition: string, record_subtitle: string, file_definition: string, file_subtitle: string,
  *   inferred_definition: string, region_record_id: string }} LinearSeqFields
  * @param {Record<string, unknown>} seq
  * @param {string} path

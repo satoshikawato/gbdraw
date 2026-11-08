@@ -22,7 +22,9 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
-const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+// The bundled Gallery Sessions store request schema 9 until `tools/refresh_gallery_sessions.py` prepares them here
+// at schema 10 (PR-W); the pull request that refreshes them takes 9 out of this set again.
+const ACCEPTED_REQUEST_SCHEMAS = new Set([9, CURRENT_REQUEST_SCHEMA]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
 /**

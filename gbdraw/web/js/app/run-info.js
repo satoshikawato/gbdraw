@@ -698,7 +698,7 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', 'display'
+      'cardinality', 'source', 'selector', 'windows', 'presentation', 'display'
     ], ['recordKey']);
     coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
@@ -721,22 +721,14 @@ const validateCurrentSemanticCoverage = (request) => {
         record.selector.kind === 'recordIndex' ? ['kind', 'index'] : ['kind', 'value']
       );
     }
-    if (record.region) {
-      coverObject(coverage, record.region, `${path}.region`, [
-        'selector', 'start', 'end', 'reverseComplement'
-      ]);
-      if (record.region.selector) {
-        if (!['recordId', 'recordIndex'].includes(record.region.selector.kind)) {
-          throw recipeUnavailable(msg('region selector "{selector}" has no current CLI projection.'), { selector: String(record.region.selector.kind || 'unknown') });
-        }
-        coverObject(
-          coverage,
-          record.region.selector,
-          `${path}.region.selector`,
-          record.region.selector.kind === 'recordIndex' ? ['kind', 'index'] : ['kind', 'value']
-        );
-      }
+    // The CLI draws one window of a record (`--region`, a records table's region); a record drawn in several
+    // windows waits for the records-table column that groups them (D-32).
+    if (record.windows.length > 1) {
+      throw recipeUnavailable(msg('semantic field "{field}" has no current CLI projection.'), { field: `${path}.windows` });
     }
+    record.windows.forEach((window, windowIndex) => {
+      coverObject(coverage, window, `${path}.windows[${windowIndex}]`, ['start', 'end', 'reverseComplement', 'column']);
+    });
     coverObject(coverage, record.presentation, `${path}.presentation`, [
       'label', 'subtitle', 'reverseComplement', 'gridRow', 'gridColumn'
     ]);
@@ -918,7 +910,7 @@ const layoutRows = (request, records) => {
     } else {
       const matches = records
         .map((record, index) => (
-          [selectorText(record?.selector), selectorText(record?.region?.selector)].includes(selector)
+          selectorText(record?.selector) === selector
             ? index
             : -1
         ))
@@ -986,7 +978,7 @@ const appendInputArgs = async (args, request, files) => {
     (record.display?.isCircular != null || record.display?.startCoordinate != null)
     || gridCoordinate(record.presentation?.gridColumn) !== ''
     || (request.mode === 'circular' && (
-      Boolean(record.region)
+      record.windows.length > 0
       || Boolean(record.presentation?.label)
       || Boolean(record.presentation?.subtitle)
       || Boolean(record.presentation?.reverseComplement)
@@ -997,7 +989,7 @@ const appendInputArgs = async (args, request, files) => {
   if (request.mode === 'circular') {
     for (const [index, record] of records.entries()) {
       if (
-        (record.region?.selector || record.selector)
+        record.selector
         && await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) !== 1
       ) {
         circularSelectorNeedsTable = true;
@@ -1031,7 +1023,7 @@ const appendInputArgs = async (args, request, files) => {
       : ((options.includes('gff') || records.length > 1) && loadComparison ? 'first' : 'all');
     for (const [index, record] of records.entries()) {
       const canonicalCardinality = String(record.cardinality || '');
-      const cliCardinality = (record.region?.selector || record.selector)
+      const cliCardinality = record.selector
         ? 'exactly_one'
         : effectiveCardinality;
       if (
@@ -1047,8 +1039,8 @@ const appendInputArgs = async (args, request, files) => {
     const requestedTableRows = requestedRows;
     const columns = [...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
     const rows = records.map((record, index) => {
-      const region = isPlainObject(record.region) ? record.region : null;
-      const selector = selectorText(region?.selector || record.selector);
+      const [region = null] = record.windows;
+      const selector = selectorText(record.selector);
       const row = {
         ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
         record_label: String(record.presentation?.label || ''),
@@ -1078,7 +1070,8 @@ const appendInputArgs = async (args, request, files) => {
   options.forEach((option, part) => args.push(`--${option}`, ...sourcePaths.map((paths) => paths[part])));
 
   if (request.mode !== 'linear') return false;
-  const selectors = records.map((record) => selectorText(record.selector));
+  // A record drawn in a window names its record in its `--region`.
+  const selectors = records.map((record) => (record.windows.length ? '' : selectorText(record.selector)));
   if (selectors.some(Boolean)) args.push(...selectors.flatMap((value) => ['--record_id', value]));
   const labels = records.map((record) => String(record.presentation?.label || ''));
   if (labels.some(Boolean)) args.push(...labels.flatMap((value) => ['--record_label', value]));
@@ -1089,13 +1082,11 @@ const appendInputArgs = async (args, request, files) => {
     args.push(...reverseFlags.flatMap((value) => ['--reverse_complement', value ? '1' : '0']));
   }
   records.forEach((record, index) => {
-    if (!isPlainObject(record.region)) return;
-    const selector = selectorText(record.region.selector) || `#${index + 1}`;
-    args.push(
+    const selector = selectorText(record.selector) || `#${index + 1}`;
+    record.windows.forEach((window) => args.push(
       '--region',
-      `${selector}:${Number(record.region.start)}-${Number(record.region.end)}` +
-        `${record.region.reverseComplement ? ':rc' : ''}`
-    );
+      `${selector}:${Number(window.start)}-${Number(window.end)}${window.reverseComplement ? ':rc' : ''}`
+    ));
   });
   const rows = requestedRows.length
     ? requestedRows

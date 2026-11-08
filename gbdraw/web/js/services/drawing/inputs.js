@@ -55,7 +55,37 @@ const normalizeLinearSeqNumber = (value) => {
  *   a Session load stores the saved value as it is; the request projection validates it (R7)
  * @property {unknown} region_end a draft, as `region_start`
  * @property {boolean} region_reverse
+ * @property {LinearSeqWindow[]} windows the windows of a record drawn in several (D-01), in the order the request
+ *   gave them; empty for a record drawn whole or in one window, which `region_*` hold. The card shows them and
+ *   cannot edit them (D-10).
  */
+
+/**
+ * One window of a record drawn in several: its span in source coordinates (1-based, both ends included), its
+ * orientation, and its column in the record's row (D-08). The request validates it (R7).
+ * @typedef {object} LinearSeqWindow
+ * @property {number | null} start
+ * @property {number | null} end
+ * @property {boolean} reverseComplement
+ * @property {number | null} column
+ */
+
+/**
+ * The windows a slot or a Session stores, read as `LinearSeqWindow`s; a value that is no list reads as none.
+ * @param {unknown} value
+ * @returns {LinearSeqWindow[]}
+ */
+const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : []).map((item) => {
+  const window = /** @type {Partial<Record<keyof LinearSeqWindow, unknown>>} */ (
+    item && typeof item === 'object' && !Array.isArray(item) ? item : {}
+  );
+  return {
+    start: normalizeLinearSeqNumber(window.start),
+    end: normalizeLinearSeqNumber(window.end),
+    reverseComplement: Boolean(window.reverseComplement),
+    column: normalizeLinearSeqNumber(window.column)
+  };
+});
 
 /**
  * @param {Partial<LinearSeq> | Record<string, unknown> | null} [overrides] a slot,
@@ -68,6 +98,9 @@ export const createLinearSeq = (overrides = {}) => {
   );
   const rawUid = String(source.uid ?? '').trim();
   const rawLosatGencode = Number(source.losat_gencode);
+  // One window is the card's own crop, which `region_*` hold and the card edits; `windows` holds two or more.
+  const windows = readLinearSeqWindows(source.windows);
+  const [onlyWindow] = windows.length === 1 ? windows : [null];
   return {
     uid: rawUid || generateLinearSeqUid(),
     gb: source.gb ?? null,
@@ -81,9 +114,10 @@ export const createLinearSeq = (overrides = {}) => {
     file_subtitle: String(source.file_subtitle ?? ''),
     inferred_definition: String(source.inferred_definition ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
-    region_start: normalizeLinearSeqNumber(source.region_start),
-    region_end: normalizeLinearSeqNumber(source.region_end),
-    region_reverse: Boolean(source.region_reverse)
+    region_start: onlyWindow ? onlyWindow.start : windows.length ? null : normalizeLinearSeqNumber(source.region_start),
+    region_end: onlyWindow ? onlyWindow.end : windows.length ? null : normalizeLinearSeqNumber(source.region_end),
+    region_reverse: onlyWindow ? onlyWindow.reverseComplement : windows.length ? false : Boolean(source.region_reverse),
+    windows: windows.length > 1 ? windows : []
   };
 };
 

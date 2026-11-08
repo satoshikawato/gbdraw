@@ -321,7 +321,7 @@ export const createLinearSourceRemovalDialog = ({
 // CI-03: the per-record presentation a Linear source file carries. Replacing
 // or removing the file resets it in the replacement's History step.
 const RETIRED_LINEAR_RECORD_PRESENTATION = Object.freeze({ region_record_id: '', region_start: null,
-  region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
+  region_end: null, region_reverse: false, windows: [], definition: '', record_subtitle: '' });
 // The record reference names a record of the old file, so any replacement retires it.
 const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
 

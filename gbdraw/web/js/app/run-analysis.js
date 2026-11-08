@@ -788,12 +788,18 @@ const canReuseResolvedProteinArtifacts = ({
     const end = Number(seq.region_end) || null;
     const reverse = Boolean(seq.region_reverse)
       || (start !== null && end !== null && start > end);
-    const selector = record.region?.selector || record.selector;
+    const { selector, windows } = record;
+    /** @param {{ start: unknown, end: unknown, reverseComplement: unknown }} window */
+    const spanText = (window) => `${window.start}-${window.end}:${Boolean(window.reverseComplement)}`;
+    // A record drawn in several windows: its card holds them as the request does (`createLinearSeq`).
+    const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
       || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
-      || (record.region?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
-      || (record.region?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
-      || reverse !== Boolean(record.region?.reverseComplement || record.presentation?.reverseComplement);
+      || (seq.windows.length > 1 || windows.length > 1
+        ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
+        : (only?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
+          || (only?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
+          || reverse !== Boolean(only?.reverseComplement || record.presentation?.reverseComplement));
   })) return false;
 
   const persistedMode = inferredResolvedProteinMode(persisted);
@@ -5019,8 +5025,8 @@ export const createRunAnalysis = ({
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.
-            records: canonical.renderRequest.records.map(({ source, selector, region, presentation }) => (
-              [source, selector, region, presentation.reverseComplement]
+            records: canonical.renderRequest.records.map(({ source, selector, windows, presentation }) => (
+              [source, selector, windows, presentation.reverseComplement]
             )),
             resources: canonical.resources
           },

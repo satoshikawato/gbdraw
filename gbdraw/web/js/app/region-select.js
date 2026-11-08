@@ -323,6 +323,7 @@ export const createRegionSelect = ({
     /** @type {RegionSelection} */
     const selection = {
       kind: 'region', resultIndex: record.resultIndex, recordIndex: record.recordIndex, recordKey: record.recordKey,
+      windowIndex: record.windowIndex,
       recordId: record.recordId, span: finished.span, source: sourceSpanOf(record.axis.source, finished.span)
     };
     shownSelection.value = selection;
@@ -358,10 +359,14 @@ export const createRegionSelect = ({
   /** The selection the band shows: the open popup's, or the one being opened. */
   const selection = computed(() => openSelection() ?? shownSelection.value);
 
-  /** The record of a selection in the shown Result, found by its key; null once the Result no longer draws it. */
-  /** @param {RegionSelection} chosen */
+  /**
+   * The record of a selection in the shown Result, found by its key and window; null once the Result no longer draws
+   * it.
+   * @param {RegionSelection} chosen
+   */
   const recordOf = (chosen) => readAxisRecords().find((record) => (
     record.resultIndex === chosen.resultIndex && record.recordKey === chosen.recordKey
+      && record.windowIndex === chosen.windowIndex
   )) ?? null;
 
   // The band is drawn over the Result in the overlay's own SVG (never in the Result), placed by the record group's

@@ -171,7 +171,7 @@ export const createRecordDisplayControls = ({
         ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
           inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
-        cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
+        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length), reverse: seq.region_reverse })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
     /** @type {DrawingState[]} */

@@ -102,8 +102,10 @@ export const createShownDrawingReaders = ({
   const committedLinearRecordsOf = (drawing) => {
     const records = (committedLinearRecordCards(drawing) ?? []).map(({ record, seq }) => {
       const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
-      const { region } = record;
-      return sourceLength > 0 ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
+      // A record drawn in several windows cannot be wrapped (Python refuses it), so it has no wrap estimate.
+      const [region = null] = record.windows.length === 1 ? record.windows : [];
+      return sourceLength > 0 && record.windows.length < 2
+        ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
     });
     return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
   };

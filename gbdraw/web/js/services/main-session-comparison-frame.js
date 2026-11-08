@@ -18,7 +18,7 @@ import { DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION } from '../contracts/schema.
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /**
  * @import { CanonicalGenbankRecordSource, CanonicalGffFastaRecordSource, CanonicalLinearRenderRequest,
- *   CanonicalRecord, CanonicalRecordPresentation, CanonicalRecordRegion } from '../contracts/request.generated.js'
+ *   CanonicalRecord, CanonicalRecordPresentation, CanonicalRecordWindow } from '../contracts/request.generated.js'
  */
 
 // The conversion reads the stored request before `readSessionRequests` reads
@@ -58,9 +58,14 @@ const heldResource = (resources, resourceId) => {
  * @returns {boolean} whether the stored record is drawn reverse-complemented
  */
 const storedRecordReverses = (record) => {
-  const region = /** @type {UnvalidatedFields<keyof CanonicalRecordRegion>} */ (record?.region);
+  // A stored record of schema 10 writes its spans as `windows`; an older one as one `region`, which reads as one
+  // window (Python's `stored_record_windows`).
+  const stored = /** @type {{ windows?: unknown, region?: unknown }} */ (record ?? {});
+  const windows = /** @type {UnvalidatedFields<keyof CanonicalRecordWindow>[]} */ (
+    Array.isArray(stored.windows) ? stored.windows : [stored.region]
+  );
   const presentation = /** @type {UnvalidatedFields<keyof CanonicalRecordPresentation>} */ (record?.presentation);
-  return Boolean(region?.reverseComplement || presentation?.reverseComplement);
+  return windows.some((window) => Boolean(window?.reverseComplement)) || Boolean(presentation?.reverseComplement);
 };
 
 /**

@@ -4140,7 +4140,7 @@ export const assertDrawingInputs = (drawing) => {
 // `sequences`: the drawn record files, in request order. `cards`: every
 // Linear card, OFF cards included; an error names its card number among them.
 /**
- * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown }} S
+ * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: unknown }} S
  * @param {S[]} sequences
  * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
  *   records?: { sourceIndex?: unknown }[] } | null | undefined} catalog
@@ -4173,7 +4173,7 @@ export const materializeLinearRecordFiles = (
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
-    );
+    ) || (Array.isArray(source.windows) && source.windows.length > 0);
     if (hasRegion) {
       throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
@@ -4261,7 +4261,8 @@ export const serializeActiveRenderFiles = async (
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
-      region_reverse: !!seq.region_reverse
+      region_reverse: !!seq.region_reverse,
+      windows: seq.windows.map((window) => ({ ...window }))
     }))
   );
   const optionBag = comparisonPlanOrOptions
