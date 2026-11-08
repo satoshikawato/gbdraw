@@ -25,8 +25,10 @@ from gbdraw.annotations.models import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import (
+    DEPTH_COMPATIBILITY_FIELDS,
     CircularDiagramOptions,
     CircularRequestTrackOptions,
+    DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     _ModeDiagramOptions,
@@ -42,15 +44,29 @@ from gbdraw.api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
-from gbdraw.auto_sizes import AutoValue, DrawnExtent, SettingAdaptation, adapt_explicit_settings
+from gbdraw.analysis.depth_tracks import DepthTrackStyle, depth_track_config
+from gbdraw.auto_sizes import (
+    ADAPTABLE_SETTINGS,
+    AutoValue,
+    DrawnDepthRow,
+    DrawnExtent,
+    SettingAdaptation,
+    adapt_explicit_settings,
+)
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.render_profiles import CircularRenderProfile
+from gbdraw.configurators.depth import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RecordWindow
 from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_request
 from gbdraw.session_drawings import DrawingMode
-from gbdraw.tracks.circular import CircularTrackSlot
+from gbdraw.session_request_codec import canonical_depth_tracks
+from gbdraw.tracks.circular import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slots
+from gbdraw.tracks.parsing import depth_slot_track_index
 
 _SIZE_OPTIONS = ("window", "step", "depth_window", "depth_step")
+_SIZE_SETTINGS = frozenset(setting for settings in ADAPTABLE_SETTINGS.values() for setting in settings)
 _COMPARISON_THRESHOLDS = ("evalue", "bitscore", "identity", "alignment_length")
 _SHARED_FIELDS = tuple(option.name for option in fields(_ModeDiagramOptions) if option.init)
 _LINEAR_ONLY_FIELDS = tuple(
@@ -380,9 +396,24 @@ def derive_from_source(
     target_mode = derived.mode
     selected = derived.regions
     options = source.options
-    cfg = apply_config_overrides(options.config, None)
-    source_extent = DrawnExtent(source_mode, tuple(len(record) for record in collection.records))
-    target_extent = DrawnExtent(target_mode, derived.lengths)
+    by_index = {region.index: region for region in selected}
+    source_tracks = canonical_depth_tracks(options, record_count=len(collection.records))
+    depth_tracks = _region_depth_tracks(
+        source_tracks, [by_index.get(index) for index in range(len(derived.records))], target_mode
+    )
+    # The source's settings without its sizes, as its drawing reads them; the depth rows each drawing draws.
+    cfg = apply_config_overrides(
+        options.config,
+        {path: value for path, value in (options.config_overrides or {}).items() if _setting_of(path) not in _SIZE_SETTINGS},
+    )
+    source_extent = DrawnExtent(
+        source_mode,
+        tuple(len(record) for record in collection.records),
+        depth_rows=_drawn_depth_rows(options, source_tracks, cfg, source_mode),
+    )
+    target_extent = DrawnExtent(
+        target_mode, derived.lengths, depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode)
+    )
     adaptation = adapt_explicit_settings(
         _explicit_values(options, source_extent.size_class(cfg)),
         source=source_extent,
@@ -407,7 +438,6 @@ def derive_from_source(
     if other_mode_paths:
         dropped.append(NotCarried("OTHER_MODE_SETTINGS", source_mode, items=tuple(other_mode_paths)))
     by_key = {region.item.record_identity_key: region for region in selected}
-    by_index = {region.index: region for region in selected}
     values: dict[str, Any] = {name: getattr(options, name) for name in _SHARED_FIELDS}
     values.update(
         {name: None if name in returned else getattr(options, name) for name in _SIZE_OPTIONS},
@@ -425,9 +455,9 @@ def derive_from_source(
         annotations=_region_annotations(
             options.annotations, collection, selected, dropped, source_mode, derived.record_ids
         ),
-        depth_tracks=_region_depth_tracks(
-            options, [by_index.get(index) for index in range(len(derived.records))], target_mode
-        ),
+        # The depth tracks in their canonical form, which replaces the compatibility inputs.
+        **dict.fromkeys(name for name in DEPTH_COMPATIBILITY_FIELDS if name in _SHARED_FIELDS),
+        depth_tracks=depth_tracks,
     )
     if target_mode != source_mode:
         # Comparison thresholds filter rings in Circular and ribbons in Linear:
@@ -449,7 +479,7 @@ def derive_from_source(
         if isinstance(source, LinearDiagramRequest):
             assert isinstance(options, LinearDiagramOptions)
             values.update(
-                {name: getattr(options, name) for name in _LINEAR_ONLY_FIELDS},
+                {name: getattr(options, name) for name in _LINEAR_ONLY_FIELDS if name not in DEPTH_COMPATIBILITY_FIELDS},
                 **linear_comparisons(options, dropped),
             )
             if source.similarity_alignment is not None:
@@ -638,6 +668,40 @@ def _explicit_values(options: _ModeDiagramOptions, size_class: str) -> dict[str,
     return explicit
 
 
+def _drawn_depth_rows(
+    options: _ModeDiagramOptions,
+    depth_tracks: Sequence[DepthTrackInput] | None,
+    cfg: GbdrawConfig,
+    mode: DrawingMode,
+) -> tuple[DrawnDepthRow, ...]:
+    """The depth rows a Circular drawing of ``options`` with ``depth_tracks`` draws, in stack order: its stack's
+    enabled depth slots, else the default stack's; each with the axis of the series it draws (that series' own
+    tick font over the Depth settings of ``cfg``, as the drawing configures it) and its width as stated."""
+    if mode != "circular" or not depth_tracks:
+        return ()
+    tracks = getattr(options, "tracks", None)
+    stated = tracks.circular_track_slots if isinstance(tracks, CircularRequestTrackOptions) else None
+    slots: Sequence[str | CircularTrackSlot] = (
+        stated if stated is not None else default_circular_track_slots(show_depth=True, depth_track_count=len(depth_tracks))
+    )
+    base = DepthConfigurator(1, 1, CircularRenderProfile(cfg))
+    axes = {
+        index: depth_track_config(DepthTrackStyle(None, None, None, track.tick_font_size), base, 1, 1, None)
+        for index, track in enumerate(depth_tracks)
+    }
+    rows: list[DrawnDepthRow] = []
+    for item, slot in zip(slots, parse_circular_track_slots(slots)):
+        track_index = depth_slot_track_index(slot.id, slot.params) if slot.renderer == "depth" else -1
+        axis = axes.get(track_index) if slot.enabled else None
+        if axis is None:
+            continue
+        # The Depth row's hand-set width is the size setting circularSlot.depth.width (_explicit_values).
+        depth_width = slot.id == "depth" and isinstance(item, CircularTrackSlot) and (slot.width is None or slot.width.unit == "px")
+        width = None if slot.width is None or depth_width else slot.width.resolve(cfg.canvas.circular.radius)
+        rows.append(DrawnDepthRow(axis, track_index, width, depth_width))
+    return tuple(rows)
+
+
 def _keeps_feature(by_key: Mapping[str, SourceRegion], record_key: str, feature_id: str) -> bool:
     region = by_key.get(record_key)
     if region is None:
@@ -726,14 +790,14 @@ def _bound_record(record_ids: Sequence[str], selector: RecordSelector | None) ->
 
 
 def _region_depth_tracks(
-    options: _ModeDiagramOptions,
+    source_tracks: Sequence[DepthTrackInput] | None,
     slots: Sequence[SourceRegion | None],
     target_mode: DrawingMode,
-) -> tuple[Any, ...] | None:
+) -> tuple[DepthTrackInput, ...] | None:
     """Depth tracks of the drawn records, one slot per new record; a per-record source follows its record, and a
     record not in the source drawing has none."""
     tracks = []
-    for track in options.depth_tracks or ():
+    for track in source_tracks or ():
         source = track.source
         if isinstance(source, tuple):
             source = tuple(None if slot is None else source[slot.item.resolved_index] for slot in slots)

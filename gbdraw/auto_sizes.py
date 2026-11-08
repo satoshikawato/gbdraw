@@ -9,7 +9,7 @@ circular track widths, and the Auto value of every such setting of one drawing.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from typing import Literal, Protocol
@@ -319,17 +319,58 @@ def gc_axis_tick_font_size_of_depth(
     return depth_axis_tick_font_size_px(depth, depth_track_width_px)
 
 
+def gc_axis_tick_font_size_of_depth_rows(
+    gc: TickFontSource, depth_rows: Iterable[tuple[TickedAxisSource | None, float]]
+) -> float | None:
+    """The tick font a Percent GC axis ``gc`` takes from the depth rows beside it, each the axis of the depth track
+    it draws (None for a track the record does not draw) and its width as requested: that of the first row, in stack
+    order, that draws a track (``gc_axis_tick_font_size_of_depth``). The one reading of this rule: the drawing
+    (``CircularScalarAxes.gc_tick_font_size``) and the Auto values (``auto_setting_values``) both call it."""
+
+    for axis, width_px in depth_rows:
+        if axis is not None and width_px > 0:
+            return gc_axis_tick_font_size_of_depth(gc, axis, width_px)
+    return None
+
+
+@dataclass(frozen=True)
+class DrawnDepthRow:
+    """A depth row of a Circular drawing: the depth track it draws (``track_index``) and that track's axis, in its
+    own settings (its tick font among them), and its width.
+
+    ``width_px`` is a width the row states that no size setting holds (a share of the radius, or a width in px of
+    a row other than the Depth row); None for the Auto width, or, when ``depth_width``, the Depth width. A
+    ``depth_width`` row is the Depth row: its width is the setting ``circularSlot.depth.width``, which a drawing
+    keeps by hand or returns to Auto.
+    """
+
+    axis: TickedAxisSource
+    track_index: int
+    width_px: float | None = None
+    depth_width: bool = False
+
+
+@dataclass(frozen=True)
+class _DepthAxisInFont:
+    """A depth row's axis drawn in the drawing's own Depth tick font."""
+
+    show_axis: bool
+    show_ticks: bool
+    tick_font_size: float | None
+
+
 @dataclass(frozen=True)
 class DrawnExtent:
     """The records one drawing draws: its mode and lengths after crops, in drawing order.
 
     ``wrap_row_length`` is a wrapped drawing's row length: sizes and ticks follow what one row shows, the
-    windows the whole record.
+    windows the whole record. ``depth_rows`` are the depth rows a Circular drawing draws, in stack order.
     """
 
     mode: DiagramMode
     record_lengths: tuple[int, ...]
     wrap_row_length: int | None = None
+    depth_rows: tuple[DrawnDepthRow, ...] = ()
 
     def __post_init__(self) -> None:
         if self.mode not in _MODE_LENGTH_PAIRS:
@@ -354,7 +395,7 @@ def auto_setting_values(
     cfg: GbdrawConfig,
     *,
     track_thickness_px: Mapping[str, float] | None = None,
-    show_depth: bool = False,
+    depth_tick_font_size: float | None = None,
 ) -> dict[str, AutoValue]:
     """Return the Auto value of every length- or mode-dependent setting of a drawing.
 
@@ -371,9 +412,13 @@ def auto_setting_values(
     Circular canvas the records then share the long styles. The GC content and
     Depth tick fonts follow the track thickness: the Auto thickness unless
     ``track_thickness_px`` gives the drawing's own (keys ``gc_content`` and
-    ``depth``). A Circular drawing that draws a depth track (``show_depth``)
-    with an axis and ticks gives a Percent GC axis the depth axis's tick font
-    (``gc_axis_tick_font_size_of_depth``).
+    ``depth``); a Circular drawing's Depth font, that of the first depth
+    row of series 0 (``extent.depth_rows``). The drawing gives a Percent GC
+    axis the tick font of its first depth row
+    (``gc_axis_tick_font_size_of_depth_rows``): the font of its track, else
+    the drawing's own Depth tick font (``depth_tick_font_size``), else the
+    Auto font of its width. ``cfg`` then holds the drawing's other settings
+    (the GC content mode among them).
     """
     mode = extent.mode
     longest = max(extent.record_lengths)
@@ -403,11 +448,29 @@ def auto_setting_values(
         track: float(values[setting]) for track, setting in _TRACK_THICKNESS_SETTINGS[mode].items()
     }
     thickness.update(track_thickness_px or {})
+    auto_depth_width = float(values[_TRACK_THICKNESS_SETTINGS[mode]["depth"]])
+    rows = tuple(
+        (
+            row,
+            row.width_px if row.width_px is not None else thickness["depth"] if row.depth_width else auto_depth_width,
+        )
+        for row in extent.depth_rows
+    )
+    # The Depth font's Auto value is that of the first row of the first series, the one the font sets.
+    thickness["depth"] = next((width for row, width in rows if row.track_index == 0), thickness["depth"])
     for track, setting in _TICK_FONT_SETTINGS.items():
         values[setting] = scalar_axis_tick_font_size(mode, thickness[track])
     gc_content = cfg.objects.gc_content
-    if mode == "circular" and show_depth and gc_content.mode == "percent":
-        of_depth = gc_axis_tick_font_size_of_depth(gc_content, cfg.objects.depth, thickness["depth"])
+    if mode == "circular" and gc_content.mode == "percent":
+
+        def drawn_axis(axis: TickedAxisSource) -> TickedAxisSource:
+            if axis.tick_font_size is not None or depth_tick_font_size is None:
+                return axis
+            return _DepthAxisInFont(axis.show_axis, axis.show_ticks, depth_tick_font_size)
+
+        of_depth = gc_axis_tick_font_size_of_depth_rows(
+            gc_content, ((drawn_axis(row.axis), width) for row, width in rows)
+        )
         if of_depth is not None:
             values[_TICK_FONT_SETTINGS["gc_content"]] = of_depth
     return values
@@ -447,7 +510,8 @@ def adapt_explicit_settings(
     value changes with the size class, a tier or the mode returns to Auto and
     is listed in ``reset``; the other sizes are listed in ``kept``. A value
     that neither drawing lists is not a size and is in neither. The tick fonts
-    are compared at the track thickness each drawing ends with.
+    are compared at the track thickness each drawing ends with, and its depth
+    rows at the Depth width it ends with.
     """
 
     def thickness(mode: DiagramMode, values: Mapping[str, AutoValue]) -> dict[str, float]:
@@ -457,8 +521,12 @@ def adapt_explicit_settings(
             if setting in values
         }
 
+    depth_font = _TICK_FONT_SETTINGS["depth"]
     source_auto = auto_setting_values(
-        source, cfg, track_thickness_px=thickness(source.mode, explicit)
+        source,
+        cfg,
+        track_thickness_px=thickness(source.mode, explicit),
+        depth_tick_font_size=explicit.get(depth_font),
     )
     target_auto = auto_setting_values(target, cfg)
     unchanged = {
@@ -467,9 +535,12 @@ def adapt_explicit_settings(
         if source_auto.get(setting) == target_auto.get(setting)
     }
     # The thickness settings never depend on a thickness, so this pass only
-    # moves the tick fonts to the thickness the target keeps.
+    # moves the tick fonts to the thickness and the Depth font the target keeps.
     target_auto = auto_setting_values(
-        target, cfg, track_thickness_px=thickness(target.mode, unchanged)
+        target,
+        cfg,
+        track_thickness_px=thickness(target.mode, unchanged),
+        depth_tick_font_size=unchanged.get(depth_font),
     )
     kept: dict[str, AutoValue] = {}
     reset: list[SettingReset] = []
@@ -488,6 +559,7 @@ def adapt_explicit_settings(
 __all__ = [
     "ADAPTABLE_SETTINGS",
     "AutoValue",
+    "DrawnDepthRow",
     "DrawnExtent",
     "SettingAdaptation",
     "SettingReset",
@@ -502,6 +574,7 @@ __all__ = [
     "depth_sliding_window",
     "determine_length_parameter",
     "gc_axis_tick_font_size_of_depth",
+    "gc_axis_tick_font_size_of_depth_rows",
     "linear_label_font_size",
     "linear_label_size_lengths",
     "linear_label_size_records",

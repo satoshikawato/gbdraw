@@ -12,7 +12,7 @@ from gbdraw.auto_sizes import (
     TickedAxisSource,
     TickFontSource,
     depth_axis_tick_font_size_px,
-    gc_axis_tick_font_size_of_depth,
+    gc_axis_tick_font_size_of_depth_rows,
 )
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.core.text import calculate_svg_bbox_dimensions
@@ -152,14 +152,12 @@ class CircularScalarAxes:
 
     def gc_tick_font_size(self, gc: TickFontSource, depth_slots: Iterable[DepthSlotWidth]) -> float | None:
         """The tick font a Percent GC axis ``gc`` takes from the depth axis beside it: that of the first of
-        ``depth_slots`` (in slot order) that draws an axis (``gc_axis_tick_font_size_of_depth``). The radial layout
-        keeps the GC axis's room in it and the drawing draws the GC axis in it."""
+        ``depth_slots`` (in slot order) that draws an axis (``gc_axis_tick_font_size_of_depth_rows``). The radial
+        layout keeps the GC axis's room in it and the drawing draws the GC axis in it."""
 
-        for track_index, width_px in depth_slots:
-            axis = self.depth_axis(track_index)
-            if axis is not None and width_px > 0:
-                return gc_axis_tick_font_size_of_depth(gc, axis, width_px)
-        return None
+        return gc_axis_tick_font_size_of_depth_rows(
+            gc, ((self.depth_axis(track_index), width_px) for track_index, width_px in depth_slots)
+        )
 
     def with_gc_font_of_depth(self, depth_slots: Iterable[DepthSlotWidth]) -> CircularScalarAxes:
         """These axes with the GC axis in the font it is drawn in (``gc_tick_font_size``)."""

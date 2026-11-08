@@ -266,6 +266,25 @@ def test_regions_of_several_records_follow_source_order(materialize, tmp_path: P
     assert derive_region_drawing(materialized, [RegionSelection("pair:1", 1, 20)]).drawing.request.options.depth_tracks is None
 
 
+def test_a_region_carries_compatibility_depth_inputs_in_their_canonical_form(tmp_path: Path) -> None:
+    # OV-2934: per-record depth_track_files followed the request unchanged, a row per source record, so the new
+    # drawing of one record was refused at Generate. The region carries them as depth_tracks, as a Session stores them.
+    first, second = tmp_path / "a.tsv", tmp_path / "b.tsv"
+    first.write_text("".join(f"TESTA\t{position}\t{position % 5}\n" for position in range(1, 3001)))
+    second.write_text("".join(f"TESTB\t{position}\t{position % 7}\n" for position in range(1, 3001)))
+    source = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
+        options=LinearDiagramOptions(depth_track_files=[[str(first)], [str(second)]], depth_track_heights=[12]),
+    )
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 50)])
+    options = region.request.options
+    assert options.depth_track_files is None and options.depth_track_heights is None
+    [track] = options.depth_tracks
+    assert (track.source, track.height) == ((str(second),), 12)
+    output = replace(region.request.output, output_directory=tmp_path / "out")
+    assert all(path.is_file() for path in render_request(replace(region.request, output=output)).output_paths)
+
+
 def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> None:
     document = build_session_document(
         LinearDiagramRequest(
@@ -413,6 +432,73 @@ def test_circular_track_widths_follow_the_rule(materialize) -> None:
         slots[0],
         replace(slots[1], renderer="dinucleotide_content"),
     ]
+
+
+def _mito_depth_source(tmp_path: Path, *depth_slots: Any, **depth_track: Any) -> CircularDiagramRequest:
+    """The human mtDNA drawn in Circular with one Depth series and a Percent GC axis whose tick font is set by hand,
+    as the Web and the CLI state the Percent mode: a config override."""
+    from gbdraw.api import CircularRequestTrackOptions, CircularTrackSlot
+
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("".join(f"NC_012920.1\t{position}\t{position % 9}\n" for position in range(1, 16570)))
+    slots = (
+        CircularTrackSlot("features", "features"),
+        *depth_slots,
+        CircularTrackSlot("gc_content", "gc_content"),
+    )
+    return _mito_circular(
+        depth_tracks=(DepthTrackInput(source=str(depth), **depth_track),),
+        config_overrides={"objects.gc_content.mode": "percent", "objects.gc_content.tick_font_size": 7},
+        tracks=CircularRequestTrackOptions(circular_track_slots=slots) if depth_slots else None,
+    )
+
+
+def _gc_font_adaptation(region: Any) -> tuple[Any, ...]:
+    kept = region.adaptation.kept.get("objects.gc_content.tick_font_size")
+    reset = [
+        (item.explicit, item.source_auto, item.target_auto)
+        for item in region.adaptation.reset
+        if item.setting == "objects.gc_content.tick_font_size"
+    ]
+    return ("kept", kept) if kept is not None else ("reset", *reset)
+
+
+def test_a_region_compares_the_gc_axis_font_the_source_draws_beside_a_narrow_depth_row(tmp_path: Path) -> None:
+    # OV-2877: a Percent GC axis without its own font is drawn in the font of the first Depth row
+    # (CircularScalarAxes.gc_tick_font_size); a 20 px row draws 5 px, the Linear GC axis 8 px, so the hand-set 7 px
+    # returns to Auto. The Percent mode and the row's width come from the source's own settings.
+    from gbdraw.api import CircularTrackSlot, ScalarSpec
+
+    source = _mito_depth_source(tmp_path, CircularTrackSlot("depth", "depth", width=ScalarSpec(20.0, "px")))
+    region = derive_region_request(source, [RegionSelection("mito", 12337, 14148)])
+    assert _gc_font_adaptation(region) == ("reset", (7, 5.0, 8.0))
+
+
+def test_a_region_compares_the_gc_axis_font_of_the_depth_series_own_font(tmp_path: Path) -> None:
+    # A Depth series' own tick font is the font the Percent GC axis takes, at any row width.
+    source = _mito_depth_source(tmp_path, tick_font_size=12)
+    linear = derive_region_request(source, [RegionSelection("mito", 12337, 14148)])
+    assert _gc_font_adaptation(linear) == ("reset", (7, 12.0, 8.0))
+    # A whole-record Circular drawing draws the same Depth series beside its GC axis: the size is kept.
+    whole = derive_region_request(source, [RegionSelection("mito", 1, 16569)])
+    assert whole.mode == "circular"
+    assert _gc_font_adaptation(whole) == ("kept", 7)
+
+
+def test_a_region_compares_the_gc_axis_font_of_the_first_depth_row_of_the_stack(tmp_path: Path) -> None:
+    # The first Depth row of the stack draws series 1 at a share of the radius (0.05 of 390 px: 19.5 px draws 5 px);
+    # the Depth row of series 0 after it (60 px) would draw 8 px, the Linear GC axis's size.
+    from gbdraw.api import CircularTrackSlot, ScalarSpec
+
+    source = _mito_depth_source(
+        tmp_path,
+        CircularTrackSlot("depth_2", "depth", width=ScalarSpec(0.05, "factor"), params={"track_index": 1}),
+        CircularTrackSlot("depth", "depth", width=ScalarSpec(60.0, "px")),
+    )
+    [series] = source.options.depth_tracks
+    source = replace(source, options=replace(source.options, depth_tracks=(series, series)))
+    region = derive_region_request(source, [RegionSelection("mito", 12337, 14148)])
+    assert _gc_font_adaptation(region) == ("reset", (7, 5.0, 8.0))
 
 
 # The request-level core and the Worker helper of New drawing from a region.

@@ -170,6 +170,21 @@ class ColorOptions:
 
 
 _DepthTrackSource: TypeAlias = str | Path | DataFrame
+# The compatibility depth inputs, which ``depth_tracks`` replaces (``canonical_depth_tracks`` projects them onto it).
+DEPTH_COMPATIBILITY_FIELDS: tuple[str, ...] = (
+    "depth_table",
+    "depth_file",
+    "depth_tables",
+    "depth_files",
+    "depth_track_tables",
+    "depth_track_files",
+    "depth_track_labels",
+    "depth_track_colors",
+    "depth_track_heights",
+    "depth_track_large_tick_intervals",
+    "depth_track_small_tick_intervals",
+    "depth_track_tick_font_sizes",
+)
 # The DepthTrackInput fields that hold a finite number > 0 or None.
 DEPTH_TRACK_POSITIVE_FIELDS: tuple[str, ...] = (
     "height",
@@ -1036,23 +1051,9 @@ class _ModeDiagramOptions:
                 raise ValidationError(
                     "depth_tracks must contain DepthTrackInput values."
                 )
-            compatibility_fields = (
-                "depth_table",
-                "depth_file",
-                "depth_tables",
-                "depth_files",
-                "depth_track_tables",
-                "depth_track_files",
-                "depth_track_labels",
-                "depth_track_colors",
-                "depth_track_heights",
-                "depth_track_large_tick_intervals",
-                "depth_track_small_tick_intervals",
-                "depth_track_tick_font_sizes",
-            )
             mixed = [
                 field_name
-                for field_name in compatibility_fields
+                for field_name in DEPTH_COMPATIBILITY_FIELDS
                 if getattr(self, field_name, None) is not None
             ]
             if mixed:
