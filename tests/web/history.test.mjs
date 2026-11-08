@@ -3216,8 +3216,15 @@ for (const previousSuppressed of [false, true]) {
   await history.undo();
   await history.undo();
   assert.deepEqual(restores.at(-1), { drawn: false }, 'the before side was not drawn');
-  // The step before is the last one now; its after side is drawn already.
-  assert.equal(await history.keepRedrawnResult(), false, 'undone');
+  // The rerender that Undo asks for draws the state the step's before side holds: that side keeps its figure, so the
+  // next Undo back to it shows it with no Python run. The step before, the last one now, is drawn already.
+  figure = 'drawn-before-2';
+  assert.equal(await history.keepRedrawnResult(), true, 'the side the Undo shows');
+  assert.equal(await history.keepRedrawnResult(), false, 'kept');
+  await history.redo();
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side is not drawn yet');
+  await history.undo();
+  assert.deepEqual([restores.at(-1), rules, figure], [{ drawn: true }, 1, 'drawn-before-2']);
   await history.redo();
   assert.deepEqual(restores.at(-1), { drawn: false });
   // A checkpoint step's side is kept only while nothing is open.

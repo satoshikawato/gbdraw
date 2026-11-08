@@ -553,7 +553,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // D-24 (OV-731): a checkpoint step records whether the figure of each
     // side is the one its state draws, so Undo and Redo of a drawn side ask
     // for no Python run; History reads the drawing's figure as it captures
-    // each side (`setFigureDrawnReader`). The commit's own figure is drawn
+    // each side (`setFigurePort`). The commit's own figure is drawn
     // when it also shows every row; otherwise History keeps the figure of the
     // rerender the commit asks for once that is shown, while the step is the
     // last one (`keepRedrawnResult`).

@@ -766,14 +766,35 @@ export const createFeatureLabelActions = ({
     if (rerender) labelReflowLastError.value = null;
   };
 
+  // An edit whose Result Python must draw again asks for the automatic
+  // rerender, Auto Reflow on or off: a specific-color rule edit, a History
+  // step that changes a Legend source (Owner decision 2026-10-06, OV-43), and
+  // every label or visibility edit the Result cannot show (a forced reflow,
+  // D-118: this is its one request). A request while one is pending joins it.
+  // D-36: an accepted request leaves a redraw owed by the shown drawing (each drawing has its own, PD-OI-090) until
+  // the composition root shows a rerender of that drawing drawn from its current paint (`redrawShown`, OV-346);
+  // while one is owed, the shown figure can lack what Python draws, so a History step does not record it as drawn
+  // (D-24 (OV-731)). A side History restores owes nothing when drawn; the shown drawing's undrawn one is drawn again
+  // (`redrawRestored`, D-174).
+  /** @type {WeakSet<DrawingState>} */
+  const redrawOwed = new WeakSet();
+  const requestAutomaticRerender = () => {
+    if (!svgContainer.value?.querySelector?.('svg')) return false;
+    redrawOwed.add(state.activeDrawing());
+    labelReflowLastError.value = null;
+    labelReflowForceRequestSeq.value += 1;
+    return true;
+  };
+  const isRedrawOwed = (/** @type {DrawingState} */ drawing) => redrawOwed.has(drawing);
+  const redrawShown = (/** @type {DrawingState} */ drawing) => { redrawOwed.delete(drawing); };
+  const redrawRestored = (/** @type {DrawingState} */ drawing, /** @type {boolean | undefined} */ drawn) => (drawn
+    ? redrawShown(drawing) : drawn === false && drawing === state.activeDrawing() && requestAutomaticRerender());
+
+  // `force`: only Python can show the edit; else Auto Reflow places the labels.
   const queueLabelReflow = (force = false) => {
     labelReflowLastError.value = null;
-    if (force) {
-      labelReflowForceRequestSeq.value += 1;
-      return;
-    }
-    if (!autoLabelReflowEnabled.value) return;
-    labelReflowRequestSeq.value += 1;
+    if (force) requestAutomaticRerender();
+    else if (autoLabelReflowEnabled.value) labelReflowRequestSeq.value += 1;
   };
 
   /** @param {unknown} value */
@@ -1151,28 +1172,6 @@ export const createFeatureLabelActions = ({
     if (reflow || rerender) queueLabelReflow(rerender || projection.unavailableOverride);
     return projection.changed;
   };
-
-  // An edit whose Result Python must draw again asks for the automatic
-  // rerender, Auto Reflow on or off: a specific-color rule edit or a History
-  // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
-  // request while one is pending joins it. D-36: an accepted request leaves a
-  // redraw owed by the shown drawing (each drawing has its own, PD-OI-090) until
-  // the composition root shows a rerender of that drawing drawn from its
-  // current paint (`redrawShown`, OV-346); while one is owed, the shown
-  // figure can lack rows Python draws, so a History step does not record it
-  // as drawn (D-24 (OV-731)).
-  /** @type {WeakSet<DrawingState>} */
-  const redrawOwed = new WeakSet();
-  const requestAutomaticRerender = () => {
-    if (!svgContainer.value?.querySelector?.('svg')) return false;
-    redrawOwed.add(state.activeDrawing());
-    queueLabelReflow(true);
-    return true;
-  };
-  /** @param {DrawingState} drawing */
-  const isRedrawOwed = (drawing) => redrawOwed.has(drawing);
-  /** @param {DrawingState} drawing */
-  const redrawShown = (drawing) => { redrawOwed.delete(drawing); };
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -1881,6 +1880,7 @@ export const createFeatureLabelActions = ({
     requestAutomaticRerender,
     isRedrawOwed,
     redrawShown,
+    redrawRestored,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,

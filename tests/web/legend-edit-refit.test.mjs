@@ -171,19 +171,22 @@ test('while the rerender fits a sized figure, the line under the field says so i
 
 // D-24 with the sized refit: a checkpoint step whose listener asked for the refit after its commit marks its figure
 // undrawn, so History keeps the rerender's figure as the step's (Redo then shows the fitted figure without another
-// Python run), and a restore of a figure that stayed undrawn (a refused refit) tells the listener so.
+// Python run), and a restore of a figure that stayed undrawn (a refused refit) says so (`figureRestored`).
 test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitted one says it is undrawn', async () => {
   const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
   let rows = 'CDS';
   let figure = 'fitted-0';
   /** @type {unknown[][]} */
   const heard = [];
+  /** @type {(boolean | undefined)[]} */
+  const restored = [];
   const history = createHistoryManager({
     buildIntent: () => ({ rows }),
     applyIntent: (intent) => { rows = intent.rows; },
     buildCheckpoint: () => ({ rows, figure }),
     applyCheckpoint: (checkpoint) => { rows = checkpoint.rows; figure = checkpoint.figure; },
-    figureDrawn: () => true
+    figureDrawn: () => true,
+    figureRestored: (drawn) => restored.push(drawn)
   });
   history.setSettingsStepListener((changes, direction, undrawn) => {
     heard.push([changes === null ? null : 'changes', direction, undrawn]);
@@ -199,15 +202,16 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
   assert.deepEqual({ rows, figure }, { rows: 'CDS', figure: 'fitted-0' });
   await history.redo();
   assert.deepEqual({ rows, figure }, { rows: 'Genes', figure: 'fitted-1' }, 'Redo shows the fitted figure');
-  assert.deepEqual(heard.slice(-2), [[null, undefined, false], [null, undefined, false]]);
+  assert.deepEqual(heard.slice(-2), [[null, undefined, undefined], [null, undefined, undefined]]);
+  assert.deepEqual(restored.slice(-2), [true, true]);
   // A refit that never came (refused): the step keeps the live figure, and its Redo says it is undrawn.
   await history.runUndoableCheckpoint('Rename legend item', () => { rows = 'Long name'; figure = 'live-2'; },
     { drawn: { change: true } });
   await history.undo();
-  assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure before it is drawn');
+  assert.equal(restored.at(-1), true, 'the figure before it is drawn');
   await history.redo();
   assert.deepEqual({ rows, figure }, { rows: 'Long name', figure: 'live-2' });
-  assert.deepEqual(heard.at(-1), [null, undefined, true], 'the listener refits it again');
+  assert.equal(restored.at(-1), false, 'it is drawn again');
   // A commit whose caller asks for the automatic rerender itself says so: the listener asks for no second one.
   await history.runUndoableCheckpoint('Add color rule', () => { rows = 'Alpha'; figure = 'live-3'; },
     { drawn: { change: false } });
@@ -221,9 +225,9 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
 // OV-2560 (#1634 residual): each side of every checkpoint step reads the drawing's one reader of whether its figure is
 // the one its state draws, as History captures that side. A step whose caller says nothing of its figure (a file
 // import, the Merge of a Legend rename onto a deleted row) that starts while the refit of the step before it is
-// pending captures a figure Python has not fitted: its Undo shows that figure at once and tells the listener it is
-// undrawn, so the automatic rerender fits it. A refit shown while the step is the last one is kept as its figure, so
-// its Redo runs no Python (D-48). The reader is scoped to the History's own drawing.
+// pending captures a figure Python has not fitted: its Undo shows that figure at once and says it is undrawn
+// (`FigureDrawnPort.restored`), so the automatic rerender fits it. A refit shown while the step is the last one is
+// kept as its figure, so its Redo runs no Python (D-48). The reader is scoped to the History's own drawing.
 test('a checkpoint step captured while its drawing owes a refit restores undrawn, whoever runs it', async () => {
   const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
   const values = { circular: { colors: 'a', figure: 'fitted-0' }, other: { colors: 'x', figure: 'fitted-x' } };
@@ -243,8 +247,7 @@ test('a checkpoint step captured while its drawing owes a refit restores undrawn
       applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
     })
   });
-  history.setSettingsStepListener((changes, direction, undrawn) => heard.push([changes === null ? null : 'changes', direction, undrawn]));
-  history.setFigureDrawnReader((drawingId) => !owed.has(drawingId));
+  history.setFigurePort({ drawn: (drawingId) => !owed.has(drawingId), restored: (drawingId, drawn) => heard.push([drawingId, drawn]) });
   await history.captureBaseline('initial');
   // A Canvas padding refit is pending: the figure shows the padding as the Web drew it.
   owed.add('circular');
@@ -256,19 +259,20 @@ test('a checkpoint step captured while its drawing owes a refit restores undrawn
   assert.equal(await history.keepRedrawnResult(), true, 'the fitted figure is the step\'s');
   await history.undo();
   assert.deepEqual(values.circular, { colors: 'a', figure: 'padded-live' }, 'Undo shows the figure before the step at once');
-  assert.deepEqual(heard.at(-1), [null, undefined, true], 'and asks the listener to fit it');
+  assert.deepEqual(heard.at(-1), ['circular', false], 'and asks for it to be fitted');
   await history.redo();
   assert.deepEqual(values.circular, { colors: 'b', figure: 'fitted-1' });
-  assert.deepEqual(heard.at(-1), [null, undefined, false], 'Redo shows the kept fitted figure with no Python run');
+  assert.deepEqual(heard.at(-1), ['circular', true], 'Redo shows the kept fitted figure with no Python run');
   // A refit owed by another drawing does not mark this drawing's figure: the step ends in the History that opened
   // it, which reads its own drawing, also when the other drawing is shown by then.
   owed.add('other');
   await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'c'; shown = 'other'; });
   shown = 'circular';
   await history.undo();
-  assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure before the step is drawn');
+  assert.deepEqual(heard.at(-1), ['circular', true], 'the figure before the step is drawn');
+  const reported = heard.length;
   await history.redo();
-  assert.deepEqual(heard.at(-1), [null, undefined, false], 'the figure as the step ended is not marked undrawn');
+  assert.equal(heard.length, reported, 'the figure as the step ended is not known undrawn: nothing is reported');
   await history.undo();
   // A refit that never came (refused) leaves the step's figure undrawn: its Redo asks again (D-49).
   owed.delete('other');
@@ -276,9 +280,60 @@ test('a checkpoint step captured while its drawing owes a refit restores undrawn
   values.circular.figure = 'refused-live';
   await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'd'; });
   await history.undo();
-  assert.deepEqual(heard.at(-1), [null, undefined, true]);
+  assert.deepEqual(heard.at(-1), ['circular', false]);
   await history.redo();
-  assert.deepEqual(heard.at(-1), [null, undefined, true], 'the Redo asks for the refit again');
+  assert.deepEqual(heard.at(-1), ['circular', false], 'the Redo asks for the refit again');
+});
+
+// D-174: a Generate is a History step whose sides are the Results it replaced and drew. Each side reads whether its
+// drawing's figure is the one its state draws as History captures it, and Undo and Redo bring that back as a
+// checkpoint side's: the figure from before a Generate begun while a forced rerender was pending lacks what that
+// rerender draws, so its restore asks for it again; a drawn side owes nothing, also when a redraw was owed as the
+// Undo began. The port hears the History's own drawing.
+test('a restored Generate side brings back whether its figure was drawn', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const handle = (id) => Object.freeze({ id, identity: { fingerprint: id.repeat(64), compactSignature: id }, retainedBytes: 8, fileIds: [] });
+  let artifact = handle('a');
+  let colors = 'a';
+  /** @type {Set<string>} */
+  const owed = new Set();
+  /** @type {unknown[][]} */
+  const restored = [];
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: () => ({
+      buildIntent: () => ({ colors }),
+      applyIntent: (intent) => { colors = intent.colors; },
+      buildCheckpoint: () => ({ colors }),
+      applyCheckpoint: (checkpoint) => { colors = checkpoint.colors; },
+      captureGeneratedArtifactHandle: () => artifact,
+      restoreGeneratedArtifactHandle: (stored) => { artifact = stored; }
+    })
+  });
+  history.setFigurePort({
+    drawn: (drawingId) => !owed.has(drawingId),
+    restored: (drawingId, drawn) => restored.push([drawingId, drawn])
+  });
+  await history.captureBaseline('initial');
+  const generate = (id) => history.runUndoableArtifactReplacement('Generate diagram', () => {
+    artifact = handle(id);
+    owed.delete('circular');
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  // A forced rerender is pending as the Generate begins; the Generate draws the current state and pays it.
+  owed.add('circular');
+  await generate('b');
+  await history.undo();
+  assert.deepEqual([restored.at(-1), artifact.id], [['circular', false], 'a'], 'the figure before the Generate is drawn again');
+  // The rerender that Undo asked for is still pending as the Redo restores the Generate's own figure.
+  await history.redo();
+  assert.deepEqual([restored.at(-1), artifact.id], [['circular', true], 'b'], 'the Generate\'s figure owes nothing');
+  await generate('c');
+  owed.add('circular');
+  await history.undo();
+  assert.deepEqual([restored.at(-1), artifact.id], [['circular', true], 'b'], 'a drawn side owes nothing, though a redraw was owed');
 });
 
 // OV-2678: a checkpoint step runs inside the composition root's hold over the automatic rerender, from its first write
@@ -323,4 +378,211 @@ test('a checkpoint step runs inside the hold over the rerender, from its first w
   await assert.rejects(history.runUndoableCheckpoint('Change uploaded file', () => { throw new Error('refused'); }), /refused/);
   await history.runProjectStep('Reset settings', () => { values.circular.colors = 'c'; values.other.colors = 'y'; });
   assert.deepEqual(events.splice(0), ['released held=0', 'released held=0', 'listener commit held=1', 'released held=0']);
+});
+
+// Reset all drawings on a sized figure is a project step: the fit its commit's listener asks for marks the shown
+// drawing's part of that step, the step being committed, never the drawing's own last step; the fit shown then keeps
+// that part's figure, so the Redo of the project step runs no Python, and the drawing's own step keeps its own state.
+test('a project step\'s fit marks and keeps its own part, never the drawing\'s last own step', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a', figure: 'fitted-0' }, other: { colors: 'x', figure: 'fitted-x' } };
+  /** @type {unknown[][]} */
+  const heard = [];
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  history.setSettingsStepListener((changes, direction, undrawn) => {
+    heard.push([changes === null ? null : 'changes', direction, undrawn]);
+    // Only the reset changes what Python draws of a sized figure (`stepRefitsDrawnLegend`).
+    if (changes && !direction && values.circular.colors === 'reset') history.markLastStepUndrawn();
+  });
+  history.setFigurePort({ drawn: () => true, restored: (drawingId, drawn) => heard.push(['restored', drawingId, drawn]) });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change uploaded file', () => { values.circular.colors = 'b'; });
+  await history.runProjectStep('Reset settings', () => {
+    Object.assign(values.circular, { colors: 'reset', figure: 'reset-live' });
+    values.other.colors = 'y';
+  });
+  assert.notEqual(history.stackEntries('undo').at(-1)?.after.drawn, false, 'the drawing\'s own last step is not marked');
+  values.circular.figure = 'reset-fitted';
+  assert.equal(await history.keepRedrawnResult(), true, 'the part keeps the fitted figure');
+  await history.undo();
+  assert.deepEqual(values.circular, { colors: 'b', figure: 'fitted-0' });
+  await history.redo();
+  assert.deepEqual(values.circular, { colors: 'reset', figure: 'reset-fitted' });
+  assert.deepEqual(heard.filter(([kind]) => kind === 'restored').at(-1), ['restored', 'circular', true],
+    'the Redo shows the kept fit: no Python run');
+  await history.undo();
+  await history.undo();
+  await history.redo();
+  assert.deepEqual(values.circular, { colors: 'b', figure: 'fitted-0' }, 'the own step\'s Redo shows its own state');
+});
+
+// A newer project step that has no part for the shown drawing (a drawing Rename, a Session-only change) leaves the
+// drawing's own last step as the one whose figure a fit is kept as: the fit the drawing's import asked for, shown
+// after the Rename, is the import's figure, so the import's Redo runs no Python.
+test('a project step with no part for the shown drawing leaves the drawing\'s own last step to keep the fit', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a', figure: 'fitted-0' }, other: { colors: 'x', figure: 'fitted-x' } };
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  history.setSettingsStepListener((changes, direction) => { if (changes && !direction) history.markLastStepUndrawn(); });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change uploaded file', () => { Object.assign(values.circular, { colors: 'b', figure: 'live-1' }); });
+  history.runListStep('Rename drawing', { redo: () => {}, undo: () => {} });
+  values.circular.figure = 'fitted-1';
+  assert.equal(await history.keepRedrawnResult(), true, 'the import keeps the fitted figure');
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(values.circular, { colors: 'a', figure: 'fitted-0' });
+  await history.redo();
+  assert.deepEqual(values.circular, { colors: 'b', figure: 'fitted-1' }, 'the import\'s Redo shows the kept fit');
+});
+
+// OV-2700: a project step with no part for the shown drawing (a Rename) is passed over, but a project step with a part
+// (Reset all drawings) that is newer than the drawing's own last step still shows the drawing's state: a rerender
+// shown then is the reset's, not the import's, whose refused fit left its figure undrawn (D-49). It is never written
+// into the import's step, so the import's Redo shows the import.
+test('a project step with a part, under one with none, keeps a rerender out of the drawing\'s own older step', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a', figure: 'fig-a' }, other: { colors: 'x', figure: 'fig-x' } };
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  // The import's fit is asked for and then refused: its after side stays undrawn.
+  history.setSettingsStepListener((changes, direction) => {
+    if (changes && !direction && values.circular.colors === 'b') history.markLastStepUndrawn();
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Import', () => { Object.assign(values.circular, { colors: 'b', figure: 'fig-b-unfitted' }); });
+  await history.runProjectStep('Reset settings', () => {
+    Object.assign(values.circular, { colors: 'reset', figure: 'fig-reset' });
+    values.other.colors = 'y';
+  });
+  history.runListStep('Rename drawing', { redo: () => {}, undo: () => {} });
+  values.circular.figure = 'fig-reset-rerendered';
+  assert.equal(await history.keepRedrawnResult(), false, 'the reset\'s part shows the state; it is drawn already');
+  assert.deepEqual(history.stackEntries('undo').at(-1)?.after.checkpoint, { colors: 'b', figure: 'fig-b-unfitted' });
+  await history.undo();
+  await history.undo();
+  await history.undo();
+  await history.redo();
+  assert.deepEqual(values.circular, { colors: 'b', figure: 'fig-b-unfitted' }, 'the import\'s Redo shows the import');
+});
+
+// A restored drawn side owes nothing from the moment its restore begins, so a rerender its own mount asks for (a
+// Legend row or label edit the restored bytes lack, OV-2293) stays owed; an undrawn side asks once restored.
+test('a rerender the restore\'s own mount asks for stays owed after a drawn side is restored', async () => {
+  const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+  const handle = (id) => Object.freeze({ id, identity: { fingerprint: id.repeat(64), compactSignature: id }, retainedBytes: 8, fileIds: [] });
+  let artifact = handle('a');
+  let colors = 'a';
+  let owed = false;
+  /** @type {string[]} */
+  const events = [];
+  const mountAsks = () => { owed = true; events.push('mount asks'); };
+  const history = createHistoryManager({
+    buildIntent: () => ({ colors }),
+    applyIntent: (intent) => { colors = intent.colors; },
+    buildCheckpoint: () => ({ colors }),
+    applyCheckpoint: (checkpoint) => { colors = checkpoint.colors; mountAsks(); },
+    captureGeneratedArtifactHandle: () => artifact,
+    restoreGeneratedArtifactHandle: (stored) => { artifact = stored; mountAsks(); },
+    figureDrawn: () => !owed,
+    figureRestored: (drawn) => { if (drawn) owed = false; else if (drawn === false) owed = true; events.push(`restored ${drawn}`); }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableArtifactReplacement('Generate diagram', () => { artifact = handle('b'); return { status: 'ok' }; },
+    { shouldCommit: (result) => result.status === 'ok' });
+  await history.runUndoableCheckpoint('Change uploaded file', () => { colors = 'b'; });
+  await history.undo();
+  assert.deepEqual([events.splice(0), owed], [['restored true', 'mount asks'], true], 'a checkpoint side');
+  owed = false;
+  await history.undo();
+  assert.deepEqual([events.splice(0), owed], [['restored true', 'mount asks'], true], 'a Generate side');
+});
+
+// A project step the step limit or the budget dropped may have changed the drawing: while one is newer than the
+// drawing's own last step and no kept project step has a part for the drawing, a rerender is kept as no step's figure
+// (at most one Python run later), never written into that older own step (the OV-2700 class).
+test('a dropped project step newer than the drawing\'s own last step keeps a rerender out of that step', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const values = { circular: { colors: 'a', figure: 'fig-a' }, other: { colors: 'x', figure: 'fig-x' } };
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'other'],
+    activeDrawingId: () => 'circular',
+    maxActions: 2,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (id) => ({
+      buildIntent: () => ({ colors: values[id].colors }),
+      applyIntent: (intent) => { values[id].colors = intent.colors; },
+      buildCheckpoint: () => ({ ...values[id] }),
+      applyCheckpoint: (checkpoint) => { Object.assign(values[id], checkpoint); }
+    })
+  });
+  history.setSettingsStepListener((changes, direction) => {
+    if (changes && !direction && values.circular.colors === 'b') history.markLastStepUndrawn();
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Import', () => { Object.assign(values.circular, { colors: 'b', figure: 'fig-b-unfitted' }); });
+  await history.runProjectStep('Reset settings', () => {
+    Object.assign(values.circular, { colors: 'reset', figure: 'fig-reset' });
+    values.other.colors = 'y';
+  });
+  history.runListStep('Rename drawing', { redo: () => {}, undo: () => {} });
+  history.runListStep('Rename again', { redo: () => {}, undo: () => {} });
+  assert.ok(!history.timeline().undo.some((step) => step.label === 'Reset settings'), 'the step limit dropped the reset');
+  values.circular.figure = 'fig-reset-rerendered';
+  assert.equal(await history.keepRedrawnResult(), false, 'the dropped reset may have changed the drawing');
+  assert.deepEqual(history.stackEntries('undo').at(-1)?.after.checkpoint, { colors: 'b', figure: 'fig-b-unfitted' });
+});
+
+// A drawn side owes nothing from the start of its restore; a restore that fails gives the drawing back the redraw it
+// owed, so the figure still shown is drawn again.
+test('a restore that fails gives back the redraw its drawing owed', async () => {
+  const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+  let colors = 'a';
+  let owed = false;
+  let fail = false;
+  /** @type {(boolean | undefined)[]} */
+  const restored = [];
+  const history = createHistoryManager({
+    buildIntent: () => ({ colors }),
+    applyIntent: (intent) => { colors = intent.colors; },
+    buildCheckpoint: () => ({ colors }),
+    applyCheckpoint: (checkpoint) => { if (fail) throw new Error('restore failed'); colors = checkpoint.colors; },
+    figureDrawn: () => !owed,
+    figureRestored: (drawn) => { owed = drawn === false ? true : drawn ? false : owed; restored.push(drawn); }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change uploaded file', () => { colors = 'b'; });
+  owed = true;
+  fail = true;
+  await assert.rejects(history.undo());
+  assert.deepEqual([restored, owed], [[true, false], true], 'the drawing owes its redraw again');
 });

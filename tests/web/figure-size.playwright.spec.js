@@ -11,7 +11,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
-const { open: openParityFixture } = require('./helpers/live-generate-parity-steps.cjs');
+const { FL1_OFF, addVisibilityRule, open: openParityFixture } = require('./helpers/live-generate-parity-steps.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
 const MM_180_PX = 180 * 96 / 25.4;
@@ -360,6 +360,18 @@ test('an Undo back to a sized figure whose refit was still pending fits it again
   expect(await cdsColor()).toBe('#123456');
   expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
   expect(await renders(), 'the Redo of a fitted step runs no Python').toBe(0);
+
+  // The fit the first Undo ran is kept as the import's before side: the next Undo back to it runs no Python.
+  await page.evaluate(() => { window.__renders = 0; });
+  await hold();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  const againLine = await fittingLine();
+  await release();
+  await settle(page);
+  expect(await cdsColor()).toBe(before);
+  expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+  expect(againLine, 'the second Undo shows the fit History kept').toBe(null);
+  expect(await renders(), 'the second Undo runs no Python').toBe(0);
 });
 
 // A Generate whose Result shows the drawing's current paint pays the refit a refused one left owed (D-36), as a shown
@@ -511,4 +523,261 @@ test('a Restore and merge onto a deleted Legend row on a sized figure is fitted 
   expect(merged).not.toContain('alpha');
   expect(px((await sizeState(page)).root.width), 'the merge is fitted').toBeCloseTo(MM_280_PX, 2);
   expect(await renders(), 'one Python run fits the merged figure').toBe(1);
+});
+
+// D-118: a Feature visibility On for a feature the Result lacks forces the automatic rerender, which owes the drawing a
+// redraw like any other forced rerender. A checkpoint step (a Default colors import) begun while that rerender is
+// pending records its figure before the step as not drawn, so the Undo back to it, which shows that figure without
+// the feature, draws it again with the feature, on a sized figure and on an Auto one.
+for (const sized of [true, false]) test(`an Undo back to a figure whose forced rerender was pending draws it again (${sized ? '280 mm' : 'Auto'})`, async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  if (sized) {
+    await openLayout(page);
+    await setSide(page, 'width', 280, 'mm');
+  }
+  await addVisibilityRule(page, FL1_OFF);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const fl1Drawn = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const id = app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1')?.svg_id;
+    const svg = document.querySelector('.gbdraw-preview-surface svg');
+    return Boolean(id && svg?.querySelector(`[id="${CSS.escape(id)}"]`));
+  });
+  expect(await fl1Drawn(), 'the rule hid FL1 at Generate').toBe(false);
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__holdRender = null;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async (...args) => {
+        window.__renders += 1;
+        if (window.__holdRender) await window.__holdRender;
+        return render?.(...args);
+      }
+    };
+  });
+  const hold = () => page.evaluate(() => { window.__holdRender = new Promise((resolve) => { window.__releaseRender = resolve; }); });
+  const release = () => page.evaluate(() => { window.__holdRender = null; window.__releaseRender(); });
+  const renders = () => page.evaluate(() => window.__renders);
+  const cdsColor = () => page.evaluate(() => window.__GBDRAW_APP__.currentColors.CDS);
+
+  // Feature visibility On for FL1: only Python can draw it; its rerender is held.
+  // The popup's Feature visibility control, as `popupEdit` drives it, without waiting for the rerender.
+  await hold();
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
+    await window.Vue.nextTick();
+    app.clickedFeature.featureVisibility = 'on';
+    await app.updateClickedFeatureVisibility('on');
+    if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+    app.clickedFeature = null;
+  });
+  await expect.poll(renders).toBe(1);
+  expect(await fl1Drawn(), 'the held rerender has not drawn FL1 yet').toBe(false);
+
+  // The import is one checkpoint step; it starts while that rerender is pending.
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\t#123456\n')
+  });
+  await page.evaluate(() => { window.__importing = window.__GBDRAW_APP__.waitForAuxiliaryFileImport(window.__GBDRAW_APP__.files.d_color); });
+  await expect.poll(cdsColor).toBe('#123456');
+  await release();
+  await page.evaluate(() => window.__importing);
+  await settle(page);
+  expect(await fl1Drawn(), 'the rerender draws FL1').toBe(true);
+
+  // The import's Undo shows the figure as the import began, which lacks FL1; it is drawn again with FL1.
+  await page.evaluate(() => { window.__renders = 0; });
+  await undo(page);
+  expect(await cdsColor()).not.toBe('#123456');
+  console.log(`figure-size forced rerender undone: renders=${await renders()} fl1=${await fl1Drawn()}`);
+  expect(await fl1Drawn(), 'the Undo shows FL1, which its state draws').toBe(true);
+  expect(await renders(), 'the Undo asks Python to draw the figure once').toBe(1);
+  if (sized) expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+});
+
+// Reset all drawings on a sized figure is a project step; removing a color rule's Legend row asks for the rerender,
+// which fits the figure. That rerender's figure is kept as the shown drawing's part of the step, so the Redo of the
+// reset shows it with no Python run. OV-2697: the fit the step's commit asked for marked the drawing's last own step
+// instead (here a Default colors import), and the rerender's figure and the reset state were kept as that step's.
+test('Reset all drawings on a sized figure keeps its fit as its own; the import before it keeps its state', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await openLayout(page);
+  await setSide(page, 'width', 280, 'mm');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__renders = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: (...args) => { window.__renders += 1; return render?.(...args); }
+    };
+  });
+  const renders = () => page.evaluate(() => window.__renders);
+  const fittingLine = () => page.evaluate(() => document.querySelector('[data-figure-size-fitting]')?.textContent?.trim() ?? null);
+  const shown = () => page.evaluate(() => ({
+    cds: window.__GBDRAW_APP__.currentColors.CDS,
+    alpha: window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'alpha')
+  }));
+  await evaluateWithRetainedPromise(page, () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' });
+    return app.addSpecificRule();
+  });
+  await settle(page);
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\t#123456\n')
+  });
+  await evaluateWithRetainedPromise(page, async () => { const app = window.__GBDRAW_APP__; await app.waitForAuxiliaryFileImport(app.files.d_color); });
+  await settle(page);
+  const imported = await shown();
+  expect(imported).toEqual({ cds: '#123456', alpha: true });
+
+  await page.evaluate(() => { window.__renders = 0; });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.resetSettings());
+  await settle(page);
+  const reset = await shown();
+  expect(reset, 'the reset').not.toEqual(imported);
+  expect(await renders(), 'the reset is fitted').toBeGreaterThan(0);
+
+  await undo(page);
+  expect(await shown()).toEqual(imported);
+  await page.evaluate(() => { window.__renders = 0; });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  const redoneLine = await fittingLine();
+  await settle(page);
+  expect(await shown()).toEqual(reset);
+  console.log(`figure-size reset all redone: renders=${await renders()} line=${JSON.stringify(redoneLine)}`);
+  expect(redoneLine, 'the Redo shows the fit History kept').toBe(null);
+  expect(await renders(), 'the Redo of a fitted reset runs no Python').toBe(0);
+
+  // The import's own step keeps the state it left.
+  await undo(page);
+  await undo(page);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await shown(), 'the Redo of the import shows the import').toEqual(imported);
+});
+
+// Counts the Python runs of a page and holds or refuses their replies on demand.
+const watchRenders = async (page) => {
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const render = hooks.beforeDiagramGenerationResponse;
+    Object.assign(window, { __renders: 0, __holdRender: null, __refuseRender: false });
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async (...args) => {
+        window.__renders += 1;
+        if (window.__holdRender) await window.__holdRender;
+        if (window.__refuseRender) throw new Error('Refused by the test.');
+        return render?.(...args);
+      }
+    };
+  });
+  return {
+    renders: () => page.evaluate(() => window.__renders),
+    hold: () => page.evaluate(() => { window.__holdRender = new Promise((resolve) => { window.__releaseRender = resolve; }); }),
+    release: () => page.evaluate(() => { window.__holdRender = null; window.__releaseRender(); }),
+    refuse: (refused) => page.evaluate((value) => { window.__refuseRender = value; }, refused)
+  };
+};
+const fl1Shown = (page) => page.evaluate(() => {
+  const id = window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.locus_tag === 'FL1')?.svg_id;
+  const svg = document.querySelector('.gbdraw-preview-surface svg');
+  return Boolean(id && svg?.querySelector(`[id="${CSS.escape(id)}"]`));
+});
+// The popup's Feature visibility On for FL1, as `popupEdit` drives it, without waiting for the rerender.
+const showFl1FromPopup = (page) => evaluateWithRetainedPromise(page, async () => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.filteredFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
+  await window.Vue.nextTick();
+  app.clickedFeature.featureVisibility = 'on';
+  await app.updateClickedFeatureVisibility('on');
+  if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+  app.clickedFeature = null;
+});
+
+// D-174: a Generate is a History step whose sides record whether their figure is the one their state draws, as a
+// checkpoint's do. A Generate begun while a forced rerender is owed (Python refused it) draws the current state; its
+// Undo brings back the figure from before it, which lacks what the rerender would draw, and draws it again, on a sized
+// figure and on an Auto one.
+for (const sized of [true, false]) test(`an Undo of a Generate begun while a forced rerender was owed draws the figure before it again (${sized ? '280 mm' : 'Auto'})`, async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  if (sized) {
+    await openLayout(page);
+    await setSide(page, 'width', 280, 'mm');
+  }
+  await addVisibilityRule(page, FL1_OFF);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await fl1Shown(page), 'the rule hid FL1 at Generate').toBe(false);
+  const { renders, refuse } = await watchRenders(page);
+
+  await refuse(true);
+  await showFl1FromPopup(page);
+  await expect.poll(renders).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+  await refuse(false);
+  expect(await fl1Shown(page), 'Python refused the rerender: FL1 is not drawn').toBe(false);
+
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await fl1Shown(page), 'the Generate draws FL1').toBe(true);
+
+  await page.evaluate(() => { window.__renders = 0; });
+  await undo(page);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().redo[0]?.label)).toBe('Generate diagram');
+  console.log(`figure-size generate undone (${sized ? '280 mm' : 'Auto'}): renders=${await renders()} fl1=${await fl1Shown(page)}`);
+  expect(await fl1Shown(page), 'the Undo shows FL1, which its state draws').toBe(true);
+  expect(await renders(), 'the Undo asks Python to draw the figure once').toBe(1);
+  if (sized) expect(px((await sizeState(page)).root.width)).toBeCloseTo(MM_280_PX, 2);
+});
+
+// D-175: a rerender requested while a Generate runs waits for it and runs once after it. It keeps the History step
+// serial of its request (D-40): a step begun after the request (here the focus of the width field) takes the
+// rerender's drawn write (the Legend row Python draws for a color rule) into the state it began from, so focus alone
+// records no step.
+test('a rerender held by a Generate counts as requested before a step begun after it', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openParityFixture(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await openLayout(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const { renders, hold, release } = await watchRenders(page);
+  const serial = () => page.evaluate(() => window.__GBDRAW_HISTORY__.intentStepSerial());
+  const steps = () => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo.map((step) => step.label));
+
+  await hold();
+  await page.evaluate(() => { window.__generating = window.__GBDRAW_APP__.runAnalysis(); });
+  await expect.poll(renders).toBe(1);
+  // A color rule adds a Legend row that only Python draws; its rerender waits for the Generate.
+  await evaluateWithRetainedPromise(page, () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' });
+    return app.addSpecificRule();
+  });
+  const requested = await serial();
+  await page.locator('#figure-width').focus();
+  await expect.poll(serial, 'the width field\'s step begins after the request').toBeGreaterThan(requested);
+  await release();
+  // The rule changed the draft the Generate drew, so the Generate may end stale; either way the rerender follows it.
+  const generated = await page.evaluate(() => window.__generating.then((outcome) => outcome.status));
+  await expect.poll(renders, 'the held rerender runs once after the Generate').toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+  const drawn = await steps();
+  await page.locator('#figure-width').blur();
+  await settle(page);
+  const after = await steps();
+  console.log(`figure-size held replay: generate=${generated} before=${JSON.stringify(drawn.slice(0, 3))} after=${JSON.stringify(after.slice(0, 3))}`);
+  expect(after, 'focus alone records no step').toEqual(drawn);
 });
