@@ -109,12 +109,24 @@ const TOKEN_PIECE_BYTES = 16 * MIB;
  */
 export const contentTokenOfBytes = async (bytes) => {
   const pieceCount = Math.max(1, Math.ceil(bytes.byteLength / TOKEN_PIECE_BYTES));
-  const digests = new Uint8Array(pieceCount * 32);
+  /** @type {ArrayBuffer[]} */
+  const digests = [];
   for (let index = 0; index < pieceCount; index += 1) {
     const start = index * TOKEN_PIECE_BYTES;
-    digests.set(new Uint8Array(await sha256Digest(bytes.subarray(start, start + TOKEN_PIECE_BYTES))), index * 32);
+    digests.push(await sha256Digest(bytes.subarray(start, start + TOKEN_PIECE_BYTES)));
   }
-  return /** @type {ResourceContentToken} */ (await sha256Hex(digests));
+  return tokenOfPieceDigests(digests);
+};
+
+/**
+ * The content token from the SHA-256 digests of the 16 MiB pieces, in order (`contentTokenOfBytes`).
+ * @param {readonly ArrayBuffer[]} digests
+ * @returns {Promise<ResourceContentToken>}
+ */
+const tokenOfPieceDigests = async (digests) => {
+  const joined = new Uint8Array(digests.length * 32);
+  digests.forEach((digest, index) => joined.set(new Uint8Array(digest), index * 32));
+  return /** @type {ResourceContentToken} */ (await sha256Hex(joined));
 };
 
 /**
@@ -273,6 +285,95 @@ const writeCopy = async (store, plain, facts) => {
     writer.abort();
     return null;
   }
+};
+
+/**
+ * A copy of a stream's bytes and their facts; or no copy, because the browser
+ * lets none be written (`unavailable`), or a write failed or fell short, as when
+ * the browser's storage is full (`write-failed`). A failed copy is deleted.
+ * @typedef {{ copy: InputCopy, facts: FileContentFacts }
+ *   | { copy: null, reason: 'unavailable' | 'write-failed' }} StreamCopy
+ */
+/** A write of a stream's copy that failed, told apart from a failure of the stream. */
+const COPY_WRITE_FAILED = Symbol('copy write failed');
+
+/**
+ * Copies the bytes of `stream` (an input that a Session Load reads from its
+ * file, PD-OI-121) into a new copy in 16 MiB pieces, one at a time, hashing each
+ * piece for the content token while it is written: the content is never whole
+ * in memory and is read once. A copy that holds the token already is shared.
+ * A stream that fails rejects with its error, after the copy is deleted; with
+ * no copy store, the stream is cancelled unread.
+ * @param {ReadableStream<Uint8Array>} stream
+ * @returns {Promise<StreamCopy>}
+ */
+export const copyInputStream = async (stream) => {
+  const writer = copyStore ? await copyStore.openWriter().catch(() => null) : null;
+  if (!writer) {
+    await stream.cancel().catch(() => {});
+    return { copy: null, reason: 'unavailable' };
+  }
+  const reader = stream.getReader();
+  /** @type {ArrayBuffer[]} */
+  const digests = [];
+  let byteLength = 0;
+  let buffer = new ArrayBuffer(TOKEN_PIECE_BYTES);
+  let filled = 0;
+  // Web Crypto copies a piece when the digest starts, so the write may transfer it at once.
+  const writePiece = async () => {
+    const piece = filled === buffer.byteLength ? buffer : buffer.slice(0, filled);
+    const [digest, given] = await Promise.all([
+      sha256Digest(new Uint8Array(piece)),
+      writer.write(piece).catch(() => { throw COPY_WRITE_FAILED; })
+    ]);
+    digests.push(digest);
+    byteLength += filled;
+    if (piece === buffer) buffer = given.byteLength === TOKEN_PIECE_BYTES ? given : new ArrayBuffer(TOKEN_PIECE_BYTES);
+    filled = 0;
+  };
+  try {
+    for (let step = await reader.read(); !step.done; step = await reader.read()) {
+      for (let chunk = step.value; chunk.byteLength > 0;) {
+        const taken = Math.min(chunk.byteLength, buffer.byteLength - filled);
+        new Uint8Array(buffer, filled, taken).set(chunk.subarray(0, taken));
+        filled += taken;
+        chunk = chunk.subarray(taken);
+        if (filled === buffer.byteLength) await writePiece();
+      }
+    }
+    // The last piece, or the one empty piece of empty content (`contentTokenOfBytes`).
+    if (filled > 0 || digests.length === 0) await writePiece();
+    const token = await tokenOfPieceDigests(digests);
+    const copy = await writer.finish(token).catch(() => { throw COPY_WRITE_FAILED; });
+    return { copy, facts: { token, byteLength } };
+  } catch (error) {
+    writer.abort();
+    reader.cancel().catch(() => {});
+    if (error === COPY_WRITE_FAILED) return { copy: null, reason: 'write-failed' };
+    throw error;
+  }
+};
+
+/**
+ * The plain bytes of a File or Session resource view as a Blob that a Session
+ * Save streams: the File's copy (PD-OI-121), read only as it is streamed, or,
+ * with no copy or when the copy is gone, the bytes `readFileBytes` reads. A
+ * caller that streams it while the File may be let go holds the copy
+ * (`holdFileCopy`).
+ * @param {FileLike} file
+ * @returns {Promise<Blob>}
+ */
+export const readFileBlob = async (file) => {
+  const key = asCacheKey(file);
+  const copy = key ? await fileCopies.get(key) : null;
+  if (copy) {
+    try {
+      return await copy.blob();
+    } catch {
+      // The copy is gone (the site's storage was cleared): the File is read itself.
+    }
+  }
+  return new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (await readFileBytes(file))]);
 };
 
 /**

@@ -12,8 +12,8 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, takeFileBytesForTransfer,
-  useInputCopyStore
+  contentTokenOfBytes, copyInputStream, holdFileCopy, holdReadBytes, keepFileCopy, readFileBlob, readFileBytes, readFileContentFacts,
+  releaseFileCopy, takeFileBytesForTransfer, useInputCopyStore
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createBrowserInputCopyStore } = await import('../../gbdraw/web/js/services/input-copies.js');
 
@@ -535,4 +535,84 @@ test('a failed Feature Edits TSV import keeps a copy, which its Retry reads afte
   assert.deepEqual(sent, [table, table], 'Retry sends the content first read, from its copy');
   assert.equal(file.reads, 1);
   assert.notEqual(errorLog.value?.code, 'INPUT_UNREADABLE');
+});
+
+/** A stream of `bytes` in chunks of `size` bytes (a ZIP entry inflates in small chunks); `fail` ends it with an error after them. */
+const chunkedStream = (bytes, size, fail = null) => new ReadableStream({
+  start(controller) {
+    for (let start = 0; start < bytes.byteLength; start += size) controller.enqueue(bytes.slice(start, start + size));
+    if (fail) controller.error(fail);
+    else controller.close();
+  }
+});
+
+test('a copy is a Blob that streams and slices its bytes from the file, not from memory', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(PIECE + 17).map((_, index) => (index * 7) % 251);
+  const file = chosenFile(bytes);
+  await choose(file);
+  const blob = await readFileBlob(file);
+  assert.equal(blob.size, bytes.byteLength);
+  assert.deepEqual(new Uint8Array(await blob.slice(PIECE - 3, PIECE + 3).arrayBuffer()), bytes.slice(PIECE - 3, PIECE + 3));
+  assert.deepEqual(new Uint8Array(await new Response(blob.stream()).arrayBuffer()), bytes);
+  assert.equal(file.reads, 1, 'the File is not read again');
+  // A File without a copy gives the bytes it reads.
+  useInputCopyStore(null);
+  const uncopied = chosenFile(bytes.subarray(0, 100));
+  assert.deepEqual(new Uint8Array(await (await readFileBlob(uncopied)).arrayBuffer()), bytes.subarray(0, 100));
+});
+
+test('a stream is copied in 16 MiB pieces through one buffer, under the token its bytes have', async () => {
+  const fileSystem = createFakeFileSystem();
+  const store = copyStoreOn(fileSystem);
+  const written = [];
+  useInputCopyStore({
+    openWriter: async () => {
+      const writer = await store.openWriter();
+      return writer && { ...writer, write: async (buffer) => { written.push(buffer.byteLength); return writer.write(buffer); } };
+    }
+  });
+  for (const length of [2 * PIECE + 1000, PIECE, 0]) {
+    written.length = 0;
+    const bytes = new Uint8Array(length).map((_, index) => (index * 13) % 249);
+    const copied = await within(copyInputStream(chunkedStream(bytes, 65536 + 3)));
+    assert.ok(copied.copy, `copied ${length} bytes`);
+    assert.deepEqual(copied.facts, { token: await contentTokenOfBytes(bytes), byteLength: length });
+    assert.deepEqual(new Uint8Array(await copied.copy.read()), bytes);
+    assert.deepEqual(new Uint8Array(await new Response((await copied.copy.blob()).stream()).arrayBuffer()), bytes);
+    assert.deepEqual(written, length === 0 ? [0] : length === PIECE ? [PIECE] : [PIECE, PIECE, 1000]);
+    copied.copy.release();
+  }
+  assert.equal(fileSystem.copyFiles().length, 0, 'a released copy is deleted');
+});
+
+test('a stream with the content of a chosen File shares its copy', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(1000).map((_, index) => index % 7);
+  await choose(chosenFile(bytes));
+  const copied = await within(copyInputStream(chunkedStream(bytes, 100)));
+  assert.ok(copied.copy);
+  assert.equal(fileSystem.copyFiles().length, 1);
+});
+
+test('a stream that fails, or a copy write that fails or falls short, leaves no copy; no store cancels the stream', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new Uint8Array(PIECE + 10).map((_, index) => index % 5);
+  const damaged = Object.assign(new Error('damaged'), { code: 'INPUT_INVALID' });
+  await assert.rejects(within(copyInputStream(chunkedStream(bytes, 1 << 20, damaged))), (error) => error === damaged);
+  await until(() => fileSystem.copyFiles().length === 0);
+
+  const full = createFakeFileSystem({ writeResult: (buffer) => Math.max(0, buffer.byteLength - 1) });
+  useInputCopyStore(copyStoreOn(full));
+  assert.deepEqual(await within(copyInputStream(chunkedStream(bytes, 1 << 20))), { copy: null, reason: 'write-failed' });
+  await until(() => full.copyFiles().length === 0);
+
+  useInputCopyStore(null);
+  let cancelled = false;
+  const unread = new ReadableStream({ pull() {}, cancel() { cancelled = true; } });
+  assert.deepEqual(await copyInputStream(unread), { copy: null, reason: 'unavailable' });
+  assert.equal(cancelled, true);
 });

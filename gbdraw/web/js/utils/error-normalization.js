@@ -170,6 +170,10 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  // A Session file container (gbdraw/session_container.py, services/session-container.js) that Load refuses
+  // whole: the sentence is the refusal (NOT_A_SESSION).
+  CONTAINER_DAMAGED: 'This file is not a gbdraw Session: it is incomplete or damaged.',
+  CONTAINER_NO_DOCUMENT: 'This file is not a gbdraw Session: it has no gbdraw-session.json.',
   SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
   SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
@@ -399,6 +403,11 @@ const PHRASES = Object.freeze({
   liveEditRetry: 'Retry the live edit or use Generate.',
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
   operationError: 'Operation error'
+});
+// The reasons whose Load refusal says the file is not a Session, and that sentence alone.
+/** @type {Readonly<Record<string, string>>} */
+const NOT_A_SESSION = Object.freeze({
+  JSON_FORMAT: PHRASES.notASession, CONTAINER_DAMAGED: REASONS.CONTAINER_DAMAGED, CONTAINER_NO_DOCUMENT: REASONS.CONTAINER_NO_DOCUMENT
 });
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
@@ -1034,11 +1043,11 @@ export const normalizeUserFacingError = (value, {
     result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
     sessionLoadRejected(result, field, reason) && { text: PHRASES.schema }
   ];
-  // A file chosen in Load Session that is not JSON is not a Session;
-  // every other Session reason keeps its correction.
-  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
-    && field === 'schema' && reason === 'JSON_FORMAT';
-  result.summaryParts = capParts(notASession ? [{ text: PHRASES.notASession }]
+  // A file chosen in Load Session that is not JSON, or a damaged container or one without
+  // gbdraw-session.json, is not a Session; every other Session reason keeps its correction.
+  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID' && field === 'schema'
+    && reason !== undefined && Object.hasOwn(NOT_A_SESSION, reason) ? NOT_A_SESSION[reason] : null;
+  result.summaryParts = capParts(notASession ? [{ text: notASession }]
     : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece)),
   Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   result.summary = renderErrorText(result.summaryParts);

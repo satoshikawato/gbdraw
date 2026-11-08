@@ -15,6 +15,8 @@ const lockNameOf = (folder) => `${COPY_ROOT}/${folder}`;
  * One copy file. Files with equal content (one content token) share it.
  * @typedef {object} InputCopy
  * @property {() => Promise<Uint8Array>} read The copied bytes; rejects if the file is gone.
+ * @property {() => Promise<Blob>} blob The copy file itself, read only when sliced or streamed (a Session
+ *   Save streams it), so its bytes never sit whole in memory; rejects if the file is gone.
  * @property {() => void} release Ends one File's use of the copy; the last use deletes the file. A second call does nothing.
  */
 /**
@@ -181,8 +183,10 @@ export const createBrowserInputCopyStore = ({
    */
   const useOf = (folder, token, entry) => {
     let used = true;
+    const blob = async () => (await folder.getFileHandle(entry.name)).getFile();
     return {
-      read: async () => new Uint8Array(await (await (await folder.getFileHandle(entry.name)).getFile()).arrayBuffer()),
+      read: async () => new Uint8Array(await (await blob()).arrayBuffer()),
+      blob,
       release: () => {
         if (!used) return;
         used = false;
