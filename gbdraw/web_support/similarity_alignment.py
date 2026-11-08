@@ -11,10 +11,10 @@ from typing import Any, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, _source_details, project_similarity_alignment_anchor_fact,
+    ResolvedRecordCollection, _source_details, alignment_record_keys, project_similarity_alignment_anchor_fact,
     similarity_alignment_evidence_edges,
 )
-from gbdraw.api.request_render import plan_linear_request, resolve_request_records
+from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -136,38 +136,50 @@ class AlignmentHelperRecord(TypedDict):
 
 @dataclass(frozen=True)
 class _RecordFact:
-    """A validated helper request record: the span it draws and its orientation."""
+    """A validated helper request record: the windows it draws and its orientation."""
 
     record_key: str
     record_length: int | None
-    window: RecordWindow | None
+    windows: tuple[RecordWindow, ...]
     presentation_reverse: bool
 
-    @property
-    def reverse(self) -> bool:
-        """Whether the record is drawn reverse-complemented: by its window or by its presentation (never both)."""
+    def placed(self, source_center: float) -> tuple[float | None, bool]:
+        """Where the record draws the source boundary ``source_center``: the display offset on the drawn unit that
+        holds it, and whether that unit is drawn reverse-complemented.
 
-        return self.presentation_reverse or (self.window is not None and self.window.reverse_complement)
+        A record drawn in several windows is anchored in the first window, in drawing order, that holds the position,
+        as the renderer anchors it (``alignment_anchor_unit``, D-50). The offset is ``None`` when no window holds the
+        position, or when the map needs the source length and it is unknown; the orientation is then the first
+        window's.
+        """
 
-    def display_center(self, source_center: float) -> float | None:
-        """The display offset at which the record draws the source boundary ``source_center``.
+        if not self.windows:
+            return self._unit_offset(None, source_center), self.presentation_reverse
+        for window in self.windows:
+            offset = self._unit_offset(window, source_center)
+            if offset is not None:
+                return offset, self.presentation_reverse or window.reverse_complement
+        return None, self.presentation_reverse or self.windows[0].reverse_complement
+
+    def _unit_offset(self, window: RecordWindow | None, source_center: float) -> float | None:
+        """The display offset at which the unit of ``window`` (the whole record for ``None``) draws ``source_center``.
 
         The crop draws a window as a unit whose coordinate map starts at the
         window's start, or at its end when the unit is reversed (by the window
         or by the presentation, applied after the crop); the unit's
         ``RecordDisplayTransform`` maps the source onto its axis, round the
-        origin for a window across it. ``None`` when the window does not hold
-        the position, or when the map needs the source length and it is unknown.
+        origin for a window across it.
         """
 
-        window, length = self.window, self.record_length
+        length = self.record_length
         if window is None:
-            if not self.reverse:
+            if not self.presentation_reverse:
                 return source_center
             if length is None or source_center > length:
                 return None
             transform = RecordDisplayTransform(length, length, -1, None, False)
             return transform.source_position_to_display_offset(source_center)
+        reverse = self.presentation_reverse or window.reverse_complement
         if window.crosses_origin and length is None:
             return None
         bound = length if length is not None else window.end
@@ -175,7 +187,7 @@ class _RecordFact:
             return None
         span = bound - window.start + 1 + window.end if window.crosses_origin else window.end - window.start + 1
         transform = RecordDisplayTransform(
-            bound, window.end if self.reverse else window.start, -1 if self.reverse else 1, None,
+            bound, window.end if reverse else window.start, -1 if reverse else 1, None,
             window.crosses_origin, display_length=span, crosses_origin=window.crosses_origin,
         )
         offset = transform.source_position_to_display_offset(source_center)
@@ -202,24 +214,17 @@ def _record_fact(value: object, path: str) -> _RecordFact:
         windows = _decode_windows(raw["windows"], path=f"{path}.windows")
     except ValueError as exc:
         raise ValidationError(f"{path}.windows is invalid: {exc}") from exc
-    if len(windows) > 1:
-        # Plans and record translations key a record drawn in several windows by
-        # record, its drawn units by window; the two do not meet yet.
-        raise ValidationError(
-            f"Record {record_key!r} is drawn in {len(windows)} windows; Similarity alignment places a record "
-            "drawn whole or in one window."
-        )
-    window = windows[0] if windows else None
-    if window is not None and record_length is not None and max(window.start, window.end) > record_length:
-        raise ValidationError(
-            f"{path}.windows exceeds recordLength.",
-            diagnostic={"code": "INPUT_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
-        )
-    if window is not None and window.reverse_complement and presentation_reverse:
-        raise ValidationError(
-            f"{path} cannot reverse complement both window and presentation."
-        )
-    return _RecordFact(record_key, record_length, window, presentation_reverse)
+    for window in windows:
+        if record_length is not None and max(window.start, window.end) > record_length:
+            raise ValidationError(
+                f"{path}.windows exceeds recordLength.",
+                diagnostic={"code": "INPUT_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+            )
+        if window.reverse_complement and presentation_reverse:
+            raise ValidationError(
+                f"{path} cannot reverse complement both window and presentation."
+            )
+    return _RecordFact(record_key, record_length, tuple(windows), presentation_reverse)
 
 
 def _member_candidate(
@@ -265,10 +270,10 @@ def _member_candidate(
     if not isinstance(role, str) or "\0" in role:
         raise ValidationError(f"{path}.role must be text without NUL.")
 
-    display_center = record.display_center((start + end) / 2)
+    display_center, reverse = record.placed((start + end) / 2)
     displayed_strand = (
         None if source_strand is None
-        else source_strand * (-1 if record.reverse else 1)
+        else source_strand * (-1 if reverse else 1)
     )
     display_name = raw.get("displayName", anchor.biological_feature_id)
     return SimilarityAlignmentCandidate(
@@ -383,9 +388,10 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
     request = replace(request, similarity_alignment=None)
     before = plan_linear_request(request)
     before_collection = ResolvedRecordCollection(before.records, before.provenance)
+    if alignment_record_keys(before_collection) != tuple(keys):
+        raise ValidationError("Alignment projection record binding changed.")
     # Counterfactual source transforms are always available for local direction edits.
-    flipped_orientations = {key: item.source_step == 1
-                            for key, item in zip(keys, before.transforms, strict=True)}
+    flipped_orientations = {key: not _drawn_reverse(before, key) for key in keys}
     orientations = raw["orientations"]
     if orientations is None:
         orientations = flipped_orientations
@@ -414,6 +420,19 @@ def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str
     return replace(request, records=tuple(records))
 
 
+def _record_units(plan: LinearRequestPlan, record_key: str) -> list[int]:
+    """The drawn units of the request record ``record_key``: one, or one per window (D-50)."""
+
+    return [index for index, item in enumerate(plan.provenance) if item.record_identity_key == record_key]
+
+
+def _drawn_reverse(plan: LinearRequestPlan, record_key: str) -> bool:
+    """Whether the request record is drawn reverse-complemented: every unit of it is, as the Web reads a record's
+    direction from its windows (``canonicalRecordReverseComplement``)."""
+
+    return all(plan.transforms[index].source_step == -1 for index in _record_units(plan, record_key))
+
+
 def _serialize_projection(context, candidates, raw_request):
     raw, before, collection, after, flipped_collection, _orthogroups, request = context
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
@@ -432,10 +451,13 @@ def _serialize_projection(context, candidates, raw_request):
     binding_records = []
     records = []
     base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}
-    for index, provenance in enumerate(collection.provenance):
-        key = provenance.record_key
-        before_reverse = before.transforms[index].source_step == -1
-        after_reverse = after.transforms[index].source_step == -1
+    # One entry per request record; the windows of a record share its row and move with it, and each anchor is drawn
+    # by the window that holds it (D-50).
+    for index, key in enumerate(item.record_key for item in request.records):
+        first = _record_units(before, key)[0]
+        provenance = collection.provenance[first]
+        before_reverse = _drawn_reverse(before, key)
+        after_reverse = _drawn_reverse(after, key)
         translation = base.get(key)
         record_raw = raw["canonicalRequest"]["records"][index]
         binding_records.append({
@@ -457,7 +479,7 @@ def _serialize_projection(context, candidates, raw_request):
         variants = []
         for reverse in (False, True):
             variant_collection = collection if reverse == before_reverse else flipped_collection
-            placement = after_placements[index] if reverse == after_reverse else before_placements[index]
+            placements = after_placements if reverse == after_reverse else before_placements
             anchors = []
             for candidate in candidates:
                 if candidate.anchor.record_key != key:
@@ -467,17 +489,20 @@ def _serialize_projection(context, candidates, raw_request):
                     "anchor": _serialize_anchor(candidate.anchor),
                     "displayedStrand": fact.displayed_strand,
                     "displayCenter": fact.display_center,
-                    "centerX": None if fact.display_center is None else placement.x_for_position(fact.display_center),
+                    "centerX": None if fact.display_center is None
+                    else placements[fact.unit_index].x_for_position(fact.display_center),
                 })
-            variants.append({"reverseComplement": reverse, "axisY": placement.axis_y, "anchors": anchors})
+            variants.append({"reverseComplement": reverse, "axisY": placements[first].axis_y, "anchors": anchors})
         records.append({
             "recordKey": key, "beforeReverseComplement": before_reverse,
             "base": {"x": 0.0 if translation is None else float(translation.x),
                      "y": 0.0 if translation is None else float(translation.y)},
-            "beforeAxisY": before_placements[index].axis_y,
+            "beforeAxisY": before_placements[first].axis_y,
             "beforeAnchors": [
                 {"anchor": _serialize_anchor(candidate.anchor),
-                 "centerX": before_placements[index].x_for_position(candidate.display_center)}
+                 "centerX": before_placements[
+                     project_similarity_alignment_anchor_fact(collection, candidate.anchor).unit_index
+                 ].x_for_position(candidate.display_center)}
                 for candidate in candidates if candidate.anchor.record_key == key and candidate.center_mappable
             ],
             "variants": variants,
@@ -486,8 +511,8 @@ def _serialize_projection(context, candidates, raw_request):
                "reference": raw_request["reference"],
                "anchors": [_serialize_anchor(candidate.anchor) for candidate in candidates]}
     return {"binding": hashlib.sha256(json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
-            "geometryOrientations": {item.record_key: transform.source_step == -1
-                                     for item, transform in zip(after.provenance, after.transforms, strict=True)},
+            "geometryOrientations": {item.record_key: _drawn_reverse(after, cast(str, item.record_key))
+                                     for item in request.records},
             "records": records}
 
 def _resource_evidence_edges(context, group_id, candidates) -> list[AlignmentEvidenceEdge]:
@@ -560,7 +585,7 @@ def resolve_similarity_alignment_payload(
     if projection is not None:
         context = _projection_context(projection, resource_paths or {}, output_directory)
         collection = context[2]
-        if tuple(item.record_key for item in collection.provenance) != tuple(record_keys):
+        if alignment_record_keys(collection) != tuple(record_keys):
             raise ValidationError("Alignment projection record binding changed.")
         verified = []
         for candidate, member in zip(candidates, raw["members"], strict=True):

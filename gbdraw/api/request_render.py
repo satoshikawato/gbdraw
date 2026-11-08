@@ -79,7 +79,6 @@ from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losa
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import record_identity_key
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
     FeatureOverride,
@@ -194,6 +193,7 @@ from .record_planning import (
     effective_record_presentation,
     unit_presentation,
     resolve_anchor_feature,
+    alignment_record_keys,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -224,6 +224,7 @@ from .requests import (
     RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
+    drawn_record_identity,
 )
 
 if TYPE_CHECKING:
@@ -1843,7 +1844,7 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     units are one, and the positions stay as given.
     """
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if len(set(keys)) == len(keys):
         return layout
     records = [cast(InMemoryRecordSource, record_input.source).record for record_input in request.records]
@@ -1858,21 +1859,10 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     return replace(layout, multi_record_positions=tuple(positions))
 
 
-def _drawn_record_identities(request: LinearDiagramRequest) -> list[str | None]:
-    """The record each drawn unit of a projected request draws (``record_identity_key``); windows of one share it."""
-
-    return [
-        record_identity_key(record_input.source.record)
-        if isinstance(record_input.source, InMemoryRecordSource)
-        else record_input.record_key
-        for record_input in request.records
-    ]
-
-
 def _with_window_layout(request: LinearDiagramRequest) -> LinearDiagramRequest:
     """A projected request whose windows share rows has a Linear layout, the default one when it set none (D-01)."""
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if request.layout is not None or len(set(keys)) == len(keys):
         return request
     return replace(request, layout=LinearMultiRecordOptions())
@@ -1887,7 +1877,7 @@ def _windows_share_rows(
     keeps its layout (one record per row).
     """
 
-    keys = _drawn_record_identities(request)
+    keys = [drawn_record_identity(record_input) for record_input in request.records]
     if layout is None or len(set(keys)) == len(keys):
         return layout
     rows = {key: row for row, key in enumerate(dict.fromkeys(keys), start=1)}
@@ -2370,7 +2360,7 @@ def resolve_similarity_alignment_plan(
             f"Similarity Group ID {target!r}.",
         )
     collection = ResolvedRecordCollection(plan.records, plan.provenance)
-    record_keys = tuple(item.record_key for item in collection.provenance)
+    record_keys = alignment_record_keys(collection)
     candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
     exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
     for members in orthogroups.orthogroups.values():

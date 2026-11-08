@@ -13,6 +13,7 @@ from typing import Literal, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
@@ -506,6 +507,21 @@ def window_unit_key(record_key: str, window_index: int, window_count: int) -> st
     """The key of the drawn unit of one window of the record ``record_key`` (the one owner of that key)."""
 
     return record_key if window_count == 1 else f"{record_key}{WINDOW_UNIT_KEY_SEPARATOR}{window_index + 1}"
+
+
+def drawn_record_identity(record_input: RecordInput) -> str | None:
+    """The key of the record ``record_input`` draws: its own key, or, for a drawn unit that is one of several windows
+    of a record (a projected request), that record's key (``WINDOW_OF_ANNOTATION``, D-01).
+
+    Record translations and a Similarity alignment plan are keyed by it: the windows of a record move as one (D-50).
+    """
+
+    source = record_input.source
+    if isinstance(source, InMemoryRecordSource):
+        window_of = (source.record.annotations or {}).get(WINDOW_OF_ANNOTATION)
+        if window_of is not None:
+            return str(window_of)
+    return record_input.record_key
 _OUTPUT_PREFIX_MAX_BYTES = 200
 
 
@@ -1004,8 +1020,9 @@ class LinearDiagramRequest:
         )
         if translations or plan is not None:
             # None keys are rejected just below.
+            # The windows of one record share its key (D-50).
             record_keys = cast(
-                "tuple[str, ...]", tuple(record.record_key for record in records)
+                "tuple[str, ...]", tuple(dict.fromkeys(drawn_record_identity(record) for record in records))
             )
             if any(record_key is None for record_key in record_keys):
                 raise ValidationError(

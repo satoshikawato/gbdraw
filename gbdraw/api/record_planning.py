@@ -827,51 +827,60 @@ def project_source_bound_results(
     return FrameProjection(projected, typed.unmatched)
 
 
+def alignment_record_keys(collection: ResolvedRecordCollection) -> tuple[str, ...]:
+    """The records a Similarity alignment plan covers, in drawing order: the windows of one record are one (D-50)."""
+
+    return tuple(dict.fromkeys(item.record_identity_key for item in collection.provenance))
+
+
 def project_similarity_alignment_centers(
     collection: ResolvedRecordCollection,
     plan: SimilarityAlignmentPlan | None,
 ) -> tuple[float | None, ...]:
-    """Project selected anchor centers from already resolved record orientations."""
+    """Project selected anchor centers from already resolved record orientations.
 
+    One centre per drawn unit: a record drawn in several windows has it in the window that holds its anchor
+    (``alignment_anchor_unit``) and ``None`` in its other windows, which move with it (D-50).
+    """
+
+    centers: list[float | None] = [None] * len(collection.records)
     if plan is None:
-        return tuple(None for _ in collection.records)
-    record_keys = tuple(item.record_key for item in collection.provenance)
-    plan.validate_record_coverage(record_keys)
-    decisions = {decision.record_key: decision for decision in plan.records}
-    return tuple(
-        _project_alignment_anchor_center(
-            decision.anchor,
-            provenance=provenance,
-            transform=transform,
-            displayed_length=len(record),
-        )
-        if decision.status is not AlignmentDecisionStatus.SKIPPED
-        else None
-        for record, provenance, transform, decision in zip(
-            collection.records,
-            collection.provenance,
-            collection.transforms,
-            (decisions[key] for key in record_keys),
-            strict=True,
-        )
-    )
+        return tuple(centers)
+    plan.validate_record_coverage(alignment_record_keys(collection))
+    for decision in plan.records:
+        if decision.status is AlignmentDecisionStatus.SKIPPED:
+            continue
+        if decision.anchor is None:
+            raise ValidationError(f"Similarity alignment record {decision.record_key!r} has no anchor.")
+        index, center = alignment_anchor_unit(collection, decision.anchor)
+        if center is None:
+            raise ValidationError(
+                "Similarity alignment anchor is outside the current crop for record "
+                f"{decision.record_key!r}."
+            )
+        centers[index] = center
+    return tuple(centers)
 
 
-def _project_alignment_anchor_center(
-    anchor: AlignmentAnchorIdentity | None,
-    *,
-    provenance: ResolvedRecordProvenance,
-    transform: RecordDisplayTransform,
-    displayed_length: int,
-) -> float:
-    feature = _alignment_source_feature(anchor, provenance)
-    projected = _source_feature_display_center(feature, transform)
-    if not 0.0 <= projected <= float(displayed_length):
-        raise ValidationError(
-            "Similarity alignment anchor is outside the current crop for record "
-            f"{provenance.record_key!r}."
-        )
-    return projected
+def alignment_anchor_unit(
+    collection: ResolvedRecordCollection, anchor: AlignmentAnchorIdentity,
+) -> tuple[int, float | None]:
+    """The drawn unit of the anchor's record that holds the anchor, and the anchor's centre on it (D-50).
+
+    A record drawn whole or in one window has one unit. A record drawn in several windows is anchored in the first
+    window, in drawing order, that holds the anchor's centre; when none holds it the centre is ``None`` (the anchor
+    is unusable) and the unit is the record's first.
+    """
+
+    units = [index for index, item in enumerate(collection.provenance) if item.record_identity_key == anchor.record_key]
+    if not units:
+        raise ValidationError("Alignment anchor record coverage is invalid.")
+    for index in units:
+        feature = _alignment_source_feature(anchor, collection.provenance[index])
+        projected = _source_feature_display_center(feature, collection.transforms[index])
+        if 0.0 <= projected <= float(len(collection.records[index])):
+            return index, projected
+    return units[0], None
 
 
 def _source_feature_display_center(
@@ -1257,13 +1266,17 @@ def _feature_location_text(feature: SourceFeatureIdentity) -> str:
 
 @dataclass(frozen=True)
 class AlignmentAnchorDisplayFact:
-    """Source-bound anchor geometry in one already resolved display transform."""
+    """Source-bound anchor geometry in one already resolved display transform.
+
+    ``unit_index`` is the drawn unit that holds the anchor (``alignment_anchor_unit``), whose placement draws it.
+    """
 
     source_start: int
     source_end: int
     source_strand: int | None
     displayed_strand: int | None
     display_center: float | None
+    unit_index: int
 
 
 def project_similarity_alignment_anchor_fact(
@@ -1272,28 +1285,17 @@ def project_similarity_alignment_anchor_fact(
 ) -> AlignmentAnchorDisplayFact:
     """Use the same source identity and center projection as the renderer."""
 
-    matches = [i for i, item in enumerate(collection.provenance)
-               if item.record_key == anchor.record_key]
-    if len(matches) != 1:
-        raise ValidationError("Alignment anchor record coverage is invalid.")
-    index = matches[0]
-    provenance = collection.provenance[index]
-    feature = _alignment_source_feature(anchor, provenance)
+    # An exact source anchor outside every window of its record is unusable (centre None).
+    index, center = alignment_anchor_unit(collection, anchor)
+    feature = _alignment_source_feature(anchor, collection.provenance[index])
     if anchor.biological_feature_id not in {feature.biological_feature_id, feature.stable_feature_id}:
         raise ValidationError("Alignment anchor biological identity changed.")
     strands = {part[2] for part in feature.location_parts}
     strand = next(iter(strands)) if len(strands) == 1 and strands <= {-1, 1} else None
-    try:
-        center = _project_alignment_anchor_center(
-            anchor, provenance=provenance, transform=collection.transforms[index],
-            displayed_length=len(collection.records[index]),
-        )
-    except ValidationError:
-        center = None  # An exact source anchor outside the crop is unusable.
     return AlignmentAnchorDisplayFact(
         min(part[0] for part in feature.location_parts),
         max(part[1] for part in feature.location_parts),
-        strand, None if strand is None else strand * collection.transforms[index].source_step, center,
+        strand, None if strand is None else strand * collection.transforms[index].source_step, center, index,
     )
 
 def similarity_alignment_evidence_edges(
@@ -1355,7 +1357,8 @@ def _similarity_candidate_from_orthogroup_member(
     identity_is_unique = len(matches) == 1
     feature = matches[0] if identity_is_unique else None
     anchor = AlignmentAnchorIdentity(
-        record_key=provenance.record_key,
+        # A plan names a record drawn in several windows by the record's key (D-50).
+        record_key=provenance.record_identity_key,
         biological_feature_id=(
             feature.biological_feature_id
             if feature is not None

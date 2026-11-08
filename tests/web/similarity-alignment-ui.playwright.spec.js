@@ -2117,6 +2117,28 @@ test('Review alignment places a record drawn in one window across the origin', a
     .toMatchObject({ status: 'aligned', anchor: { recordKey: 'record-2' } });
 });
 
+// D-50: a record drawn in several windows moves as one, anchored in the window that holds its anchor.
+test('Review alignment moves a record drawn in two windows as one', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows']);
+  const windowShifts = async () => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
+    return ['record-2~w1', 'record-2~w2'].map((key) => Number(
+      svg.querySelector(`g[data-record-key="${key}"]`).getAttribute('data-record-translation-x')));
+  });
+  // Both windows draw the record's own translation before the Align.
+  expect(await windowShifts()).toEqual([48, 48]);
+  const dialog = await openDirectionReview(page);
+  const outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  const aligned = await artifactSnapshot(page);
+  expect(aligned.plan.records.find(({ recordKey }) => recordKey === 'record-2'))
+    .toMatchObject({ status: 'aligned', anchor: { recordKey: 'record-2' } });
+  const [first, second] = await windowShifts();
+  expect(first).toBe(second);
+  expect(first).not.toBe(48);
+});
+
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadDirectionSession(page, testInfo);

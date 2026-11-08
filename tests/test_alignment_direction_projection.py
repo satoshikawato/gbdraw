@@ -355,6 +355,11 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
     ((RecordWindow(901, 100, True),), False, 60.5),
     ((RecordWindow(500, 900),), False, None),
     ((RecordWindow(950, 10),), False, None),
+    # A record drawn in several windows is anchored in the window that holds the anchor (D-50).
+    ((RecordWindow(500, 900), RecordWindow(1, 200)), False, 39.5),
+    ((RecordWindow(1, 200), RecordWindow(500, 900)), False, 39.5),
+    ((RecordWindow(500, 900), RecordWindow(11, 300, True)), False, 260.5),
+    ((RecordWindow(300, 400), RecordWindow(500, 900)), False, None),
 ])
 def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center):
     helper, context, paths = _circular_fixture(tmp_path, windows=windows, reverse=reverse)

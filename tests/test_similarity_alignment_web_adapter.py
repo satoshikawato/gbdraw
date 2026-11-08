@@ -143,7 +143,7 @@ def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
         resolve_similarity_alignment_payload(cropped)
 
 
-def test_web_adapter_reads_a_window_across_the_origin_and_refuses_several_windows() -> None:
+def test_web_adapter_reads_a_window_across_the_origin_and_places_a_record_of_several_windows() -> None:
     request = _request()
     # record-b (400 bp) drawn from 301 across the origin to 160: the target 140..170 centres at 155,
     # which the window holds at 100 + 155 = 255, reversed at 160 - 155 = 5 (OV-2771).
@@ -162,8 +162,10 @@ def test_web_adapter_reads_a_window_across_the_origin_and_refuses_several_window
         {"start": 1, "end": 100, "reverseComplement": False, "column": None},
         {"start": 131, "end": 200, "reverseComplement": False, "column": None},
     ]
-    with pytest.raises(ValidationError, match="Record 'record-b' is drawn in 2 windows"):
-        resolve_similarity_alignment_payload(several)
+    # The record is anchored in the window that holds the target (131..200 draws 155 at 25), and aligns (D-50).
+    row = resolve_similarity_alignment_payload(several)["records"][1]  # type: ignore[index]
+    assert (row["candidates"][0]["displayCenter"], row["candidates"][0]["displayedStrand"]) == (25.0, -1)  # type: ignore[index]
+    assert row["status"] == "aligned"  # type: ignore[index]
 
 
 def test_web_projection_discloses_candidate_evidence_and_strand_relation() -> None:

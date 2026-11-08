@@ -29,6 +29,9 @@ def main(directory: Path, variant: str = '') -> None:
         target = records[1]
         records = (records[0], replace(target, windows=(RecordWindow(401, 300),),
                                        display=replace(target.display, is_circular=True))) + records[2:]
+    if variant == 'windows':
+        # record-2 (target, 500 bp) drawn in two windows, 401..500 and 1..300; the second holds its anchor (D-50).
+        records = (records[0], replace(records[1], windows=(RecordWindow(401, 500), RecordWindow(1, 300)))) + records[2:]
     members = []
     for member in helper['members']:
         if member['anchor']['recordKey'] == 'unusable':
@@ -36,7 +39,9 @@ def main(directory: Path, variant: str = '') -> None:
         key = member['anchor']['recordKey']
         members.append(OrthogroupMember(
             orthogroup_id='group', protein_id=key + '-protein',
-            record_index=next(i for i, record in enumerate(request.records) if record.record_key == key),
+            # A member's record index counts drawn units: the target sits in record-2's second window, a unit of its own.
+            record_index=next(i for i, record in enumerate(request.records) if record.record_key == key)
+            + (variant == 'windows' and key != 'ref'),
             feature_index=0, record_id=key, label=key + '-protein',
             start=member['sourceStart'], end=member['sourceEnd'], strand=member['sourceStrand'],
             feature_svg_id=None, source_protein_id=key + '-protein'))
