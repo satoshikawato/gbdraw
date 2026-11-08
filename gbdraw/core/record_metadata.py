@@ -265,6 +265,23 @@ def _copy_source_feature_identity(
         _stamp_source_feature_hash(target, stamp.record_id, stamp.feature_hash)
 
 
+# A drawn unit that is one of several windows of a record carries that record's key here (D-01); the unit's own key
+# is ``gbdraw_record_key``.
+WINDOW_OF_ANNOTATION = "gbdraw_window_of"
+
+
+def record_identity_key(record: object) -> str | None:
+    """The key of the record ``record`` draws: the record's own, also for a unit that is one of its windows.
+
+    Per-record identities (feature instances, annotation and edit bindings, same-record evidence) read this key; the
+    placement of a drawn unit reads ``gbdraw_record_key``.
+    """
+
+    annotations = getattr(record, "annotations", None) or {}
+    key = annotations.get(WINDOW_OF_ANNOTATION) or annotations.get("gbdraw_record_key")
+    return None if key is None else str(key)
+
+
 def _read_coord_map(record: object) -> tuple[int, int]:
     annotations = getattr(record, "annotations", None) or {}
     try:

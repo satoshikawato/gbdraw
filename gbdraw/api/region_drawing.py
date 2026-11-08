@@ -44,7 +44,7 @@ from gbdraw.api.requests import (
 from gbdraw.auto_sizes import AutoValue, DrawnExtent, SettingAdaptation, adapt_explicit_settings
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.io.regions import RegionSpec
+from gbdraw.io.regions import RecordWindow
 from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_request
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.tracks.circular import CircularTrackSlot
@@ -213,15 +213,33 @@ class RegionDrawing:
 
 @dataclass(frozen=True)
 class _Region:
+    """The spans of one source record a region drawing draws: one window each, in source order (D-01).
+
+    ``index`` is the record's place in the new drawing; ``first_unit`` the drawn index of its first window there.
+    """
+
     item: ResolvedRecordProvenance
     index: int
-    start: int
-    end: int
+    spans: tuple[tuple[int, int], ...]
     whole: bool
+    first_unit: int
 
     def contains(self, location_parts: Sequence[tuple[int, int, int | None]]) -> bool:
         """Whether a feature (0-based, end-exclusive parts) intersects the region."""
-        return self.whole or any(start < self.end and end >= self.start for start, end, _strand in location_parts)
+        return self.whole or any(
+            start < span_end and end >= span_start
+            for span_start, span_end in self.spans
+            for start, end, _strand in location_parts
+        )
+
+    @property
+    def drawn_lengths(self) -> tuple[int, ...]:
+        return tuple(end - start + 1 for start, end in self.spans)
+
+    @property
+    def units(self) -> range:
+        """The drawn indexes of the record's windows in the new drawing."""
+        return range(self.first_unit, self.first_unit + len(self.spans))
 
 
 def derive_region_drawing(
@@ -284,7 +302,7 @@ def derive_region_request(
     target_mode: DrawingMode = mode or (source_mode if len(selected) == 1 and selected[0].whole else "linear")
     if target_mode not in {"circular", "linear"}:
         raise ValidationError(f"Unknown drawing mode: {target_mode!r}.", diagnostic={"code": "INPUT_INVALID"})
-    if target_mode == "circular" and len(selected) != 1:
+    if target_mode == "circular" and (len(selected) != 1 or len(selected[0].spans) != 1):
         raise ValidationError(
             "A Circular region drawing draws exactly one record.", diagnostic={"code": "INPUT_INVALID"}
         )
@@ -292,7 +310,7 @@ def derive_region_request(
     options = source.options
     cfg = apply_config_overrides(options.config, None)
     source_extent = DrawnExtent(source_mode, tuple(len(record) for record in collection.records))
-    target_extent = DrawnExtent(target_mode, tuple(region.end - region.start + 1 for region in selected))
+    target_extent = DrawnExtent(target_mode, tuple(length for region in selected for length in region.drawn_lengths))
     adaptation = adapt_explicit_settings(
         _explicit_values(options, source_extent.size_class(cfg)),
         source=source_extent,
@@ -316,7 +334,7 @@ def derive_region_request(
         config_overrides[path] = value
     if other_mode_paths:
         dropped.append(NotCarried("OTHER_MODE_SETTINGS", source_mode, items=tuple(other_mode_paths)))
-    by_key = {region.item.record_key: region for region in selected}
+    by_key = {region.item.record_identity_key: region for region in selected}
     values: dict[str, Any] = {name: getattr(options, name) for name in _SHARED_FIELDS}
     values.update(
         {name: None if name in returned else getattr(options, name) for name in _SIZE_OPTIONS},
@@ -397,17 +415,16 @@ def _resolve_regions(
             "margin must be a non-negative integer.",
             diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE_INTEGER"},
         )
-    items = {item.record_key: item for item in collection.provenance}
-    resolved: dict[str, tuple[ResolvedRecordProvenance, int, int, bool]] = {}
+    # A record drawn in windows is selected by its own key; its first window stands for it.
+    items: dict[str, ResolvedRecordProvenance] = {}
+    for unit in collection.provenance:
+        items.setdefault(unit.record_identity_key, unit)
+    resolved: dict[str, tuple[ResolvedRecordProvenance, list[tuple[int, int]], int]] = {}
     for selection in selections:
         item = items.get(selection.record_key)
         if item is None:
             raise ValidationError(
                 f"The source drawing has no record {selection.record_key!r}.", diagnostic={"code": "INPUT_INVALID"}
-            )
-        if item.record_key in resolved:
-            raise ValidationError(
-                f"Record {selection.record_key!r} has more than one region.", diagnostic={"code": "INPUT_INVALID"}
             )
         length = int(item.source_length or len(collection.records[item.resolved_index]))
         start, end = _selected_span(selection, item, length)
@@ -419,9 +436,26 @@ def _resolve_regions(
                 diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
             )
         start, end = max(1, start - margin), min(length, end + margin)
-        resolved[item.record_key] = (item, start, end, (start, end) == (1, length))
+        resolved.setdefault(selection.record_key, (item, [], length))[1].append((start, end))
     ordered = sorted(resolved.values(), key=lambda value: value[0].resolved_index)
-    return tuple(_Region(item, index, start, end, whole) for index, (item, start, end, whole) in enumerate(ordered))
+    regions: list[_Region] = []
+    first_unit = 0
+    for index, (item, ranges, length) in enumerate(ordered):
+        spans = _merged_spans(ranges)
+        regions.append(_Region(item, index, spans, spans == ((1, length),), first_unit))
+        first_unit += len(spans)
+    return tuple(regions)
+
+
+def _merged_spans(ranges: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    """Regions of one record in source order, overlapping or touching ones joined: each base is drawn once."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return tuple(merged)
 
 
 def _selected_span(selection: RegionChoice, item: ResolvedRecordProvenance, length: int) -> tuple[int, int]:
@@ -456,29 +490,19 @@ def _record_input(
         if reverse_complement is None
         else reverse_complement
     )
-    crop = None
-    if not region.whole:
-        # A crop names its record in the region, as the Web writes it.
-        crop = RegionSpec(
-            raw=f"{region.start}-{region.end}" + (":rc" if reverse else ""),
-            file_selector=None,
-            record_id=None if selector is None else selector.record_id,
-            record_index=None if selector is None else selector.record_index,
-            start=region.start,
-            end=region.end,
-            reverse_complement=reverse,
-        )
+    # The windows of one record share its row in source order (D-01; the planner places them).
+    windows = () if region.whole else tuple(RecordWindow(start, end, reverse) for start, end in region.spans)
     return RecordInput(
         source=source.records[item.input_index].source,
-        selector=selector if crop is None else None,
-        region=crop,
+        selector=selector,
+        windows=windows,
         presentation=replace(
             item.presentation,
             reverse_complement=reverse and region.whole,
             grid_row=None,
             grid_column=None,
         ),
-        record_key=item.record_key,
+        record_key=item.record_identity_key,
         # A display start cannot be combined with a crop.
         display=item.display if region.whole else RecordDisplayOptions(),
     )
@@ -538,7 +562,7 @@ def _region_annotations(
         dropped.append(NotCarried("ANNOTATION_TABLE", source_mode))
         return None
     by_source = {region.item.resolved_index: region for region in regions}
-    by_key = {region.item.record_key: region for region in regions}
+    by_key = {region.item.record_identity_key: region for region in regions}
     source_ids = [str(record.id) for record in collection.records]
     new_ids = [source_ids[region.item.resolved_index] for region in regions]
     outside = 0
@@ -562,8 +586,9 @@ def _region_annotations(
                 )
                 dropped.append(NotCarried(kind, source_mode, items=(annotation.id,)))
                 return None
-            inside = region.start <= target.start and target.end <= region.end
-            if target.end < region.start or target.start > region.end or (target.out_of_bounds == "error" and not inside):
+            inside = any(start <= target.start and target.end <= end for start, end in region.spans)
+            overlaps = any(target.end >= start and target.start <= end for start, end in region.spans)
+            if not overlaps or (target.out_of_bounds == "error" and not inside):
                 outside += 1
                 return None
         selector = target.record
@@ -629,18 +654,20 @@ def _linear_comparisons(
         if _has_any(options, _LINEAR_COMPARISON_INPUTS):
             dropped.append(NotCarried("COMPARISON_TABLES", source_mode))
         return changes
-    new_index = {region.item.resolved_index: region.index for region in regions}
+    new_units = {region.item.resolved_index: region.units for region in regions}
     pairs = None
     if search.pairs is not None:
         pairs = [
-            (new_index[query], new_index[subject])
+            (new_query, new_subject)
             for query, subject in search.pairs
-            if query in new_index and subject in new_index
+            if query in new_units and subject in new_units
+            for new_query in new_units[query]
+            for new_subject in new_units[subject]
         ]
     gencodes = tuple(search.record_gencodes)
     if len(gencodes) > 1:
         gencodes = tuple(gencodes[region.item.input_index] for region in regions)
-    if len(regions) < 2 or pairs == []:
+    if sum(len(region.spans) for region in regions) < 2 or pairs == []:
         changes["losat_search"] = None
         dropped.append(NotCarried("LOSAT_NO_PAIR", source_mode))
     else:

@@ -44,20 +44,6 @@ class AutoOrientationReply(TypedDict):
     records: list[RecordOrientation]
 
 
-def _forward(item: RecordInput) -> RecordInput:
-    """The record input with its reverse flags (presentation and region) cleared."""
-
-    return replace(
-        item,
-        presentation=replace(item.presentation, reverse_complement=False),
-        region=None if item.region is None else replace(item.region, reverse_complement=False),
-    )
-
-
-def _is_reversed(item: RecordInput) -> bool:
-    return item.presentation.reverse_complement or bool(item.region and item.region.reverse_complement)
-
-
 def _record_input_of(item: RecordInput, provenance: ResolvedRecordProvenance) -> RecordInput:
     """The input that draws only this record: an input that draws all its file's records, narrowed to this one."""
 
@@ -84,14 +70,14 @@ def _with_rows_below_top_unreversed(request: LinearDiagramRequest, plan: LinearR
     rows = resolve_record_row_positions(
         plan.records, plan.layout.multi_record_positions if plan.layout is not None else None
     )[1]
-    below = [row != 0 and _is_reversed(request.records[provenance.input_index])
+    below = [row != 0 and request.records[provenance.input_index].is_reversed
              for provenance, row in zip(plan.provenance, rows, strict=True)]
     if not any(below):
         return None
     # Every other input draws exactly one record, so the drawn records name the inputs in order.
     narrowed = (_record_input_of(request.records[provenance.input_index], provenance) for provenance in plan.provenance)
     return replace(request, records=tuple(
-        _forward(item) if clear else item for item, clear in zip(narrowed, below, strict=True)
+        item.oriented(False) if clear else item for item, clear in zip(narrowed, below, strict=True)
     ))
 
 

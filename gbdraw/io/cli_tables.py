@@ -190,23 +190,6 @@ class RecordsTable:
             if row.region
         ]
 
-    def multi_record_positions(self) -> list[str]:
-        if not self.has_multi_record_placement:
-            return []
-        positioned = [
-            (loaded_index, row)
-            for loaded_index, row in enumerate(self.rows, start=1)
-            if row.row is not None
-        ]
-        positioned.sort(
-            key=lambda item: (
-                int(item[1].row or 0),
-                int(item[1].column) if item[1].column is not None else item[0],
-                item[0],
-            )
-        )
-        return [f"#{loaded_index}@{row.row}" for loaded_index, row in positioned]
-
 
 @dataclass(frozen=True)
 class _RawRow:

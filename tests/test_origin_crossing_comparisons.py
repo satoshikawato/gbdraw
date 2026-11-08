@@ -314,7 +314,7 @@ def _web_helpers() -> dict[str, object]:
 def _web_records(strand: int, reverse: bool) -> list[SeqRecord]:
     """``_records``, whose subject a reversed view draws in the order that forms a block."""
     query, subject = _records(strand)
-    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0]]
+    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0][0]]
 
 
 def _web_conversion(
@@ -386,8 +386,8 @@ def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: st
     back with x -> L + 1 - x, the rule of the planner's search-frame projection.
     """
     query, subject = _web_records(strand, reverse)
-    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0]
-    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0]
+    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0][0]
+    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0][0]
     records = [query, drawn]
     extraction = extract_cds_proteins(records)
     pairs = [(q, s) for q, s in _pairs(strand) if s in extraction.protein_map]
@@ -474,7 +474,7 @@ def test_every_cds_protein_field_crosses_the_web_transport(strand: int) -> None:
 def test_web_display_map_flips_the_arc_of_a_reversed_record(strand: int) -> None:
     helpers = _web_helpers()
     records = _records(strand)
-    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0]
+    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0][0]
     source = extract_cds_proteins([records[1]]).proteins_by_record[0]
     expected = extract_cds_proteins([flipped]).proteins_by_record[0]
     raw_map = json.loads(json.dumps({

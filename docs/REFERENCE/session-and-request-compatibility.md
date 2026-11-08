@@ -2,7 +2,7 @@
 
 # Session and request compatibility
 
-Current writers emit session version 51 and canonical `renderRequest` schema 9.
+Current writers emit session version 51 and canonical `renderRequest` schema 10.
 Session 51 lists the drawings of a project in `drawings`. The Web app and Python
 read a Session 46–50 into drawings themselves; a Session 27–44 is converted by
 Python, once, at Load (the Web app waits for it); a Session 45 is not read.
@@ -10,7 +10,7 @@ Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 51 | 27–33, 39–42, 44, and 46–51 |
-| Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
+| Canonical `renderRequest` | 10 | 1, 2, 5, 6, 7, 8, 9, and 10 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–51 |
 
 [Session and request structure](#session-and-request-structure) has the JSON
@@ -123,6 +123,15 @@ and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
+
+Request schema 10 writes the spans of a record as `windows`, a list of
+`{start, end, reverseComplement, column}` in source coordinates, in place of
+the single `region`; a crop names its record in the record's `selector`. A
+record with several windows draws each as its own part of one Linear row,
+leaving out the interval between them; `column` places those windows, and a
+record drawn as one part keeps its column in `presentation.gridColumn`. A
+schema 1–9 request reads its `region` as one window, and its region's selector
+as the record's.
 
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-9 request against `describe_canonical_request()`: it refuses a key

@@ -124,10 +124,10 @@ def test_region_vectors(materialize, case: dict[str, Any]) -> None:
     region = derive_region_drawing(materialized, [selection], margin=case["margin"])
     [record] = region.drawing.request.records
     if expected["whole"]:
-        assert record.region is None
+        assert record.windows == ()
         assert region.drawing.mode == "circular"
     else:
-        assert (record.region.start, record.region.end) == (expected["start"], expected["end"])
+        assert (record.windows[0].start, record.windows[0].end) == (expected["start"], expected["end"])
         assert region.drawing.mode == "linear"
 
 
@@ -154,8 +154,8 @@ def test_region_of_a_circular_drawing_is_linear_with_adapted_sizes(materialize, 
     request = region.drawing.request
     assert isinstance(request, LinearDiagramRequest)
     [record] = request.records
-    assert (record.record_key, record.region.start, record.region.end) == ("mito", 11737, 14748)
-    assert record.region.reverse_complement is False
+    assert (record.record_key, record.windows[0].start, record.windows[0].end) == ("mito", 11737, 14748)
+    assert record.windows[0].reverse_complement is False
     assert {item.setting for item in region.adaptation.reset} == {"labels.font_size", "objects.depth.tick_font_size"}
     assert region.adaptation.kept == {"objects.legends.font_size": 18, "window": 500, "step": 50}
     overrides = request.options.config_overrides
@@ -170,12 +170,12 @@ def test_region_of_a_circular_drawing_is_linear_with_adapted_sizes(materialize, 
     rendered = render_request(request)
     assert all(path.is_file() for path in rendered.output_paths)
     document = build_session_document(request)
-    assert drawing_view(document.to_dict())["renderRequest"]["records"][0]["region"] == {
-        "selector": None,
+    assert drawing_view(document.to_dict())["renderRequest"]["records"][0]["windows"] == [{
         "start": 11737,
         "end": 14748,
         "reverseComplement": False,
-    }
+        "column": None,
+    }]
 
 
 def test_a_region_drawing_is_written_through_the_drawings_api(materialize) -> None:
@@ -204,7 +204,7 @@ def test_the_source_drawing_is_selected_by_id_or_name(tmp_path: Path) -> None:
         derived = derive_region_drawing(materialized, [region], drawing="Linear")
         [record] = derived.drawing.request.records
         assert record.source.path.name.endswith("NC_001416.gb")
-    assert (record.region.start, record.region.end) == (20000, 30000)
+    assert (record.windows[0].start, record.windows[0].end) == (20000, 30000)
 
 
 def test_adapt_sizes_off_keeps_every_size(materialize) -> None:
@@ -225,19 +225,19 @@ def test_whole_record_keeps_the_mode_orientation_and_display(materialize) -> Non
     [record] = region.drawing.request.records
     assert region.drawing.mode == "circular"
     assert isinstance(region.drawing.request, CircularDiagramRequest)
-    assert record.region is None and record.presentation.reverse_complement is True
+    assert record.windows == () and record.presentation.reverse_complement is True
     assert region.adaptation.reset == ()
 
 
 def test_a_crop_keeps_the_orientation_in_source_coordinates(materialize) -> None:
     materialized = materialize(_mito_circular(record={"presentation": RecordPresentation(reverse_complement=True)}))
     [record] = derive_region_drawing(materialized, [RegionSelection("mito", 100, 900)]).drawing.request.records
-    assert (record.region.start, record.region.end, record.region.reverse_complement) == (100, 900, True)
+    assert (record.windows[0].start, record.windows[0].end, record.windows[0].reverse_complement) == (100, 900, True)
     assert record.presentation.reverse_complement is False
     [forward] = derive_region_drawing(
         materialized, [RegionSelection("mito", 100, 900)], reverse_complement=False
     ).drawing.request.records
-    assert forward.region.reverse_complement is False
+    assert forward.windows[0].reverse_complement is False
 
 
 def test_regions_of_several_records_follow_source_order(materialize, tmp_path: Path) -> None:
@@ -258,10 +258,8 @@ def test_regions_of_several_records_follow_source_order(materialize, tmp_path: P
     )
     records = region.drawing.request.records
     assert [record.record_key for record in records] == ["pair:1", "pair:2"]
-    # The source rows' own selectors (the Session stores each record by its ID),
-    # each in its crop, as the Web writes a crop.
-    assert [record.selector for record in records] == [None, None]
-    assert [record.region.record_id for record in records] == ["TESTA", "TESTB"]
+    # The source rows' own selectors (the Session stores each record by its ID).
+    assert [record.selector.record_id for record in records] == ["TESTA", "TESTB"]
     assert all(record.cardinality is RecordCardinality.EXACTLY_ONE for record in records)
     [track] = region.drawing.request.options.depth_tracks
     assert track.source[0] is None and str(track.source[1]).endswith("depth.tsv")
@@ -279,12 +277,12 @@ def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> N
     with materialize_session(document, output_directory=tmp_path / "out") as materialized:
         region = derive_region_drawing(materialized, [RegionSelection("pair:2", 1, 20)])
     [record] = region.drawing.request.records
-    assert (record.record_key, record.selector, record.region.record_index) == ("pair:2", None, 1)
+    assert (record.record_key, record.selector.record_index) == ("pair:2", 1)
 
 
 def test_a_crop_of_a_record_of_a_file_is_stated_as_the_web_writes_it() -> None:
     # A card of a file of two records, with a record gap: each crop names its
-    # record in the region, and the drawing, whose records take a row each,
+    # record in its selector, and the drawing, whose records take a row each,
     # states no layout (OV-2464).
     source = LinearDiagramRequest(
         records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
@@ -292,12 +290,12 @@ def test_a_crop_of_a_record_of_a_file_is_stated_as_the_web_writes_it() -> None:
     )
     request = derive_region_request(source, [RegionSelection("pair:1", 2, 30), RegionSelection("pair:2", 5, 40)]).request
     assert request.layout is None
-    assert [(record.selector, record.region.record_index) for record in request.records] == [(None, 0), (None, 1)]
+    assert [record.selector.record_index for record in request.records] == [0, 1]
     stated = build_session_document(request).to_dict()["drawings"][0]["renderRequest"]
     assert stated["layout"] == {}
-    assert [(record["selector"], record["region"]["selector"] is not None) for record in stated["records"]] == [
-        (None, True),
-        (None, True),
+    assert [(record["selector"] is not None, len(record["windows"])) for record in stated["records"]] == [
+        (True, 1),
+        (True, 1),
     ]
 
 
@@ -361,7 +359,6 @@ def test_comparison_tables_are_not_carried(materialize) -> None:
     [
         ([], {}, "at least one region"),
         ([RegionSelection("other", 1, 10)], {}, "no record 'other'"),
-        ([RegionSelection("mito", 1, 10), RegionSelection("mito", 20, 30)], {}, "more than one region"),
         ([RegionSelection("mito", 1, 10)], {"margin": -1}, "margin"),
     ],
 )
@@ -469,7 +466,7 @@ def test_python_refuses_exactly_the_spans_the_web_says_cross_the_origin(case: di
     assert case["pythonOutcome"] == "accepted"
     [record] = derive_region_request(request, selection).request.records
     whole = (span["start"], span["end"]) == (1, axis["sourceLength"])
-    assert (record.region is None) if whole else ((record.region.start, record.region.end) == (span["start"], span["end"]))
+    assert (record.windows == ()) if whole else ((record.windows[0].start, record.windows[0].end) == (span["start"], span["end"]))
 
 
 def test_a_start_after_the_end_of_a_linear_record_is_worded_without_the_origin(tmp_path: Path) -> None:
@@ -512,7 +509,7 @@ def test_the_web_helper_derives_one_record_of_a_circular_drawing(tmp_path: Path)
     request = reply["renderRequest"]
     # The new drawing names the source's resource: the same file, no new upload.
     assert request["records"][0]["source"] == payload["records"][0]["source"]
-    assert request["records"][0]["region"]["start"] == 100
+    assert request["records"][0]["windows"][0]["start"] == 100
     assert [item["setting"] for item in reply["returnedToAuto"]] == ["labels.font_size"]
     assert reply["returnedToAuto"][0]["explicit"] == 16
     decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
@@ -629,6 +626,6 @@ def test_the_web_helper_takes_a_feature_region(tmp_path: Path) -> None:
     inside, across = _feature_id(source, "inside"), _feature_id(source, "across")
     reply = _web_region(source, [{"recordKey": "o", "featureId": inside}], tmp_path)[2]
     assert reply["status"] == "derived"
-    assert reply["renderRequest"]["records"][0]["region"]["start"] == 101
+    assert reply["renderRequest"]["records"][0]["windows"][0]["start"] == 101
     refused = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
     assert refused == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "o", "start": 901, "end": 50}

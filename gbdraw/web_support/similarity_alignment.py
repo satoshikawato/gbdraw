@@ -372,12 +372,7 @@ def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str
 
     records = []
     for record in request.records:
-        reverse = reverse_by_key[cast(str, record.record_key)]
-        if record.region is not None:
-            records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
-                                   presentation=replace(record.presentation, reverse_complement=False)))
-        else:
-            records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
+        records.append(record.oriented(reverse_by_key[cast(str, record.record_key)]))
     return replace(request, records=tuple(records))
 
 

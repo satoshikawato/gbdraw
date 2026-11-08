@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from ..core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
 from ..core.record_metadata import _read_coord_map, _write_coord_map
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
-from .record_select import reverse_records
+from .record_select import RecordSelector, reverse_records
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,6 @@ _REGION_COORD_RE = re.compile(
 )
 
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -54,6 +50,77 @@ class RegionSpec:
         if parts:
             return ":".join(parts)
         return "(by-order)"
+
+    def record_selector(self) -> RecordSelector | None:
+        """The record this spec names (by ID or index), or ``None``; the file selector is not a record's."""
+
+        if self.record_id is not None:
+            return RecordSelector(raw=self.record_id, record_id=self.record_id, record_index=None)
+        if self.record_index is not None:
+            return RecordSelector(raw=f"#{self.record_index + 1}", record_id=None, record_index=self.record_index)
+        return None
+
+
+@dataclass(frozen=True)
+class RecordWindow:
+    """One span of a record, drawn as its own unit of a Linear row (D-01).
+
+    ``start`` and ``end`` are 1-based source coordinates of the record;
+    ``reverse_complement`` draws the span reversed; ``column`` orders the
+    record's units with the other units of its row. Windows of one record
+    leave out the interval between them.
+    """
+
+    start: int
+    end: int
+    reverse_complement: bool = False
+    column: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("start", "end"):
+            value = getattr(self, name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"Window {name} must be a positive integer.")
+        if self.end < self.start:
+            raise ValueError(f"Window {self.start}-{self.end} ends before it starts.")
+        if not isinstance(self.reverse_complement, bool):
+            raise ValueError("Window reverse_complement must be a boolean.")
+        if self.column is not None and (
+            not isinstance(self.column, int) or isinstance(self.column, bool) or self.column < 1
+        ):
+            raise ValueError("Window column must be a positive integer or None.")
+
+    @classmethod
+    def from_region(cls, spec: RegionSpec, *, column: int | None = None) -> RecordWindow:
+        """The window ``spec`` crops; its record selector stays with the spec's reader."""
+
+        return cls(spec.start, spec.end, spec.reverse_complement, column)
+
+    def region(self) -> RegionSpec:
+        """The crop this window draws, as an unqualified region spec."""
+
+        coordinates = f"{self.start}-{self.end}" + (":rc" if self.reverse_complement else "")
+        return RegionSpec(
+            raw=coordinates,
+            file_selector=None,
+            record_id=None,
+            record_index=None,
+            start=self.start,
+            end=self.end,
+            reverse_complement=self.reverse_complement,
+        )
+
+
+def check_disjoint_windows(spans: Sequence[tuple[int, int]], record_name: str) -> None:
+    """Refuse windows of one record that share a base (each base is drawn once)."""
+
+    ordered = sorted(spans)
+    for (start, end), (next_start, next_end) in zip(ordered, ordered[1:]):
+        if next_start <= end:
+            raise ValueError(
+                f"Windows {start}-{end} and {next_start}-{next_end} of record {record_name} overlap; "
+                "windows of one record must not share a base."
+            )
 
 
 def _extract_parenthetical(selector: str) -> str | None:
@@ -222,8 +289,11 @@ def _crop_record_to_region(
 def assign_region_specs(
     records: Sequence[SeqRecord],
     specs: Sequence[RegionSpec],
-) -> dict[int, RegionSpec]:
-    """Return the region spec that applies to each record index."""
+) -> dict[int, tuple[RegionSpec, ...]]:
+    """Return the region specs that apply to each record index, in the order given.
+
+    Several specs that select one record are its windows (D-01).
+    """
 
     total = len(records)
     selectorless = [
@@ -233,18 +303,18 @@ def assign_region_specs(
     ]
     selectorful = [spec for spec in specs if spec not in selectorless]
 
-    assignments: dict[int, RegionSpec] = {}
+    assignments: dict[int, tuple[RegionSpec, ...]] = {}
 
     if selectorless:
         if selectorful:
             raise ValueError(
                 "Region specs without a record selector cannot be mixed with selector-based specs."
             )
-        if total == 1 and len(specs) == 1:
-            assignments[0] = selectorless[0]
+        if total == 1:
+            assignments[0] = tuple(selectorless)
         elif len(specs) == total:
             for idx, spec in enumerate(specs):
-                assignments[idx] = spec
+                assignments[idx] = (spec,)
         else:
             raise ValueError(
                 "Region specs without a record selector require a single record or one spec per record in input order."
@@ -310,11 +380,7 @@ def assign_region_specs(
                             f"in file '{spec.file_selector}', but only {len(file_indices)} record(s) were loaded."
                         )
                     idx = file_indices[spec.record_index]
-                if idx in assignments:
-                    raise ValueError(
-                        f"Multiple region specs target record {spec.selector_label()}."
-                    )
-                assignments[idx] = spec
+                assignments[idx] = (*assignments.get(idx, ()), spec)
                 continue
 
             record_id = spec.record_id or ""
@@ -331,11 +397,7 @@ def assign_region_specs(
                     f"Region spec '{spec.raw}' matched multiple records with ID '{record_id}'. Use #index to disambiguate."
                 )
             idx = matches[0]
-            if idx in assignments:
-                raise ValueError(
-                    f"Multiple region specs target record '{record_id}'."
-                )
-            assignments[idx] = spec
+            assignments[idx] = (*assignments.get(idx, ()), spec)
 
     return assignments
 
@@ -365,15 +427,43 @@ def apply_region_specs(
     *,
     log: logging.Logger | None = None,
 ) -> list[SeqRecord]:
+    """Crop each record to the specs that select it; a record with several specs gives one record per window."""
+
     if not specs:
         return list(records)
-    assignments = assign_region_specs(records, specs)
-    return [
-        crop_record_to_region(record, assignments[idx], log=log)
-        if idx in assignments
-        else record
-        for idx, record in enumerate(records)
-    ]
+    windows, _cropped = crop_then_reverse_records(records, specs, [False] * len(records), log=log)
+    return [unit for units in windows for unit in units]
+
+
+def crop_record_windows(
+    record: SeqRecord,
+    specs: Sequence[RegionSpec],
+    reverse: bool,
+    *,
+    log: logging.Logger | None = None,
+) -> tuple[SeqRecord, ...]:
+    """Crop ``record`` to each of its windows, then reverse-complement each (OV-1279).
+
+    The one owner of that order: a record's ``reverse`` flag applies after its
+    crop, as the spec's own ``:rc`` does, so both spellings draw one window and
+    asking for both reverses once. A record without a window is only reversed.
+    Windows of one record must not overlap, and a record with several windows
+    orients each window by its own flag (D-01).
+    """
+
+    log = log or logger
+    if not specs:
+        return (reverse_records((record,), reverse, log=log)[0],)
+    if len(specs) > 1:
+        if reverse:
+            raise ValueError(
+                f"Record {record.id} has several windows; reverse-complement each window, not the record."
+            )
+        check_disjoint_windows([(spec.start, spec.end) for spec in specs], str(record.id))
+    return tuple(
+        crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or reverse), log=log)
+        for spec in specs
+    )
 
 
 def crop_then_reverse_records(
@@ -382,30 +472,29 @@ def crop_then_reverse_records(
     reverse: Sequence[bool],
     *,
     log: logging.Logger | None = None,
-) -> tuple[list[SeqRecord], frozenset[int]]:
-    """Crop each record a spec selects, then reverse-complement it (OV-1279).
+) -> tuple[list[tuple[SeqRecord, ...]], frozenset[int]]:
+    """Crop each record to the windows the specs select, then orient them (:func:`crop_record_windows`).
 
-    The one owner of that order: a record's ``reverse`` flag applies after its
-    crop, as the spec's own ``:rc`` does, so both spellings draw one window and
-    asking for both reverses once. A record no spec selects is only reversed.
-    Returns the records and the indexes of the cropped ones.
+    Returns each record's drawn windows (one record when no spec selects it)
+    and the indexes of the cropped records.
     """
 
     assignments = assign_region_specs(records, specs) if specs else {}
     oriented = [
-        crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or flag), log=log)
-        if (spec := assignments.get(index)) is not None
-        else reverse_records((record,), flag, log=log)[0]
+        crop_record_windows(record, assignments.get(index, ()), flag, log=log)
         for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
     ]
     return oriented, frozenset(assignments)
 
 
 __all__ = [
+    "RecordWindow",
     "RegionSpec",
     "apply_region_specs",
     "assign_region_specs",
+    "check_disjoint_windows",
     "crop_record_to_region",
+    "crop_record_windows",
     "crop_then_reverse_records",
     "parse_region_spec",
     "parse_region_specs",

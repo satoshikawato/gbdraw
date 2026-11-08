@@ -341,7 +341,7 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
             records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
         specs = parse_region_specs([region_spec]) if region_spec else []
-        records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+        records = [unit for units in crop_then_reverse_records(records, specs, [reverse] * len(records))[0] for unit in units]
         record = records[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
@@ -589,7 +589,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
     else:
         raise ValueError(f"Unsupported format: {fmt}")
     specs = parse_region_specs([region_spec]) if region_spec else []
-    records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+    records = [unit for units in crop_then_reverse_records(records, specs, [reverse] * len(records))[0] for unit in units]
     if not records:
         raise ValueError("No records found")
     return records[0]

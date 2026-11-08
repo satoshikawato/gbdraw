@@ -91,7 +91,7 @@ from gbdraw.features.placement import (
 )
 from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
-from gbdraw.io.regions import RegionSpec
+from gbdraw.io.regions import RecordWindow, RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import _read_coord_map
@@ -183,11 +183,13 @@ if TYPE_CHECKING:
     from .api.options import LosatpMode
 
 
-CANONICAL_REQUEST_SCHEMA = 9
+CANONICAL_REQUEST_SCHEMA = 10
 DISPLAY_PLACEMENT_SCHEMA = 7
 FEATURE_OVERRIDE_SCHEMA = 9
+# Schema 10 writes a record's spans as ``windows`` (D-01); earlier schemas wrote one ``region``, read as one window.
+RECORD_WINDOWS_SCHEMA = 10
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
-    {1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA}
+    {1, 2, 5, 6, 7, 8, 9, CANONICAL_REQUEST_SCHEMA}
 )
 UNKNOWN_FIELD_POLICY = "reject"
 
@@ -1108,23 +1110,6 @@ def _source_file_transforms(
     return cast("list[tuple[tuple[int, int] | None, bool]]", found)
 
 
-def _source_region(
-    span: tuple[int, int], reverse: bool, selector: RecordSelector | None
-) -> RegionSpec:
-    """A source-coordinate crop of the selected record, reverse-complemented when drawn so."""
-
-    coordinates = f"{span[0]}-{span[1]}" + (":rc" if reverse else "")
-    return RegionSpec(
-        raw=f"{selector.raw}:{coordinates}" if selector is not None else coordinates,
-        file_selector=None,
-        record_id=selector.record_id if selector is not None else None,
-        record_index=selector.record_index if selector is not None else None,
-        start=span[0],
-        end=span[1],
-        reverse_complement=reverse,
-    )
-
-
 def _encode_records(
     records: Sequence[RecordInput],
     *,
@@ -1136,7 +1121,7 @@ def _encode_records(
     The planner projects each displayed record to an in-memory record. When
     they are records of their source file, each drawn once, that file's own
     bytes are the resource, and each record's crop (in source coordinates) and
-    orientation are its region and reverse complement, as the Web writes them:
+    orientation are its window and reverse complement, as the Web writes them:
     the CLI binds the same file for the Web draft, so Session Load sees the
     request draw from its bound inputs. ``per_record`` says whether the Web
     draft selects, crops, and orients each record (every Linear record, and a
@@ -1224,13 +1209,11 @@ def _encode_records(
                 record = records[position]
                 transformed[position] = replace(
                     record,
-                    region=None if span is None else _source_region(span, reverse, selector),
+                    windows=() if span is None else (RecordWindow(span[0], span[1], reverse),),
                     presentation=replace(
                         record.presentation, reverse_complement=reverse and span is None
                     ),
                 )
-                # A crop names its record in the region, as the Web writes it.
-                selector = selector if span is None else None
             shared[position] = (source_payload, selector)
     payloads = [
         _encode_record(
@@ -1285,9 +1268,34 @@ def _encode_record(
         "display": _encode_record_display(record.display),
         "source": source_payload,
         "selector": _encode_selector(selector),
-        "region": _encode_region(record.region),
+        "windows": [_encode_window(window) for window in record.windows],
         "presentation": _encode_record_presentation(record.presentation),
     }
+
+
+def _encode_window(window: RecordWindow) -> dict[str, Any]:
+    return {
+        "start": window.start,
+        "end": window.end,
+        "reverseComplement": window.reverse_complement,
+        "column": window.column,
+    }
+
+
+def _decode_windows(value: object, *, path: str) -> tuple[RecordWindow, ...]:
+    if not isinstance(value, list):
+        raise CanonicalRequestDecodingError(f"{path} must be an array.")
+    windows = []
+    for index, item in enumerate(value):
+        window_path = f"{path}[{index}]"
+        window = _object(item, path=window_path, required={"start", "end", "reverseComplement", "column"})
+        windows.append(RecordWindow(
+            _integer(window["start"], f"{window_path}.start"),
+            _integer(window["end"], f"{window_path}.end"),
+            _boolean(window["reverseComplement"], f"{window_path}.reverseComplement"),
+            _optional_integer(window["column"], f"{window_path}.column"),
+        ))
+    return tuple(windows)
 
 
 def _encode_record_display(display: RecordDisplayOptions) -> dict[str, Any]:
@@ -1326,7 +1334,7 @@ def _decode_record(
     resource_paths: Mapping[str, str | Path],
 ) -> RecordInput:
     path = f"renderRequest.records[{index - 1}]"
-    required = {"source", "selector", "region", "presentation"}
+    required = {"source", "selector", "windows" if schema >= RECORD_WINDOWS_SCHEMA else "region", "presentation"}
     if schema >= 2:
         required.add("recordKey")
     if schema >= 6:
@@ -1388,7 +1396,8 @@ def _decode_record(
             else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
-        region=_decode_region(item["region"], path=f"{path}.region"),
+        region=None if schema >= RECORD_WINDOWS_SCHEMA else _decode_region(item["region"], path=f"{path}.region"),
+        windows=_decode_windows(item["windows"], path=f"{path}.windows") if schema >= RECORD_WINDOWS_SCHEMA else (),
         presentation=presentation,
         display=display,
         record_key=(
@@ -1433,24 +1442,6 @@ def _decode_selector(value: object, *, path: str) -> RecordSelector | None:
             raw=f"#{record_index + 1}", record_id=None, record_index=record_index
         )
     raise CanonicalRequestDecodingError(f"Unsupported selector kind at {path}: {kind!r}.")
-
-
-def _encode_region(region: RegionSpec | None) -> dict[str, Any] | None:
-    if region is None:
-        return None
-    selector: dict[str, Any] | None
-    if region.record_id is not None:
-        selector = {"kind": "recordId", "value": region.record_id}
-    elif region.record_index is not None:
-        selector = {"kind": "recordIndex", "index": region.record_index}
-    else:
-        selector = None
-    return {
-        "selector": selector,
-        "start": region.start,
-        "end": region.end,
-        "reverseComplement": region.reverse_complement,
-    }
 
 
 def _decode_region(value: object, *, path: str) -> RegionSpec | None:
@@ -5788,23 +5779,22 @@ def describe_canonical_request() -> dict[str, Any]:
     data(RecordPresentation, defaults={
         _camel(item.name): getattr(RecordPresentation(), item.name) for item in fields(RecordPresentation)
     })
-    region_hints = _class_type_hints(RegionSpec)
-    region = named("RecordRegion", obj({  # _encode_region
-        "selector": nullable(selector),
-        "start": of(region_hints["start"]),
-        "end": of(region_hints["end"]),
-        "reverseComplement": of(region_hints["reverse_complement"]),
-    }))
+    # _encode_window: RecordWindow.__post_init__ checks positive coordinates and columns.
+    data(RecordWindow, replace={
+        "start": bound(RecordWindow, "start", minimum=1),
+        "end": bound(RecordWindow, "end", minimum=1),
+        "column": bound(RecordWindow, "column", minimum=1),
+    })
     # A request has a record (validate_render_request); RecordInput.__post_init__
     # refuses a blank record key.
     records = bounded(array(data(RecordInput, "Record", replace={
         "source": source,
-        "region": nullable(region),
         "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
     }, defaults={
         "display": _encode_record_display(RecordDisplayOptions()),
         "presentation": _encode_record_presentation(RecordPresentation()),
         "cardinality": RecordInput.__dataclass_fields__["cardinality"].default.value,
+        "windows": [],
     })), minItems=1)
 
     # _encode_output: output_directory is the caller's, overwrite is read and ignored.

@@ -29,7 +29,7 @@ Every `RecordInput` declares a `RecordCardinality`:
 | `FIRST` | deliberately selects the first source candidate |
 | `ALL` | expands all candidates in source order |
 
-Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection and the record-local region crop, then reverse complement: a region counts its coordinates on the source strand, whether the reverse complement comes from `RecordPresentation.reverse_complement` or the region's own setting. Collection-level ordering and layout are applied after expansion.
+Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. `RecordInput.windows` lists the spans of a record to draw (`RecordWindow(start, end, reverse_complement, column)`, source coordinates); each window is drawn as its own part of one Linear row, and windows must not overlap. A `region` is read as one window, its record selector as the record's `selector`; after construction `RecordInput.region` reads `None`. A record with several windows reverse-complements each window by its own setting and places each by its `column`; Circular requests draw one window at most. The planner loads each unique source once, then applies selection and the record-local region crop, then reverse complement: a region counts its coordinates on the source strand, whether the reverse complement comes from `RecordPresentation.reverse_complement` or the region's own setting. Collection-level ordering and layout are applied after expansion.
 
 For Linear Similarity Group alignment, `similarity_alignment` stores the exact
 reference and each record's anchor or Skip decision. It has no orientation
@@ -150,8 +150,9 @@ ID or name, as in `session_to_request()`. Each
 `RegionSelection(record_key, start, end)` names a record of the source drawing
 and a region in source coordinates (1-based, inclusive);
 `FeatureRegionSelection(record_key, feature_id)` instead takes the span of one
-feature, by its biological feature ID in the source drawing. Give at most one
-region per record. `drawing` in the result is a `SessionDrawingSpec` for
+feature, by its biological feature ID in the source drawing. Several regions
+of one record become that record's windows, drawn side by side in one row;
+regions that overlap or touch after the margin are joined. `drawing` in the result is a `SessionDrawingSpec` for
 `build_session_document(drawings=...)`, and `drawing.request` draws the same
 files cut to those regions, in source order. The current Session version names
 each drawing by its mode, so it cannot write a `name` other than `Linear` or

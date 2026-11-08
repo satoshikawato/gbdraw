@@ -870,7 +870,7 @@ Allowed columns:
 | `row` | optional | Positive multi-record row. In Circular mode it requires `--multi_record_canvas`; in Linear mode it enables multi-record row layout. |
 | `column` | optional | Positive integer used to order records from left to right within a multi-record row. |
 
-One table row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+One table row represents one displayed record, except that rows with a `region` that name the same file and `record_id` in the same `row` are the windows of one record: they are drawn side by side in that row, ordered by `column`, and leave out the interval between them. Such rows must agree on `record_label`, `record_subtitle`, `topology`, and `losat_gencode`, and their regions must not overlap. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
 A `:rc` suffix and `reverse_complement` draw the same window. `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both crop 1000..9000 of the record as stored in the file, then reverse-complement the crop. `--region` and `--reverse_complement` follow the same order.
 
@@ -1818,6 +1818,9 @@ options:
                         1-based inclusive. For multiple records without
                         selectors, provide one spec per record in input order
                         (file order, then record order within each file).
+                        Repeat --region for one record to draw several windows
+                        of it side by side in one row; the windows must not
+                        overlap.
   --record_id RECORD_ID
                         Select a record by ID or #index per input file
                         (repeatable; order matches input files). Use an empty

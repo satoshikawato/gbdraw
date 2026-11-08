@@ -33,6 +33,16 @@ write-up of a release.
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
+- Added: one Linear row can show several windows of one record, leaving out
+  the interval between them. Repeat `--region` for a record, or give a records
+  table several rows with a `region` that name the same file and record in the
+  same `row` (ordered by `column`); in the Python API, list
+  `RecordInput.windows`. The windows keep one record identity, so a feature
+  cut by a window edge keeps one colour. A new drawing from regions accepts several
+  regions of one record. Request schema 10 writes a record's `windows`; older
+  requests read their `region` as one window. Overlapping windows, a record-wide
+  reverse complement with several windows, and several windows in Circular are
+  refused.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

@@ -499,7 +499,8 @@ def _crop_then_reverse(records: list[SeqRecord], region_spec: object | None, rev
 
     specs = parse_region_specs([str(region_spec)]) if region_spec else []
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-    return crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+    windows = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
+    return [unit for units in windows for unit in units]
 
 
 def extract_features_from_genbank_payload(
