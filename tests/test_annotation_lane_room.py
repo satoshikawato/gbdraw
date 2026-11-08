@@ -260,8 +260,8 @@ def test_a_circular_label_whose_letters_cross_nothing_parts_no_lanes(
     orientation: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # a's label stands at bp 2500, at 3 o'clock: a horizontal or radial label spans only its letters' height along
-    # the circle there, short of b's mark (2700-3000) in the next lane.
-    regions = (_region("a", 2400, 2600, "LONGLABELNAME", orientation), _region("b", 2700, 3000, ""))
+    # the circle there, short of b's mark (2550-3000) in the next lane.
+    regions = (_region("a", 2400, 2600, "LONGLABELNAME", orientation), _region("b", 2550, 3000, ""))
     drawn = _svg("circular", regions)
     items = _groups(drawn)
 
@@ -758,6 +758,107 @@ def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:
     assert any("1 region label without room before the centre" in str(item.message) for item in caught), [
         str(item.message) for item in caught
     ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "regions", "shares_lane"),
+    (
+        # The letters (bp 1711-2390) reach over b's mark; 0.6 em would keep only bp 1834-2266.
+        ("linear", (("a", 2001, 2100, "WWWWWW", "horizontal"), ("b", 2301, 2600, "", "horizontal")), False),
+        # The letters (bp 1979-2122) end short of b; 0.6 em would keep up to bp 2266.
+        ("linear", (("a", 2001, 2100, "iiiiii", "horizontal"), ("b", 2201, 2500, "", "horizontal")), True),
+        ("circular", (("a", 2001, 2050, "WWWWWW", "tangent"), ("b", 2151, 2400, "", "tangent")), False),
+        # The letters end short of b at bp 2101, where 0.6 em kept b in the next lane.
+        ("circular", (("a", 2001, 2050, "iiiiii", "tangent"), ("b", 2101, 2350, "", "tangent")), True),
+    ),
+    ids=("linear-wide", "linear-narrow", "circular-wide", "circular-narrow"),
+)
+def test_the_lane_packer_keeps_a_labels_letters_as_the_drawer_measures_them(
+    mode: str, regions: tuple[tuple[str, int, int, str, str], ...], shares_lane: bool
+) -> None:
+    # The lane packer keeps a's letters as the drawer measures them: a's label leaves its short mark, and b shares
+    # a's lane only where the letters end short of b's mark.
+    items = _groups(_svg(mode, tuple(_region(*region) for region in regions)))
+    shape = _band if mode == "linear" else _radii
+
+    assert (shape(items["a"]) == shape(items["b"])) is shares_lane
+
+
+def test_a_slot_whose_lanes_stay_where_it_is_drawn_lays_the_tracks_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The letters measured where an outside slot is drawn span fewer bp than at the axis circle, but a's lane stays:
+    # the packing there equals the one at the axis circle, so the tracks are laid out once. (A packing that kept the
+    # bp its letters span at the radius they were measured at would differ, and lay the tracks out twice.)
+    from gbdraw.diagrams.circular import assemble
+
+    original = assemble._place_annotation_tracks_where_drawn
+    passes: list[int] = []
+
+    def counting(place, slots, tracks):
+        calls: list[object] = []
+
+        def counted(*args):
+            calls.append(args)
+            return place(*args)
+
+        result = original(counted, slots, tracks)
+        passes.append(len(calls))
+        return result
+
+    monkeypatch.setattr(assemble, "_place_annotation_tracks_where_drawn", counting)
+    regions = (_region("a", 2001, 2050, "WWWWWW", "tangent"), _region("b", 6001, 6400, ""))
+    _svg("circular", regions, "regions:annotations@side=outside,set_id=regions")
+
+    assert passes and set(passes) == {1}, passes
+
+
+def _two_stacks(gap_bp: int) -> tuple[ResolvedRegionAnnotation, ...]:
+    """Two stacks of three nested labelled regions (a0-a2 from bp 100, b0-b2 ``gap_bp`` further on): each stack takes
+    three lanes."""
+
+    return tuple(
+        ResolvedRegionAnnotation(
+            id=f"{stack}{index}", set_id="s", record_index=0, segments=((start + index, start + 100),),
+            midpoint_bp=start + 50.0, span_bp=100 - index, label=f"{stack}{index}", mark="band", lane=None,
+            style=RegionAnnotationStyle(),
+        )
+        for stack, start in (("a", 100), ("b", 100 + gap_bp))
+        for index in range(3)
+    )
+
+
+def _inside_lanes(annotations, letters, limit: float) -> dict[str, int]:
+    track = layout_annotation_track(
+        "regions", "s", annotations, record_lengths={0: 10_000}, params=AnnotationTrackParams(set_id="s"),
+        labels=LabelSizing(font_size=10.0, extent=letters), join_origin=True, room_bounds=packer.RoomBounds(limit_px=limit),
+    )
+    return {item.annotation.id: item.lane for item in track.placements}
+
+
+def test_an_inside_slot_measures_each_lane_where_it_is_drawn() -> None:
+    # The lane packer measures letters lane by lane: the third lane lies further in, where they span more of the
+    # circle (400 bp instead of 50). Measured there, a2's letters reach b2's mark 300 bp on, so b2 takes a lane of
+    # its own.
+    def letters(_annotation, _style, _font_size, _place_bp, mark_offset):
+        reach = 400.0 if mark_offset > 40.0 else 50.0
+        return LabelExtent(-reach, reach, 10.0)
+
+    lanes = _inside_lanes(_two_stacks(300), letters, limit=1_000.0)
+
+    assert lanes == {"a0": 0, "a1": 1, "a2": 2, "b0": 0, "b1": 1, "b2": 3}
+
+
+def test_an_inside_slot_whose_lanes_would_pass_the_centre_measures_its_letters_in_its_outer_lane() -> None:
+    # The slot has 40 px before the centre, room for two lanes of 14 px. A label in a lane past that, measured
+    # where the band would put it, covers the whole circle, so each would take a lane of its own and the lanes would
+    # pass the centre. The slot measures every lane beside a mark in its outer lane instead: the two stacks share
+    # their three lanes.
+    def letters(_annotation, _style, _font_size, _place_bp, mark_offset):
+        reach = 50.0 if mark_offset < 20.0 else 4_900.0
+        return LabelExtent(-reach, reach, 10.0)
+
+    lanes = _inside_lanes(_two_stacks(5_000), letters, limit=40.0)
+
+    assert lanes == {"a0": 0, "a1": 1, "a2": 2, "b0": 0, "b1": 1, "b2": 2}
 
 
 def test_a_clipped_inside_slot_stops_its_lanes_at_the_centre() -> None:
