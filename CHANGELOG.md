@@ -21,6 +21,12 @@ write-up of a release.
   placed by the width of the italic words (OV-2808). A name or label with other
   markup, or with `<`, `>`, or `&` elsewhere, is still drawn as written
   (OV-2760).
+- Fixed: a Linear GC content or GC skew track stopped at its last window,
+  short of the record end, so a 671 bp crop drew no track under its last
+  71 bp, and on a wrapped record a last row past that window drew none at all.
+  The track now holds the last window's value to the end of the record (and of
+  each row), as Depth and GC content in Percent mode already did, in the CLI,
+  the Python API, and the Web app (OV-2865).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web
