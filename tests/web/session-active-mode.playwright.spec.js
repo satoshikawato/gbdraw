@@ -60,7 +60,8 @@ const snapshot = page => page.evaluate(async () => {
     featurePanelTab: state.featurePanelTab.value,
     downloadDpi: state.downloadDpi.value,
     // null: the project has no drawing of that mode (a one-mode Load makes none for the other mode).
-    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.circularSources[0].gb)) : null,
+    // A settings-only Session has no File card.
+    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.circularSources[0]?.gb)) : null,
     linearSource: linearDrawing ? await fileInfo(state.inputFiles.fileOf(linearDrawing.linearSeqs[0]?.gb)) : null,
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
