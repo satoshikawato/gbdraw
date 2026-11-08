@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { gallerySessionDocument, readSavedSession, sessionLoadEvent } from './helpers/session-documents.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
@@ -52,13 +53,11 @@ const MODES = ['circular', 'linear'];
 const save = async (title) => {
   const result = await exportSession(title);
   assert.equal(result.status, 'saved', result.error?.message);
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 // The Load dialogs asked (BA-D25); the port answers [Load].
 const loadDialogs = [];
-const load = (session) => importSession({
-  target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-}, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
+const load = async (session) => importSession(await sessionLoadEvent(await session), { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
 // The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
 const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
 const resetDrawings = () => {
@@ -349,7 +348,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
 test('Session Load clears the label fit notice of the Result shown before', async () => {
   resetDrawings();
   installShownDrawing('circular');
-  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  const gallery = await gallerySessionDocument('HmmtDNA_basic_circular');
   state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
     report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
   state.inputSummaries.value = [{ resultIndex: 0, resultName: 'fit.svg', lines: ['Record r (a.gb), record 1 of 1, 8 bp: drew 0 features.'],
@@ -367,7 +366,7 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
   resetDrawings();
   installShownDrawing('circular');
-  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  const gallery = await gallerySessionDocument('HmmtDNA_basic_circular');
   assert.equal((await load(gallery)).status, 'ok');
   addPairDrawings();
   const uid = modeDrawing(state, 'linear').linearSeqs[0].uid;
@@ -420,7 +419,7 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
 // Session of one mode) draws every record of that mode too, and saves again.
 test('a Session without a mode slice turns every record of that mode ON (record selection)', async () => {
   resetDrawings();
-  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
+  const gallery = (name) => gallerySessionDocument(name);
   assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, modeDrawing(state, 'linear').linearSeqs[0].uid);
   assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
@@ -561,9 +560,7 @@ test('a Load that fails in its commit leaves the drawings, their order and the s
   installShownDrawing('linear');
   modeDrawing(state, 'linear').adv.label_font_size = 11;
   const before = state.drawingList();
-  const loaded = await importSession({
-    target: { files: [new Blob([JSON.stringify(fixtureSession('two-mode-linear-shown.v48'))], { type: 'application/json' })], value: 'selected' }
-  }, {
+  const loaded = await importSession(await sessionLoadEvent(fixtureSession('two-mode-linear-shown.v48')), {
     confirmLoadRepairs: async () => true,
     afterLoad: async () => { throw new Error('install failed'); }
   });
@@ -615,9 +612,7 @@ test('Load reads each Result set\'s request, reset receipt and catalog where the
   Object.assign(session.otherModeResult.renderRequest.records[0], { bogus: true });
   // The Load hands its caller the artifact of each drawing it does not show.
   const stashed = [];
-  const loaded = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, {
+  const loaded = await importSession(await sessionLoadEvent(session), {
     confirmLoadRepairs: async () => true,
     installLoadedArtifactSlots: (slots) => { stashed.push(...slots.stashed); }
   });
@@ -664,9 +659,7 @@ const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixt
 const loadKeepingSlots = async (session) => {
   const stashed = [];
   let opening = null;
-  const loaded = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, {
+  const loaded = await importSession(await sessionLoadEvent(session), {
     confirmLoadRepairs: async () => true,
     installLoadedArtifactSlots: (slots) => { opening = slots.opening; stashed.push(...slots.stashed); }
   });
@@ -973,9 +966,7 @@ test('a Session 51 Load lists each drawing\'s stored override fault once, at its
   const faulted = session.drawings.flatMap((entry, index) => (entry.config ? [{ entry, index }] : []));
   assert.ok(faulted.some(({ entry }) => entry.id === 'circular'));
   faulted.forEach(({ entry }) => { entry.config.unmanagedConfigOverrides = { [`no_such.${entry.id}.key`]: 1 }; });
-  const loaded = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await sessionLoadEvent(session), { confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(loaded.repairs.filter((repair) => repair.path.includes('unmanagedConfigOverrides'))
     .map((repair) => `${repair.code} ${repair.path}`).sort(), faulted
@@ -992,7 +983,7 @@ test('Save writes each drawing of a Session 51 as its own entry; a fresh Load re
   const saved = await (async () => {
     const result = await exportSession(null, { readKeptArtifacts: () => kept });
     assert.equal(result.status, 'saved', result.error?.message);
-    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    return await readSavedSession(result.blob);
   })();
   assert.equal(saved.version, SESSION_VERSION);
   for (const retired of ['modes', 'otherModeResult', 'renderRequest', 'results', 'config']) assert.equal(Object.hasOwn(saved, retired), false, retired);
@@ -1013,7 +1004,7 @@ test('Save writes each Session 51 drawing\'s own CLI options, found by drawing I
   assertLoadedDrawings(session, first);
   const result = await exportSession('cli-options', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   for (const id of ['linear', 'linear-2']) {
     assert.deepEqual(saved.drawings.find((entry) => entry.id === id).cliOptions, optionsOf(id), id);
   }
@@ -1039,7 +1030,7 @@ test('a Session 51 keeps each Linear drawing\'s own wrap length override through
   for (const id of ['linear', 'linear-2']) assert.deepEqual({ ...state.drawingOf(id).unmanagedConfigOverrides }, {}, id);
   const result = await exportSession('wrap-length', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   assert.equal(entryOf(saved, 'linear-2').config.form.linear_wrap_length, 30000);
   assert.equal(entryOf(saved, 'linear').config.form.linear_wrap_length, 'auto');
   for (const id of ['linear', 'linear-2']) assert.deepEqual(entryOf(saved, id).config.unmanagedConfigOverrides ?? {}, {}, id);
@@ -1152,7 +1143,7 @@ test('a Session 51 keeps each Linear drawing\'s own Italic gene names through Lo
   assert.equal(state.drawingOf('linear').adv.italic_gene_labels, false);
   const result = await exportSession('italic-gene-labels', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const italicOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.italic_gene_labels;
   assert.equal(italicOf('linear-2'), true);
   assert.equal(italicOf('linear'), false);
@@ -1171,7 +1162,7 @@ test('a Session 51 keeps each Linear drawing\'s own identity colour scale throug
   assert.equal(state.drawingOf('linear').adv.identity_scale, null);
   const result = await exportSession('identity-scale', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const scaleOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.identity_scale;
   assert.deepEqual(scaleOf('linear-2'), [40, 90]);
   assert.equal(scaleOf('linear'), null);
@@ -1204,7 +1195,7 @@ test('Save writes into each Session 51 drawing the LOSAT entries of its own Line
   assertLoadedDrawings(session, loaded);
   const result = await exportSession('losat-entries', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
   assert.deepEqual(keysOf('linear'), [entry.key]);
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
@@ -1238,7 +1229,7 @@ test('a Session 51 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusabl
     }
     const result = await exportSession(`losat-runtime-${opened}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
     assert.equal(result.status, 'saved', JSON.stringify(result));
-    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const saved = await readSavedSession(result.blob);
     const runtimesOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ runtime }) => runtime);
     assert.deepEqual(runtimesOf('linear'), [entry.runtime], opened);
     assert.deepEqual(runtimesOf('linear-2'), [entry.runtime], opened);
@@ -1261,7 +1252,7 @@ test('Save writes no LOSAT entry into a Session 51 drawing without a request, th
   assert.deepEqual(state.drawingOf('linear-2').linearSeqs.map(({ uid }) => uid), [entry.queryUid, entry.subjectUid]);
   const result = await exportSession('losat-no-request', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
   assert.equal(saved.drawings.find((candidate) => candidate.id === 'linear-2').renderRequest, null);
   assert.deepEqual(keysOf('linear'), [entry.key]);
@@ -1285,7 +1276,7 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
   assert.deepEqual([...state.losatCache.value.keys()], [conservation.key]);
   const result = await exportSession('losat-conservation', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   assert.deepEqual(Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)])),
     { circular: [], linear: [] });
 });
@@ -1333,7 +1324,7 @@ const twoConservationDrawings = async () => {
   // Each call saves under its own title, so no repeat-download question cancels it.
   const result = await exportSession(`conservation-${++conservationSaves}`, { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const session = await readSavedSession(result.blob);
   const circular = session.drawings.find((entry) => entry.id === 'circular');
   const entries = circular.losatCache.entries;
   assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
@@ -1353,7 +1344,7 @@ const twoConservationDrawings = async () => {
 const savedEntryKeys = async (title, loaded) => {
   const result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   return Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)]));
 };
 
@@ -1400,7 +1391,7 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
     assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
     const result = await exportSession(title, { readKeptArtifacts: () => [outcome.opening, ...outcome.stashed].filter(Boolean) });
     assert.equal(result.status, 'saved', result.error?.message);
-    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    return await readSavedSession(result.blob);
   };
   resetDrawings();
   const first = await saveKept('round trip', await loadKeepingSlots(session));
@@ -1420,7 +1411,7 @@ test('Save after a one-mode Session 51 Load writes no drawing of the other mode 
   const first = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
   const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
 }));
 
