@@ -378,7 +378,7 @@ test('replacing a genome file that a Duplicate also uses asks for this drawing o
   const [source] = await drawingIds(page);
   const uploader = page.getByLabel('GenBank/DDBJ File', { exact: true });
   const fileName = (id) => page.evaluate(async (drawingId) => {
-    const ref = (await import('./js/state.js')).state.drawingOf(drawingId).files.c_gb;
+    const ref = (await import('./js/state.js')).state.drawingOf(drawingId).circularSources[0]?.gb;
     return ref ? ref.name : null;
   }, id);
   await uploader.setInputFiles('tests/test_inputs/NC_001416.gb');
@@ -419,7 +419,7 @@ test('an uploader offers the files in this Session and binds the chosen one with
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
   const boundId = (id, read) => page.evaluate(async ([drawingId, field]) => {
     const drawing = (await import('./js/state.js')).state.drawingOf(drawingId);
-    const ref = field === 'c_gb' ? drawing.files.c_gb : drawing.linearSeqs[0].gb;
+    const ref = field === 'c_gb' ? drawing.circularSources[0]?.gb : drawing.linearSeqs[0].gb;
     return ref ? ref.fileId : null;
   }, [id, read]);
   await expect.poll(() => boundId(circular, 'c_gb')).not.toBeNull();
