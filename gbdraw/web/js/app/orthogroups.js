@@ -331,7 +331,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {{ value: string }} selectedOrthogroupId
  * @property {{ value: string }} orthogroupSearch
  * @property {{ value: string }} orthogroupSortMode
- * @property {{ value: Record<string, any> | null }} clickedFeature
+ * @property {WebState['clickedFeature']} clickedFeature
  * @property {{ value: boolean }} showRightDrawer
  * @property {{ value: string }} rightDrawerTab
  * @property {{ value: HTMLElement | null }} svgContainer
@@ -345,7 +345,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * The group names of a drawing (`DrawingState` of state.js), and the handle their writers take.
  * @typedef {GroupNamesView & { readonly slices: { readonly groupNames: GroupNamesSlice } }} OrthogroupEditorDrawing
  */
-/** @import { LinearSeq } from '../state.js' */
+/** @import { LinearSeq, WebState } from '../state.js' */
 /**
  * The shown drawing: its group names, its mode, and its record rows.
  * @typedef {OrthogroupEditorDrawing & { readonly mode: string, readonly linearSeqs: readonly LinearSeq[] }} OrthogroupEditorShownDrawing

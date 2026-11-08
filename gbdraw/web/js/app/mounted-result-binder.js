@@ -223,7 +223,7 @@ const redrawPayer = (phase) => {
  * @typedef {object} MountedResultReadinessPorts
  * @property {WebState} state
  * @property {{ readonly value: boolean }} isFeatureDrawerMounted
- * @property {{ readonly value: unknown }} clickedFeature The open feature popup's feature, or null.
+ * @property {WebState['clickedFeature']} clickedFeature The open feature popup, or null.
  * @property {{ readonly show: boolean }} labelTextScopeDialog
  * @property {{ readonly value: boolean }} labelReflowProcessing Whether a label rerender runs.
  * @property {{ value: number }} mountedResultRevision Counts the Results made ready.

@@ -8,6 +8,8 @@ import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../u
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 /** @import { PopupPosition, WebState } from '../state.js' */
 /** @import { FeatureListRow } from './pairwise-match-popup.js' */
+/** @import { MatchFramePopup } from './preview-item-popup.js' */
+import { matchPopupOf } from './preview-item-popup.js';
 
 const { computed, onMounted, onUnmounted, watch } = window.Vue;
 
@@ -17,12 +19,7 @@ const { computed, onMounted, onUnmounted, watch } = window.Vue;
 /** @typedef {{ active: boolean, startX: number, startY: number, startWidth: number, startHeight: number }} PopupResizeState */
 /** @typedef {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} PopupConstraints */
 /** @typedef {{ start: (event: MouseEvent & { target: Element }) => void, end: () => void, keepInWindow: () => void }} PopupDrag */
-/**
- * The open match popup: a similarity-group ribbon carries its `group`, a
- * collinear block its `block` and the `blockOrthogroups` of its gene pairs.
- * @typedef {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown, block?: unknown, group?: unknown, blockOrthogroups?: unknown }} OpenPairwiseMatch
- */
-/** @typedef {(match: { id?: unknown, matchKind?: unknown, orthogroupId?: unknown } | null) => void} MarkSelectedPairwiseMatch */
+/** @typedef {(opened: MatchFramePopup | null) => void} MarkSelectedPairwiseMatch The SVG owner's mark of the open match's bands. */
 /** @typedef {(feature: object, event: MouseEvent) => void} OpenFeatureEditorForFeature */
 
 /** @param {Element | null} target */
@@ -158,7 +155,7 @@ const keepSettingsPopupSectionOpen = (event) => {
 /**
  * The similarity group the match popup lists members of, and the gene pair of a collinear block picked in it.
  * @param {object} options
- * @param {{ value: OpenPairwiseMatch | null }} options.clickedPairwiseMatch
+ * @param {{ value: MatchFramePopup | null }} options.clickedPairwiseMatch
  * @param {{ value: string }} options.selectedPairwiseBlockOrthogroupId
  * @param {OpenFeatureEditorForFeature} options.openFeatureEditorForFeature
  * @param {MarkSelectedPairwiseMatch} options.markSelectedPairwiseMatch
@@ -166,11 +163,8 @@ const keepSettingsPopupSectionOpen = (event) => {
 const createPairwiseGroupView = ({
   clickedPairwiseMatch, selectedPairwiseBlockOrthogroupId, openFeatureEditorForFeature, markSelectedPairwiseMatch
 }) => {
-  const pairwiseBlockOrthogroups = computed(() => (
-    Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
-      ? clickedPairwiseMatch.value.blockOrthogroups
-      : []
-  ));
+  // A collinear block carries the `blockOrthogroups` of its gene pairs, a similarity-group ribbon its `group`.
+  const pairwiseBlockOrthogroups = computed(() => matchPopupOf(clickedPairwiseMatch.value)?.blockOrthogroups ?? []);
   const selectedPairwiseBlockOrthogroup = computed(() => {
     const selectedId = String(selectedPairwiseBlockOrthogroupId.value || '').trim();
     if (!selectedId) return null;
@@ -178,11 +172,10 @@ const createPairwiseGroupView = ({
   });
   // The group the match popup lists members of: a similarity-group ribbon's
   // own group, or the group picked in a collinear block's gene-pair table.
-  const pairwiseGroupView = computed(() => (
-    clickedPairwiseMatch.value?.block
-      ? selectedPairwiseBlockOrthogroup.value
-      : clickedPairwiseMatch.value?.group || null
-  ));
+  const pairwiseGroupView = computed(() => {
+    const match = matchPopupOf(clickedPairwiseMatch.value);
+    return match?.block ? selectedPairwiseBlockOrthogroup.value : match?.group || null;
+  });
   /** @param {{ id?: unknown } | null | undefined} group */
   const selectPairwiseBlockOrthogroup = (group) => {
     const id = String(group?.id || '').trim();
@@ -196,7 +189,7 @@ const createPairwiseGroupView = ({
 
   // The bands of the open match popup carry `gbdraw-match-selected`; the SVG
   // owner marks them from its band indexes (OV-937).
-  watch(clickedPairwiseMatch, (/** @type {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown } | null} */ match) => {
+  watch(clickedPairwiseMatch, (/** @type {MatchFramePopup | null} */ match) => {
     selectedPairwiseBlockOrthogroupId.value = '';
     markSelectedPairwiseMatch(match);
   });
@@ -206,7 +199,7 @@ const createPairwiseGroupView = ({
 /**
  * The match popup's resize from its corner.
  * @param {object} options
- * @param {{ value: OpenPairwiseMatch | null }} options.clickedPairwiseMatch
+ * @param {{ value: MatchFramePopup | null }} options.clickedPairwiseMatch
  * @param {PopupElementRef} options.pairwiseMatchPopupRef
  * @param {PopupPosition} options.clickedPairwiseMatchPos
  * @param {PopupResizeState} options.pairwiseMatchPopupResize
@@ -266,7 +259,7 @@ const createPairwiseMatchPopupResize = ({
 /**
  * The feature popup's resize from its corner.
  * @param {object} options
- * @param {{ value: unknown }} options.clickedFeature
+ * @param {WebState['clickedFeature']} options.clickedFeature
  * @param {PopupElementRef} options.featurePopupRef
  * @param {PopupPosition} options.clickedFeaturePos
  * @param {PopupResizeState} options.featurePopupResize
@@ -327,9 +320,9 @@ const createFeaturePopupResize = ({
  * The popup state of state.js and the owners' reactions the Result popups use.
  * @typedef {object} ResultPopupsPorts
  * @property {WebState} state The app state; the settings popup's place is `state.settingsPopup`.
- * @property {{ value: unknown }} clickedFeature The open feature popup's payload, or null.
+ * @property {WebState['clickedFeature']} clickedFeature The open feature popup's payload, or null.
  * @property {PopupPosition} clickedFeaturePos
- * @property {{ value: OpenPairwiseMatch | null }} clickedPairwiseMatch The open match popup's payload, or null.
+ * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open match popup's payload, or null.
  * @property {PopupPosition} clickedPairwiseMatchPos
  * @property {{ value: boolean }} richFeaturePopup The app-level rich popup preference.
  * @property {PopupElementRef} featurePopupRef

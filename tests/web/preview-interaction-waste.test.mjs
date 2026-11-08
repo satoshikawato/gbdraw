@@ -34,7 +34,7 @@ for (const source of [
   'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles.
   'mode-profiles.generated.js',
-  'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
+  'app/feature-editor/svg-actions.js', 'services/feature-popup.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
   'services/svg-serialization.js', 'services/preview-affordances.js', 'services/settings-sections.js', 'services/drawn-groups.js',
   'services/drawn-attributes.generated.js',
@@ -97,7 +97,9 @@ const stubs = {
   ],
   'app/preview-item-popup.js': [
     'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";',
-    'export const previewItemTarget = () => null;'
+    'export const previewItemTarget = () => null;',
+    "export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);",
+    "export const matchPopupOf = (opened) => (opened && !('previewItem' in opened) ? opened : null);"
   ]
 };
 for (const [path, lines] of Object.entries(stubs)) {
@@ -681,7 +683,7 @@ test('OV-913: clearing an empty selection writes no new selection and restyles n
     featureSelectionSuppressNextClick: ref(false), featureSelectionDrag: { active: true, committed: true },
     extractedFeatures: ref([]), featuresBySvgId: ref(new Map()), selectedFeatures: ref([]),
     svgContainer: ref({ querySelector: () => svg }), clickedFeature: ref(null), clickedPairwiseMatch: ref(null),
-    clickedLabel: ref(null), mode: ref('linear')
+    mode: ref('linear')
   };
   const selectionOwner = createFeatureSelection({ state });
   selectionOwner.clearFeatureSelection({ clearStatus: true });

@@ -4,6 +4,7 @@
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 /** @import { SettingApplicationId } from '../services/setting-application.js' */
 /** @import { RegionSelection } from '../services/region-axis.js' */
+/** @import { MatchPopupPayload } from './pairwise-match-popup.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -28,7 +29,10 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  * @typedef {{ kind: 'legend-entry', key: string }
  *   | { kind: 'record-definition', recordIndex: number, recordId: string }
  *   | RegionSelection} PreviewItem
- * @typedef {{ previewItem?: PreviewItem, matchesReady?: boolean }} PreviewItemPayload
+ * @typedef {{ previewItem: PreviewItem, matchesReady: boolean }} PreviewItemPopup
+ *   A popup about a preview item; a Legend row's popup counts its features once `matchesReady`.
+ * @typedef {MatchPopupPayload | PreviewItemPopup} MatchFramePopup
+ *   What the match popup frame shows (`state.clickedPairwiseMatch`): a match, or a preview item.
  * @typedef {{ label: string, value: string }} PreviewItemFact
  * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown }} ColorRuleLike
  * @typedef {{ start?: unknown, end?: unknown }} RegionLike
@@ -57,7 +61,7 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 /**
  * The members of the Web state this owner reads.
  * @typedef {object} PreviewItemState
- * @property {{ value: PreviewItemPayload | null }} clickedPairwiseMatch The open match-frame popup.
+ * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open match-frame popup.
  * @property {{ value: Element | null }} svgContainer The preview's mounted Result.
  * @property {{ value: string }} mode
  * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
@@ -116,6 +120,20 @@ const positive = (value) => {
   const number = Number(value);
   return value != null && Number.isFinite(number) && number > 0 ? number : null;
 };
+
+/**
+ * The open match-frame popup when it is about a preview item, else null.
+ * @param {MatchFramePopup | null} opened
+ * @returns {PreviewItemPopup | null}
+ */
+export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);
+
+/**
+ * The open match-frame popup when it shows a match, else null.
+ * @param {MatchFramePopup | null} opened
+ * @returns {MatchPopupPayload | null}
+ */
+export const matchPopupOf = (opened) => (opened && !('previewItem' in opened) ? opened : null);
 
 export const PREVIEW_ITEM_SELECTOR =
   'g[data-legend-key], [data-gbdraw-role="record-definition"], [data-gbdraw-role="record-definition-row"]';
@@ -477,11 +495,11 @@ export const createPreviewItemPopup = ({
   });
 
   const view = computed(() => {
-    const opened = state.clickedPairwiseMatch.value;
-    const item = opened?.previewItem;
-    if (!item) return null;
+    const opened = previewItemPopupOf(state.clickedPairwiseMatch.value);
+    if (!opened) return null;
+    const item = opened.previewItem;
     if (item.kind === 'region') return regionView(item);
-    return item.kind === 'legend-entry' ? legendView(item.key, Boolean(opened?.matchesReady)) : recordView(item);
+    return item.kind === 'legend-entry' ? legendView(item.key, opened.matchesReady) : recordView(item);
   });
 
   /** @param {RecordDefinitionView} recordView @returns {Record<string, unknown> | null} */
@@ -539,13 +557,13 @@ export const createPreviewItemPopup = ({
   // typed name (Merge).
   /** @param {number} index @param {string} caption */
   const renameLegendEntry = async (index, caption) => {
-    const opened = state.clickedPairwiseMatch.value;
+    const opened = previewItemPopupOf(state.clickedPairwiseMatch.value);
     const before = legendEntries();
     const renamedKey = before[index] ? text(legendEntryKey(before[index])) : '';
     const known = new Set(before.map((entry) => text(legendEntryKey(entry))));
     const result = await renameLegendRow(index, caption);
     await legendRenameSettled();
-    if (state.clickedPairwiseMatch.value !== opened || opened?.previewItem?.kind !== 'legend-entry') return result;
+    if (!opened || state.clickedPairwiseMatch.value !== opened || opened.previewItem.kind !== 'legend-entry') return result;
     const entries = legendEntries();
     const added = entries.filter((entry) => !known.has(text(legendEntryKey(entry))));
     const entry = entries.find((row) => text(legendEntryKey(row)) === renamedKey)

@@ -122,7 +122,6 @@ const resetEditorUiState = (state) => {
   state.labelSearch.value = '';
   state.featurePanelTab.value = editorDefaults.featurePanelTab;
   state.clickedFeature.value = null;
-  state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
 };

@@ -68,7 +68,7 @@ export const createFeatureChoiceReaders = ({ state, shownLegendName }) => {
   // as the Legend shows its row: by the row's drawn name, and a group that
   // draws no row by its name as written, never by a key.
   const popupLegendGroups = computed(() => {
-    const type = clickedFeature.value?.feat?.type;
+    const type = clickedFeature.value?.feat.type;
     if (type === undefined) return [];
     const drawing = state.activeDrawing();
     const rowKeyOf = groupLegendRowKeys(displayedLegendRowContext(state, drawing));

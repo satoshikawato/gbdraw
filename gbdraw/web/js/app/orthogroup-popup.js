@@ -57,7 +57,7 @@ export const createOrthogroupPopup = ({
       drawing.losatProgram.value === 'blastp' &&
       drawing.losat.blastp?.mode === 'orthogroup' &&
       drawing.inputType.value === 'gb' &&
-      cf.feat?.type === 'CDS' &&
+      cf.feat.type === 'CDS' &&
       cf.orthogroupId
     );
   });

@@ -171,7 +171,6 @@ export const setupWatchers = ({
     orthogroupSearch,
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
-    clickedLabel,
     semanticFileWatchersSuppressed,
     linearReorderNotice,
     autoLabelReflowEnabled,
@@ -275,7 +274,6 @@ export const setupWatchers = ({
     labelSearch.value = '';
     featurePanelTab.value = 'colors';
     clickedPairwiseMatch.value = null;
-    clickedLabel.value = null;
     closeLabelTextScopeDialog();
     closeHiddenLabelTextDialog();
     resetRightDrawer();

@@ -1140,10 +1140,8 @@ Object.assign(state.featureSelectionDrag, {
 state.labelReflowLastError.value = { summary: 'keep reflow error' };
 const clickedFeature = { id: 'keep-feature' };
 const clickedPairwiseMatch = { id: 'keep-match' };
-const clickedLabel = { key: 'keep-label' };
 state.clickedFeature.value = clickedFeature;
 state.clickedPairwiseMatch.value = clickedPairwiseMatch;
-state.clickedLabel.value = clickedLabel;
 // The popup of a settings section is a popup of the Result too: a failed load leaves it open where it was.
 floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
@@ -1278,7 +1276,6 @@ const rollbackState = () => ({
   labelReflowLastError: state.labelReflowLastError.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
-  clickedLabel: state.clickedLabel.value,
   settingsPopup: structuredClone(state.settingsPopup.value),
   featureExtractionPending: state.featureExtractionPending.value,
   featureEditorStatus: structuredClone(state.featureEditorStatus.value),
