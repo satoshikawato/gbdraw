@@ -48,7 +48,7 @@ def _admission_problems(session: dict[str, Any]) -> list[str]:
 
 def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
     """A Session up to 50 as the current description reads it: its schema 9 requests, one ``region`` per record, as
-    schema 10 (Gallery Sessions and ``two_mode_session`` store schema 9 requests).
+    schema 10 (``two_mode_session`` stores schema 9 requests).
 
     The description is of the current request; a Session 50 stores the request of its own time, which the readers
     accept (``tests/test_session_request_codec.py``).

@@ -227,7 +227,7 @@ test('source recipe of a FASTA alone gives --fasta in both modes and a fasta rec
           cardinality: 'all',
           source: { kind: 'fasta', fastaResourceId: 'source' },
           selector: null,
-          region: null,
+          windows: [],
           // A Circular record label needs a records table.
           presentation: { ...presentation(), label: labelled ? 'Alpha' : null }
         }],
@@ -270,7 +270,7 @@ test('source recipe reuses materialized source text and preserves record selecti
             ? { kind: 'genbank', resourceId: 'source' }
             : { kind: 'gffFasta', gffResourceId: 'gff', fastaResourceId: 'source' },
           selector: { kind: 'recordIndex', index: 0 },
-          region: null,
+          windows: [],
           presentation: presentation()
         }],
         resources: {
@@ -331,7 +331,7 @@ test('source recipe counts survive transfer and follow same-name source replacem
               ? { kind: 'genbank', resourceId: 'source' }
               : { kind: 'gffFasta', gffResourceId: 'gff', fastaResourceId: 'source' },
             selector: { kind: 'recordIndex', index: recordCount - 1 },
-            region: null,
+            windows: [],
             presentation: presentation()
           }],
           resources: {
@@ -582,7 +582,7 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: `genome-${index + 1}` },
       selector: null,
-      region: null,
+      windows: [],
       presentation: presentation()
     })),
     resources: {
@@ -670,7 +670,7 @@ const circularCanonical = canonical({
     cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'record-1-genbank' },
     selector: null,
-    region: null,
+    windows: [],
     presentation: presentation()
   }],
   resources: {
@@ -751,7 +751,7 @@ test('circular source recipe names comparison genomes with --conservation_sequen
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'multi-genbank' },
       selector: { kind: 'recordId', value: recordId },
-      region: null,
+      windows: [],
       presentation: {
         ...presentation(),
         label: recordId.toUpperCase()
@@ -793,7 +793,7 @@ const linearCanonical = canonical({
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'record-1-genbank' },
       selector: null,
-      region: null,
+      windows: [],
       presentation: presentation()
     },
     {
@@ -801,7 +801,7 @@ const linearCanonical = canonical({
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'record-2-genbank' },
       selector: null,
-      region: null,
+      windows: [],
       presentation: presentation()
     }
   ],
@@ -1427,7 +1427,7 @@ test('a reordered Circular multi-record canvas keeps its order in the records ta
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'source' },
       selector: { kind: 'recordId', value: recordId },
-      region: null,
+      windows: [],
       presentation: presentation()
     })),
     resources: { source: resource('genbank', 'source-two.gbk', text) },
@@ -1470,7 +1470,7 @@ test('placement recipe names one of two identical features and the CLI replays i
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'source' },
       selector: null,
-      region: null,
+      windows: [],
       presentation: presentation(),
       display: { isCircular: null, startCoordinate: null }
     }],
@@ -1517,14 +1517,13 @@ const identityEditSession = (mode, featureOverrides) => {
       cardinality: 'exactly_one',
       source: { kind: 'genbank', resourceId: 'source' },
       selector: null,
-      region: null,
+      windows: [],
       presentation: presentation(),
       display: { isCircular: null, startCoordinate: null }
     }],
     resources: { source: resource('genbank', 'source-dup.gbk', IDENTITY_GENBANK) },
     webFiles: { resourceOriginalNames: { source: 'dup.gbk' } }
   });
-  session.renderRequest.schema = 9;
   session.renderRequest.diagramOptions.selectedFeaturesSet = ['CDS'];
   Object.assign(session.renderRequest.diagramOptions, { featurePlacements: [], featureOverrides });
   return session;
@@ -1612,7 +1611,7 @@ const twoCardColorSession = (rows) => {
     cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'source' },
     selector: null,
-    region: null,
+    windows: [],
     presentation: presentation(),
     display: { isCircular: null, startCoordinate: null }
   });
