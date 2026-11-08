@@ -14,7 +14,9 @@ import gbdraw.api.diagram as diagram_api
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.auto_sizes import (
     ADAPTABLE_SETTINGS,
+    DrawnDepthRow,
     DrawnExtent,
+    adapt_explicit_settings,
     auto_setting_values,
     circular_tick_intervals,
     circular_track_width_px,
@@ -413,21 +415,67 @@ def test_dependent_tick_fonts_follow_a_given_track_thickness(cfg: GbdrawConfig) 
     assert circular["objects.gc_content.tick_font_size"] == pytest.approx(6.6)
 
 
+def _vector_depth_rows(case: dict[str, Any], cfg: GbdrawConfig) -> tuple[DrawnDepthRow, ...]:
+    """The depth rows of a gcAxisTickFonts vector: each series' axis as the drawing configures it, on the custom
+    stack's Depth rows (``circularDepthSlots``), else on the one Depth row the Depth width sizes."""
+    if not case["showDepth"]:
+        return ()
+    base = DepthConfigurator(10, 10, CircularRenderProfile(cfg))
+    axes = [
+        depth_track_config(DepthTrackStyle(None, None, None, track["tickFontSize"]), base, 10, 10, None)
+        for track in case.get("depthTracks", [{"tickFontSize": None}])
+    ]
+    if "circularDepthSlots" not in case:
+        return (DrawnDepthRow(axes[0], 0, depth_width=True),)
+    return tuple(
+        DrawnDepthRow(axes[slot["trackIndex"]], slot["trackIndex"], float(slot["widthPx"]))
+        for slot in case["circularDepthSlots"]
+    )
+
+
 @pytest.mark.parametrize("case", VECTORS["gcAxisTickFonts"], ids=lambda case: case["name"])
 def test_a_percent_gc_axis_takes_the_tick_font_of_the_depth_axis_beside_it(case: dict[str, Any]) -> None:
-    # The drawing draws the GC axis in gc_axis_tick_font_size_of_depth's font (OV-2873); its Auto value is that font.
+    # The drawing draws the GC axis in the font of its first depth row (OV-2873, OV-2875); its Auto value is that
+    # font, read from the drawing's depth rows: series fonts and stack rows included (OV-2877).
     cfg = apply_config_overrides(None, case["config"])
-    if "depthTracks" in case or "circularDepthSlots" in case:
-        # Per-series fonts and stack rows are no settings of auto_setting_values: the drawing's owner reads them.
-        return
     values = auto_setting_values(
-        DrawnExtent(case["mode"], tuple(case["recordLengths"])),
+        DrawnExtent(case["mode"], tuple(case["recordLengths"]), depth_rows=_vector_depth_rows(case, cfg)),
         cfg,
         track_thickness_px=case["trackThicknessPx"],
-        show_depth=case["showDepth"],
     )
     for setting, expected in case["expected"].items():
         assert values[setting] == pytest.approx(expected, abs=1e-9), setting
+
+
+def test_the_gc_axis_takes_the_drawings_own_depth_font_when_its_first_row_has_none(cfg: GbdrawConfig) -> None:
+    # A hand-set Depth tick font is the font a series without its own draws in (clone_depth_config), so the Percent
+    # GC axis's Auto value follows it; a series' own font wins.
+    percent = apply_config_overrides(None, {"objects.gc_content.mode": "percent"})
+    base = DepthConfigurator(10, 10, CircularRenderProfile(percent))
+    own = depth_track_config(DepthTrackStyle(None, None, None, 12.0), base, 10, 10, None)
+    gc_font = "objects.gc_content.tick_font_size"
+    for axis, expected in ((base, 7.0), (own, 12.0)):
+        extent = DrawnExtent("circular", (16_569,), depth_rows=(DrawnDepthRow(axis, 0, depth_width=True),))
+        assert auto_setting_values(extent, percent, depth_tick_font_size=7.0)[gc_font] == expected
+
+
+def test_a_new_drawing_reads_its_depth_row_at_the_depth_width_it_keeps(cfg: GbdrawConfig) -> None:
+    # The Depth row's width is the setting circularSlot.depth.width. A Circular crop keeps a hand-set 20 px (its
+    # Auto value does not change), so its first Depth row still draws 5 px and the GC axis's hand-set font is kept;
+    # a Linear drawing has no Depth row beside its GC axis.
+    percent = apply_config_overrides(None, {"objects.gc_content.mode": "percent"})
+    rows = (DrawnDepthRow(DepthConfigurator(10, 10, CircularRenderProfile(percent)), 0, depth_width=True),)
+    explicit = {"circularSlot.depth.width": 20.0, "objects.gc_content.tick_font_size": 7}
+    source = DrawnExtent("circular", (2_000_000,), depth_rows=rows)
+    crop = adapt_explicit_settings(
+        explicit, source=source, target=DrawnExtent("circular", (3_000,), depth_rows=rows), cfg=percent
+    )
+    assert crop.kept == explicit and crop.reset == ()
+    linear = adapt_explicit_settings(explicit, source=source, target=DrawnExtent("linear", (3_000,)), cfg=percent)
+    assert {item.setting: (item.source_auto, item.target_auto) for item in linear.reset} == {
+        "circularSlot.depth.width": (auto_setting_values(source, percent)["circularSlot.depth.width"], None),
+        "objects.gc_content.tick_font_size": (5.0, 8.0),
+    }
 
 
 @pytest.mark.parametrize("case", VECTORS["gcAxisTickFonts"], ids=lambda case: case["name"])

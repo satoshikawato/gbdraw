@@ -1921,7 +1921,7 @@ def _encode_diagram_options(
         raise CanonicalRequestEncodingError(
             "Feature override tables must be materialized before canonical encoding."
         )
-    depth_tracks = _canonical_depth_tracks_for_encoding(
+    depth_tracks = canonical_depth_tracks(
         options,
         record_count=record_count,
     )
@@ -2647,7 +2647,7 @@ def _expanded_depth_numeric_metadata(
     return items
 
 
-def _canonical_depth_tracks_for_encoding(
+def canonical_depth_tracks(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     record_count: int,
@@ -6322,6 +6322,7 @@ __all__ = [
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "canonical_depth_tracks",
     "encode_record_translations",
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
