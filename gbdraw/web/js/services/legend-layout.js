@@ -6,7 +6,7 @@ import { FALLBACK_FACE_PREFIX, bundledFacePrefix, comparableFamilyName, isGeneri
 // that the Web places an edited Legend's rows, sizes the Legend and docks it
 // exactly where Python would (zero shift). Sources:
 // - text: gbdraw/core/text.py `drawn_text_box`, `drawn_runs_box`,
-//   gbdraw/legend/metrics.py `legend_caption_runs`, `legend_caption_box` and
+//   `italic_markup_runs`, gbdraw/legend/metrics.py `legend_caption_box` and
 //   gbdraw/core/fonts.py `resolve_font_face`;
 // - rows: gbdraw/legend/metrics.py, linear_layout.py, circular_layout.py;
 // - Legend size: gbdraw/configurators/legend.py `_linear_legend_local_bounds`,
@@ -351,7 +351,7 @@ const measureTextRun = (metrics, { text: value, fontFile, fontSize }) => {
 };
 
 /**
- * One styled run of a Legend caption (Python's `LegendCaptionRun`).
+ * One styled run of a Legend caption (Python's `TextRun`).
  * @typedef {object} LegendCaptionRun
  * @property {string} text
  * @property {boolean} italic
@@ -363,7 +363,7 @@ const CAPTION_CHARACTER = '[^<>&\\u0000-\\u0008\\u000b-\\u001f\\ud800-\\udfff\\u
 const ITALIC_CAPTION = new RegExp(`^${CAPTION_CHARACTER}*(?:<i>${CAPTION_CHARACTER}+</i>${CAPTION_CHARACTER}*)+$`, 'u');
 
 /**
- * Python's `legend_caption_runs`: the styled runs a Legend caption is drawn and measured as. A caption in the
+ * Python's `italic_markup_runs`: the styled runs a Legend caption is drawn and measured as. A caption in the
  * italic subset splits at its tags (inside the subset this is what Python's XML parse gives); any other caption is
  * one literal upright run.
  * @param {string} caption

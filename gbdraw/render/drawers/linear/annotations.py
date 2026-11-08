@@ -32,6 +32,7 @@ from gbdraw.annotations.layout import (
     LANE_EXTENT_PX,
     lane_width_px,
 )
+from gbdraw.core.text import italic_markup_runs
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
@@ -54,6 +55,7 @@ from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
 from gbdraw.svg.path_data import path_number
+from gbdraw.svg.text_path import write_text_runs
 
 
 @dataclass(frozen=True)
@@ -345,7 +347,7 @@ def _label_rows(
         if wrap_row is not None and row != wrap_row:
             continue
         size = annotation_label_font_size(style, track.label_font_size)
-        offsets = label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
+        offsets = label_ink_offsets(italic_markup_runs(annotation.label), font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
         reach = linear_annotation_mark_reach(annotation, style, lane_height)
         if covers_slots:
@@ -430,7 +432,9 @@ def linear_annotation_label_extent(
     its anchor): the bp they reach on each side of the place, at the record's ``bp_per_px``, and the height they
     take. The lane packer's measure (``LabelSizing.extent``); a Linear label's letters do not depend on its lane."""
 
-    left, right, top, bottom = label_ink_offsets(annotation.label, font_family, font_size, _label_anchor(style))
+    left, right, top, bottom = label_ink_offsets(
+        italic_markup_runs(annotation.label), font_family, font_size, _label_anchor(style)
+    )
     scale = float(bp_per_px.get(annotation.record_index, 1.0))
     return LabelExtent(left * scale, right * scale, bottom - top)
 
@@ -542,8 +546,10 @@ def _track_group_id(track: ResolvedAnnotationTrack, record_index: int, dom_group
 
 
 def _label_text(label: LinearAnnotationLabel, font_family: str, y_offset_px: float = 0.0) -> Text:
-    return Text(
-        label.text,
+    """A label's ``<text>``: its runs (``italic_markup_runs``) as ``write_text_runs`` writes them."""
+
+    text = Text(
+        "",
         insert=(label.x, y_offset_px + label.y),
         fill=label.color,
         stroke="none",
@@ -552,6 +558,7 @@ def _label_text(label: LinearAnnotationLabel, font_family: str, y_offset_px: flo
         text_anchor=label.anchor,
         dominant_baseline="central",
     )
+    return write_text_runs(text, italic_markup_runs(label.text))
 
 
 def linear_annotation_track_content(

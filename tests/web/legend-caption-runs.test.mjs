@@ -1,6 +1,6 @@
 // A Legend caption written with <i> draws its italic runs as tspans (OV-2760).
 // The Web splits a caption as Python does (gbdraw/legend/metrics.py
-// `legend_caption_runs`, tests/test_legend_caption_markup.py holds the same
+// `italic_markup_runs`, tests/test_legend_caption_markup.py holds the same
 // cases), and the naming pass writes and reads a row's drawn name through one
 // writer and one reader, so a caption drawn as tspans reads back as its markup.
 import assert from 'node:assert/strict';

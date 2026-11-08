@@ -32,7 +32,7 @@ from gbdraw.core import fonts as gbdraw_fonts  # noqa: E402
 from gbdraw.core import text as gbdraw_text  # noqa: E402
 
 # The Legend measures with the default weight, upright and, for the ``<i>``
-# runs of a caption (gbdraw.legend.metrics.legend_caption_runs), italic, so it
+# runs of a caption (gbdraw.core.text.italic_markup_runs), italic, so it
 # reads the Regular and Italic faces. Another face costs about 95 KB here.
 MEASURED_FACES = (
     "LiberationSans-Regular",

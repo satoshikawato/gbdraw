@@ -17,7 +17,8 @@ from svgwrite import Drawing
 
 from gbdraw.circular import circular_main
 from gbdraw.core.text import calculate_svg_bbox_dimensions, drawn_text_box
-from gbdraw.legend.metrics import legend_caption_box, legend_caption_runs
+from gbdraw.core.text import italic_markup_runs
+from gbdraw.legend.metrics import legend_caption_box
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.linear_layout import build_linear_legend_layout
 from gbdraw.linear import linear_main
@@ -60,7 +61,7 @@ DANIO = "<i>Danio rerio</i> (zebrafish)"
     ],
 )
 def test_caption_runs_follow_the_italic_subset(caption: str, runs: tuple[tuple[str, str], ...]) -> None:
-    assert legend_caption_runs(caption) == runs
+    assert italic_markup_runs(caption) == runs
 
 
 @pytest.mark.parametrize("caption", ["CDS", "GC skew (-)", "<b>x</b>", "a & <i>b</i>", "  spaced  ", "", "日本語"])
@@ -72,7 +73,7 @@ def _run_sum(caption: str, family: str = FAMILY) -> float:
     """The drawn width of the caption's runs, each in its own face, each starting at the previous run's advance."""
 
     right = origin = 0.0
-    for text, style in legend_caption_runs(caption):
+    for text, style in italic_markup_runs(caption):
         right = max(right, origin + drawn_text_box(text, family, SIZE, "normal", style)[0])
         origin += float(calculate_svg_bbox_dimensions(text, family, SIZE, "normal", style)[0])
     return max(right, origin)

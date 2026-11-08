@@ -487,7 +487,7 @@ export const legendRowSwatch = (row) => {
   return legendSwatch({ fill: swatch?.getAttribute('fill'), stroke: swatch?.getAttribute('stroke'), width: swatch?.getAttribute('stroke-width') });
 };
 // A caption written with `<i>` is drawn as one tspan per run, italic runs with
-// `font-style="italic"`, as Python draws it (`legend_caption_runs`, OV-2760);
+// `font-style="italic"`, as Python draws it (`italic_markup_runs`, OV-2760);
 // its drawn name reads back as that markup, so the naming pass and the Legend
 // layout see the name Python drew.
 /** @param {Element} row @returns {DrawnLegendName} */

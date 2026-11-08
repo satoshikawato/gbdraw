@@ -11,7 +11,8 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.metrics import GradientScaleLayout, legend_caption_runs, write_gradient_scale_names
+from ....core.text import italic_markup_runs
+from ....legend.metrics import GradientScaleLayout, write_gradient_scale_names
 from ....legend.table import as_legend_table, LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
@@ -121,7 +122,7 @@ class LegendGroup:
                 stroke_width=properties["width"],
             )
             legend_path = generate_runs_text_path(
-                legend_caption_runs(drawn_name),
+                italic_markup_runs(drawn_name),
                 self.font_size,
                 self.font_family,
                 dominant_baseline="central",
@@ -207,7 +208,7 @@ class LegendGroup:
             entry_group.add(gradient)
 
             title_path = generate_runs_text_path(
-                legend_caption_runs(drawn_name),
+                italic_markup_runs(drawn_name),
                 self.font_size,
                 self.font_family,
                 dominant_baseline=(
