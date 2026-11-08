@@ -416,3 +416,44 @@ test('a resource sent again after a cancel keeps the cache file its earlier reco
     delete globalThis.crossOriginIsolated;
   }
 });
+
+// OV-2749: the page sends each input as a Blob (its copy's File, PD-OI-121), and the Worker reads it whole into
+// the cache file it owns. A copy deleted after that (its File no longer reads) leaves the cached resource that a
+// later Generate reuses intact; a staging whose Blob no longer reads fails with INPUT_UNREADABLE, and one with no
+// memory for the bytes says so.
+test('the Worker owns the bytes it read from a staged Blob, and names why a Blob does not read (OV-2749)', async () => {
+  const { prepareCanonicalResources } = await loadStagingOwner();
+  const fs = new MemoryFS();
+  class CopyFile extends Blob {
+    failure = null;
+    async arrayBuffer() {
+      if (this.failure) throw this.failure();
+      return super.arrayBuffer();
+    }
+    slice(...args) {
+      const piece = super.slice(...args);
+      const gone = this.failure && this.failure().name === 'NotFoundError';
+      return gone ? Object.assign(new CopyFile([piece]), { failure: this.failure }) : piece;
+    }
+  }
+  const entry = (token, blob) => ({ resourceId: 'source', cacheToken: token, size: blob.size, name: 'a.gb', kind: 'genbank' });
+  const stage = (workspace, token, blob, staged) => prepareCanonicalResources({ FS: fs }, workspace, {
+    resourceManifest: [entry(token, blob)], stagedResources: staged ? [{ resourceId: 'source', cacheToken: token, blob }] : [],
+    retainedResourceTokens: []
+  }, { prune: true });
+  const copy = new CopyFile(['LOCUS A\n//\n']);
+  const first = await stage('/w1', 'a'.repeat(64), copy, true);
+  assert.equal(Buffer.from(fs.read(first.source)).toString(), 'LOCUS A\n//\n');
+  fs.cleanWorkspace('/w1');
+  copy.failure = () => new DOMException('The copy was deleted.', 'NotFoundError');
+  const again = await stage('/w2', 'a'.repeat(64), copy, false);
+  assert.equal(Buffer.from(fs.read(again.source)).toString(), 'LOCUS A\n//\n', 'the cache holds the bytes, not the Blob');
+  fs.cleanWorkspace('/w2');
+  await assert.rejects(stage('/w3', 'b'.repeat(64), copy, true), (error) => (
+    error.code === 'INPUT_UNREADABLE' && error.stage === 'resource-staging'));
+  fs.cleanWorkspace('/w3');
+  const large = new CopyFile(['LOCUS B\n//\n']);
+  large.failure = () => new RangeError('Array buffer allocation failed');
+  await assert.rejects(stage('/w4', 'c'.repeat(64), large, true), (error) => (
+    error.code === 'RESOURCE_INVALID' && error.context.reason === 'INPUT_MEMORY'));
+});

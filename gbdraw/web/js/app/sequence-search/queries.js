@@ -55,8 +55,7 @@ export const createSearchQueries = (panel, runHelper, operation) => {
     }
     panel.reading = true;
     try {
-      const bytes = new TextEncoder().encode(text).buffer;
-      const { result } = await runHelper(operation, { files: [{ role: 'source', bytes }] });
+      const { result } = await runHelper(operation, { files: [{ role: 'source', blob: new Blob([text]) }] });
       if (sequence !== readSequence) return;
       panel.queries = panelQueries(readSearchQueriesReply(result), panel.queries);
     } catch (error) {

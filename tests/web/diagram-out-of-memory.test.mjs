@@ -62,8 +62,8 @@ const sent = async (type, seen = null) => {
   assert.fail(`no ${type} message was sent`);
 };
 const engineError = (operation, code) => ({ code, operation, stage: operation === 'generate' ? 'render' : 'helper', context: {} });
-// The inputs a run message carries: each staged resource by its id, with its byte count.
-const staged = (message) => (message.payload.stagedResources ?? []).map(({ resourceId, bytes }) => [resourceId, bytes.byteLength]);
+// The inputs a run message carries: each staged resource by its id, with its byte count (a Blob since OV-2749).
+const staged = (message) => (message.payload.stagedResources ?? []).map(({ resourceId, blob }) => [resourceId, blob.size]);
 
 test.afterEach(() => disposeDiagramGenerationWorker());
 

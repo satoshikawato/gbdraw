@@ -2,7 +2,7 @@
 import { runFeatureExtraction } from './diagram-generation.js';
 import { linearCardRegion } from './record-options.js';
 import { cloneJsonValue } from './json-clone.js';
-import { cloneFileBytesForTransfer } from './file-content-cache.js';
+import { inputContentBlob } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
 
@@ -199,24 +199,23 @@ export const readFeatureExtractionData = async ({
   }
 
   const startedAt = getNow();
-  const buffer = await cloneFileBytesForTransfer(file);
   const requestFiles = [{
     path,
     name: file.name || path.split('/').pop() || 'input.gb',
-    bytes: buffer
+    blob: await inputContentBlob(file)
   }];
   if (fastaPath && fastaFile) {
     requestFiles.push({
       path: fastaPath,
       name: fastaFile.name || fastaPath.split('/').pop() || 'input.fasta',
-      bytes: await cloneFileBytesForTransfer(fastaFile)
+      blob: await inputContentBlob(fastaFile)
     });
   }
   if (featureVisibilityTablePath && featureVisibilityTsv) {
     requestFiles.push({
       path: featureVisibilityTablePath,
       name: featureVisibilityTablePath.split('/').pop() || 'feature_visibility.tsv',
-      bytes: new TextEncoder().encode(featureVisibilityTsv).buffer
+      blob: new Blob([featureVisibilityTsv])
     });
   }
 

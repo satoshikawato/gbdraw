@@ -105,12 +105,12 @@ await assert.rejects(
   error => error.code === 'HELPER_PROTOCOL' && error.stage === 'request-validation'
 );
 assert.equal(FakeWorker.instances.length, 0);
-const sourceBuffer = new TextEncoder().encode('>shared-worker\nACGT\n').buffer;
+const sourceBlob = new Blob(['>shared-worker\nACGT\n']);
 const helper = await runDiagramHelperOperation(
   DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
   {
     format: 'fasta',
-    files: [{ role: 'source', bytes: sourceBuffer }]
+    files: [{ role: 'source', blob: sourceBlob }]
   }
 );
 assert.equal(helper.result.records[0].record_id, 'shared-worker');
@@ -134,7 +134,9 @@ assert.equal(FakeWorker.instances.length, 1);
 assert.equal(worker.messages.filter(({ type }) => type === 'init').length, 1);
 assert.equal(worker.messages.filter(({ type }) => type === 'helper').length, 2);
 assert.equal(worker.messages.filter(({ type }) => type === 'run').length, 1);
-assert.equal(worker.transferLists[1][0], sourceBuffer);
+// OV-2749: the input is a Blob in the message, passed as a handle; nothing is transferred.
+assert.equal(worker.messages[1].payload.files[0].blob, sourceBlob);
+assert.deepEqual(worker.transferLists[1], []);
 
 await runDiagramHelperOperation(
   DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
@@ -183,7 +185,7 @@ await assert.rejects(
 disposeDiagramGenerationWorker();
 FakeWorker.failRuns = false;
 
-const { cloneFileBytesForTransfer, holdReadBytes } = await import(
+const { holdReadBytes, inputContentBlob } = await import(
   '../../gbdraw/web/js/services/file-content-cache.js'
 );
 let fileReads = 0;
@@ -193,15 +195,10 @@ const cachedFile = {
     return new Uint8Array([1, 2, 3, 4]).buffer;
   }
 };
-// The clones of one helper reading share one read of the File.
+// The content Blobs of one helper reading share one read of the File.
 const releaseReads = holdReadBytes();
-const transferredClone = await cloneFileBytesForTransfer(cachedFile);
-structuredClone(transferredClone, { transfer: [transferredClone] });
-assert.equal(transferredClone.byteLength, 0);
-assert.deepEqual(
-  Array.from(new Uint8Array(await cloneFileBytesForTransfer(cachedFile))),
-  [1, 2, 3, 4]
-);
+assert.deepEqual(Array.from(new Uint8Array(await (await inputContentBlob(cachedFile)).arrayBuffer())), [1, 2, 3, 4]);
+assert.deepEqual(Array.from(new Uint8Array(await (await inputContentBlob(cachedFile)).arrayBuffer())), [1, 2, 3, 4]);
 assert.equal(fileReads, 1);
 releaseReads();
 

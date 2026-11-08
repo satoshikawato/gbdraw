@@ -228,7 +228,7 @@ _PATH_PAGE_OBSERVER = r'''(() => {
     postMessage(message, ...rest) {
       if (window.__s06MeasureTransfer && message?.type === 'helper') {
         window.__s06.messages.push({direction: 'request', requestId: message.requestId,
-          transferredArrayBufferBytes: (message.payload?.files || []).reduce((sum, f) => sum + f.bytes.byteLength, 0)});
+          transferredArrayBufferBytes: (message.payload?.files || []).reduce((sum, f) => sum + f.blob.size, 0)});
       }
       return super.postMessage(message, ...rest);
     }
@@ -320,8 +320,8 @@ def run_path_browser(root, inputs, samples, measurement):
                             worker.postMessage({type: '__s06_probe', action, requestId: id});
                           });
                           const payload = parameters => ({...parameters, files: [
-                            {role: 'pairs', bytes: encoder.encode(input.pairsText).buffer},
-                            {role: 'rawTsv', bytes: encoder.encode(input.rawText).buffer}
+                            {role: 'pairs', blob: new Blob([input.pairsText])},
+                            {role: 'rawTsv', blob: new Blob([input.rawText])}
                           ]});
                           const summary = value => {
                             if (value.error) throw new Error(JSON.stringify(value.error));

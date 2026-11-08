@@ -116,7 +116,7 @@ test('a gzip input\'s facts and transfer are its gzip bytes\', its first read ex
     const prepared = await createDiagramResourceTransport().prepare({
       request: fileRequest, resources: fileResources(file, gzip.byteLength)
     });
-    assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), gzip, 'Generate sends the gzip bytes');
+    assert.deepEqual(new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer()), gzip, 'Generate sends the gzip bytes');
     assert.deepEqual([prepared.resourceManifest[0].cacheToken, prepared.resourceManifest[0].size],
       [gzipFacts.token, gzip.byteLength]);
     assert.equal(expansions(), 2, 'staging expands nothing');
@@ -145,7 +145,7 @@ test('Generate after the bytes were dropped reads the File again and sends the s
     request: fileRequest, resources: fileResources(file, bytes.byteLength)
   });
   assert.equal(file.reads, 2);
-  assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), bytes);
+  assert.deepEqual(new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer()), bytes);
   assert.equal(prepared.resourceManifest[0].cacheToken, expectedToken(Buffer.from(bytes)));
 });
 
@@ -170,7 +170,7 @@ test('a staging shares one read between a token it computes and the transfer', a
     request: fileRequest, resources: fileResources(file, bytes.byteLength)
   });
   assert.equal(file.reads, 1);
-  assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), bytes);
+  assert.deepEqual(new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer()), bytes);
 });
 
 const { readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
@@ -223,6 +223,6 @@ test('a Generate during a running discovery shares its one read', async () => {
   const [length, prepared] = await Promise.all([discovery, generate]);
   assert.equal(file.reads, 1, 'discovery and Generate read the File once');
   assert.equal(length, bytes.byteLength);
-  assert.deepEqual(new Uint8Array(prepared.stagedResources[0].bytes), bytes);
+  assert.deepEqual(new Uint8Array(await prepared.stagedResources[0].blob.arrayBuffer()), bytes);
   assert.equal(prepared.resourceManifest[0].cacheToken, expectedToken(Buffer.from(bytes)));
 });

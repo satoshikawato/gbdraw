@@ -105,8 +105,12 @@ let lastLinearUnitPlan = null;
 const workerMessages = [];
 
 /** The bytes of every resource the page staged, by content token: a held resource is not staged again. */
-const stagedBytesByToken = () => new Map(workerMessages.flatMap(({ payload }) => (payload?.stagedResources || [])
-  .map(({ cacheToken, bytes }) => [cacheToken, bytes])));
+const stagedBytes = new Map();
+const stagedBytesByToken = () => stagedBytes;
+/** Reads the Blobs a message stages, as the Worker does before it answers (OV-2749). @param {any} message */
+const readStagedBlobs = (message) => Promise.all((message.payload?.stagedResources || []).map(async ({ cacheToken, blob }) => {
+  stagedBytes.set(cacheToken, new Uint8Array(await blob.arrayBuffer()));
+}));
 /** The latest ring table conversion message: its request, ring table IDs, and staged resources (base64 by ID). */
 const ringTableConversionInput = () => {
   const { canonicalRequest, resourceIds, resourceManifest } = workerMessages
@@ -203,7 +207,7 @@ class AuditSimplePathWorker {
     }
     if (message.type === 'run') {
       const response = workerResponses.shift();
-      Promise.resolve(response).then((payload) => queueMicrotask(() => this.emit('message', {
+      readStagedBlobs(message).then(() => response).then((payload) => queueMicrotask(() => this.emit('message', {
         type: 'run',
         requestId: message.requestId,
         ok: true,
@@ -217,7 +221,7 @@ class AuditSimplePathWorker {
       const response = message.operation === 'planLinearUnits'
         ? { ok: true, result: lastLinearUnitPlan } : workerHelperResponses.shift();
       if (!response) throw new Error(`missing helper worker response for ${message.operation}`);
-      Promise.resolve(response).then((payload) => this.emit('message', {
+      readStagedBlobs(message).then(() => response).then((payload) => this.emit('message', {
         type: 'helper',
         requestId: message.requestId,
         ...structuredClone(payload)
@@ -1013,7 +1017,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const committedCatalogRevision = `fake:${fakeCatalogBuilds}`;
   assert.equal(Object.hasOwn(firstRunPayload, 'resources'), false);
   assert.ok(firstRunPayload.resourceManifest.length > 0);
-  assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
+  assert.ok(firstRunPayload.stagedResources.every(({ blob }) => blob instanceof Blob));
 
   let committedState = committedFeatureState();
   let committedExtractedFeatureIdentity = state.extractedFeatures.value;
@@ -2827,7 +2831,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const uploadBytesSent = workerMessages.slice(messagesBeforeUpload)
       .flatMap(({ payload }) => payload?.stagedResources ?? [])
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
-      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+      .reduce((total, { blob }) => total + blob.size, 0);
     assert.equal(uploadBytesSent, uploadFile.size);
 
     // A new file inserted before the committed one: the next request names it record-1 and the committed file
@@ -2866,7 +2870,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const recordBytesSent = workerMessages.slice(messagesBeforeInsert)
       .flatMap(({ payload }) => payload?.stagedResources ?? [])
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
-      .reduce((total, { bytes }) => total + bytes.byteLength, 0);
+      .reduce((total, { blob }) => total + blob.size, 0);
     assert.equal(recordBytesSent, insertedFile.size);
     state.activeDrawing().linearSeqs.splice(2);
 

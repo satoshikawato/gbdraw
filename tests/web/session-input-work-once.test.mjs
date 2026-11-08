@@ -48,7 +48,7 @@ const savedSession = async (...args) => {
   return { ...built, resources: await encodeSessionResources(built.resources) };
 };
 const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
-const { holdReadBytes, takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { holdReadBytes, inputContentBlob, releaseFileContentCache } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -67,7 +67,8 @@ test('Save binds a File Generate described with no hash or decode and reads it o
   const sourceState = boundState({ files: {}, circularSources: [card(file)], linearSeqs: [] });
   const releaseReads = holdReadBytes();
   const described = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files, circularSources: sourceState.circularSources })).circularSources[0].gb;
-  await takeFileBytesForTransfer(file);
+  await inputContentBlob(file);
+  releaseFileContentCache(file);
   releaseReads();
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {

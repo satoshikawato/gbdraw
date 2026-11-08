@@ -64,8 +64,9 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  * @property {(ref: InputFileRef | null | undefined) => FileLike | null} fileOf
  * @property {(fileIds: Iterable<string> | null | undefined) => void} retainOnly
  * @property {(fileIds: Iterable<string> | null | undefined, payloadOf?: (file: HistoryFile) => object) => number} estimateBytes
- *   The bytes of the files; files that stand for one payload (`payloadOf`, the composition root gives
- *   `inputFilePayload`) count once.
+ *   The bytes the page keeps in memory for these files (`residentBytesOf`), which the History budget
+ *   counts; files that stand for one payload (`payloadOf`, the composition root gives
+ *   `inputFilePayload`) count once, at the most any of them keeps.
  * @property {(fileId: string) => boolean} has
  * @property {typeof collectHistoryFileIds} collectIds
  */
@@ -73,15 +74,19 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  * @param {{
  *   sourceOf?: (file: HistoryFile) => object | null | undefined,
  *   onHold?: (file: HistoryFile) => void,
- *   onRelease?: (file: HistoryFile) => void
+ *   onRelease?: (file: HistoryFile) => void,
+ *   residentBytesOf?: (file: HistoryFile) => number
  * }} [options] `sourceOf`: the object a file's bytes come from when other files share them (a
  *   Session resource view's descriptor); refs of files with one source share `sourceId`.
  *   `onHold` and `onRelease`: the store now holds a file, and no longer holds it (its temporary
- *   copy, PD-OI-121). The project's store is given the Session's and the copies' (`state.js`),
- *   so this module imports nothing.
+ *   copy, PD-OI-121). `residentBytesOf`: the bytes the page keeps in memory for a file while it
+ *   is held, none for a File on disk (OV-2750); its whole size when not given. The project's
+ *   store is given the Session's and the copies' (`state.js`), so this module imports nothing.
  * @returns {InputFileStore}
  */
-export const createInputFileStore = ({ sourceOf = () => null, onHold = () => {}, onRelease = () => {} } = {}) => {
+export const createInputFileStore = ({
+  sourceOf = () => null, onHold = () => {}, onRelease = () => {}, residentBytesOf = (file) => file.size || 0
+} = {}) => {
   /** @type {Map<string, { file: HistoryFile, ref: InputFileRef }>} */
   const files = new Map();
   /** @type {WeakMap<HistoryFile, string>} */
@@ -143,14 +148,17 @@ export const createInputFileStore = ({ sourceOf = () => null, onHold = () => {},
 
   // Files that stand for the same bytes count once, by their payload, read at
   // each estimate: the views of one stored resource (OV-3018), and the views
-  // each Generate bound of one chosen File, with that File (OV-3019).
+  // each Generate bound of one chosen File, with that File (OV-3019). A payload
+  // counts the most page memory any of its files keeps (`residentBytesOf`).
   /** @type {InputFileStore['estimateBytes']} */
   const estimateBytes = (fileIds, payloadOf = (file) => file) => {
     /** @type {Map<object, number>} */
     const bytesByPayload = new Map();
     for (const fileId of fileIds || []) {
       const stored = files.get(fileId);
-      if (stored) bytesByPayload.set(payloadOf(stored.file), stored.file.size || 0);
+      if (!stored) continue;
+      const payload = payloadOf(stored.file);
+      bytesByPayload.set(payload, Math.max(bytesByPayload.get(payload) || 0, residentBytesOf(stored.file)));
     }
     let total = 0;
     bytesByPayload.forEach((bytes) => { total += bytes; });

@@ -45,7 +45,7 @@ for (const mode of ['circular', 'linear']) {
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
       const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {
-        format: 'genbank', files: [{ role: 'source', bytes: await file.arrayBuffer() }]
+        format: 'genbank', files: [{ role: 'source', blob: file }]
       });
       return { fast, worker: normalizeSequenceRecords(response.result) };
     }, mode);

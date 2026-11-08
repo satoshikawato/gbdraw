@@ -70,7 +70,8 @@ const genbankFile = (name, records) => new File([`${records.join('\n')}\n`], nam
 /** @param {unknown} request @param {Record<string, unknown>} resources */
 const stagedFiles = async (request, resources) => {
   const { resourceManifest, stagedResources } = await createDiagramResourceTransport().prepare({ request, resources });
-  const bytesByToken = new Map(stagedResources.map(({ cacheToken, bytes }) => [cacheToken, Buffer.from(bytes).toString('base64')]));
+  const bytesByToken = new Map(await Promise.all(stagedResources.map(async ({ cacheToken, blob }) => [
+    cacheToken, Buffer.from(await blob.arrayBuffer()).toString('base64')])));
   return Object.fromEntries(resourceManifest.map(({ resourceId, cacheToken, name }) => [resourceId, { name, base64: bytesByToken.get(cacheToken) }]));
 };
 const STAGE = `

@@ -20,7 +20,7 @@ import {
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createInputFileStore } from './services/history-files.js';
-import { keepFileCopy, releaseFileCopy, useInputCopyStore } from './services/file-content-cache.js';
+import { keepFileCopy, releaseFileCopy, residentBytesOf, useInputCopyStore } from './services/file-content-cache.js';
 import { createBrowserInputCopyStore } from './services/input-copies.js';
 import { INPUTS_SLICE } from './services/drawing/inputs.js';
 import { sessionResourceSource } from './services/session-resource-backing.js';
@@ -215,7 +215,9 @@ const inputFiles = createInputFileStore({
   sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor,
   // A held File is copied when it is chosen, and its copy is deleted when no step or binding names it (PD-OI-121).
   onHold: keepFileCopy,
-  onRelease: releaseFileCopy
+  onRelease: releaseFileCopy,
+  // The History budget counts the bytes the page keeps in memory, not those of a File on disk (OV-2750).
+  residentBytesOf
 });
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());

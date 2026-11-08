@@ -147,15 +147,15 @@ const installCanonicalRequestCapture = (page) => page.evaluate(() => {
       const files = Array.isArray(message.payload?.files) ? message.payload.files : [];
       const pairs = files.find(({ role }) => role === 'pairs');
       const rawTsv = files.find(({ role }) => role === 'rawTsv');
-      const manifestText = pairs?.bytes instanceof ArrayBuffer
-        ? new TextDecoder().decode(pairs.bytes)
-        : '';
-      window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__.push({
+      const transport = {
         roles: files.map(({ role }) => String(role || '')),
-        metadataBytes: Number(pairs?.bytes?.byteLength || 0),
-        rawTsvBytes: Number(rawTsv?.bytes?.byteLength || 0),
-        manifestContainsBlastText: manifestText.includes('"blastText"')
-      });
+        metadataBytes: Number(pairs?.blob?.size || 0),
+        rawTsvBytes: Number(rawTsv?.blob?.size || 0),
+        manifestContainsBlastText: false
+      };
+      window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__.push(transport);
+      // OV-2749: helper files are Blobs, read here as the Worker reads them, before the run it serves ends.
+      pairs?.blob?.text().then((manifestText) => { transport.manifestContainsBlastText = manifestText.includes('"blastText"'); });
     }
     if (transfer === undefined) return previousPostMessage.call(this, message);
     return previousPostMessage.call(this, message, transfer);

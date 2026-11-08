@@ -33,6 +33,7 @@ export {
 
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView, StoredResourceBytes } from './session-resource-backing.js' */
 /** @import { InputCopy, InputCopyStore, InputCopyWriter } from './input-copies.js' */
+/** @import { WorkerInputFile } from './diagram-worker-protocol.js' */
 
 /**
  * A resource's content token: the Worker's cache key for its bytes, so equal
@@ -859,63 +860,60 @@ export const releaseFileContentCache = (file) => {
   return releaseSessionResourceContent(file) || deleted;
 };
 
-// The buffers a take handed out whole. Each is its caller's to transfer: a take
-// that read the same cached bytes (it started before an earlier take released
-// them, as two helper requests staging one input at once do, OV-2490) reads
-// the file again instead of sharing a buffer that the first transfer detaches.
-// A read again that returns a taken buffer too (a FileLike that keeps one
-// buffer) gives a copy, so the retake ends.
-/** @type {WeakSet<ArrayBufferLike>} */
-const takenBuffers = new WeakSet();
-
 /**
- * The bytes the descriptor Generate made of `file` counts, which it transfers
- * to the Worker (`readStoredBytes`): a File's bytes as chosen (its descriptor
- * counts their length, `serializeFile` in config.js), a Session resource
- * view's as stored. Python reads a gzip input by its signature.
+ * An input's bytes as chosen (a File's) or as stored (a Session resource
+ * view's) as the diagram Worker reads them (OV-2749): a Blob, which
+ * postMessage passes as a handle whatever its size, so no input's bytes cross
+ * it. They are the bytes its descriptor counts and its content token hashes;
+ * a gzip input's are its gzip bytes, which Python expands under its cap. A File
+ * with a copy gives the copy file (PD-OI-121), which the page does not read;
+ * any other input gives the bytes `readStoredBytes` reads (a File without a
+ * copy checked against its first read) in a Blob.
  * @param {FileLike} file
+ * @returns {Promise<Blob>}
  */
-const readAndRelease = async (file) => {
-  const bytes = await readStoredBytes(file);
-  releaseFileContentCache(file);
-  return bytes;
-};
-
-/**
- * @param {FileLike} file
- * @returns {Promise<ArrayBuffer>} A buffer no other take holds.
- */
-export const takeFileBytesForTransfer = async (file) => {
-  // A first read hashes the bytes it read and copies them; a transfer detaches them once both end.
+export const inputContentBlob = async (file) => {
   const key = asCacheKey(file);
-  if (key) await Promise.allSettled([fileContentFacts.get(key), fileCopies.get(key)]);
-  let bytes = await readAndRelease(file);
-  if (takenBuffers.has(bytes.buffer)) bytes = await readAndRelease(file);
-  if (takenBuffers.has(bytes.buffer) || bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
-    return bytes.slice().buffer;
+  // A first read writes the copy: whether the File has one is known once it ends.
+  // Meanwhile a hold keeps the bytes that read shares, in case there is none.
+  const releaseReads = holdReadBytes();
+  try {
+    const copy = key ? await fileCopies.get(key) : null;
+    if (copy) {
+      try {
+        return await copy.blob();
+      } catch {
+        // The copy is gone (the site's storage was cleared): the File is read itself.
+      }
+    }
+    return new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (await readStoredBytes(file))]);
+  } finally {
+    releaseReads();
   }
-  takenBuffers.add(bytes.buffer);
-  return /** @type {ArrayBuffer} */ (bytes.buffer);
 };
 
 /**
- * A copy of `file`'s bytes as chosen (`readStoredBytes`) for a Worker helper,
- * which reads a gzip input as Python does.
- * @param {FileLike} file
+ * The bytes a History step keeps alive by naming `file`, as the History budget
+ * counts them (OV-2750): none for a File, whose bytes stay on disk (the chosen
+ * file, or its copy) and whose bytes this cache holds and lets go of on its
+ * own; the whole size of a Session resource view, or of any other object taken
+ * for a file, whose bytes are in memory.
+ * @param {{ readonly size?: unknown } | null | undefined} file
+ * @returns {number}
  */
-export const cloneFileBytesForTransfer = async (file) => {
-  const bytes = await readStoredBytes(file);
-  return bytes.slice().buffer;
+export const residentBytesOf = (file) => {
+  const key = asCacheKey(file);
+  if (!key || key instanceof Blob) return 0;
+  return Number(/** @type {{ readonly size?: unknown }} */ (key).size) || 0;
 };
 
 /**
- * A Worker helper's file for `role`: `file`'s bytes as chosen
- * (`cloneFileBytesForTransfer`) and its name, which a helper's refusal of the
- * file names (a gzip input over its cap, PD-OI-116).
- * @typedef {{ role: string, name: string, bytes: ArrayBuffer }} HelperInputFile
+ * A Worker helper's file for `role`: `file`'s content Blob (`inputContentBlob`)
+ * and its name, which a helper's refusal of the file names (a gzip input over
+ * its cap, PD-OI-116).
  * @param {string} role @param {FileLike} file
- * @returns {Promise<HelperInputFile>}
+ * @returns {Promise<WorkerInputFile>}
  */
 export const helperInputFile = async (role, file) => ({
-  role, name: String(file.name ?? ''), bytes: await cloneFileBytesForTransfer(file)
+  role, name: String(file.name ?? ''), blob: await inputContentBlob(file)
 });

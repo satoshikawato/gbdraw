@@ -46,7 +46,7 @@ test('render staging selects references, transfers bytes once, and reuses the ca
   );
   assert.equal(first.stagedResources.length, 1);
   assert.equal(
-    Buffer.from(first.stagedResources[0].bytes).toString('utf8'),
+    await first.stagedResources[0].blob.text(),
     'LOCUS record\nORIGIN\n//\n'
   );
   first.commit();
@@ -206,9 +206,9 @@ test('staging decodes base64 with the one shared decoder (OV-1560)', async () =>
   let nativeCalls = 0;
   const viaNative = await decodeWith(function (...args) { nativeCalls += 1; return native.value.apply(this, args); });
   assert.ok(nativeCalls > 0, 'the engine decoder writes the transfer buffer');
-  assert.deepEqual(new Uint8Array(viaNative.stagedResources[0].bytes), bytes);
+  assert.deepEqual(new Uint8Array(await viaNative.stagedResources[0].blob.arrayBuffer()), bytes);
   const viaFallback = await decodeWith(undefined);
-  assert.deepEqual(new Uint8Array(viaFallback.stagedResources[0].bytes), bytes);
+  assert.deepEqual(new Uint8Array(await viaFallback.stagedResources[0].blob.arrayBuffer()), bytes);
   await assert.rejects(
     createDiagramResourceTransport().prepare({ request: request('bad'), resources }),
     /Canonical resource bad contains invalid base64 data\./
@@ -418,4 +418,55 @@ test('a held file that was never staged is not held', async () => {
   assert.deepEqual(prepared.heldResourceTokens, []);
   assert.deepEqual(prepared.retainedResourceTokens, []);
   assert.deepEqual(prepared.resourceManifest.map(({ resourceId }) => resourceId), ['record-1-genbank']);
+});
+
+// OV-2749: postMessage refuses one ArrayBuffer of 2,047 MiB or more (Chromium), so an input's bytes never travel
+// in the request. A File with a copy (PD-OI-121) is staged as the copy file, which the page does not read; the
+// staged entry is a Blob, which postMessage passes as a handle, and the request holds no ArrayBuffer.
+test('a chosen File is staged as its copy file, and the request holds no input bytes (OV-2749)', async () => {
+  const { keepFileCopy, releaseFileCopy, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const text = 'LOCUS copied\nORIGIN\n//\n';
+  let copyReads = 0;
+  const copyFile = new File([text], 'copy-1.bin');
+  // The copy's File as the copy store gives it: reading it in the page would count.
+  const copyArrayBuffer = copyFile.arrayBuffer.bind(copyFile);
+  copyFile.arrayBuffer = async () => { copyReads += 1; return copyArrayBuffer(); };
+  useInputCopyStore({
+    openWriter: async () => ({
+      write: async (buffer) => buffer,
+      finish: async () => ({
+        read: async () => new Uint8Array(await copyFile.arrayBuffer()), blob: async () => copyFile, release: () => {}
+      }),
+      abort: () => {}
+    })
+  });
+  try {
+    const upload = new File([text], 'upload.gb');
+    keepFileCopy(upload);
+    const request = { records: [{ source: { kind: 'genbank', resourceId: 'record-1-genbank' } }], diagramOptions: {} };
+    const resources = { 'record-1-genbank': setResourcePayloadOwner({ ...descriptor(text), data: undefined }, upload) };
+    const prepared = await createDiagramResourceTransport().prepare({ request, resources });
+    assert.equal(prepared.stagedResources.length, 1);
+    assert.equal(prepared.stagedResources[0].blob, copyFile, 'the staged content is the copy file itself');
+    assert.equal(copyReads, 0, 'the page does not read the copy');
+    const buffers = [];
+    const collect = (value) => {
+      if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) buffers.push(value);
+      else if (value && typeof value === 'object' && !(value instanceof Blob)) Object.values(value).forEach(collect);
+    };
+    collect(prepared);
+    assert.deepEqual(buffers, [], 'no ArrayBuffer of an input crosses postMessage');
+    releaseFileCopy(upload);
+  } finally {
+    useInputCopyStore(null);
+  }
+});
+
+test('a staging that runs out of memory says so, not that the input is wrong (OV-2749)', async () => {
+  const request = { records: [{ source: { kind: 'genbank', resourceId: 'record-1-genbank' } }], diagramOptions: {} };
+  const upload = { arrayBuffer: async () => { throw new RangeError('Array buffer allocation failed'); } };
+  const resources = { 'record-1-genbank': setResourcePayloadOwner({ ...descriptor('LOCUS x'), data: undefined }, upload) };
+  await assert.rejects(createDiagramResourceTransport().prepare({ request, resources }), (error) => (
+    error.code === 'RESOURCE_INVALID' && error.stage === 'resource-staging' && error.context.reason === 'INPUT_MEMORY'
+  ));
 });
