@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import logging
 import sys
+from functools import lru_cache
+from pathlib import Path
 
 # tomllib is available in Python 3.11+; use tomli as fallback for 3.10
 if sys.version_info >= (3, 11):
@@ -20,14 +22,18 @@ if sys.version_info >= (3, 11):
 else:
     from importlib.abc import Traversable
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from ..exceptions import ConfigError
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=8)
+def _config_text(path: Path) -> str:
+    """The text of one config file, read and logged once per process: the packaged file does not change."""
+    logger.info("Loading config file: %s", path)
+    return path.read_bytes().decode("utf-8")
 
 
 def load_config_toml(config_directory: str, config_file: str) -> dict:
@@ -38,11 +44,8 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
         # Convert the path to an absolute path
         # Installed packages are directories, so files() returns a Path here.
         absolute_config_path = cast("Path", config_path).resolve()
-        # Display or log the absolute path
-        logger.info(f"INFO: Loading config file: {absolute_config_path}")
-        # Open the file and load the configuration
-        with open(absolute_config_path, "rb") as config_toml:
-            config_dict = tomllib.load(config_toml)
+        # Parsed on every call, so each caller gets a dict of its own to change.
+        config_dict = tomllib.loads(_config_text(absolute_config_path))
     except FileNotFoundError as e:
         raise ConfigError(
             f"Configuration file missing: {absolute_config_path}. "

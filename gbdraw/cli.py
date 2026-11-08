@@ -33,6 +33,7 @@ from functools import partial
 
 from .api.request_render import _without_derived_losat_entries
 from .circular import circular_main
+from .cli_utils.common import cli_label
 from .linear import linear_main
 from .exceptions import LabelLeadersCrossWarning, LabelsMayNotFitWarning, GbdrawError
 from .render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
@@ -153,20 +154,21 @@ def start_local_server(directory: str):
 
     port = httpd.server_address[1]
     url = f"http://localhost:{port}"
+    # Status lines go to standard error with the log; standard output keeps what a command exists to print.
     if fell_back:
-        print(f"Port {GUI_PORT} is in use, so the UI is served at another address.")
-        print("The layout choice made there is not kept, and its temporary input copies are")
-        print(f"deleted only when port {port} is used again.")
-    print(f"✅ Local server started at: {url}")
-    print(f"📂 Serving UI from: {directory}")
-    print("Press Ctrl+C to stop the server.")
+        print(f"Port {GUI_PORT} is in use, so the UI is served at another address.", file=sys.stderr)
+        print("The layout choice made there is not kept, and its temporary input copies are", file=sys.stderr)
+        print(f"deleted only when port {port} is used again.", file=sys.stderr)
+    print(f"✅ Local server started at: {url}", file=sys.stderr)
+    print(f"📂 Serving UI from: {directory}", file=sys.stderr)
+    print("Press Ctrl+C to stop the server.", file=sys.stderr)
 
     webbrowser.open(url)
 
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping server...")
+        print("\nStopping server...", file=sys.stderr)
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -258,7 +260,7 @@ class _CliWarningPrinter:
         line: str | None = None,
     ) -> None:
         if issubclass(category, (LabelLeadersCrossWarning, LabelsMayNotFitWarning)):
-            print(f"WARNING: {message}", file=sys.stderr)
+            print(cli_label("WARNING", str(message)), file=sys.stderr)
             return
         self._show_other(message, category, filename, lineno, file, line)
 
@@ -314,7 +316,7 @@ def main() -> None:
                     import os
                     web_dir = os.path.join(os.path.dirname(__file__), 'web')
 
-                print("Launching gbdraw GUI (Local Mode)...")
+                print("Launching gbdraw GUI (Local Mode)...", file=sys.stderr)
                 start_local_server(str(web_dir))
             else:
                 print(
@@ -324,7 +326,7 @@ def main() -> None:
                 )
                 sys.exit(1)
         except GbdrawError as exc:
-            print(f"ERROR: {_cli_error_message(exc)}", file=sys.stderr)
+            print(cli_label("ERROR", _cli_error_message(exc)), file=sys.stderr)
             sys.exit(1)
 
 

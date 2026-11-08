@@ -82,7 +82,7 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
         for idx, row in null_rows.iterrows():
             missing = [c for c in required_cols if pd.isna(row[c])]
             logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
+                f"Missing values in '{filepath}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"
             )
         raise ValidationError(
@@ -133,7 +133,7 @@ def _normalize_visibility_action(action: str, row_idx: int) -> str:
             "use 'exclude_matching' instead."
         )
         warnings.warn(message, DeprecationWarning, stacklevel=2)
-        logger.warning("WARNING: %s", message)
+        logger.warning("%s", message)
         return "exclude_matching"
     raise ValidationError(
         f"Invalid action in feature visibility table at row {row_idx}: '{action}'. "

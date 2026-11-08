@@ -458,7 +458,7 @@ def test_each_search_logs_one_info_line_naming_its_backend(
         ]
 
     expected = [
-        "INFO: Running LOSAT blastp for protein colinearity "
+        "Running LOSAT blastp for protein colinearity "
         f"(backend losat, source managed, executable {managed}, version 0.1.0)."
     ]
     # The first search of a process already names the version.

@@ -69,13 +69,25 @@ _DEPTH_TRACK_HELP_BY_MODE = {
 }
 
 
+CLI_LOG_FORMAT = "%(levelname)s: %(message)s"
+
+
+def cli_label(levelname: str, message: str) -> str:
+    """Return the label of one CLI line, shared by the log formatter and the CLI's own prints."""
+    return CLI_LOG_FORMAT % {"levelname": levelname, "message": message}
+
+
 def setup_logging() -> None:
-    """Setup logging with INFO level and stdout handler."""
+    """Log INFO and above to standard error, each line labelled with its level.
+
+    The command's entry points call it; importing a module never does. Standard output stays for what a
+    command exists to print (help, a version, a path).
+    """
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     if not root_logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter(CLI_LOG_FORMAT))
         root_logger.addHandler(handler)
 
 
@@ -353,7 +365,7 @@ def png_dpi(dpi: int | None, formats: Sequence[str]) -> int | None:
     """``--dpi``, with a warning when none of ``formats`` is a PNG."""
 
     if dpi is not None and "png" not in formats:
-        logger.warning("WARNING: --dpi applies to PNG output only; no PNG is written (-f).")
+        logger.warning("--dpi applies to PNG output only; no PNG is written (-f).")
     return dpi
 
 
@@ -844,13 +856,13 @@ def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     ):
         parser.error("--records_table cannot be combined with --record_topology or --display_start_coordinate.")
     if records_table and (args.gbk or args.gff or args.fasta):
-        parser.error("Error: --records_table cannot be used with --gbk, --gff, or --fasta.")
+        parser.error("--records_table cannot be used with --gbk, --gff, or --fasta.")
     if args.gbk and (args.gff or args.fasta):
-        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
+        parser.error("--gbk cannot be used with --gff or --fasta.")
     if args.gff and not args.fasta:
-        parser.error("Error: --gff requires --fasta.")
+        parser.error("--gff requires --fasta.")
     if not records_table and not args.gbk and not args.fasta:
-        parser.error("Error: Either --records_table, --gbk, or --fasta (with or without --gff) must be provided.")
+        parser.error("Either --records_table, --gbk, or --fasta (with or without --gff) must be provided.")
 
 
 def apply_record_display_cli_options(
@@ -888,7 +900,7 @@ def validate_output_choice_args(args: argparse.Namespace) -> None:
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate label argument combinations."""
     if args.label_whitelist and args.label_blacklist:
-        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+        parser.error("--label_whitelist and --label_blacklist are mutually exclusive.")
 
 
 def parse_feature_shape_assignment_arg(value: str) -> str:
@@ -944,6 +956,7 @@ __all__ = [
     "add_feature_args",
     "add_input_args",
     "add_label_args",
+    "cli_label",
     "handle_output_formats",
     "setup_logging",
     "validate_input_args",

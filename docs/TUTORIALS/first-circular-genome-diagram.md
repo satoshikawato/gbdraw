@@ -160,8 +160,9 @@ gbdraw circular \
 ```
 <!-- executable:T-CLI-01:end -->
 
-Expected output: the command prints `Generated SVG: human_mitochondrion.svg`
-and writes the file in the current directory.
+Expected output: among its progress messages, the command prints
+`INFO: Generated SVG: human_mitochondrion.svg` and writes the file in the
+current directory.
 
 ### Step 3: Inspect the SVG
 

@@ -162,7 +162,7 @@ def _crop_record_to_region(
 
     if start_0 != spec.start - 1 or end_0 != spec.end:
         log.warning(
-            "WARNING: Region %s for record %s was clamped to %s..%s (record length %s).",
+            "Region %s for record %s was clamped to %s..%s (record length %s).",
             spec.raw,
             record.id,
             start_0 + 1,
@@ -350,7 +350,7 @@ def crop_record_to_region(
 
     log = log or logger
     log.info(
-        "INFO: Cropping record %s to %s..%s%s.",
+        "Cropping record %s to %s..%s%s.",
         record.id,
         spec.start,
         spec.end,

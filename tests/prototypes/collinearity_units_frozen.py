@@ -284,13 +284,13 @@ def build_collinearity_unit_index(
     if mixed_fallback_counts:
         preview = ", ".join(f"{record_id}: {count}" for record_id, count in mixed_fallback_counts[:5])
         logger.warning(
-            "WARNING: collinear_unit_mode auto used CDS units for CDS proteins without stable locus IDs (%s).",
+            "collinear_unit_mode auto used CDS units for CDS proteins without stable locus IDs (%s).",
             preview,
         )
     if collapsed_counts:
         preview = ", ".join(f"{record_id}: {count}" for record_id, count in collapsed_counts[:5])
         logger.info(
-            "INFO: Collapsed multiple CDS proteins into locus collinearity units (%s).",
+            "Collapsed multiple CDS proteins into locus collinearity units (%s).",
             preview,
         )
 

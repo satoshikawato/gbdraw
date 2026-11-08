@@ -341,7 +341,7 @@ def resolve_circular_conservation_losat(
             text = str(cached["text"])
         else:
             logger.info(
-                "INFO: %s ring %d/%d (%s against %d record(s) of the reference file(s)).",
+                "%s ring %d/%d (%s against %d record(s) of the reference file(s)).",
                 search.program.upper(), index + 1, len(comparison_files),
                 os.path.basename(comparison.path), len(subject_ids),
             )

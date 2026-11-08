@@ -449,6 +449,10 @@ comparison table or the table has no rows. These runs still write the figure and
 exit with status 0. A file with no record stops the run with an `ERROR:` line and
 status 1, and nothing is written.
 
+These lines, and every other progress message, warning, and error, go to
+standard error; a drawing run writes nothing to standard output. To keep the
+messages in a file, redirect standard error: `gbdraw circular ... 2> log.txt`.
+
 A UTF-8 byte order mark at the start of a GenBank, EMBL, GFF3, or FASTA file is
 ignored, so the first record is read.
 

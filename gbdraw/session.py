@@ -110,7 +110,7 @@ def read_session_png_dpi(session: Mapping[str, object]) -> int | None:
         dpi = None
     if dpi is None:
         logger.warning(
-            "WARNING: Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; "
+            "Session: the PNG DPI %s (ui.downloadDpi) is not one of %s; "
             "a PNG is drawn at the default PNG DPI (%s) instead.",
             json.dumps(stored, ensure_ascii=False),
             ", ".join(str(choice) for choice in sorted(SESSION_PNG_DPI_CHOICES)),
@@ -2102,7 +2102,7 @@ def _upgrade_to_current(
             resources=resources,
         )
     for warning in warnings:
-        logger.warning("WARNING: %s", warning)
+        logger.warning("%s", warning)
     return SessionUpgrade(upgraded, tuple(warnings))
 
 

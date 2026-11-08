@@ -146,7 +146,6 @@ _CLI_RING_FIELD_FLAGS = {
     "record_gencodes": "--losat_gencode",
     "losatn_task": "--losatn_task",
 }
-setup_logging()
 
 
 def _circular_cli_record_cardinality() -> RecordCardinality:
@@ -882,6 +881,7 @@ def circular_main(cmd_args) -> None:
     - Plotting the circular diagrams with genomic features and GC-related tracks.
     - Generating output files in specified formats.
     """
+    setup_logging()
     session_request = parse_session_pre_args(cmd_args, mode="circular")
     if session_request is not None:
         # Before the Session is read, so its font names resolve to these files.
@@ -1376,7 +1376,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     ):
         logger.warning(
-            "WARNING: --hide_scale does not suppress an enabled ticks slot in a "
+            "--hide_scale does not suppress an enabled ticks slot in a "
             "user-explicit Circular track list; the explicit slot wins."
         )
 
@@ -1611,13 +1611,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
 
 if __name__ == "__main__":
-    # Entry point for the script when run as a standalone program.
-    # Calls the main function `circular_main` with command-line arguments.
-    # args are parsed command-line arguments
-    # This gets all arguments passed to the script, excluding the script name
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(handler)
+    # ``python -m gbdraw.circular``: circular_main sets up the log as ``gbdraw circular`` does.
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

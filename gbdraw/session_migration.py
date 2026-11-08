@@ -426,7 +426,7 @@ def log_session_draft_migration(migration: SessionDraftMigration, source_version
 
     if migration.dropped_feature_edit_count:
         logger.warning(
-            "WARNING: %d feature edit(s) from Session version %d could not "
+            "%d feature edit(s) from Session version %d could not "
             "be matched to a feature of its saved diagram and were dropped "
             "from the written Session.",
             migration.dropped_feature_edit_count,
@@ -434,7 +434,7 @@ def log_session_draft_migration(migration: SessionDraftMigration, source_version
         )
     if migration.narrowed_visibility_count:
         logger.warning(
-            "WARNING: %d Feature visibility edit(s) from Session version %d "
+            "%d Feature visibility edit(s) from Session version %d "
             "hid every feature with the same hash; in the written Session "
             "each applies only to the feature that was edited.",
             migration.narrowed_visibility_count,
@@ -442,14 +442,14 @@ def log_session_draft_migration(migration: SessionDraftMigration, source_version
         )
     if migration.unmapped_hash_selector_count:
         logger.warning(
-            "WARNING: %s",
+            "%s",
             unmapped_hash_selector_warning(
                 migration.unmapped_hash_selector_count, source_version
             ),
         )
     if migration.migrated_annotation_count:
         logger.info(
-            "INFO: %d annotation(s) from Session version %d named a feature "
+            "%d annotation(s) from Session version %d named a feature "
             "by hash=; in the written Session each names that feature by "
             "its source.",
             migration.migrated_annotation_count,

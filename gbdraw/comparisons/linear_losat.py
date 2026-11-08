@@ -205,7 +205,7 @@ def resolve_linear_nucleotide_losat(
             split = {pair: str(cast("dict[str, object]", entry)["text"]) for pair, entry in cached.items()}
         else:
             logger.info(
-                "INFO: %s source job %d/%d (%d query x %d subject record(s)).",
+                "%s source job %d/%d (%d query x %d subject record(s)).",
                 search.program.upper(), job_number, len(batches),
                 len(batch.query.indexes), len(batch.subject.indexes),
             )

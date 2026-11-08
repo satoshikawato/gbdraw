@@ -186,7 +186,7 @@ def read_literal_table(
             lines = [str(repair["row"]) for repair in repairs if repair["repair"] == kind]
             if lines:
                 logger.warning(
-                    f"WARNING: The {label} '{filepath}' of a Session 31-39 was read as the "
+                    f"The {label} '{filepath}' of a Session 31-39 was read as the "
                     f"current version writes it: line(s) {', '.join(lines)} {reason}."
                 )
     rows = [

@@ -1952,7 +1952,7 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
         if record.name == session_migration.__name__
     ] == (
         [
-            f"WARNING: {narrowed} Feature visibility edit(s) from Session version 44 "
+            f"{narrowed} Feature visibility edit(s) from Session version 44 "
             "hid every feature with the same hash; in the written Session each "
             "applies only to the feature that was edited."
         ]
@@ -2110,7 +2110,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     ] == [
         # feature_3 names TESTB_0006 by its source hash, which main wrote: it
         # matches that feature now, without a reader or a warning.
-        "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
+        "1 annotation(s) from Session version 44 named a feature by hash=; "
         "in the written Session each names that feature by its source.",
     ]
 
@@ -2154,7 +2154,7 @@ def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict
 
 
 _UNMAPPED_HASH_WARNING = (
-    "WARNING: {count} hash= value(s) from Session version {version} could not be renamed "
+    "{count} hash= value(s) from Session version {version} could not be renamed "
     "to the hash of a feature in its source record: the saved diagram drew a "
     "cropped or reverse-complemented record, and the value names features of "
     "several source hashes there, or the sources were not read again. hash= now "

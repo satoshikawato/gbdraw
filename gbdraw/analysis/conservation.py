@@ -406,7 +406,7 @@ def load_conservation_sources(
             if frame is not None:
                 valid_frames.append(frame)
             elif reason:
-                logger.warning("WARNING: Skipping conservation source %s file: %s", source_index, reason)
+                logger.warning("Skipping conservation source %s file: %s", source_index, reason)
                 skip_reasons.append(reason)
 
         if source_index < len(dataframes):
@@ -419,7 +419,7 @@ def load_conservation_sources(
                 )
             except ValidationError as exc:
                 reason = f"error parsing conservation dataframe {source_index}: {exc}"
-                logger.warning("WARNING: %s", reason)
+                logger.warning("%s", reason)
                 skip_reasons.append(reason)
 
         if valid_frames:
@@ -634,7 +634,7 @@ def _normalize_source_hits_for_record(
 
     if dropped:
         logger.warning(
-            "WARNING: Dropped %s invalid conservation hit(s) for source %s and record %s.",
+            "Dropped %s invalid conservation hit(s) for source %s and record %s.",
             dropped,
             source.source_index,
             record.id,

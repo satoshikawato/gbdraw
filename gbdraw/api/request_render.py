@@ -1746,13 +1746,13 @@ def _warn_circular_topologies(records: Sequence[SeqRecord]) -> None:
         topology = getattr(record, "annotations", {}).get("topology")
         if topology == "linear":
             logger.warning(
-                "WARNING: The annotation indicates that record %s is linear. "
+                "The annotation indicates that record %s is linear. "
                 "Are you sure you want to visualize it as circular?",
                 record.id,
             )
         elif topology is not None and topology != "circular":
             logger.warning(
-                "WARNING: Topology information not available for %s.",
+                "Topology information not available for %s.",
                 record.id,
             )
 
@@ -2209,7 +2209,7 @@ def _auto_oriented_collection(
         return collection
     for index in sorted(reversed_indexes):
         logger.info(
-            "INFO: auto_orient reverse-complemented record #%d %r: its reverse hits "
+            "auto_orient reverse-complemented record #%d %r: its reverse hits "
             "against the row above weigh more than half of its hits.",
             index + 1, str(records[index].id),
         )

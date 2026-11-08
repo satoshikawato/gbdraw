@@ -157,7 +157,7 @@ def reverse_records(
         _write_coord_map(reversed_record, base=rc_base, step=rc_step)
         reversed_records.append(reversed_record)
     if reverse_flag and reversed_records:
-        log.info("INFO: Reverse complemented %d record(s).", len(reversed_records))
+        log.info("Reverse complemented %d record(s).", len(reversed_records))
     return reversed_records
 
 

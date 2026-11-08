@@ -563,7 +563,7 @@ def run_losat_search(
         # once per executable; the runtime record reuses it.
         version = _runtime_version(runtime)
         logger.info(
-            "INFO: Running %s for %s (backend %s, source %s, executable %s%s).",
+            "Running %s for %s (backend %s, source %s, executable %s%s).",
             runtime_label,
             spec.activity,
             runtime.kind,

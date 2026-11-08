@@ -552,7 +552,7 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
     circular = drawing_view(written, mode="circular")["modes"]["circular"]["config"]["annotationSets"]
     assert all(not annotation_set["annotations"] for annotation_set in circular)
     assert saved["renderRequest"]["diagramOptions"]["annotations"] == source["renderRequest"]["diagramOptions"]["annotations"]
-    assert "INFO: 1 annotation(s) from Session version 44 named a feature by hash=" in caplog.text
+    assert "1 annotation(s) from Session version 44 named a feature by hash=" in caplog.text
 
 
 def test_split_moves_a_boolean_instant_preview_to_the_app() -> None:

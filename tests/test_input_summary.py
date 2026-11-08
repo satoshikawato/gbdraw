@@ -57,8 +57,9 @@ def _gbdraw(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _lines(run: subprocess.CompletedProcess[str]) -> list[str]:
-    """The CLI's log lines (INFO and WARNING go to stdout, ERROR to stderr)."""
-    return (run.stdout + run.stderr).splitlines()
+    """The CLI's log lines: every level goes to stderr, and stdout stays empty."""
+    assert run.stdout == ""
+    return run.stderr.splitlines()
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

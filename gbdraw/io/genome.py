@@ -165,12 +165,12 @@ def _load_record_files(
 
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
-    logger.info(f"INFO: Loading {kind} file(s)...")
+    logger.info(f"Loading {kind} file(s)...")
     for file_idx, path in enumerate(paths):
         if not os.path.isfile(path):
             raise InputFileError(f"File does not exist or is not accessible: {path}")
         try:
-            logger.info(f"INFO: Loading {kind} file {path}")
+            logger.info(f"Loading {kind} file {path}")
             records_list = read(path)
             selector_raw = (
                 record_selectors[file_idx]
@@ -186,11 +186,11 @@ def _load_record_files(
                 else False
             )
             records_list = reverse_records(records_list, reverse_flag, log=logger)
-            logger.info("INFO: Importing all entries...")
+            logger.info("Importing all entries...")
             for record in records_list:
                 if record.id in id_list:
                     logger.warning(
-                        f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
+                        f"Record {record.id} seems to have been already loaded. Check for duplicates!"
                     )
                 _attach_source_annotations(record, path)
                 record_list.append(record)
@@ -205,8 +205,8 @@ def _load_record_files(
             raise ParseError(
                 f"Unexpected error while processing {path}: {e}"
             ) from e
-    logger.info(f"INFO:              ... finished loading {kind} file(s)")
-    logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
+    logger.info(f"... finished loading {kind} file(s)")
+    logger.info(f"Number of sequences loaded to gbdraw: {len(id_list)}")
     if len(id_list) < 1:
         raise ValidationError(
             f"No valid {kind} records were loaded. Please check your input files."
@@ -446,7 +446,7 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
     record.features, merged_count = _normalize_gff3_feature_list(record.features)
     if merged_count:
         logger.info(
-            "INFO: Normalized %d multipart GFF3 feature(s) for record %s.",
+            "Normalized %d multipart GFF3 feature(s) for record %s.",
             merged_count,
             record.id,
         )
@@ -602,7 +602,7 @@ def parse_gff_fasta(
         if not os.path.isfile(path):
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
-        logger.info("INFO: Loading GFF3 file {}".format(gff_file))
+        logger.info("Loading GFF3 file {}".format(gff_file))
         gff_records = read_sequence_text(gff_file, lambda lines: list(GFF.parse(gff3_stream(lines))))
         for record in gff_records:
             canonicalize_feature_types(record.features)
@@ -612,7 +612,7 @@ def parse_gff_fasta(
         catalogs = {
             id(record): capture_source_features(record) for record in gff_records
         } if source_feature_catalogs is not None else {}
-        logger.info("INFO: Loading FASTA file {}".format(fasta_file))
+        logger.info("Loading FASTA file {}".format(fasta_file))
         fasta_records = _read_fasta_records(fasta_file)
         merged_records = merge_gff_fasta_records(gff_records, fasta_records, fasta_file=fasta_file)
         if source_feature_catalogs is not None:
@@ -636,7 +636,7 @@ def load_gff_fasta(
 
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
-    logger.info("INFO: Loading GFF3/FASTA file(s)...")
+    logger.info("Loading GFF3/FASTA file(s)...")
 
     if len(gff_list) != len(fasta_list):
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
@@ -680,15 +680,15 @@ def load_gff_fasta(
             for record_index, record in enumerate(merged_records):
                 if record.id in id_list:
                     logger.warning(
-                        f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
+                        f"Record {record.id} seems to have been already loaded. Check for duplicates!"
                     )
                 if source_feature_catalogs is not None:
                     source_feature_catalogs.append(selected_catalogs[record_index])
                 record_list.append(record)
                 id_list.append(record.id)
 
-    logger.info("INFO:              ... finished loading GFF3 and FASTA files")
-    logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
+    logger.info("... finished loading GFF3 and FASTA files")
+    logger.info(f"Number of sequences loaded to gbdraw: {len(record_list)}")
     if len(record_list) < 1:
         raise ValidationError(
             "No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."

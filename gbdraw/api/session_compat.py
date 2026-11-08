@@ -1715,7 +1715,7 @@ def _adapt_session_plan(
         else ()
     )
     for warning in warnings[len(warnings) - bool(unmapped_hash_selectors):]:
-        logger.warning("WARNING: %s", warning)
+        logger.warning("%s", warning)
     return AdaptedSessionRequest(
         request=request,
         artifacts=artifacts,

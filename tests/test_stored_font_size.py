@@ -93,7 +93,7 @@ def test_a_stored_size_of_zero_or_less_draws_auto_with_the_web_notice(
     assert _cli_svg(stored, tmp_path, "stored") == _cli_svg(auto, tmp_path, "auto")
     notices = [record.getMessage() for record in caplog.records if "cannot be used" in record.getMessage()]
     expected = [
-        f'WARNING: Settings: the value "{value}" ({where.format(path=path, kind=path.split(".")[-2])}) '
+        f'Settings: the value "{value}" ({where.format(path=path, kind=path.split(".")[-2])}) '
         "cannot be used; its default is used."
         for path, value in ((NAME, "-1.5"), (SUBTITLE, "0"))
     ]

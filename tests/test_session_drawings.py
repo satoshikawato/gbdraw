@@ -494,9 +494,7 @@ def test_upgrade_names_and_logs_each_result_it_drops(
         "2 Result(s) 'out.svg', 'second.svg': Session 33 saved no feature catalog "
         "for them. Render the drawing and save the Session to write new Results.",
     )
-    assert [record.getMessage() for record in caplog.records] == [
-        f"WARNING: {warning}" for warning in upgrade.warnings
-    ]
+    assert [record.getMessage() for record in caplog.records] == list(upgrade.warnings)
     assert all(record.levelno == logging.WARNING for record in caplog.records)
 
 

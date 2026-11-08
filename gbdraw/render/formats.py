@@ -91,7 +91,7 @@ def parse_format_string(
         else:
             if logger is not None:
                 logger.warning(
-                    "WARNING: Unaccepted/unrecognized output file format: %s",
+                    "Unaccepted/unrecognized output file format: %s",
                     fmt,
                 )
 
@@ -99,7 +99,7 @@ def parse_format_string(
     if not accepted:
         if logger is not None:
             logger.warning(
-                "WARNING: No valid output file format was specified; generate a PNG file."
+                "No valid output file format was specified; generate a PNG file."
             )
         accepted = list(fallback)
     return accepted

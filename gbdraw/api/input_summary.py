@@ -385,9 +385,9 @@ def log_input_summary(summary: InputSummary) -> None:
     """Write the summary as CLI INFO lines and its warnings as WARNING lines."""
 
     for line in input_summary_lines(summary):
-        logger.info("INFO: %s", line)
+        logger.info("%s", line)
     for warning in input_warnings(summary):
-        logger.warning("WARNING: %s", warning.message)
+        logger.warning("%s", warning.message)
 
 
 def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputSummary:

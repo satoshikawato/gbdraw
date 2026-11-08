@@ -93,9 +93,9 @@ def build(extraction, *, records=None, mode='auto'):
                 collapsed.append(f'{label}: {c}')
     if fallback:
         logging.getLogger(__name__).warning(
-            'WARNING: collinear_unit_mode auto used CDS units for CDS proteins without stable locus IDs (%s).',
+            'collinear_unit_mode auto used CDS units for CDS proteins without stable locus IDs (%s).',
             ', '.join(fallback[:5]))
     if collapsed:
         logging.getLogger(__name__).info(
-            'INFO: Collapsed multiple CDS proteins into locus collinearity units (%s).', ', '.join(collapsed[:5]))
+            'Collapsed multiple CDS proteins into locus collinearity units (%s).', ', '.join(collapsed[:5]))
     return result
