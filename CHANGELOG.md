@@ -55,6 +55,13 @@ write-up of a release.
   polygon instead of a ring. The rings now follow the circle between samples,
   in the CLI, the Python API, and the Web app. Longer records draw as before
   (OV-2863).
+- Fixed: on a Circular Multi-Record Canvas whose `--multi_record_position`
+  (Web: Record Order) draws the records in another order than they were given,
+  a moved record took another record's feature edits, display start or crop,
+  and presentation: a label edit was drawn on the feature at the same position
+  in another record, and the Web app then stopped Generate with "Label
+  visibility is On for a feature, but this diagram does not draw its label."
+  Each record now keeps its own (OV-2907).
 - Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
   a Percent GC content axis, the GC content **Tick Font Size** field showed an
   Auto size that the figure did not use: the GC axis numbers are drawn in the
