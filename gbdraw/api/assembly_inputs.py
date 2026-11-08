@@ -123,6 +123,8 @@ class CircularAssemblyInputs(DiagramAssemblyInputs):
     keep_full_definition_with_plot_title: bool = False
     center_reserved_radius: float | None = None
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
+    # True when ``circular_track_slots`` is the stack a grid built for its records because the reader gave none.
+    _implicit_track_stack: bool = False
     circular_track_axis_index: int | None = None
     evalue: float = CIRCULAR_MODE_PROFILE.comparison.evalue
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore
