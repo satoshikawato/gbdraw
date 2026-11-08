@@ -16,7 +16,7 @@ import math
 import os
 import re
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -5464,6 +5464,34 @@ def _project_web_file_binding(
     return {"resourceId": resource_id, "descriptor": resource, **metadata}
 
 
+def _web_card_binding(
+    sequence: Mapping[str, object],
+    add_file: Callable[[object], object],
+    add_value: Callable[[object], object],
+) -> dict[str, object]:
+    """One Linear card's bindings, the card shape the Web writes (``linearBindings`` in services/session-resources.js)."""
+
+    return {
+        "uid": str(sequence.get("uid") or ""),
+        "gb": add_file(sequence.get("gb")),
+        "gff": add_file(sequence.get("gff")),
+        "fasta": add_file(sequence.get("fasta")),
+        "depth": add_value(sequence.get("depth")),
+        "losat_gencode": sequence.get("losat_gencode", 1),
+        "definition": str(sequence.get("definition") or ""),
+        "record_subtitle": str(sequence.get("record_subtitle") or ""),
+        "file_definition": str(sequence.get("file_definition") or ""),
+        "file_subtitle": str(sequence.get("file_subtitle") or ""),
+        "inferred_definition": str(sequence.get("inferred_definition") or ""),
+        "region_record_id": str(sequence.get("region_record_id") or ""),
+        "region_start": sequence.get("region_start"),
+        "region_end": sequence.get("region_end"),
+        "region_reverse": bool(sequence.get("region_reverse")),
+        # The card's window list (several windows, or one across the origin), as the Web writes it.
+        "windows": [dict(window) for window in _mapping_list(sequence.get("windows"))],
+    }
+
+
 def _attach_current_web_file_bindings(
     payload: dict[str, Any],
     files: Mapping[str, Any],
@@ -5519,31 +5547,11 @@ def _attach_current_web_file_bindings(
     linear_sequences = (
         linear_sequences_value if isinstance(linear_sequences_value, list) else []
     )
-    sequence_bindings = []
-    for sequence in linear_sequences:
-        if not isinstance(sequence, Mapping):
-            continue
-        sequence_bindings.append(
-            {
-                "uid": str(sequence.get("uid") or ""),
-                "gb": add_file(sequence.get("gb")),
-                "gff": add_file(sequence.get("gff")),
-                "fasta": add_file(sequence.get("fasta")),
-                "depth": add_value(sequence.get("depth")),
-                "losat_gencode": sequence.get("losat_gencode", 1),
-                "definition": str(sequence.get("definition") or ""),
-                "record_subtitle": str(sequence.get("record_subtitle") or ""),
-                "file_definition": str(sequence.get("file_definition") or ""),
-                "file_subtitle": str(sequence.get("file_subtitle") or ""),
-                "inferred_definition": str(sequence.get("inferred_definition") or ""),
-                "region_record_id": str(sequence.get("region_record_id") or ""),
-                "region_start": sequence.get("region_start"),
-                "region_end": sequence.get("region_end"),
-                "region_reverse": bool(sequence.get("region_reverse")),
-                # The card's window list (several windows, or one across the origin), as the Web writes it.
-                "windows": [dict(window) for window in _mapping_list(sequence.get("windows"))],
-            }
-        )
+    sequence_bindings = [
+        _web_card_binding(sequence, add_file, add_value)
+        for sequence in linear_sequences
+        if isinstance(sequence, Mapping)
+    ]
     comparison_bindings = []
     comparisons_value = files.get("linearComparisons")
     comparisons = comparisons_value if isinstance(comparisons_value, list) else []
