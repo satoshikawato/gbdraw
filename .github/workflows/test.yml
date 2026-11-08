@@ -563,8 +563,11 @@ jobs:
           find tests/web -type f \
             -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs' \
             -print0 | xargs -0 node --test
-          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
-          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
+          # Each Gallery Session, a JSON Session or (after the Session file container) its .gbdraw file.
+          for session in gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw* \
+            gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw*; do
+            node tests/web/session-request.test.mjs --project-session "$session"
+          done
 
       - name: Run Python browser tests
         timeout-minutes: 10
