@@ -115,7 +115,7 @@ test('each window of a record is its own axis record, found by the record key an
   const records = readRegionAxisRecords(geometry, 0);
   assert.deepEqual(records.map(({ recordKey, windowIndex }) => [recordKey, windowIndex]), [['a', 0], ['a', 1], ['b', null], ['d', null]]);
   // A search reads each record once (D-11); a `#n` selector counts records, not windows (I-6).
-  assert.deepEqual(searchSpans(records, 30).map(({ recordKey }) => recordKey), ['a', 'b', 'd']);
+  assert.deepEqual(searchSpans(records, [{ reach: 30 }]).map(({ recordKey }) => recordKey), ['a', 'b', 'd']);
   // Two records named NC_2 are told apart by number: b is the second record, d the fourth (c, whose axis entry is
   // malformed, is still a record the Result draws).
   const bindings = resultRecordBindings(records, []);

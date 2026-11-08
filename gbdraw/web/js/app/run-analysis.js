@@ -1254,7 +1254,9 @@ const extractFirstFastaWithWorker = async (sourceFile, { fmt, regionSpec, record
 
 /**
  * The LOSAT entry of a record's protein extraction (the `extractCdsProteinFasta` reply).
- * @param {Record<string, any>} res
+ * @param {{ fasta: string, record_id?: string, record_length?: number, protein_map?: Record<string, unknown>,
+ *   protein_count?: number, protein_set_hash?: string, record_analysis_id?: string, record_instance_key?: string,
+ *   runtime_binding_hash?: string, display_binding_hash?: string, identity_manifest?: unknown }} res
  * @param {number} idx
  * @param {string} recordInstanceKey The key the request names the record by, when the reply names none.
  * @returns {Promise<LosatSeqEntry>}
