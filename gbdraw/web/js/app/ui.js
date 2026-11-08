@@ -1,8 +1,10 @@
 // @ts-check
 /** @import { PersistedPreviewViewport, StoredFigurePreview } from '../services/config.js' */
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
+/** @import { WebState } from '../state.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
+import { watch } from '../utils/reactivity.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
@@ -110,10 +112,50 @@ const createHiddenPreview = ({ hidden, canvas, fitAtOnce, setPreviewViewport }) 
   return { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview: () => roomObserver?.disconnect() };
 };
 
-/** @param {Record<string, any>} state Shape owned by state.js. */
+/**
+ * The view the Preview surface shows.
+ * @typedef {Pick<WebState, 'canvasPan' | 'zoom' | 'isPanning' | 'previewTransitionHeld' | 'previewHiddenUntilShown'>}
+ *   PreviewSurfaceView
+ */
+
+/**
+ * The Preview surface's style, projected from the view: the one writer of the surface's transform, transform
+ * origin, transition, will-change, and visibility, from `v-preview-transform`'s creation of the surface to its
+ * unmount. Outside a gesture or a held transition the transform moves through a 0.2 s transition; during one
+ * it follows at once, as a promoted layer. A change of the view shows at Vue's next flush, before the frame is
+ * drawn, once however many members changed (a pan frame changes both coordinates); a held transition shows at
+ * once, so the Fit measures, and the Fit shown at once reads, the style its write set. No app template reads
+ * the view (OV-912).
+ * @param {HTMLElement} element The Preview surface.
+ * @param {PreviewSurfaceView} view
+ * @returns {() => void} Stops the projection.
+ */
+export const projectPreviewSurface = (element, view) => {
+  const show = () => {
+    const immediate = view.isPanning.value || view.previewTransitionHeld.value;
+    element.style.transform = `translate(${view.canvasPan.x}px, ${view.canvasPan.y}px) scale(${view.zoom.value})`;
+    element.style.transformOrigin = 'top center';
+    element.style.transition = immediate ? 'none' : 'transform 0.2s';
+    element.style.willChange = immediate ? 'transform' : '';
+    element.style.visibility = view.previewHiddenUntilShown.value ? 'hidden' : '';
+  };
+  const stops = [
+    watch(() => [view.canvasPan.x, view.canvasPan.y, view.zoom.value, view.isPanning.value,
+      view.previewHiddenUntilShown.value], show, { immediate: true }),
+    watch(() => view.previewTransitionHeld.value, show, { flush: 'sync' })
+  ];
+  return () => stops.forEach((stop) => stop());
+};
+
+/**
+ * The pan and zoom owner. It writes the view state only; `projectPreviewSurface` shows it.
+ * @param {Pick<WebState, 'zoom' | 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
+ *   | 'svgContainer' | 'previewHiddenUntilShown' | 'previewTransitionHeld'>} state
+ */
 export const createPanZoom = (state) => {
   const {
-    zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown
+    zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown,
+    previewTransitionHeld
   } = state;
   /** @type {number | null} */
   let panFrameId = null;
@@ -260,27 +302,13 @@ export const createPanZoom = (state) => {
     return true;
   };
 
-  const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
+  const isLayoutRepositionModeEnabled = () => layoutRepositionMode.value;
 
   const cancelPanFrame = () => {
     if (panFrameId !== null) {
       cancelAnimationFrame(panFrameId);
       panFrameId = null;
     }
-  };
-
-  /**
-   * @param {number} panX
-   * @param {number} panY
-   * @param {number} zoomLevel
-   * @param {boolean} [disableTransition]
-   */
-  const applyPreviewTransform = (panX, panY, zoomLevel, disableTransition = isPanning.value) => {
-    if (!svgContainer.value) return;
-    svgContainer.value.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
-    svgContainer.value.style.transformOrigin = 'top center';
-    svgContainer.value.style.transition = disableTransition ? 'none' : 'transform 0.2s';
-    svgContainer.value.style.willChange = disableTransition ? 'transform' : '';
   };
 
   /** @param {number} clientX @param {number} clientY */
@@ -293,11 +321,13 @@ export const createPanZoom = (state) => {
     };
   };
 
+  // A pan writes its live position to the view, so every reader (the surface, a wheel zoom during the
+  // pan) sees where the figure is (OV-2722).
   /** @param {number} clientX @param {number} clientY */
   const flushPanUpdate = (clientX, clientY) => {
     const nextPan = getPanPosition(clientX, clientY);
-    applyPreviewTransform(nextPan.x, nextPan.y, zoom.value, true);
-    return nextPan;
+    canvasPan.x = nextPan.x;
+    canvasPan.y = nextPan.y;
   };
 
   /**
@@ -311,7 +341,6 @@ export const createPanZoom = (state) => {
     canvasPan.x = pan.x;
     canvasPan.y = pan.y;
     zoom.value = zoomLevel;
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
   };
 
   /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
@@ -330,16 +359,19 @@ export const createPanZoom = (state) => {
     const container = canvasContainerRef.value;
     const surface = svgContainer.value;
     const svg = surface?.querySelector?.('svg');
-    if (!container || !svg) return;
+    if (!container || !surface || !svg) return;
     // Measure the current transform itself, not a frame of its transition.
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
+    previewTransitionHeld.value = true;
     const surfaceBox = surface.getBoundingClientRect();
     const svgBox = svg.getBoundingClientRect();
     const frameBox = container.getBoundingClientRect();
     const frameWidth = container.clientWidth - editorReserveWidth(container);
     const width = svgBox.width / zoom.value;
     const height = svgBox.height / zoom.value;
-    if (!(width > 0 && height > 0)) return;
+    if (!(width > 0 && height > 0)) {
+      previewTransitionHeld.value = false;
+      return;
+    }
     fittedRoom = previewRoom(container);
     const largest = Math.min(
       (frameWidth - 2 * FIT_MARGIN_PX) / width,
@@ -358,13 +390,13 @@ export const createPanZoom = (state) => {
       x: frameBox.left + container.clientLeft + frameWidth / 2 - originX - nextZoom * centerX,
       y: frameBox.top + container.clientTop + container.clientHeight / 2 - originY - nextZoom * centerY
     }, nextZoom);
+    previewTransitionHeld.value = false;
   };
 
   /** @param {WheelEvent} event */
   const handleWheel = (event) => {
     beginWheelInteraction(event);
     zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, isPanning.value);
   };
 
   /** @param {MouseEvent & { target: Element }} event A press on the canvas; its target is an element. */
@@ -400,7 +432,6 @@ export const createPanZoom = (state) => {
     panStart.panX = canvasPan.x;
     panStart.panY = canvasPan.y;
     container.style.cursor = 'grabbing';
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
   };
 
   /** @param {MouseEvent} event */
@@ -426,16 +457,11 @@ export const createPanZoom = (state) => {
         : pendingPanPointer;
     cancelPanFrame();
 
-    if (isPanning.value && finalPointer) {
-      const nextPan = flushPanUpdate(finalPointer.x, finalPointer.y);
-      canvasPan.x = nextPan.x;
-      canvasPan.y = nextPan.y;
-    }
+    if (isPanning.value && finalPointer) flushPanUpdate(finalPointer.x, finalPointer.y);
 
     pendingPanPointer = null;
     isPanning.value = false;
     if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
     if (wasPanning) endPreviewTransformInteraction('pan');
   };
 
@@ -479,13 +505,14 @@ export const createPanZoom = (state) => {
   const fitAtOnce = () => {
     if (!svgContainer.value) return;
     fitPreviewToViewport();
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
+    previewTransitionHeld.value = true;
     void getComputedStyle(svgContainer.value).transform;
-    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
+    previewTransitionHeld.value = false;
   };
   const { hidePreviewUntilShown, showHiddenPreview, storedFigurePreview, disposeHiddenPreview } = createHiddenPreview({
     hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
   });
+
 
   const disposePanZoom = () => {
     heldRoomObserver?.disconnect();
@@ -513,7 +540,7 @@ export const createPanZoom = (state) => {
   };
 };
 
-/** @param {Record<string, any>} state Shape owned by state.js. */
+/** @param {Pick<WebState, 'sidebarWidth' | 'isResizing'>} state */
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
   // Where the pointer pressed the handle, as its distance from the pane's width: the pane

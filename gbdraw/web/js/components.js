@@ -20,6 +20,7 @@ import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionE
 import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 import { isInputFileRef } from './services/history-files.js';
+import { projectPreviewSurface } from './app/ui.js';
 import { sessionFilesOfKind } from './services/drawing/inputs.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
@@ -251,11 +252,11 @@ export const HelpTip = {
   }
 };
 
-// OV-912: the preview zoom and pan change on every wheel tick and pan. Only
-// the zoom label and the preview surface read them, so a change renders the
-// label and writes the surface transform instead of rendering the whole app.
+// OV-912: the preview zoom and pan change on every wheel tick and pan frame.
+// Only the zoom label and the preview surface read them, so a change renders
+// the label and writes the surface style instead of rendering the whole app.
 // The values stay in `state` for History, the Session, and the pan and zoom
-// owner (app/ui.js), which also writes the transform during a gesture.
+// owner (app/ui.js), which writes them and nothing else.
 export const PreviewZoomPercent = {
   setup: () => ({ zoom: state.zoom }),
   template: '{{ Math.round(zoom * 100) }}%'
@@ -263,28 +264,49 @@ export const PreviewZoomPercent = {
 
 /** @type {WeakMap<HTMLElement, () => void>} */
 const previewTransformStops = new WeakMap();
-// `v-preview-transform` on the preview surface: its transform follows the pan
-// and zoom from its creation (before it is inserted) until it unmounts, and it
-// stays hidden while the pan and zoom owner holds it (OV-2702).
+// `v-preview-transform` on the preview surface: its style shows the view (the
+// pan, the zoom, a gesture, a held transition, the hidden Load figure, OV-2702)
+// from its creation (before it is inserted) until it unmounts, through the one
+// projection of the view (`projectPreviewSurface`, app/ui.js).
 export const previewTransform = {
   /** @param {HTMLElement} element */
   beforeMount: (element) => {
-    previewTransformStops.set(element, watch(
-      () => /** @type {const} */ ([state.canvasPan.x, state.canvasPan.y, state.zoom.value, state.isPanning.value,
-        state.previewHiddenUntilShown.value]),
-      (/** @type {readonly [number, number, number, boolean, boolean]} */ [x, y, zoom, panning, hidden]) => {
-        element.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
-        element.style.transformOrigin = 'top center';
-        element.style.transition = panning ? 'none' : 'transform 0.2s';
-        element.style.visibility = hidden ? 'hidden' : '';
-      },
-      { immediate: true }
-    ));
+    previewTransformStops.set(element, projectPreviewSurface(element, state));
   },
   /** @param {HTMLElement} element */
   unmounted: (element) => {
     previewTransformStops.get(element)?.();
     previewTransformStops.delete(element);
+  }
+};
+
+/**
+ * The title and disabled state of the Reset layout button.
+ * @typedef {{ title: string, disabled: boolean }} ResetLayoutState
+ */
+/** @type {WeakMap<HTMLElement, () => void>} */
+const resetLayoutStateStops = new WeakMap();
+// `v-reset-layout-state` on the Reset layout button: its title and disabled
+// state follow the function it is given, which the app template creates but
+// does not call. Its availability changes at the first pan frame or wheel tick
+// from an unmoved view; that change renders this button, not the whole app
+// (OV-2723).
+export const resetLayoutState = {
+  /** @param {HTMLButtonElement} element @param {{ value: () => ResetLayoutState }} binding */
+  beforeMount: (element, binding) => {
+    resetLayoutStateStops.set(element, watch(
+      () => binding.value(),
+      (/** @type {ResetLayoutState} */ { title, disabled }) => {
+        element.title = title;
+        element.disabled = disabled;
+      },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLButtonElement} element */
+  unmounted: (element) => {
+    resetLayoutStateStops.get(element)?.();
+    resetLayoutStateStops.delete(element);
   }
 };
 

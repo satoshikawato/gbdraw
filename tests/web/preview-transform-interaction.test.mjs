@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const repoRoot = process.cwd();
 const ref = (value) => ({ value });
@@ -156,7 +157,9 @@ const flushFrames = () => {
   pending.forEach(([, callback]) => callback());
 };
 
+const Vue = loadPageVue();
 globalThis.window = {
+  Vue,
   innerWidth: 1440,
   innerHeight: 1000,
   setTimeout(callback, delay) {
@@ -207,16 +210,21 @@ class ListenerTarget {
 const wrapper = new ListenerTarget();
 wrapper.style = {};
 const canvas = { style: {} };
+// The view is reactive, as in state.js, and the surface shows it through the
+// same projection `v-preview-transform` binds: the pan and zoom owner writes the view only.
 const uiState = {
-  zoom: ref(1),
+  zoom: Vue.ref(1),
   layoutRepositionMode: ref(false),
-  isPanning: ref(false),
+  isPanning: Vue.ref(false),
   panStart: { x: 0, y: 0, panX: 0, panY: 0 },
-  canvasPan: { x: 0, y: 0 },
+  canvasPan: Vue.reactive({ x: 0, y: 0 }),
+  previewHiddenUntilShown: Vue.ref(false),
+  previewTransitionHeld: Vue.ref(false),
   canvasContainerRef: ref(canvas),
   svgContainer: ref(wrapper)
 };
-const { createPanZoom } = await import(pathToFileURL(join(tempDir, 'app', 'ui.js')));
+const { createPanZoom, projectPreviewSurface } = await import(pathToFileURL(join(tempDir, 'app', 'ui.js')));
+projectPreviewSurface(wrapper, uiState);
 const panZoom = createPanZoom(uiState);
 const interactionChanges = [];
 panZoom.previewTransformInteraction.subscribe((change) => interactionChanges.push(change));
@@ -265,11 +273,17 @@ assert.equal(panZoom.previewTransformInteraction.isActive(), true);
 assert.equal(canvas.style.cursor, 'grabbing');
 panZoom.doPan({ clientX: 130, clientY: 150 });
 flushFrames();
+// The surface shows the view at Vue's flush, before the frame is drawn.
+await Vue.nextTick();
 assert.equal(wrapper.style.transform, 'translate(30px, 30px) scale(1.2)');
+// The pan's live position is the view's (OV-2722), shown at once as a promoted layer.
+assert.equal(`${uiState.canvasPan.x},${uiState.canvasPan.y}`, '30,30');
+assert.equal(`${wrapper.style.transition}|${wrapper.style.willChange}`, 'none|transform');
 panZoom.endPan({ clientX: 130, clientY: 150 });
 assert.equal(uiState.isPanning.value, false);
 assert.equal(panZoom.previewTransformInteraction.isActive(), false);
 assert.equal(canvas.style.cursor, 'grab');
+await Vue.nextTick();
 assert.equal(wrapper.style.transition, 'transform 0.2s');
 completeCase('pan updates the wrapper transform and restores the existing transition');
 
@@ -433,9 +447,33 @@ editorReserve = 0;
 Object.assign(layout, { width: 50, height: 40 });
 panZoom.fitPreviewToViewport();
 expectFitted(5);
+// The Fit measures the current transform with the transition held off, and the Fit shown at
+// once reads its fitted view with no transition before the transition comes back.
+const transitionsSeen = [];
+const svgBox = fakeSvg.getBoundingClientRect;
+fakeSvg.getBoundingClientRect = () => {
+  transitionsSeen.push(`measure ${wrapper.style.transform} ${wrapper.style.transition}`);
+  return svgBox();
+};
+globalThis.getComputedStyle = (element) => {
+  transitionsSeen.push(`read ${element.style.transform} ${element.style.transition}`);
+  return { transform: element.style.transform };
+};
+Object.assign(layout, { width: 997, height: 817 });
+uiState.zoom.value = 2;
+Object.assign(uiState.canvasPan, { x: 30, y: -20 });
+panZoom.showHiddenPreview({ fit: true });
+const fittedTransform = `translate(${uiState.canvasPan.x}px, ${uiState.canvasPan.y}px) scale(0.45)`;
+assert.equal(transitionsSeen.join('\n'), [
+  'measure translate(30px, -20px) scale(2) none', `read ${fittedTransform} none`
+].join('\n'));
+expectFitted(0.45);
+assert.equal(uiState.previewTransitionHeld.value, false);
+fakeSvg.getBoundingClientRect = svgBox;
+delete globalThis.getComputedStyle;
 wrapper.querySelector = () => null;
 panZoom.fitPreviewToViewport();
-assert.equal(uiState.zoom.value, 5);
+assert.equal(uiState.zoom.value, 0.45);
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
 for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'ownerDocument']) delete canvas[key];
 completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
@@ -572,6 +610,8 @@ const featureInteractionState = {
   isPanning: ref(false),
   panStart: { x: 0, y: 0, panX: 0, panY: 0 },
   canvasPan: { x: 0, y: 0 },
+  previewHiddenUntilShown: ref(false),
+  previewTransitionHeld: ref(false),
   canvasContainerRef: ref(featureInteractionCanvas),
   svgContainer: ref(featureInteractionWrapper)
 };
@@ -836,10 +876,10 @@ assert.match(
 );
 completeCase('preview replacement cancels the canonical lifecycle before rebinding');
 
-// OV-912: the surface's `v-preview-transform` (components.js) writes the transition.
+// OV-912: the surface's `v-preview-transform` (components.js) binds the projection of the view, which writes the transition.
 const componentsSource = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
 assert.match(indexHtml, /ref="svgContainer"[^>]*\sv-preview-transform[\s>]/);
-assert.match(componentsSource, /transition\s*=\s*panning\s*\?\s*'none'\s*:\s*'transform 0\.2s'/);
+assert.match(componentsSource, /projectPreviewSurface\(element, state\)/);
 assert.match(indexHtml, /@pointercancel="endPan"/);
 assert.match(indexHtml, /@lostpointercapture="endPan"/);
 completeCase('template preserves transition and routes interrupted pan cleanup');

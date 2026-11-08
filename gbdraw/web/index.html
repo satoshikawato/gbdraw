@@ -9118,8 +9118,8 @@
                         <!-- Reset preview layout button -->
                         <button v-if="svgContent" @click="resetLayout"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
-                                :title="layoutResetAvailable ? t('Return moved elements, canvas padding, pan, and zoom to their defaults') : t('Nothing moved yet')"
-                                :aria-label="t('Reset layout')" :disabled="!semanticMutationAvailable || !layoutResetAvailable">
+                                v-reset-layout-state="() => ({ title: layoutResetAvailable ? t('Return moved elements, canvas padding, pan, and zoom to their defaults') : t('Nothing moved yet'), disabled: !semanticMutationAvailable || !layoutResetAvailable })"
+                                :aria-label="t('Reset layout')">
                             <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                             <span>{{ t('Reset Layout') }}</span>
                         </button>
