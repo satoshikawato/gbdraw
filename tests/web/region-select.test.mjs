@@ -289,7 +289,9 @@ test('Add to annotation set that fails shows the normalized error under its butt
 
 // OV-2717 parity: Python's catalog of a record drawn in two windows, admitted by the Web, binds each drawn feature to
 // its record (the key a Web feature edit names, which Python binds: tests/test_record_windows.py) and to its window.
-test('a span of a window counts the features that window draws, by the record and the drawn unit', async () => {
+// OV-2740: two overlapping windows each draw the features of their overlap, and each window's span counts them.
+for (const [label, windows] of [['two windows', [[1000, 6500], [7000, 9000]]], ['two overlapping windows', [[1000, 6500], [5000, 9000]]]]) {
+test(`a span of a window counts the features that window draws, by the record and the drawn unit: ${label}`, async () => {
   const { evaluatePython } = await import('./helpers/python-evaluator.mjs');
   const { admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
   const { readRegionAxisRecords } = await import('../../gbdraw/web/js/services/region-axis.js');
@@ -302,7 +304,7 @@ from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.web_support.request_render import render_canonical_web_request
 directory = Path(tempfile.mkdtemp())
 request = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(Path('tests/test_inputs/HmmtDNA.gbk')),
-    record_key='mito', windows=(RecordWindow(1000, 6500), RecordWindow(7000, 9000))),))
+    record_key='mito', windows=tuple(RecordWindow(start, end) for start, end in payload['windows'])),))
 encoded = encode_canonical_request(resolve_request(request))
 paths = {}
 for index, resource in enumerate(encoded.resources):
@@ -312,7 +314,7 @@ for index, resource in enumerate(encoded.resources):
 reply = render_canonical_web_request(encoded.payload, resource_paths=paths, output_directory=directory / 'out')
 result = json.dumps({'catalog': reply['featureCatalog'], 'geometry': reply['metadata']['trackSlotGeometry'],
     'name': reply['results'][0]['name']})
-`));
+`, { windows }));
   const { extractedFeatures } = admitFeatureCatalog(rendered.catalog, [{ name: rendered.name }], { mode: 'linear' });
   const geometry = { ...rendered.geometry, records: rendered.geometry.records.map((record) => ({ ...record, resultIndex: 0 })) };
   const axisRecords = readRegionAxisRecords(geometry, 0);
@@ -335,4 +337,11 @@ result = json.dumps({'catalog': reply['featureCatalog'], 'geometry': reply['meta
     assert.ok(whole.length > 0, `window ${axisRecord.windowIndex + 1} draws features`);
     assert.equal(owner.popup.value.featureCount, whole.length, `the features of window ${axisRecord.windowIndex + 1}`);
   }
+  if (label === 'two overlapping windows') {
+    const units = new Map();
+    rows.forEach((row) => units.set(row.biologicalFeatureId, [...(units.get(row.biologicalFeatureId) || []), row.recordIndex]));
+    assert.ok([...units.values()].some((indexes) => indexes.includes(0) && indexes.includes(1)),
+      'a feature of the overlap is drawn, and counted, in both windows');
+  }
 });
+}

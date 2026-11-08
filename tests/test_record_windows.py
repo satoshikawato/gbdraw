@@ -808,3 +808,13 @@ def test_the_web_catalog_gives_source_coordinates_for_a_window_across_the_origin
     # The D-loop, complement(join(16024..16569,1..576)), is drawn whole and named in both of its source parts.
     [d_loop] = [row for row in item["biologicalFeatures"] if row["type"] == "D-loop"]
     assert sorted((part["start"], part["end"]) for part in d_loop["location_parts"]) == [(0, 576), (16023, 16569)]
+
+
+@pytest.mark.parametrize("cardinality", [RecordCardinality.ALL, RecordCardinality.EXACTLY_ONE])
+def test_windows_on_a_file_of_several_records_without_a_selector_are_refused(cardinality: RecordCardinality) -> None:
+    """A card's windows are spans of one record: a file of several records needs the record named (the Web writes
+    ``exactly_one`` for a card with windows, and its producers name the record), never every record."""
+    source = GenBankInputSource(REPO / "tests" / "test_inputs" / "GCF_000196095.1_ASM19609v1_genomic.gbff")
+    windows = (RecordWindow(1, 100), RecordWindow(200, 300))
+    with pytest.raises(ValidationError, match=r"selectorless per-input region|requires exactly one record"):
+        resolve_request_records(LinearDiagramRequest(records=(RecordInput(source, cardinality=cardinality, windows=windows),)))
