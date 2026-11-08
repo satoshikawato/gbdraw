@@ -1402,7 +1402,7 @@ export const createAppSetup = () => {
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf
   });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.

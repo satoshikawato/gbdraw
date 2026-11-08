@@ -304,3 +304,31 @@ def test_a_byte_order_mark_on_a_line_of_its_own_is_not_text(tmp_path: Path) -> N
     path = tmp_path / "marked.gb"
     path.write_bytes(BOM + b"\n>s1\nACGT\n")
     assert genbank_absence_diagnostic(str(path)) == {"code": "NO_RECORDS", "reason": "FASTA_IN_GENBANK"}
+
+
+def test_a_window_across_the_origin_names_its_span_and_its_export_check_reads_it() -> None:
+    # A window across the origin of a circular record: the summary names the source span the drawing draws, start
+    # after end, and the wrapped export check reads the drawn bases of that span (670 bp), not an ordered pair.
+    import json
+
+    from gbdraw.api.input_summary import input_summary_payload, summarize_inputs
+    from gbdraw.api.request_render import resolve_request_records
+    from gbdraw.io.regions import RecordWindow
+    from gbdraw.web_support.export_limit import check_web_export_limit_json
+
+    request = LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(ROOT / "tests/test_inputs/HmmtDNA.gbk"), windows=(RecordWindow(16000, 100),),
+                    record_key="mito"),
+    ))
+    resolved = resolve_request_records(request)
+    summary = summarize_inputs(resolved.records, resolved.provenance, selected_features=["CDS"],
+                               feature_visibility_rules=None, specific_color_rules=None)
+    assert summary.records[0].region == (16000, 100)
+    assert input_summary_lines(summary)[0].startswith(
+        "Record NC_012920.1 (HmmtDNA.gbk), record 1 of 1, 16,000..100 across the origin of 16,569 bp:"
+    )
+    records = input_summary_payload(summary, result_index=0, result_name="x")["records"]
+    reply = json.loads(check_web_export_limit_json(json.dumps(
+        {"format": "png", "width": 1000.0, "height": 500.0, "dpi": 96, "linearWrap": {"requested": 500, "records": records}}
+    )))
+    assert reply["ok"] is True

@@ -32,6 +32,8 @@ const { computed } = window.Vue;
  * @property {(drawing: DrawingState) => { record: CanonicalRenderRequest['records'][number], seq: LinearSeq }[] | null} committedLinearRecordCards
  *   Each record of the committed Linear request with the card of the drawing that still draws it.
  * @property {() => CanonicalRenderRequest | null} getCommittedCanonicalRenderRequest
+ * @property {(drawing: DrawingState) => (card: LinearSeq) => CanonicalRenderRequest['records'][number]['windows']} windowsOf
+ *   The windows a card of the drawing writes in its request (`linearDrawingWindowsOf`).
  */
 
 /**
@@ -41,7 +43,7 @@ const { computed } = window.Vue;
  */
 export const createShownDrawingReaders = ({
   state, shownDrawingOfMode, linearRecordsFor, linearRecordStatusFor, refreshLinearRecords, committedLinearRecordCards,
-  getCommittedCanonicalRenderRequest
+  getCommittedCanonicalRenderRequest, windowsOf
 }) => {
   const { inputSummaries, selectedResultIndex, results } = state;
   /**
@@ -80,17 +82,27 @@ export const createShownDrawingReaders = ({
     inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
   ));
   // The records the next Linear Generate draws, as their cards ask for them:
-  // each source record's length and the region its card states. Known once
-  // every drawn record is read and every region can be drawn, else none.
+  // each source record's length and the window its card writes in the request
+  // (a window across the origin starts after it ends, as Python's summary names
+  // it). Known once every drawn record is read and every region can be drawn,
+  // else none; a card with several windows cannot be wrapped, so it is unknown.
   /** @param {DrawingState | null | undefined} drawing @returns {LinearDraftRecord[]} */
   const linearDraftRecordsOf = (drawing) => {
     if (!drawing || drawing.mode !== 'linear') return [];
+    const cardWindows = windowsOf(drawing);
     const records = drawing.drawnLinearSeqs.value.map((seq, index) => {
       const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
       const region = linearCardRegion(seq, index + 1);
       if (!(sourceLength > 0) || (region !== null && 'error' in region)) return null;
-      return { sourceLength,
-        region: region === null ? null : { start: Math.min(region.start, region.end), end: Math.max(region.start, region.end) } };
+      /** @type {CanonicalRenderRequest['records'][number]['windows']} */
+      let windows;
+      try {
+        windows = cardWindows(seq);
+      } catch {
+        return null; // A window Generate refuses (REGION_INVALID): nothing is known.
+      }
+      const [only = null] = windows;
+      return windows.length < 2 ? { sourceLength, region: only && { start: only.start, end: only.end } } : null;
     });
     return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
   };

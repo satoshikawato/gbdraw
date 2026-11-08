@@ -243,6 +243,27 @@ def parse_region_specs(specs: Sequence[str] | None) -> list[RegionSpec]:
     return parsed
 
 
+def region_slice(record_length: int, start: int, end: int, record_id: str) -> tuple[int, int]:
+    """The 0-based slice a region of a record draws, its end clamped as the crop clamps it.
+
+    A region whose start is after its end runs across the origin (D-28): its
+    slice is on the record read twice round, ``start - 1`` to ``length + end``.
+    It reads only the record's length, so the crop and the Web export check of
+    a drawn record's bases share it (D-70); whether the record is circular is
+    the crop's to check.
+    """
+
+    if start <= end:
+        return check_start_end_coords(record_length, start, end, record_id)
+    if not 1 <= end < start <= record_length:
+        raise ValidationError(
+            f"Region {start}..{end} across the origin lies outside record {record_id} ({record_length} bp). "
+            f"Choose a start and an end within 1..{record_length}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
+    return start - 1, record_length + end
+
+
 def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool) -> tuple[SeqRecord, int, int]:
     """The record read twice round, and the 0-based bounds of ``spec`` on it, for a span across the origin (D-28).
 
@@ -264,17 +285,12 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
             "already cropped or reversed.",
             diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"},
         )
-    if not 1 <= spec.end < spec.start <= length:
-        raise ValidationError(
-            f"Region {spec.start}..{spec.end} across the origin lies outside record {record.id} ({length} bp). "
-            f"Choose a start and an end within 1..{length}.",
-            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
-        )
+    start_0, end_0 = region_slice(length, spec.start, spec.end, str(record.id))
     source_indexes = _feature_source_index_map(record.features)
     turns: list[SeqFeature] = []
     for feature in record.features:
         index = source_indexes[id(feature)]
-        shown = _two_turns(_unwrapped_location(feature.location, length), length, (spec.start - 1, length + spec.end))
+        shown = _two_turns(_unwrapped_location(feature.location, length), length, (start_0, end_0))
         if shown is None:
             continue
         copy = SeqFeature(
@@ -300,7 +316,7 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
             view.letter_annotations = {key: values + values for key, values in record.letter_annotations.items()}
         except (TypeError, ValueError):
             pass
-    return view, spec.start - 1, length + spec.end
+    return view, start_0, end_0
 
 
 def _unwrapped_location(location: Location, length: int) -> Location:
@@ -382,7 +398,7 @@ def _crop_record_to_region(
     if crosses_origin:
         source, start_0, end_0 = _origin_crossing_view(record, spec, circular=circular)
     else:
-        start_0, end_0 = check_start_end_coords(len(record.seq), spec.start, spec.end, str(record.id))
+        start_0, end_0 = region_slice(len(record.seq), spec.start, spec.end, str(record.id))
     coord_base, coord_step = _read_coord_map(record)
 
     if not crosses_origin and (start_0 != spec.start - 1 or end_0 != spec.end):

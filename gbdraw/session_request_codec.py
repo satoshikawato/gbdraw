@@ -100,10 +100,9 @@ from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
+    _drawn_source_span,
     _read_coord_map,
-    _record_source_start,
     _source_period,
-    _wrap_source_base,
 )
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -1074,15 +1073,12 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
     """
 
     annotations = record.annotations
-    base, step = _read_coord_map(record)
-    length = len(record)
-    source_length = annotations.get("gbdraw_source_length", length)
-    period = _source_period(record)
-    if period is not None and annotations.get("gbdraw_region_applied"):
+    _base, step = _read_coord_map(record)
+    source_length = annotations.get("gbdraw_source_length", len(record))
+    first, last = _drawn_source_span(record)
+    if _source_period(record) is not None and annotations.get("gbdraw_region_applied"):
         # A crop across the origin (D-28): its span starts after it ends.
-        first = _record_source_start(record)
-        return (first, _wrap_source_base(first + length - 1, period)), step < 0
-    first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
+        return (first, last), step < 0
     if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
         return None
     if annotations.get("gbdraw_region_applied"):
