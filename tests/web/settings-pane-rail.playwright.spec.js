@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, waitForSessionLoadAtRest } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // A click on a button that is not there fails at once instead of at the test's own limit.
@@ -46,8 +46,7 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
-    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+  await waitForSessionLoadAtRest(page, { timeout: 180000 });
 };
 
 // What the pane shows: its display, the docked entry, the widths, the

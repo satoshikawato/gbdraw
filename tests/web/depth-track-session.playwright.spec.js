@@ -18,6 +18,7 @@ const {
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
   answerLoadRepairs,
+  waitForSessionLoadAtRest,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -26,12 +27,6 @@ const hmmtDnaPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
 const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gbk');
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
-
-// A loading Session publishes its Result about 45 ms before it finishes; the
-// app refuses edits until then (OV-1023).
-const waitForLoadedSessionResult = (page) => page.waitForFunction(
-  () => window.__GBDRAW_APP__?.results?.length > 0 && !window.__GBDRAW_APP__.sessionImportPending
-);
 
 const storedZipEntryNames = (path) => {
   const bytes = readFileSync(path);
@@ -1407,7 +1402,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await waitForLoadedSessionResult(page);
+  await waitForSessionLoadAtRest(page);
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
 
@@ -1630,7 +1625,7 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
 
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await waitForLoadedSessionResult(page);
+  await waitForSessionLoadAtRest(page);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.errorLog.value = {
@@ -3466,8 +3461,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
-  await page.waitForTimeout(250);
+  await waitForSessionLoadAtRest(page);
 
   const summary = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -3537,8 +3531,7 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
-  await page.waitForTimeout(250);
+  await waitForSessionLoadAtRest(page);
 
   const featureIds = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -4006,7 +3999,7 @@ test('Save Session stores one Depth file used by two series once (D-220)', async
   await waitForAppShell(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
-  await waitForLoadedSessionResult(page);
+  await waitForSessionLoadAtRest(page);
   expect(await page.evaluate(async () => {
     const { readSessionResourceBytes } = await import('/gbdraw/web/js/services/session-resource-backing.js');
     const { state } = await import('/gbdraw/web/js/state.js');

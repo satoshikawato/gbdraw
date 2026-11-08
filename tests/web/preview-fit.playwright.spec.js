@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, waitForSessionLoadAtRest } = require('./helpers/app-lifecycle.cjs');
 
 // UI-11 (Web GUI re-audit 2026-10-05, Owner decision 2026-10-07): the preview
 // toolbar's Fit button sets the zoom so the whole diagram lies inside the
@@ -158,7 +158,8 @@ const openLinearSession = async (page) => {
   page.on('dialog', (dialog) => dialog.dismiss());
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(linearSession);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await waitForSessionLoadAtRest(page, { timeout: 60_000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await settle(page);
 };
@@ -193,7 +194,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     page.on('dialog', (dialog) => dialog.dismiss());
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(circularSession);
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+    await waitForSessionLoadAtRest(page, { timeout: 60_000 });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     await settle(page);
     const loaded = await fitGeometry(page);
     expect(loaded.zoom, JSON.stringify(loaded)).toBeLessThan(1);
