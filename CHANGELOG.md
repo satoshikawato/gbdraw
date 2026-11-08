@@ -27,6 +27,12 @@ write-up of a release.
   app, or `--depth_width` in the CLI) moved the row up, so the Legend changed
   order between two Generates. The Depth rows now follow the ring order in
   every case, in the CLI, the Python API, and the Web app (OV-2823).
+- Fixed: a Circular figure of a short span (a crop or a small record of a few
+  kilobases or less) drew its GC content, GC skew and Depth rings as straight
+  chords between the window samples, so a 670 bp crop showed a seven-sided
+  polygon instead of a ring. The rings now follow the circle between samples,
+  in the CLI, the Python API, and the Web app. Longer records draw as before
+  (OV-2863).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while
