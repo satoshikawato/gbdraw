@@ -376,6 +376,8 @@ test('Worker construction and the diagram-generation client have explicit owners
     occurrenceOwners(/\bnew\s+Worker\s*\(/g),
     new Map([
       ['services/diagram-generation.js', 1],
+      ...(productionSources.has('services/input-copies.js')
+        ? [['services/input-copies.js', 1]] : []),
       ['services/losat.js', 2],
       ...(productionSources.has('services/session-import-client.js')
         ? [['services/session-import-client.js', 1]] : []),
@@ -839,6 +841,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     'Diagram Worker': [
       { path: 'app/run-analysis.js', count: 1 },
       { path: 'services/diagram-generation.js', count: 1 },
+      ...(productionSources.has('services/input-copies.js')
+        ? [{ path: 'services/input-copies.js', count: 1 }] : []),
       { path: 'services/losat.js', count: 2 },
       ...(productionSources.has('services/session-import-client.js')
         ? [{ path: 'services/session-import-client.js', count: 1 }] : []),
