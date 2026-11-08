@@ -399,14 +399,19 @@ const undoneTrackHides = ref(/** @type {Map<string, ReadonlySet<UndoneTrackHide>
 
 // SVG Feature Click state
 const svgContainer = typedRef(/** @type {HTMLElement | null} */ (null));
-const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
+/** @import { FeaturePopup } from './services/feature-popup.js' */
+// The open feature popup (the SVG owner writes it; its fields are edited while it is open).
+const clickedFeature = typedRef(/** @type {FeaturePopup | null} */ (null));
 // A popup's position. A popup opened at a clicked point keeps that `anchor`
 // until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
 // keeps a popup placed above the point from growing over it.
 /** @import { PopupAnchor } from './utils/popup-bounds.js' */
 /** @typedef {{ x: number, y: number, maxHeight: number, anchor: PopupAnchor | null }} PopupPosition */
 const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
-const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
+// The open match-frame popup: `MatchFramePopup` of app/preview-item-popup.js, a match
+// (app/pairwise-match-popup.js) or a preview item. Its type is declared in app/, which
+// state.js does not import (R14), so readers declare the member with that type.
+const clickedPairwiseMatch = ref(null);
 const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
@@ -428,8 +433,6 @@ const featurePopupResize = reactive({
   startWidth: 0,
   startHeight: 0
 });
-const clickedLabel = ref(null); // { key, text, sourceText, featureId }
-const clickedLabelPos = reactive({ x: 0, y: 0 });
 
 // Feature style scope dialog state
 const featureStyleScopeDialog = reactive({
@@ -1365,8 +1368,6 @@ export const state = Object.freeze({
   featurePopupDrag,
   featurePopupSize,
   featurePopupResize,
-  clickedLabel,
-  clickedLabelPos,
   featureStyleScopeDialog,
   paletteColorsDialog,
   resetColorDialog,

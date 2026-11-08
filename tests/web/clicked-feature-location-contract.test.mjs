@@ -16,11 +16,15 @@ test('clickedFeatureSummary shows only the location the popup payload carries', 
 });
 
 test('every clickedFeature payload writer sets location with the shared formatter', () => {
+  // The SVG owner opens the popup with the payload services/feature-popup.js builds.
   const actions = read('app/feature-editor/svg-actions.js');
-  const builder = actions.slice(
+  const opener = actions.slice(
     actions.indexOf('const buildClickedFeaturePayload ='),
     actions.indexOf('clickedFeature.value = buildClickedFeaturePayload(')
   );
+  assert.match(opener, /return buildFeaturePopup\(feat, \{/);
+  const popup = read('services/feature-popup.js');
+  const builder = popup.slice(popup.indexOf('export const buildFeaturePopup ='));
   assert.match(builder, /const locationText = formatFeatureLocation\(feat\);/);
   assert.match(builder, /\blocation: locationText,/);
   // The popup payload is assigned from the builder only: no other production

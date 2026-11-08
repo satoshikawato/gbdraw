@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { FeaturePopup } from '../services/feature-popup.js' */
 /** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
@@ -549,8 +550,6 @@ export const createAppSetup = () => {
     featurePopupDrag,
     featurePopupSize,
     featurePopupResize,
-    clickedLabel,
-    clickedLabelPos,
     featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     legendRenameDialog,
@@ -1901,8 +1900,9 @@ export const createAppSetup = () => {
     action: featureRecordRotationAction,
     makeReactive: reactive,
     onRebind: (feature, identity) => {
-      const popupFeature = clickedFeature.value?.feat;
-      if (!popupFeature) return;
+      const popup = clickedFeature.value;
+      if (!popup) return;
+      const popupFeature = popup.feat;
       const popupRecordKey = String(
         popupFeature.record_key ?? popupFeature.recordKey ?? ''
       );
@@ -1911,20 +1911,20 @@ export const createAppSetup = () => {
       );
       if (popupRecordKey !== identity.recordKey
         || popupFeatureId !== identity.biologicalFeatureId) return;
-      clickedFeature.value.feat = feature;
+      popup.feat = feature;
       const renderedId = String(
         feature?.rendered_feature_svg_id
         ?? feature?.renderedFeatureSvgId
         ?? feature?.svg_id
         ?? ''
       );
-      if (renderedId) clickedFeature.value.svg_id = renderedId;
+      if (renderedId) popup.svg_id = renderedId;
     }
   });
   const recordActionsExpanded = ref(false);
-  watch(clickedFeature, (/** @type {{ feat?: Record<string, unknown> } | null} */ popup) => {
+  watch(clickedFeature, (/** @type {FeaturePopup | null} */ popup) => {
     recordActionsExpanded.value = false;
-    if (popup?.feat) {
+    if (popup) {
       featureRecordRotation.open({ feature: popup.feat });
     } else {
       featureRecordRotation.close();
@@ -4090,8 +4090,6 @@ export const createAppSetup = () => {
     clickedFeaturePos,
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
-    clickedLabel,
-    clickedLabelPos,
     featurePopupRef,
     featurePopupStyle,
     startFeaturePopupDrag: featurePopupDragging.start,

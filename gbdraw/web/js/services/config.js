@@ -5292,7 +5292,6 @@ const captureSessionImportTransientState = () => ({
   labelReflowLastError: state.labelReflowLastError.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
-  clickedLabel: state.clickedLabel.value,
   settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
   matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
@@ -5348,7 +5347,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.labelReflowLastError.value = snapshot.labelReflowLastError;
   state.clickedFeature.value = snapshot.clickedFeature;
   state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
-  state.clickedLabel.value = snapshot.clickedLabel;
   // The popup of a settings section is open again where it was, as the popups above are.
   if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
   else returnSettingsSection(state);

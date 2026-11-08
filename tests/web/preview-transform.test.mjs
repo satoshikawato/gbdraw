@@ -20,15 +20,33 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { previewTransform, PreviewZoomPercent, resetLayoutState } = await import('../../gbdraw/web/js/components.js');
 const { createPanZoom } = await import('../../gbdraw/web/js/app/ui.js');
 
+// The expressions of a template that the app render evaluates: every attribute binding, every
+// directive value (Vue evaluates a custom directive's value in the render, `withDirectives`), and
+// every interpolation. An event handler (`@x`, `v-on:x`) and a slot's props (`v-slot`, `#x`) are
+// not render reads, and neither is a directive value that is a top-level arrow function: the
+// render creates the function, and only the directive calls it. String literals are text.
+/** @param {string} html */
+const templateRenderReads = (html) => [...html.matchAll(/(?:\s:[\w.-]+|\sv-(?!on\b|slot\b)[\w-]+(?::[\w-]+)?(?:\.[\w-]+)*)="([^"]*)"|\{\{([^}]*)\}\}/g)]
+  .map((match) => (match[1] ?? match[2]))
+  .filter((expression) => !/^\s*(?:\([^()]*\)|[\w$]+)\s*=>/.test(expression))
+  .map((expression) => expression.replace(/'[^']*'|`[^`$]*`/g, "''"));
+
+test('the template scanner reads a custom directive value unless it is a top-level arrow function', () => {
+  assert.deepEqual(templateRenderReads('<div v-foo="zoom"></div>'), ['zoom']);
+  assert.deepEqual(templateRenderReads('<div v-foo:arg.mod="canvasPan.x"></div>'), ['canvasPan.x']);
+  assert.deepEqual(templateRenderReads('<div v-foo.mod="zoom"></div><input v-model.number="zoom">'), ['zoom', 'zoom']);
+  assert.deepEqual(templateRenderReads('<div v-foo="() => zoom" v-bar="(el) => isPanning"></div>'), []);
+  assert.deepEqual(templateRenderReads('<div @click="zoom = 1" v-on:wheel="zoom" v-slot="{ zoom }" #item="zoom"></div>'), []);
+  assert.deepEqual(templateRenderReads('<div v-if="zoom > 1" :title="\'zoom\'">{{ isPanning }}</div>'), ['zoom > 1', "''", ' isPanning ']);
+});
+
 test('the app template reads no preview zoom, pan, panning flag, or Reset layout availability (OV-912, OV-2723)', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const surface = html.slice(html.lastIndexOf('<div', html.indexOf('ref="svgContainer"')), html.indexOf('>', html.indexOf('ref="svgContainer"')) + 1);
   assert.match(surface, /\sv-preview-transform[\s>]/);
   assert.doesNotMatch(surface, /:style=/);
   // Outside event handlers, no binding reads them.
-  const bindings = [...html.matchAll(/(?:\s:[\w.-]+|\sv-(?:if|show|for|bind|html|text|model)(?::[\w.-]+)?)="([^"]*)"|\{\{([^}]*)\}\}/g)]
-    // String literals in an expression are text, not reads.
-    .map((match) => (match[1] ?? match[2]).replace(/'[^']*'|`[^`$]*`/g, "''"));
+  const bindings = templateRenderReads(html);
   // Reset layout's availability changes at the first pan frame or wheel tick: the button reads it in a function
   // that `v-reset-layout-state` calls, which the app template creates but does not call (OV-2723).
   for (const name of ['zoom', 'canvasPan', 'isPanning', 'layoutResetAvailable']) {
@@ -89,6 +107,30 @@ test('the surface follows the zoom, the pan, panning, and a held transition unti
   assert.equal(PreviewZoomPercent.setup().zoom, state.zoom);
 });
 
+// The names through which a module writes the Preview surface's style (`svgContainer`, or a variable
+// assigned from it, as `const surface = svgContainer.value` or `svgContainer?.value`), joined by `|`; '' when it writes none.
+/** @param {string} source */
+const surfaceStyleWriter = (source) => {
+  const styleWrite = String.raw`(?:\??\.value)?\??\.style(?:\.(?:transform|transformOrigin|transition|willChange|visibility|cssText)\s*=(?!=)|\.setProperty\(|\s*=(?!=))`;
+  // The value is the surface itself: optionally cast, optionally `?? null` or `|| null`, then the statement ends.
+  const aliases = [...source.matchAll(/\b(\w+)\s*=\s*(?:\/\*\*.*?\*\/\s*\(\s*)?(?:state\.)?svgContainer\??\.value(?:\s*(?:\?\?|\|\|)\s*null)?\s*\)?\s*(?:[;,]|$)/gm)]
+    .map((match) => match[1]);
+  const names = ['svgContainer', ...aliases].join('|');
+  return new RegExp(String.raw`\b(?:${names})${styleWrite}`).test(source) ? names : '';
+};
+
+test('the surface-style scanner counts a variable as the surface only when it holds the surface itself', () => {
+  assert.equal(surfaceStyleWriter("const surface = svgContainer.value; surface.style.transform = 'x';"), 'svgContainer|surface');
+  assert.equal(surfaceStyleWriter("const surface = /** @type {HTMLElement | null} */ (state.svgContainer.value ?? null);\nsurface.style.visibility = '';"), 'svgContainer|surface');
+  assert.equal(surfaceStyleWriter("const svg = svgContainer.value.querySelector('svg'); svg.style.visibility = 'hidden';"), '');
+  assert.equal(surfaceStyleWriter("const root = svgContainer.value?.parentElement || null; root.style.cursor = 'grab';"), '');
+  assert.equal(surfaceStyleWriter("const rect = state.svgContainer.value.getBoundingClientRect(); rect.style = 1;"), '');
+  assert.equal(surfaceStyleWriter("svgContainer.value.style.transform = 'x';"), 'svgContainer');
+  assert.equal(surfaceStyleWriter("state.svgContainer?.value.style.setProperty('transform', 'x');"), 'svgContainer');
+  assert.equal(surfaceStyleWriter("const surface = state.svgContainer?.value; surface.style.transform = 'x';"), 'svgContainer|surface');
+  assert.equal(surfaceStyleWriter("const root = svgContainer?.value?.querySelector('svg'); root.style.visibility = '';"), '');
+});
+
 // The surface's style has one writer: the projection of the view in app/ui.js, which
 // `v-preview-transform` binds. No other module writes the surface's style or knows its format.
 // It reads every module for a style write through the surface's ref (`svgContainer`) or a
@@ -97,13 +139,11 @@ test('only the projection of the view writes the Preview surface style', () => {
   const root = new URL('../../gbdraw/web/js/', import.meta.url);
   const modules = readdirSync(root, { recursive: true })
     .filter((path) => path.endsWith('.js') && !path.startsWith('vendor'));
-  const styleWrite = String.raw`(?:\.value)?\??\.style(?:\.(?:transform|transformOrigin|transition|willChange|visibility|cssText)\s*=(?!=)|\.setProperty\(|\s*=(?!=))`;
   const writers = [];
   for (const path of modules) {
     const source = readFileSync(new URL(path, root), 'utf8');
-    const aliases = [...source.matchAll(/\b(\w+)\s*=\s*(?:\/\*\*.*?\*\/\s*\()?(?:state\.)?svgContainer\.value\b/g)].map((match) => match[1]);
-    const names = ['svgContainer', ...aliases].join('|');
-    if (new RegExp(String.raw`\b(?:${names})${styleWrite}`).test(source)) writers.push(`${path} (${names})`);
+    const names = surfaceStyleWriter(source);
+    if (names) writers.push(`${path} (${names})`);
     if (/translate\(\$\{[^}]+\}px, \$\{[^}]+\}px\) scale\(/.test(source)) writers.push(`${path} (transform format)`);
   }
   assert.deepEqual(writers, ['app/ui.js (transform format)']);

@@ -255,20 +255,8 @@ export const createMissingBlastTsvChoice = ({
 };
 
 /**
- * The open feature popup's payload: what its header and its Copy buttons read.
- * @typedef {object} CopiedFeature
- * @property {string} [gene]
- * @property {string} [label]
- * @property {string} [product]
- * @property {string} [recordId]
- * @property {string} [location]
- * @property {{ label: string, value: string }[]} detailRows
- * @property {{ key: string, values: string[] }[]} [qualifierRows]
- */
-
-/**
  * The feature popup's header and its Copy buttons.
- * @param {{ clickedFeature: { value: CopiedFeature | null } }} options The open feature popup's payload.
+ * @param {Pick<WebState, 'clickedFeature'>} options The open feature popup's payload.
  */
 export const createClickedFeatureCopy = ({ clickedFeature }) => {
   // The popup header names the gene (else the feature label), then
@@ -292,7 +280,7 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
     const cf = clickedFeature.value;
     if (!cf) return;
     const { title, product } = clickedFeatureHeading.value;
-    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((/** @type {{ label: string, value: string }} */ row) => `${row.label}: ${row.value}`)]
+    copyTextToClipboard([title, product, clickedFeatureSummary.value, ...cf.detailRows.map((row) => `${row.label}: ${row.value}`)]
       .filter(Boolean).join('\n'));
   };
   const copyClickedFeatureQualifiers = () => {

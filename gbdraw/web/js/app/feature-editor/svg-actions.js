@@ -3,7 +3,9 @@
 /** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
-/** @import { PopupRow } from '../pairwise-match-popup.js' */
+/** @import { FeaturePopup } from '../../services/feature-popup.js' */
+/** @import { MatchFramePopup, PreviewItemPopup } from '../preview-item-popup.js' */
+/** @import { MatchPopupPayload, PopupRow } from '../pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
@@ -12,21 +14,20 @@ import {
   formatFeatureLength,
   formatFeatureLocation,
   getFeatureCaption,
-  normalizeStringArray,
-  resolveFeatureProteinId
+  getQualifierFirstValue
 } from '../../services/feature-utils.js';
+import { buildFeaturePopup } from '../../services/feature-popup.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
   buildMatchPopupPayload
 } from '../pairwise-match-popup.js';
-import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
-import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
+import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../preview-item-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
@@ -248,16 +249,11 @@ export {
  * @property {((options?: { restore?: boolean }) => void) | null} clearAlignmentCandidatePreview
  * @property {((eventLike: any, kind?: string) => void) | null} beginPreviewTransformInteraction
  * @property {((options?: { reconcile?: boolean }) => void) | null} endPreviewTransformInteraction
- * @property {((match: SelectedPairwiseMatch | null) => void) | null} markSelectedMatch
+ * @property {((match: MatchPopupPayload | null) => void) | null} markSelectedMatch
  * @property {(() => void) | null} cleanup
  */
 
 /** @typedef {{ svgId: string, identity: FeatureIdentity }} RenderedIdentityEntry */
-
-/**
- * The open match popup's payload, as far as it names the bands it shows.
- * @typedef {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown }} SelectedPairwiseMatch
- */
 
 /** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
@@ -368,33 +364,6 @@ export const createFeatureSvgActions = ({
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
   };
 
-  /** @param {unknown} qualifiers */
-  const normalizeQualifierRows = (qualifiers) => {
-    if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return [];
-    return Object.entries(qualifiers)
-      .map(([key, value]) => {
-        const values = normalizeStringArray(value);
-        return { key: String(key || ''), values };
-      })
-      .filter((row) => row.key && row.values.length > 0)
-      .sort((left, right) => left.key.localeCompare(right.key));
-  };
-
-  /** @param {FeatureLike | null | undefined} feat @param {unknown} key */
-  const getQualifierFirstValue = (feat, key) => {
-    const normalizedKey = String(key || '').trim().toLowerCase();
-    if (!normalizedKey) return '';
-    const directValue = feat?.[normalizedKey];
-    // A non-null object (checked): the qualifier table is read by a fixed key.
-    const qualifierValue = feat?.qualifiers && typeof feat.qualifiers === 'object'
-      ? /** @type {Record<string, unknown>} */ (feat.qualifiers)[normalizedKey]
-      : null;
-    const values = normalizeStringArray(directValue || qualifierValue)
-      .map((value) => String(value || '').trim())
-      .filter(Boolean);
-    return values[0] || '';
-  };
-
   /** @param {FeatureLike | null | undefined} feat */
   const getHoverSummaryPrimaryLabel = (feat) => (
     getQualifierFirstValue(feat, 'gene') ||
@@ -443,18 +412,6 @@ export const createFeatureSvgActions = ({
     if (legendName && legendName !== primaryLabel) rows.push([t('Legend'), legendName]);
     return rows;
   };
-
-  // Details lists what the popup header and the Edit tab do not show:
-  // the header names the feature, its product, record, and location, and the
-  // Similarity group section its group.
-  /** @param {FeatureLike} feat */
-  const buildDetailRows = (feat) => [
-    { key: 'type', label: t('Feature type'), value: feat.type },
-    { key: 'length', label: t('Length'), value: formatFeatureLength(feat) },
-    { key: 'protein_id', label: t('Protein ID'), value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
-  ]
-    .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
-    .filter((row) => row.value !== '');
 
   /** @returns {Map<string, Record<string, any>>} */
   const buildFeatureLookup = () => {
@@ -567,79 +524,20 @@ export const createFeatureSvgActions = ({
    * @param {Record<string, any>} feat
    * @param {Element | null} [featureElement]
    * @param {string} [renderedSvgId]
+   * @returns {FeaturePopup}
    */
   const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
-    const defaultLabel = getFeatureCaption(feat);
     const existingOverride = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat));
-    const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
-    const locationText = formatFeatureLocation(feat);
-    const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
-    const qualifierRows = normalizeQualifierRows(feat.qualifiers);
-    const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
-    const nucleotideSequence = String(feat.nucleotide_sequence || '');
-    const aminoAcidSequence = String(feat.amino_acid_sequence || '');
-    const { nucleotideFasta, aminoAcidFasta } = buildFeatureSequenceFastas(feat, {
-      nucleotideSequence,
-      aminoAcidSequence
-    });
-
-    const currentColor = resolveColorToHex(
-      featureElement?.getAttribute('fill') || getFeatureColor(feat)
-    );
-    const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
-    const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width') ?? '') || 0.5;
-
-    const actualSvgId = String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim();
-    const visibilityMode = normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility'));
-
-    return {
-      id: feat.id,
-      svg_id: actualSvgId,
-      rendered_svg_id: actualSvgId,
-      stable_svg_id: feat.stable_svg_id || feat.stable_feature_id || feat.svg_id || '',
-      label: defaultLabel,
-      location: locationText,
-      locationParts,
-      color: currentColor,
-      feat,
-      activeTab: 'edit',
-      recordId: String(feat.record_id || ''),
-      gene: getQualifierFirstValue(feat, 'gene'),
-      product: getQualifierFirstValue(feat, 'product'),
-      recordIdx: Number.isInteger(Number(feat.record_idx)) ? Number(feat.record_idx) : null,
-      featureType: String(feat.type || ''),
-      start: Number.isFinite(Number(feat.start)) ? Number(feat.start) : null,
-      end: Number.isFinite(Number(feat.end)) ? Number(feat.end) : null,
-      strand: String(feat.strand || ''),
-      qualifiers: feat.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {},
-      qualifierRows,
-      sequenceWarnings,
-      nucleotideSequence,
-      aminoAcidSequence,
-      nucleotideFasta,
-      aminoAcidFasta,
-      detailRows: buildDetailRows(feat),
-      legendName: effectiveCaption,
-      appliedLegendName: effectiveCaption,
-      strokeColor: currentStrokeColor,
-      strokeWidth: currentStrokeWidth,
-      labelKey: '',
-      labelText: '',
-      labelSourceText: '',
-      labelVisibility: 'default',
-      featureVisibility: visibilityMode,
+    return buildFeaturePopup(feat, {
+      svgId: String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim(),
+      legendName: String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || getFeatureCaption(feat) || '').trim(),
+      color: resolveColorToHex(featureElement?.getAttribute('fill') || getFeatureColor(feat)),
+      strokeColor: featureElement?.getAttribute('stroke') || '#000000',
+      strokeWidth: parseFloat(featureElement?.getAttribute('stroke-width') ?? '') || 0.5,
+      featureVisibility: normalizeVisibilityMode(featureOverrideValue(drawing.featureOverrides, feat, 'featureVisibility')),
       // Per-feature edits name the feature by source identity (design Q4).
-      identityEditable: Boolean(featureIdentityKeyOf(feat)),
-      proteinId: feat.proteinId || feat.protein_id || '',
-      sourceProteinId: feat.sourceProteinId || feat.source_protein_id || '',
-      orthogroupId: feat.orthogroupId || '',
-      orthogroupMemberCount: feat.orthogroupMemberCount || 0,
-      orthogroupRecordCoverage: feat.orthogroupRecordCoverage || 0,
-      orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
-      orthogroupMember: feat.orthogroupMember || null,
-      hasEditableLabel: false,
-      labelUnavailableReason: t('No editable feature label for this feature in current diagram.')
-    };
+      identityEditable: Boolean(featureIdentityKeyOf(feat))
+    });
   };
 
   /**
@@ -957,6 +855,7 @@ export const createFeatureSvgActions = ({
     closeOtherPopups('match');
     // A Legend row's feature count reads the rule matches: the popup opens at
     // once and counts when they are prepared.
+    /** @type {PreviewItemPopup} */
     const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
     clickedPairwiseMatch.value = opened;
     // The preview-item popup is 400 px wide (`.preview-item-popup`).
@@ -965,8 +864,8 @@ export const createFeatureSvgActions = ({
       const openedKey = item.key;
       reportRuleRunFailure(state, 'feature-extraction', () => runWhenPrepared(
         state, () => [prepareDrawnFeatureMatches({ strict: true, view: true })], () => {
-          const current = clickedPairwiseMatch.value;
-          if (current?.previewItem?.kind === 'legend-entry' && current.previewItem.key === openedKey) current.matchesReady = true;
+          const current = previewItemPopupOf(clickedPairwiseMatch.value);
+          if (current?.previewItem.kind === 'legend-entry' && current.previewItem.key === openedKey) current.matchesReady = true;
         }
       ));
     }
@@ -1646,10 +1545,10 @@ export const createFeatureSvgActions = ({
 
       // The bands of the open match popup: a similarity group's ribbons, or one
       // match's fragments. Only the bands that change are written (OV-937).
-      /** @param {SelectedPairwiseMatch | null} match */
+      /** @param {MatchPopupPayload | null} match */
       handlerState.markSelectedMatch = (match) => {
         const matchId = String(match?.id || '').trim();
-        const orthogroupId = String(match?.matchKind === 'orthogroup' ? match?.orthogroupId : '').trim();
+        const orthogroupId = String(match?.matchKind === 'orthogroup' ? match.orthogroupId : '').trim();
         /** @type {Element[]} */
         let selected = [];
         if (orthogroupId || matchId) {
@@ -2116,9 +2015,9 @@ export const createFeatureSvgActions = ({
   };
 
   // Marks the bands of the open match popup on the mounted Result.
-  /** @param {SelectedPairwiseMatch | null} match */
-  const markSelectedPairwiseMatch = (match) => {
-    delegatedFeatureHandlers?.markSelectedMatch?.(match);
+  /** @param {MatchFramePopup | null} opened */
+  const markSelectedPairwiseMatch = (opened) => {
+    delegatedFeatureHandlers?.markSelectedMatch?.(matchPopupOf(opened));
   };
 
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */

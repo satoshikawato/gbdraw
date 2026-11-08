@@ -35,6 +35,52 @@ export const normalizeStringArray = (value) => {
   return [String(value)];
 };
 
+/** @param {unknown} value The first text of a value or of a list of values, trimmed ('' when none). */
+const firstValueText = (value) => {
+  /** @param {unknown} entry */
+  const text = (entry) => String(entry === null || entry === undefined ? '' : entry).trim();
+  if (!Array.isArray(value)) return text(value);
+  for (const entry of value) {
+    if (text(entry)) return text(entry);
+  }
+  return '';
+};
+
+/**
+ * The raw value of a feature's qualifier `normalizedKey` (a lower-case name): the qualifier of that name when it holds
+ * a value, else of a name that differs only in case, as Python's selectors match a qualifier
+ * (`gbdraw/features/selector_values.py`). The Web's feature rows carry their qualifiers under lower-case names
+ * (`gbdraw/web_support/feature_metadata.py`), so for them the second lookup finds nothing.
+ * @param {FeatureLike} feature
+ * @param {string} normalizedKey
+ * @returns {unknown} undefined when no qualifier holds a value
+ */
+const qualifierValueOf = (feature, normalizedKey) => {
+  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+    ? /** @type {{ [name: string]: unknown }} */ (feature.qualifiers) // an object of qualifier values, checked just above
+    : {};
+  /** @param {string} name */
+  const held = (name) => Object.prototype.hasOwnProperty.call(qualifiers, name)
+    && qualifiers[name] !== null && qualifiers[name] !== undefined;
+  if (held(normalizedKey)) return qualifiers[normalizedKey];
+  const matchingKey = Object.keys(qualifiers).find((candidate) => candidate.toLowerCase() === normalizedKey && held(candidate));
+  return matchingKey === undefined ? undefined : qualifiers[matchingKey];
+};
+
+/**
+ * The first value of a feature's field `key`, else of its qualifier `key` (`qualifierValueOf`).
+ * @param {FeatureLike | null | undefined} feature
+ * @param {unknown} key
+ * @returns {string}
+ */
+export const getQualifierFirstValue = (feature, key) => {
+  const normalizedKey = String(key ?? '').trim().toLowerCase();
+  if (!feature || !normalizedKey) return '';
+  const direct = Object.prototype.hasOwnProperty.call(feature, normalizedKey) ? feature[normalizedKey] : undefined;
+  if (direct !== null && direct !== undefined && direct !== '') return firstValueText(direct);
+  return firstValueText(qualifierValueOf(feature, normalizedKey));
+};
+
 /** @param {FeatureLike | null | undefined} feature */
 export const getFeatureCaption = (feature) => {
   const caption = firstNonInternalProteinDisplayText(
@@ -293,17 +339,7 @@ const directFeatureDisplayValue = (feature, ...keys) => {
 const getFeatureQualifierDisplayValue = (feature, key) => {
   const normalizedKey = String(key || '').trim().toLowerCase();
   if (!feature || !normalizedKey) return '';
-  /** @type {{ [name: string]: unknown }} */
-  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? /** @type {{ [name: string]: unknown }} */ (feature.qualifiers) // an object of qualifier values, checked just above
-    : {};
-  if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
-    return firstNonInternalProteinDisplayText(qualifiers[normalizedKey]);
-  }
-  const matchingKey = Object.keys(qualifiers).find((candidate) => candidate.toLowerCase() === normalizedKey);
-  return matchingKey
-    ? firstNonInternalProteinDisplayText(qualifiers[matchingKey])
-    : '';
+  return firstNonInternalProteinDisplayText(qualifierValueOf(feature, normalizedKey));
 };
 
 /**

@@ -2,6 +2,7 @@
 import { ORTHOGROUP_MEMBER_CONFIDENCE, ORTHOGROUP_MEMBER_ROLE } from '../contracts/schema.generated.js';
 import {
   formatFeatureLocation,
+  getQualifierFirstValue,
   isInternalProteinDisplayId,
   locationRangeText,
   resolveDisplayProteinId
@@ -324,40 +325,6 @@ const intervalText = (start, end) => {
   return startText || endText;
 };
 
-/**
- * @param {PopupFeature | null | undefined} feature
- * @param {string} key
- */
-const qualifierFirstValue = (feature, key) => {
-  const normalizedKey = normalizeText(key).toLowerCase();
-  if (!feature || !normalizedKey) return '';
-  const direct = feature[normalizedKey];
-  if (direct !== null && direct !== undefined && direct !== '') return firstArrayValue(direct);
-  // A plain object, by the test.
-  const qualifiers = /** @type {Record<string, unknown>} */ (
-    feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-      ? feature.qualifiers
-      : {}
-  );
-  if (qualifiers[normalizedKey] !== null && qualifiers[normalizedKey] !== undefined) {
-    return firstArrayValue(qualifiers[normalizedKey]);
-  }
-  const matchingKey = Object.keys(qualifiers).find((candidate) => candidate.toLowerCase() === normalizedKey);
-  return matchingKey ? firstArrayValue(qualifiers[matchingKey]) : '';
-};
-
-/** @param {unknown} value */
-const firstArrayValue = (value) => {
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const text = normalizeText(entry);
-      if (text) return text;
-    }
-    return '';
-  }
-  return normalizeText(value);
-};
-
 /** @param {PopupGroup | null | undefined} group */
 const groupScopeStatus = (group) => {
   const presentationValues = [
@@ -630,11 +597,11 @@ const featureOrthogroupIdStatus = (feature) => {
 /** @param {PopupFeature | null | undefined} feature */
 const featureProduct = (feature) => firstText(
   feature?.product,
-  qualifierFirstValue(feature, 'product'),
+  getQualifierFirstValue(feature, 'product'),
   feature?.orthogroupMember?.product,
   feature?.orthogroup_member?.product,
   feature?.note,
-  qualifierFirstValue(feature, 'note')
+  getQualifierFirstValue(feature, 'note')
 );
 
 /**
@@ -668,10 +635,10 @@ const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
       member?.source_protein_id,
       feature?.sourceProteinId,
       feature?.source_protein_id,
-      qualifierFirstValue(feature, 'protein_id')
+      getQualifierFirstValue(feature, 'protein_id')
     ),
     product: firstText(member?.product, featureProduct(feature)),
-    note: firstText(member?.note, feature?.note, qualifierFirstValue(feature, 'note')),
+    note: firstText(member?.note, feature?.note, getQualifierFirstValue(feature, 'note')),
     featureSvgId: firstText(
       memberFeatureSvgId(member),
       identity.stableId.value
@@ -1495,10 +1462,10 @@ const featureRowDisplayName = (feature, fallbackDisplayName) => firstText(
   feature?.display_label,
   feature?.label,
   feature?.gene,
-  qualifierFirstValue(feature, 'gene'),
+  getQualifierFirstValue(feature, 'gene'),
   feature?.locus_tag,
   feature?.locusTag,
-  qualifierFirstValue(feature, 'locus_tag'),
+  getQualifierFirstValue(feature, 'locus_tag'),
   featureProduct(feature)
 );
 
@@ -1509,10 +1476,10 @@ const featureRowDisplayName = (feature, fallbackDisplayName) => firstText(
 const featureRowLocusId = (feature, fallbackLocusId) => firstText(
   feature?.locus_tag,
   feature?.locusTag,
-  qualifierFirstValue(feature, 'locus_tag'),
+  getQualifierFirstValue(feature, 'locus_tag'),
   feature?.gene_id,
   feature?.geneId,
-  qualifierFirstValue(feature, 'gene_id'),
+  getQualifierFirstValue(feature, 'gene_id'),
   fallbackLocusId
 );
 
@@ -2026,9 +1993,9 @@ const buildFeatureRows = ({
   addRow(rows, msg('Record'), firstText(feature?.record_id, recordId));
   addRow(rows, msg('Location'), firstText(formatFeatureLocation(feature), interval));
   addRow(rows, displayProteinIds.includes(';') ? msg('Protein IDs') : msg('Protein ID'), displayProteinIds);
-  addRow(rows, msg('Gene'), firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
-  addRow(rows, msg('Locus tag'), firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
-  addRow(rows, msg('Product'), firstText(feature?.product, qualifierFirstValue(feature, 'product')));
+  addRow(rows, msg('Gene'), firstText(feature?.gene, getQualifierFirstValue(feature, 'gene')));
+  addRow(rows, msg('Locus tag'), firstText(feature?.locus_tag, feature?.locusTag, getQualifierFirstValue(feature, 'locus_tag')));
+  addRow(rows, msg('Product'), firstText(feature?.product, getQualifierFirstValue(feature, 'product')));
   addRow(rows, msg('Locus ID'), locusId);
   addRow(rows, msg('Display name'), displayName);
   return section(title, rows, { featureRows });

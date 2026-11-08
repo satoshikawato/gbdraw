@@ -55,6 +55,7 @@ await copyModule('utils/i18n.js', 'utils/i18n.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
+await copyModule('services/feature-popup.js', 'services/feature-popup.js');
 await copyModule('services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
@@ -87,7 +88,8 @@ await writeFile(
     'export const getFeatureCaption = (feature) => feature?.label || feature?.id || "Feature";',
     'export const normalizeStringArray = (value) => Array.isArray(value) ? value : (value ? [String(value)] : []);',
     'export const resolveDisplayProteinId = () => "";',
-    'export const resolveFeatureProteinId = () => "";'
+    'export const resolveFeatureProteinId = () => "";',
+    "export const getQualifierFirstValue = (feature, key) => { const first = (v) => (Array.isArray(v) ? v : [v]).map((x) => String(x ?? '').trim()).find(Boolean) || ''; const d = feature?.[key]; if (d !== null && d !== undefined && d !== '') return first(d); return first(feature?.qualifiers?.[key]); };"
   ].join('\n'),
   'utf8'
 );
@@ -129,7 +131,8 @@ await writeFile(
 // No Legend row or record definition in these fixtures opens a popup.
 await writeFile(
   join(tempDir, 'app', 'preview-item-popup.js'),
-  'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n',
+  'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n'
+    + "export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);\nexport const matchPopupOf = (opened) => (opened && !('previewItem' in opened) ? opened : null);\n",
   'utf8'
 );
 // No drawn element in these fixtures opens a settings section.

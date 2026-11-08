@@ -33,6 +33,8 @@ const TOOLBAR_EDGE_MARGIN_PX = 8;
 
 /**
  * @import { RegionAxisRecord } from '../services/region-axis.js'
+ * @import { WebState } from '../state.js'
+ * @import { MatchFramePopup } from './preview-item-popup.js'
  */
 
 /**
@@ -269,9 +271,8 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
  * @property {{ value: Map<string, SelectionFeature> }} featuresBySvgId
  * @property {{ value: SelectionFeature[] }} selectedFeatures
  * @property {{ value: HTMLElement | null }} svgContainer
- * @property {{ value: unknown }} clickedFeature The open popup, closed by setting null.
- * @property {{ value: unknown }} clickedPairwiseMatch The open popup, closed by setting null.
- * @property {{ value: unknown }} clickedLabel The open popup, closed by setting null.
+ * @property {WebState['clickedFeature']} clickedFeature The open popup, closed by setting null.
+ * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open popup, closed by setting null.
  * @property {{ value: string }} mode
  */
 
@@ -302,7 +303,6 @@ export const createFeatureSelection = ({
     svgContainer,
     clickedFeature,
     clickedPairwiseMatch,
-    clickedLabel,
     mode
   } = state;
 
@@ -337,10 +337,9 @@ export const createFeatureSelection = ({
   };
 
   const closePreviewPopups = () => {
-    if (clickedLabel?.value) clickedLabel.value = null;
     if (previewPopupsHeld()) return;
-    if (clickedFeature?.value) clickedFeature.value = null;
-    if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+    if (clickedFeature.value) clickedFeature.value = null;
+    if (clickedPairwiseMatch.value) clickedPairwiseMatch.value = null;
   };
 
   const syncFeatureSelectionClasses = (svg = getCurrentSvg()) => {
@@ -752,7 +751,7 @@ export const createFeatureSelection = ({
     }
     // The key event of an element; `closest?.` covers a target without it.
     const target = /** @type {Element | null} */ (event.target);
-    if (target?.closest?.('.feature-popup, .pairwise-match-popup, .label-popup, input, textarea, select, [contenteditable="true"]')) {
+    if (target?.closest?.('.feature-popup, .pairwise-match-popup, input, textarea, select, [contenteditable="true"]')) {
       return;
     }
     if ((selectedFeatureIds.value || new Set()).size > 0) {

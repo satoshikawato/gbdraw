@@ -2,6 +2,7 @@
 /** @import { PersistedPreviewViewport, StoredFigurePreview } from '../services/config.js' */
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
 /** @import { WebState } from '../state.js' */
+/** @import { MatchFramePopup } from './preview-item-popup.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
 import { watch } from '../utils/reactivity.js';
@@ -574,7 +575,8 @@ export const createSidebarResize = (state) => {
 
 /**
  * @typedef {Object} GlobalUiEventsOptions
- * @property {Record<string, any>} state Shape owned by state.js.
+ * @property {Pick<WebState, 'clickedFeature' | 'showCanvasControls'>
+ *   & { clickedPairwiseMatch: { value: MatchFramePopup | null } }} state The popups that Escape and a click outside close.
  * @property {(callback: () => void) => void} onMounted
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
@@ -594,7 +596,6 @@ export const setupGlobalUiEvents = ({
   const {
     clickedFeature,
     clickedPairwiseMatch,
-    clickedLabel,
     showCanvasControls
   } = state;
 
@@ -616,7 +617,7 @@ export const setupGlobalUiEvents = ({
     if (press === pressPoint) return;
     pressPoint = press;
     pressStartedInPopup = e.target instanceof Element
-      && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
+      && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup'));
   };
 
   /** @param {MouseEvent & { target: Element }} e A click; the popups and dialogs are elements. */
@@ -628,15 +629,13 @@ export const setupGlobalUiEvents = ({
       !e.target.closest('[data-modal-overlay], [aria-modal="true"]')
       && !e.target.closest('.feature-popup')
       && !e.target.closest('.pairwise-match-popup')
-      && !e.target.closest('.label-popup')
       && !e.target.closest('[data-similarity-alignment-overlay]')
       // The notice banner's Dismiss is not a click on the diagram.
       && !e.target.closest('[data-app-notice]')
     ) {
-      if (clickedLabel.value) clickedLabel.value = null;
       if (previewPopupsHeld()) return;
       if (clickedFeature.value) clickedFeature.value = null;
-      if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+      if (clickedPairwiseMatch.value) clickedPairwiseMatch.value = null;
       // The popup of a settings section stays through clicks elsewhere (Generate, Undo, the
       // pane) and through a pan: a click on the Result's canvas that nothing took closes it.
       if (e.target.closest('.preview-canvas') && isClickAtPress(pressPoint, e)) closeSettingsPopup();
@@ -649,10 +648,9 @@ export const setupGlobalUiEvents = ({
   /** @param {KeyboardEvent} e */
   const handleEscapeKey = (e) => {
     if (e.key !== 'Escape' || modalDialogOpen()) return;
-    if (clickedFeature.value || clickedPairwiseMatch?.value || clickedLabel.value) {
+    if (clickedFeature.value || clickedPairwiseMatch.value) {
       if (clickedFeature.value) clickedFeature.value = null;
-      if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
-      if (clickedLabel.value) clickedLabel.value = null;
+      if (clickedPairwiseMatch.value) clickedPairwiseMatch.value = null;
       return;
     }
     if (closeSettingsPopup()) return;

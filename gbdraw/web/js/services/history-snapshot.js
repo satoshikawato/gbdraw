@@ -524,7 +524,6 @@ const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
 const closeTransientState = (state) => {
   setRef(state.clickedFeature, null);
   setRef(state.clickedPairwiseMatch, null);
-  setRef(state.clickedLabel, null);
   if (state.featureStyleScopeDialog) state.featureStyleScopeDialog.show = false;
   if (state.resetColorDialog) state.resetColorDialog.show = false;
   if (state.legendRenameDialog) state.legendRenameDialog.show = false;
