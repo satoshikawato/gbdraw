@@ -377,8 +377,9 @@ export const legendCaptionRuns = (caption) => (
 
 /**
  * Python's `legend_caption_box` (`drawn_runs_box` of the caption's runs): each run measured in its own face,
- * starting at the previous run's advance; the width is the last advance or a run's box end past it, the height
- * the tallest run's line box. One run measures as `measureTextBox`.
+ * starting at the previous run's advance, white space collapsed across runs (a run's leading space after a space
+ * is not drawn); the width is the last advance or a run's box end past it, the height the tallest run's line box.
+ * One run measures as `measureTextBox`.
  * @param {LegendFontMetrics} metrics
  * @param {{ text: string, fontFile: string, fontSize: number }} request `fontFile`: the upright face.
  * @returns {{ width: number, height: number }}
@@ -391,8 +392,12 @@ export const measureCaptionBox = (metrics, { text: caption, fontFile, fontSize }
   let right = 0.0;
   let origin = 0.0;
   let height = 0.0;
+  let afterSpace = false;
   runs.forEach((run) => {
-    const box = measureTextRun(metrics, { text: run.text, fontFile: runFace(run), fontSize });
+    const collapsed = collapseSvgWhiteSpace(run.text);
+    const drawn = afterSpace && collapsed.startsWith(' ') ? collapsed.slice(1) : collapsed;
+    if (drawn) afterSpace = drawn.endsWith(' ');
+    const box = measureTextRun(metrics, { text: drawn, fontFile: runFace(run), fontSize });
     right = Math.max(right, origin + box.width);
     origin += box.advance;
     height = Math.max(height, box.height);

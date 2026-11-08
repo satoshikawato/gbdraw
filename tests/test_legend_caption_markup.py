@@ -199,3 +199,9 @@ def test_linear_gradient_title_draws_in_italics() -> None:
     assert rows
     for row in rows:
         _assert_italic_caption(_caption_of(row))
+
+
+def test_white_space_collapses_across_runs_as_drawn() -> None:
+    # A renderer draws one space where a run's space meets the next run's space.
+    assert legend_caption_box("<i>a </i> b", SERIF, SIZE) == legend_caption_box("<i>a </i>b", SERIF, SIZE)
+    assert legend_caption_box("<i>a</i>  b", SERIF, SIZE) == legend_caption_box("<i>a</i> b", SERIF, SIZE)

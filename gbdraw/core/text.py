@@ -754,20 +754,27 @@ def drawn_runs_box(
     """``drawn_text_box`` of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``.
 
     Each run is measured in its own face and starts at the end of the previous
-    run's advance. The width is the last advance or, when a run's box ends past
-    it (an italic glyph painting past its advance), that box's right edge; the
-    height is the tallest run's line box. One run measures as
-    ``drawn_text_box``. Unlike ``measure_mixed_text_line`` (advance width,
-    glyph height), the box contains the painted ink and has the line height a
-    browser reports, so a text measures the same whether it is one run or
-    several.
+    run's advance; white space collapses across runs as a renderer draws it (a
+    run's leading space after a space is not drawn). The width is the last
+    advance or, when a run's box ends past it (an italic glyph painting past
+    its advance), that box's right edge; the height is the tallest run's line
+    box. One run measures as ``drawn_text_box``. Unlike
+    ``measure_mixed_text_line`` (advance width, glyph height), the box
+    contains the painted ink and has the line height a browser reports, so a
+    text measures the same whether it is one run or several.
     """
 
     if len(runs) == 1:
         text, font_style = runs[0]
         return drawn_text_box(text, font_family, font_size, "normal", font_style)
     right = origin = height = 0.0
-    for text, font_style in runs:
+    after_space = False
+    for run, font_style in runs:
+        text = collapse_svg_white_space(run)
+        if after_space and text.startswith(" "):
+            text = text[1:]
+        if text:
+            after_space = text.endswith(" ")
         width, run_height = drawn_text_box(text, font_family, font_size, "normal", font_style)
         right = max(right, origin + width)
         origin += float(calculate_svg_bbox_dimensions(text, font_family, font_size, "normal", font_style)[0])
