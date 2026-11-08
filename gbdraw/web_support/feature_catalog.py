@@ -1058,14 +1058,17 @@ def _record_key(record_keys: Sequence[str], record_index: int | None) -> str:
     return str(record_keys[record_index])
 
 
-def _normalized_biological_features(
+def _source_feature_candidates(
     context: InteractiveSvgContext,
     record_keys: Sequence[str],
     identity_keys: Sequence[str],
-) -> tuple[
-    list[dict[str, object]],
-    list[_IndexedBiologicalFeature],
-]:
+) -> tuple[list[_SourceFeatureCandidate], dict[int, list[int]]]:
+    """The biological features of the drawn records, and the drawn units that show each one.
+
+    A feature that two windows of one record show is one biological feature of that record (OV-2717): the first
+    unit's row stands for it, and every unit that shows it resolves to that row.
+    """
+
     rendered_source_identities = {
         (_record_index(feature), _stable_feature_id(feature))
         for feature in context.features
@@ -1081,8 +1084,6 @@ def _normalized_biological_features(
     from gbdraw.api.prepared import cancel_checkpoint
 
     candidates: list[_SourceFeatureCandidate] = []
-    # A feature that two windows of one record show is one biological feature of that record (OV-2717): the first
-    # unit's row stands for it, and every unit that shows it resolves to that row.
     first_by_identity: dict[tuple[str, str, int | None], int] = {}
     units_by_candidate: dict[int, list[int]] = {}
     for feature in source_features:
@@ -1117,6 +1118,21 @@ def _normalized_biological_features(
             identity_base=identity_base,
         )
         candidates.append(candidate)
+    return candidates, units_by_candidate
+
+
+def _normalized_biological_features(
+    context: InteractiveSvgContext,
+    record_keys: Sequence[str],
+    identity_keys: Sequence[str],
+) -> tuple[
+    list[dict[str, object]],
+    list[_IndexedBiologicalFeature],
+]:
+    # A canceled Worker request stops between features: this build's state is local (D7).
+    from gbdraw.api.prepared import cancel_checkpoint
+
+    candidates, units_by_candidate = _source_feature_candidates(context, record_keys, identity_keys)
     biological_ids = disambiguate_feature_ids(
         ((item.record_key, item.identity_base, item.feature_index) for item in candidates),
         description="Feature catalog",
@@ -2514,6 +2530,23 @@ def build_feature_catalog(
     }
 
 
+def _keyed_sequence_sources(value: object) -> Sequence[object]:
+    """A catalog item's sequence sources (none when it has no array), each with its own non-empty key."""
+
+    sequence_sources: Sequence[object] = (
+        value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else ()
+    )
+    known_sequence_source_keys: set[str] = set()
+    for source in sequence_sources:
+        key = _text(source.get("key")) if isinstance(source, Mapping) else ""
+        if not key or key in known_sequence_source_keys:
+            raise GbdrawError(
+                "Feature catalog sequence sources require unique non-empty keys."
+            )
+        known_sequence_source_keys.add(key)
+    return sequence_sources
+
+
 def select_feature_catalog_item(
     catalog: Mapping[str, object],
     *,
@@ -2598,20 +2631,7 @@ def select_feature_catalog_item(
         tuple[str, str],
         list[int | None],
     ] = defaultdict(list)
-    sequence_sources = item.get("sequenceSources")
-    if not isinstance(sequence_sources, Sequence) or isinstance(
-        sequence_sources,
-        (str, bytes),
-    ):
-        sequence_sources = ()
-    known_sequence_source_keys: set[str] = set()
-    for source in sequence_sources:
-        key = _text(source.get("key")) if isinstance(source, Mapping) else ""
-        if not key or key in known_sequence_source_keys:
-            raise GbdrawError(
-                "Feature catalog sequence sources require unique non-empty keys."
-            )
-        known_sequence_source_keys.add(key)
+    sequence_sources = _keyed_sequence_sources(item.get("sequenceSources"))
     canonical_sources = canonical_catalog_sequence_sources(sequence_sources)
     if any(source is None for source in canonical_sources):
         raise GbdrawError(
@@ -2694,15 +2714,9 @@ def select_feature_catalog_item(
                 )
         if "sequenceSourceIndex" in feature:
             source_index = feature.get("sequenceSourceIndex")
-            source = (
-                sequence_sources[source_index]
-                if (
-                    type(source_index) is int
-                    and 0 <= source_index < len(sequence_sources)
-                    and isinstance(sequence_sources[source_index], Mapping)
-                )
-                else None
-            )
+            in_range = type(source_index) is int and 0 <= source_index < len(sequence_sources)
+            indexed_source = sequence_sources[cast(int, source_index)] if in_range else None
+            source = indexed_source if isinstance(indexed_source, Mapping) else None
             if (
                 "nucleotide_sequence" in feature
                 or "nucleotideSequence" in feature

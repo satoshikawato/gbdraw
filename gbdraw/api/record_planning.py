@@ -193,6 +193,60 @@ class ResolvedWindow:
         """Whether the record draws more than one unit (each then has its own unit key)."""
         return self.count > 1
 
+    @property
+    def unit_key(self) -> str:
+        """The key of the drawn unit of this window (``window_unit_key``)."""
+        return window_unit_key(self.record_key, self.index, self.count)
+
+    @property
+    def window_of(self) -> str | None:
+        """The key of the record this unit is one of several windows of; ``None`` when the record draws one unit."""
+        return self.record_key if self.is_one_of_several else None
+
+
+def record_drawn_windows(record_key: str, windows: Sequence[RecordWindow]) -> tuple[ResolvedWindow | None, ...]:
+    """The drawn units of the record ``record_key`` drawn through ``windows``, in drawing order (D-01).
+
+    One unit per window; a record without windows draws one unit, the record itself (``None``). The one owner of a
+    record's units: the record resolver draws them, and the Web plans its comparison searches over them
+    (``gbdraw.web_support.linear_units``).
+    """
+
+    return tuple(ResolvedWindow(record_key, index, len(windows), window) for index, window in enumerate(windows)) or (
+        None,
+    )
+
+
+def refuse_file_comparison_of_windows(
+    query_units: Sequence[int],
+    subject_units: Sequence[int],
+    *,
+    records: tuple[str, str],
+    where: str,
+    row: int | None = None,
+) -> None:
+    """Refuse a comparison file between records one of which is drawn in several windows: the file gives the
+    coordinates of one drawn unit, so such a pair is searched (``comparison_unit_pairs``)."""
+
+    if len(query_units) > 1 or len(subject_units) > 1:
+        windowed = records[0] if len(query_units) > 1 else records[1]
+        raise ValidationError(
+            f"{where}: record {windowed!r} is drawn in several windows, and a comparison file gives the coordinates "
+            "of one drawn record; use source=losat for it.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "WINDOWED_FILE_COMPARISON",
+                **({} if row is None else {"row": row}),
+            },
+        )
+
+
+def comparison_unit_pairs(query_units: Sequence[int], subject_units: Sequence[int]) -> tuple[tuple[int, int], ...]:
+    """The drawn-unit pairs a comparison of two records searches: every window of one against every window of the
+    other (D-01, D-37), in the order of the query's units, then the subject's."""
+
+    return tuple((query, subject) for query in query_units for subject in subject_units)
+
 
 @dataclass(frozen=True)
 class ResolvedRecordProvenance:
@@ -1717,9 +1771,9 @@ def _apply_provenance_annotations(
     )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
-    if provenance.window is not None and provenance.window.is_one_of_several:
+    if provenance.window is not None and provenance.window.window_of is not None:
         # The record this unit is a window of (D-01): per-record readers bind to it (``record_identity_key``).
-        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.record_key
+        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.window_of
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
         record.annotations["gbdraw_source_basename"] = Path(
@@ -1784,19 +1838,13 @@ def _expand_record_windows(
                 raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
         elif item.pending_reverse:
             units = crop_record_windows(units[0], (), True, log=logger)
-        for index, unit in enumerate(units):
-            window = (
-                ResolvedWindow(item.provenance.record_key, index, len(units), windows[index]) if windows else None
-            )
+        # The crop draws one unit per window, as ``record_drawn_windows`` plans them.
+        for unit, window in zip(units, record_drawn_windows(item.provenance.record_key, windows), strict=True):
             unit_item = replace(
                 item.provenance,
                 resolved_index=len(records),
                 record_position=position,
-                record_key=(
-                    window_unit_key(window.record_key, index, window.count)
-                    if window is not None
-                    else item.provenance.record_key
-                ),
+                record_key=window.unit_key if window is not None else item.provenance.record_key,
                 # A unit of an input window draws that window's span as its region.
                 region=window.span.region() if window is not None and not specs else None,
                 has_collection_region=bool(specs),
@@ -2360,15 +2408,15 @@ def resolve_linear_options(
             )
         if row.source == "losat":
             # A record drawn in windows is searched window by window against each window of the other (D-01).
-            losat_pairs.extend((query, subject) for query in query_units for subject in subject_units)
+            losat_pairs.extend(comparison_unit_pairs(query_units, subject_units))
             continue
-        if len(query_units) > 1 or len(subject_units) > 1:
-            windowed = row.query if len(query_units) > 1 else row.subject
-            raise ValidationError(
-                f"{table.table_path}: row {row.row_number}: record {windowed!r} is drawn in several windows, and a "
-                "comparison file gives the coordinates of one drawn record; use source=losat for it.",
-                diagnostic={"code": "COMPARISON_INPUT", "row": row.row_number},
-            )
+        refuse_file_comparison_of_windows(
+            query_units,
+            subject_units,
+            records=(row.query, row.subject),
+            where=f"{table.table_path}: row {row.row_number}",
+            row=row.row_number,
+        )
         try:
             # The file's staged identity keys the stages that take its rows.
             matches = read_comparison_resource(row.blast)

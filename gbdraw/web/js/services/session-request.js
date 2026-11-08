@@ -1485,7 +1485,7 @@ const windowEndpoints = (rawStart, rawEnd) => {
  * @param {{ arranged: boolean }} options
  * @returns {CanonicalRecord['windows']}
  */
-const linearWindowsPayload = (seq, { arranged }) => {
+export const linearWindowsPayload = (seq, { arranged }) => {
   if (seq.windows && seq.windows.length) {
     const placed = arranged && seq.windows.length > 1;
     return seq.windows.map((window) => {

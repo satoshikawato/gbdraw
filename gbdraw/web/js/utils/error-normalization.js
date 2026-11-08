@@ -7,7 +7,7 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta',
-  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords',
+  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planLinearUnits',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
@@ -180,6 +180,10 @@ const REASONS = Object.freeze({
   SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
   RECORD_ID: 'A table row names another displayed record in this column. Swap the query and subject columns of the table, or assign the table to the pair it describes.',
   BLAST_TSV_REQUIRED: 'Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.',
+  // A BLAST TSV gives the coordinates of one drawn record (gbdraw/api/record_planning.py refuse_file_comparison_of_windows).
+  // The browser search reads a crop as one span of its record (gbdraw/web/js/services/linear-units.js, OV-2739).
+  ORIGIN_WINDOW_SEARCH: 'A record of this pair is drawn in a window across its origin, which a comparison search in the browser does not read. Draw it as two windows, one on each side of the origin, or set the pair to No comparison.',
+  WINDOWED_FILE_COMPARISON: 'A record of this pair is drawn in several windows, and a BLAST TSV gives the coordinates of one drawn record. Set the pair to Run LOSAT.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',

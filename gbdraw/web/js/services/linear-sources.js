@@ -420,12 +420,13 @@ export const planLosatSourceJobs = ({ sequences, specs, buildArgs, drawnCount = 
  * request and the specs use, then the OFF records, which are database members
  * only (`planLosatSourceJobs`).
  * @template {{ uid?: unknown }} T
- * @param {readonly T[]} drawn
+ * @param {readonly T[]} drawn The drawn records: the drawn units of a Generate (`linearUnitSearch`).
  * @param {readonly T[]} sequences Every record card, in file order.
+ * @param {readonly T[]} [drawnCards] The cards of the drawn records, when `drawn` holds units made from them.
  * @returns {{ sequences: T[], drawnCount: number }}
  */
-export const losatSearchSequences = (drawn, sequences) => {
-  const drawnSet = new Set(drawn);
+export const losatSearchSequences = (drawn, sequences, drawnCards = drawn) => {
+  const drawnSet = new Set(drawnCards);
   return { sequences: [...drawn, ...sequences.filter((sequence) => !drawnSet.has(sequence))], drawnCount: drawn.length };
 };
 

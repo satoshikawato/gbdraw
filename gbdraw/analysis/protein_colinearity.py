@@ -289,6 +289,125 @@ class CdsProtein:
         return (self.window_of, -1) if self.window_of is not None else ("", int(self.record_index))
 
 
+class _CdsProteinJsonRequired(TypedDict):
+    """The fields of :class:`CdsProteinJson` without a default."""
+
+    protein_id: str
+    record_index: int
+    feature_index: int
+    record_id: str
+    start: int
+    end: int
+    strand: int | None
+    label: str
+    protein_length: int
+
+
+class CdsProteinJson(_CdsProteinJsonRequired, total=False):
+    """A :class:`CdsProtein` as the Web carries it between Worker calls (:func:`cds_protein_json`): every field but
+    ``sequence``, which travels in the protein FASTA; tuples are lists. A field with a default may be left out."""
+
+    source_protein_id: str | None
+    feature_svg_id: str | None
+    gene: str | None
+    product: str | None
+    note: str | None
+    locus_tag: str | None
+    gene_id: str | None
+    old_locus_tag: str | None
+    db_xref: list[str]
+    gff_id: str | None
+    parent_ids: list[str]
+    gene_parent_id: str | None
+    feature_type: str
+    feature_hash_start: int | None
+    feature_hash_end: int | None
+    feature_hash_strand: int | None
+    feature_hash_parts: list[list[int | None]]
+    location_operator: str
+    source_feature_position: int | None
+    same_location_ordinal: int | None
+    feature_analysis_id: str | None
+    display_alias: str | None
+    runtime_handle: str | None
+    aa_sha256: str | None
+    record_instance_key: str | None
+    record_analysis_id: str | None
+    protein_set_hash: str | None
+    runtime_binding_hash: str | None
+    display_binding_hash: str | None
+    view_feature_svg_id: str | None
+    origin_arc: list[int] | None
+    record_length: int | None
+    window_of: str | None
+
+
+def cds_protein_json(protein: CdsProtein) -> CdsProteinJson:
+    """``protein`` as :class:`CdsProteinJson`: the one writer of a protein the Web carries, read back by
+    :func:`cds_protein_from_json`."""
+
+    def plain(value: object) -> object:
+        return [plain(item) for item in value] if isinstance(value, tuple) else value
+
+    return cast(
+        CdsProteinJson,
+        {name: plain(getattr(protein, name)) for name in CdsProteinJson.__annotations__},
+    )
+
+
+def cds_protein_from_json(data: CdsProteinJson, *, sequence: str) -> CdsProtein:
+    """The protein :func:`cds_protein_json` wrote, with its ``sequence`` (read from its FASTA)."""
+
+    arc = data.get("origin_arc")
+    return CdsProtein(
+        protein_id=data["protein_id"],
+        record_index=data["record_index"],
+        feature_index=data["feature_index"],
+        record_id=data["record_id"],
+        start=data["start"],
+        end=data["end"],
+        strand=data["strand"],
+        label=data["label"],
+        protein_length=data["protein_length"],
+        sequence=sequence,
+        source_protein_id=data.get("source_protein_id"),
+        feature_svg_id=data.get("feature_svg_id"),
+        gene=data.get("gene"),
+        product=data.get("product"),
+        note=data.get("note"),
+        locus_tag=data.get("locus_tag"),
+        gene_id=data.get("gene_id"),
+        old_locus_tag=data.get("old_locus_tag"),
+        db_xref=tuple(data.get("db_xref", ())),
+        gff_id=data.get("gff_id"),
+        parent_ids=tuple(data.get("parent_ids", ())),
+        gene_parent_id=data.get("gene_parent_id"),
+        feature_type=data.get("feature_type", "CDS"),
+        feature_hash_start=data.get("feature_hash_start"),
+        feature_hash_end=data.get("feature_hash_end"),
+        feature_hash_strand=data.get("feature_hash_strand"),
+        feature_hash_parts=tuple(
+            (int(cast(int, start)), int(cast(int, end)), strand) for start, end, strand in data.get("feature_hash_parts", ())
+        ),
+        location_operator=data.get("location_operator", ""),
+        source_feature_position=data.get("source_feature_position"),
+        same_location_ordinal=data.get("same_location_ordinal"),
+        feature_analysis_id=data.get("feature_analysis_id"),
+        display_alias=data.get("display_alias"),
+        runtime_handle=data.get("runtime_handle"),
+        aa_sha256=data.get("aa_sha256", None),
+        record_instance_key=data.get("record_instance_key"),
+        record_analysis_id=data.get("record_analysis_id"),
+        protein_set_hash=data.get("protein_set_hash"),
+        runtime_binding_hash=data.get("runtime_binding_hash"),
+        display_binding_hash=data.get("display_binding_hash"),
+        view_feature_svg_id=data.get("view_feature_svg_id"),
+        origin_arc=None if arc is None else (int(arc[0]), int(arc[1])),
+        record_length=data.get("record_length"),
+        window_of=data.get("window_of"),
+    )
+
+
 def _refuse_change(self: object, *_args: object, **_kwargs: object) -> NoReturn:
     raise TypeError(
         f"{type(self).__name__} is read-only: a validated protein identity manifest "
@@ -6902,6 +7021,9 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
 
 __all__ = [
     "CdsProtein",
+    "CdsProteinJson",
+    "cds_protein_from_json",
+    "cds_protein_json",
     "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA",
     "LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA",
     "LOSAT_CACHE_SCHEMA",

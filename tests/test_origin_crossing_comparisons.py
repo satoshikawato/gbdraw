@@ -448,11 +448,18 @@ def test_web_rows_of_a_crop_equal_the_cli_rows(tmp_path, stage_web_losatp_transp
 TRANSPORT_EXEMPT = {"sequence"}
 
 
+@pytest.mark.parametrize("window_of", [None, "subject-record"], ids=["whole-record", "one-of-several-windows"])
 @pytest.mark.parametrize("strand", [1, -1])
-def test_every_cds_protein_field_crosses_the_web_transport(strand: int) -> None:
+def test_every_cds_protein_field_crosses_the_web_transport(strand: int, window_of: str | None) -> None:
+    """Every field, ``window_of`` included: Web Similarity groups read the windows of one record as one record by it."""
+    from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
+
     helpers = _web_helpers()
     records = _records(strand)
+    if window_of is not None:
+        records[1].annotations[WINDOW_OF_ANNOTATION] = window_of
     extraction = extract_cds_proteins(records)
+    assert {protein.window_of for protein in extraction.proteins_by_record[1]} == {window_of}
     subject = records[1]
     raw_map = json.loads(json.dumps({
         protein.protein_id: helpers["_serialize_cds_protein"](protein, subject)

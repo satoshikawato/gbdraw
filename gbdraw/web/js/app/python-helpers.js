@@ -28,6 +28,7 @@ from gbdraw.web_support.comparison_sequences import read_comparison_sequence_jso
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
+from gbdraw.web_support.linear_units import plan_linear_units_json
 from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
@@ -610,58 +611,24 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
             else view_hash_parts_index.get(int(source_feature_position), ())
         )
     )
+    from gbdraw.analysis.protein_colinearity import cds_protein_json
+
+    # Every field of the protein (Python's writer), and what the display transform reads.
     return {
-        "protein_id": protein.protein_id,
-        "record_index": protein.record_index,
-        "feature_index": protein.feature_index,
-        "record_id": protein.record_id,
-        "start": protein.start,
-        "end": protein.end,
-        "strand": protein.strand,
-        "label": protein.label,
-        "protein_length": protein.protein_length,
-        "source_protein_id": protein.source_protein_id,
-        "feature_svg_id": protein.feature_svg_id,
-        "view_feature_svg_id": getattr(protein, "view_feature_svg_id", None),
+        **cds_protein_json(protein),
         "view_feature_hash_parts": [list(part) for part in view_feature_hash_parts],
-        "gene": getattr(protein, "gene", None),
-        "product": getattr(protein, "product", None),
-        "note": getattr(protein, "note", None),
-        "locus_tag": getattr(protein, "locus_tag", None),
-        "gene_id": getattr(protein, "gene_id", None),
-        "old_locus_tag": getattr(protein, "old_locus_tag", None),
-        "db_xref": list(getattr(protein, "db_xref", ()) or ()),
-        "gff_id": getattr(protein, "gff_id", None),
-        "parent_ids": list(getattr(protein, "parent_ids", ()) or ()),
-        "gene_parent_id": getattr(protein, "gene_parent_id", None),
-        "feature_type": getattr(protein, "feature_type", "CDS"),
-        "feature_hash_start": getattr(protein, "feature_hash_start", None),
-        "feature_hash_end": getattr(protein, "feature_hash_end", None),
-        "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
-        "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
-        "location_operator": getattr(protein, "location_operator", ""),
-        "source_feature_position": getattr(protein, "source_feature_position", None),
-        "same_location_ordinal": getattr(protein, "same_location_ordinal", None),
-        "feature_analysis_id": getattr(protein, "feature_analysis_id", None),
-        "display_alias": getattr(protein, "display_alias", None),
-        "runtime_handle": getattr(protein, "runtime_handle", None),
-        "aa_sha256": getattr(protein, "aa_sha256", None),
-        "record_instance_key": getattr(protein, "record_instance_key", None),
-        "record_analysis_id": getattr(protein, "record_analysis_id", None),
-        "protein_set_hash": getattr(protein, "protein_set_hash", None),
-        "runtime_binding_hash": getattr(protein, "runtime_binding_hash", None),
-        "display_binding_hash": getattr(protein, "display_binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
-        "origin_arc": None if protein.origin_arc is None else list(protein.origin_arc),
-        "record_length": protein.record_length,
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None):
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None, window_of=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp.
 
     feature_overrides_json holds this record's canonical featureOverrides rows;
-    the shared resolver binds them as Generate does (R4).
+    the shared resolver binds them as Generate does (R4). window_of names the
+    record when this unit is one of several windows of it (the unit plan,
+    gbdraw/web_support/linear_units.py): its edits bind to that record, and
+    its proteins carry it as the render's do (D-01).
     """
     try:
         from gbdraw.analysis.protein_colinearity import (
@@ -681,6 +648,10 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             reverse_flag=reverse_flag,
             source_feature_catalogs=source_feature_catalogs,
         )
+        if not _is_blank_or_js_nullish(window_of):
+            from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
+
+            record.annotations[WINDOW_OF_ANNOTATION] = str(window_of)
         feature_visibility_rules = None
         if not _is_blank_or_js_nullish(feature_visibility_table_path):
             feature_visibility_rules = compile_feature_visibility_rules(
@@ -699,7 +670,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
 
             resolution = resolve_record_feature_inputs(
                 records=[record],
-                record_keys=[str(stable_record_key)],
+                record_keys=[str(window_of) if not _is_blank_or_js_nullish(window_of) else str(stable_record_key)],
                 source_catalogs=[catalog.entries for catalog in source_feature_catalogs[:1]],
                 placements=(),
                 mode="linear",
@@ -749,92 +720,18 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         return json.dumps({'error': serialize_web_error(error, operation='extractCdsProteinFasta', stage="helper")})
 
 def _build_web_cds_protein_map(raw_map):
-    from gbdraw.analysis.protein_colinearity import CdsProtein
+    """The proteins of a map that _serialize_cds_protein wrote (Python's reader, cds_protein_from_json); each
+    protein's sequence is read from its FASTA (_web_ordered_proteins_from_fasta)."""
+    from gbdraw.analysis.protein_colinearity import cds_protein_from_json
 
-    protein_map = {}
     if not isinstance(raw_map, dict):
-        return protein_map
-    for protein_id, data in raw_map.items():
-        if not isinstance(data, dict):
-            continue
-        strand = data.get("strand")
-        strand = int(strand) if strand in (-1, 1, "-1", "1") else None
-        kwargs = {
-            "protein_id": str(data.get("protein_id") or protein_id),
-            "record_index": int(data.get("record_index") or 0),
-            "feature_index": int(data.get("feature_index") or 0),
-            "record_id": str(data.get("record_id") or ""),
-            "start": int(data.get("start") or 0),
-            "end": int(data.get("end") or 0),
-            "strand": strand,
-            "label": str(data.get("label") or protein_id),
-            "protein_length": int(data.get("protein_length") or 0),
-            "sequence": str(data.get("sequence") or ""),
-            "source_protein_id": data.get("source_protein_id"),
-            "feature_svg_id": data.get("feature_svg_id"),
-            "origin_arc": None if data.get("origin_arc") is None else tuple(int(bound) for bound in data["origin_arc"]),
-            "record_length": None if data.get("record_length") is None else int(data["record_length"]),
-        }
-        supported_fields = getattr(CdsProtein, "__dataclass_fields__", {})
-        for optional_field in (
-            "gene",
-            "product",
-            "note",
-            "locus_tag",
-            "gene_id",
-            "old_locus_tag",
-            "gff_id",
-            "gene_parent_id",
-            "view_feature_svg_id",
-        ):
-            if optional_field in supported_fields:
-                kwargs[optional_field] = data.get(optional_field)
-        if "feature_type" in supported_fields:
-            kwargs["feature_type"] = str(data.get("feature_type") or "CDS")
-        for optional_int_field in ("feature_hash_start", "feature_hash_end", "feature_hash_strand"):
-            if optional_int_field in supported_fields:
-                raw_value = data.get(optional_int_field)
-                if raw_value is None or raw_value == "":
-                    kwargs[optional_int_field] = None
-                else:
-                    kwargs[optional_int_field] = int(raw_value)
-        if "feature_hash_parts" in supported_fields:
-            kwargs["feature_hash_parts"] = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
-        for optional_int_field in (
-            "source_feature_position",
-            "same_location_ordinal",
-        ):
-            if optional_int_field in supported_fields:
-                raw_value = data.get(optional_int_field)
-                kwargs[optional_int_field] = (
-                    int(raw_value) if raw_value is not None and raw_value != "" else None
-                )
-        for optional_string_field in (
-            "location_operator",
-            "feature_analysis_id",
-            "display_alias",
-            "runtime_handle",
-            "aa_sha256",
-            "record_instance_key",
-            "record_analysis_id",
-            "protein_set_hash",
-            "runtime_binding_hash",
-            "display_binding_hash",
-        ):
-            if optional_string_field in supported_fields:
-                raw_value = data.get(optional_string_field)
-                kwargs[optional_string_field] = (
-                    str(raw_value) if raw_value is not None else None
-                )
-        for tuple_field in ("db_xref", "parent_ids"):
-            if tuple_field in supported_fields:
-                raw_values = data.get(tuple_field) or ()
-                if isinstance(raw_values, (list, tuple)):
-                    kwargs[tuple_field] = tuple(str(value) for value in raw_values if str(value).strip())
-                else:
-                    kwargs[tuple_field] = (str(raw_values),) if str(raw_values).strip() else ()
-        protein_map[str(protein_id)] = CdsProtein(**kwargs)
-    return protein_map
+        return {}
+    return {
+        str(protein_id): cds_protein_from_json(data, sequence=str(data.get("sequence") or ""))
+        for protein_id, data in raw_map.items()
+        if isinstance(data, dict)
+    }
+
 
 def _web_ordered_proteins_from_fasta(raw_map, fasta_text):
     from Bio import SeqIO
@@ -1923,6 +1820,8 @@ _WEB_JSON_HELPERS = {
     "read_record_span_sequences_json": (
         _with_prepared_input_lookup(read_record_span_sequences_json, 1), "readRecordSpanSequences"
     ),
+    # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
+    "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),
     # Sequence search: the queries, and one search's rows as an annotation set (PD-OI-117).
     "read_search_queries_json": (read_search_queries_json, "readSearchQueries"),
     "sequence_search_annotation_set_json": (sequence_search_annotation_set_json, "searchHitAnnotationSet"),
