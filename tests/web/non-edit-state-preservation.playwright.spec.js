@@ -197,9 +197,11 @@ const ROWS = [
       });
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.adv.multi_record_positions.length)).toBe(2);
       await page.evaluate(() => window.__GBDRAW_APP__.moveCircularRecordOrderDown(0));
+      // Record Order rows name the records by identity (`<card uid>:<k>`).
+      const card = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularSources[0].uid);
       await expect.poll(() => page.evaluate(() => (
         window.__GBDRAW_APP__.adv.multi_record_positions.map(({ selector }) => selector)
-      ))).toEqual(['#2', '#1']);
+      ))).toEqual([`${card}:2`, `${card}:1`]);
       await generateAndWaitForResult(page);
       await settle(page);
       await makeLinearDrawing(page);
