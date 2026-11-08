@@ -94,7 +94,13 @@ from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RecordWindow, RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import (
+    WINDOW_OF_ANNOTATION,
+    _read_coord_map,
+    _record_source_start,
+    _source_period,
+    _wrap_source_base,
+)
 from gbdraw.linear_comparison import (
     LinearComparison,
     reverse_endpoint_table_text,
@@ -1060,6 +1066,11 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
     base, step = _read_coord_map(record)
     length = len(record)
     source_length = annotations.get("gbdraw_source_length", length)
+    period = _source_period(record)
+    if period is not None and annotations.get("gbdraw_region_applied"):
+        # A crop across the origin (D-28): its span starts after it ends.
+        first = _record_source_start(record)
+        return (first, _wrap_source_base(first + length - 1, period)), step < 0
     first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
     if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
         return None
@@ -1085,7 +1096,13 @@ def _source_file_transforms(
     annotations = [record.annotations for record in records]
     kind = annotations[0].get("gbdraw_source_kind")
     count = annotations[0].get("gbdraw_source_record_count")
-    indexes = sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
+    # The windows of one record draw that record once (D-01).
+    indexes = sorted(
+        {
+            item.get(WINDOW_OF_ANNOTATION) or position: item.get("gbdraw_source_record_index", -1)
+            for position, item in enumerate(annotations)
+        }.values()
+    )
     if not (
         len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
         and isinstance(count, int)
@@ -1143,6 +1160,8 @@ def _encode_records(
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
+    # The positions after the first of a record's windows: their windows are written on the first (D-01).
+    absorbed: set[int] = set()
     for position, record in enumerate(records):
         if isinstance(record.source, InMemoryRecordSource):
             paths = record_source_paths(record.source.record)
@@ -1207,13 +1226,41 @@ def _encode_records(
             if found is not None:
                 span, reverse = found[offset]
                 record = records[position]
-                transformed[position] = replace(
-                    record,
-                    windows=() if span is None else (RecordWindow(span[0], span[1], reverse),),
-                    presentation=replace(
-                        record.presentation, reverse_complement=reverse and span is None
-                    ),
-                )
+                window_of = members_records[offset].annotations.get(WINDOW_OF_ANNOTATION)
+                if window_of is not None:
+                    # The units of a record with windows are written back as that record with its windows.
+                    if position in absorbed:
+                        continue
+                    units = [
+                        (other, found[index])
+                        for index, other in enumerate(members)
+                        if members_records[index].annotations.get(WINDOW_OF_ANNOTATION) == window_of
+                    ]
+                    absorbed.update(other for other, _found in units[1:])
+                    transformed[position] = replace(
+                        record,
+                        record_key=str(window_of),
+                        windows=tuple(
+                            RecordWindow(
+                                unit_span[0],
+                                unit_span[1],
+                                unit_reverse,
+                                # A unit is placed by its window's column (D-08).
+                                records[other].presentation.grid_column,
+                            )
+                            for other, (unit_span, unit_reverse) in units
+                            if unit_span is not None
+                        ),
+                        presentation=replace(record.presentation, reverse_complement=False, grid_column=None),
+                    )
+                else:
+                    transformed[position] = replace(
+                        record,
+                        windows=() if span is None else (RecordWindow(span[0], span[1], reverse),),
+                        presentation=replace(
+                            record.presentation, reverse_complement=reverse and span is None
+                        ),
+                    )
             shared[position] = (source_payload, selector)
     payloads = [
         _encode_record(
@@ -1223,6 +1270,7 @@ def _encode_records(
             shared_source=shared.get(position),
         )
         for position, record in enumerate(records)
+        if position not in absorbed
     ]
     frames = tuple(
         (len(record.source.record), True)

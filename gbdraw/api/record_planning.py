@@ -48,6 +48,7 @@ from gbdraw.io.genome import (
 )
 from gbdraw.io.record_select import (
     RecordSelector,
+    drawn_record_units,
     parse_record_selector,
     reverse_records,
 )
@@ -2166,7 +2167,11 @@ def _resolve_linear_comparison_selector(
     table_path: str,
     row_number: int,
     column: str,
-) -> int:
+) -> tuple[int, ...]:
+    """The drawn units of the record a comparisons-table selector names: ``#n`` counts records and a record ID
+    names the record whose units carry it (``drawn_record_units``); a record without windows is one unit."""
+
+    groups = drawn_record_units(records)
     if selector.startswith("#"):
         number = parse_ascii_integer(selector[1:].strip())
         if number is None:
@@ -2175,14 +2180,10 @@ def _resolve_linear_comparison_selector(
                 f"invalid record selector {selector!r}."
             )
         index = number - 1
-        if 0 <= index < len(records):
-            return index
+        if 0 <= index < len(groups):
+            return groups[index]
     else:
-        matches = [
-            index
-            for index, record in enumerate(records)
-            if str(record.id) == selector
-        ]
+        matches = [group for group in groups if any(str(records[index].id) == selector for index in group)]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
@@ -2322,23 +2323,24 @@ def resolve_linear_options(
     comparisons: list[LinearComparison] = []
     losat_pairs: list[tuple[int, int]] = []
     for row in table.rows:
-        query_index = _resolve_linear_comparison_selector(
+        query_units = _resolve_linear_comparison_selector(
             records,
             row.query,
             table_path=table.table_path,
             row_number=row.row_number,
             column="query",
         )
-        subject_index = _resolve_linear_comparison_selector(
+        subject_units = _resolve_linear_comparison_selector(
             records,
             row.subject,
             table_path=table.table_path,
             row_number=row.row_number,
             column="subject",
         )
+        query_index, subject_index = query_units[0], subject_units[0]
         query_row = int(rows_by_record[query_index])
         subject_row = int(rows_by_record[subject_index])
-        if query_index == subject_index:
+        if query_units == subject_units:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'subject': "
                 "query and subject resolved to the same record."
@@ -2355,8 +2357,16 @@ def resolve_linear_options(
                 f"{subject_row + 1} must be in {topology}."
             )
         if row.source == "losat":
-            losat_pairs.append((query_index, subject_index))
+            # A record drawn in windows is searched window by window against each window of the other (D-01).
+            losat_pairs.extend((query, subject) for query in query_units for subject in subject_units)
             continue
+        if len(query_units) > 1 or len(subject_units) > 1:
+            windowed = row.query if len(query_units) > 1 else row.subject
+            raise ValidationError(
+                f"{table.table_path}: row {row.row_number}: record {windowed!r} is drawn in several windows, and a "
+                "comparison file gives the coordinates of one drawn record; use source=losat for it.",
+                diagnostic={"code": "COMPARISON_INPUT", "row": row.row_number},
+            )
         try:
             # The file's staged identity keys the stages that take its rows.
             matches = read_comparison_resource(row.blast)

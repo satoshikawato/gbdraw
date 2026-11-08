@@ -118,7 +118,12 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
+from gbdraw.io.record_select import parse_record_selector, select_record_units
+from gbdraw.layout.record_placement import (
+    FeatureAnchorPlacement,
+    parse_record_row_position,
+    resolve_record_row_positions,
+)
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
@@ -1804,7 +1809,7 @@ def _linear_layout_with_record_placements(
 ) -> LinearMultiRecordOptions | None:
     layout = request.layout
     if layout is not None and layout.multi_record_positions:
-        return layout
+        return _unit_positions(request, layout)
     positioned = [
         (index, record_input.presentation)
         for index, record_input in enumerate(request.records)
@@ -1828,6 +1833,29 @@ def _linear_layout_with_record_placements(
         for index, presentation in positioned
     )
     return replace(layout, multi_record_positions=positions)
+
+
+def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOptions) -> LinearMultiRecordOptions:
+    """Given row positions name records (``#n`` counts records, a record ID names its record, I-6); each becomes the
+    positions of the record's drawn units, in window order, at that row.
+
+    ``request`` is projected (one in-memory record per drawn unit). Without a record of several windows records and
+    units are one, and the positions stay as given.
+    """
+
+    keys = _drawn_record_identities(request)
+    if len(set(keys)) == len(keys):
+        return layout
+    records = [cast(InMemoryRecordSource, record_input.source).record for record_input in request.records]
+    positions: list[str] = []
+    for token in layout.multi_record_positions or ():
+        selector, row = parse_record_row_position(str(token))
+        try:
+            units = select_record_units(records, parse_record_selector(selector))
+        except ValueError as exc:
+            raise ValidationError(f"multi_record_position selector '{selector}': {exc}") from exc
+        positions.extend(f"#{unit + 1}@{row}" for unit in units)
+    return replace(layout, multi_record_positions=tuple(positions))
 
 
 def _drawn_record_identities(request: LinearDiagramRequest) -> list[str | None]:

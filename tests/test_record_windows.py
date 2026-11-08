@@ -517,3 +517,111 @@ def test_an_annotation_in_a_window_across_the_origin_is_drawn_at_its_source_base
         "after": ((669, 870),), "before": ((201, 301),), "cut": ((1469, 1570),),
     }
     assert [warning.code for warning in bundle.warnings] == ["out_of_bounds_clipped"]
+
+
+# I-6 (D-34): `#n` counts records in the given row positions and in a comparisons table, not drawn windows.
+
+
+def test_given_row_positions_name_records_and_place_all_their_windows() -> None:
+    request = LinearDiagramRequest(
+        records=(
+            _windowed(RecordWindow(100, 900), RecordWindow(5000, 5600)),
+            RecordInput(GenBankInputSource(MITO), record_key="other", region=parse_region_spec("1-500")),
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=("#2@1", "#1@2")),
+    )
+    plan = plan_linear_request(request)
+    assert plan.layout is not None
+    assert plan.layout.multi_record_positions == ("#3@1", "#1@2", "#2@2")
+    with pytest.raises(ValidationError, match="out of range"):
+        plan_linear_request(replace(request, layout=LinearMultiRecordOptions(multi_record_positions=("#3@1",))))
+
+
+def test_a_comparisons_table_names_a_windowed_record_by_its_record_number(tmp_path: Path) -> None:
+    from gbdraw.api.record_planning import resolve_linear_options
+
+    records = resolve_request_records(
+        LinearDiagramRequest(
+            records=(
+                _windowed(RecordWindow(100, 900), RecordWindow(5000, 5600)),
+                RecordInput(GenBankInputSource(MITO), record_key="other", region=parse_region_spec("1-500")),
+            ),
+        )
+    ).records
+    layout = LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1", "#3@2"))
+    blast = tmp_path / "pair.tsv"
+    blast.write_text("q\ts\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t200\n", encoding="utf-8")
+    table = tmp_path / "comparisons.tsv"
+    table.write_text(f"blast\tquery\tsubject\n{blast}\t#2\t#1\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="drawn in several windows"):
+        resolve_linear_options(LinearDiagramOptions(comparison_table_file=str(table)), records=records, layout=layout)
+    # `#2` is the second record (the third drawn unit), not the first record's second window.
+    table.write_text(f"blast\tquery\tsubject\n{blast}\t#2\t#3\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="unresolved record selector '#3'"):
+        resolve_linear_options(LinearDiagramOptions(comparison_table_file=str(table)), records=records, layout=layout)
+
+
+def _saved_request(session: Path) -> dict:
+    import json
+
+    document = json.loads(session.read_text(encoding="utf-8"))
+    return document["drawings"][0]["renderRequest"]
+
+
+def _cli(monkeypatch: pytest.MonkeyPatch, arguments: list[str]) -> None:
+    import sys
+
+    from gbdraw.cli import main
+
+    monkeypatch.setattr(sys, "argv", ["gbdraw", *arguments])
+    main()
+
+
+@pytest.mark.parametrize(
+    "regions",
+    [["100-900", "5000-5600:rc"], ["16000-200"]],
+    ids=["two-windows", "one-reversed-crop"],
+)
+def test_a_cli_session_saves_a_record_with_its_windows_and_replays_the_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, regions: list[str]
+) -> None:
+    def main(arguments: list[str]) -> None:
+        _cli(monkeypatch, arguments)
+
+    monkeypatch.chdir(tmp_path)
+    arguments = ["linear", "--gbk", str(MITO), "-o", "w", "-f", "svg", "--save_session"]
+    for region in regions:
+        arguments += ["--region", region]
+    main(arguments)
+    [record] = _saved_request(tmp_path / "w.gbdraw-session.json")["records"]
+    assert record["recordKey"] == "record-1"
+    assert record["source"]["kind"] == "genbank" and record["selector"] is None
+    expected = [parse_region_spec(region) for region in regions]
+    assert [(w["start"], w["end"], w["reverseComplement"]) for w in record["windows"]] == [
+        (spec.start, spec.end, spec.reverse_complement) for spec in expected
+    ]
+    main(["render", "--session", "w.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "w.svg").read_bytes()
+
+
+def test_a_cli_session_of_a_records_table_group_keeps_the_window_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    table = _table(
+        tmp_path,
+        [
+            f"{MITO}\t\tM\t1\t1\t100-900\tg",
+            f"{TWO_RECORDS}\tTESTA\tT\t1\t2\t\t",
+            f"{MITO}\t\t\t1\t3\t5000-5600:rc\tg",
+            f"{TWO_RECORDS}\tTESTB\tN\t2\t1\t\t",
+        ],
+        "gbk\trecord_id\trecord_label\trow\tcolumn\tregion\trecord_group",
+    )
+    _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "g", "-f", "svg", "--save_session"])
+    records = _saved_request(tmp_path / "g.gbdraw-session.json")["records"]
+    assert [(record["recordKey"], [w["column"] for w in record["windows"]]) for record in records] == [
+        ("record-1", [1, 3]), ("record-2", []), ("record-3", []),
+    ]
+    _cli(monkeypatch, ["render", "--session", "g.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "g.svg").read_bytes()
