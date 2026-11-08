@@ -120,3 +120,12 @@ def test_gui_status_lines_go_to_stderr(monkeypatch: pytest.MonkeyPatch, capsys: 
     assert captured.out == ""
     assert f"Local server started at: {opened[0]}" in captured.err
     assert "Stopping server..." in captured.err
+
+
+def test_an_argument_error_carries_one_label(tmp_path: Path) -> None:
+    run = _gbdraw("circular", "--gff", str(tmp_path / "genome.gff"), cwd=tmp_path)
+
+    assert run.returncode == 2
+    assert run.stdout == ""
+    assert "error: --gff requires --fasta." in run.stderr
+    assert "Error:" not in run.stderr
