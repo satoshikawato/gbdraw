@@ -33,7 +33,7 @@ def _reference_help_options(mode: str) -> set[str]:
     return set(LONG_OPTION.findall(block))
 
 
-@pytest.mark.parametrize("mode", ["circular", "linear", "render"])
+@pytest.mark.parametrize("mode", ["circular", "linear", "render", "locate"])
 def test_cli_reference_generated_help_option_sets_match_live_help(mode: str) -> None:
     assert _reference_help_options(mode) == _live_help_options(mode)
 

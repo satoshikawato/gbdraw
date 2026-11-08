@@ -170,6 +170,14 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
         ),
     }
 )
+# The programs that compare drawn records with each other, like molecules on both sides: the choices of
+# ``gbdraw linear --losat``, ``gbdraw circular --ring_losat`` and ``LosatSearchOptions.program``. ``tlosatn``
+# searches proteins in records (the locate search, Sequence search) and draws no comparison.
+COMPARISON_LOSAT_PROGRAMS: tuple[str, ...] = tuple(
+    name for name, spec in LOSAT_PROGRAMS.items() if spec.molecules[0] == spec.molecules[1]
+)
+# The ``losatn`` task when none is chosen.
+DEFAULT_LOSATN_TASK = "megablast"
 
 
 @dataclass(frozen=True)
@@ -457,12 +465,14 @@ def require_losat_program(
     *,
     losat_bin: str | None = None,
     ncbi_blast_bin: str | None = None,
+    alternatives: Sequence[str] = (),
 ) -> LosatRuntime:
     """Resolve the runtime of ``program`` and fail before searching when it lacks the program.
 
     A resolved LOSAT runtime is probed (:func:`losat_supports_program`); an
     NCBI BLAST+ runtime is the program's own executable. There is no fallback
-    to another program: another program is another search.
+    to another program: another program is another search. The error names
+    ``alternatives``, the other programs the caller's ``--losat`` takes.
     """
 
     spec = losat_program(program)
@@ -474,7 +484,9 @@ def require_losat_program(
         f"The LOSAT runtime at {runtime.executable} ({version}) has no {spec.search}, which the "
         f"{spec.description} search needs. Pass a LOSAT build that has {spec.search} with "
         f"{LOSAT_BIN_OPTION}, pass NCBI BLAST+ {spec.search} with {NCBI_BLAST_BIN_OPTION}, "
-        "or choose another search program.",
+        "or choose another search program"
+        + (f" with --losat ({' or '.join(alternatives)})" if alternatives else "")
+        + ".",
         diagnostic={"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE", "program": spec.name},
     )
 
@@ -845,6 +857,8 @@ class LosatRawCache:
 
 __all__ = [
     "AUTOMATIC_LOSAT_BIN",
+    "COMPARISON_LOSAT_PROGRAMS",
+    "DEFAULT_LOSATN_TASK",
     "LOSAT_BIN_OPTION",
     "LOSAT_OPTION_FLAGS",
     "LOSAT_PROGRAMS",

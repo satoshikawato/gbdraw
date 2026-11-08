@@ -135,7 +135,7 @@ def test_reference_orders_genes_along_the_drawn_windows_and_reports_cut_genes() 
     assert [(gene.protein_id, gene.window_index, gene.order) for gene in reference.genes] == [
         ("g0_0", 0, 0), ("g0_1", 0, 1), ("g0_2", 0, 2), ("g1_1", 1, 3), ("g1_0", 1, 4),
     ]
-    assert reference.cut_genes == ("cut",)
+    assert [cds.protein_id for cds in reference.cut_genes] == ["cut"]
     plan = plan_locate(reference, [], [], OPTIONS)
     assert [(warning.code, warning.args) for warning in plan.warnings] == [("REFERENCE_GENE_CUT", (("count", 1),))]
 
@@ -175,7 +175,7 @@ def test_a_reference_window_may_cross_the_origin_of_a_circular_reference() -> No
         windows=[RecordWindow(9001, 2000)], cds=cds,
     )
     assert [gene.protein_id for gene in reference.genes] == ["a", "origin", "b"]
-    assert reference.cut_genes == ("cut",)
+    assert [cds.protein_id for cds in reference.cut_genes] == ["cut"]
     with pytest.raises(ValidationError, match="crosses the origin of a linear record"):
         locate_reference(file_key="r", record_key="r", record_id="R", record_length=10_000, circular=False,
                          windows=[RecordWindow(9001, 2000)], cds=cds[:1])
@@ -188,7 +188,7 @@ def test_a_cds_across_the_origin_is_cut_by_a_window_that_ends_at_the_record_end(
                                  windows=[RecordWindow(1, 10_000)], cds=cds)
 
     assert [gene.protein_id for gene in reference.genes] == ["a"]
-    assert reference.cut_genes == ("origin",)
+    assert [cds.protein_id for cds in reference.cut_genes] == ["origin"]
 
 
 # Rule 1: filter.

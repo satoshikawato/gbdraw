@@ -61,6 +61,7 @@ from gbdraw.comparisons.losat_jobs import (
     split_losat_batch_result,
 )
 from gbdraw.comparisons.losat_runtime import (
+    DEFAULT_LOSATN_TASK,
     LOSAT_PROGRAMS,
     LosatRuntimeRecord,
     LosatSearchArgs,
@@ -73,6 +74,8 @@ from gbdraw.io.comparisons import (
     filter_comparison_dataframe,
     read_comparison_table,
 )
+from gbdraw.io.genome import filter_features_by_type, load_fasta, load_gbks, parse_gff_fasta
+from gbdraw.io.record_select import parse_record_selector, select_record
 from gbdraw.io.regions import RecordWindow
 from gbdraw.mode_profiles import LINEAR_MODE_PROFILE, ComparisonThresholds
 
@@ -93,6 +96,8 @@ LocateWarningCode = Literal[
 ]
 LocateArg = Union[str, int, float]
 
+# The record key of the reference record in a plan read from files.
+REFERENCE_RECORD_KEY = "reference"
 # A gene found with at least this share of its query aligned, away from a record end, is complete.
 COMPLETE_QUERY_COVERAGE = 0.9
 _INVALID = {"code": "INPUT_INVALID", "reason": "FIELDS"}
@@ -141,6 +146,12 @@ class ReferenceCds:
     length_aa: int
     length_nt: int
 
+    @property
+    def name(self) -> str:
+        """The name a report gives the CDS: its gene name, else its locus tag, else its protein ID."""
+
+        return self.gene or self.locus_tag or self.protein_id
+
     def __post_init__(self) -> None:
         _require(bool(str(self.protein_id).strip()), "A reference CDS needs a protein ID.")
         _require(
@@ -175,8 +186,8 @@ class ReferenceGene:
 class LocateReference:
     """The reference windows and their genes (:func:`locate_reference`).
 
-    ``windows`` are in column order; ``cut_genes`` are the protein IDs of the
-    CDS a window edge cuts, which are not searched.
+    ``windows`` are in column order; ``cut_genes`` are the CDS a window edge
+    cuts, by protein ID, which are not searched.
     """
 
     file_key: str
@@ -186,7 +197,7 @@ class LocateReference:
     circular: bool
     windows: tuple[RecordWindow, ...]
     genes: tuple[ReferenceGene, ...]
-    cut_genes: tuple[str, ...]
+    cut_genes: tuple[ReferenceCds, ...]
 
 
 def _gene_strand_as_drawn(gene: ReferenceGene, windows: Sequence[RecordWindow]) -> Strand:
@@ -253,7 +264,7 @@ def locate_reference(
         for other in arcs[index + 1:]:
             _require(not _overlaps(arc, other, record_length), "Reference windows overlap.")
     genes: list[ReferenceGene] = []
-    cut: set[str] = set()
+    cut: dict[str, ReferenceCds] = {}
     for window_index, (window, arc) in enumerate(zip(ordered, arcs)):
         inside = []
         for item in cds:
@@ -261,7 +272,7 @@ def locate_reference(
             if _contains(arc, span, record_length):
                 inside.append(item)
             elif _overlaps(arc, span, record_length):
-                cut.add(item.protein_id)
+                cut[item.protein_id] = item
         _require(bool(inside), f"Reference window {window.start}-{window.end} holds no whole CDS.")
         # Positions along the window: a CDS after the origin follows the record end.
         inside.sort(key=lambda item: (item.start + (record_length if item.start < window.start else 0), item.protein_id))
@@ -279,7 +290,7 @@ def locate_reference(
         circular=bool(circular),
         windows=ordered,
         genes=tuple(genes),
-        cut_genes=tuple(sorted(cut)),
+        cut_genes=tuple(cut[key] for key in sorted(cut)),
     )
 
 
@@ -1066,6 +1077,126 @@ def plan_locate(
     return LocatePlan(reference, options, runtime, files, warnings)
 
 
+# The drawing a plan gives: what the records table, the comparisons table and the new drawing read.
+
+
+@dataclass(frozen=True)
+class LocateDrawnRecord:
+    """One record of a row of the drawing: its windows in column order, numbered 1..k over the row's windows.
+
+    ``genes`` are the protein IDs of the reference genes its windows hold.
+    """
+
+    file_key: str
+    record_key: str
+    record_id: str
+    record_length: int
+    windows: tuple[RecordWindow, ...]
+    genes: frozenset[str]
+
+    @property
+    def whole(self) -> bool:
+        """Whether its one window is the whole record as stored, drawn as the record itself."""
+
+        return len(self.windows) == 1 and (self.windows[0].start, self.windows[0].end) == (1, self.record_length)
+
+
+@dataclass(frozen=True)
+class LocateDrawnRow:
+    """One row of the drawing: the reference windows, or the selected windows of one target File."""
+
+    file_key: str
+    records: tuple[LocateDrawnRecord, ...]
+
+
+# A record of the drawing as (row, record) indexes, 0-based.
+LocateRecordPlace = tuple[int, int]
+
+
+@dataclass(frozen=True)
+class LocateDrawing:
+    """The rows of the drawing a plan gives, and the record pairs it compares.
+
+    The first row is the reference; each target File with a selected window
+    follows in plan order. ``pairs`` are the records of adjacent rows that
+    share a reference gene, upper row first.
+    """
+
+    rows: tuple[LocateDrawnRow, ...]
+    pairs: tuple[tuple[LocateRecordPlace, LocateRecordPlace], ...]
+
+
+_DrawnWindow = tuple[str, str, int, RecordWindow, frozenset[str]]
+
+
+def _drawn_row(file_key: str, windows: Sequence[_DrawnWindow]) -> LocateDrawnRow:
+    """A row from its windows in column order, each as (record key, record ID, length, window, genes)."""
+
+    grouped: dict[str, list[tuple[int, _DrawnWindow]]] = {}
+    for column, item in enumerate(windows, start=1):
+        grouped.setdefault(item[0], []).append((column, item))
+    return LocateDrawnRow(
+        file_key=file_key,
+        records=tuple(
+            LocateDrawnRecord(
+                file_key=file_key,
+                record_key=key,
+                record_id=items[0][1][1],
+                record_length=items[0][1][2],
+                windows=tuple(
+                    RecordWindow(item[3].start, item[3].end, item[3].reverse_complement, column)
+                    for column, item in items
+                ),
+                genes=frozenset().union(*(item[4] for _column, item in items)),
+            )
+            for key, items in grouped.items()
+        ),
+    )
+
+
+def locate_drawing(plan: LocatePlan) -> LocateDrawing:
+    """The drawing of ``plan``: the reference windows as picked, then each File's selected windows."""
+
+    reference = plan.reference
+    genes_by_window: dict[int, frozenset[str]] = {}
+    for gene in reference.genes:
+        genes_by_window[gene.window_index] = genes_by_window.get(gene.window_index, frozenset()) | {gene.protein_id}
+    rows = [
+        _drawn_row(
+            reference.file_key,
+            [
+                (reference.record_key, reference.record_id, reference.record_length, window, genes_by_window[index])
+                for index, window in enumerate(reference.windows)
+            ],
+        )
+    ]
+    rows.extend(
+        _drawn_row(
+            file_plan.file_key,
+            [
+                (
+                    planned.record_key,
+                    planned.record_id,
+                    planned.record_length,
+                    planned.window,
+                    frozenset(gene.protein_id for gene in planned.genes),
+                )
+                for planned in file_plan.windows
+            ],
+        )
+        for file_plan in plan.files
+        if file_plan.windows
+    )
+    pairs = tuple(
+        ((row, upper_index), (row + 1, lower_index))
+        for row in range(len(rows) - 1)
+        for upper_index, upper in enumerate(rows[row].records)
+        for lower_index, lower in enumerate(rows[row + 1].records)
+        if upper.genes & lower.genes
+    )
+    return LocateDrawing(tuple(rows), pairs)
+
+
 # Inputs from records and the search plan.
 
 
@@ -1181,9 +1312,18 @@ class LocateSearchJob:
 @dataclass(frozen=True)
 class LocateSearchPlan:
     program: LocateProgramName
-    # The search options in the raw-cache form.
+    # The search options every job runs with, and the same in the raw-cache form.
+    search_args: LosatSearchArgs
     cache_args: tuple[str, ...]
     jobs: tuple[LocateSearchJob, ...]
+
+
+def locate_search_args(program: LocateProgramName) -> LosatSearchArgs:
+    """The search options of a locate search with ``program``: the runtime defaults, and the default
+    ``losatn`` task (``losatn`` needs one)."""
+
+    _require(program in LOCATE_PROGRAMS, f"Unknown locate program {program!r}.")
+    return LosatSearchArgs(task=DEFAULT_LOSATN_TASK if "task" in LOSAT_PROGRAMS[program].required_options else None)
 
 
 def plan_locate_search(
@@ -1191,15 +1331,15 @@ def plan_locate_search(
     targets: Sequence[tuple[str, Sequence[SeqRecord], Sequence[str]]],
     *,
     program: LocateProgramName,
-    search_args: LosatSearchArgs = LosatSearchArgs(),
 ) -> LocateSearchPlan:
     """One job per target File through the shared job owner (``plan_losat_jobs``).
 
     ``targets`` holds ``(file_key, records, record_keys)`` per File. The
-    queries are one source; each File is one source searched whole.
+    queries are one source; each File is one source searched whole, with
+    :func:`locate_search_args`.
     """
 
-    _require(program in LOCATE_PROGRAMS, f"Unknown locate program {program!r}.")
+    search_args = locate_search_args(program)
     spec = LOSAT_PROGRAMS[program]
     source_ids: list[str] = [f"reference:{query.reference.file_key}"]
     uids: list[str] = [query.reference.record_key]
@@ -1221,6 +1361,7 @@ def plan_locate_search(
     batches = prepare_losat_batches(jobs, uids=uids, record_fasta=lambda index: fastas[index])
     return LocateSearchPlan(
         program=program,
+        search_args=search_args,
         cache_args=cache_args,
         jobs=tuple(
             LocateSearchJob(
@@ -1248,6 +1389,104 @@ def locate_search_rows(job: LocateSearchJob, text: str) -> LocateSearchResult:
     return LocateSearchResult(job.file_key, "".join(split[spec] for spec in job.batch.job.specs))
 
 
+# One locate run from input files: what the command line and the Web's Worker share; each runs the jobs itself.
+
+
+class LocateInputFile(NamedTuple):
+    """One input File: its key in the plan (the command line's path, the Web's File key) and its input paths:
+    GenBank, GFF3 with FASTA, or FASTA alone."""
+
+    key: str
+    gbk: str | None
+    gff: str | None
+    fasta: str | None
+
+
+def read_locate_file(file: LocateInputFile) -> list[SeqRecord]:
+    """The records of ``file``, nested GFF3 features (a CDS under an mRNA) read as the drawing reads them."""
+
+    if file.gbk:
+        return load_gbks([file.gbk])
+    if file.gff and file.fasta:
+        return [filter_features_by_type(record, None) for record in parse_gff_fasta(file.gff, file.fasta)]
+    _require(bool(file.fasta), f"Locate File {file.key!r} names no input.")
+    return load_fasta([str(file.fasta)])
+
+
+@dataclass(frozen=True)
+class LocateSearch:
+    """The queries, the targets and the search plan of one locate run (:func:`prepare_locate_search`)."""
+
+    query: LocateQuery
+    targets: tuple[LocateTarget, ...]
+    plan: LocateSearchPlan
+
+
+def _reference_record(records: Sequence[SeqRecord], selector: str | None, file_key: str) -> SeqRecord:
+    if selector is None:
+        _require(
+            len(records) == 1,
+            f"The reference file {file_key} holds {len(records)} records; choose one with --reference_record.",
+        )
+        return records[0]
+    try:
+        [record] = select_record(list(records), parse_record_selector(selector))
+    except ValueError as exc:
+        raise ValidationError(f"The reference file {file_key} has no record {selector!r}: {exc}", diagnostic=_INVALID) from exc
+    return record
+
+
+def prepare_locate_search(
+    reference: LocateInputFile,
+    targets: Sequence[LocateInputFile],
+    *,
+    record: str | None,
+    windows: Sequence[RecordWindow],
+    program: LocateProgramName,
+) -> LocateSearch:
+    """Read the reference record (``record``: an ID or ``#index``, required when the file holds several) and its
+    windows (none: the whole record), and plan one search per target File."""
+
+    chosen = _reference_record(read_locate_file(reference), record, reference.key)
+    query = locate_query(
+        chosen, file_key=reference.key, record_key=REFERENCE_RECORD_KEY,
+        windows=windows or [RecordWindow(1, len(chosen.seq))], program=program,
+    )
+    files = [
+        (file.key, records, [f"{file.key}#{index}" for index in range(1, len(records) + 1)])
+        for file in targets
+        for records in [read_locate_file(file)]
+    ]
+    return LocateSearch(
+        query=query,
+        targets=tuple(locate_target(key, records, keys) for key, records, keys in files),
+        plan=plan_locate_search(query, files, program=program),
+    )
+
+
+def locate_results(search: LocateSearch, outcomes: Sequence[LocateSearchResult]) -> tuple[LocateSearchResult, ...]:
+    """Each job's runtime output (the raw text as the runtime wrote it, or the error that stopped it) with the
+    original record IDs."""
+
+    jobs = {job.file_key: job for job in search.plan.jobs}
+    return tuple(
+        outcome if outcome.error is not None else locate_search_rows(jobs[outcome.file_key], outcome.text)
+        for outcome in outcomes
+    )
+
+
+def finish_locate(
+    search: LocateSearch,
+    results: Sequence[LocateSearchResult],
+    options: LocateOptions,
+    *,
+    runtime: LosatRuntimeRecord | None = None,
+) -> LocatePlan:
+    """The plan of ``search`` from its results with original record IDs (:func:`locate_results`)."""
+
+    return plan_locate(search.query.reference, search.targets, results, options, runtime=runtime)
+
+
 __all__ = [
     "COMPLETE_QUERY_COVERAGE",
     "CandidateReason",
@@ -1256,11 +1495,22 @@ __all__ = [
     "GeneCoverage",
     "GeneStatus",
     "LOCATE_PROGRAMS",
+    "LocateDrawing",
+    "LocateInputFile",
+    "LocateSearch",
+    "REFERENCE_RECORD_KEY",
+    "finish_locate",
+    "locate_results",
+    "prepare_locate_search",
+    "read_locate_file",
+    "LocateDrawnRecord",
+    "LocateDrawnRow",
     "LocateOptions",
     "LocatePlan",
     "LocateProgramName",
     "LocateQuery",
     "LocateRecord",
+    "LocateRecordPlace",
     "LocateReference",
     "LocateSearchJob",
     "LocateSearchPlan",
@@ -1273,8 +1523,10 @@ __all__ = [
     "ReferenceGene",
     "WindowGene",
     "locate_default_thresholds",
+    "locate_drawing",
     "locate_query",
     "locate_reference",
+    "locate_search_args",
     "locate_search_rows",
     "locate_target",
     "plan_locate",

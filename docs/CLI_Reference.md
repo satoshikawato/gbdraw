@@ -50,6 +50,7 @@ Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
   render    Render the drawings of a saved Session
+  locate    Find where a reference span lies in other genomes and write the windows to draw
   setup-losat  Install the pinned native LOSAT release
   gui       Launch the local web UI in your browser
 
@@ -64,6 +65,7 @@ Examples:
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw render --session project.gbdraw-session.json
+  gbdraw locate --reference_gbk ref.gb --reference_region 1000-25000 --targets genome1.gb genome2.gb -o plan
   gbdraw gui
 
 Options (examples):
@@ -2028,6 +2030,148 @@ options:
 `gbdraw render` renders the drawings of a saved Session. Drawing selection,
 output names, and the Session re-save are described in
 [Sessions and output](./REFERENCE/command-line.md#sessions-and-output).
+
+## Locate mode
+
+<!-- BEGIN GENERATED LOCATE HELP -->
+
+```text
+usage: gbdraw locate [-h] [--reference_gbk GBK] [--reference_gff GFF]
+                     [--reference_fasta FASTA] [--reference_record ID]
+                     [--reference_region START-END[:origin][:rc]]
+                     [--targets GBK [GBK ...]] [--target_gffs GFF [GFF ...]]
+                     [--target_fastas FASTA [FASTA ...]] [-o PREFIX]
+                     [--overwrite] [--losat {tlosatn,losatn}]
+                     [--losat_bin PATH] [--ncbi_blast_bin PATH]
+                     [--losat_threads N] [--evalue EVALUE]
+                     [--bitscore BITSCORE] [--identity IDENTITY]
+                     [--alignment_length ALIGNMENT_LENGTH]
+                     [--losat_output_dir DIR] [--flank BP]
+                     [--merge_distance BP] [--max_windows N]
+
+Find where the genes of a reference span lie in other genomes and write the
+windows to draw: PREFIX.records.tsv and PREFIX.comparisons.tsv for gbdraw
+linear, and PREFIX.plan.json.
+
+options:
+  -h, --help            show this help message and exit
+  -o, --output PREFIX   Output prefix (default: locate).
+  --overwrite           Replace existing output files (default: refuse).
+
+reference:
+  --reference_gbk GBK   Reference GenBank file.
+  --reference_gff GFF   Reference GFF3 file (requires --reference_fasta).
+  --reference_fasta FASTA
+                        Reference FASTA file.
+  --reference_record ID
+                        The reference record (record ID or #index); required
+                        when the reference file holds several records.
+  --reference_region START-END[:origin][:rc]
+                        One reference window, 1-based and inclusive; repeat it
+                        once per window, in column order. :origin marks a
+                        window across the origin of a circular record, :rc
+                        draws it reversed (default: the whole record).
+
+targets:
+  --targets GBK [GBK ...]
+                        Target GenBank files, one genome each.
+  --target_gffs GFF [GFF ...]
+                        Target GFF3 files (with --target_fastas).
+  --target_fastas FASTA [FASTA ...]
+                        Target FASTA files.
+
+search:
+  --losat {tlosatn,losatn}
+                        tlosatn searches each gene's protein (tblastn); losatn
+                        its nucleotide sequence (blastn) (default: tlosatn).
+  --losat_bin PATH      Native LOSAT executable (default: automatic runtime
+                        resolution).
+  --ncbi_blast_bin PATH
+                        NCBI BLAST+ executable of the --losat program (tblastn
+                        or blastn) (default: automatic runtime resolution).
+  --losat_threads N     Threads passed to each search (default: runtime
+                        default).
+  --evalue EVALUE       Maximum e-value (default: 0.01).
+  --bitscore BITSCORE   Minimum bitscore (default: 50).
+  --identity IDENTITY   Minimum identity percentage (default: 0).
+  --alignment_length ALIGNMENT_LENGTH
+                        Minimum alignment length (default: 0).
+  --losat_output_dir DIR
+                        Write the raw rows of each target File to DIR.
+
+windows:
+  --flank BP            Bases kept on each side of the genes (default: 1000).
+  --merge_distance BP   Hits of one record at most this many bases apart are
+                        one window (default: 10000).
+  --max_windows N       Most windows selected per File (default: 8).
+```
+
+<!-- END GENERATED LOCATE HELP -->
+
+`gbdraw locate` finds where the genes of a reference span lie in other genomes
+and writes the windows to draw them, for review and editing before
+`gbdraw linear` draws them:
+
+```bash
+gbdraw locate --reference_gbk FZB42.gbff --reference_record NC_009725.2 \
+  --reference_region 373165-373839 --reference_region 1911335-1989004 \
+  --targets CBMB205.gbff SK19.001.gbff -o fengycin
+gbdraw linear --records_table fengycin.records.tsv \
+  --comparisons_table fengycin.comparisons.tsv \
+  --losat losatp --losatp_mode pairwise -o fengycin -f svg
+```
+
+- The reference is the record of `--reference_gbk` (or `--reference_gff` with
+  `--reference_fasta`) that `--reference_record` names; it is required when the
+  file holds several records. Each `--reference_region` is one window, in
+  column order; without it the whole record is the reference. A window across
+  the origin of a circular record ends in `:origin`, as in the records table.
+- The CDS that lie wholly inside a window are the queries. A CDS cut by a
+  window edge is not searched, and the report names it.
+- Each target file is one genome, and every record of it is searched:
+  `--targets` (GenBank), or `--target_gffs` with `--target_fastas`, or
+  `--target_fastas` alone (without annotation, a window may cut a gene).
+- `--losat tlosatn` (the default) searches the protein of each gene in the
+  six-frame translation of every record (tblastn); `--losat losatn` searches
+  its nucleotide sequence (blastn, close relatives only). The thresholds start
+  at the `gbdraw linear` defaults. tblastn needs a LOSAT that has it: the
+  native LOSAT that `gbdraw setup-losat` installs has none, so pass a newer
+  LOSAT with `--losat_bin`, NCBI BLAST+ `tblastn` with `--ncbi_blast_bin`, or
+  choose `--losat losatn`; gbdraw never searches with blastn instead.
+- A window holds the matching genes whole and `--flank` bases on each side, or
+  runs to the end of the record when less remains. Hits of one record at most
+  `--merge_distance` bases apart are one window; farther apart they are two
+  windows of that record. A window is reverse-complemented when most of its
+  genes lie on the opposite strand. A window is selected when it adds genes
+  the windows selected before it do not cover (at least 5 % of the genes of
+  its reference window, and at least two genes, or all of them in a smaller
+  window), at most `--max_windows` per file; the others are listed in the
+  plan as candidates.
+
+Outputs (an existing file stops the command unless `--overwrite` is given):
+
+| File | Contents |
+| --- | --- |
+| `PREFIX.records.tsv` | A [records table](#--records_table): row 1 holds the reference windows, and each target file with a window has one further row, one table row per selected window. The rows of one record share a `record_group` value such as `1:NC_009725.2`; a window that covers a whole record leaves `region` empty. The first window of each row is labelled with its file name. |
+| `PREFIX.comparisons.tsv` | A [comparisons table](#--comparisons_table) of `source=losat` rows: the records of adjacent rows whose windows share a reference gene. |
+| `PREFIX.plan.json` | The whole plan: the reference genes, the selected windows and the candidates with their genes, gene coverage per file, the threshold tally, warnings, the options and the runtime. |
+| `DIR/N.FILE.PROGRAM.tsv` | With `--losat_output_dir DIR`: the raw outfmt 6 rows of the search of target file `N`, with its record IDs. |
+
+The report on standard error lists, for each target file, its windows in
+drawing order (record, span, `(−)` when reversed, genes, and `contig start` or
+`contig end` where a window reaches the end of a record), the genes found in
+part or not at all, and warnings. The command exits with status 1 and an
+`ERROR:` line for an unknown reference record, a window outside the record, two
+overlapping windows, a window without a whole CDS, a target that is the
+reference file, a LOSAT without tblastn, `--ncbi_blast_bin` together with
+`--losat_bin`, and when no target file has a window. A file without a window,
+more windows than `--max_windows`, a target without annotation, and genes
+found in part or not at all are `WARNING:` lines with exit status 0.
+
+The comparisons table names records, so `gbdraw linear` compares every window
+of one record with every window of the other; it warns about a window pair
+with no protein match to draw. `source=losat` rows need `--losatp_mode
+pairwise` with `--losat losatp`.
 
 ## Related documentation
 

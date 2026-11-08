@@ -158,6 +158,7 @@ from .cli_utils.losat_output import (
 )
 from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS
 from .core.numeric import (
     argparse_float,
     argparse_integer,
@@ -169,7 +170,6 @@ from .core.numeric import (
 
 
 # ``--losat`` choices (design 3.2).
-_CLI_LOSAT_PROGRAMS = ("losatn", "tlosatx", "losatp")
 _LOSATP_MODES = ("similarity_groups", "collinear", "pairwise")
 # ``--losat_output_dir`` file for LOSATP raw evidence (design 3.7, D13).
 LOSATP_RAW_OUTPUT_NAME = "losatp.raw.tsv"
@@ -365,7 +365,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     )
     parser.add_argument(
         '--losat',
-        choices=_CLI_LOSAT_PROGRAMS,
+        choices=COMPARISON_LOSAT_PROGRAMS,
         default=None,
         help=(
             'Run a LOSAT comparison between the records: losatn compares the '
