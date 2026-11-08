@@ -848,10 +848,20 @@ def test_a_region_passed_to_replace_replaces_the_windows_as_on_dev() -> None:
     two = RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(1, 100), RecordWindow(200, 300)), record_key="m")
     assert replace(two, record_key="n").windows == two.windows
     assert replace(cropped, record_key="n").windows == cropped.windows
-    # A region passed with windows is the record's one span (replace passes both).
-    assert RecordInput(
-        GenBankInputSource(MITO), region=parse_region_spec("1-5"), windows=(RecordWindow(1, 9),)
-    ).windows == (RecordWindow(1, 5),)
+    # replace passes the record's own windows with the region: the region is the record's one span, also for a
+    # record drawn in several windows.
+    assert replace(two, region=parse_region_spec("5-9")).windows == (RecordWindow(5, 9),)
+    # Windows the caller gives with a region conflict with it, at construction and in replace, and the refusal
+    # names the record.
+    with pytest.raises(ValidationError, match=r"Record 'm' \(HmmtDNA\.gbk\): give a region or windows, not both"):
+        RecordInput(GenBankInputSource(MITO), region=parse_region_spec("1-5"), windows=(RecordWindow(1, 9),),
+                    record_key="m")
+    with pytest.raises(ValidationError, match="give a region or windows, not both"):
+        replace(cropped, region=parse_region_spec("1-5"), windows=[RecordWindow(1, 9)])
+    # No windows given is no conflict.
+    assert RecordInput(GenBankInputSource(MITO), region=parse_region_spec("1-5"), windows=()).windows == (
+        RecordWindow(1, 5),
+    )
     # A record with several windows still names windows when region is read.
     with pytest.raises(ValidationError, match="several windows"):
         _ = two.region

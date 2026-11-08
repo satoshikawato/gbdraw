@@ -228,6 +228,14 @@ class _NoRegion:
 _NO_REGION = _NoRegion()
 
 
+class _HeldWindows(tuple[RecordWindow, ...]):
+    """The windows a ``RecordInput`` holds, which ``dataclasses.replace`` passes back with any region given to it.
+
+    A region given with windows of this type replaces them (OV-2769); a region
+    given with windows the caller built conflicts with them.
+    """
+
+
 @dataclass(frozen=True, init=False)
 class RecordInput:
     """A record source plus selection, windows, and presentation metadata.
@@ -241,10 +249,11 @@ class RecordInput:
     named by the record's selector, ``None`` without windows, and an error
     with several (D-20). Windows of one record may overlap (D-18).
     A ``region`` passed explicitly, ``None`` included, is the record's one span
-    and replaces ``windows``, so ``dataclasses.replace(record, region=None)``
-    draws the record whole and ``replace(record, region=other)`` crops it again,
-    as before windows (OV-2769); without ``region``, ``replace`` copies
-    ``windows``.
+    and replaces the windows the record held, so
+    ``dataclasses.replace(record, region=None)`` draws the record whole and
+    ``replace(record, region=other)`` crops it again, as before windows
+    (OV-2769); without ``region``, ``replace`` copies ``windows``. A region
+    given with windows of the caller's own is refused: give one or the other.
     """
 
     source: RecordInputSource
@@ -270,16 +279,22 @@ class RecordInput:
         # default gets its own presentation and display, as the fields' default factories give.
         presentation = RecordPresentation() if presentation is _NEW_PRESENTATION else presentation
         display = RecordDisplayOptions() if display is _NEW_DISPLAY else display
-        if not isinstance(region, _NoRegion):
-            # A region passed explicitly is the record's one span: it replaces the windows (OV-2769).
-            windows = ()
-        else:
+        # A region passed explicitly is the record's one span: it replaces the windows the record held, which
+        # ``replace`` passes back (OV-2769); windows the caller built conflict with it.
+        conflict = not isinstance(region, _NoRegion) and bool(windows) and not isinstance(windows, _HeldWindows)
+        if isinstance(region, _NoRegion):
             region = None
+        else:
+            windows = ()
         for name, value in (
             ("source", source), ("selector", selector), ("presentation", presentation),
             ("record_key", record_key), ("cardinality", cardinality), ("display", display), ("windows", windows),
         ):
             object.__setattr__(self, name, value)
+        if conflict:
+            raise ValidationError(
+                f"{self.refusal_name()}: give a region or windows, not both.", diagnostic={"code": "INPUT_INVALID"}
+            )
         self._validate(region)
 
     @property
@@ -407,7 +422,7 @@ class RecordInput:
     def _validate_windows(self) -> None:
         if isinstance(self.windows, (str, bytes)) or not isinstance(self.windows, Sequence):
             raise ValidationError("Record windows must be a sequence of RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
-        windows = tuple(self.windows)
+        windows = _HeldWindows(self.windows)
         if not all(isinstance(window, RecordWindow) for window in windows):
             raise ValidationError("Record windows must contain RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
         object.__setattr__(self, "windows", windows)
