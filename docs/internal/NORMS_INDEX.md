@@ -284,7 +284,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 2 | scenario revision 1 | 4 |
 | [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
 | [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
-| [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 1 | — | 0 |
+| [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 1 | — | 6 |
 | [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 0 |
 | [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 0 |
 
@@ -772,19 +772,19 @@ are listed under "Cited ids without a record".
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/session-export-validation.test.mjs`
   - `tests/web/session-resource-backing.test.mjs`
-
-### Cited ids without a record
-
-- `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).
-  - `tests/fixtures/sessions/two-mode-project.provenance.json`
-  - `tests/fixtures/sessions/two-mode-thresholds.provenance.json`
-- `PD-OI-122`: no record. No record mentions it.
+- [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row)
   - `tests/test_origin_crossing_comparisons.py`
   - `tests/test_record_windows.py`
   - `tests/test_region_origin_spelling.py`
   - `tests/test_session_io.py`
   - `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
   - `tests/web/run-info.test.mjs`
+
+### Cited ids without a record
+
+- `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).
+  - `tests/fixtures/sessions/two-mode-project.provenance.json`
+  - `tests/fixtures/sessions/two-mode-thresholds.provenance.json`
 - `PD-OI-900`: no record. No record mentions it.
   - `tests/web/architecture-contracts.test.mjs`
 
