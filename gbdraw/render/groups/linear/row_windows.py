@@ -14,9 +14,15 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Circle, Group, Line, Rect, Text, TSpan
 
 from ....core.text import create_text_element, drawn_text_box, measure_mixed_text_line, parse_mixed_content_text
-from ....layout.linear_row_windows import LIST_LABEL_SEPARATOR, LinearRowWindows, RowWindowLine, RowWindowStyle
+from ....layout.linear_row_windows import (
+    LIST_LABEL_SEPARATOR,
+    EdgeMark,
+    LinearRowWindows,
+    RowWindowLine,
+    RowWindowStyle,
+)
 from ....layout.spatial import Aabb, union_aabbs
-from .definition import DefinitionGroup, LinearDefinitionStyle, _DefinitionLine
+from .definition import DefinitionGroup, LinearDefinitionStyle, DefinitionLine
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
@@ -88,8 +94,8 @@ class RowWindowHeadingGroup(DefinitionGroup):
         label = parse_mixed_content_text(line.label) if line.label else []
         return [*label, {"text": (LIST_LABEL_SEPARATOR if line.label else "") + line.text, "italic": False}]
 
-    def _build_definition_lines(self) -> list[_DefinitionLine]:
-        lines = [line for line in super()._build_definition_lines() if line.kind == "name"]
+    def build_definition_lines(self) -> list[DefinitionLine]:
+        lines = [line for line in super().build_definition_lines() if line.kind == "name"]
         style = self._window_style
         for window_line in self._windows.lines:
             parts = self._list_parts(window_line)
@@ -101,7 +107,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
             )
             height = max(height, drawn_text_box("0", style.font_family, style.list_font_size)[1])
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="window",
                     text="".join(str(part.get("text") or "") for part in parts),
                     width=style.number_room + width,
@@ -124,8 +130,8 @@ class RowWindowHeadingGroup(DefinitionGroup):
         anchor = str(self.linear_text_anchor).strip().lower()
         return self.text_x if anchor == "start" else self.text_x - (block if anchor == "end" else 0.5 * block)
 
-    def _calculate_local_bounds(self) -> Aabb:
-        name_bounds = super()._calculate_local_bounds()
+    def calculate_local_bounds(self) -> Aabb:
+        name_bounds = super().calculate_local_bounds()
         left = self._list_left()
         boxes = [
             Aabb(left, line.y - 0.5 * line.height, left + line.width, line.y + 0.5 * line.height)
@@ -142,7 +148,7 @@ class RowWindowHeadingGroup(DefinitionGroup):
         number = 0
         for line in self.definition_lines:
             if line.kind != "window":
-                self.definition_group.add(self._create_name_text(line, line.y))
+                self.definition_group.add(self.create_name_text(line, line.y))
                 continue
             window_line = self._windows.lines[number]
             number += 1
@@ -213,7 +219,7 @@ class RowWindowMarksGroup:
                 style,
             )
 
-    def _edge(self, x: float, side: float, axis_y: float, mark: str, style: RowWindowStyle) -> None:
+    def _edge(self, x: float, side: float, axis_y: float, mark: EdgeMark, style: RowWindowStyle) -> None:
         if mark == "bar":
             bar_x = x + side * style.bar_offset
             line = Line(

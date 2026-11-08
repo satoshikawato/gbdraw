@@ -2661,18 +2661,20 @@ class _LinearDefinitionMetrics:
 
 def _row_window_heading_content(
     canvas_config: LinearCanvasConfigurator,
-    leading_record: SeqRecord,
+    record: SeqRecord,
     record_count: int,
     frame: _LinearRowFrame,
     windows: LinearRowWindows,
 ) -> GroupContent:
-    """A windowed row's heading, drawn from the row's leading record with the name of its first labelled one."""
+    """A windowed row's heading. It carries the identity (record index and ID) of the record whose label it shows,
+    so a click on the name finds that record; without a label in the row, the leading record's. ``record`` is the
+    record at ``windows.heading_record_index``."""
 
-    index = windows.leading_record_index
-    group_id = definition_group_svg_id(leading_record.id, mode="linear", record_index=index, record_count=record_count)
+    index = windows.heading_record_index
+    group_id = definition_group_svg_id(record.id, mode="linear", record_index=index, record_count=record_count)
     return build_group_content(
         RowWindowHeadingGroup,
-        leading_record,
+        record,
         str(canvas_config.length_param),
         style=LinearDefinitionStyle.of(canvas_config.profile.config),
         windows=windows,
@@ -2680,9 +2682,7 @@ def _row_window_heading_content(
         text_anchor="start" if bool(canvas_config.keep_definition_left_aligned) else "middle",
         group_id=f"{group_id}_row",
         record_index=index,
-        record_presentation=(
-            frame.presentations[windows.name_record_index] if windows.name_record_index is not None else None
-        ),
+        record_presentation=frame.presentations[index] if windows.name_record_index is not None else None,
     )
 
 
@@ -2738,7 +2738,7 @@ def _linear_definition_metrics(
     row_definition_tops: list[float | None] = [None for _record in records]
     for windows in frame.row_windows:
         content = _row_window_heading_content(
-            canvas_config, records[windows.leading_record_index], len(records), frame, windows
+            canvas_config, records[windows.heading_record_index], len(records), frame, windows
         )
         index = windows.leading_record_index
         measured = content.definition
@@ -2997,8 +2997,11 @@ def _ribbon_clear_bands(
     frame: _LinearRowFrame,
     comparisons: _LinearComparisons,
     definition_geometries: Sequence[_LinearRecordDefinitionGeometry],
+    marks_bands: Mapping[int, VerticalBand],
 ) -> dict[int, VerticalBand]:
-    """The text above each record of a shared row that a comparison ribbon reaches (OV-2712), by record index."""
+    """The row text of each record of a shared row that a comparison ribbon reaches, by record index: the text
+    above the record (OV-2712), and a window's number and "//" length (PD-OI-122: no row text is drawn over the
+    comparison ribbons)."""
 
     if not frame.multi_record_enabled:
         return {}
@@ -3007,11 +3010,14 @@ def _ribbon_clear_bands(
         for comparison in comparisons.normalized
         for index in (comparison.query_record_index, comparison.subject_record_index)
     }
-    return {
-        index: band
-        for index in sorted(endpoints)
-        if (band := definition_geometries[index].local_band) is not None
-    }
+    clear: dict[int, VerticalBand] = {}
+    for index in sorted(endpoints):
+        bands = [
+            band for band in (definition_geometries[index].local_band, marks_bands.get(index)) if band is not None
+        ]
+        if bands:
+            clear[index] = bands[0] if len(bands) == 1 else bands[0].union(bands[1])
+    return clear
 
 
 def _linear_vertical_plans(
@@ -3046,9 +3052,22 @@ def _linear_vertical_plans(
         render_context=tracks.render_context,
         record_transforms=record_inputs.record_transforms,
     )
-    # The text above a record that a ribbon reaches belongs to its body: the ribbons end above it, and the rows
-    # move apart by its height (OV-2712).
-    ribbon_clear_bands = _ribbon_clear_bands(frame, comparisons, record_definition_geometries)
+    # A window's marks, number and gap text belong to its record's body (PD-OI-122).
+    marks_bands = {
+        index: frame.row_window_style.marks_band(record_vertical_plans[index].feature_lanes_band.top_y)
+        for windows in frame.row_windows
+        for index in windows.record_indices
+    }
+    for index, marks in marks_bands.items():
+        plan = record_vertical_plans[index]
+        record_vertical_plans[index] = replace(
+            plan,
+            record_body_band=plan.record_body_band.union(marks),
+            canvas_band=plan.canvas_band.union(marks),
+        )
+    # The row text of a record that a ribbon reaches belongs to its body: the ribbons end above it, and the rows
+    # move apart by its height (OV-2712, PD-OI-122).
+    ribbon_clear_bands = _ribbon_clear_bands(frame, comparisons, record_definition_geometries, marks_bands)
     for index, band in ribbon_clear_bands.items():
         plan = record_vertical_plans[index]
         record_vertical_plans[index] = replace(
@@ -3056,16 +3075,6 @@ def _linear_vertical_plans(
             record_body_band=plan.record_body_band.union(band),
             comparison_exclusion_band=plan.comparison_exclusion_band.union(band),
         )
-    # A window's marks, number and gap text belong to its record's body (PD-OI-122).
-    for windows in frame.row_windows:
-        for index in windows.record_indices:
-            plan = record_vertical_plans[index]
-            marks = frame.row_window_style.marks_band(plan.feature_lanes_band.top_y)
-            record_vertical_plans[index] = replace(
-                plan,
-                record_body_band=plan.record_body_band.union(marks),
-                canvas_band=plan.canvas_band.union(marks),
-            )
     # Every later reader counts a wrapped record's labels in one frame, where rows do not overlap.
     feature_slot_id = next((slot.id for slot in tracks.linear_track_layout.slots if slot.renderer == "features"), None)
     all_labels = [
@@ -3760,6 +3769,8 @@ class _LinearRecordDrawing:
     orthogroup_label_top_member_ids: set[str | int] | None
     record_group_id: str
     axis_row_offsets: tuple[float, ...]
+    # The record whose identity the heading of this record's windowed row carries, when this record leads the row.
+    row_heading_record: SeqRecord | None
 
 
 def _linear_record_drawing(
@@ -3776,6 +3787,7 @@ def _linear_record_drawing(
     record = records[record_index]
     definitions = plan.definitions
     vertical_plan = plan.vertical.record_vertical_plans[record_index]
+    windows = plan.frame.row_windows_of(record_index)
     member_ids, top_member_ids = orthogroup_label_sets_for_record(
         plan.comparisons.orthogroup_label_eligibility if plan.comparisons.label_scope == "orthogroup_top" else None,
         record_index,
@@ -3819,6 +3831,11 @@ def _linear_record_drawing(
             record_count=len(records),
         ),
         axis_row_offsets=vertical_plan.row_offsets if vertical_plan.wrap_rows else (),
+        row_heading_record=(
+            records[windows.heading_record_index]
+            if windows is not None and windows.leading_record_index == record_index
+            else None
+        ),
     )
 
 
@@ -4156,10 +4173,16 @@ def _draw_linear_record_definition(canvas: Drawing, drawing: _LinearRecordDrawin
         record_key=drawing.record_key,
     )
     windows = plan.frame.row_windows_of(record_index)
-    if windows is not None and windows.leading_record_index == record_index and geometry.row_center_y is not None:
+    if (
+        windows is not None
+        and drawing.row_heading_record is not None
+        and geometry.row_center_y is not None
+    ):
         add_row_window_heading_group(
             canvas,
-            _row_window_heading_content(drawing.canvas_config, drawing.record, drawing.record_count, plan.frame, windows),
+            _row_window_heading_content(
+                drawing.canvas_config, drawing.row_heading_record, drawing.record_count, plan.frame, windows
+            ),
             drawing.canvas_config,
             drawing.placement,
             row_definition_width=definitions.row_definition_width,

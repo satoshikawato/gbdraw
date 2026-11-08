@@ -129,6 +129,32 @@ def test_the_texts_of_spans_and_omitted_lengths() -> None:
     assert [omitted_length_text(n) for n in (1_535_000, 12_345, 850)] == ["1.54 Mb", "12.3 kb", "850 bp"]
 
 
+
+def test_the_unit_of_an_omitted_length_is_chosen_after_rounding() -> None:
+    assert [omitted_length_text(n) for n in (999, 1_000, 999_949, 999_950, 999_999, 1_000_000)] == [
+        "999 bp", "1.0 kb", "999.9 kb", "1.00 Mb", "1.00 Mb", "1.00 Mb",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "text"),
+    [
+        ((16_000, 500), (2_000, 3_000), "1.5 kb"),  # the first window crosses the origin
+        ((15_000, 16_000), (1_000, 2_000), "1.6 kb"),  # the interval left out crosses the origin
+    ],
+)
+def test_on_a_circular_record_the_interval_runs_forward_through_the_origin(first, second, text) -> None:
+    plan = plan_row_windows(
+        [_unit(0, first, circular=True, length=16_569), _unit(1, second, circular=True, length=16_569)]
+    )
+    assert plan is not None and [gap.text for gap in plan.gaps] == [text]
+
+
+def test_on_a_linear_record_windows_that_run_backwards_have_no_length() -> None:
+    plan = plan_row_windows([_unit(0, (15_000, 16_000), length=16_569), _unit(1, (1_000, 2_000), length=16_569)])
+    assert plan is not None and [gap.text for gap in plan.gaps] == [""]
+
+
 # --- the drawing ------------------------------------------------------------------------------------------------
 
 
@@ -277,3 +303,112 @@ def test_a_ruler_scale_in_a_figure_with_several_records_in_a_row_spans_one_recor
     widest = max(record["sequenceWidthPx"] for record in canvas._gbdraw_track_slot_geometry["records"])
     ruler_end = max(float(line.get("x2", "0")) for line in bar.iter(f"{SVG}line"))
     assert ruler_end == pytest.approx(widest)
+
+
+
+def _mito_windows_figure(tmp_path: Path, windows: tuple[RecordWindow, ...]) -> ET.Element:
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                GenBankInputSource(MITO),
+                windows=windows,
+                record_key="mito",
+                presentation=RecordPresentation(grid_row=1),
+            ),
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    rendered = render_request(replace(request, output=replace(request.output, output_directory=tmp_path)))
+    [svg] = [path for path in rendered.output_paths if path.suffix == ".svg"]
+    return ET.fromstring(svg.read_text(encoding="utf-8"))
+
+
+def test_a_window_across_the_origin_is_listed_with_its_span_and_counts_the_gap_round_the_origin(tmp_path: Path) -> None:
+    root = _mito_windows_figure(
+        tmp_path, (RecordWindow(16_000, 500, column=1), RecordWindow(2_000, 3_000, column=2))
+    )
+    [heading] = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "record-definition-row"]
+    assert [
+        "".join(text.itertext()) for text in heading.iter(f"{SVG}text") if text.get("data-definition-line-kind")
+    ] == ["NC_012920.1:16,000-500", "NC_012920.1:2,000-3,000"]
+    [marks] = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "row-window-marks"]
+    assert [e.get("data-gbdraw-row-mark") for e in marks if e.get("data-gbdraw-row-mark") in ("bar", "dash")] == [
+        "dash", "dash", "dash", "dash",
+    ]
+    assert [_texts(g) for g in marks if g.get("data-gbdraw-row-mark") == "gap"] == [["1.5 kb"]]
+
+
+def _record(record_id: str, length: int = 1_000) -> SeqRecord:
+    record = SeqRecord(Seq("ACGT" * (length // 4)), id=record_id, name=record_id)
+    record.annotations.update({"molecule_type": "DNA", "topology": "linear"})
+    record.features = [SeqFeature(FeatureLocation(10, 900, strand=1), type="CDS")]
+    return record
+
+
+def _window_input(record_id: str, column: int, row: int, label: str | None = None) -> RecordInput:
+    return RecordInput(
+        InMemoryRecordSource(_record(record_id)),
+        windows=(RecordWindow(1, 950),),
+        record_key=record_id.lower(),
+        presentation=RecordPresentation(label=label, grid_row=row, grid_column=column),
+    )
+
+
+def _render(tmp_path: Path, request: LinearDiagramRequest) -> ET.Element:
+    rendered = render_request(replace(request, output=replace(request.output, output_directory=tmp_path)))
+    [svg] = [path for path in rendered.output_paths if path.suffix == ".svg"]
+    return ET.fromstring(svg.read_text(encoding="utf-8"))
+
+
+def test_the_row_heading_carries_the_identity_of_the_record_whose_label_it_shows(tmp_path: Path) -> None:
+    root = _render(
+        tmp_path,
+        LinearDiagramRequest(
+            records=(_window_input("A", 1, 1), _window_input("B", 2, 1, label="Bname")),
+            layout=LinearMultiRecordOptions(),
+        ),
+    )
+    [heading] = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "record-definition-row"]
+    assert "Bname" in _texts(heading)
+    # A click on the name opens B's card, and an edit there writes B's label.
+    assert (heading.get("data-gbdraw-record-index"), heading.get("data-gbdraw-record-id")) == ("1", "B")
+
+
+def test_ribbons_end_above_the_window_numbers_of_the_row_they_reach(tmp_path: Path) -> None:
+    comparison = LinearComparison(
+        0, 1, pd.DataFrame([["T", "A", 90.0, 700, 0, 0, 100, 800, 100, 800, 1e-20, 200]], columns=COMPARISON_COLUMNS)
+    )
+    second = LinearComparison(
+        0, 2, pd.DataFrame([["T", "B", 90.0, 700, 0, 0, 100, 800, 100, 800, 1e-20, 200]], columns=COMPARISON_COLUMNS)
+    )
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                InMemoryRecordSource(_record("T", 2_000)),
+                record_key="t",
+                presentation=RecordPresentation(grid_row=1, grid_column=1),
+            ),
+            _window_input("A", 1, 2),
+            _window_input("B", 2, 2),
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    root = _render(
+        tmp_path,
+        replace(request, options=replace(request.options, linear_comparisons=(comparison, second))),
+    )
+    ribbon_bottom = max(
+        _translate_y(group) + max(float(y) for y in re.findall(r"[ ,L]([-\d.]+)(?=[ L z]|$)", path.get("d", "")))
+        for group in root.iter(f"{SVG}g")
+        if group.get("data-subject-row") == "1"
+        for path in group.iter(f"{SVG}path")
+    )
+    [marks] = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "row-window-marks"]
+    circles = [
+        _translate_y(marks) + float(circle.get("cy", "0")) - float(circle.get("r", "0"))
+        for number in marks
+        if number.get("data-gbdraw-row-mark") == "number"
+        for circle in number.iter(f"{SVG}circle")
+    ]
+    assert len(circles) == 2
+    assert ribbon_bottom <= min(circles)

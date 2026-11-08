@@ -60,10 +60,6 @@ class RowWindowUnit:
     has_region: bool
 
     @property
-    def crosses_origin(self) -> bool:
-        return self.span[0] > self.span[1]
-
-    @property
     def length(self) -> int:
         start, end = self.span
         return end - start + 1 if start <= end else self.source_length - start + 1 + end
@@ -116,14 +112,15 @@ def window_span_text(start: int, end: int) -> str:
 def omitted_length_text(length_bp: int) -> str:
     """The length a "//" leaves out, as the row draws it above the gap (``1.54 Mb``, ``12.3 kb``, ``850 bp``)."""
 
-    # Rounded half up in integers, so a length such as 1,535,000 bp reads 1.54 Mb on every platform.
-    if length_bp >= 1_000_000:
-        hundredths = (length_bp + 5_000) // 10_000
-        return f"{hundredths // 100:,}.{hundredths % 100:02d} Mb"
-    if length_bp >= 1_000:
-        tenths = (length_bp + 50) // 100
+    # Rounded half up in integers, so a length such as 1,535,000 bp reads 1.54 Mb on every platform. The unit is
+    # chosen after rounding: 999,950 bp reads 1.00 Mb, not 1,000.0 kb.
+    if length_bp < 1_000:
+        return f"{length_bp:,} bp"
+    tenths = (length_bp + 50) // 100
+    if tenths < 10_000:
         return f"{tenths // 10:,}.{tenths % 10} kb"
-    return f"{length_bp:,} bp"
+    hundredths = (length_bp + 5_000) // 10_000
+    return f"{hundredths // 100:,}.{hundredths % 100:02d} Mb"
 
 
 @dataclass(frozen=True)
@@ -167,6 +164,12 @@ class LinearRowWindows:
     def leading_record_index(self) -> int:
         return self.record_indices[0]
 
+    @property
+    def heading_record_index(self) -> int:
+        """The record whose identity the row heading carries: the one whose label it shows, else the leading one."""
+
+        return self.name_record_index if self.name_record_index is not None else self.leading_record_index
+
     def number_of(self, record_index: int) -> int:
         return self.record_indices.index(record_index) + 1
 
@@ -189,11 +192,13 @@ def _arc_contains(start: int, end: int, base: int) -> bool:
 
 def _source_interval_left_out(earlier: RowWindowUnit, later: RowWindowUnit) -> tuple[int, int] | None:
     """The source interval between ``earlier``'s end and ``later``'s start, read in the record's stored order,
-    or ``None`` when the two overlap, touch or run backwards."""
+    or ``None`` when the two overlap, touch or (on a linear record) run backwards. On a circular record the
+    interval runs forward from ``earlier``'s end to ``later``'s start, through the origin when needed, for every
+    pair: windows of a circular record never run backwards."""
 
     length = earlier.source_length
     first, last = earlier.span[1] + 1, later.span[0] - 1
-    if not earlier.circular or not (earlier.crosses_origin or later.crosses_origin):
+    if not earlier.circular:
         return (first, last) if earlier.span[1] < later.span[0] and first <= last else None
     gap = (later.span[0] - earlier.span[1] - 1) % length
     if gap <= 0 or gap + earlier.length + later.length > length:
