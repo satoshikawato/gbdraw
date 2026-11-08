@@ -6,6 +6,7 @@
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
+import { cropFormReverseComplement, linearCardCropForm, orientLinearCard } from './record-display-model.js';
 /** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
@@ -912,12 +913,12 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
-  // The orientations of the cards of `drawing`, the drawing a step captures.
+  // The orientations of the cards of `drawing`, the drawing a step captures, as each card holds them (`linearCardCropForm`).
   /** @param {D} drawing */
   const captureLinearRecordOrientations = (drawing) => (
     drawing.linearSeqs.map((sequence) => ({
       recordKey: String(sequence?.uid || ''),
-      reverseComplement: Boolean(sequence?.region_reverse)
+      reverseComplement: cropFormReverseComplement(linearCardCropForm(sequence))
     })).filter(({ recordKey }) => recordKey)
   );
 
@@ -931,7 +932,7 @@ export const createHistorySnapshotService = ({
     );
     drawing.linearSeqs.forEach((sequence) => {
       const reverse = byRecord.get(String(sequence?.uid || ''));
-      if (reverse !== undefined) sequence.region_reverse = reverse;
+      if (reverse !== undefined) orientLinearCard(sequence, reverse);
     });
   };
 

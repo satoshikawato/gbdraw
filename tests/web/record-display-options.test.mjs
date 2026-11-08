@@ -327,6 +327,48 @@ test('a Linear rotation writes the File card orientation and leaves no row overr
   assert.deepEqual([sequence.region_reverse, model.state.recordDisplayDrafts[0].reverseComplementOverride], [true, null]);
 });
 
+// OV-2883: a Linear card that lists windows holds its orientation on them, the orientation Generate reads; its
+// Reverse complement orients only a card without windows.
+const windowedCard = (model, ...reverses) => {
+  const sequence = model.state.linearSeqs[1];
+  sequence.windows = reverses.map((reverseComplement, index) => ({ start: 1 + 40 * index, end: 20 + 40 * index,
+    reverseComplement, column: null }));
+  return sequence;
+};
+const cardOrientation = (sequence) => [sequence.region_reverse, ...sequence.windows.map((window) => window.reverseComplement)];
+
+test('Record options Reverse on a Linear card with windows writes the windows (OV-2883)', () => {
+  const model = compositeControls({ linear: true });
+  const sequence = windowedCard(model, true, true);
+  const row = () => model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
+  assert.equal(row().reverse, true, 'the row reads the orientation its windows hold');
+  model.controls.setReverseComplement(row(), false);
+  assert.deepEqual(cardOrientation(sequence), [false, false, false]);
+  assert.equal(row().reverse, false);
+  model.controls.setReverseComplement(row(), true);
+  assert.deepEqual(cardOrientation(sequence), [false, true, true]);
+  assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  // A rotation's checkpoint gives back the windows as they were.
+  const before = model.controls.captureTargetDraft(row());
+  model.controls.commitResolvedTransform(row(), { startCoordinate: 25, reverseComplement: false, anchorIntent });
+  assert.deepEqual(cardOrientation(sequence), [false, false, false]);
+  model.controls.restoreTargetDraft(before);
+  assert.deepEqual(cardOrientation(sequence), [false, true, true]);
+});
+
+test('an Align commit writes a windowed card\'s windows and its restore gives them back as they were (OV-2883)', () => {
+  const model = compositeControls({ linear: true });
+  // Windows of both orientations: the record is drawn forward (not every window is reversed).
+  const sequence = windowedCard(model, false, true);
+  const directions = [{ recordKey: 'record-2', reverseComplement: true }];
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, directions);
+  model.controls.commitAlignmentOrientations(model.state, directions);
+  assert.deepEqual(cardOrientation(sequence), [false, true, true]);
+  assert.equal(model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2').reverse, true);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
+  assert.deepEqual(cardOrientation(sequence), [false, false, true]);
+});
+
 // The real History manager over the intent the app captures for these owners:
 // the record display drafts and the Linear File card orientation.
 const draftHistory = (state) => {

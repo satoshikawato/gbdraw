@@ -348,7 +348,7 @@ export const writeCanonicalRecordReverseComplement = (record, reverseComplement)
 };
 
 /**
- * The orientation fields of a crop form, a Linear File card (`windows`, `region_reverse`) or the Circular Region block
+ * The orientation fields of a crop form, a Linear File card (`windows`, `region_reverse`, `linearCardCropForm`) or the Circular Region block
  * (`circular_windows`, `circular_reverse`): the windows it lists (several, or one across the origin), each with its
  * own orientation, and its Reverse complement, which orients only a record it lists no window of, as the request
  * writers read them (Load folds a record-wide reverse complement into the listed windows).
@@ -383,6 +383,35 @@ export const orientedCropForm = (form, reverseComplement) => {
   const record = cropFormRecord(form);
   writeCanonicalRecordReverseComplement(record, reverseComplement);
   return { windows: record.windows, reverse: record.presentation.reverseComplement };
+};
+
+/**
+ * A Linear File card's orientation fields: the windows it lists and its Reverse complement.
+ * @template {{ reverseComplement: boolean }} W
+ * @typedef {{ windows: W[], region_reverse: boolean }} LinearCardOrientation
+ */
+/**
+ * The crop form of a Linear File card, as `cropFormReverseComplement` and `orientedCropForm` read it.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @returns {CropFormOrientation<W>}
+ */
+export const linearCardCropForm = (card) => ({ windows: card.windows, reverse: card.region_reverse });
+
+/**
+ * Draws a Linear File card's record in the absolute direction `reverseComplement` where the card holds its
+ * orientation (`orientedCropForm`): on the windows it lists, else on its Reverse complement. A card drawn so already
+ * is left as it is.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {boolean} reverseComplement
+ */
+export const orientLinearCard = (card, reverseComplement) => {
+  const form = linearCardCropForm(card);
+  if (cropFormReverseComplement(form) === reverseComplement) return;
+  const oriented = orientedCropForm(form, reverseComplement);
+  card.windows = oriented.windows;
+  card.region_reverse = oriented.reverse;
 };
 
 /**

@@ -6,7 +6,8 @@ import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
-import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
+import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
+/** @import { LinearSeq } from '../state.js' */
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
@@ -540,7 +541,7 @@ const baseReverseComplement = canonicalRecordReverseComplement;
 /**
  * @param {Record<string, any> | null | undefined} plan
  * @param {{
- *   linearSeqs?: Record<string, any>[],
+ *   linearSeqs?: LinearSeq[],
  *   catalog?: Record<string, any> | null,
  *   request?: Record<string, any> | null
  * }} [options]
@@ -549,7 +550,7 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
   if (!plan || plan.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !Array.isArray(plan.records)) return null;
   const records = new Map(
     (Array.isArray(linearSeqs) ? linearSeqs : [])
-      .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
+      .map((record) => [record.uid, cropFormReverseComplement(linearCardCropForm(record))])
   );
   const factsOf = catalogNameIndex(catalog).featureOf;
   const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => featureNameParts(anchor, factsOf(anchor) || {});

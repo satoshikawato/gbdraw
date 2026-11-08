@@ -7,6 +7,9 @@ import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
   canonicalRecordReverseComplement,
+  cropFormReverseComplement,
+  linearCardCropForm,
+  orientLinearCard,
   parseRecordDisplayStart,
   recordDisplayKey,
   recordDisplaySurface,
@@ -29,6 +32,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
+/** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
+/** @import { LinearCardOrientation } from '../services/record-display-model.js' */
 /** @import { RecordSelectorStatus } from './linear-record-selector.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
@@ -44,6 +49,14 @@ import { errorText } from '../utils/error-text.js';
 export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
 /** @param {string} kind @param {string} message */
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
+
+/** @param {LinearSeq} card @returns {CardOrientation} */
+const captureCardOrientation = (card) => ({ windows: cloneJsonData(card.windows), region_reverse: card.region_reverse });
+/** Puts back the orientation fields a checkpoint kept, as they were. @param {LinearSeq} card @param {CardOrientation} saved */
+const restoreCardOrientation = (card, saved) => {
+  card.windows = cloneJsonData(saved.windows);
+  card.region_reverse = saved.region_reverse;
+};
 
 /**
  * An entry of the Circular record list, as the record discovery stores it (`run-analysis.js`).
@@ -87,8 +100,15 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  */
 
 /**
- * What `captureAlignmentOrientationIntent` keeps of an orientation: the File card's reverse and the record's drafts.
- * @typedef {AlignmentOrientation & { drafts: TargetDraftCheckpoint[] }} AlignmentOrientationCheckpoint
+ * A Linear File card's orientation fields as a checkpoint keeps them (`captureCardOrientation`): the windows it lists,
+ * copied, and its Reverse complement.
+ * @typedef {LinearCardOrientation<LinearSeqWindow>} CardOrientation
+ */
+
+/**
+ * What `captureAlignmentOrientationIntent` keeps of an orientation: the File card's orientation fields and the record's
+ * drafts.
+ * @typedef {{ recordKey: string, card: CardOrientation, drafts: TargetDraftCheckpoint[] }} AlignmentOrientationCheckpoint
  */
 
 /**
@@ -124,7 +144,7 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {number} index
  * @property {RecordDisplayDraft | null} draft
  * @property {string} [ownerUid]
- * @property {boolean} [ownerReverse]
+ * @property {CardOrientation} [ownerOrientation] the orientation fields of the File card `ownerUid`
  */
 
 /**
@@ -167,12 +187,13 @@ export const createRecordDisplayControls = ({
         records: drawing.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
         cropped: circularDrawingCropped(drawing.circularRecordList.value, drawing),
-        reverse: drawing.form.circular_reverse }]
+        reverse: cropFormReverseComplement({ windows: drawing.form.circular_windows, reverse: drawing.form.circular_reverse }) }]
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
         ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
           inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
-        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length), reverse: seq.region_reverse })));
+        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length),
+        reverse: cropFormReverseComplement(linearCardCropForm(seq)) })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
     /** @type {DrawingState[]} */
@@ -200,7 +221,8 @@ export const createRecordDisplayControls = ({
   };
   /** @param {DrawnRecordRow} row */
   const draftFor = (row) => boundDrafts(state.drawingOf(row.drawingId)).find((/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === row.key) || {};
-  // Linear orientation has one owner, the File card's region_reverse (CO-03,
+  // Linear orientation has one owner, the File card: the windows it lists, else
+  // its region_reverse (`orientLinearCard`, as Generate reads them; CO-03,
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
   // several records.
@@ -214,7 +236,7 @@ export const createRecordDisplayControls = ({
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {RecordDisplayDraft} draft @param {boolean | null} reverseComplement */
   const writeReverseComplement = (drawing, row, draft, reverseComplement) => {
     const owner = reverseComplement === null ? null : linearOrientationOwner(drawing, row);
-    if (owner && reverseComplement !== null) owner.region_reverse = reverseComplement;
+    if (owner && reverseComplement !== null) orientLinearCard(owner, reverseComplement);
     draft.reverseComplementOverride = owner ? null : reverseComplement;
   };
   // A row's draft in its drawing, added when it has none yet.
@@ -302,20 +324,20 @@ export const createRecordDisplayControls = ({
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
     return alignmentRows(drawing, orientations)
-      .map(({recordKey, sequence, drafts}) => ({ recordKey, reverseComplement: Boolean(sequence.region_reverse),
+      .map(({recordKey, sequence, drafts}) => ({ recordKey, card: captureCardOrientation(sequence),
         drafts: drafts.map((/** @type {RecordDisplayDraft} */ draft) => captureTargetDraft({ ...draft, scope: 'linear', drawingId: drawing.id })) }));
   };
   /** @param {DrawingState} drawing @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (drawing, checkpoints) => {
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
-      sequence.region_reverse = checkpoints[index].reverseComplement;
+      restoreCardOrientation(sequence, checkpoints[index].card);
       checkpoints[index].drafts.forEach(restoreTargetDraft);
     });
   };
   /** @param {DrawingState} drawing @param {AlignmentOrientation[]} orientations */
   const commitAlignmentOrientations = (drawing, orientations) => {
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
-      sequence.region_reverse = orientation.reverseComplement;
+      orientLinearCard(sequence, orientation.reverseComplement);
       drafts.forEach((/** @type {RecordDisplayDraft} */ draft) => { draft.reverseComplementOverride = null; });
     });
   };
@@ -554,15 +576,15 @@ export const createRecordDisplayControls = ({
       key,
       index,
       draft: index >= 0 ? cloneJsonData(drawing.recordDisplayDrafts[index]) : null,
-      ...(owner ? { ownerUid: owner.uid, ownerReverse: Boolean(owner.region_reverse) } : {})
+      ...(owner ? { ownerUid: owner.uid, ownerOrientation: captureCardOrientation(owner) } : {})
     };
   };
   /** @param {TargetDraftCheckpoint} checkpoint */
   const restoreTargetDraft = (checkpoint) => {
     const drawing = state.drawingOf(checkpoint.drawingId);
-    if (checkpoint.ownerUid) {
+    if (checkpoint.ownerUid && checkpoint.ownerOrientation) {
       const owner = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === checkpoint.ownerUid);
-      if (owner) owner.region_reverse = checkpoint.ownerReverse;
+      if (owner) restoreCardOrientation(owner, checkpoint.ownerOrientation);
     }
     const index = drawing.recordDisplayDrafts.findIndex(
       (/** @type {RecordDisplayDraft} */ draft) => recordDisplayKey(draft) === checkpoint.key

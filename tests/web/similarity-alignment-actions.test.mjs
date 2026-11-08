@@ -45,7 +45,7 @@ const renderRequest = {
 };
 const state = () => {
   // The shown Linear drawing's rows.
-  const linearSeqs = ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false }));
+  const linearSeqs = ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false, windows: [] }));
   return {
     ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
     activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
@@ -1242,6 +1242,22 @@ test('Review and the active-plan inspector use names, never internal keys or has
   assert.deepEqual(inspector.records.map(({ recordName, recordDetail }) => [recordName, recordDetail]), [
     ['Genome A', 'ACC-A'], ['Genome B', 'Record 2'], ['Genome B', 'Record 3']
   ]);
+});
+
+// OV-2883: the inspector reads a record's orientation where its File card holds it: on the windows the card lists.
+test('the active-plan inspector reads a card drawn in windows as reversed by its windows', async () => {
+  const fixture = create({ members: [reference, targetA, targetC] });
+  await startReview(fixture);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  const card = fixture.state.activeDrawing().linearSeqs[1];
+  const reversed = () => fixture.actions.activePlanInspector.value.records
+    .find(({ recordKey }) => recordKey === card.uid).reversedFromSource;
+  card.region_reverse = false;
+  card.windows = [{ start: 1, end: 10, reverseComplement: true, column: null }];
+  assert.equal(reversed(), true);
+  card.windows = [{ start: 1, end: 10, reverseComplement: false, column: null }];
+  card.region_reverse = true;
+  assert.equal(reversed(), false, 'a card that lists windows is not oriented by its Reverse complement');
 });
 
 // UX-B06: the drawer reference options name the record and the gene, not the

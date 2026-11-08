@@ -2139,6 +2139,36 @@ test('Review alignment moves a record drawn in two windows as one', async ({ pag
   expect(first).not.toBe(48);
 });
 
+// OV-2883: Align's flip of a record drawn in windows is written on the File card's windows, the orientation Generate
+// reads for such a card, so the next Generate draws the record flipped too.
+test('Review alignment flips a record drawn in two windows and the next Generate keeps it flipped', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['windows']);
+  const record2 = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const card = state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[1];
+    const drawn = getCommittedCanonicalSession().renderRequest.records[1];
+    return { card: [card.region_reverse, ...card.windows.map((window) => window.reverseComplement)],
+      drawn: [drawn.presentation.reverseComplement, ...drawn.windows.map((window) => window.reverseComplement)] };
+  });
+  expect(await record2()).toEqual({ card: [false, false, false], drawn: [false, false, false] });
+  const dialog = await openDirectionReview(page);
+  await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
+  await directionSelect(dialog, 'record-2').selectOption('left');
+  let outcome = await applyAndSettle(page, dialog);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  await expect(dialog).toBeHidden();
+  const flipped = { card: [false, true, true], drawn: [false, true, true] };
+  expect(await record2()).toEqual(flipped);
+  // The fixture's saved comparison is read-only: Generate reuses it (Inherit), as a user picks it before Generate.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.inheritImportedComparison());
+  const generated = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(generated.status).toBe('ok');
+  expect(await record2()).toEqual(flipped);
+});
+
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadDirectionSession(page, testInfo);
