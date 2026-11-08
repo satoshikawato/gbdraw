@@ -619,11 +619,12 @@ def collapse_runs_white_space(runs: Sequence[tuple[str, _RunStyle]]) -> list[tup
 
     Each run collapses as ``collapse_svg_white_space`` does, and a run's leading
     space after a space (ending an earlier run) is not drawn: browsers collapse
-    white space across ``tspan`` boundaries.
+    white space across ``tspan`` boundaries. Nor are the spaces at the start and
+    the end of the whole text.
     """
 
     collapsed: list[tuple[str, _RunStyle]] = []
-    after_space = False
+    after_space = True
     for run, font_style in runs:
         text = collapse_svg_white_space(run)
         if after_space and text.startswith(" "):
@@ -631,6 +632,12 @@ def collapse_runs_white_space(runs: Sequence[tuple[str, _RunStyle]]) -> list[tup
         if text:
             after_space = text.endswith(" ")
         collapsed.append((text, font_style))
+    # The trailing space of the whole text: that of its last run with any text left.
+    for index in range(len(collapsed) - 1, -1, -1):
+        text, font_style = collapsed[index]
+        if text:
+            collapsed[index] = (text.rstrip(" "), font_style)
+            break
     return collapsed
 
 
