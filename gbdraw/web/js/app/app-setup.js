@@ -1177,8 +1177,11 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
   specificRuleRestorePorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
   specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
-  // D-24 (OV-731): History's one reader of a figure not drawn yet (OV-2560).
-  history.setFigureDrawnReader((drawingId) => !featureActions.isRedrawOwed(state.drawingOf(drawingId)));
+  // D-24 (OV-731): History's one reader of a figure not drawn yet (OV-2560), and what a restored side brings back (D-174).
+  history.setFigurePort({
+    drawn: (drawingId) => !featureActions.isRedrawOwed(state.drawingOf(drawingId)),
+    restored: (drawingId, drawn) => featureActions.redrawRestored(state.drawingOf(drawingId), drawn)
+  });
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch, computed,
@@ -1839,7 +1842,7 @@ export const createAppSetup = () => {
   // its Canvas padding (its commit, Undo, or Redo) shows at once, and a figure drawn to a requested size is then fitted
   // again by the automatic rerender, which draws them (`projectCommittedEditorIntent`). An Auto figure is not redrawn.
   // History marks a checkpoint side undrawn while that fit is owed and keeps the rerender's figure as the last step's;
-  // a restore of an undrawn side fits it again (D-24).
+  // a restore of an undrawn side asks the label owner to draw it again (`redrawRestored`, D-24).
   /**
    * @param {readonly HistoryChangeLike[] | null} changes
    * @param {'undo' | 'redo' | undefined} direction
@@ -1847,11 +1850,7 @@ export const createAppSetup = () => {
    */
   const refitSizedFigure = (changes, direction, undrawn) => {
     const root = svgContainer.value?.querySelector?.('svg');
-    if (!root || !requestedCanvasOf(root)) return;
-    if (!changes) {
-      if (undrawn) featureActions.requestAutomaticRerender();
-      return;
-    }
+    if (!root || !changes || !requestedCanvasOf(root)) return;
     const drawing = state.activeDrawing();
     // A commit whose caller asks for the automatic rerender itself (a color rule that adds a Legend row) is fitted
     // by that rerender; a second request would draw the figure twice.

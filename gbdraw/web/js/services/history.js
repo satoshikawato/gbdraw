@@ -442,8 +442,11 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {() => boolean | undefined} [figureDrawn]
  *   The one reader of whether the drawing's figure is the one its state draws (D-24 (OV-731)): not while an
  *   automatic rerender asked for in the drawing is still owed, pending or refused (D-36); undefined when unknown.
- *   Each side of every checkpoint step reads it as History captures that side, so the restore of a side that was
- *   not drawn tells the listener (`undrawn`), which fits a figure drawn to a requested size again (PD-OI-114).
+ *   Each side of every checkpoint and Generate step reads it as History captures that side (D-174).
+ * @property {(drawn: boolean | undefined) => void} [figureRestored]
+ *   Told whether a checkpoint or Generate side an Undo or a Redo restores has the figure its state draws (`figureDrawn`
+ *   as History captured it): a drawn one as its restore begins, so it owes no redraw but what that restore's own mount
+ *   asks for (D-174, D-211); one not drawn once restored, to be drawn again (PD-OI-114); an unknown one never.
  * @property {CheckpointHold} [checkpointHold]
  *   Runs a checkpoint step, from its first write to the end of its commit and listener (OV-2678).
  */
@@ -560,6 +563,67 @@ const afterSideDrawn = (drawn, options) => {
   return drawn === true && options.drawn ? options.drawn.change : undefined;
 };
 
+// D-174: whether each Generate side's figure was the one its state draws, read as History captured it (`figureDrawn`);
+// the snapshot service's handles are frozen, so History keeps it beside them.
+/** @type {WeakMap<HistoryArtifactHandle, boolean | undefined>} */
+const artifactSideDrawn = new WeakMap();
+/**
+ * The checkpoint side whose state is shown and whose figure that state does not draw yet, which keeps a rerender's
+ * figure (D-24, D-48): the before side of the step Redo takes (`next`) when an Undo or a project step's Undo shows it
+ * (it is the current checkpoint), else the after side of the step Undo takes (`last`).
+ * @param {HistoryEntry | null | undefined} last @param {HistoryEntry | null | undefined} next
+ * @param {HistoryCheckpoint | null} current @returns {{ entry: CheckpointEntry, side: 'before' | 'after' } | null}
+ */
+const undrawnShownSide = (last, next, current) => {
+  if (next?.type === 'checkpoint' && next.before.drawn === false && next.before.checkpoint === current) return { entry: next, side: 'before' };
+  return last?.type === 'checkpoint' && last.after.drawn === false ? { entry: last, side: 'after' } : null;
+};
+/**
+ * A checkpoint step's side replaced by a new record of it, with the step's bytes and files.
+ * @param {CheckpointEntry} entry @param {'before' | 'after'} side @param {CheckpointRecord} record
+ */
+const replaceSide = (entry, side, record) => {
+  entry[side] = record;
+  entry.byteSize = entry.before.byteSize + entry.after.byteSize;
+  entry.fileIds = new Set([...entry.before.fileIds, ...entry.after.fileIds]);
+};
+// PD-OI-090: of the shown drawing's next step (`own`, its sequence) and
+// the project's, Undo takes the newer and Redo the older.
+/** @param {'undo' | 'redo'} direction @param {number | null} own @param {ProjectEntry | undefined} project */
+const projectGoesFirst = (direction, own, project) => project !== undefined && (
+  own === null || !(direction === 'undo' ? own > project.sequence : own < project.sequence));
+/**
+ * The step whose side shows the drawing's state on one side of it (`direction`): the drawing's part of the nearest
+ * project step that has one (`projects`, oldest first), when it comes before the drawing's own next step (`own`, its
+ * sequence), else undefined (the own step). A project step without a part for the drawing (a Rename, a Session-only
+ * change) left it as it was and is passed over; one with a part shows its state even under such a step (OV-2700). A
+ * part keeps a redrawn figure as a drawing's own step does (`keepRedrawnResult`), and its project step counts its
+ * bytes as they are now. Null (no step) while a project step the limits dropped (`droppedThrough`, the newest dropped
+ * sequence) is newer than the own step and none kept has a part: it may have changed the drawing (D-212).
+ * @param {readonly ProjectEntry[]} projects @param {'undo' | 'redo'} direction @param {number | null} own
+ * @param {DrawingId} drawingId @param {number} droppedThrough @returns {HistoryEntry | null | undefined}
+ */
+const shownProjectPart = (projects, direction, own, drawingId, droppedThrough) => {
+  const project = [...projects].reverse().find((entry) => entry.parts.some((part) => part.drawingId === drawingId));
+  if (!project && direction === 'undo' && droppedThrough > (own ?? -1)) return null;
+  return projectGoesFirst(direction, own, project) ? project?.parts.find((part) => part.drawingId === drawingId)?.entry : undefined;
+};
+/** @param {readonly ProjectPart[]} parts @param {IntentEntry | null} session */
+const projectEntryBytes = (parts, session) => parts.reduce((bytes, { entry: part }) => bytes + part.byteSize, session?.byteSize ?? 0);
+
+/**
+ * Restores a checkpoint or Generate side (`restore`) and tells the figure's owner whether that side is drawn (D-211,
+ * D-212): a drawn one as its restore begins, so a rerender its own mount asks for stays owed; an undrawn one once
+ * restored, to be drawn again. A restore that fails gives back the redraw the drawing owed.
+ * @param {Required<Pick<HistoryManagerOptions, 'figureDrawn' | 'figureRestored'>>} figure
+ * @param {boolean | undefined} drawn @param {() => Promise<void>} restore
+ */
+const restoreReported = async ({ figureDrawn, figureRestored }, drawn, restore) => {
+  const owed = drawn && figureDrawn() === false;
+  if (drawn) figureRestored(true);
+  try { await restore(); } catch (error) { if (owed) figureRestored(false); throw error; }
+  if (drawn === false) figureRestored(false);
+};
 /**
  * The hold of a History whose composition root registered none: the step runs as it is.
  * @template T @param {() => T} run @returns {Promise<Awaited<T>>}
@@ -592,6 +656,7 @@ export const createHistoryManager = ({
   stepEnded = () => null,
   applySessionPart = () => {},
   figureDrawn = () => undefined,
+  figureRestored = () => {},
   checkpointHold = holdNothing
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
@@ -1392,7 +1457,8 @@ export const createHistoryManager = ({
     enforceLimits(entry);
     touch();
     notifyCheckpointCapture(options, 'after-end');
-    settingsStepListener(changes, undefined, options.drawn ? !options.drawn.change : false);
+    committing = entry;
+    try { settingsStepListener(changes, undefined, options.drawn ? !options.drawn.change : false); } finally { committing = null; }
     return true;
   };
 
@@ -1442,33 +1508,31 @@ export const createHistoryManager = ({
       : execute(transaction);
   };
 
-  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36). While the last step is a checkpoint and
-  // no open step changed the state (a control's step opened by focus, which a closing dialog gives back, OV-2677;
-  // an action's open step may write the Result before its intent), the state is the one its after side holds, so a
-  // side not yet drawn keeps the figure the rerender drew: Redo then shows it without another Python run. A rerender
-  // a checkpoint step's listener asked for after its commit (the fit of a figure drawn to a requested size, PD-OI-114
-  // rev 2) makes the step's figure one its state does not draw, so History keeps the rerender's figure as the step's
-  // and a restore of the figure before it names it undrawn. A last step that is not a checkpoint restores its
-  // intent, which the Result shows again; no mark.
-  const markLastStepUndrawn = () => {
-    const entry = topEntry(undoStack);
-    if (entry?.type === 'checkpoint' && !openTransaction()) entry.after.drawn = false;
-  };
-  const keepRedrawnResult = async () => {
-    const entry = topEntry(undoStack);
-    if (entry?.type !== 'checkpoint') return false;
-    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false && !activeCheckpoint
-      && !intentCommitOwnedByAction() && !activeReplacement && !restoring.value && !capturing.value;
-    if (!keeps()) return false;
-    const after = await captureCheckpoint();
+  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36). While no open step changed the state (a
+  // focus step a closing dialog gives back, OV-2677; an action's open step may write the Result before its intent), the
+  // shown side not yet drawn keeps its figure (`undrawnShownSide`, `shownProjectPart`): Undo or Redo shows it with no
+  // Python run. A fit the listener of a step's commit asks (PD-OI-114 rev 2) marks that step, a project part included.
+  /** @type {CheckpointEntry | null} The checkpoint step whose commit the listener is told of. */
+  let committing = null;
+  const markLastStepUndrawn = () => { if (committing && !openTransaction()) committing.after.drawn = false; };
+  /** @param {(stack: 'undo' | 'redo') => HistoryEntry | null | undefined} [projectPart] null: no step shows the state. */
+  const keepRedrawnResult = async (projectPart) => {
+    /** @param {'undo' | 'redo'} stack */
+    const stepAt = (stack) => { const part = projectPart?.(stack); return part === undefined ? topEntry(stack === 'undo' ? undoStack : redoStack) : part; };
+    const shownSide = () => undrawnShownSide(stepAt('undo'), stepAt('redo'), currentCheckpoint);
+    const kept = shownSide();
+    const keeps = () => { const now = shownSide(); return Boolean(kept) && now?.entry === kept?.entry && now?.side === kept?.side
+      && !activeCheckpoint && !intentCommitOwnedByAction() && !activeReplacement && !restoring.value && !capturing.value; };
+    if (!kept || !keeps()) return false;
+    const record = await captureCheckpoint();
     if (!keeps() || await openStepChanged() || !keeps()) return false;
-    after.drawn = true;
-    removeEntryBytes(entry);
-    entry.after = after;
-    entry.byteSize = entry.before.byteSize + after.byteSize;
-    entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
-    addEntryBytes(entry);
-    setCurrentCheckpoint(after);
+    record.drawn = true;
+    const { entry, side } = kept;
+    const owned = undoStack.includes(entry) || redoStack.includes(entry);
+    if (owned) removeEntryBytes(entry);
+    replaceSide(entry, side, record);
+    if (owned) addEntryBytes(entry);
+    setCurrentCheckpoint(record);
     enforceLimits(entry);
     return true;
   };
@@ -1515,9 +1579,9 @@ export const createHistoryManager = ({
 
   /**
    * @param {HistoryArtifactHandle} handle
-   * @param {'before' | 'after'} phase
+   * @param {'before' | 'after'} phase @param {boolean | undefined} drawn
    */
-  const finishArtifactHandleCapture = (handle, phase) => {
+  const finishArtifactHandleCapture = (handle, phase, drawn) => {
     if (!handle || typeof handle !== 'object') {
       throw new Error('Generated artifact capture did not return a handle.');
     }
@@ -1531,6 +1595,7 @@ export const createHistoryManager = ({
       phase,
       bytes: retainedBytes
     });
+    artifactSideDrawn.set(handle, drawn);
     return handle;
   };
 
@@ -1540,18 +1605,19 @@ export const createHistoryManager = ({
       throw new Error('Generated artifact replacement requires a capture owner.');
     }
     capturing.value = true;
+    const drawn = figureDrawn();
     if (phase === 'before') diagnostics.artifactHandleBeforeBuildCount += 1;
     else diagnostics.artifactHandleAfterBuildCount += 1;
     try {
       const handle = captureGeneratedArtifactHandle();
       if (isPromiseLike(handle)) {
         return Promise.resolve(handle)
-          .then((captured) => finishArtifactHandleCapture(captured, phase))
+          .then((captured) => finishArtifactHandleCapture(captured, phase, drawn))
           .finally(() => {
             capturing.value = false;
           });
       }
-      const captured = finishArtifactHandleCapture(handle, phase);
+      const captured = finishArtifactHandleCapture(handle, phase, drawn);
       capturing.value = false;
       return captured;
     } catch (error) {
@@ -1924,16 +1990,17 @@ export const createHistoryManager = ({
 
   /** @param {CheckpointRecord} record */
   const applyCheckpointEntry = async (record) => {
-    restoring.value = true;
-    try {
-      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
-    } finally {
-      restoring.value = false;
-    }
-    // A checkpoint's figure can predate the apply of its live values (the
-    // Redo of Reset Settings); one already equal applies nothing. `undrawn`:
-    // its caller said the figure is not the one its state draws (D-24).
-    settingsStepListener(null, undefined, record.drawn === false);
+    await restoreReported({ figureDrawn, figureRestored }, record.drawn, async () => {
+      restoring.value = true;
+      try {
+        await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
+      } finally {
+        restoring.value = false;
+      }
+      // A checkpoint's figure can predate the apply of its live values (the
+      // Redo of Reset Settings); one already equal applies nothing.
+      settingsStepListener(null);
+    });
     setCurrentCheckpoint(record);
     await refreshCurrentIntent();
   };
@@ -1944,19 +2011,13 @@ export const createHistoryManager = ({
    */
   const applyArtifactReplacementEntry = async (entry, direction) => {
     const handle = direction === 'undo' ? entry.before : entry.after;
-    if (!entry.intentCheckpoint) {
-      await restoreArtifactHandle(handle);
-      return;
-    }
-    await restoreArtifactHandle(handle, { refreshIntent: false });
-    const checkpoint = direction === 'undo'
-      ? entry.intentCheckpoint.before
-      : entry.intentCheckpoint.after;
-    await restoreReplacementIntentCheckpoint(
-      checkpoint,
-      entry.intentCheckpoint.restore
-    );
-    await refreshCurrentIntent();
+    const intent = entry.intentCheckpoint;
+    await restoreReported({ figureDrawn, figureRestored }, artifactSideDrawn.get(handle), async () => {
+      await restoreArtifactHandle(handle, { refreshIntent: !intent });
+      if (!intent) return;
+      await restoreReplacementIntentCheckpoint(direction === 'undo' ? intent.before : intent.after, intent.restore);
+      await refreshCurrentIntent();
+    });
   };
 
   /**
@@ -2125,8 +2186,8 @@ export const createHistoryManager = ({
    * automatic rerender exist (R1 (c), PD-OI-102).
    * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} listener
    *   `direction`: set when the call restores an intent step, which way it went. `undrawn`: a checkpoint
-   *   restore whose figure its step said is not the one its state draws, or a checkpoint commit whose caller said
-   *   its figure is not (the caller then asks for the automatic rerender itself).
+   *   commit whose caller said its figure is not the one its state draws (the caller then asks for the automatic
+   *   rerender itself); a restore tells `figureRestored`.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 
@@ -2271,6 +2332,11 @@ const PROJECT_STREAM = Symbol('project stream');
 // gives it back); `replaceMembers` (a Load) clears the project stream and
 // every History, then installs the new list.
 /**
+ * The composition root's port to whether a drawing's figure is the one its state draws (D-24 (OV-731), D-174).
+ * @typedef {{ drawn: (drawingId: DrawingId) => boolean, restored: (drawingId: DrawingId, drawn: boolean | undefined) => void }} FigureDrawnPort
+ *   `drawn`: the one reader (`figureDrawn`); `restored`: History restored a side whose figure was `drawn` (`figureRestored`).
+ */
+/**
  * The composition root's listener of the settings a step records, commits, or restores (`setSettingsStepListener`).
  * @typedef {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} SettingsStepListener
  */
@@ -2336,8 +2402,7 @@ export const createHistoryRouter = ({
   // The Session-level values as the last step left them.
   let sessionCurrent = sessionRecord();
 
-  // The newest project step the limit or the budget dropped from Undo, as a
-  // drawing's History keeps its own (OV-1169).
+  // The newest project step the limit or the budget dropped from Undo, as a drawing's History keeps its own (OV-1169).
   let projectDroppedThrough = -1;
   const dropOldestProject = () => {
     projectDroppedThrough = Math.max(projectDroppedThrough, projectUndo.shift()?.sequence ?? -1);
@@ -2381,7 +2446,7 @@ export const createHistoryRouter = ({
     /** @type {ProjectEntry} */
     const entry = {
       type: 'project', label, sequence: stamp, parts, session, list, fileIds, detail,
-      byteSize: parts.reduce((bytes, { entry: part }) => bytes + part.byteSize, session?.byteSize ?? 0)
+      get byteSize() { return projectEntryBytes(parts, session); }
     };
     if (held.length > 0) heldBy.set(entry, held);
     pushProject(entry);
@@ -2419,7 +2484,8 @@ export const createHistoryRouter = ({
     stepEnded,
     applySessionPart: (part, direction) => applySession(part, direction, { asLeft: true }),
     // Read at each capture, so the reader the composition root registers later reaches every member.
-    figureDrawn: () => (figureDrawnReader ? figureDrawnReader(drawingId) : undefined),
+    figureDrawn: () => figurePort?.drawn(drawingId),
+    figureRestored: (drawn) => figurePort?.restored(drawingId, drawn),
     checkpointHold: (run) => (checkpointHold ?? holdNothing)(run),
     budget: {
       ...budget,
@@ -2442,8 +2508,8 @@ export const createHistoryRouter = ({
   const heldBy = new WeakMap();
   /** @type {SettingsStepListener | null} */
   let settingsStepListener = null;
-  /** @type {((drawingId: DrawingId) => boolean) | null} The composition root's figure reader, by drawing. */
-  let figureDrawnReader = null;
+  /** @type {FigureDrawnPort | null} */
+  let figurePort = null;
   /** @type {CheckpointHold | null} The composition root's hold over the rerender a checkpoint step asks for. */ let checkpointHold = null;
   /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
   const installMember = (drawingId) => {
@@ -2472,8 +2538,7 @@ export const createHistoryRouter = ({
   // The removals of each open project step (R16-3); a removal joins the newest.
   /** @type {HeldHistory[][]} */
   const openRemovals = [];
-  // The budget members of the held Histories: those the project steps hold
-  // and those an open project step removed.
+  // The budget members of the held Histories: those the project steps hold and those an open project step removed.
   const heldHistories = () => [...projectEntries().flatMap((entry) => heldBy.get(entry) ?? []), ...openRemovals.flat()];
   const heldMembers = () => heldHistories()
     .flatMap(({ budgetMembers }) => budgetMembers);
@@ -2580,11 +2645,6 @@ export const createHistoryRouter = ({
       projectTraversals.value -= 1;
     }
   };
-  // PD-OI-090: of the shown drawing's next step (`own`, its sequence) and
-  // the project's, Undo takes the newer and Redo the older.
-  /** @param {'undo' | 'redo'} direction @param {number | null} own @param {ProjectEntry | undefined} project */
-  const projectGoesFirst = (direction, own, project) => project !== undefined && (
-    own === null || !(direction === 'undo' ? own > project.sequence : own < project.sequence));
   /**
    * @param {'undo' | 'redo'} direction
    * @param {number | null} [expected] the sequence of the step to take: another step next is not taken.
@@ -2845,9 +2905,11 @@ export const createHistoryRouter = ({
       settingsStepListener = listener;
       managers.forEach((manager, drawingId) => listenToShownSteps(manager, drawingId, activeDrawingId, listener));
     },
-    /** @param {(drawingId: DrawingId) => boolean} reader Whether a drawing's figure is the one its state draws. */
-    setFigureDrawnReader: (reader) => { figureDrawnReader = reader; },
+    setFigurePort: (/** @type {FigureDrawnPort} */ port) => { figurePort = port; },
     setCheckpointHold: (/** @type {CheckpointHold} */ hold) => { checkpointHold = hold; },
+    keepRedrawnResult: () => managerOf(activeDrawingId()).keepRedrawnResult((stack) => shownProjectPart(
+      stack === 'undo' ? projectUndo : projectRedo, stack, managerOf(activeDrawingId()).topSequence(stack), activeDrawingId(),
+      projectDroppedThrough)),
     /** @param {DrawingId} drawingId A new drawing: its History starts empty (R11). */
     addMember: (drawingId) => {
       if (managers.has(drawingId)) throw membershipError('addMember', 'DUPLICATE_DRAWING', drawingId);

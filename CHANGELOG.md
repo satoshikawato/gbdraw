@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed (Web app): an Undo could show a figure that did not match its
+  settings. After a label or visibility edit that only a redraw can show (for
+  example Feature visibility On for a feature the figure did not draw), a step
+  begun before that redraw ended, such as loading a Default colors file, kept
+  the figure without the edit, and its Undo showed it so. The Undo now draws
+  the figure again; so does the Undo of a Generate made while such a redraw
+  was still owed. Focusing a field while a Generate ran, after an edit that
+  needed a redraw, no longer adds an empty History step that undid that
+  redraw. After Reset all drawings on a figure with a requested
+  size, the Undo and Redo of the step before the reset could show the reset
+  settings; they now show that step's own. A figure fitted to its requested
+  size after an Undo, or after Reset all drawings, is kept, so a later Undo or
+  Redo back to it shows it at once instead of fitting it again.
 - Changed: PNGs from the command line and Python are now 300 dpi by default,
   as in the web app, so they are about 3 times as wide and tall as before (a
   1,000 px figure is 3,125 px). `--dpi 96` (`dpi=96` in Python) keeps the old

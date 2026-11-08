@@ -6218,17 +6218,16 @@ export const createRunAnalysis = ({
   };
 
   /**
-   * @param {{ settings?: readonly string[] }} [options] `settings`: the live
-   *   setting request paths of a request to apply live values alone; without
-   *   it, an editor edit's rerender.
+   * @param {{ settings?: readonly string[], replay?: boolean }} [options] `settings`: the live setting request paths of
+   *   a request to apply live values alone; without it, an editor edit's rerender. `replay`: the held requests run.
    */
-  const runLabelReflow = async ({ settings } = {}) => {
+  const runLabelReflow = async ({ settings, replay = false } = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!settings) editorRerenderRequested = true;
     pendingReflowRequestId += 1;
     if (!settings || settings.some((path) => activeLiveSettings.includes(path))) reflowSupersededAt = pendingReflowRequestId;
-    pendingReflowRequestedAt = readHistoryStepSerial();
+    if (!replay) pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
     if (reflowWaits()) {
       reflowDeferred = true;
@@ -6338,14 +6337,14 @@ export const createRunAnalysis = ({
     return true;
   };
 
-  // Called where a run clears `processing`, and when a hold ends: the requests
-  // held back run once. An editor request held back kept its flag; live values
-  // the Generate committed are equal now, so a replay with nothing left is
-  // skipped.
+  // Called where a run clears `processing`, and when a hold ends: the requests held back run once. An editor request
+  // held back kept its flag; live values the Generate committed are equal now, so a replay with nothing left is
+  // skipped. D-175: it keeps the serial of the last request held back (D-40), so a step begun while they waited (a
+  // focused field) is not counted as their requester.
   const replayDeferredLabelReflow = () => {
     if (!reflowDeferred || reflowWaits()) return;
     reflowDeferred = false;
-    void runLabelReflow({ settings: [] });
+    void runLabelReflow({ settings: [], replay: true });
   };
   // OV-1076: Reset Settings asks for the rerender while it writes (its label
   // projection), again for the rules it removed, and its History checkpoint

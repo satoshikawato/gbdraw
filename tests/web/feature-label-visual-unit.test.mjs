@@ -916,6 +916,70 @@ test('a requested redraw stays owed until a rerender of its own drawing is shown
   assert.equal(harness.actions.isRedrawOwed(linear), false);
 });
 
+// D-174: an Undo or a Redo restored a side whose figure was drawn, which owes nothing, or one that was not, which is
+// drawn again when its drawing is shown; an unknown side changes nothing.
+test('a restored side owes nothing when it was drawn and is drawn again when it was not', () => {
+  const harness = buildHarness();
+  const circular = {};
+  const linear = {};
+  withModeDrawings(harness.state, { circular, linear });
+  const requests = () => harness.state.labelReflowForceRequestSeq.value;
+  harness.actions.requestAutomaticRerender();
+  harness.actions.redrawRestored(linear, undefined);
+  assert.deepEqual([harness.actions.isRedrawOwed(linear), requests()], [true, 1], 'unknown changes nothing');
+  harness.actions.redrawRestored(linear, true);
+  assert.deepEqual([harness.actions.isRedrawOwed(linear), requests()], [false, 1], 'a drawn side owes nothing');
+  harness.actions.redrawRestored(circular, false);
+  assert.deepEqual([harness.actions.isRedrawOwed(circular), requests()], [false, 1], 'a drawing not shown is not drawn');
+  harness.actions.redrawRestored(linear, false);
+  assert.deepEqual([harness.actions.isRedrawOwed(linear), requests()], [true, 2], 'the shown drawing is drawn again');
+});
+
+// D-118: every edit that forces the automatic rerender (the Result cannot show it) asks through the one request that
+// leaves the redraw owed, so a History step begun before that rerender is shown records its figure as not drawn. A
+// placement-only reflow (Auto Reflow) leaves nothing owed.
+test('every forced rerender leaves the redraw owed; an Auto Reflow request does not (D-118)', async () => {
+  const featureId = 'feature:one/[a]';
+  const owed = (harness) => harness.actions.isRedrawOwed(harness.state);
+
+  const placed = buildHarness();
+  placed.state.autoLabelReflowEnabled.value = true;
+  assert.equal(placed.actions.applyFeatureVisibilityToLabels({ reflow: true }), false);
+  assert.deepEqual([placed.state.labelReflowRequestSeq.value, owed(placed)], [1, false], 'an Auto Reflow request');
+
+  const drawsFeature = buildHarness();
+  drawsFeature.actions.applyFeatureVisibilityToLabels({ rerender: true });
+  assert.deepEqual([drawsFeature.state.labelReflowForceRequestSeq.value, owed(drawsFeature)], [1, true],
+    'a visibility edit that draws a feature the Result lacks');
+
+  const metadataFree = buildHarness({ svg: labelSvg({ marker: null }), visibilityOverrides: { [featureId]: 'off' } });
+  metadataFree.actions.reconcileLabelOverrides();
+  assert.deepEqual([metadataFree.state.labelReflowForceRequestSeq.value, owed(metadataFree)], [1, true],
+    'a label override the Result cannot show');
+
+  const embedded = buildHarness({ diagramOptions: EMBEDDED_ONLY });
+  setRow(embedded.state, featureId, { labelText: 'edited' });
+  embedded.actions.reconcileLabelOverrides();
+  assert.deepEqual([embedded.state.labelReflowForceRequestSeq.value, owed(embedded)], [1, true],
+    'an Embedded Only label text');
+
+  const shown = buildHarness();
+  shown.state.editableLabels.value = [];
+  Object.assign(shown.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  const applied = shown.actions.updateClickedFeatureLabelText();
+  assert.equal(shown.state.hiddenLabelTextDialog.show, true);
+  shown.actions.handleHiddenLabelTextChoice('show');
+  await applied;
+  assert.deepEqual([shown.state.labelReflowForceRequestSeq.value, owed(shown)], [1, true],
+    'the Label Not Shown dialog\'s show choice');
+
+  // A forced request with no mounted Result draws nothing and owes nothing.
+  const unmounted = buildHarness();
+  unmounted.state.svgContainer.value = { querySelector: () => null };
+  unmounted.actions.applyFeatureVisibilityToLabels({ rerender: true, labels: true });
+  assert.deepEqual([unmounted.state.labelReflowForceRequestSeq.value, owed(unmounted)], [0, false]);
+});
+
 // OV-923: opening the editor or a feature popup binds the labels of the
 // mounted Result, measuring every feature. While nothing the binding reads
 // has changed on that root since the last binding, the binding is reused; a

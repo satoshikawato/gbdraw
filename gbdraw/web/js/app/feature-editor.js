@@ -210,12 +210,12 @@ export const createFeatureEditor = ({
   };
 
   return {
-    // O-2: the root asks Python for a Legend row a restore returns that the
-    // displayed Result's bytes lack.
+    // O-2: the root asks Python for a Legend row a restore returns that the displayed Result's bytes lack.
     requestAutomaticRerender: labelActions.requestAutomaticRerender,
-    // D-36: the root says when a shown rerender drew the current paint; History reads whether one is owed.
+    // D-36: the root says when a shown rerender drew the current paint; History reads and restores it (D-174).
     redrawShown: labelActions.redrawShown,
     isRedrawOwed: labelActions.isRedrawOwed,
+    redrawRestored: labelActions.redrawRestored,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,
