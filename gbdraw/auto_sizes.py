@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
-from typing import Literal
+from typing import Literal, Protocol
 
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.labels import LINEAR_LABEL_SCOPE_RECORDS, LinearLabelScope
@@ -264,6 +264,61 @@ def scalar_axis_tick_font_size(mode: DiagramMode, track_thickness_px: float) -> 
     )
 
 
+def scalar_axis_tick_font_rule() -> dict[str, object]:
+    """The rule of ``scalar_axis_tick_font_size`` as data, for the Web's Auto notes: the font is the track
+    thickness times the mode's fraction, kept within the range."""
+    return {
+        "rangePx": list(_SCALAR_TICK_FONT_RANGE_PX),
+        "thicknessFraction": dict(_SCALAR_TICK_FONT_THICKNESS_FRACTION),
+    }
+
+
+class TickFontSource(Protocol):
+    """A scalar axis's tick font size: set, or none for the Auto size of its track."""
+
+    @property
+    def tick_font_size(self) -> float | None: ...
+
+
+class TickedAxisSource(TickFontSource, Protocol):
+    """A scalar axis that may draw ticks: whether it draws its axis and ticks, and their font size."""
+
+    @property
+    def show_axis(self) -> bool: ...
+
+    @property
+    def show_ticks(self) -> bool: ...
+
+
+def depth_axis_tick_font_size_px(axis: TickFontSource, track_width_px: float) -> float:
+    """The tick font of a Circular scalar axis on a track ``track_width_px`` wide: its own size, else the Auto
+    size of that width."""
+
+    if axis.tick_font_size is not None:
+        return max(0.0, float(axis.tick_font_size))
+    return scalar_axis_tick_font_size("circular", track_width_px)
+
+
+def gc_axis_tick_font_size_of_depth(
+    gc: TickFontSource, depth: TickedAxisSource | None, depth_track_width_px: float | None
+) -> float | None:
+    """The tick font a Percent GC axis without its own size takes from the depth axis beside it, so the two axes
+    read alike: the depth axis's size on its track ``depth_track_width_px`` wide (as requested, before any
+    narrowing). None when the GC axis sets its own size or no depth axis with ticks is drawn; the GC axis then
+    keeps its own size or the Auto size of its own track. The radial layout keeps the GC axis's room in this font,
+    the drawing draws it in it, and ``auto_setting_values`` gives it as the GC axis's Auto tick font."""
+
+    if (
+        gc.tick_font_size is not None
+        or depth is None
+        or not (depth.show_axis and depth.show_ticks)
+        or depth_track_width_px is None
+        or depth_track_width_px <= 0
+    ):
+        return None
+    return depth_axis_tick_font_size_px(depth, depth_track_width_px)
+
+
 @dataclass(frozen=True)
 class DrawnExtent:
     """The records one drawing draws: its mode and lengths after crops, in drawing order.
@@ -299,6 +354,7 @@ def auto_setting_values(
     cfg: GbdrawConfig,
     *,
     track_thickness_px: Mapping[str, float] | None = None,
+    show_depth: bool = False,
 ) -> dict[str, AutoValue]:
     """Return the Auto value of every length- or mode-dependent setting of a drawing.
 
@@ -315,7 +371,9 @@ def auto_setting_values(
     Circular canvas the records then share the long styles. The GC content and
     Depth tick fonts follow the track thickness: the Auto thickness unless
     ``track_thickness_px`` gives the drawing's own (keys ``gc_content`` and
-    ``depth``).
+    ``depth``). A Circular drawing that draws a depth track (``show_depth``)
+    with an axis and ticks gives a Percent GC axis the depth axis's tick font
+    (``gc_axis_tick_font_size_of_depth``).
     """
     mode = extent.mode
     longest = max(extent.record_lengths)
@@ -347,6 +405,11 @@ def auto_setting_values(
     thickness.update(track_thickness_px or {})
     for track, setting in _TICK_FONT_SETTINGS.items():
         values[setting] = scalar_axis_tick_font_size(mode, thickness[track])
+    gc_content = cfg.objects.gc_content
+    if mode == "circular" and show_depth and gc_content.mode == "percent":
+        of_depth = gc_axis_tick_font_size_of_depth(gc_content, cfg.objects.depth, thickness["depth"])
+        if of_depth is not None:
+            values[_TICK_FONT_SETTINGS["gc_content"]] = of_depth
     return values
 
 
@@ -433,12 +496,17 @@ __all__ = [
     "auto_setting_values",
     "circular_tick_intervals",
     "circular_track_width_px",
+    "TickFontSource",
+    "TickedAxisSource",
+    "depth_axis_tick_font_size_px",
     "depth_sliding_window",
     "determine_length_parameter",
+    "gc_axis_tick_font_size_of_depth",
     "linear_label_font_size",
     "linear_label_size_lengths",
     "linear_label_size_records",
     "linear_tick_interval",
+    "scalar_axis_tick_font_rule",
     "scalar_axis_tick_font_size",
     "sliding_window",
 ]

@@ -44,6 +44,31 @@ test('the Circular label font note follows the shared Auto size vectors, mixed s
   }
 });
 
+// OV-2873: the GC "Tick Font Size" note shows the font Generate draws the GC axis in. A Percent axis takes the font
+// of the depth axis drawn with ticks beside it (Python's gc_axis_tick_font_size_of_depth); the shared vectors pin it.
+test('the Circular GC tick font note follows the depth axis beside it, as the shared Auto size vectors say', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/auto_size_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(vectors.gcAxisTickFonts.length >= 6, 'vectors exist');
+  for (const entry of vectors.gcAxisTickFonts) {
+    const thickness = entry.trackThicknessPx;
+    const display = createAutoValueDisplay(withDrawings({
+      mode: { value: entry.mode },
+      form: { show_depth: entry.showDepth },
+      adv: {
+        gc_content_mode: entry.config['objects.gc_content.mode'],
+        depth_show_axis: entry.config['objects.depth.show_axis'],
+        depth_show_ticks: entry.config['objects.depth.show_ticks'],
+        depth_tick_font_size: entry.config['objects.depth.tick_font_size'] ?? null,
+        depth_width_circular: thickness.depth ?? null,
+        gc_content_width_circular: thickness.gc_content ?? null
+      }
+    }), { circularDiagramLengths: () => [entry.recordLengths] });
+    const px = (/** @type {number} */ value) => `${Number(value.toFixed(1))} px (auto)`;
+    assert.equal(display.autoValueText('gcTickFont'), px(entry.expected['objects.gc_content.tick_font_size']), entry.name);
+    assert.equal(display.autoValueText('depthTickFont'), px(entry.expected['objects.depth.tick_font_size']), entry.name);
+  }
+});
+
 // A Session that stores its whole configuration keeps the boundary it was saved
 // with (labels.length_threshold.<mode> among the drawing's preserved settings),
 // and Generate draws with it. The Auto notes and the track preview read the same

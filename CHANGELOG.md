@@ -27,6 +27,12 @@ write-up of a release.
   app, or `--depth_width` in the CLI) moved the row up, so the Legend changed
   order between two Generates. The Depth rows now follow the ring order in
   every case, in the CLI, the Python API, and the Web app (OV-2823).
+- Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
+  a Percent GC content axis, the GC content **Tick Font Size** field showed an
+  Auto size that the figure did not use: the GC axis numbers are drawn in the
+  Depth axis's font, so a narrow Depth track drew them smaller than shown
+  (for example 5.5 px drawn, 8 px shown). The field now shows the size the
+  figure draws (OV-2873).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while

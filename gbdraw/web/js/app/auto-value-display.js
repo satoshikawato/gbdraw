@@ -7,17 +7,13 @@ import {
   sizeClassForRecordLengths
 } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
+import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { t } from '../utils/i18n.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 const DEFAULTS = Object.freeze({
   circular: {
     radiusPx: 390,
-    trackRatio: 0.19,
-    trackRatioFactors: {
-      short: [0.50, 1.0, 1.0],
-      long: [0.25, 1.0, 1.0]
-    },
     trackDict: {
       short: {
         spreadout: { 1: 1.0, 2: 0.85, 3: 0.65, 4: 0.45 },
@@ -64,9 +60,10 @@ const DEFAULTS = Object.freeze({
   }
 });
 
-// The length tiers of the Auto sliding window and scale ticks are Python's
-// (gbdraw/auto_sizes.py), carried by the generated mode-profile data.
-const { slidingWindow, circularTicks, linearTicks } = MODE_PROFILE_DATA.autoSizes;
+// The length tiers of the Auto sliding window and scale ticks, the Auto track
+// widths and the scalar-axis tick font rule are Python's (gbdraw/auto_sizes.py),
+// carried by the generated mode-profile data.
+const { slidingWindow, circularTicks, linearTicks, circularSlots, scalarAxisTickFont } = MODE_PROFILE_DATA.autoSizes;
 // One object per tier: `sharedLengthValue` compares the values of the drawn records by identity.
 const SLIDING_WINDOW_PRESETS = Object.freeze([
   ...slidingWindow.tiers.map(([maxExclusive, window, step]) => Object.freeze({ maxExclusive, window, step })),
@@ -292,22 +289,25 @@ const normalizeTrackPreset = (value) => {
   return ['tuckin', 'middle', 'spreadout'].includes(text) ? /** @type {'tuckin' | 'middle' | 'spreadout'} */ (text) : 'tuckin';
 };
 
-/** @param {SizeClass} lengthParam */
-const circularBaseTrackWidthPx = (lengthParam) => {
-  const base = DEFAULTS.circular.radiusPx * DEFAULTS.circular.trackRatio;
-  const factors = DEFAULTS.circular.trackRatioFactors[normalizeLengthParam(lengthParam) || 'long'];
-  return { base, factors };
-};
+/** @typedef {keyof typeof circularSlots.widthPx.long} CircularAutoWidthRenderer */
 
 /**
- * @param {string} renderer
+ * The Auto width of a Circular track (Python's `circular_track_width_px`).
+ * @param {CircularAutoWidthRenderer} renderer
  * @param {SizeClass} lengthParam
  */
-const circularWidthForRenderer = (renderer, lengthParam) => {
-  const { base, factors } = circularBaseTrackWidthPx(lengthParam);
-  if (renderer === 'features' || renderer === 'sequence_conservation') return base * Number(factors[0]);
-  if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
-  return base * Number(factors[1]);
+const circularWidthForRenderer = (renderer, lengthParam) => (
+  circularSlots.widthPx[normalizeLengthParam(lengthParam) || 'long'][renderer]
+);
+
+/**
+ * The Auto tick font of a GC content or Depth axis on a track this thick (Python's `scalar_axis_tick_font_size`).
+ * @param {'circular' | 'linear'} mode
+ * @param {number} thicknessPx
+ */
+const scalarAxisTickFontSize = (mode, thicknessPx) => {
+  const [low, high] = scalarAxisTickFont.rangePx;
+  return Math.max(low, Math.min(high, thicknessPx * scalarAxisTickFont.thicknessFraction[mode]));
 };
 
 const previewSpacingPx = () => Math.max(1.0, 0.01 * DEFAULTS.circular.radiusPx);
@@ -331,7 +331,7 @@ const circularLengthValues = (state, drawing, resolver) => {
 /**
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing
- * @param {string} renderer
+ * @param {CircularAutoWidthRenderer} renderer
  */
 const circularWidthText = (state, drawing, renderer) => {
   const value = circularLengthValues(state, drawing, (lengthParam) => circularWidthForRenderer(renderer, lengthParam));
@@ -401,22 +401,40 @@ const circularRadiusText = (state, drawing, renderer) => {
     : formatShortLong(value, formatFactor, null);
 };
 
+/** @param {RecordLengthState} state @param {DrawingState} drawing */
+const circularDepthWidthPx = (state, drawing) => (
+  parsePositiveNumber(drawing?.adv?.depth_width_circular)
+    ?? circularWidthForRenderer('depth', activeCircularLengthParam(state, drawing) || 'long')
+);
+
 /**
  * @param {RecordLengthState} state
  * @param {DrawingState} drawing
  * @param {AutoValueContext | null} [trackConfig]
  */
 const depthTickFontSize = (state, drawing, trackConfig = null) => {
-  const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'linear') {
+  if (shownMode(state) === 'linear') {
     const trackHeight = parsePositiveNumber(trackConfig?.height)
       ?? parsePositiveNumber(drawing?.adv?.depth_height)
       ?? DEFAULTS.linear.depthHeightPx;
-    return Math.max(5, Math.min(8, trackHeight * 0.7));
+    return scalarAxisTickFontSize('linear', trackHeight);
   }
-  const trackWidth = parsePositiveNumber(drawing?.adv?.depth_width_circular)
-    ?? circularWidthForRenderer('depth', activeCircularLengthParam(state, drawing) || 'long');
-  return Math.max(5, Math.min(8, trackWidth * 0.22));
+  return scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing));
+};
+
+/**
+ * The font a Percent GC axis takes from the depth axis drawn with ticks beside it, as Python's
+ * `gc_axis_tick_font_size_of_depth` draws it (pinned by `gcAxisTickFonts` of tests/fixtures/auto_size_vectors.json);
+ * null when the GC axis keeps the Auto size of its own track.
+ * @param {RecordLengthState} state
+ * @param {DrawingState} drawing
+ */
+const gcTickFontOfDepth = (state, drawing) => {
+  const { adv } = drawing;
+  if (adv.gc_content_mode !== 'percent' || !draftDrawsDepth('circular', drawing)) return null;
+  if (!(adv.depth_show_axis && adv.depth_show_ticks)) return null;
+  return parsePositiveNumber(adv.depth_tick_font_size)
+    ?? scalarAxisTickFontSize('circular', circularDepthWidthPx(state, drawing));
 };
 
 /**
@@ -424,14 +442,13 @@ const depthTickFontSize = (state, drawing, trackConfig = null) => {
  * @param {DrawingState} drawing
  */
 const gcTickFontSize = (state, drawing) => {
-  const mode = String(state?.mode?.value || state?.mode || 'circular');
-  if (mode === 'linear') {
+  if (shownMode(state) === 'linear') {
     const trackHeight = parsePositiveNumber(drawing?.adv?.gc_height) ?? DEFAULTS.linear.defaultGcHeightPx;
-    return Math.max(5, Math.min(8, trackHeight * 0.7));
+    return scalarAxisTickFontSize('linear', trackHeight);
   }
   const trackWidth = parsePositiveNumber(drawing?.adv?.gc_content_width_circular)
     ?? circularWidthForRenderer('dinucleotide_content', activeCircularLengthParam(state, drawing) || 'long');
-  return Math.max(5, Math.min(8, trackWidth * 0.22));
+  return gcTickFontOfDepth(state, drawing) ?? scalarAxisTickFontSize('circular', trackWidth);
 };
 
 /**

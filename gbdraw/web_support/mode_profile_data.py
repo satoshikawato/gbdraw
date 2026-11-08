@@ -8,7 +8,12 @@ from __future__ import annotations
 from typing import get_args
 
 from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
-from gbdraw.auto_sizes import ADAPTABLE_SETTINGS, linear_label_size_records, tick_and_window_tiers
+from gbdraw.auto_sizes import (
+    ADAPTABLE_SETTINGS,
+    linear_label_size_records,
+    scalar_axis_tick_font_rule,
+    tick_and_window_tiers,
+)
 from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.labels import LinearLabelScope
@@ -48,14 +53,16 @@ def mode_profiles_payload() -> dict[str, object]:
         # The packaged short/long boundary of each mode, the records that set
         # the Auto Linear label font for each label display scope (rules:
         # gbdraw/auto_sizes.py), and the Auto sizes of a Circular row
-        # (gbdraw/diagrams/circular/presets.py), and the settings of each mode
-        # that can return to Auto, by setting ID.
+        # (gbdraw/diagrams/circular/presets.py), the settings of each mode
+        # that can return to Auto, by setting ID, and the Auto tick font of a
+        # GC content or Depth axis by track thickness.
         "autoSizes": {
             "adaptableSettings": {mode: list(settings) for mode, settings in ADAPTABLE_SETTINGS.items()},
             "circularSlots": circular_auto_slot_sizes(packaged_cfg),
             "linearLabelSizeRecords": {
                 scope: linear_label_size_records(scope) for scope in get_args(LinearLabelScope)
             },
+            "scalarAxisTickFont": scalar_axis_tick_font_rule(),
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
             **tick_and_window_tiers(packaged_cfg),
         },

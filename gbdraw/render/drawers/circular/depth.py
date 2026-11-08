@@ -4,6 +4,7 @@
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
+from ....auto_sizes import depth_axis_tick_font_size_px
 from ....configurators import DepthConfigurator
 from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
@@ -12,7 +13,6 @@ from ....layout.circular_depth_axis import (
     CircularRangeLabel,
     ScalarAxisTick,
     circular_range_label,
-    depth_axis_tick_font_size_px,
     scalar_axis_ink,
 )
 from ....layout.circular_ink import CircularInk, CircularInkProfile, stroke_pad_px
