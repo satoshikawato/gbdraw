@@ -18,8 +18,12 @@ The application keeps one choice in the browser's local storage: whether the
 settings show in full or as the column of icons. The browser keeps it per
 site address, so another browser, a private window, or another address starts
 with the full settings. Files, settings, and Results are not stored there.
-`gbdraw gui` serves the application on a new port each time it starts, which
-is a new address to the browser, so the choice lasts until that server stops.
+`gbdraw gui` serves the application at the same address on every run,
+`http://localhost:24372`, so the choice lasts from one run to the next. When
+another program uses that port, `gbdraw gui` says so and serves the
+application on a free port instead. That is another address to the browser: a
+choice made there is not kept, and copies left there are deleted only when
+that port is used again.
 
 When you choose an input file, the page writes its contents (a gzip file's
 expanded contents) to a temporary file in the browser's private storage for
@@ -32,8 +36,8 @@ cannot read them, and they are never sent anywhere. The disk needs free space
 for the inputs in use, including those an Undo step can bring back. A copy is
 deleted when no drawing, History step, or running operation uses its file, and
 when the page closes; copies left by a page or browser that ended abnormally
-are deleted the next time the page opens, and a copy another open tab uses is
-kept. A private (incognito) window keeps the copies in memory. When a copy
+are deleted the next time the page opens at the same address, and a copy
+another open tab uses is kept. A private (incognito) window keeps the copies in memory. When a copy
 cannot be written (no free space, or the browser does not allow the storage),
 the page reads the file itself, and a file that changed after it was chosen
 then stops Generate or Save Session with "An input could not be read. Replace

@@ -48,7 +48,10 @@ const run = async (request) => {
 self.onmessage = async ({ data }) => {
   const request = /** @type {InputCopyWorkerRequest} */ (data);
   try {
-    self.postMessage({ id: request.id, ok: true, written: await run(request) });
+    const written = await run(request);
+    // A write gives its buffer back, for the page's next piece.
+    if (request.op === 'write') self.postMessage({ id: request.id, ok: true, written, buffer: request.buffer }, [request.buffer]);
+    else self.postMessage({ id: request.id, ok: true, written });
   } catch (error) {
     self.postMessage({ id: request.id, ok: false, error: String(error instanceof Error ? error.message : error) });
   }

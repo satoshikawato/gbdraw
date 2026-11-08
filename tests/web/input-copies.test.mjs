@@ -12,7 +12,8 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, useInputCopyStore
+  holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, takeFileBytesForTransfer,
+  useInputCopyStore
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createBrowserInputCopyStore } = await import('../../gbdraw/web/js/services/input-copies.js');
 
@@ -40,7 +41,13 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, wri
         node.entries.set(name, { bytes: new Uint8Array(0) });
       }
       const file = node.entries.get(name);
-      return { file, getFile: async () => new Blob([file.bytes]) };
+      return {
+        file,
+        getFile: async () => {
+          copyReads += 1;
+          return new Blob([file.bytes]);
+        }
+      };
     },
     async removeEntry(name, { recursive = false } = {}) {
       const entry = node.entries.get(name);
@@ -52,6 +59,7 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, wri
     async *keys() { yield* [...node.entries.keys()]; }
   });
   const open = new Map();
+  let copyReads = 0;
   const run = async ({ op, folder: path, name, buffer }) => {
     if (op === 'closeAll') {
       for (const file of open.values()) file.open = false;
@@ -94,7 +102,10 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, wri
         // A posted message detaches the buffers it transfers, as in the browser.
         const request = structuredClone(message, { transfer });
         run(request).then(
-          (written) => worker.onmessage({ data: { id: request.id, ok: true, written } }),
+          (written) => worker.onmessage(request.op === 'write'
+            // A write gives its buffer back, as the copy Worker does.
+            ? structuredClone({ data: { id: request.id, ok: true, written, buffer: request.buffer } }, { transfer: [request.buffer] })
+            : { data: { id: request.id, ok: true, written } }),
           (error) => worker.onmessage({ data: { id: request.id, ok: false, error: String(error) } })
         );
       }
@@ -104,7 +115,9 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, wri
   const tabFolders = () => [...(root.entries.get('gbdraw-input-copies')?.entries.keys() ?? [])];
   const copyFiles = () => [...(root.entries.get('gbdraw-input-copies')?.entries.values() ?? [])]
     .flatMap((tab) => [...tab.entries.values()]);
-  return { root, storage: { getDirectory: async () => handleOf(root) }, createWorker, tabFolders, copyFiles };
+  return {
+    root, storage: { getDirectory: async () => handleOf(root) }, createWorker, tabFolders, copyFiles, copyReads: () => copyReads
+  };
 };
 
 /** Web Locks in one process: a held name refuses `ifAvailable`, and a callback's end releases it. */
@@ -372,4 +385,52 @@ test('a copy that another state still uses outlives the input store\'s release',
   endUse();
   await flush();
   assert.deepEqual(fileSystem.copyFiles(), []);
+});
+
+test('a reading that starts while the copy is written takes the first read\'s bytes, and a transfer then reads no copy', async () => {
+  const gate = createGate();
+  const fileSystem = createFakeFileSystem({ writeGate: gate.wait });
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const file = chosenFile(new Uint8Array(PIECE + 9).map((_, index) => index % 249));
+  keepFileCopy(file);
+  const first = await readFileBytes(file);
+  const release = holdReadBytes();
+  try {
+    assert.equal(await readFileBytes(file), first, 'a Generate reading shares the bytes the page holds');
+    const taken = takeFileBytesForTransfer(file);
+    assert.equal(await settledSoon(taken), TIMED_OUT, 'a transfer waits for the copy to close');
+    gate.open();
+    assert.equal(await taken, first.buffer, 'it transfers the bytes the page holds');
+    assert.equal(fileSystem.copyReads(), 0, 'and reads no copy');
+  } finally {
+    release();
+  }
+  assert.equal(file.reads, 1);
+});
+
+test('a copy goes through one buffer, which the Worker gives back after each piece', async () => {
+  const fileSystem = createFakeFileSystem();
+  const store = copyStoreOn(fileSystem);
+  /** @type {{ given: ArrayBuffer[], back: ArrayBuffer[] }} */
+  const seen = { given: [], back: [] };
+  useInputCopyStore({
+    openWriter: async () => {
+      const writer = await store.openWriter();
+      return writer && {
+        ...writer,
+        write: async (buffer) => {
+          seen.given.push(buffer);
+          const back = await writer.write(buffer);
+          seen.back.push(back);
+          return back;
+        }
+      };
+    }
+  });
+  const bytes = new Uint8Array(3 * PIECE + 5).map((_, index) => index % 241);
+  await choose(chosenFile(bytes));
+  assert.deepEqual(fileSystem.copyFiles()[0].bytes, bytes);
+  assert.equal(seen.given.length, 4);
+  assert.equal(seen.given[1], seen.back[0]);
+  assert.equal(seen.given[2], seen.back[1]);
 });

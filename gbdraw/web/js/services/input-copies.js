@@ -19,7 +19,9 @@ const lockNameOf = (folder) => `${COPY_ROOT}/${folder}`;
  */
 /**
  * @typedef {object} InputCopyWriter
- * @property {(buffer: ArrayBuffer) => Promise<void>} write Appends `buffer`, which it transfers; rejects unless every byte was written.
+ * @property {(buffer: ArrayBuffer) => Promise<ArrayBuffer>} write Appends `buffer`, which it transfers, and gives
+ *   it back for the next piece, so a copy holds at most one piece beside the content however late the Worker's
+ *   memory is collected; rejects unless every byte was written.
  * @property {(token: string) => Promise<InputCopy>} finish Ends the writing; a copy that holds `token` already is shared instead.
  * @property {() => void} abort Ends the writing and deletes the file.
  */
@@ -40,9 +42,11 @@ const lockNameOf = (folder) => `${COPY_ROOT}/${folder}`;
  */
 /** @typedef {InputCopyWorkerCall & { id: number }} InputCopyWorkerRequest */
 /**
- * The copy Worker's reply: `written` is the byte count `write()` returned.
- * @typedef {{ id: number, ok: true, written: number } | { id: number, ok: false, error: string }} InputCopyWorkerReply
+ * The copy Worker's reply: `written` is the byte count `write()` returned, and a write gives its `buffer` back.
+ * @typedef {{ id: number, ok: true, written: number, buffer?: ArrayBuffer }
+ *   | { id: number, ok: false, error: string }} InputCopyWorkerReply
  */
+/** @typedef {{ written: number, buffer?: ArrayBuffer }} InputCopyWorkerResult */
 /** @typedef {{ keys: () => AsyncIterable<string> }} ListedFolder */
 /** @typedef {{ base: FileSystemDirectoryHandle, folder: FileSystemDirectoryHandle }} CopyFolders */
 
@@ -53,7 +57,7 @@ const lockNameOf = (folder) => `${COPY_ROOT}/${folder}`;
 const workerCaller = (createWorker) => {
   /** @type {Worker | null} */
   let worker = null;
-  /** @type {Map<number, { resolve: (written: number) => void, reject: (error: Error) => void }>} */
+  /** @type {Map<number, { resolve: (result: InputCopyWorkerResult) => void, reject: (error: Error) => void }>} */
   const waiting = new Map();
   let nextId = 1;
   /** @param {Error} error */
@@ -69,7 +73,7 @@ const workerCaller = (createWorker) => {
       const reply = /** @type {InputCopyWorkerReply} */ (data);
       const pending = waiting.get(reply.id);
       waiting.delete(reply.id);
-      if (reply.ok) pending?.resolve(reply.written);
+      if (reply.ok) pending?.resolve({ written: reply.written, buffer: reply.buffer });
       else pending?.reject(new Error(reply.error));
     };
     started.onerror = () => failAll(new Error('The input copy Worker stopped.'));
@@ -78,7 +82,7 @@ const workerCaller = (createWorker) => {
   /**
    * @param {InputCopyWorkerCall} request
    * @param {Transferable[]} [transfer]
-   * @returns {Promise<number>}
+   * @returns {Promise<InputCopyWorkerResult>}
    */
   const call = (request, transfer = []) => new Promise((resolve, reject) => {
     const id = nextId++;
@@ -157,8 +161,8 @@ export const createBrowserInputCopyStore = ({
     sweepLeftovers(opened.base, own, locks).catch(() => {});
     page.addEventListener?.('pagehide', (event) => {
       if (/** @type {PageTransitionEvent} */ (event).persisted) return;
-      const closed = started() ? call({ op: 'closeAll', folder: [COPY_ROOT, own] }) : Promise.resolve(0);
-      closed.catch(() => 0).then(() => {
+      const closed = started() ? call({ op: 'closeAll', folder: [COPY_ROOT, own] }) : Promise.resolve(null);
+      closed.catch(() => null).then(() => {
         stop();
         opened.base.removeEntry(own, { recursive: true }).catch(() => {});
       });
@@ -205,9 +209,10 @@ export const createBrowserInputCopyStore = ({
       return {
         write: async (buffer) => {
           const expected = buffer.byteLength;
-          const written = await call({ op: 'write', name, buffer }, [buffer]);
+          const { written, buffer: given } = await call({ op: 'write', name, buffer }, [buffer]);
           // A write can return less than it was given, or an error code (Chromium's in-memory storage, 4294967288).
           if (written !== expected || testFailsInputCopyWrites()) throw new Error(`Wrote ${written} of ${expected} bytes.`);
+          return given ?? new ArrayBuffer(expected);
         },
         finish: async (token) => {
           await call({ op: 'close', name });

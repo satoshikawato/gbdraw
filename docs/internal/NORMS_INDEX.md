@@ -283,7 +283,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page) | Diagram reply too large for the page | ACCEPTED | diagram-generation.reply-too-large-for-page | 1 | — | 3 |
 | [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 2 | scenario revision 1 | 4 |
 | [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
-| [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 7 |
+| [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 8 |
 
 ### Test files that cite each record
 
@@ -759,6 +759,7 @@ are listed under "Cited ids without a record".
   - `tests/web/file-content-token.test.mjs`
   - `tests/web/session-export-validation.test.mjs`
 - [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing)
+  - `tests/test_gui_server.py`
   - `tests/web/auxiliary-file-import-retry.test.mjs`
   - `tests/web/file-content-token.test.mjs`
   - `tests/web/input-copies.playwright.spec.js`

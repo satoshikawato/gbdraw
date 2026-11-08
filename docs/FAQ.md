@@ -78,7 +78,8 @@ browser's private storage for the site, on your disk, and draws from that copy,
 so a file changed on disk after you chose it is drawn as it was when chosen.
 The copy is never sent anywhere. The page deletes it when no drawing or Undo
 step uses the file and when you close the page; a copy left by a crash is
-deleted the next time the page opens. A private window keeps the copies in
+deleted the next time the page opens at the same address (`gbdraw gui` uses
+`http://localhost:24372` on every run). A private window keeps the copies in
 memory instead.
 
 A saved Session embeds your input files, so protect it like the source data.

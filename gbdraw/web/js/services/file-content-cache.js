@@ -236,6 +236,8 @@ const readThroughCopy = async (file, copy, facts) => {
 /**
  * Writes `plain` to a new copy in 16 MiB pieces, one at a time, while its facts
  * are hashed, and closes it under their token; null when no copy could be written.
+ * Every piece goes through one buffer, which the Worker gives back, so the copy
+ * holds one piece beside `plain`.
  * @param {InputCopyStore} store @param {Uint8Array} plain @param {Promise<FileContentFacts>} facts
  * @returns {Promise<InputCopy | null>}
  */
@@ -243,8 +245,13 @@ const writeCopy = async (store, plain, facts) => {
   const writer = await store.openWriter().catch(() => null);
   if (!writer) return null;
   try {
+    /** @type {ArrayBuffer | null} */
+    let spare = null;
     for (let start = 0; start === 0 || start < plain.byteLength; start += TOKEN_PIECE_BYTES) {
-      await writer.write(/** @type {ArrayBuffer} */ (plain.slice(start, start + TOKEN_PIECE_BYTES).buffer));
+      const piece = plain.subarray(start, start + TOKEN_PIECE_BYTES);
+      const buffer = spare?.byteLength === piece.byteLength ? spare : new ArrayBuffer(piece.byteLength);
+      new Uint8Array(buffer).set(piece);
+      spare = await writer.write(buffer);
     }
     return await writer.finish((await facts).token);
   } catch {

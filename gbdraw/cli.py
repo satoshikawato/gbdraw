@@ -22,7 +22,6 @@ import warnings
 import webbrowser
 import http.server
 import socketserver
-import socket
 from collections.abc import Callable
 from typing import TYPE_CHECKING, NoReturn, TextIO
 from importlib import resources
@@ -46,6 +45,8 @@ class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     """Serve the browser UI with the headers required for SharedArrayBuffer."""
 
     def end_headers(self) -> None:
+        # Revalidate every file, so a browser never runs an older gbdraw's cached files at the same address.
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
@@ -56,28 +57,46 @@ def print_version() -> None:
     print(f"gbdraw version {__version_display__}")
 
 
-def find_free_port():
-    """Find a free port on localhost"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
-        return s.getsockname()[1]
+GUI_PORT = 24372
+"""The port ``gbdraw gui`` serves the Web app on. One address across runs keeps the
+browser's storage for it: the layout choice, and the temporary input copies that
+the next run deletes when a run ended without deleting them (PD-OI-121)."""
+
+
+class _GuiServer(socketserver.TCPServer):
+    # A port the previous run just closed can be bound again at once; Windows
+    # would let a second server bind a port in use with this option, so not there.
+    allow_reuse_address = sys.platform != "win32"
+
+
+def bind_gui_server(handler: Callable[..., http.server.BaseHTTPRequestHandler]) -> tuple[socketserver.TCPServer, bool]:
+    """The server on ``GUI_PORT`` of 127.0.0.1, or, when that port is in use, on a free
+    port; the flag says whether it fell back."""
+    try:
+        return _GuiServer(("127.0.0.1", GUI_PORT), handler), False
+    except OSError:
+        return _GuiServer(("127.0.0.1", 0), handler), True
+
 
 def start_local_server(directory: str):
     """
     Starts a local HTTP server to serve the gbdraw web UI.
     """
 
-    port = find_free_port()
-
     handler = partial(IsolatedSimpleHTTPRequestHandler, directory=directory)
 
     try:
-        httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
+        httpd, fell_back = bind_gui_server(handler)
     except OSError as e:
         print(f"Error starting server: {e}", file=sys.stderr)
         return
 
+    port = httpd.server_address[1]
     url = f"http://localhost:{port}"
+    if fell_back:
+        print(f"Port {GUI_PORT} is in use, so the UI is served at another address.")
+        print("The layout choice made there is not kept, and its temporary input copies are")
+        print(f"deleted only when port {port} is used again.")
     print(f"✅ Local server started at: {url}")
     print(f"📂 Serving UI from: {directory}")
     print("Press Ctrl+C to stop the server.")
