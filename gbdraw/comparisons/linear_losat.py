@@ -34,6 +34,7 @@ from gbdraw.comparisons.losat_jobs import (
 )
 from gbdraw.comparisons.losat_runtime import (
     LOSAT_PROGRAMS,
+    NUCLEOTIDE_LOSAT_PROGRAMS,
     LosatRawCache,
     LosatRuntimeRecord,
     LosatSearchArgs,
@@ -46,9 +47,6 @@ from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.linear_comparison import LinearComparison
 
 logger = logging.getLogger(__name__)
-
-NUCLEOTIDE_LOSAT_PROGRAMS = frozenset({"losatn", "tlosatx"})
-
 
 def _plan_error(message: str) -> ValidationError:
     return ValidationError(

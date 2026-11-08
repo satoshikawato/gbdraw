@@ -26,12 +26,7 @@ from ...layout.circular import (
     content_outer_radius_px,
     bands_overlap,
 )
-from ...layout.circular_depth_axis import (
-    DepthAxisFootprint,
-    DepthAxisSource,
-    DepthAxisStyle,
-    resolve_depth_axis_footprint,
-)
+from ...layout.circular_depth_axis import CircularScalarAxes, ScalarAxisFootprint
 from ...tracks.circular import (
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     CircularTrackSlot,
@@ -252,12 +247,7 @@ def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
     return RadialBand(float(center_px) - half, float(center_px) + half)
 
 
-def _depth_reserved_band_for_draw_band(
-    draw_band_px: RadialBand,
-    footprint: DepthAxisFootprint | None,
-) -> RadialBand:
-    if footprint is None:
-        return draw_band_px
+def _band_with_axis_footprint(draw_band_px: RadialBand, footprint: ScalarAxisFootprint) -> RadialBand:
     return RadialBand(
         float(draw_band_px.inner_px) - float(footprint.radial_inner_extra_px),
         float(draw_band_px.outer_px) + float(footprint.radial_outer_extra_px),
@@ -837,7 +827,7 @@ def _measure_radial_slot(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
     anchor_radius_px = float(axis_radius_px) + float(anchor_offset_px)
@@ -930,11 +920,10 @@ def _measure_radial_slot(
             if intent.side == "inside"
             else RadialBand(band.inner_px, band.outer_px + room)
         )
-    if renderer == "depth" and depth_config is not None:
-        reserved_band = _depth_reserved_band_for_draw_band(
-            band,
-            resolve_depth_axis_footprint(depth_config, resolved_width),
-        )
+    axis_footprint = None if scalar_axes is None else scalar_axes.footprint(renderer, resolved_width)
+    if axis_footprint is not None:
+        # A scalar track's axis paints past its band (its numbered labels); other rings keep clear of it.
+        reserved_band = _band_with_axis_footprint(band, axis_footprint)
     return _with_span_label_room(intent, CircularResolvedSlot(
         slot_index=int(intent.slot_index),
         id=intent.slot_id,
@@ -1054,7 +1043,7 @@ def _place_outside_auto(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         anchor_offset = max(0.0, float(intent.anchor_offset_px or 0.0))
@@ -1068,7 +1057,7 @@ def _place_outside_auto(
                 geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
                 compressed=compressed,
             )
             if resolved.packing_band_px is not None and resolved.packing_band_px.inner_px < placement_window.inner_px - LAYOUT_EPSILON:
@@ -1132,7 +1121,7 @@ def _try_measure_inside_interval(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
     compressed: bool,
     packing_inner_px: float = 0.0,
 ) -> CircularResolvedSlot | None:
@@ -1170,7 +1159,7 @@ def _try_measure_inside_interval(
                 geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
                 compressed=compressed,
             )
             bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
@@ -1211,7 +1200,7 @@ def _place_inside_auto(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         resolved = _place_inside_auto_fixed_width(
@@ -1225,7 +1214,7 @@ def _place_inside_auto(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
         if resolved is not None:
             return resolved
@@ -1248,7 +1237,7 @@ def _place_inside_auto_fixed_width(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot | None:
     outer_limit = max(0.0, float(placement_window.outer_px))
     reserved_inner = placement_window.reserved_inner_px
@@ -1268,7 +1257,7 @@ def _place_inside_auto_fixed_width(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
             compressed=compressed,
             packing_inner_px=float(placement_window.inner_px),
         )
@@ -1291,7 +1280,7 @@ def _measure_anchored_inside(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> CircularResolvedSlot | None:
     """A pinned row at ``width_px`` on its radius, or ``None`` when it leaves the window or overlaps."""
 
@@ -1304,7 +1293,7 @@ def _measure_anchored_inside(
         geometry=geometry,
         cfg=cfg,
         total_length=total_length,
-        depth_config=depth_config,
+        scalar_axes=scalar_axes,
         compressed=compressed,
     )
     bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
@@ -1598,7 +1587,7 @@ def _place_inside_auto_stack_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     failure: _RadialSlotIntent | None = None
     for scale in _inside_auto_stack_width_scales(intents):
@@ -1620,7 +1609,7 @@ def _place_inside_auto_stack_group(
                 geometry=geometry,
                 cfg=cfg,
                 total_length=total_length,
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
             )
             if resolved is None:
                 failure = intent
@@ -1665,7 +1654,7 @@ def _place_outside_auto_stack_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     """Place ``intents``, given from the axis outward, from the window's inner edge."""
 
@@ -1682,7 +1671,7 @@ def _place_outside_auto_stack_group(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
         resolved_group.append(resolved)
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
@@ -1819,7 +1808,7 @@ def _try_place_preferred_numeric_group_at_anchors(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     resolved_group = tuple(
         _measure_radial_slot(
@@ -1831,7 +1820,7 @@ def _try_place_preferred_numeric_group_at_anchors(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
             compressed=False,
         )
         for intent in intents
@@ -1857,7 +1846,7 @@ def _place_inside_auto_group_with_width_scale(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> tuple[CircularResolvedSlot, ...] | None:
     working_occupied = list(occupied)
     working_outer = float(placement_window.outer_px)
@@ -1876,7 +1865,7 @@ def _place_inside_auto_group_with_width_scale(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
         if resolved is None:
             return None
@@ -1916,7 +1905,7 @@ def _place_preferred_numeric_group(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     total_length: int,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
     under_a_track: bool,
     pack: bool,
 ) -> tuple[CircularResolvedSlot, ...]:
@@ -1939,7 +1928,7 @@ def _place_preferred_numeric_group(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
 
     def packed_at(group: Sequence[_RadialSlotIntent], scale: float) -> tuple[CircularResolvedSlot, ...] | None:
@@ -1953,7 +1942,7 @@ def _place_preferred_numeric_group(
             geometry=geometry,
             cfg=cfg,
             total_length=total_length,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
 
     lanes = list(intents)
@@ -2073,7 +2062,7 @@ def _minimum_future_inside_width_px(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
 ) -> float:
     width = max(0.0, float(intent.width_px))
     if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
@@ -2093,7 +2082,7 @@ def _minimum_future_inside_width_px(
             geometry=geometry,
             cfg=cfg,
             total_length=int(total_length),
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
             compressed=width < float(intent.width_px) - LAYOUT_EPSILON,
         )
         footprint_widths = [width]
@@ -2116,7 +2105,7 @@ def _future_unresolved_inside_span_px(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> tuple[float, tuple[_KeptInsideSlot, ...]]:
     """The smallest span the unresolved inside rows after ``start_pos`` need, and those rows."""
@@ -2137,7 +2126,7 @@ def _future_unresolved_inside_span_px(
             cfg=cfg,
             total_length=total_length,
             feature_dict=feature_dict,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
         outer_neighbor = future
     return span, tuple(slots)
@@ -2178,7 +2167,7 @@ def _inside_placement_window(
     cfg: GbdrawConfig,
     total_length: int,
     feature_dict: Mapping[str, Any] | None,
-    depth_config: DepthAxisSource | None,
+    scalar_axes: CircularScalarAxes | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
     group: Sequence[_RadialSlotIntent] = (),
 ) -> PlacementWindow:
@@ -2221,7 +2210,7 @@ def _inside_placement_window(
         cfg=cfg,
         total_length=total_length,
         feature_dict=feature_dict,
-        depth_config=depth_config,
+        scalar_axes=scalar_axes,
         resolved_by_index=resolved_by_index,
     )
     if future_span <= LAYOUT_EPSILON:
@@ -2283,7 +2272,7 @@ class _RadialLayoutInputs(TypedDict):
     slots: Sequence[CircularTrackSlot]
     feature_dict: Mapping[str, Any] | None
     preferred_anchor_slot_ids: Collection[str]
-    depth_config: DepthAxisStyle | None
+    scalar_axes: CircularScalarAxes | None
     center_reserved_radius_explicit: bool
     keep_preset_lanes: bool
     annotation_label_rooms: Mapping[str, AnnotationLabelRoom]
@@ -2299,7 +2288,7 @@ def resolve_circular_radial_layout(
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
-    depth_config: DepthAxisStyle | None = None,
+    scalar_axes: CircularScalarAxes | None = None,
     center_reserved_radius_explicit: bool = False,
     annotation_label_rooms: Mapping[str, AnnotationLabelRoom] | None = None,
 ) -> CircularRadialLayout:
@@ -2331,7 +2320,7 @@ def resolve_circular_radial_layout(
         slots=slots,
         feature_dict=feature_dict,
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-        depth_config=depth_config,
+        scalar_axes=scalar_axes,
         center_reserved_radius_explicit=center_reserved_radius_explicit,
         keep_preset_lanes=True,
         annotation_label_rooms=annotation_label_rooms or {},
@@ -2549,7 +2538,7 @@ def _resolve_circular_radial_layout(
     feature_dict: Mapping[str, Any] | None = None,
     definition_reserved_radius_px: float | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
-    depth_config: DepthAxisSource | None = None,
+    scalar_axes: CircularScalarAxes | None = None,
     center_reserved_radius_explicit: bool = False,
     keep_preset_lanes: bool = True,
     annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
@@ -2584,6 +2573,11 @@ def _resolve_circular_radial_layout(
         axis=axis,
         annotation_label_rooms=annotation_label_rooms,
     )
+    if scalar_axes is not None:
+        # The GC axis keeps its room in the font it is drawn in (``_gc_content_axis_font_size`` in the assembly).
+        scalar_axes = scalar_axes.with_gc_font_of_depth(
+            next((float(intent.width_px) for intent in intents if intent.renderer == "depth" and intent.width_px > 0), None)
+        )
     if definition_pass == "move":
         circular = cfg.canvas.circular
         floor_px = float(circular.track_narrowing_min_px) if circular.track_narrowing else math.inf
@@ -2617,7 +2611,7 @@ def _resolve_circular_radial_layout(
             geometry=geometry,
             cfg=cfg,
             total_length=int(total_length),
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
         if _anchored_inside(intent):
             if resolved.reserved_band_px is not None:
@@ -2690,7 +2684,7 @@ def _resolve_circular_radial_layout(
                     geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
-                    depth_config=depth_config,
+                    scalar_axes=scalar_axes,
                 )
                 for group_intent, group_resolved in zip(outside_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
@@ -2749,7 +2743,7 @@ def _resolve_circular_radial_layout(
                 cfg=cfg,
                 total_length=int(total_length),
                 feature_dict=feature_dict,
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
                 resolved_by_index=resolved_by_index,
                 group=movable_group,
             )
@@ -2762,7 +2756,7 @@ def _resolve_circular_radial_layout(
                 geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
             )
             for group_intent, group_resolved in zip(movable_group, resolved_group):
                 resolved_by_index[group_intent.slot_index] = group_resolved
@@ -2790,7 +2784,7 @@ def _resolve_circular_radial_layout(
                 cfg=cfg,
                 total_length=int(total_length),
                 feature_dict=feature_dict,
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
                 resolved_by_index=resolved_by_index,
                 group=preferred_group,
             )
@@ -2803,7 +2797,7 @@ def _resolve_circular_radial_layout(
                 geometry=geometry,
                 cfg=cfg,
                 total_length=int(total_length),
-                depth_config=depth_config,
+                scalar_axes=scalar_axes,
                 under_a_track=any(
                     row.renderer not in _ROWS_ABOVE_THE_INSIDE_STACK for row, _edge in rows_above_inside
                 ),
@@ -2835,7 +2829,7 @@ def _resolve_circular_radial_layout(
             cfg=cfg,
             total_length=int(total_length),
             feature_dict=feature_dict,
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
             resolved_by_index=resolved_by_index,
         )
         if len(inside_group) > 1:
@@ -2849,7 +2843,7 @@ def _resolve_circular_radial_layout(
                     geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
-                    depth_config=depth_config,
+                    scalar_axes=scalar_axes,
                 )
             except ValidationError:
                 fallback_group = _inside_movable_stack_group_from(
@@ -2871,7 +2865,7 @@ def _resolve_circular_radial_layout(
                     cfg=cfg,
                     total_length=int(total_length),
                     feature_dict=feature_dict,
-                    depth_config=depth_config,
+                    scalar_axes=scalar_axes,
                     resolved_by_index=resolved_by_index,
                 )
                 resolved_group = _place_inside_auto_stack_group(
@@ -2883,7 +2877,7 @@ def _resolve_circular_radial_layout(
                     geometry=geometry,
                     cfg=cfg,
                     total_length=int(total_length),
-                    depth_config=depth_config,
+                    scalar_axes=scalar_axes,
                 )
                 inside_group = fallback_group
             for group_intent, group_resolved in zip(inside_group, resolved_group):
@@ -2902,7 +2896,7 @@ def _resolve_circular_radial_layout(
             geometry=geometry,
             cfg=cfg,
             total_length=int(total_length),
-            depth_config=depth_config,
+            scalar_axes=scalar_axes,
         )
 
         resolved_by_index[intent.slot_index] = resolved

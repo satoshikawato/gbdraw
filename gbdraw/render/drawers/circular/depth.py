@@ -2,14 +2,13 @@
 # coding: utf-8
 
 from pandas import DataFrame
-from gbdraw.svg.elements import Circle, Group, Line, Path, Text
+from gbdraw.svg.elements import Group, Path
 
 from ....configurators import DepthConfigurator
 from ....layout.circular_depth_axis import (
     DEPTH_AXIS_SMALL_TICK_SIZE_PX,
     DEPTH_AXIS_STROKE_WIDTH_PX,
     DEPTH_AXIS_TICK_SIZE_PX,
-    SCALAR_AXIS_LABEL_GAP_PX,
     CircularRangeLabel,
     ScalarAxisTick,
     circular_range_label,
@@ -24,8 +23,8 @@ from ....layout.scalar_axis import (
     depth_axis_labels,
     scalar_axis_small_tick_values,
 )
-from ....svg.circular_ticks import text_along_circle
 from ....svg.circular_tracks import circular_scalar_area_line, generate_circular_depth_path_desc
+from .scalar_axis import circular_scalar_axis_group
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -117,59 +116,18 @@ class DepthDrawer:
         if not self.show_axis:
             return group
         baseline_radius, outer_radius = self._radii(radius, track_width, norm_factor)
-        axis_group = Group(id=axis_group_id)
-        axis_group.add(
-            Circle(
-                center=(0, 0),
-                r=baseline_radius,
-                fill="none",
-                stroke=self.axis_stroke,
-                stroke_width=self.axis_stroke_width,
-            )
-        )
-        axis_group.add(
-            Line(
-                start=(0, -baseline_radius),
-                end=(0, -outer_radius),
-                stroke=self.axis_stroke,
-                stroke_width=self.axis_stroke_width,
-            )
-        )
-        font_size = depth_axis_tick_font_size_px(self._depth_config, track_width)
         ticks, range_label = self._axis_ticks(depth_df, baseline_radius, track_width)
-        for tick in ticks:
-            axis_group.add(
-                Line(
-                    start=(0, -tick.radius_px),
-                    end=(tick.length_px, -tick.radius_px),
-                    stroke=self.axis_stroke,
-                    stroke_width=self.axis_stroke_width,
-                )
-            )
-            if tick.label is not None:
-                axis_group.add(
-                    Text(
-                        tick.label,
-                        insert=(tick.length_px + SCALAR_AXIS_LABEL_GAP_PX, -tick.radius_px),
-                        fill=self.axis_stroke,
-                        font_size=font_size,
-                        font_family=self.font_family,
-                        text_anchor="start",
-                        dominant_baseline="central",
-                    )
-                )
-        if range_label is not None:
-            for element in text_along_circle(
-                range_label.text,
-                range_label.baseline_px,
-                -90.0 + range_label.start_deg,
-                range_label.path_span_deg,
-                id_parts=(axis_group_id,),
-                fill=self.axis_stroke,
-                font_size=font_size,
-                font_family=self.font_family,
-            ):
-                axis_group.add(element)
+        axis_group = circular_scalar_axis_group(
+            axis_group_id,
+            baseline_radius,
+            outer_radius,
+            ticks,
+            range_label,
+            stroke=self.axis_stroke,
+            stroke_width=self.axis_stroke_width,
+            font_size=depth_axis_tick_font_size_px(self._depth_config, track_width),
+            font_family=self.font_family,
+        )
         group.add(axis_group)
         return group
 

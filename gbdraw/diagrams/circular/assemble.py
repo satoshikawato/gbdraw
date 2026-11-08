@@ -111,7 +111,7 @@ from ...layout.circular import (
     feature_radius_intervals,
     slots_feature_layout,
 )
-from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
+from ...layout.circular_depth_axis import CircularScalarAxes, ScalarAxisStyle, gc_axis_tick_font_size_of_depth
 from ...layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink, stroke_pad_px
 from ...layout.composition import (
     CompositionInputs,
@@ -1961,31 +1961,34 @@ def _slot_gc_config_with_axis_font_size(
     return cloned
 
 
-def _gc_content_matches_depth_axis_font_size(
+def _circular_scalar_axes(configurators: DiagramConfigurators, *, show_depth_track: bool) -> CircularScalarAxes:
+    """The axes the radial layout keeps room for: the depth track's when it is drawn, the GC content track's in
+    percent mode."""
+
+    gc = configurators.gc
+    return CircularScalarAxes.of(
+        configurators.depth if show_depth_track else None,
+        gc if str(gc.mode).strip().lower() == "percent" else None,
+    )
+
+
+def _gc_content_axis_font_size(
+    configurators: DiagramConfigurators,
     *,
-    gc_config: GcContentConfigurator,
-    depth_config: DepthConfigurator | None,
+    show_depth_track: bool,
     resolved_track_slots: Sequence[CircularResolvedSlot],
 ) -> float | None:
-    if depth_config is None:
+    """The tick font the Percent GC axis takes from the depth axis, as the radial layout kept its room for it."""
+
+    gc, depth = configurators.gc, configurators.depth
+    if str(gc.mode).strip().lower() != "percent" or not show_depth_track or depth is None:
         return None
-    if str(getattr(gc_config, "mode", "deviation")).strip().lower() != "percent":
-        return None
-    if getattr(gc_config, "tick_font_size", None) is not None:
-        return None
-    if not bool(getattr(depth_config, "show_axis", True)) or not bool(getattr(depth_config, "show_ticks", True)):
-        return None
-    depth_slot = next(
-        (
-            slot
-            for slot in resolved_track_slots
-            if str(slot.renderer) == "depth" and float(slot.draw_width_px) > 0
-        ),
+    depth_width = next(
+        (width for slot in resolved_track_slots
+         if slot.renderer == "depth" and (width := slot.requested_width_px) is not None and width > 0),
         None,
     )
-    if depth_slot is None:
-        return None
-    return depth_axis_tick_font_size_px(depth_config, float(depth_slot.draw_width_px))
+    return gc_axis_tick_font_size_of_depth(gc, ScalarAxisStyle.of(depth), depth_width)
 
 
 def _slot_dataframe_for_nt(
@@ -2955,7 +2958,7 @@ def circular_labels(
     record_features: ResolvedRecordFeatureInputs | None,
     definition_reserved_radius_px: float | None,
     preferred_anchor_slot_ids: Collection[str],
-    depth_axis: DepthAxisStyle | None,
+    scalar_axes: CircularScalarAxes,
     center_reserved_radius_explicit: bool,
     record_transform: RecordDisplayTransform | None,
     definition_text: tuple[Aabb, ...],
@@ -3123,7 +3126,7 @@ def circular_labels(
                     total_length=total_length, geometry=geometry, cfg=cfg, slots=sized,
                     feature_dict=_radial_layout_feature_dict(feature_layers),
                     definition_reserved_radius_px=definition_reserved_radius_px,
-                    preferred_anchor_slot_ids=preferred_anchor_slot_ids, depth_config=depth_axis,
+                    preferred_anchor_slot_ids=preferred_anchor_slot_ids, scalar_axes=scalar_axes,
                     center_reserved_radius_explicit=center_reserved_radius_explicit, annotation_label_rooms=rooms,
                 ), definition_reserved_radius_px),
                 slots, annotation_tracks,
@@ -3323,6 +3326,8 @@ def add_record_on_circular_canvas(
     # Rows that pack from the feature track are placed around the full definition the record draws alone, so a
     # record summary on a Multi-Record Canvas changes only the center text (OV-1711). The preset lanes keep the
     # drawn definition there (D-08 covers the plot title).
+    # The scalar axes the radial layout keeps room for; the layout sets the GC axis font they are drawn in.
+    scalar_axes = _circular_scalar_axes(configurators, show_depth_track=show_depth_track)
     reserved_definition_profile: CircularDefinitionProfile = (
         "full"
         if presentation.definition_profile == "record_summary" and not preferred_anchor_slot_ids
@@ -3342,9 +3347,7 @@ def add_record_on_circular_canvas(
                 feature_dict=layout_feature_dict,
                 definition_reserved_radius_px=reserved_radius_px,
                 preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-                depth_config=(
-                    DepthAxisStyle.of(configurators.depth) if show_depth_track and configurators.depth is not None else None
-                ),
+                scalar_axes=scalar_axes,
                 center_reserved_radius_explicit=presentation.center_reserved_radius is not None,
                 annotation_label_rooms=rooms,
             ),
@@ -3491,10 +3494,8 @@ def add_record_on_circular_canvas(
             record_features=configurators.feature.record_features[0] if configurators.feature.record_features else None,
             definition_reserved_radius_px=definition_reserved_radius_px,
             preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-            # The radial replan reads the depth axis and ticks only.
-            depth_axis=(
-                DepthAxisStyle.of(configurators.depth) if show_depth_track and configurators.depth is not None else None
-            ),
+            # The radial replan reads the scalar axes and ticks only.
+            scalar_axes=scalar_axes,
             center_reserved_radius_explicit=presentation.center_reserved_radius is not None,
             record_transform=presentation.record_transform,
             definition_text=definition_text,
@@ -3532,10 +3533,8 @@ def add_record_on_circular_canvas(
         base_radius_px=float(canvas_config.radius),
     )
     attach_track_slot_geometry(canvas, track_slot_geometry)
-    gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
-        gc_config=configurators.gc,
-        depth_config=configurators.depth if show_depth_track else None,
-        resolved_track_slots=resolved_track_slots,
+    gc_content_tick_font_size_override = _gc_content_axis_font_size(
+        configurators, show_depth_track=show_depth_track, resolved_track_slots=resolved_track_slots
     )
 
     # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.

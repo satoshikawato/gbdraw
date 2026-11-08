@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
+from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.collinearity import (
@@ -30,6 +31,8 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
+    WINDOW_SPAN_ANNOTATION,
+    record_window_span,
     _feature_source_index_map,
     _iter_source_features,
     _SourceFeatureAnchorProfile,
@@ -52,6 +55,7 @@ from gbdraw.io.record_select import (
     drawn_record_units,
     parse_record_selector,
     reverse_records,
+    select_record_units,
 )
 from gbdraw.io.regions import (
     RecordWindow,
@@ -59,6 +63,7 @@ from gbdraw.io.regions import (
     assign_region_specs,
     crop_record_windows,
     parse_region_spec,
+    region_text,
 )
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -1771,6 +1776,8 @@ def _apply_provenance_annotations(
     )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
+    if provenance.window is not None:
+        record.annotations[WINDOW_SPAN_ANNOTATION] = (provenance.window.span.start, provenance.window.span.end)
     if provenance.window is not None and provenance.window.window_of is not None:
         # The record this unit is a window of (D-01): per-record readers bind to it (``record_identity_key``).
         record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.window_of
@@ -2226,33 +2233,89 @@ def _resolve_linear_comparison_selector(
     row_number: int,
     column: str,
 ) -> tuple[int, ...]:
-    """The drawn units of the record a comparisons-table selector names: ``#n`` counts records and a record ID
-    names the record whose units carry it (``drawn_record_units``); a record without windows is one unit."""
+    """The drawn units a comparisons-table selector names: ``#n`` counts records and a record ID names the record
+    whose units carry it (``drawn_record_units``); a record without windows is one unit. A selector that names no
+    record and reads as a region (``RECORD:START-END[:origin]``, as the records table writes a window) names the
+    one window of that record with that span."""
 
+    where = f"{table_path}: row {row_number}, column {column!r}"
+    diagnostic = {"code": "COMPARISON_INPUT", "row": row_number}
     groups = drawn_record_units(records)
-    if selector.startswith("#"):
-        number = parse_ascii_integer(selector[1:].strip())
-        if number is None:
-            raise ValidationError(
-                f"{table_path}: row {row_number}, column {column!r}: "
-                f"invalid record selector {selector!r}."
-            )
-        index = number - 1
-        if 0 <= index < len(groups):
-            return groups[index]
-    else:
+    number = parse_ascii_integer(selector[1:].strip()) if selector.startswith("#") else None
+    if number is not None:
+        if 0 <= number - 1 < len(groups):
+            return groups[number - 1]
+    elif not selector.startswith("#"):
         matches = [group for group in groups if any(str(records[index].id) == selector for index in group)]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
             raise ValidationError(
-                f"{table_path}: row {row_number}, column {column!r}: "
-                f"selector {selector!r} matched multiple record IDs; use #index."
+                f"{where}: selector {selector!r} matched multiple record IDs; use #index.", diagnostic=diagnostic
             )
-    raise ValidationError(
-        f"{table_path}: row {row_number}, column {column!r}: unresolved "
-        f"record selector {selector!r}."
-    )
+    window = _comparison_window_selector(selector)
+    if window is not None:
+        record_selector, start, end = window
+        try:
+            units = select_record_units(records, record_selector)
+        except ValueError as exc:
+            raise ValidationError(
+                f"{where}: unresolved record in window selector {selector!r}: {exc}", diagnostic=diagnostic
+            ) from exc
+        named = [unit for unit in units if record_window_span(records[unit]) == (start, end)]
+        if len(named) == 1:
+            return (named[0],)
+        spans = ", ".join(
+            region_text(*span, False) for unit in units if (span := record_window_span(records[unit])) is not None
+        )
+        raise ValidationError(
+            f"{where}: record {record_selector.label()} has no window {region_text(start, end, False)}"
+            + (f"; its windows are {spans}." if spans else "; it is drawn whole, so name it without a span."),
+            diagnostic=diagnostic,
+        )
+    if selector.startswith("#") and number is None:
+        raise ValidationError(f"{where}: invalid record selector {selector!r}.", diagnostic=diagnostic)
+    raise ValidationError(f"{where}: unresolved record selector {selector!r}.", diagnostic=diagnostic)
+
+
+class DrawnUnitName(NamedTuple):
+    """What a comparisons-table selector reads of a drawn unit: its record ID, the key of the record it draws
+    (shared by the windows of one record), and its window span (``None`` for a record drawn whole)."""
+
+    record_id: str
+    record_key: str
+    window_span: tuple[int, int] | None
+
+
+def comparison_selector_units(units: Sequence[DrawnUnitName], selector: str) -> tuple[int, ...] | None:
+    """The units ``selector`` names among ``units`` as the comparisons table reader resolves it
+    (:func:`_resolve_linear_comparison_selector`), or ``None`` when it names none: a writer checks a selector
+    with it before writing one."""
+
+    records = []
+    for unit in units:
+        annotations: dict[str, object] = {WINDOW_OF_ANNOTATION: unit.record_key}
+        if unit.window_span is not None:
+            annotations[WINDOW_SPAN_ANNOTATION] = unit.window_span
+        records.append(SeqRecord(Seq(""), id=unit.record_id, annotations=annotations))
+    try:
+        return _resolve_linear_comparison_selector(records, selector, table_path="", row_number=0, column="")
+    except ValidationError:
+        return None
+
+
+def _comparison_window_selector(selector: str) -> tuple[RecordSelector, int, int] | None:
+    """The record and span of a window selector ``RECORD:START-END[:origin]``, or ``None`` when ``selector`` is
+    not one. Orientation is not part of a window's name, so ``:rc`` and a reversed span are not window selectors."""
+
+    try:
+        spec = parse_region_spec(selector)
+    except ValueError:
+        return None
+    record_selector = spec.record_selector()
+    if record_selector is None or spec.file_selector is not None or spec.reverse_complement:
+        return None
+    return record_selector, spec.start, spec.end
 
 
 def _requested_wrap_length(options: LinearDiagramOptions) -> LinearWrapLength:
@@ -2378,6 +2441,7 @@ def resolve_linear_options(
     if options.comparison_table_file is None:
         return options
     table = read_comparisons_table(options.comparison_table_file)
+    record_units = {unit: group for group in drawn_record_units(records) for unit in group}
     comparisons: list[LinearComparison] = []
     losat_pairs: list[tuple[int, int]] = []
     for row in table.rows:
@@ -2418,9 +2482,10 @@ def resolve_linear_options(
             # A record drawn in windows is searched window by window against each window of the other (D-01).
             losat_pairs.extend(comparison_unit_pairs(query_units, subject_units))
             continue
+        # A file compares whole drawn records, also when a selector names one window of a record.
         refuse_file_comparison_of_windows(
-            query_units,
-            subject_units,
+            record_units[query_index],
+            record_units[subject_index],
             records=(row.query, row.subject),
             where=f"{table.table_path}: row {row.row_number}",
             row=row.row_number,
@@ -2454,6 +2519,13 @@ def resolve_linear_options(
             "Pass LOSAT record pairs either in the comparisons table or as "
             "losat_search pairs, not both.",
             diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
+    if search is not None and search.program == "losatp" and search.losatp_mode != "pairwise":
+        raise ValidationError(
+            f"{table.table_path}: source=losat rows list the pairs to compare, and --losatp_mode "
+            f"{search.losatp_mode} does not compare listed pairs; use --losatp_mode pairwise "
+            "(Python: losatp_mode='pairwise').",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN", "field": "losatp_mode"},
         )
     return replace(
         options,
@@ -2524,6 +2596,7 @@ def resolve_implicit_record_output_prefix(record_id: object) -> str:
 
 
 __all__ = [
+    "DrawnUnitName",
     "RecordInputManifest",
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
@@ -2532,6 +2605,7 @@ __all__ = [
     "prepared_parsed_source",
     "feature_drawn_start",
     "resolve_anchor_feature",
+    "comparison_selector_units",
     "project_origin_feature_starts",
     "resolve_origin_feature_start",
     "with_origin_feature_starts",

@@ -69,6 +69,7 @@ from .tracks import (
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS
 from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
@@ -131,7 +132,6 @@ logger = logging.getLogger()
 
 # ``--losat`` for similarity rings (design 3.3). losatp is accepted so that it
 # reports COMPARISON_INPUT / RING_LOSAT_PROGRAM rather than a usage error.
-_CLI_RING_LOSAT_PROGRAMS = ("losatn", "tlosatx", "losatp")
 # ``--losat_output_dir`` manifest of the rings; it is a valid --conservation_table.
 LOSAT_CONSERVATION_OUTPUT_NAME = "conservation.tsv"
 # CLI spelling of typed ring fields named in ring diagnostics (mapping only).
@@ -404,7 +404,7 @@ def _get_args(
         type=argparse_float)
     parser.add_argument(
         '--losat',
-        choices=_CLI_RING_LOSAT_PROGRAMS,
+        choices=COMPARISON_LOSAT_PROGRAMS,
         default=None,
         help=(
             'Build the similarity rings with LOSAT: losatn compares nucleotide '
