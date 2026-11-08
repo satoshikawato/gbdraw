@@ -224,10 +224,19 @@ def test_web_rejects_removed_choice_field_and_invalid_crop() -> None:
     with pytest.raises(ValidationError, match="invalid fields"):
         resolve_similarity_alignment_payload(request)
 
+    # A window whose End runs past the record end is drawn clamped to the record end (the crop's
+    # `region_slice`), so record-b's window 101..300 of a 200-bp record draws 101..200, reversed: the
+    # target centre 155 is at 200 - 155 = 45, not at 300 - 155.
     cropped = _request()
     cropped["records"][1]["recordLength"] = 200  # type: ignore[index]
-    with pytest.raises(ValidationError, match="exceeds recordLength"):
+    row = resolve_similarity_alignment_payload(cropped)["records"][1]  # type: ignore[index]
+    assert row["candidates"][0]["displayCenter"] == 45.0  # type: ignore[index]
+    assert row["status"] == "aligned"  # type: ignore[index]
+    # A window that starts past the record end is refused, as the crop refuses it.
+    cropped["records"][1]["recordLength"] = 100  # type: ignore[index]
+    with pytest.raises(ValidationError, match="starts after the end of record") as refused:
         resolve_similarity_alignment_payload(cropped)
+    assert refused.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"}
 
 
 def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:

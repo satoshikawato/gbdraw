@@ -355,6 +355,8 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
     ((RecordWindow(901, 100, True),), False, 60.5),
     ((RecordWindow(500, 900),), False, None),
     ((RecordWindow(950, 10),), False, None),
+    # A window whose End runs past the record end is drawn clamped to it: 11..1000, reversed.
+    ((RecordWindow(11, 1200, True),), False, 960.5),
     # A record drawn in several windows is anchored in the window that holds the anchor (D-50).
     ((RecordWindow(500, 900), RecordWindow(1, 200)), False, 39.5),
     ((RecordWindow(1, 200), RecordWindow(500, 900)), False, 39.5),

@@ -16,7 +16,7 @@ from gbdraw.api.record_planning import (
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
-from gbdraw.io.regions import RecordWindow
+from gbdraw.io.regions import RecordWindow, region_slice
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.session_request_codec import StoredRecordWindow, _decode_windows, decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
@@ -211,20 +211,28 @@ def _record_fact(value: object, path: str) -> _RecordFact:
         presentation["reverseComplement"], f"{path}.presentation.reverseComplement"
     )
     try:
-        windows = _decode_windows(raw["windows"], path=f"{path}.windows")
+        stored = _decode_windows(raw["windows"], path=f"{path}.windows")
     except ValueError as exc:
         raise ValidationError(f"{path}.windows is invalid: {exc}") from exc
-    for window in windows:
-        if record_length is not None and max(window.start, window.end) > record_length:
-            raise ValidationError(
-                f"{path}.windows exceeds recordLength.",
-                diagnostic={"code": "INPUT_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
-            )
-        if window.reverse_complement and presentation_reverse:
-            raise ValidationError(
-                f"{path} cannot reverse complement both window and presentation."
-            )
-    return _RecordFact(record_key, record_length, tuple(windows), presentation_reverse)
+    if any(window.reverse_complement for window in stored) and presentation_reverse:
+        raise ValidationError(f"{path} cannot reverse complement both window and presentation.")
+    windows = tuple(_drawn_window(window, record_length, record_key) for window in stored)
+    return _RecordFact(record_key, record_length, windows, presentation_reverse)
+
+
+def _drawn_window(window: RecordWindow, record_length: int | None, record_key: str) -> RecordWindow:
+    """A window as the crop draws it: its bounds read by the crop's slice rule (``region_slice``).
+
+    The crop clamps an End past the record end and refuses a window that
+    starts past it or runs across the origin outside the record, so the helper
+    places the record as the drawing places it. Without the record length the
+    window is read as stored.
+    """
+
+    if record_length is None:
+        return window
+    _start_0, end_0 = region_slice(record_length, window.start, window.end, record_key)
+    return window if window.crosses_origin or end_0 == window.end else replace(window, end=end_0)
 
 
 def _member_candidate(
