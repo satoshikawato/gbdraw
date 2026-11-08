@@ -1,6 +1,7 @@
 // The Worker that writes the input copies of `services/input-copies.js`:
 // `FileSystemSyncAccessHandle` exists only in a Worker. Each copy file is
-// open from `open` to `close`; `write` replies with the byte count `write()`
+// open from `open` to `close`, or to `closeAll`, which also deletes the tab's
+// folder when the page closes; `write` replies with the byte count `write()`
 // returned, which the page checks. Nothing calls `flush()`: a copy is
 // temporary, and it only has to outlive the page, not the system.
 /** @import { InputCopyWorkerRequest } from '../services/input-copies.js' */
@@ -18,6 +19,16 @@ const run = async (request) => {
     const file = await folder.getFileHandle(request.name, { create: true });
     handles.set(request.name, await file.createSyncAccessHandle());
     sizes.set(request.name, 0);
+    return 0;
+  }
+  if (request.op === 'closeAll') {
+    // The page closes: every copy is closed, so the folder can be deleted.
+    for (const open of handles.values()) open.close();
+    handles.clear();
+    sizes.clear();
+    let parent = await navigator.storage.getDirectory();
+    for (const name of request.folder.slice(0, -1)) parent = await parent.getDirectoryHandle(name);
+    await parent.removeEntry(request.folder[request.folder.length - 1], { recursive: true });
     return 0;
   }
   const handle = handles.get(request.name);

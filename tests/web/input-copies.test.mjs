@@ -12,15 +12,18 @@ import { gzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
-  holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, useInputCopyStore
+  holdFileCopy, holdReadBytes, keepFileCopy, readFileBytes, readFileContentFacts, releaseFileCopy, useInputCopyStore
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { createBrowserInputCopyStore } = await import('../../gbdraw/web/js/services/input-copies.js');
 
 const PIECE = 16 * 1024 * 1024;
 const notFound = () => new DOMException('missing', 'NotFoundError');
 
-/** An origin private file system in memory: folders of files, and the copy Worker that writes them. */
-const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength } = {}) => {
+/**
+ * An origin private file system in memory: folders of files, and the copy Worker that writes them. Each write
+ * waits for `writeGate()` first, which stands for a slow Worker.
+ */
+const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, writeGate = async () => {} } = {}) => {
   const folder = () => ({ entries: new Map() });
   const root = folder();
   const handleOf = (node) => ({
@@ -50,6 +53,14 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength } = 
   });
   const open = new Map();
   const run = async ({ op, folder: path, name, buffer }) => {
+    if (op === 'closeAll') {
+      for (const file of open.values()) file.open = false;
+      open.clear();
+      let parent = handleOf(root);
+      for (const part of path.slice(0, -1)) parent = await parent.getDirectoryHandle(part);
+      await parent.removeEntry(path.at(-1), { recursive: true });
+      return 0;
+    }
     if (op === 'open') {
       let handle = handleOf(root);
       for (const part of path) handle = await handle.getDirectoryHandle(part);
@@ -64,6 +75,8 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength } = 
       open.delete(name);
       return 0;
     }
+    await writeGate();
+    if (!open.has(name)) throw new Error('closed');
     const written = writeResult(buffer);
     const bytes = new Uint8Array(buffer).subarray(0, Math.min(written, buffer.byteLength));
     const joined = new Uint8Array(file.bytes.byteLength + bytes.byteLength);
@@ -135,9 +148,18 @@ const chosenFile = (bytes, name = 'chosen.gb') => {
   };
 };
 
-const copyStoreOn = (fileSystem, locks = createFakeLocks()) => createBrowserInputCopyStore({
-  storage: fileSystem.storage, locks, createWorker: fileSystem.createWorker
+const copyStoreOn = (fileSystem, locks = createFakeLocks(), page = new EventTarget()) => createBrowserInputCopyStore({
+  storage: fileSystem.storage, locks, createWorker: fileSystem.createWorker, page
 });
+/** A gate a test opens: writes wait until then. */
+const createGate = () => {
+  let open;
+  const opened = new Promise((resolve) => { open = resolve; });
+  return { wait: () => opened, open };
+};
+const TIMED_OUT = Symbol('timed out');
+/** `promise`'s value, or TIMED_OUT when it has not settled after the event loop ran a while. */
+const settledSoon = async (promise) => Promise.race([promise, flush().then(() => TIMED_OUT)]);
 
 /** Chooses `file` (the input store holds it) and waits until its copy is written. */
 const choose = async (file) => {
@@ -275,4 +297,79 @@ test('the start sweep deletes the folders of tabs that are gone and keeps a live
 test('a browser without a private file system or locks writes no copies', () => {
   assert.equal(createBrowserInputCopyStore({ storage: {}, locks: createFakeLocks() }), null);
   assert.equal(createBrowserInputCopyStore({ storage: createFakeFileSystem().storage, locks: {} }), null);
+});
+
+test('a first reading and its facts resolve before a slow copy is written, for a plain and a gzip file', async () => {
+  const gate = createGate();
+  const fileSystem = createFakeFileSystem({ writeGate: gate.wait });
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const plain = new TextEncoder().encode('LOCUS slow\n//\n');
+  const expanded = new TextEncoder().encode('LOCUS slow-gzip\n//\n');
+  const files = [[chosenFile(plain), plain], [chosenFile(new Uint8Array(gzipSync(expanded)), 'slow.gb.gz'), expanded]];
+  for (const [file, content] of files) {
+    keepFileCopy(file);
+    assert.deepEqual(await settledSoon(readFileBytes(file)), content, `${file.name}: the bytes wait for no copy`);
+    assert.equal((await settledSoon(readFileContentFacts(file))).byteLength, content.byteLength, `${file.name}: nor the facts`);
+  }
+  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes.byteLength), [0, 0], 'the copies are still being written');
+  gate.open();
+  await flush();
+  assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes), [plain, expanded]);
+});
+
+test('a gzip file whose copy could not be written keeps its expanded bytes: no second read and no new expansion', async () => {
+  const fileSystem = createFakeFileSystem({ writeResult: () => 0 });
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const plain = new TextEncoder().encode('chr\t1\t9\n'.repeat(64));
+  const file = chosenFile(new Uint8Array(gzipSync(plain)), 'unwritten.tsv.gz');
+  await choose(file);
+  const first = await readFileBytes(file);
+  assert.deepEqual(fileSystem.copyFiles(), []);
+  await flush();
+  assert.equal(await readFileBytes(file), first, 'later readings share the expanded bytes');
+  assert.equal(file.reads, 1);
+});
+
+test('a tab whose lock is refused makes no folder and writes no copy', async () => {
+  const fileSystem = createFakeFileSystem();
+  const store = copyStoreOn(fileSystem, { request: async () => { throw new DOMException('refused', 'AbortError'); } });
+  assert.equal(await store.openWriter(), null);
+  useInputCopyStore(store);
+  const file = chosenFile(new TextEncoder().encode('>refused\nACGT\n'));
+  await choose(file);
+  assert.deepEqual(fileSystem.tabFolders(), []);
+});
+
+test('closing the page closes the copies being written and deletes the tab\'s folder', async () => {
+  const gate = createGate();
+  const fileSystem = createFakeFileSystem({ writeGate: gate.wait });
+  const page = new EventTarget();
+  useInputCopyStore(copyStoreOn(fileSystem, createFakeLocks(), page));
+  const file = chosenFile(new TextEncoder().encode('>closing\nACGT\n'));
+  keepFileCopy(file);
+  await readFileBytes(file);
+  await flush();
+  assert.equal(fileSystem.tabFolders().length, 1);
+  page.dispatchEvent(new Event('pagehide'));
+  await flush();
+  assert.deepEqual(fileSystem.tabFolders(), []);
+  gate.open();
+});
+
+test('a copy that another state still uses outlives the input store\'s release', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new TextEncoder().encode('CDS\tproduct\tx\t#123456\tx\n');
+  const file = chosenFile(bytes, 'rules.tsv');
+  await choose(file);
+  const endUse = holdFileCopy(file);
+  releaseFileCopy(file);
+  await flush();
+  file.refused = true;
+  assert.deepEqual(await readFileBytes(file), bytes, 'a Retry reads the copy');
+  await flush();
+  assert.equal(fileSystem.copyFiles().length, 1);
+  endUse();
+  await flush();
+  assert.deepEqual(fileSystem.copyFiles(), []);
 });

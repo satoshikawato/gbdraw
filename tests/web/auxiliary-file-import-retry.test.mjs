@@ -206,3 +206,56 @@ test('Retry imports the chosen rules file after the store released it', async ()
     { file, error: null });
   bindCard('t_color', null);
 });
+
+// PD-OI-121: a failed card import that offers Retry is a state that uses its
+// file, so the file's copy stays after the store released the file, and Retry
+// reads the copy although the file changed on disk since it was chosen.
+test('Retry reads the copy of a rules file that changed on disk after the store released it', async () => {
+  const { readFileContentFacts, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const settle = async () => {
+    for (let round = 0; round < 20; round += 1) await new Promise((resolve) => setImmediate(resolve));
+  };
+  /** @type {string[]} */
+  const released = [];
+  useInputCopyStore({
+    openWriter: async () => {
+      /** @type {Uint8Array[]} */
+      const pieces = [];
+      return {
+        write: async (buffer) => { pieces.push(new Uint8Array(buffer)); },
+        finish: async (token) => ({ read: async () => pieces[0], release: () => released.push(token) }),
+        abort: () => {}
+      };
+    }
+  });
+  try {
+    const rules = new TextEncoder().encode('CDS\tproduct\tNADH\t#123456\tImported\n');
+    let changed = false;
+    const file = {
+      name: 'rules.tsv', size: rules.byteLength,
+      arrayBuffer: async () => {
+        if (changed) throw new DOMException('changed', 'NotReadableError');
+        return rules.slice().buffer;
+      }
+    };
+    bindCard('t_color', null);
+    state.errorLog.value = null;
+    owner.outcome = false;
+    assert.equal(await importAuxiliaryTable('t_color', file), false);
+    await readFileContentFacts(file);
+    await settle();
+    state.inputFiles.retainOnly(new Set());
+    await settle();
+    assert.deepEqual(released, [], 'the failure keeps the copy');
+    changed = true;
+    owner.outcome = 1;
+    assert.equal(await retryAuxiliaryImportFailure(), true);
+    assert.equal(state.errorLog.value, null);
+    bindCard('t_color', null);
+    state.inputFiles.retainOnly(new Set());
+    for (let round = 0; round < 100 && released.length === 0; round += 1) await settle();
+    assert.equal(released.length, 1, 'the copy goes once nothing uses the file');
+  } finally {
+    useInputCopyStore(null);
+  }
+});

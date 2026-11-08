@@ -11,9 +11,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   bytesToText,
-  expandGzipPieces,
-  expandsAsGzip,
-  joinBytes,
+  expandGzipBytes,
   sha256Digest,
   sha256Hex,
   textToBase64,
@@ -33,7 +31,7 @@ export {
 };
 
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { InputCopy, InputCopyStore, InputCopyWriter } from './input-copies.js' */
+/** @import { InputCopy, InputCopyStore } from './input-copies.js' */
 
 /**
  * A resource's content token: the Worker's cache key for its bytes, so equal
@@ -54,21 +52,23 @@ const fileByteCache = new WeakMap();
 /** @type {WeakMap<object, Promise<FileContentFacts>>} */
 const fileContentFacts = new WeakMap();
 // The Files whose cached bytes a gzip file expanded to while no copy holds
-// them. They stay until a transfer takes them: expanding again would be slower
-// than keeping them.
+// them: until the copy is written, or for good when it has none. They stay
+// until a transfer takes them: expanding again would be slower than keeping them.
 /** @type {WeakSet<object>} */
 const expandedFiles = new WeakSet();
 // The temporary copies of the chosen inputs (PD-OI-121, `services/input-copies.js`):
-// the store the composition root gives (`useInputCopyStore`), the Files the
-// input store holds (`keepFileCopy`), whose first read writes a copy, the copy
-// of each such File, and the Files the input store let go, whose copies are
-// given back once no reading runs (`releaseFileCopy`).
+// the store `state.js` gives (`useInputCopyStore`), the Files the input store
+// holds (`keepFileCopy`), whose first read writes a copy, the other uses that
+// keep a copy (`holdFileCopy`), the copy of each such File, and the Files no
+// longer kept or used, whose copies are given back once no reading runs.
 /** @type {InputCopyStore | null} */
 let copyStore = null;
 /** @type {WeakSet<object>} */
 const keptFiles = new WeakSet();
 /** @type {WeakMap<object, Promise<InputCopy | null>>} */
 const fileCopies = new WeakMap();
+/** @type {WeakMap<object, number>} */
+const copyUses = new WeakMap();
 /** @type {Set<object>} */
 const releasedFiles = new Set();
 /**
@@ -101,65 +101,6 @@ const MIB = 1024 * 1024;
 const TOKEN_PIECE_BYTES = 16 * MIB;
 
 /**
- * @typedef {object} PieceSink
- * @property {(piece: Uint8Array, owned: boolean) => Promise<void>} add Hashes one piece and starts its write.
- * @property {() => Promise<{ facts: FileContentFacts, copy: InputCopy | null }>} finish
- * @property {() => void} fail Deletes the copy.
- */
-/**
- * Hashes the pieces of one content in order and, given a writer, writes each
- * piece to the content's copy as it is hashed: a piece is hashed while the one
- * before it is written, so at most one piece waits for the Worker. A copy that
- * fails to write is deleted, and the content keeps no copy.
- * @param {InputCopyWriter | null} writer
- * @returns {PieceSink}
- */
-const createPieceSink = (writer) => {
-  /** @type {Uint8Array[]} */
-  const digests = [];
-  let byteLength = 0;
-  let copying = writer;
-  /** @type {Promise<void>} */
-  let writing = Promise.resolve();
-  const stopCopying = () => {
-    copying?.abort();
-    copying = null;
-  };
-  return {
-    // `owned`: the piece's buffer is the sink's to transfer.
-    add: async (piece, owned) => {
-      // Web Crypto copies the piece when it is called, so the piece may then be transferred.
-      const digest = sha256Digest(piece);
-      byteLength += piece.byteLength;
-      if (copying) {
-        const whole = owned && piece.byteOffset === 0 && piece.byteLength === piece.buffer.byteLength;
-        const buffer = /** @type {ArrayBuffer} */ (whole ? piece.buffer : piece.slice().buffer);
-        await writing;
-        if (copying) writing = copying.write(buffer).catch(stopCopying);
-      }
-      digests.push(new Uint8Array(await digest));
-    },
-    finish: async () => {
-      await writing;
-      const token = /** @type {ResourceContentToken} */ (await sha256Hex(joinBytes(digests)));
-      const copy = copying ? await copying.finish(token).catch(() => null) : null;
-      return { facts: { token, byteLength }, copy };
-    },
-    fail: stopCopying
-  };
-};
-
-/**
- * Hands `bytes` to `sink` in 16 MiB pieces (one empty piece when empty).
- * @param {Uint8Array} bytes @param {PieceSink} sink
- */
-const addPlainPieces = async (bytes, sink) => {
-  for (let start = 0; start === 0 || start < bytes.byteLength; start += TOKEN_PIECE_BYTES) {
-    await sink.add(bytes.subarray(start, start + TOKEN_PIECE_BYTES), false);
-  }
-};
-
-/**
  * The content token of `bytes`, one scheme for every size: the SHA-256 hex of
  * the SHA-256 digests of their 16 MiB pieces in order (one piece when empty).
  * One piece is hashed at a time, so hashing copies at most one piece.
@@ -167,9 +108,13 @@ const addPlainPieces = async (bytes, sink) => {
  * @returns {Promise<ResourceContentToken>}
  */
 export const contentTokenOfBytes = async (bytes) => {
-  const sink = createPieceSink(null);
-  await addPlainPieces(bytes, sink);
-  return (await sink.finish()).facts.token;
+  const pieceCount = Math.max(1, Math.ceil(bytes.byteLength / TOKEN_PIECE_BYTES));
+  const digests = new Uint8Array(pieceCount * 32);
+  for (let index = 0; index < pieceCount; index += 1) {
+    const start = index * TOKEN_PIECE_BYTES;
+    digests.set(new Uint8Array(await sha256Digest(bytes.subarray(start, start + TOKEN_PIECE_BYTES))), index * 32);
+  }
+  return /** @type {ResourceContentToken} */ (await sha256Hex(digests));
 };
 
 /**
@@ -207,7 +152,9 @@ const dropSharedReads = () => {
     if (fileByteCache.get(key) === pending && !expandedFiles.has(key)) fileByteCache.delete(key);
   }
   for (const key of releasedFiles) {
-    if (readRuns(key)) continue;
+    // A File kept or used again keeps its copy; one that a reading still reads gives it back after.
+    if (keptFiles.has(key) || copyUses.get(key)) releasedFiles.delete(key);
+    if (readRuns(key) || !releasedFiles.has(key)) continue;
     releasedFiles.delete(key);
     fileCopies.get(key)?.then((copy) => copy?.release());
     fileCopies.delete(key);
@@ -229,30 +176,19 @@ export const holdReadBytes = () => {
   };
 };
 
-const expandedCap = () => testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
 /**
- * The refusal of a gzip file that expands past Python's `MAX_EXPANDED_INPUT_BYTES`:
- * `INPUT_UNREADABLE` (`GZIP_EXPANDED_SIZE`), naming the file and the cap in MiB.
- * @param {string} name @param {number} maxBytes
- */
-const expandedSizeError = (name, maxBytes) => diagnosticError('INPUT_UNREADABLE',
-  { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' });
-
-/**
- * The plain bytes of a File's bytes: a gzip file expands, up to the cap.
+ * The plain bytes of a File's bytes, the one setup of an input's expansion: a
+ * gzip file expands to at most Python's `MAX_EXPANDED_INPUT_BYTES`, and past it
+ * rejects with `INPUT_UNREADABLE` (`GZIP_EXPANDED_SIZE`), naming the file and
+ * the cap in MiB.
  * @param {string} name The File's name.
  * @param {Uint8Array<ArrayBuffer>} bytes
  * @returns {Promise<Uint8Array>}
  */
-const expandInputBytes = async (name, bytes) => {
-  if (!expandsAsGzip(bytes)) return bytes;
-  /** @type {Uint8Array[]} */
-  const pieces = [];
-  const maxBytes = expandedCap();
-  await expandGzipPieces(bytes, maxBytes, () => expandedSizeError(name, maxBytes), TOKEN_PIECE_BYTES, async (piece) => {
-    pieces.push(piece);
-  });
-  return joinBytes(pieces);
+const expandInputBytes = (name, bytes) => {
+  const maxBytes = testByteCap('maxExpandedInputBytes') ?? MAX_EXPANDED_INPUT_BYTES;
+  return expandGzipBytes(bytes, maxBytes, () => diagnosticError('INPUT_UNREADABLE',
+    { reason: 'GZIP_EXPANDED_SIZE', inputName: name, limit: Math.floor(maxBytes / MIB) }, { stage: 'read' }));
 };
 
 /** @typedef {{ arrayBuffer: () => Promise<ArrayBuffer>, readonly name?: unknown }} ReadableFile */
@@ -298,50 +234,50 @@ const readThroughCopy = async (file, copy, facts) => {
 };
 
 /**
- * The first read of a File: the one read of its own bytes. It hashes them in
- * 16 MiB pieces (a gzip file's as they expand) for the File's facts and, for a
- * File the input store holds, writes each piece to the File's copy. Readers get
- * a plain File's bytes as soon as they are read; a gzip file's expanded bytes
- * come from its copy, so no whole expanded buffer is held, or from its pieces
- * when it has no copy.
+ * Writes `plain` to a new copy in 16 MiB pieces, one at a time, while its facts
+ * are hashed, and closes it under their token; null when no copy could be written.
+ * @param {InputCopyStore} store @param {Uint8Array} plain @param {Promise<FileContentFacts>} facts
+ * @returns {Promise<InputCopy | null>}
+ */
+const writeCopy = async (store, plain, facts) => {
+  const writer = await store.openWriter().catch(() => null);
+  if (!writer) return null;
+  try {
+    for (let start = 0; start === 0 || start < plain.byteLength; start += TOKEN_PIECE_BYTES) {
+      await writer.write(/** @type {ArrayBuffer} */ (plain.slice(start, start + TOKEN_PIECE_BYTES).buffer));
+    }
+    return await writer.finish((await facts).token);
+  } catch {
+    writer.abort();
+    return null;
+  }
+};
+
+/**
+ * The first read of a File: the one read of its own bytes. Readers get them, a
+ * gzip file's expanded, as soon as they are read, and their facts follow from
+ * them. For a File the input store holds, a copy is then written from them in
+ * the background (PD-OI-121); a gzip file's expanded bytes are dropped once it
+ * is written, and kept when no copy could be.
  * @param {object} key @param {ReadableFile} file
  * @returns {{ bytes: Promise<Uint8Array>, done: Promise<unknown> }}
  */
 const readFirst = (key, file) => {
-  const source = readSource(file);
-  const written = source.then(async (raw) => {
-    const writer = keptFiles.has(key) && copyStore ? await copyStore.openWriter().catch(() => null) : null;
-    const sink = createPieceSink(writer);
-    /** @type {Uint8Array[] | null} */
-    const pieces = writer ? null : [];
-    try {
-      if (!expandsAsGzip(raw)) await addPlainPieces(raw, sink);
-      else {
-        const maxBytes = expandedCap();
-        const name = String(file.name ?? '');
-        await expandGzipPieces(raw, maxBytes, () => expandedSizeError(name, maxBytes), TOKEN_PIECE_BYTES, async (piece) => {
-          pieces?.push(piece);
-          await sink.add(piece, true);
-        });
-      }
-    } catch (error) {
-      sink.fail();
-      throw error;
-    }
-    return { ...await sink.finish(), pieces };
+  const bytes = readSource(file).then(async (raw) => {
+    const plain = await expandInputBytes(String(file.name ?? ''), raw);
+    if (plain !== raw) expandedFiles.add(key);
+    return plain;
   });
-  const facts = rememberFacts(key, written.then((result) => result.facts));
-  const copy = written.then((result) => result.copy, () => null);
+  const facts = rememberFacts(key, bytes.then(async (plain) => ({
+    token: await contentTokenOfBytes(plain), byteLength: plain.byteLength
+  })));
+  const store = keptFiles.has(key) ? copyStore : null;
+  const copy = store ? bytes.then((plain) => writeCopy(store, plain, facts), () => null) : Promise.resolve(null);
   fileCopies.set(key, copy);
-  written.catch(() => {
-    if (fileCopies.get(key) === copy) fileCopies.delete(key);
+  const copied = copy.then((written) => {
+    if (written) expandedFiles.delete(key);
   });
-  const bytes = source.then((raw) => (expandsAsGzip(raw) ? written.then(({ pieces }) => {
-    if (!pieces) return readThroughCopy(file, copy, facts);
-    expandedFiles.add(key);
-    return joinBytes(pieces);
-  }) : raw));
-  return { bytes, done: Promise.allSettled([bytes, written]) };
+  return { bytes, done: Promise.allSettled([bytes, facts, copied]) };
 };
 
 /**
@@ -474,6 +410,27 @@ export const releaseFileCopy = (file) => {
   dropSharedReads();
 };
 
+/**
+ * Keeps the copy of `file` while a state the input store does not see can
+ * read it again (a failed card import that offers Retry), even after the
+ * input store lets it go.
+ * @param {unknown} file
+ * @returns {() => void} Ends this use; a second call does nothing.
+ */
+export const holdFileCopy = (file) => {
+  const key = asCacheKey(file);
+  if (!key) return () => {};
+  copyUses.set(key, (copyUses.get(key) ?? 0) + 1);
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    copyUses.set(key, (copyUses.get(key) ?? 1) - 1);
+    if (fileCopies.has(key)) releasedFiles.add(key);
+    dropSharedReads();
+  };
+};
+
 /** @param {unknown} file */
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
 
@@ -527,9 +484,9 @@ const readAndRelease = async (file) => {
  * @returns {Promise<ArrayBuffer>} A buffer no other take holds.
  */
 export const takeFileBytesForTransfer = async (file) => {
-  // A first read hashes and copies the bytes it read until its facts are known; a transfer detaches them after that.
+  // A first read hashes the bytes it read and copies them; a transfer detaches them once both end.
   const key = asCacheKey(file);
-  await (key && fileContentFacts.get(key))?.catch(() => {});
+  if (key) await Promise.allSettled([fileContentFacts.get(key), fileCopies.get(key)]);
   let bytes = await readAndRelease(file);
   if (takenBuffers.has(bytes.buffer)) bytes = await readAndRelease(file);
   if (takenBuffers.has(bytes.buffer) || bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {

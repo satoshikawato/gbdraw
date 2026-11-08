@@ -31,10 +31,12 @@ const lockNameOf = (folder) => `${COPY_ROOT}/${folder}`;
  */
 /**
  * A call of the copy Worker (`workers/input-copy-worker.js`): open a copy file in a folder (its path
- * from the private file system's root), append to it, or close it.
+ * from the private file system's root), append to it, or close it; or, when the page closes, close
+ * every copy and delete the folder.
  * @typedef {{ op: 'open', folder: string[], name: string }
  *   | { op: 'write', name: string, buffer: ArrayBuffer }
- *   | { op: 'close', name: string }} InputCopyWorkerCall
+ *   | { op: 'close', name: string }
+ *   | { op: 'closeAll', folder: string[] }} InputCopyWorkerCall
  */
 /** @typedef {InputCopyWorkerCall & { id: number }} InputCopyWorkerRequest */
 /**
@@ -89,7 +91,7 @@ const workerCaller = (createWorker) => {
       reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
-  return { call, stop: () => failAll(new Error('The page closed.')) };
+  return { call, started: () => worker !== null, stop: () => failAll(new Error('The page closed.')) };
 };
 
 /**
@@ -112,44 +114,54 @@ const sweepLeftovers = async (base, own, locks) => {
 
 /**
  * Takes this tab's lock, then makes its folder: a folder exists only under a
- * held lock, so another tab's sweep never deletes it.
+ * held lock, so another tab's sweep never deletes it. A refused lock makes no
+ * folder, and the tab writes no copies.
  * @param {StorageManager} storage
  * @param {LockManager} locks
  * @param {string} own
  * @returns {Promise<CopyFolders>}
  */
 const openTabFolder = async (storage, locks, own) => {
-  await new Promise((granted) => {
+  await new Promise((granted, refused) => {
     locks.request(lockNameOf(own), () => {
       granted(undefined);
       return new Promise(() => {});
-    }).catch(granted);
+    }).catch(refused);
   });
   const base = await (await storage.getDirectory()).getDirectoryHandle(COPY_ROOT, { create: true });
   return { base, folder: await base.getDirectoryHandle(own, { create: true }) };
 };
 
+/** @typedef {{ addEventListener: (type: 'pagehide', listener: (event: Event) => void) => void }} ClosingPage */
+
 /**
  * The browser's copy store, or null when it has no private file system or no locks.
  * Creating it takes this tab's lock and folder and starts the sweep of leftovers.
- * @param {{ storage?: StorageManager, locks?: LockManager, createWorker?: () => Worker }} [environment]
+ * When the page closes (not into the back-forward cache), the Worker closes the
+ * copies and deletes the folder, and the page deletes it too if the Worker did
+ * not; the next page's sweep deletes what is left.
+ * @param {{ storage?: StorageManager, locks?: LockManager, createWorker?: () => Worker, page?: ClosingPage }} [environment]
  * @returns {InputCopyStore | null}
  */
 export const createBrowserInputCopyStore = ({
   storage = globalThis.navigator?.storage,
   locks = globalThis.navigator?.locks,
-  createWorker = () => new Worker(new URL('../workers/input-copy-worker.js', import.meta.url), { type: 'module' })
+  createWorker = () => new Worker(new URL('../workers/input-copy-worker.js', import.meta.url), { type: 'module' }),
+  page = globalThis
 } = {}) => {
   if (typeof storage?.getDirectory !== 'function' || typeof locks?.request !== 'function') return null;
   const own = `tab-${crypto.randomUUID()}`;
-  const { call, stop } = workerCaller(createWorker);
+  const { call, started, stop } = workerCaller(createWorker);
   /** @type {Promise<CopyFolders | null>} */
   const folders = openTabFolder(storage, locks, own).then((opened) => {
     sweepLeftovers(opened.base, own, locks).catch(() => {});
-    globalThis.addEventListener?.('pagehide', (event) => {
+    page.addEventListener?.('pagehide', (event) => {
       if (/** @type {PageTransitionEvent} */ (event).persisted) return;
-      stop();
-      opened.base.removeEntry(own, { recursive: true }).catch(() => {});
+      const closed = started() ? call({ op: 'closeAll', folder: [COPY_ROOT, own] }) : Promise.resolve(0);
+      closed.catch(() => 0).then(() => {
+        stop();
+        opened.base.removeEntry(own, { recursive: true }).catch(() => {});
+      });
     });
     return opened;
   }, () => null);
