@@ -265,6 +265,22 @@ assert.equal((await compareCanonicalRenderRequests({
   actualResources: lambdaWithDefaultColorFileAliasResources
 })).equivalent, true);
 
+// Overrides stored before the axis label style existed drew numbered ticks:
+// they equal a rebuilt request that states numbered, and differ from range.
+const unstatedAxisLabels = structuredClone(lambdaPrepared.session.renderRequest);
+for (const leaf of ['objects.depth.axis_labels', 'objects.gc_content.axis_labels']) {
+  delete unstatedAxisLabels.diagramOptions.configOverrides[leaf];
+}
+for (const [style, equivalent] of [['numbered', true], ['range', false]]) {
+  const stated = structuredClone(unstatedAxisLabels);
+  stated.diagramOptions.configOverrides['objects.depth.axis_labels'] = style;
+  stated.diagramOptions.configOverrides['objects.gc_content.axis_labels'] = style;
+  assert.equal((await compareCanonicalRenderRequests({
+    expectedRequest: unstatedAxisLabels, expectedResources: lambdaPrepared.session.resources,
+    actualRequest: stated, actualResources: lambdaPrepared.session.resources
+  })).equivalent, equivalent, style);
+}
+
 // OV-398: a published CLI request states the default definition-line weight
 // `normal`; the Web draft holds it as null after Load and omits it.
 const nameWeight = 'objects.definition.linear.line_styles.name.font_weight';

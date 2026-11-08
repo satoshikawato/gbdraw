@@ -173,6 +173,7 @@ _ADV_ROWS = _rows(
     ("depth_normalize", "both", "copy"),
     ("depth_show_axis", "both", "copy"),
     ("depth_show_ticks", "both", "copy"),
+    ("depth_axis_labels", "both", "copy"),
     # The flat Depth tick values that a series without its own value reads.
     ("depth_large_tick_interval", "both", "copy"),
     ("depth_small_tick_interval", "both", "copy"),
@@ -186,6 +187,7 @@ _ADV_ROWS = _rows(
     ("gc_content_max_percent", "both", "copy"),
     ("gc_content_show_axis", "both", "copy"),
     ("gc_content_show_ticks", "both", "copy"),
+    ("gc_content_axis_labels", "both", "copy"),
     ("gc_content_tick_interval", "both", "copy"),
     ("gc_content_small_tick_interval", "both", "copy"),
     ("gc_content_tick_font_size", "both", "copy"),

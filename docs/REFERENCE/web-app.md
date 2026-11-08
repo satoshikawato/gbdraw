@@ -534,6 +534,17 @@ rewrites a setting; after a failure the field still shows the rejected value.
 Comparison thresholds (**E-value**, **Bitscore**, **Identity**, **Alignment
 length**) are checked before LOSAT runs against the same accepted ranges.
 
+### Depth and GC Percent axis labels
+
+A depth axis and a GC content axis in **Percent** mode print one range label,
+such as `[0–80x]` or `[10–55%]`, and draw every tick mark without a number.
+**Numbered Ticks** (in **Depth TSV tracks** and in **Dinucleotide
+content/skew**) prints a number on each large tick instead; a number that
+would overlap another is left out. The setting applies on Generate and is
+saved with the drawing. A Session saved before the setting existed loads with
+**Numbered Ticks** on, as it was drawn. On the command line the same settings
+are `--depth_axis_labels` and `--gc_content_axis_labels`.
+
 ### Circular track Width and Radius
 
 In **Layout → Custom Track Slots**, **Width** and **Radius** each have a

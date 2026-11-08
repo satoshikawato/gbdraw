@@ -70,6 +70,7 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
@@ -82,6 +83,7 @@ from gbdraw.session_legacy_values import (
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
     LEGACY_SCALAR_AXIS_LABEL_SECTIONS,
     LEGACY_SCALAR_AXIS_LABELS,
+    SCALAR_AXIS_LABEL_PATHS,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import SESSION_ID_RE
@@ -299,15 +301,21 @@ _LEGACY_SPARSE_COMPARISON_DEFAULTS = {
     "identity": 70.0,
     "alignment_length": 0,
 }
+# Overrides an older writer stored without the axis label style drew numbered ticks (D-24).
+_UNSTATED_SCALAR_AXIS_LABELS: dict[str, object] = dict.fromkeys(
+    SCALAR_AXIS_LABEL_PATHS, LEGACY_SCALAR_AXIS_LABELS
+)
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
         "canvas.show_skew": True,
+        **_UNSTATED_SCALAR_AXIS_LABELS,
     },
     "linear": {
         "canvas.show_gc": True,
         "canvas.show_skew": True,
         "objects.axis.linear.stroke_color": "gray",
+        **_UNSTATED_SCALAR_AXIS_LABELS,
     },
 }
 _LEGACY_CONFIG_OVERRIDE_KEYS = {
@@ -1959,6 +1967,19 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
+    overrides = result.get("configOverrides")
+    if isinstance(overrides, MappingABC):
+        # Stored overrides state each axis label style the request draws, so a reader takes an absent
+        # one for an older writer's (D-24).
+        # A full config states its own style; one without it reads as an older writer's, as the decoder reads it.
+        config = result.get("config")
+        stated = {**overrides}
+        for section, label_path in zip(LEGACY_SCALAR_AXIS_LABEL_SECTIONS, SCALAR_AXIS_LABEL_PATHS):
+            stated.setdefault(label_path, (
+                DEFAULT_SCALAR_AXIS_LABELS if not isinstance(config, MappingABC)
+                else config.get("objects", {}).get(section, {}).get("axis_labels", LEGACY_SCALAR_AXIS_LABELS)
+            ))
+        result["configOverrides"] = stated
     labels = _precomputed_ring_labels(options)
     if labels is not None:
         result["conservationLabels"] = _encode_option_value(
@@ -2236,7 +2257,10 @@ def _decode_config_overrides(
                 f"{path} contains retired value {retired!r}; schema {schema} "
                 "requires canonical config overrides."
             )
-    return migrate_flat_config_overrides(overrides, mode=mode, path=path)
+    migrated = migrate_flat_config_overrides(overrides, mode=mode, path=path)
+    for label_path, style in _UNSTATED_SCALAR_AXIS_LABELS.items():
+        migrated.setdefault(label_path, style)
+    return migrated
 
 
 def migrate_flat_config_overrides(

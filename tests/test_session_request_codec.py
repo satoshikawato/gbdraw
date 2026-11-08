@@ -80,6 +80,7 @@ from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.features.source import capture_source_features
+from gbdraw.session_legacy_values import SCALAR_AXIS_LABEL_PATHS
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -103,6 +104,11 @@ from gbdraw.tracks import (
     parse_circular_track_slot,
     parse_linear_track_slot,
 )
+
+# The writer states the axis label style in every configOverrides it writes;
+# overrides an older writer stored without it read as numbered ticks.
+RANGE_AXIS_LABELS = {path: "range" for path in SCALAR_AXIS_LABEL_PATHS}
+NUMBERED_AXIS_LABELS = {path: "numbered" for path in SCALAR_AXIS_LABEL_PATHS}
 
 
 def _materialize_resources(
@@ -2099,7 +2105,10 @@ def test_schema5_round_trips_arrow_shape_and_geometry_overrides(
         output_directory=tmp_path / "output",
     )
     assert decoded.options.feature_shapes == {"CDS": "arrow"}
-    assert decoded.options.config_overrides == request.options.config_overrides
+    assert decoded.options.config_overrides == {
+        **request.options.config_overrides,
+        **RANGE_AXIS_LABELS,
+    }
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
@@ -2556,6 +2565,7 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
                 "configOverrides": {
                     "canvas.show_gc": True,
                     "canvas.show_skew": True,
+                    **RANGE_AXIS_LABELS,
                 },
             },
         ),
@@ -2570,6 +2580,7 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
                     "canvas.show_gc": False,
                     "canvas.show_skew": False,
                     "objects.axis.linear.stroke_color": "lightgray",
+                    **RANGE_AXIS_LABELS,
                 },
             },
         ),
@@ -2658,7 +2669,7 @@ def test_sparse_supported_schemas_retain_historical_defaults(
         "misc_RNA",
         "repeat_region",
     )
-    assert decoded.options.config_overrides == expected_overrides
+    assert decoded.options.config_overrides == {**expected_overrides, **NUMBERED_AXIS_LABELS}
 
     payload_with_null_overrides = copy.deepcopy(payload)
     payload_with_null_overrides["diagramOptions"]["configOverrides"] = {
@@ -2674,7 +2685,10 @@ def test_sparse_supported_schemas_retain_historical_defaults(
         ),
         output_directory=tmp_path / "output-null-overrides",
     )
-    assert decoded_null_overrides.options.config_overrides == expected_overrides
+    assert decoded_null_overrides.options.config_overrides == {
+        **expected_overrides,
+        **NUMBERED_AXIS_LABELS,
+    }
 
 
 @pytest.mark.parametrize(
@@ -2767,6 +2781,7 @@ def test_supported_schemas_preserve_explicit_serialized_defaults(
         "canvas.show_gc": False,
         "canvas.show_skew": False,
         "objects.axis.linear.stroke_color": "hotpink",
+        **NUMBERED_AXIS_LABELS,
     }
 
 

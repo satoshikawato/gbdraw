@@ -185,6 +185,9 @@ export const SESSION_PNG_DPI_CHOICES = Object.freeze([72, 96, 150, 300, 600]);
 // gbdraw/render/export_limits.py: DEFAULT_PNG_DPI
 export const DEFAULT_PNG_DPI = 300;
 
+// gbdraw/session_legacy_values.py: LEGACY_SCALAR_AXIS_LABELS
+export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
@@ -234,12 +237,16 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   configOverrides: Object.freeze({
     circular: Object.freeze({
       "canvas.show_gc": true,
-      "canvas.show_skew": true
+      "canvas.show_skew": true,
+      "objects.depth.axis_labels": 'numbered',
+      "objects.gc_content.axis_labels": 'numbered'
     }),
     linear: Object.freeze({
       "canvas.show_gc": true,
       "canvas.show_skew": true,
-      "objects.axis.linear.stroke_color": 'gray'
+      "objects.axis.linear.stroke_color": 'gray',
+      "objects.depth.axis_labels": 'numbered',
+      "objects.gc_content.axis_labels": 'numbered'
     })
   }),
   configOverrideRenames: Object.freeze({
@@ -528,4 +535,11 @@ export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({
 export const ORTHOGROUP_MEMBER_CONFIDENCE = Object.freeze({
   values: /** @type {readonly ('high' | 'medium' | 'low')[]} */ (Object.freeze(['high', 'medium', 'low'])),
   default: 'high'
+});
+
+// gbdraw/config/models/objects.py: ObjectsDepthConfig.axis_labels
+/** @type {Readonly<{ values: readonly ('range' | 'numbered')[], default: 'range' }>} */
+export const SCALAR_AXIS_LABELS = Object.freeze({
+  values: /** @type {readonly ('range' | 'numbered')[]} */ (Object.freeze(['range', 'numbered'])),
+  default: 'range'
 });

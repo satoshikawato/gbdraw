@@ -130,7 +130,7 @@ import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readScalarAxisLabels } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -735,6 +735,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   gcContentMaxPercent: 'objects.gc_content.max_percent',
   gcContentShowAxis: 'objects.gc_content.show_axis',
   gcContentShowTicks: 'objects.gc_content.show_ticks',
+  gcContentAxisLabels: 'objects.gc_content.axis_labels',
   gcContentLargeTickInterval: 'objects.gc_content.large_tick_interval',
   gcContentSmallTickInterval: 'objects.gc_content.small_tick_interval',
   gcContentTickFontSize: 'objects.gc_content.tick_font_size',
@@ -744,6 +745,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   depthNormalize: 'objects.depth.normalize',
   depthShowAxis: 'objects.depth.show_axis',
   depthShowTicks: 'objects.depth.show_ticks',
+  depthAxisLabels: 'objects.depth.axis_labels',
   depthLargeTickInterval: 'objects.depth.large_tick_interval',
   depthSmallTickInterval: 'objects.depth.small_tick_interval',
   depthTickFontSize: 'objects.depth.tick_font_size',
@@ -2803,6 +2805,40 @@ const trackFlagOverrides = (form, circular, depthRequested) => ({
 });
 
 /**
+ * The GC content and depth tracks' settings of a request. Each axis label
+ * style is always stated: a request without it is an older writer's, which
+ * drew numbered ticks (D-24).
+ * @param {Record<string, unknown>} adv
+ */
+const quantitativeTrackOverrides = (adv) => ({
+  [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
+  [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: configLeaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
+  [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: configLeaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
+  [CONFIG_OVERRIDE_PATHS.gcContentShowAxis]: Boolean(adv.gc_content_show_axis),
+  [CONFIG_OVERRIDE_PATHS.gcContentShowTicks]: Boolean(adv.gc_content_show_ticks),
+  [CONFIG_OVERRIDE_PATHS.gcContentAxisLabels]: readScalarAxisLabels(adv.gc_content_axis_labels).value,
+  [CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]:
+    configLeaf(CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval, adv.gc_content_tick_interval),
+  [CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval]:
+    configLeaf(CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval, adv.gc_content_small_tick_interval),
+  [CONFIG_OVERRIDE_PATHS.gcContentTickFontSize]:
+    configLeaf(CONFIG_OVERRIDE_PATHS.gcContentTickFontSize, adv.gc_content_tick_font_size),
+  [CONFIG_OVERRIDE_PATHS.depthColor]: adv.depth_color || null,
+  [CONFIG_OVERRIDE_PATHS.depthMin]: configLeaf(CONFIG_OVERRIDE_PATHS.depthMin, adv.depth_min),
+  [CONFIG_OVERRIDE_PATHS.depthMax]: configLeaf(CONFIG_OVERRIDE_PATHS.depthMax, adv.depth_max),
+  [CONFIG_OVERRIDE_PATHS.depthNormalize]: Boolean(adv.depth_normalize),
+  [CONFIG_OVERRIDE_PATHS.depthShowAxis]: Boolean(adv.depth_show_axis),
+  [CONFIG_OVERRIDE_PATHS.depthShowTicks]: Boolean(adv.depth_show_ticks),
+  [CONFIG_OVERRIDE_PATHS.depthAxisLabels]: readScalarAxisLabels(adv.depth_axis_labels).value,
+  [CONFIG_OVERRIDE_PATHS.depthLargeTickInterval]:
+    configLeaf(CONFIG_OVERRIDE_PATHS.depthLargeTickInterval, adv.depth_large_tick_interval),
+  [CONFIG_OVERRIDE_PATHS.depthSmallTickInterval]:
+    configLeaf(CONFIG_OVERRIDE_PATHS.depthSmallTickInterval, adv.depth_small_tick_interval),
+  [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: configLeaf(CONFIG_OVERRIDE_PATHS.depthTickFontSize, adv.depth_tick_font_size),
+  [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis)
+});
+
+/**
  * @param {RequestDrawing} drawing
  * @param {{ depthRequested?: boolean, hasComparisonIntent?: boolean, linearHasSharedRow?: boolean,
  *   legendEditLeaves?: LegendEditConfigLeaves }} [options] `legendEditLeaves`: `requestLegendEditLeaves`.
@@ -2863,29 +2899,7 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
-    [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
-    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
-    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
-    [CONFIG_OVERRIDE_PATHS.gcContentShowAxis]: Boolean(adv.gc_content_show_axis),
-    [CONFIG_OVERRIDE_PATHS.gcContentShowTicks]: Boolean(adv.gc_content_show_ticks),
-    [CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]:
-      leaf(CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval, adv.gc_content_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval]:
-      leaf(CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval, adv.gc_content_small_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.gcContentTickFontSize]:
-      leaf(CONFIG_OVERRIDE_PATHS.gcContentTickFontSize, adv.gc_content_tick_font_size),
-    [CONFIG_OVERRIDE_PATHS.depthColor]: adv.depth_color || null,
-    [CONFIG_OVERRIDE_PATHS.depthMin]: leaf(CONFIG_OVERRIDE_PATHS.depthMin, adv.depth_min),
-    [CONFIG_OVERRIDE_PATHS.depthMax]: leaf(CONFIG_OVERRIDE_PATHS.depthMax, adv.depth_max),
-    [CONFIG_OVERRIDE_PATHS.depthNormalize]: Boolean(adv.depth_normalize),
-    [CONFIG_OVERRIDE_PATHS.depthShowAxis]: Boolean(adv.depth_show_axis),
-    [CONFIG_OVERRIDE_PATHS.depthShowTicks]: Boolean(adv.depth_show_ticks),
-    [CONFIG_OVERRIDE_PATHS.depthLargeTickInterval]:
-      leaf(CONFIG_OVERRIDE_PATHS.depthLargeTickInterval, adv.depth_large_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.depthSmallTickInterval]:
-      leaf(CONFIG_OVERRIDE_PATHS.depthSmallTickInterval, adv.depth_small_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: leaf(CONFIG_OVERRIDE_PATHS.depthTickFontSize, adv.depth_tick_font_size),
-    [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
+    ...quantitativeTrackOverrides(adv),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval),
     [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(drawing),
@@ -6146,6 +6160,35 @@ const projectedOutputPrefix = (
 };
 
 /**
+ * The GC content and depth tracks' draft settings of a stored request: the
+ * reader of `quantitativeTrackOverrides`.
+ * @param {Record<string, unknown>} overrides @param {unknown} depthColor
+ */
+const projectQuantitativeTrackDraft = (overrides, depthColor) => ({
+  gc_content_mode: overrides.gc_content_mode || 'deviation',
+  gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
+  gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
+  gc_content_show_axis: overrides.gc_content_show_axis !== false,
+  gc_content_show_ticks: overrides.gc_content_show_ticks !== false,
+  gc_content_axis_labels: readScalarAxisLabels(overrides.gc_content_axis_labels).value,
+  gc_content_tick_interval: overrides.gc_content_large_tick_interval ?? null,
+  gc_content_small_tick_interval: overrides.gc_content_small_tick_interval ?? null,
+  gc_content_tick_font_size: overrides.gc_content_tick_font_size ?? null,
+  depth_color: depthColor,
+  depth_height: overrides.depth_height ?? null,
+  depth_min: overrides.depth_min ?? null,
+  depth_max: overrides.depth_max ?? null,
+  depth_normalize: Boolean(overrides.depth_normalize),
+  depth_show_axis: overrides.depth_show_axis !== false,
+  depth_show_ticks: overrides.depth_show_ticks !== false,
+  depth_axis_labels: readScalarAxisLabels(overrides.depth_axis_labels).value,
+  depth_large_tick_interval: overrides.depth_large_tick_interval ?? null,
+  depth_small_tick_interval: overrides.depth_small_tick_interval ?? null,
+  depth_tick_font_size: overrides.depth_tick_font_size ?? null,
+  depth_share_axis: Boolean(overrides.depth_share_axis)
+});
+
+/**
  * A reader of unvalidated Session data (R14): the input is not typed.
  * @param {Record<string, any>} input
  */
@@ -7077,25 +7120,7 @@ export const projectCanonicalSessionRequest = ({
       : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     show_definition: renderRequest.mode !== 'circular' || overrides.show_definition !== false,
-    gc_content_mode: overrides.gc_content_mode || 'deviation',
-    gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
-    gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
-    gc_content_show_axis: overrides.gc_content_show_axis !== false,
-    gc_content_show_ticks: overrides.gc_content_show_ticks !== false,
-    gc_content_tick_interval: overrides.gc_content_large_tick_interval ?? null,
-    gc_content_small_tick_interval: overrides.gc_content_small_tick_interval ?? null,
-    gc_content_tick_font_size: overrides.gc_content_tick_font_size ?? null,
-    depth_color: projectedDepthColor,
-    depth_height: overrides.depth_height ?? null,
-    depth_min: overrides.depth_min ?? null,
-    depth_max: overrides.depth_max ?? null,
-    depth_normalize: Boolean(overrides.depth_normalize),
-    depth_show_axis: overrides.depth_show_axis !== false,
-    depth_show_ticks: overrides.depth_show_ticks !== false,
-    depth_large_tick_interval: overrides.depth_large_tick_interval ?? null,
-    depth_small_tick_interval: overrides.depth_small_tick_interval ?? null,
-    depth_tick_font_size: overrides.depth_tick_font_size ?? null,
-    depth_share_axis: Boolean(overrides.depth_share_axis),
+    ...projectQuantitativeTrackDraft(overrides, projectedDepthColor),
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
@@ -8371,6 +8396,11 @@ const normalizePublicationRequestAliases = (request, resources) => {
     delete colors.colorTableFile;
   }
   const options = normalized.diagramOptions;
+  // Overrides an older writer stored without the axis label style read as numbered ticks.
+  const overrides = options?.configOverrides;
+  if (overrides) for (const path of [CONFIG_OVERRIDE_PATHS.depthAxisLabels, CONFIG_OVERRIDE_PATHS.gcContentAxisLabels]) {
+    overrides[path] = readScalarAxisLabels(overrides[path]).value;
+  }
   if (options) Object.entries(EDITOR_TABLE_OPTIONS).forEach(([table, [key, fileKey]]) => {
     options[key] = editorTableRef(options, /** @type {keyof typeof EDITOR_TABLE_OPTIONS} */ (table));
     delete options[fileKey];

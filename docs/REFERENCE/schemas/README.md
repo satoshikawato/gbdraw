@@ -250,7 +250,7 @@ classDiagram
     +selectedFeatureRecordIdx? any
   }
   class SessionModeSliceConfigAdv {
-    101 fields
+    103 fields
   }
   class SessionModeSliceConfigForm {
     30 fields
