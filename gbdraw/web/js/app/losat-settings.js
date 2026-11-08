@@ -2,7 +2,7 @@
 import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { requireCurrentCollinearInferOrthogroups } from '../services/current-option-values.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
-import { planRequestUnitSearch, requestUnitPlanPayload } from '../services/linear-units.js';
+import { drawsSeveralUnits, planRequestUnitSearch, requestUnitPlanPayload } from '../services/linear-units.js';
 import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
@@ -90,6 +90,39 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  */
 
 /**
+ * The drawn units of the shown drawing's plan when a drawn card draws several windows, from Python as Generate plans
+ * them (`planRequestUnitSearch`, OV-2741); otherwise the cards are the units. `unitPlanKey` is the payload Python
+ * answers ('' when no plan is needed), so a plan of another payload is not read.
+ * @param {LosatSettingsState} state
+ * @param {(drawing: LosatSettingsDrawing) => LinearComparisonResolution} readResolution
+ * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
+ */
+const watchLosatUnitPlan = (state, readResolution, planLinearUnits) => {
+  const unitPlanKey = computed(() => {
+    const drawing = state.activeDrawing();
+    const resolution = readResolution(drawing);
+    const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
+    if (resolution.valid === false || !resolution.hasLosatIntent || !drawsSeveralUnits(drawn)) return '';
+    return JSON.stringify(requestUnitPlanPayload(drawn, resolution, Boolean(drawing.linearRecordLayoutEnabled.value)));
+  });
+  /** @type {{ value: { key: string, search: LinearUnitSearch | null } | null }} */
+  const unitPlan = ref(null);
+  watch(() => unitPlanKey.value, /** @param {string} key */ async (key) => {
+    if (!key) return;
+    const drawing = state.activeDrawing();
+    let search = null;
+    try {
+      search = await planRequestUnitSearch(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff),
+        readResolution(drawing), Boolean(drawing.linearRecordLayoutEnabled.value), planLinearUnits);
+    } catch {
+      search = null;
+    }
+    if (unitPlanKey.value === key) unitPlan.value = { key, search };
+  }, { immediate: true });
+  return { unitPlanKey, unitPlan };
+};
+
+/**
  * @param {{ state: LosatSettingsState,
  *   planLinearUnits: (payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }> }} options
  *   `planLinearUnits` runs the Worker helper that plans the drawn units.
@@ -110,31 +143,7 @@ export const createLosatSettings = ({ state, planLinearUnits }) => {
     return state.activeDrawing().losatProgram.value !== 'blastp' || losatExecution.executionMode === 'serial';
   });
 
-  // The drawn units of the shown drawing's plan when a drawn card has windows, from Python as Generate plans them
-  // (`planRequestUnitSearch`, OV-2741); a card without windows is one unit. `unitPlanKey` is the payload Python
-  // answers, so a plan of another payload is not read.
-  const unitPlanKey = computed(() => {
-    const drawing = state.activeDrawing();
-    const resolution = readResolution(drawing);
-    const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
-    if (resolution.valid === false || !resolution.hasLosatIntent || !drawn.some((card) => card.windows.length > 0)) return '';
-    return JSON.stringify(requestUnitPlanPayload(drawn, resolution, Boolean(drawing.linearRecordLayoutEnabled.value)));
-  });
-  /** @type {{ value: { key: string, search: LinearUnitSearch | null } | null }} */
-  const unitPlan = ref(null);
-  watch(() => unitPlanKey.value, /** @param {string} key */ async (key) => {
-    if (!key) return;
-    const drawing = state.activeDrawing();
-    let search = null;
-    try {
-      search = await planRequestUnitSearch(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff),
-        readResolution(drawing), Boolean(drawing.linearRecordLayoutEnabled.value), planLinearUnits);
-    } catch {
-      search = null;
-    }
-    if (unitPlanKey.value === key) unitPlan.value = { key, search };
-  }, { immediate: true });
-
+  const { unitPlanKey, unitPlan } = watchLosatUnitPlan(state, readResolution, planLinearUnits);
   // Generate plans its jobs with the same two functions (N-10). Only the
   // translation tables vary per record, so they are the only arguments that
   // can split a source batch. Pairs join drawn records, and OFF records stay

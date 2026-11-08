@@ -3676,13 +3676,7 @@ export const createRunAnalysis = ({
 
         /** @type {{ reverse: boolean }[]} */
         const viewTransformSpecs = [];
-        /**
-         * The span a record's search reads: a drawn unit's window from Python's unit plan, whose `searchRegion` only
-         * the Worker reads when the window runs across the origin (`acrossOrigin`, OV-2739); else the card's crop.
-         * @param {LinearSeq} seq @param {LinearSeq} card The card `seq` draws a unit of.
-         * @param {LinearUnitWindow | null} window The unit's window, null for a record drawn whole or an OFF card.
-         * @returns {{ file: string, acrossOrigin: boolean } | null}
-         */
+        /** @param {LinearSeq} seq @param {LinearSeq} card @param {LinearUnitWindow | null} window its unit's, else its crop */
         const buildRegionSpec = (seq, card, window) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           recordSelectors.push(recordIdRaw || '');
@@ -3835,8 +3829,6 @@ export const createRunAnalysis = ({
           const proteinPair = useProteinBlastp && inputSpec.paired !== null;
           const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
-          // The browser reader slices one span of a record; a window across the origin is cropped by Python.
-          const acrossOrigin = Boolean(regionSpecs[idx]?.acrossOrigin);
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && inputSpec.paired !== null
             ? await gffFastaReaderSelector({
@@ -3975,11 +3967,10 @@ export const createRunAnalysis = ({
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
                 });
               };
-              if (acrossOrigin) return await extractWithWorker();
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
                 const { records, parsed } = await readParsedSequenceRecords(sourceFile, fmt);
-                if (records) {
+                if (records && !regionSpecs[idx]?.acrossOrigin) { // Python crops a window across the origin (OV-2739).
                   if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
                   return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
                 }
@@ -4236,9 +4227,7 @@ export const createRunAnalysis = ({
           return args;
         };
 
-        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(
-          seq, losatCards[idx], (idx < losatSearch.drawnCount ? unitSearch?.windows[idx] : null) ?? null
-        ));
+        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx], unitSearch?.windows[idx] ?? null));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)

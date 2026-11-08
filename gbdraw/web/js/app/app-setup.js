@@ -3,6 +3,7 @@
 /** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
+/** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
@@ -398,6 +399,9 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 // The shown Result as the region tools (Select region, New drawing from region) and Sequence search read it.
 /** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
 const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? null;
+// The Worker helper that plans a Linear request's drawn units (`planRequestUnitSearch`).
+/** @param {LinearUnitPlanPayload} payload */
+const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
 /** The records of every Result of the shown drawing whose axis Python wrote (the subjects of Sequence search). */
 const shownResultsAxisRecords = () => Array.from({ length: state.results.value.length },
   (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat();
@@ -1388,9 +1392,7 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const losatSettings = createLosatSettings({
-    state, planLinearUnits: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
-  });
+  const losatSettings = createLosatSettings({ state, planLinearUnits });
   const {
     linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
@@ -2961,7 +2963,7 @@ export const createAppSetup = () => {
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
-    shownDrawing: state.activeDrawing,
+    shownDrawing: state.activeDrawing, planLinearUnits,
     // A record read that finished while the Save was pending was deferred: the
     // end of the Save calls each drawing's discovery again (R10).
     onSettled: () => state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); }),
@@ -3278,7 +3280,7 @@ export const createAppSetup = () => {
       : { catalog: null, error: '' };
     if (error) throw error;
     return projectDraftRequest(state, drawing, {
-      linearRecordCatalog: catalog,
+      linearRecordCatalog: catalog, planLinearUnits,
       recordDisplayRows: recordDisplayControls.allRows.value || [],
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });

@@ -160,6 +160,13 @@ export const planRequestUnitSearch = async (cards, resolution, arranged, runHelp
 };
 
 /**
+ * Whether a drawn card draws several units: only a card whose window list holds several windows does (D-01). Without
+ * one, Python's unit plan is the cards themselves and the plan's own edges, so a request needs no plan to write them.
+ * @param {readonly LinearSeq[]} cards
+ */
+export const drawsSeveralUnits = (cards) => cards.some((card) => card.windows.length > 1);
+
+/**
  * What `planLinearUnits` is asked: the drawn cards' records, keyed and windowed as the request writes them, and the
  * record pairs of the plan's edges.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.

@@ -778,6 +778,13 @@ are listed under "Cited ids without a record".
 - `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).
   - `tests/fixtures/sessions/two-mode-project.provenance.json`
   - `tests/fixtures/sessions/two-mode-thresholds.provenance.json`
+- `PD-OI-122`: no record. No record mentions it.
+  - `tests/test_origin_crossing_comparisons.py`
+  - `tests/test_record_windows.py`
+  - `tests/test_region_origin_spelling.py`
+  - `tests/test_session_io.py`
+  - `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
+  - `tests/web/run-info.test.mjs`
 - `PD-OI-900`: no record. No record mentions it.
   - `tests/web/architecture-contracts.test.mjs`
 
