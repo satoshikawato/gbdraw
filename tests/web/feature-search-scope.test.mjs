@@ -7,7 +7,7 @@ import {
   formatSearchMatchLine,
   runFeatureSearch
 } from '../../gbdraw/web/js/app/feature-search/search-core.js';
-import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import {
   FEATURE_CATALOG_SCHEMA,
@@ -237,7 +237,7 @@ test('the app and the Interactive SVG read a start or end by the writers\' rule'
 // does: a null or blank bound is missing (not 0), a bound that does not read
 // shows its stored text, and one side shows alone when the other is empty.
 // The app text is `locationRangeText` plus the popup's strand rule
-// (pairwise-match-popup.js memberLocationText).
+// (services/pairwise-match-popup.js memberLocationText).
 test('Interactive SVG member location text equals the app member text', () => {
   const viewerText = new Function(`
     ${embeddedFunction('locationPartBound')}

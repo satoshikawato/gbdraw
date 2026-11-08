@@ -338,7 +338,7 @@ import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 const root = process.argv[1];
 const {admitFeatureCatalog} = await import(pathToFileURL(root + '/gbdraw/web/js/services/feature-catalog.js'));
-const {buildMatchPopupPayload} = await import(pathToFileURL(root + '/gbdraw/web/js/app/pairwise-match-popup.js'));
+const {buildMatchPopupPayload} = await import(pathToFileURL(root + '/gbdraw/web/js/services/pairwise-match-popup.js'));
 const data = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const admission = admitFeatureCatalog(data.catalog, data.results, {mode: 'linear'});
 const groups = admission.featureState.orthogroups;

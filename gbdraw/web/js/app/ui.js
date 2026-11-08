@@ -2,7 +2,6 @@
 /** @import { PersistedPreviewViewport, StoredFigurePreview } from '../services/config.js' */
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
 /** @import { WebState } from '../state.js' */
-/** @import { MatchFramePopup } from './preview-item-popup.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
 import { watch } from '../utils/reactivity.js';
@@ -575,8 +574,8 @@ export const createSidebarResize = (state) => {
 
 /**
  * @typedef {Object} GlobalUiEventsOptions
- * @property {Pick<WebState, 'clickedFeature' | 'showCanvasControls'>
- *   & { clickedPairwiseMatch: { value: MatchFramePopup | null } }} state The popups that Escape and a click outside close.
+ * @property {Pick<WebState, 'clickedFeature' | 'clickedPairwiseMatch' | 'showCanvasControls'>} state
+ *   The popups that Escape and a click outside close.
  * @property {(callback: () => void) => void} onMounted
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer

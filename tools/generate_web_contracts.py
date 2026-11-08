@@ -131,7 +131,7 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's
 # default, written after the derived values. The Web shows these values in the
-# UI language (app/pairwise-match-popup.js).
+# UI language (services/pairwise-match-popup.js).
 _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
     ("ORTHOGROUP_MEMBER_ROLE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "role"),
     ("ORTHOGROUP_MEMBER_CONFIDENCE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "confidence"),

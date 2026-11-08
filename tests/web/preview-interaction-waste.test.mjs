@@ -72,7 +72,7 @@ const stubs = {
     "export const getQualifierFirstValue = (feature, key) => { const first = (v) => (Array.isArray(v) ? v : [v]).map((x) => String(x ?? '').trim()).find(Boolean) || ''; const d = feature?.[key]; if (d !== null && d !== undefined && d !== '') return first(d); return first(feature?.qualifiers?.[key]); };"
   ],
   // The hover summary of a band: its builder is counted.
-  'app/pairwise-match-popup.js': [
+  'services/pairwise-match-popup.js': [
     'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-match-id]";',
     'export const buildPairwiseMatchHoverSummary = (element) => {',
     '  globalThis.__PREVIEW_WASTE_COUNTS__.hoverSummaryBuilds += 1;',
@@ -96,7 +96,7 @@ const stubs = {
     'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";',
     'export const legendEntryKey = (entry) => String(entry?.caption || "");'
   ],
-  'app/preview-item-popup.js': [
+  'services/match-frame-popup.js': [
     'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";',
     'export const previewItemTarget = () => null;',
     "export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);",

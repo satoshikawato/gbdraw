@@ -17,7 +17,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CONTEXT_SEPARATOR } from '../../gbdraw/web/js/utils/i18n.js';
-import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { SETTINGS_SECTIONS, settingsShortKeys } from '../../gbdraw/web/js/services/settings-sections.js';
 import { errorTextKeys } from '../../tests/web/helpers/error-text-keys.mjs';
 import { COLLINEARITY_BLOCK_KINDS } from './collinearity-words.generated.mjs';
@@ -453,10 +453,10 @@ export const sourceKeys = async () => {
   }
   for (const key of await errorTextKeys()) add(key, key, null, { ...derivedSite('js/utils/error-normalization.js', key), role: 'notice' }, null);
   for (const { context, english } of memberValueLabelKeys()) {
-    add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/app/pairwise-match-popup.js', english), role: 'label' }, null);
+    add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/services/pairwise-match-popup.js', english), role: 'label' }, null);
   }
   for (const word of COLLINEARITY_BLOCK_KINDS) {
-    add(`collinearity block kind${CONTEXT_SEPARATOR}${word}`, word, 'collinearity block kind', { ...derivedSite('js/app/pairwise-match-popup.js', word), role: 'label' }, null);
+    add(`collinearity block kind${CONTEXT_SEPARATOR}${word}`, word, 'collinearity block kind', { ...derivedSite('js/services/pairwise-match-popup.js', word), role: 'label' }, null);
   }
   for (const word of LABEL_FIT_WORDS) add(word, word, null, { ...derivedSite('js/app/label-fit-dialog.js', word), role: 'label' }, null);
   for (const { context, english } of settingsShortKeys()) {

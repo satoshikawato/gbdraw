@@ -54,6 +54,7 @@ import {
 } from './linear-source-edits.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
+import { previewItemPopupOf } from '../services/match-frame-popup.js';
 import { legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -156,7 +157,7 @@ import {
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { COLLINEAR_COLOR_MODE_TEXT } from './pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT } from '../services/pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -402,7 +403,7 @@ const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? 
 const shownResultsAxisRecords = () => Array.from({ length: state.results.value.length },
   (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat();
 const closeRegionPopup = () => {
-  if (state.clickedPairwiseMatch.value?.previewItem?.kind === 'region') state.clickedPairwiseMatch.value = null;
+  if (previewItemPopupOf(state.clickedPairwiseMatch.value)?.previewItem.kind === 'region') state.clickedPairwiseMatch.value = null;
 };
 // The bases of spans of the shown drawing's records, read by Python from the committed request, the one the shown
 // Result was made from: Copy FASTA and Use as search query of Select region, and the subjects of Sequence search.
@@ -3322,7 +3323,7 @@ export const createAppSetup = () => {
     shownRoot: shownResultRoot,
     layoutEdit: layoutRepositionMode,
     openSelection: () => {
-      const item = clickedPairwiseMatch.value?.previewItem;
+      const item = previewItemPopupOf(clickedPairwiseMatch.value)?.previewItem;
       return item?.kind === 'region' ? item : null;
     },
     openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),

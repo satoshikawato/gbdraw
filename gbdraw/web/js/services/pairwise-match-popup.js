@@ -6,14 +6,14 @@ import {
   isInternalProteinDisplayId,
   locationRangeText,
   resolveDisplayProteinId
-} from '../services/feature-utils.js';
-import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
-import { buildMatchSequenceBundle } from '../services/match-sequences.js';
-import { readRecordSourceSpan, recordSourceInterval } from '../services/record-source-coordinates.js';
+} from './feature-utils.js';
+import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { buildMatchSequenceBundle } from './match-sequences.js';
+import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from '../services/losat-normalization.js';
+} from './losat-normalization.js';
 import {
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,
@@ -22,12 +22,12 @@ import {
   renderedFeatureIdentity,
   textAliasStatus,
   orthogroupIdStatus
-} from '../services/feature-identity.js';
+} from './feature-identity.js';
 import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
-/** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
-/** @import { FeatureLike } from '../services/feature-utils.js' */
-/** @import { SequenceSource, SequenceSourceResolution, SequenceSourceResolver } from '../services/match-sequences.js' */
+/** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
+/** @import { FeatureLike } from './feature-utils.js' */
+/** @import { SequenceSource, SequenceSourceResolution, SequenceSourceResolver } from './match-sequences.js' */
 
 /**
  * A rendered or source feature row of the catalogs, or a saved group member:
@@ -159,7 +159,7 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * @property {PopupGroup[]} [orthogroups]
  * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
  * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
- * @property {import('../services/match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
+ * @property {import('./match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
  */
 
 /**

@@ -34,7 +34,6 @@ const TOOLBAR_EDGE_MARGIN_PX = 8;
 /**
  * @import { RegionAxisRecord } from '../services/region-axis.js'
  * @import { WebState } from '../state.js'
- * @import { MatchFramePopup } from './preview-item-popup.js'
  */
 
 /**
@@ -272,7 +271,7 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
  * @property {{ value: SelectionFeature[] }} selectedFeatures
  * @property {{ value: HTMLElement | null }} svgContainer
  * @property {WebState['clickedFeature']} clickedFeature The open popup, closed by setting null.
- * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open popup, closed by setting null.
+ * @property {WebState['clickedPairwiseMatch']} clickedPairwiseMatch The open popup, closed by setting null.
  * @property {{ value: string }} mode
  */
 
