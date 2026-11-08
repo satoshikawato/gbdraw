@@ -176,6 +176,21 @@ write-up of a release.
   that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
+- Fixed (Web app): after a Generate that searched comparison rings with
+  LOSAT, Reset Settings removed the ring rows while their comparison files
+  stayed, and Undo of that Reset lost the LOSAT result. Reset Settings now keeps
+  a ring row for each kept file with its settings back to the defaults, as
+  without a previous search, and Undo brings back the rows and the result.
+- Fixed: the axis labels of a depth track and of a GC content track in
+  Percent mode were drawn in the browser's default serif font instead of the
+  figure's font. They now use the figure's font, as the other labels do.
+- Added: a Gallery example with a step-by-step tutorial that adds a
+  read-depth ring to the genome map of *Ca.* Hepatoplasma scabrum.
+- Fixed (Gallery tooling): a Web-saved Session that drew a depth track was
+  published with Show Depth off, so the published Session no longer drew the
+  depth track it was saved with. A command-line Session whose depth track
+  left its color, label, height, or ticks at their defaults could not be
+  published at all; it now publishes.
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was

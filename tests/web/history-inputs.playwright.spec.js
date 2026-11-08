@@ -616,6 +616,34 @@ test('Undo of a ring change in a LOSAT-cache replay restores its rows and Genera
   expect(await generate(page)).toBe(baseline);
 });
 
+// OV-2758: Reset after a Generate that searched the rings keeps the ring rows
+// with their comparison files, as Reset does before any Generate; the search
+// result of the old settings goes, and one Undo restores it with the rows.
+test('Reset Settings after a LOSAT ring search keeps the ring rows with their files', async ({ page }) => {
+  test.setTimeout(180_000);
+  await preparePage(page);
+  await loadSession(page, conservationSession);
+  const loaded = await replayState(page);
+  expect(loaded.source).toBe('losat-cache');
+  expect(loaded.rows.map(([, fileName]) => fileName)).toEqual(loaded.blasts);
+  const [steps] = await historyCounts(page);
+
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Reset settings?' });
+  await confirm.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
+  await expectHistory(page, steps + 1, 0, 'Reset settings');
+  await expect.poll(() => replayState(page), { message: 'Reset' }).toEqual({
+    ...loaded,
+    source: null,
+    blasts: [],
+    rows: loaded.fastas.map((name) => [name.replace(/\.fasta$/, ''), name])
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularConservation.enabled)).toBe(true);
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => replayState(page), { message: 'Undo Reset' }).toEqual(loaded);
+});
+
 // PD-OI-112: the History list. A changed control's row shows its name and the
 // value it set, newest first; a pick walks Undo or Redo to its row, and the
 // list stays open until Escape or a press outside it. In the two-row header

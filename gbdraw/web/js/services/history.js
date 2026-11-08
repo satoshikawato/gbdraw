@@ -2350,6 +2350,17 @@ const listenToShownSteps = (manager, drawingId, activeDrawingId, listener) => {
   manager.setSettingsStepListener((changes, direction, undrawn) => { if (drawingId === activeDrawingId()) listener(changes, direction, undrawn); });
 };
 
+// The files a project step keeps: those its held Histories name and those of
+// its drawing parts. The shown drawing's part may join `parts` after the step
+// is recorded, and a part's files may change, so they are read each time
+// (OV-2761).
+/** @param {readonly ProjectPart[]} parts @param {Iterable<string>} heldFileIds */
+const projectStepFileIds = (parts, heldFileIds) => {
+  const fileIds = new Set(heldFileIds);
+  parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
+  return fileIds;
+};
+
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
@@ -2439,13 +2450,10 @@ export const createHistoryRouter = ({
    */
   const recordProjectStep = (label, stamp, parts, session, detail = null, held = [], list = null, heldFileIds = []) => {
     if (!session && parts.length === 0 && held.length === 0 && !list) return;
-    /** @type {Set<string>} */
-    const fileIds = new Set();
-    parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
-    for (const id of heldFileIds) fileIds.add(id);
     /** @type {ProjectEntry} */
     const entry = {
-      type: 'project', label, sequence: stamp, parts, session, list, fileIds, detail,
+      type: 'project', label, sequence: stamp, parts, session, list, detail,
+      get fileIds() { return projectStepFileIds(parts, heldFileIds); },
       get byteSize() { return projectEntryBytes(parts, session); }
     };
     if (held.length > 0) heldBy.set(entry, held);
@@ -2538,6 +2546,7 @@ export const createHistoryRouter = ({
   // The removals of each open project step (R16-3); a removal joins the newest.
   /** @type {HeldHistory[][]} */
   const openRemovals = [];
+  const openParts = /** @type {ProjectPart[][]} */ ([]); // An open project step's parts keep their files (OV-2761).
   // The budget members of the held Histories: those the project steps hold and those an open project step removed.
   const heldHistories = () => [...projectEntries().flatMap((entry) => heldBy.get(entry) ?? []), ...openRemovals.flat()];
   const heldMembers = () => heldHistories()
@@ -2572,7 +2581,7 @@ export const createHistoryRouter = ({
     retainedFileIds: () => {
       /** @type {Set<string>} */
       const ids = new Set();
-      projectEntries().forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
+      [...projectEntries(), ...openParts.flat().map(({ entry }) => entry)].forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
       heldMembers().forEach((member) => member.retainedFileIds().forEach((id) => ids.add(id)));
       return ids;
     },
@@ -2798,6 +2807,7 @@ export const createHistoryRouter = ({
       // entry keeps this list. A removed drawing has no part.
       /** @type {ProjectPart[]} */
       const parts = [];
+      openParts.push(parts);
       /** @param {DrawingId} drawingId @returns {(entry: HistoryEntry | null) => void} */
       const take = (drawingId) => (entry) => {
         if ((entry?.type === 'intent' || entry?.type === 'checkpoint') && !isRemoved(drawingId)) parts.push({ drawingId, entry });
@@ -2813,6 +2823,7 @@ export const createHistoryRouter = ({
           if (applied && !isRemoved(drawingId)) await manager.commit(steps[index]); else manager.cancel(steps[index]);
         }
         openRemovals.splice(openRemovals.indexOf(removed), 1);
+        openParts.splice(openParts.indexOf(parts), 1);
         if (!applied) { removed.forEach(reinstate); return; }
         recordProjectStep(label, ++sequence, parts, sessionStep(label), null, removed);
       };

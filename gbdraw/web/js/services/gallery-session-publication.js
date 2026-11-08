@@ -58,7 +58,7 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {'circular' | 'linear'} mode
  * @property {PublicationConfig} [config]
  * @property {StoredLayoutPreferences | null} [layoutPreferences]
- * @property {{ linearSeqs: { cardinality?: unknown }[], [field: string]: unknown }} files
+ * @property {{ linearSeqs: { cardinality?: unknown, depth?: unknown }[], c_depth?: unknown, [field: string]: unknown }} files
  */
 /**
  * A Session document at publication. Admission checks it: the current writer format (`modes`), an
@@ -289,7 +289,14 @@ const publishedSession = async (session, config, layout, projection, features, s
   // A flat draft takes the per-feature edits the request was rebuilt from: a
   // CLI Session holds its visibility and label tables only in the request, and
   // Load reads a stored draft's edits from the draft.
-  const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
+  // The split keeps Show Depth only for a drawing with a Depth file, which it counts in `webFiles.bindings`
+  // (`session_depth_source_widths`): the files the projection bound, as Load binds them. A slice draft holds no
+  // bindings of its own, so without them a Web-saved Session published with Depth hidden. The published
+  // `webFiles` is the rebuilt request's (`prepare`).
+  const webFiles = { bindings: { c_depth: projection.files.c_depth ?? null,
+    linearSeqs: projection.files.linearSeqs.map(({ depth }) => ({ depth: depth ?? null })) } };
+  const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode }, webFiles }
+    : { config: scoped, ui: { mode }, webFiles };
   // Override colors merge into the committed request's colors.
   // Only the committed mode's slice is published, so no mode profile feeds the split.
   const split = await splitDraft(draft, { committedMode: mode, paletteColors: projection.config?.colors || null });
@@ -367,14 +374,22 @@ const rebuildIntent = async (session, owners) => {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
   // A CLI-written request compares without its resolved configuration;
-  // defaults it leaves unstated compare as absent in the equivalence (OV-398).
+  // defaults it leaves unstated compare as absent in the equivalence (OV-398),
+  // also a Depth series style the command did not state (OV-2819).
   // Its track slots compare as Load reads them (OV-1299).
+  const unstatedDepth = (renderRequest.diagramOptions.depthTracks || []).map((track) => new Set(
+    Object.entries(track).filter(([, value]) => value === null).map(([key]) => key)));
   /** @param {CanonicalRenderRequest} request */
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
       .filter(([key]) => key !== 'config' && key !== 'configOverrides'));
-    return { ...request, diagramOptions: { ...diagramOptions,
+    const depthTracks = Array.isArray(diagramOptions.depthTracks)
+      ? diagramOptions.depthTracks.map((track, index) => (isObject(track)
+        ? Object.fromEntries(Object.entries(track).filter(([key]) => !unstatedDepth[index]?.has(key)))
+        : track))
+      : diagramOptions.depthTracks;
+    return { ...request, diagramOptions: { ...diagramOptions, ...(depthTracks === undefined ? {} : { depthTracks }),
       tracks: tracksAsLoaded(diagramOptions.tracks, projection.mode, drawing.form.track_type) } };
   };
   return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),

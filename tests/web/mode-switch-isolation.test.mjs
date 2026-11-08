@@ -219,7 +219,7 @@ const appModules = readdirSync(APP_DIR, { recursive: true }).filter((file) => St
 // control, Reset, Load, Generate, and setup write them in their transitions
 // (A2, D-15-46). A drawing write by a helper a callback calls is not seen,
 // except through these names.
-const SETTINGS_WRITES = /\b(ensureDepthTrackConfigCount|reconcileCircularConservation|syncCircularConservationSeries|refreshCircularConservationSlots|syncCircularConservationSlots|recordDisplayDrafts|layoutPreferences)\b/;
+const SETTINGS_WRITES = /\b(ensureDepthTrackConfigCount|reconcileCircularConservation|rederiveCircularConservation|syncCircularConservationSeries|refreshCircularConservationSlots|syncCircularConservationSlots|recordDisplayDrafts|layoutPreferences)\b/;
 
 test('no watcher of an app module writes a drawing (A2: settings watchers)', () => {
   const calls = appModules.flatMap(([file, source]) => watchCalls(source).map((text) => ({ file, text })));

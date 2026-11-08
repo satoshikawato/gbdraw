@@ -1,0 +1,653 @@
+{
+ "id": "hepatoplasma_scabrum_depth",
+ "version": 1,
+ "title": "Add a read-depth ring to a bacterial genome map",
+ "summary": "Start from the Web defaults for the <i>Ca.</i> Hepatoplasma scabrum genome, then add a table of read depth, keep its 1-kbp means as they are, and give the depth ring a readable scale, generating after each change.",
+ "appMode": "Circular",
+ "primaryWorkflow": "Circular read-depth track from a depth TSV",
+ "downloads": [
+  {
+   "label": "AP027133",
+   "source": "NCBI Nucleotide",
+   "accession": "AP027133",
+   "targetName": "AP027133.gb",
+   "note": "Download the complete genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP as a GenBank flat file and save it as AP027133.gb, the filename stored in the Gallery session."
+  },
+  {
+   "label": "Read-depth table",
+   "source": "Gallery file",
+   "targetName": "AP027133.DRR394922.depth-1kb.tsv",
+   "href": "./files/AP027133.DRR394922.depth-1kb.tsv",
+   "note": "Mean read depth of sequencing run DRR394922 in 1-kbp windows: one row per window with the record ID, the window start, and the mean depth."
+  }
+ ],
+ "manualSteps": [
+  {
+   "title": "Switch to Circular mode",
+   "body": "Open gbdraw.app and check that the Circular drawing is shown before adding the GenBank file.",
+   "operations": [
+    {
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-01-01-circular-mode.webp",
+      "alt": "Drawing bar with the Circular drawing tab selected and the + Linear tab beside it.",
+      "caption": "The Circular drawing is shown when the app opens."
+     },
+     "capture": {
+      "source": "webapp",
+      "selector": ".drawing-bar-tabs",
+      "cropPadding": 4,
+      "actions": [
+       {
+        "type": "click",
+        "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
+       },
+       {
+        "type": "waitForFunction",
+        "script": "() => window.__GBDRAW_APP__?.mode === 'circular'"
+       }
+      ]
+     }
+    }
+   ],
+   "replay": [
+    {
+     "type": "click",
+     "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
+    }
+   ]
+  },
+  {
+   "title": "Upload the GenBank file",
+   "body": "Upload AP027133.gb as the Circular GenBank input and set Output Prefix. Leave Species empty: the app reads the organism and strain from the file and draws them in the center.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "GenBank/DDBJ File",
+      "AP027133.gb"
+     ],
+     [
+      "Output Prefix",
+      "hepatoplasma_scabrum_depth"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "fill",
+     "selector": "#output-prefix",
+     "value": "hepatoplasma_scabrum_depth"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-02-01-genbank-upload.webp",
+      "alt": "Circular Input Genomes card with AP027133.gb selected as the GenBank file.",
+      "caption": "Upload AP027133.gb in the Circular GenBank uploader."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 2,
+      "cardTitle": "Input Genomes",
+      "cropPadding": 14,
+      "actions": [
+       {
+        "type": "waitForFunction",
+        "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'AP027133.gb'"
+       }
+      ],
+      "assertAppState": {
+       "mode": "circular",
+       "files.c_gb.name": "AP027133.gb"
+      },
+      "visibleText": [
+       "AP027133.gb"
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-02-02-output-prefix.webp",
+      "alt": "Basic card with hepatoplasma_scabrum_depth as the output prefix and an empty Species field.",
+      "caption": "Set Output Prefix to hepatoplasma_scabrum_depth."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 2,
+      "cardTitle": "Basic",
+      "cropPadding": 14,
+      "assertAppState": {
+       "mode": "circular"
+      },
+      "visibleControls": [
+       {
+        "selector": "#output-prefix",
+        "value": "hepatoplasma_scabrum_depth"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Generate with the defaults",
+   "body": "Click Generate Diagram. The defaults draw the features on two strands with a GC content ring and a GC skew ring, and the legend at the left. The center gives the organism, strain, accession, length, and GC content from the file.",
+   "replay": [
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-03-01-default-preview.webp",
+      "alt": "<i>Ca.</i> Hepatoplasma scabrum preview with the Web defaults: features on two strands, GC content and GC skew rings, the legend at the left, and no depth ring.",
+      "caption": "Web defaults: features, GC content, and GC skew; no read depth yet."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 3,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-depth-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-depth-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.legend": "left",
+       "form.show_depth": false
+      },
+      "visibleText": [
+       "AP027133.1",
+       "606,194 bp",
+       "GC content"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Add the read-depth table",
+   "body": "Open Depth TSV tracks, click Choose Depth TSV, and choose AP027133.DRR394922.depth-1kb.tsv. Show Depth in Layout turns on with the file. Enter DRR394922 mean depth as the Legend title, then click Generate Diagram. A depth ring appears inside the features, but it looks like a sparse comb: the default Depth Window averages the depth over 100-bp windows, and most of them hold no row of this 1-kbp table.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "Depth TSV",
+      "AP027133.DRR394922.depth-1kb.tsv"
+     ],
+     [
+      "Show Depth (Layout)",
+      "On"
+     ],
+     [
+      "Legend title",
+      "DRR394922 mean depth"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "evaluate",
+     "script": "const labels = [\"Layout\", \"Depth TSV tracks\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+    },
+    {
+     "type": "check",
+     "selector": "role=checkbox[name='Show Depth'] >> visible=true"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth legend title']",
+     "value": "DRR394922 mean depth"
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-04-01-depth-file.webp",
+      "alt": "Depth TSV tracks card with AP027133.DRR394922.depth-1kb.tsv chosen and DRR394922 mean depth as the Legend title; Depth Window and Depth Step show their automatic values.",
+      "caption": "Choose the depth table and enter the Legend title."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 4,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 200
+       }
+      ],
+      "selector": "[data-capture='depth-card']",
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true
+      },
+      "visibleText": [
+       "Depth TSV tracks",
+       "AP027133.DRR394922"
+      ],
+      "visibleControls": [
+       {
+        "selector": "input[aria-label='Depth legend title']",
+        "value": "DRR394922 mean depth"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-04-02-depth-comb-preview.webp",
+      "alt": "Preview with a depth ring inside the features that shows as a sparse comb of thin spikes.",
+      "caption": "The default Depth Window turns the 1-kbp table into a sparse comb."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 4,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-depth-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-depth-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true
+      },
+      "visibleText": [
+       "AP027133.1",
+       "606,194 bp",
+       "GC content",
+       "DRR394922 mean depth"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Keep the 1-kbp means as they are",
+   "body": "The table already holds one mean per kilobase. In Depth TSV tracks, set Depth Window to 1 and Depth Step to 1000 so that each row is drawn as it is, then click Generate Diagram. The ring becomes a continuous coverage profile.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "Depth Window",
+      "1"
+     ],
+     [
+      "Depth Step",
+      "1000"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth Window'] >> visible=true",
+     "value": 1
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth Step'] >> visible=true",
+     "value": 1000
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-05-01-continuous-preview.webp",
+      "alt": "Preview with a continuous depth ring around the genome inside the features, with a single small axis label.",
+      "caption": "Window 1 and Step 1000 draw each 1-kbp mean as it is."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 5,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-depth-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-depth-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true,
+       "adv.depth_window_size": 1,
+       "adv.depth_step_size": 1000
+      },
+      "visibleText": [
+       "AP027133.1",
+       "606,194 bp",
+       "GC content",
+       "DRR394922 mean depth"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Give the depth ring a readable scale",
+   "body": "The ring is thin and its axis shows only the maximum. In Depth TSV tracks, set Depth Max to 80 and Depth Width to 60, then, under the series, set Large Tick to 20, Small Tick to 10, and Tick Font Size to 14. Click Generate Diagram. The axis now reads 20x to 80x: coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "Depth Max",
+      "80"
+     ],
+     [
+      "Depth Width",
+      "60"
+     ],
+     [
+      "Large Tick",
+      "20"
+     ],
+     [
+      "Small Tick",
+      "10"
+     ],
+     [
+      "Tick Font Size",
+      "14"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth Max'] >> visible=true",
+     "value": 80
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth Width'] >> visible=true",
+     "value": 60
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth large tick']",
+     "value": 20
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth small tick']",
+     "value": 10
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Depth tick font size']",
+     "value": 14
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-06-01-depth-scale.webp",
+      "alt": "Depth TSV tracks card with Depth Window 1, Depth Step 1000, Depth Max 80, Depth Width 60, and the series' Large Tick 20, Small Tick 10, and Tick Font Size 14.",
+      "caption": "Depth Max, Depth Width, and the series' tick settings."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 6,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 200
+       }
+      ],
+      "selector": "[data-capture='depth-card']",
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "adv.depth_max": 80,
+       "adv.depth_width_circular": 60
+      },
+      "visibleText": [
+       "Depth TSV tracks",
+       "Large Tick",
+       "Small Tick"
+      ],
+      "visibleControls": [
+       {
+        "selector": "[data-capture='depth-card'] input[aria-label='Depth Max']",
+        "value": "80"
+       },
+       {
+        "selector": "[data-capture='depth-card'] input[aria-label='Depth Width']",
+        "value": "60"
+       },
+       {
+        "selector": "[data-capture='depth-card'] input[aria-label='Depth large tick']",
+        "value": "20"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-06-02-final-preview.webp",
+      "alt": "Final preview: a 60-px depth ring inside the features with an axis marked 20x, 40x, 60x, and 80x, an even coverage near 20x and one sharp peak near 246 kbp, with GC content and GC skew rings inside it.",
+      "caption": "The axis reads 20x to 80x; one sharp peak stands out near 246 kbp."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "replayThrough": 6,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-depth-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-depth-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.show_depth": true,
+       "adv.depth_max": 80,
+       "adv.depth_width_circular": 60
+      },
+      "visibleText": [
+       "AP027133.1",
+       "606,194 bp",
+       "GC content",
+       "DRR394922 mean depth",
+       "80x",
+       "20x"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Inspect the gene under the peak",
+   "body": "Click the long CDS just inside the peak, near 246 kbp, and open Details. It is a 6,324-bp CDS at 240,989..247,312, annotated as a hypothetical protein (protein ID BDV03503.1).",
+   "operations": [
+    {
+     "media": {
+      "src": "./media/hepatoplasma_scabrum_depth/manual-07-01-feature-popup.webp",
+      "alt": "Details popup of a hypothetical protein CDS at 240,989..247,312, 6,324 bp, protein ID BDV03503.1, beside the highlighted long feature near 246 kbp.",
+      "caption": "The Details popup names the long CDS under the depth peak and gives its location."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+      "viewport": {
+       "width": 1280,
+       "height": 900
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "async () => { document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; app.resultPanelTab = 'preview'; app.zoom = 1.6; const frame = () => new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve), 300)); await frame(); for (let i = 0; i < 6; i += 1) { const rect = document.querySelector(\"[data-gbdraw-feature-id='f84777fe2']\")?.getBoundingClientRect(); if (!rect) throw new Error(\"Pan target [data-gbdraw-feature-id='f84777fe2'] was not found.\"); const dx = 1000 - rect.left; const dy = 300 - rect.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break; app.canvasPan.x += dx; app.canvasPan.y += dy; await frame(); } }"
+       },
+       {
+        "type": "click",
+        "selector": "[data-gbdraw-feature-id='f84777fe2']"
+       },
+       {
+        "type": "waitForSelector",
+        "selector": ".feature-popup"
+       },
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; const popup = document.querySelector('.feature-popup'); if (!app || !popup) throw new Error('BDV03503.1 feature popup is unavailable.'); if (app.clickedFeature) app.clickedFeature.activeTab = 'details'; popup.style.width = '440px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = 440; app.clickedFeaturePos.y = 300; }"
+       },
+       {
+        "type": "waitForFunction",
+        "script": "() => { const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='f84777fe2']\"); const text = popup?.textContent || ''; if (!popup || !target || !text.includes('BDV03503.1')) return false; const popupRect = popup.getBoundingClientRect(); const targetRect = target.getBoundingClientRect(); return popupRect.left >= 0 && popupRect.bottom <= window.innerHeight && targetRect.left >= 0 && targetRect.right <= window.innerWidth && popupRect.right <= targetRect.left; }"
+       },
+       {
+        "type": "wait",
+        "ms": 300
+       }
+      ],
+      "clipSelectors": [
+       "[data-gbdraw-feature-id='f84777fe2']",
+       ".feature-popup"
+      ],
+      "highlightSelector": "[data-gbdraw-feature-id='f84777fe2']",
+      "waitForSelector": ".feature-popup",
+      "cropPadding": {
+       "top": 16,
+       "right": 16,
+       "bottom": 16,
+       "left": 16
+      },
+      "assertAppState": {
+       "mode": "circular"
+      },
+      "visibleText": [
+       "hypothetical protein",
+       "BDV03503.1"
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "troubleshooting": [
+  {
+   "title": "No depth ring is drawn",
+   "body": "Check that a file is chosen under Depth TSV tracks and that Show Depth in Layout is on. The first column of the table must be AP027133.1, the record ID in the GenBank file."
+  },
+  {
+   "title": "The depth ring looks like a comb of thin spikes",
+   "body": "Set Depth Window to 1 and Depth Step to 1000. The table holds one mean per kilobase, and these values draw each mean as it is."
+  },
+  {
+   "title": "The axis shows only one small label",
+   "body": "Set Depth Max to 80, and Large Tick, Small Tick, and Tick Font Size under the series to 20, 10, and 14."
+  },
+  {
+   "title": "The generated diagram differs from the Gallery image",
+   "body": "Check input record AP027133.1, Depth Window 1, Depth Step 1000, Depth Max 80, Depth Width 60, the series' ticks 20 and 10 with font size 14, the Legend title DRR394922 mean depth, and the legend at the left."
+  }
+ ],
+ "related": [
+  {
+   "label": "Open this Gallery entry",
+   "href": "./#hepatoplasma_scabrum_depth"
+  },
+  {
+   "label": "Open the gbdraw web app",
+   "href": "../"
+  },
+  {
+   "label": "Read the track customization reference",
+   "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations"
+  }
+ ]
+}
