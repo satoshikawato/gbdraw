@@ -213,9 +213,14 @@ test('without a Result the records come from the request and discovery, with no 
 // request key, then the keys it has under the other canvas (aliases).
 test('a record drawn alone after a Multi-Record Canvas Generate offers the features the Result drew of it', async () => {
   const entry = { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 };
-  const sources = { mode: 'circular', cards: new Map([['record-1', [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 }, entry]]]) };
+  // A Session written before File cards drew both records as record-1 and
+  // record-2, the keys over the flat list; its card as loaded is still held
+  // (`legacyOrder`, OV-2867).
+  const sources = {
+    mode: 'circular', legacyOrder: ['record-1'],
+    cards: new Map([['record-1', [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 }, entry]]])
+  };
   const draftKey = 'record-1:2';
-  // A Session written before File cards drew both records as record-1 and record-2, the keys over the flat list.
   const catalog = new Map([['record-1', [{ featureId: 'f1', label: 'dnaA' }]], ['record-2', [{ featureId: 'f2', label: 'recA' }]]]);
   const records = regionSourceRecords([{ recordKey: draftKey, selector: { kind: 'recordIndex', index: 1 } }], sources,
     (recordKey) => catalog.get(recordKey) ?? null);
