@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `126`
+- Contract revision: `127`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -44,7 +44,8 @@ Status: active Product authority
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
-  `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, and `PD-OI-121`
+  `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, `PD-OI-121`, `PD-OI-122`,
+  `PD-OI-123`, and `PD-OI-124`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4775,6 +4776,39 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 127 changes: `PD-OI-122`, `PD-OI-123`, and `PD-OI-124` are added.
+  `PD-OI-122` (concern `diagram-generation.linear-row-windows`, scenario
+  revision `1`; the outcome `A`, windows): a Linear row is a list of windows,
+  each a span of a record with its own orientation and column. A record with
+  several windows is one record; the drawing, the command line, the Python API,
+  and the Session read and draw the same windows, including a window across
+  the origin of a circular record (written `:origin` on the command line), the
+  row name and numbered list, the window-edge marks, the `//` gap marks, and
+  the scale bar. `PD-OI-123` (concern `diagram-generation.locate-homologs`,
+  scenario revision `1`; the outcome `A`, Find in other files): one search
+  gives the windows of one reference span in each other file, a proposal to
+  review, and a new Linear drawing, in the Web and with `gbdraw locate`.
+  `PD-OI-124` (concern `web.linear.record-windows`, scenario revision `1`; the
+  outcome `A`, editable windows in the card and one Record Layout cell per
+  window): the record card lists and edits the windows of a record, and Record
+  Layout has one cell per window.
+  - On `2026-11-08` the Product Decision Owner `satoshikawato` answered the
+    campaign's questions on a question page in two rounds. Round 1 answer
+    line: 「Q1=B Q2=A Q3=その他「パソコンはB,　スマホはA.」 Q4=A Q5=A Q6=その他「BでAdd windowあり出ない理由は何？」 Q7=B Q8=A Q9=A Q10=A Q11=A Q12=A Q13=A Q14=record_group Q15=A」. Round 2: 「Q6b=C Q16=A PD-OI-122=承認 PD-OI-123=承認 PD-OI-124(C-A)=承認」, given after the complete text of each receipt below was shown; the page returned each approved text with its SHA-256.
+  - The session drafted the receipts' fields; the Owner approved them as
+    written. The receipts and JSON reproduce the approved fields without
+    translation or additional terms.
+  - New receipt SHA-256, each scenario revision `1`: `PD-OI-122`
+    `eb4307bc38d4a6ce33bb9df86c1a998f03bba1d45a707b48708a7030ab75aa70`; `PD-OI-123`
+    `32d17982790f8927bc6f654c2a5c521380ca60b1a795bcf2186b1c49f21c80eb`; `PD-OI-124`
+    `e3ead7a968e25b61e125320d687561d8cd69b67fa80434b6e2b568365e31e0ff`.
+  - `PD-OI-115` and `PD-OI-090` are not rewritten: the May retire of
+    `PD-OI-122` names the parts it narrows (the `PD-OI-115` bullet that
+    disables New drawing from region for an origin-crossing span and its
+    Accepted residual risk, and the same risk in `PD-OI-090` 〔作成〕 (4)).
+  - No other record is amended or retired.
+  - This change is Contract-only: the runtime that implements these records
+    merges after it in separate pull requests, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -12305,6 +12339,187 @@ Decision date: 2026-11-07
   "acceptedResidualRisk": "選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip 入力は展開後の大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
+}
+```
+
+### PD-OI-122: Windows in a Linear row
+
+- Concern key: `diagram-generation.linear-row-windows`
+- Scenario revision: `1`
+- Supersedes: none.
+- Keeps: `PD-OI-010`, `PD-OI-013`, `PD-OI-018`, `PD-OI-019`, `PD-OI-024`,
+  `PD-OI-067`, `PD-OI-070`, `PD-OI-090`, `PD-OI-091`, `PD-OI-111`. It narrows,
+  and says so in its May retire: `PD-OI-115` (the bullet that disables New
+  drawing from region for an origin-crossing span, and the same risk in its
+  Accepted residual risk) and `PD-OI-090` 〔作成〕 (4) (the same risk in its
+  Accepted residual risk).
+- Status: `ACCEPTED`
+- Selected outcome: `A, windows`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's answers and approvals of `2026-11-08` described in the Revision 127 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without translation or additional terms. The runtime that implements it merges after this record, in separate pull requests; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `eb4307bc38d4a6ce33bb9df86c1a998f03bba1d45a707b48708a7030ab75aa70`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.linear-row-windows
+Scenario revision: 1
+Choice: A. A Linear row is a list of windows; the drawing, the command line, the Python API and the Session read and draw the same windows.
+  - A window is a span of a record (1-based, both ends included) with its own orientation and its own column. A Linear row is a list of windows ordered by column, ties by input order. Windows of different records are contig breaks. Windows of one record leave out the interval between them.
+  - A record with several windows is one record. Its features, their colours and edits, its label and its Similarity-group evidence belong to the record, not to a window. A feature cut by a window edge is drawn as a crop draws it, with an open end (PD-OI-111).
+  - Windows of one record may overlap and may run in any order. A feature inside an overlap is drawn in each window and edited once.
+  - A window of a circular record may cross the origin. It is drawn as one continuous window, from its start through the last base and the origin to its end.
+  - On the command line a window across the origin is written with ":origin" after its span, such as 65000-4000:origin, and before ":rc" when it is also reverse-complemented. This holds for --region and for the region column of a records table. A span whose start is greater than its end and that has no ":origin" stays the reversed span, as before. ":origin" is refused, naming the record, on a linear record and on a span whose start is not greater than its end.
+  - New drawing from region accepts a span across the origin of a circular record. It makes one window across the origin in a new Linear drawing, in the Region popup of a Circular drawing and in the New drawing from a region dialog. The popup no longer shows "A region that crosses the origin cannot be drawn on its own." Overlapping or touching regions of one record in that dialog become one window.
+  - A record has one row. Its windows are placed in that row by column, and windows of other records may stand between two windows of one record. Without row assignments, a record with several windows is drawn in its own row, with its windows side by side.
+  - A row that has two or more units, where at least one is a window with a region, shows one name at its left. The name is the label of the row's first record that has one, and the windows of a record do not repeat it. A record of the row with a different label shows that label in its line of the list below. A row of whole records, or of one record without windows, keeps the text of each record above it as before.
+  - In such a row each window has a circled number at its upper left, counted from 1 along the row. Under the row name a list has one line per window: the circled number, the record ID, the span with thousands separators, and "(−)" when the window is reverse-complemented. A row with one window has no numbers and no list.
+  - At each window edge: where the edge is the first or last base of a linear record, a vertical bar crosses the axis. Where the edge lies inside a record, or at a stored end of a circular record, the axis continues as a dashed line.
+  - Between two windows of one record that are next to each other in the row, run in the same direction and leave an interval between them, "//" stands in the gap with the length left out above it, such as "1.54 Mb". Between windows of one record that overlap, touch, run backwards or are not next to each other, "//" stands in the gap without a length. Between windows of different records only the edge marks are drawn.
+  - No row text is drawn over the comparison ribbons. A row's name, its list and the text above the records of a row make room: the row gap grows by their height.
+  - The scale bar is drawn in a figure with several records or windows in a row under the same conditions as with one record in each row: Scale shown, Normalize Record Lengths off, axis ruler off. Every window and record of the figure has the same bp-per-pixel scale.
+  - Command line: repeating --region for one record gives its windows in order. A records table gets an optional column "record_group". Rows that share a value in it are the windows of one record. They must name the same file, the same record and the same row. Each row's region, reverse_complement and column belong to its window. The record's record_label, record_subtitle, topology and losat_gencode come from the group, and a conflicting value inside a group is refused with the rows named. Rows without a value stay separate records exactly as before, including the same record twice in one row.
+  - Python API: RecordInput.windows takes a list of RecordWindow(start, end, reverse_complement, column). A RecordWindow whose start is greater than its end crosses the origin of a circular record and is refused, naming the record, on a linear record. RecordInput.region still takes one region, read as --region reads it. Reading RecordInput.region gives the one window as a region with the record selector, nothing for a record without windows, and an error that names windows for a record with several.
+  - Refused with a reason that names the record: a record-wide reverse complement together with windows, several windows in Circular mode, a Wrap Rows layout that would cut a record with several windows, and a precomputed comparison table that names a record with several windows.
+  - A saved Session keeps the windows of each record. A Session saved before this version reads its region as one window and draws as it did.
+Rationale: 遺伝子クラスターのように、ゲノムによって複数のコンティグに散らばったり、1 本の染色体の中で遠く離れたりする領域を、1 つの行に並べて比較できるようにする。コンティグの切れ目と、1 つの record の中で省いた区間を、図で区別して見せる。名前と番号の一覧を行の左に置き、比較のリボンの上に文字を描かない。Web、コマンドライン、Python API、Session は同じ window を読み書きする。環状の record の起点をまたぐ領域は、1 つの連続した window として描く。
+Must preserve: window のない図は今と同じ図になること（reference outputs と Gallery の図、Single-record の行）。複数 record の行で、全 record がそのまま描かれ region のない行は、各 record の文字を今まで通り record の上に描くこと（リボンに重ならないよう間を空けること以外）。record_group のない records table、--region を 1 つの record に 1 回、Python API の region を使う既存のスクリプトとテーブルが同じ図になること。--region と records table の region の意味（1 始まり、両端を含む、:rc は切り出してから逆相補、PD-OI-010）。部分配列の端を開いて描くこと（PD-OI-111）。Linear の File の順序と行の順序（PD-OI-018）、Web の既定の行の並べ方（PD-OI-019、PD-OI-013）、Definition の表示規則（PD-OI-024、PD-OI-067）、record ごとの描く／描かない（PD-OI-091）、drawing ごとの設定と Session（PD-OI-090）、Reset Settings の範囲（PD-OI-070）。LOSAT の raw 検索結果の再利用の鍵が、window のない record で変わらないこと。
+May retire: 複数 record の行で共通の名前を、全員の文字が一致するときだけ行の名前にしていた暗黙の扱い（window のある行は上の規則に置き換わる）。複数 record の行で、record の上の文字が比較のリボンの上に描かれる動作。複数 record の行に scale bar が描かれない動作。1 つの record に --region を 2 回以上指定すると拒否される動作。1 つの record に region が 1 つしか持てない request の形。環状の record の原点をまたぐ領域は新しい drawing にできないこと（PD-OI-115 の「A region that crosses the origin cannot be drawn on its own.」の bullet とその Accepted residual risk、PD-OI-090 〔作成〕 (4) の Accepted residual risk のうちこの制限）。
+Accepted residual risk: window のある行の図は、番号と一覧、印、scale bar が加わるので、同じ入力を 1 つの record の複数行として描いた図とは見た目が違う。window のある行では、record ごとの副題などの文字は一覧の行に現れ、record の上には出ない（名前が違う record の名前だけが一覧の行に残る）。複数 record の行で文字が比較のリボンから離れるため、そのような図は行の間隔が広がり、図全体が高くなる。重なる window や逆順の window の間の「//」は区間の長さを示さない。1 つの Session に window を保存すると、以前の版の gbdraw は読めない。Wrap Rows、事前計算した比較表、record 全体の逆相補とは window を組み合わせられない。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "diagram-generation.linear-row-windows",
+  "scenarioRevision": 1,
+  "choice": "A. A Linear row is a list of windows; the drawing, the command line, the Python API and the Session read and draw the same windows.\n  - A window is a span of a record (1-based, both ends included) with its own orientation and its own column. A Linear row is a list of windows ordered by column, ties by input order. Windows of different records are contig breaks. Windows of one record leave out the interval between them.\n  - A record with several windows is one record. Its features, their colours and edits, its label and its Similarity-group evidence belong to the record, not to a window. A feature cut by a window edge is drawn as a crop draws it, with an open end (PD-OI-111).\n  - Windows of one record may overlap and may run in any order. A feature inside an overlap is drawn in each window and edited once.\n  - A window of a circular record may cross the origin. It is drawn as one continuous window, from its start through the last base and the origin to its end.\n  - On the command line a window across the origin is written with \":origin\" after its span, such as 65000-4000:origin, and before \":rc\" when it is also reverse-complemented. This holds for --region and for the region column of a records table. A span whose start is greater than its end and that has no \":origin\" stays the reversed span, as before. \":origin\" is refused, naming the record, on a linear record and on a span whose start is not greater than its end.\n  - New drawing from region accepts a span across the origin of a circular record. It makes one window across the origin in a new Linear drawing, in the Region popup of a Circular drawing and in the New drawing from a region dialog. The popup no longer shows \"A region that crosses the origin cannot be drawn on its own.\" Overlapping or touching regions of one record in that dialog become one window.\n  - A record has one row. Its windows are placed in that row by column, and windows of other records may stand between two windows of one record. Without row assignments, a record with several windows is drawn in its own row, with its windows side by side.\n  - A row that has two or more units, where at least one is a window with a region, shows one name at its left. The name is the label of the row's first record that has one, and the windows of a record do not repeat it. A record of the row with a different label shows that label in its line of the list below. A row of whole records, or of one record without windows, keeps the text of each record above it as before.\n  - In such a row each window has a circled number at its upper left, counted from 1 along the row. Under the row name a list has one line per window: the circled number, the record ID, the span with thousands separators, and \"(−)\" when the window is reverse-complemented. A row with one window has no numbers and no list.\n  - At each window edge: where the edge is the first or last base of a linear record, a vertical bar crosses the axis. Where the edge lies inside a record, or at a stored end of a circular record, the axis continues as a dashed line.\n  - Between two windows of one record that are next to each other in the row, run in the same direction and leave an interval between them, \"//\" stands in the gap with the length left out above it, such as \"1.54 Mb\". Between windows of one record that overlap, touch, run backwards or are not next to each other, \"//\" stands in the gap without a length. Between windows of different records only the edge marks are drawn.\n  - No row text is drawn over the comparison ribbons. A row's name, its list and the text above the records of a row make room: the row gap grows by their height.\n  - The scale bar is drawn in a figure with several records or windows in a row under the same conditions as with one record in each row: Scale shown, Normalize Record Lengths off, axis ruler off. Every window and record of the figure has the same bp-per-pixel scale.\n  - Command line: repeating --region for one record gives its windows in order. A records table gets an optional column \"record_group\". Rows that share a value in it are the windows of one record. They must name the same file, the same record and the same row. Each row's region, reverse_complement and column belong to its window. The record's record_label, record_subtitle, topology and losat_gencode come from the group, and a conflicting value inside a group is refused with the rows named. Rows without a value stay separate records exactly as before, including the same record twice in one row.\n  - Python API: RecordInput.windows takes a list of RecordWindow(start, end, reverse_complement, column). A RecordWindow whose start is greater than its end crosses the origin of a circular record and is refused, naming the record, on a linear record. RecordInput.region still takes one region, read as --region reads it. Reading RecordInput.region gives the one window as a region with the record selector, nothing for a record without windows, and an error that names windows for a record with several.\n  - Refused with a reason that names the record: a record-wide reverse complement together with windows, several windows in Circular mode, a Wrap Rows layout that would cut a record with several windows, and a precomputed comparison table that names a record with several windows.\n  - A saved Session keeps the windows of each record. A Session saved before this version reads its region as one window and draws as it did.",
+  "rationale": "遺伝子クラスターのように、ゲノムによって複数のコンティグに散らばったり、1 本の染色体の中で遠く離れたりする領域を、1 つの行に並べて比較できるようにする。コンティグの切れ目と、1 つの record の中で省いた区間を、図で区別して見せる。名前と番号の一覧を行の左に置き、比較のリボンの上に文字を描かない。Web、コマンドライン、Python API、Session は同じ window を読み書きする。環状の record の起点をまたぐ領域は、1 つの連続した window として描く。",
+  "mustPreserve": "window のない図は今と同じ図になること（reference outputs と Gallery の図、Single-record の行）。複数 record の行で、全 record がそのまま描かれ region のない行は、各 record の文字を今まで通り record の上に描くこと（リボンに重ならないよう間を空けること以外）。record_group のない records table、--region を 1 つの record に 1 回、Python API の region を使う既存のスクリプトとテーブルが同じ図になること。--region と records table の region の意味（1 始まり、両端を含む、:rc は切り出してから逆相補、PD-OI-010）。部分配列の端を開いて描くこと（PD-OI-111）。Linear の File の順序と行の順序（PD-OI-018）、Web の既定の行の並べ方（PD-OI-019、PD-OI-013）、Definition の表示規則（PD-OI-024、PD-OI-067）、record ごとの描く／描かない（PD-OI-091）、drawing ごとの設定と Session（PD-OI-090）、Reset Settings の範囲（PD-OI-070）。LOSAT の raw 検索結果の再利用の鍵が、window のない record で変わらないこと。",
+  "mayRetire": "複数 record の行で共通の名前を、全員の文字が一致するときだけ行の名前にしていた暗黙の扱い（window のある行は上の規則に置き換わる）。複数 record の行で、record の上の文字が比較のリボンの上に描かれる動作。複数 record の行に scale bar が描かれない動作。1 つの record に --region を 2 回以上指定すると拒否される動作。1 つの record に region が 1 つしか持てない request の形。環状の record の原点をまたぐ領域は新しい drawing にできないこと（PD-OI-115 の「A region that crosses the origin cannot be drawn on its own.」の bullet とその Accepted residual risk、PD-OI-090 〔作成〕 (4) の Accepted residual risk のうちこの制限）。",
+  "acceptedResidualRisk": "window のある行の図は、番号と一覧、印、scale bar が加わるので、同じ入力を 1 つの record の複数行として描いた図とは見た目が違う。window のある行では、record ごとの副題などの文字は一覧の行に現れ、record の上には出ない（名前が違う record の名前だけが一覧の行に残る）。複数 record の行で文字が比較のリボンから離れるため、そのような図は行の間隔が広がり、図全体が高くなる。重なる window や逆順の window の間の「//」は区間の長さを示さない。1 つの Session に window を保存すると、以前の版の gbdraw は読めない。Wrap Rows、事前計算した比較表、record 全体の逆相補とは window を組み合わせられない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
+}
+```
+
+### PD-OI-123: Find in other files
+
+- Concern key: `diagram-generation.locate-homologs`
+- Scenario revision: `1`
+- Supersedes: none.
+- Keeps: `PD-OI-016`, `PD-OI-020`, `PD-OI-022`, `PD-OI-073`, `PD-OI-074`,
+  `PD-OI-077`, `PD-OI-090` (including 〔作成〕 (4), whose list of ways to make a
+  drawing is read together with this record), `PD-OI-105`, `PD-OI-115` (its
+  list of Region popup actions is read together with this record), and
+  `PD-OI-117` (Sequence search is unchanged).
+- Status: `ACCEPTED`
+- Selected outcome: `A, Find in other files`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's answers and approvals of `2026-11-08` described in the Revision 127 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without translation or additional terms. The runtime that implements it merges after this record, in separate pull requests; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `32d17982790f8927bc6f654c2a5c521380ca60b1a795bcf2186b1c49f21c80eb`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.locate-homologs
+Scenario revision: 1
+Choice: A. Find in other files; one search gives the windows of one reference span in each other file, a proposal to review, and a new drawing, in the Web and on the command line.
+  - The Region popup of a Linear drawing gains "Find in other files" after "Use as search query". It opens the Find in other files dialog with the picked span as the reference. In a Circular drawing the popup does not show it. It is disabled with the reason "Add another file to search in" when the drawing has fewer than two files.
+  - The Drawing menu of a Linear drawing gains "Find in other files…" after "New drawing from a region…". It opens the same dialog with one empty reference row to fill in.
+  - The dialog first shows the reference and the search. "Reference windows" lists one row per window: the record, Start and End (1-based, both ends included; a window across the origin of a circular record is shown and entered as in the record card), and a remove button. "+ Add window" adds a row, and several windows of one record are allowed. Below the list the dialog says how many genes the windows hold: the CDS that lie wholly inside a window are the queries. Search is disabled, with the reason, when a window has no CDS or when two windows of a record overlap. A CDS cut by a window edge is not a query and is named in the proposal.
+  - "Search in" lists each other file of the drawing with a checkbox, ticked at first, and its record count and length. Every record of a file is searched, drawn or not. The file of the reference is not searched.
+  - "Search settings" has Program, with tblastn as the default and blastn selectable, and Bitscore, E-value, Minimum Identity and Minimum Length. They start at the values of Pairwise Comparisons in the shown mode; they are the dialog's own values and do not change Pairwise Comparisons. tblastn searches the protein of each query gene in the six-frame translation of every selected record. blastn searches the nucleotide sequence of the same genes.
+  - While the search runs, the full-window LOSAT overlay shows its progress by file ("File k of N") and Cancel, as for Generate. A search that is cancelled adds nothing and keeps the drawing and the last Result. A file whose search fails is listed in the proposal with the reason and no windows; the other files are proposed.
+  - The proposal lists each file in the drawing's order with its name, its number of windows and "N of M genes". Each window row has a checkbox, the circled number it will have in the drawing, the record ID, the span with thousands separators, "(−)" when it is reverse-complemented, its number of genes with the first and last gene, and "contig start" or "contig end" where it reaches the end of a linear record. On a screen 768 px wide or wider the proposal is a table: each file has a heading line and one line per window. On a narrower screen, such as a phone, each file is a card with one block per window.
+  - A window is ticked when it adds genes that the windows ticked before it do not cover: at least 5 % of the genes of the reference window it matches, and at least two genes, or all of them when the reference window has fewer than two. Windows are taken in the order of their total score. At most 8 windows of a file are ticked.
+  - Windows that repeat genes already covered, that add too few genes, or that are over the limit of 8 are listed under "Not selected" with the reason, unticked. Ticking one adds it to the drawing at its place in the order of the reference.
+  - A window holds the matching genes whole and 1 kb on each side, or to the end of the record when less than 1 kb remains. Hits of one record less than 10 kb apart are one window. Farther apart they are two windows of that record, with the interval left out. A window is reverse-complemented when most of its matching genes lie on the opposite strand of the reference as drawn. Windows of a file are ordered by the position of their genes in the reference. A circular record that holds the reference genes from another start is one window that starts where the reference order starts and may cross the origin. A linear contig that holds them twice gives two windows of that record.
+  - Under each file the dialog says how many of its genes were found in full, in part and not at all, and lists the genes found in part or not at all. A file with no window says so and how many alignments the thresholds removed.
+  - Each window row has Edit, which shows Start, End and Reverse complement. An edit changes only that window; the genes shown stay as the search found them.
+  - The footer shows "N windows in M files", Back (to the search settings), Cancel and "Create new drawing". Create is disabled, with the reason, when no window is ticked.
+  - Create adds a new Linear drawing next to the source drawing as one project step, as New drawing from region does: the source drawing stays as it is, Undo removes the new drawing, Redo restores it, and the new drawing is shown. It carries the source drawing's settings and styles as New drawing from region carries them, and lists what it does not carry. Its first row holds the reference windows, labelled with the reference file's name. Each file then has one row with its ticked windows, labelled with the file's name, in the order of the dialog. Adjacent rows are compared by LOSAT for the window pairs that share at least one reference gene. The figure is drawn by Generate.
+  - Closing the dialog, Cancel and Back add nothing and make no History step. The reference, the proposal and the hits are not saved in the Session; the new drawing is.
+  - Command line: "gbdraw locate --reference_gbk REF.gbff [--reference_record ID] --reference_region START-END[:origin][:rc] ... --targets T1.gbff T2.gbff ... -o PREFIX". --reference_region is repeated once per window, in column order, and the whole record is the reference when it is absent. GFF3 and FASTA are given with --reference_gff, --reference_fasta, --target_gffs and --target_fastas. --reference_record is required when the reference file holds several records.
+  - The command writes PREFIX.records.tsv, PREFIX.comparisons.tsv and PREFIX.plan.json, and prints a report for each file to the error output: its windows, orientation, genes, genes found in part or not at all, and warnings. Without -o the prefix is "locate". An existing output stops the command unless --overwrite is given. The records table gives row 1 to the reference windows and one further row to each target file, with one table row per ticked window. It writes the same record_group value on the rows of one record, such as 1:NC_009725.2, writes the region empty for a window that covers a whole record, and writes ":origin" after the span of a window across the origin. The comparisons table lists the window pairs that share a reference gene. "gbdraw linear --records_table PREFIX.records.tsv --comparisons_table PREFIX.comparisons.tsv --losat losatp -o FIG" draws the plan, and the table can be edited first.
+  - Command line options: --losat tlosatn (the default, tblastn) or losatn, --losat_bin, --ncbi_blast_bin, --losat_threads, --evalue, --bitscore, --identity and --alignment_length (the defaults of gbdraw linear), --losat_output_dir (the raw rows of each file), --flank BP (1000), --merge_distance BP (10000) and --max_windows N (8). The other numbers above are fixed.
+  - The command stops with exit status 1 and a message for: an unknown reference record; a reference region outside the record or two overlapping reference regions; a reference window with no CDS; a target that is the reference file; a LOSAT that has no tblastn, naming the executable, its version and the ways out (losatn, a newer --losat_bin, --ncbi_blast_bin), and never searching with blastn instead; no file with a window, with how many alignments the thresholds removed; --ncbi_blast_bin together with --losat_bin. It warns and exits 0 for: a file without a window, more windows than --max_windows, a target without annotation (a window may then cut a gene), and genes found in part or not at all.
+Rationale: 参照にする遺伝子クラスターの相同な領域を、ほかのゲノムのコンティグや離れた位置から探して候補を示し、ユーザーが確かめて 1 つの図に並べられるようにする。Web と CLI は同じ検索から同じ計画を作り、候補の確認、編集、描画までを同じ手順にする。描いた図は元の図を変えず、新しい drawing に出す。
+Must preserve: Sequence search（PD-OI-117）、Select region と Region popup の既存の操作（PD-OI-115）、New drawing from region（PD-OI-090 〔作成〕 (4)）、drawing と Undo（PD-OI-090）、Pairwise Comparisons の LOSAT の実行、しきい値の意味、スレッド数、検索結果の再利用（PD-OI-016、PD-OI-020、PD-OI-022）、LOSAT の表の座標と record の読み方（PD-OI-073、PD-OI-074、PD-OI-077）。検索の失敗とキャンセルで図と直前の Result を保つこと（PD-OI-016）。Result の popup が 1 つであること（PD-OI-105）。gbdraw linear の既存の option と、records table と comparisons table の既存の列の意味。
+May retire: none
+Accepted residual risk: 提案は遺伝子単位の相同性から作った推定で、NRPS のように同じ繰り返しが多い領域では、窓が違うコピーに当たることがある（ユーザーが確かめる）。遺伝子の一部だけが見つかることがあり、組み立てられていない区間は図に出ない（遺伝子単位の数え方）。blastn は近縁なゲノムしか見つけられない。tblastn は tblastn を持つ LOSAT が要る。gbdraw が入れる LOSAT がそれを持つまで、gbdraw locate の既定の検索は止まり、losatn か --losat_bin、--ncbi_blast_bin で実行する。検索の時間は、約 24 kaa の query を 4 Mb のゲノムに対して 1 スレッドで約 1 秒で、400 個ほどのタンパク質を 10 個のゲノムに対して直列で約 2 分かかる見積りである（実測は 39 個のタンパク質）。提案と検索のヒットは Session に保存しないので、閉じると再び検索する。Circular の drawing には Find in other files がない。locate に Python API はない。Edit した窓の遺伝子の表示は検索のままで、新しい範囲では数え直さない。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "diagram-generation.locate-homologs",
+  "scenarioRevision": 1,
+  "choice": "A. Find in other files; one search gives the windows of one reference span in each other file, a proposal to review, and a new drawing, in the Web and on the command line.\n  - The Region popup of a Linear drawing gains \"Find in other files\" after \"Use as search query\". It opens the Find in other files dialog with the picked span as the reference. In a Circular drawing the popup does not show it. It is disabled with the reason \"Add another file to search in\" when the drawing has fewer than two files.\n  - The Drawing menu of a Linear drawing gains \"Find in other files…\" after \"New drawing from a region…\". It opens the same dialog with one empty reference row to fill in.\n  - The dialog first shows the reference and the search. \"Reference windows\" lists one row per window: the record, Start and End (1-based, both ends included; a window across the origin of a circular record is shown and entered as in the record card), and a remove button. \"+ Add window\" adds a row, and several windows of one record are allowed. Below the list the dialog says how many genes the windows hold: the CDS that lie wholly inside a window are the queries. Search is disabled, with the reason, when a window has no CDS or when two windows of a record overlap. A CDS cut by a window edge is not a query and is named in the proposal.\n  - \"Search in\" lists each other file of the drawing with a checkbox, ticked at first, and its record count and length. Every record of a file is searched, drawn or not. The file of the reference is not searched.\n  - \"Search settings\" has Program, with tblastn as the default and blastn selectable, and Bitscore, E-value, Minimum Identity and Minimum Length. They start at the values of Pairwise Comparisons in the shown mode; they are the dialog's own values and do not change Pairwise Comparisons. tblastn searches the protein of each query gene in the six-frame translation of every selected record. blastn searches the nucleotide sequence of the same genes.\n  - While the search runs, the full-window LOSAT overlay shows its progress by file (\"File k of N\") and Cancel, as for Generate. A search that is cancelled adds nothing and keeps the drawing and the last Result. A file whose search fails is listed in the proposal with the reason and no windows; the other files are proposed.\n  - The proposal lists each file in the drawing's order with its name, its number of windows and \"N of M genes\". Each window row has a checkbox, the circled number it will have in the drawing, the record ID, the span with thousands separators, \"(−)\" when it is reverse-complemented, its number of genes with the first and last gene, and \"contig start\" or \"contig end\" where it reaches the end of a linear record. On a screen 768 px wide or wider the proposal is a table: each file has a heading line and one line per window. On a narrower screen, such as a phone, each file is a card with one block per window.\n  - A window is ticked when it adds genes that the windows ticked before it do not cover: at least 5 % of the genes of the reference window it matches, and at least two genes, or all of them when the reference window has fewer than two. Windows are taken in the order of their total score. At most 8 windows of a file are ticked.\n  - Windows that repeat genes already covered, that add too few genes, or that are over the limit of 8 are listed under \"Not selected\" with the reason, unticked. Ticking one adds it to the drawing at its place in the order of the reference.\n  - A window holds the matching genes whole and 1 kb on each side, or to the end of the record when less than 1 kb remains. Hits of one record less than 10 kb apart are one window. Farther apart they are two windows of that record, with the interval left out. A window is reverse-complemented when most of its matching genes lie on the opposite strand of the reference as drawn. Windows of a file are ordered by the position of their genes in the reference. A circular record that holds the reference genes from another start is one window that starts where the reference order starts and may cross the origin. A linear contig that holds them twice gives two windows of that record.\n  - Under each file the dialog says how many of its genes were found in full, in part and not at all, and lists the genes found in part or not at all. A file with no window says so and how many alignments the thresholds removed.\n  - Each window row has Edit, which shows Start, End and Reverse complement. An edit changes only that window; the genes shown stay as the search found them.\n  - The footer shows \"N windows in M files\", Back (to the search settings), Cancel and \"Create new drawing\". Create is disabled, with the reason, when no window is ticked.\n  - Create adds a new Linear drawing next to the source drawing as one project step, as New drawing from region does: the source drawing stays as it is, Undo removes the new drawing, Redo restores it, and the new drawing is shown. It carries the source drawing's settings and styles as New drawing from region carries them, and lists what it does not carry. Its first row holds the reference windows, labelled with the reference file's name. Each file then has one row with its ticked windows, labelled with the file's name, in the order of the dialog. Adjacent rows are compared by LOSAT for the window pairs that share at least one reference gene. The figure is drawn by Generate.\n  - Closing the dialog, Cancel and Back add nothing and make no History step. The reference, the proposal and the hits are not saved in the Session; the new drawing is.\n  - Command line: \"gbdraw locate --reference_gbk REF.gbff [--reference_record ID] --reference_region START-END[:origin][:rc] ... --targets T1.gbff T2.gbff ... -o PREFIX\". --reference_region is repeated once per window, in column order, and the whole record is the reference when it is absent. GFF3 and FASTA are given with --reference_gff, --reference_fasta, --target_gffs and --target_fastas. --reference_record is required when the reference file holds several records.\n  - The command writes PREFIX.records.tsv, PREFIX.comparisons.tsv and PREFIX.plan.json, and prints a report for each file to the error output: its windows, orientation, genes, genes found in part or not at all, and warnings. Without -o the prefix is \"locate\". An existing output stops the command unless --overwrite is given. The records table gives row 1 to the reference windows and one further row to each target file, with one table row per ticked window. It writes the same record_group value on the rows of one record, such as 1:NC_009725.2, writes the region empty for a window that covers a whole record, and writes \":origin\" after the span of a window across the origin. The comparisons table lists the window pairs that share a reference gene. \"gbdraw linear --records_table PREFIX.records.tsv --comparisons_table PREFIX.comparisons.tsv --losat losatp -o FIG\" draws the plan, and the table can be edited first.\n  - Command line options: --losat tlosatn (the default, tblastn) or losatn, --losat_bin, --ncbi_blast_bin, --losat_threads, --evalue, --bitscore, --identity and --alignment_length (the defaults of gbdraw linear), --losat_output_dir (the raw rows of each file), --flank BP (1000), --merge_distance BP (10000) and --max_windows N (8). The other numbers above are fixed.\n  - The command stops with exit status 1 and a message for: an unknown reference record; a reference region outside the record or two overlapping reference regions; a reference window with no CDS; a target that is the reference file; a LOSAT that has no tblastn, naming the executable, its version and the ways out (losatn, a newer --losat_bin, --ncbi_blast_bin), and never searching with blastn instead; no file with a window, with how many alignments the thresholds removed; --ncbi_blast_bin together with --losat_bin. It warns and exits 0 for: a file without a window, more windows than --max_windows, a target without annotation (a window may then cut a gene), and genes found in part or not at all.",
+  "rationale": "参照にする遺伝子クラスターの相同な領域を、ほかのゲノムのコンティグや離れた位置から探して候補を示し、ユーザーが確かめて 1 つの図に並べられるようにする。Web と CLI は同じ検索から同じ計画を作り、候補の確認、編集、描画までを同じ手順にする。描いた図は元の図を変えず、新しい drawing に出す。",
+  "mustPreserve": "Sequence search（PD-OI-117）、Select region と Region popup の既存の操作（PD-OI-115）、New drawing from region（PD-OI-090 〔作成〕 (4)）、drawing と Undo（PD-OI-090）、Pairwise Comparisons の LOSAT の実行、しきい値の意味、スレッド数、検索結果の再利用（PD-OI-016、PD-OI-020、PD-OI-022）、LOSAT の表の座標と record の読み方（PD-OI-073、PD-OI-074、PD-OI-077）。検索の失敗とキャンセルで図と直前の Result を保つこと（PD-OI-016）。Result の popup が 1 つであること（PD-OI-105）。gbdraw linear の既存の option と、records table と comparisons table の既存の列の意味。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "提案は遺伝子単位の相同性から作った推定で、NRPS のように同じ繰り返しが多い領域では、窓が違うコピーに当たることがある（ユーザーが確かめる）。遺伝子の一部だけが見つかることがあり、組み立てられていない区間は図に出ない（遺伝子単位の数え方）。blastn は近縁なゲノムしか見つけられない。tblastn は tblastn を持つ LOSAT が要る。gbdraw が入れる LOSAT がそれを持つまで、gbdraw locate の既定の検索は止まり、losatn か --losat_bin、--ncbi_blast_bin で実行する。検索の時間は、約 24 kaa の query を 4 Mb のゲノムに対して 1 スレッドで約 1 秒で、400 個ほどのタンパク質を 10 個のゲノムに対して直列で約 2 分かかる見積りである（実測は 39 個のタンパク質）。提案と検索のヒットは Session に保存しないので、閉じると再び検索する。Circular の drawing には Find in other files がない。locate に Python API はない。Edit した窓の遺伝子の表示は検索のままで、新しい範囲では数え直さない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
+}
+```
+
+### PD-OI-124: Windows in the record card and Record Layout
+
+- Concern key: `web.linear.record-windows`
+- Scenario revision: `1`
+- Supersedes: none.
+- Keeps: `PD-OI-070`, `PD-OI-091`, `PD-OI-094`, `PD-OI-019`, `PD-OI-018`, and
+  `PD-OI-122`.
+- Status: `ACCEPTED`
+- Selected outcome: `A, editable windows in the card and one Record Layout cell per window`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's answers and approvals of `2026-11-08` described in the Revision 127 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without translation or additional terms. The runtime that implements it merges after this record, in separate pull requests; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `e3ead7a968e25b61e125320d687561d8cd69b67fa80434b6e2b568365e31e0ff`.
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.record-windows
+Scenario revision: 1
+Choice: A. The record card lists the windows of a record, and Record Layout has one cell per window.
+  - A Linear record with one window or none shows the Region block as before: Record, Reverse complement, Start and End. For a circular record the block also has "Across the origin".
+  - A Linear record with two or more windows shows "Windows" in place of the Region block, with "N windows of this record". The Record selector stays above the list. Each window has its own block: the circled number of its caption in the drawing, Start, End, Reverse complement, "Across the origin" for a circular record, and Remove.
+  - Start, End and Reverse complement of a window behave as the Region fields do: whole numbers, 1-based, both ends included, an end past the record's end is drawn to the end, and a change applies on Generate. Each edit is one History step.
+  - Remove deletes a window; it is one History step. The last window cannot be removed. When one window is left the card shows the Region block with that window's values. "+ Add window", under the Region block and under the list of windows, adds a window of the same record after its last window in its row, with Start and End empty, which draw the whole record until they are set. It is one History step.
+  - The card says how many bp of the record lie between two windows that are next to each other and run in the same direction.
+  - Record Layout has one cell for each window. A cell shows the record's number "#n" and the window's circled number. A record has one Row value, shown in each of its cells; changing it moves all windows of the record. Up and Down move one window within its row, and the windows of one record may stand apart in a row.
+  - Reset Settings (PD-OI-070) clears the windows of every Linear record as it clears the region. Delete settings of a record that is not drawn clears its windows. Draw this record turned off leaves out all its windows and turned on restores them in their places.
+  - With "Across the origin" ticked, a Start greater than the End is a window across the origin, drawn from the Start through the origin to the End, and the block says its length. Without it, an End before the Start reverses the span, as before. "Across the origin" with a Start not greater than the End stops Generate with the reason, naming the record. A window across the origin made by New drawing from region or by Find in other files arrives with the box ticked.
+  - Sequence search (PD-OI-117) searches the drawn windows and gives each hit its source coordinates; a hit in an overlap is drawn in both windows. A drag of Select region (PD-OI-115) stops at the edge of the window where it began.
+Rationale: 複数の window を持つ record を、図の番号と同じ番号で card に見せ、範囲と向きをその場で直せるようにする。window ごとの Row の食い違いや、record の途中を飛ばした並びも Record Layout で扱えるようにする。window が 1 つの record の card は、Add window のボタンと環状の record の Across the origin が加わるほかは今と変えない。コマンドラインで --region を繰り返すのと同じく、card から window を足せるようにする。起点をまたぐ window は、コマンドラインの :origin と同じく、印（Across the origin）で区別する。
+Must preserve: window が 1 つ以下の record の card と Region の欄（Add window のボタンと環状の record の Across the origin が加わるほかは）、Record Layout、Row と Up/Down の動作（PD-OI-019、PD-OI-018）。record ごとの描く／描かない、Delete settings、Choose records（PD-OI-091）。File カードの畳み方（PD-OI-094）。Reset Settings の範囲（PD-OI-070）。Region の入力の検証と、1 回の操作が 1 回の Undo になること。Sequence search と Select region の既存の動作（PD-OI-117、PD-OI-115）。
+May retire: none
+Accepted residual risk: Record Layout では 1 つの record の window が複数のセルになり、Row の値が同じ数字として並ぶ。window をまたぐ Select region の drag はできず、window ごとに選ぶ。Region の入力は Generate まで図に出ない。Add window で足した window は、Start と End を入れるまで record 全体を描く。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "web.linear.record-windows",
+  "scenarioRevision": 1,
+  "choice": "A. The record card lists the windows of a record, and Record Layout has one cell per window.\n  - A Linear record with one window or none shows the Region block as before: Record, Reverse complement, Start and End. For a circular record the block also has \"Across the origin\".\n  - A Linear record with two or more windows shows \"Windows\" in place of the Region block, with \"N windows of this record\". The Record selector stays above the list. Each window has its own block: the circled number of its caption in the drawing, Start, End, Reverse complement, \"Across the origin\" for a circular record, and Remove.\n  - Start, End and Reverse complement of a window behave as the Region fields do: whole numbers, 1-based, both ends included, an end past the record's end is drawn to the end, and a change applies on Generate. Each edit is one History step.\n  - Remove deletes a window; it is one History step. The last window cannot be removed. When one window is left the card shows the Region block with that window's values. \"+ Add window\", under the Region block and under the list of windows, adds a window of the same record after its last window in its row, with Start and End empty, which draw the whole record until they are set. It is one History step.\n  - The card says how many bp of the record lie between two windows that are next to each other and run in the same direction.\n  - Record Layout has one cell for each window. A cell shows the record's number \"#n\" and the window's circled number. A record has one Row value, shown in each of its cells; changing it moves all windows of the record. Up and Down move one window within its row, and the windows of one record may stand apart in a row.\n  - Reset Settings (PD-OI-070) clears the windows of every Linear record as it clears the region. Delete settings of a record that is not drawn clears its windows. Draw this record turned off leaves out all its windows and turned on restores them in their places.\n  - With \"Across the origin\" ticked, a Start greater than the End is a window across the origin, drawn from the Start through the origin to the End, and the block says its length. Without it, an End before the Start reverses the span, as before. \"Across the origin\" with a Start not greater than the End stops Generate with the reason, naming the record. A window across the origin made by New drawing from region or by Find in other files arrives with the box ticked.\n  - Sequence search (PD-OI-117) searches the drawn windows and gives each hit its source coordinates; a hit in an overlap is drawn in both windows. A drag of Select region (PD-OI-115) stops at the edge of the window where it began.",
+  "rationale": "複数の window を持つ record を、図の番号と同じ番号で card に見せ、範囲と向きをその場で直せるようにする。window ごとの Row の食い違いや、record の途中を飛ばした並びも Record Layout で扱えるようにする。window が 1 つの record の card は、Add window のボタンと環状の record の Across the origin が加わるほかは今と変えない。コマンドラインで --region を繰り返すのと同じく、card から window を足せるようにする。起点をまたぐ window は、コマンドラインの :origin と同じく、印（Across the origin）で区別する。",
+  "mustPreserve": "window が 1 つ以下の record の card と Region の欄（Add window のボタンと環状の record の Across the origin が加わるほかは）、Record Layout、Row と Up/Down の動作（PD-OI-019、PD-OI-018）。record ごとの描く／描かない、Delete settings、Choose records（PD-OI-091）。File カードの畳み方（PD-OI-094）。Reset Settings の範囲（PD-OI-070）。Region の入力の検証と、1 回の操作が 1 回の Undo になること。Sequence search と Select region の既存の動作（PD-OI-117、PD-OI-115）。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "Record Layout では 1 つの record の window が複数のセルになり、Row の値が同じ数字として並ぶ。window をまたぐ Select region の drag はできず、window ごとに選ぶ。Region の入力は Generate まで図に出ない。Add window で足した window は、Start と End を入れるまで record 全体を描く。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
 }
 ```
 
