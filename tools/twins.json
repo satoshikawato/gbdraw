@@ -1281,6 +1281,23 @@
       "reason": "the web app writes the chunk into a browser canvas PNG and cannot call Python, while every PNG the command line or Python writes gets it from png_with_resolution (#1663); the vectors pin the pixels per metre, the half-up rounding (D-84) and the chunk bytes to each other",
       "retireWhen": "the web app's PNG export is written by Python (Worker) instead of setDpiInPng",
       "source": "figure-size-1427 session 11 (D-84, D-87), registered in session 12"
+    },
+    {
+      "id": "vector:tests/fixtures/session_container_vectors.json",
+      "concern": "The Session file container (.gbdraw, a ZIP): entry names and order, stored or deflated entries, ZIP64, the size and CRC-32 checks, and which damaged files are refused with which text",
+      "pythonOwner": [
+        "gbdraw/session_container.py:write_session_container",
+        "gbdraw/session_container.py:read_session_container"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-container.js:writeSessionContainer",
+        "gbdraw/web/js/services/session-container.js:readSessionContainer"
+      ],
+      "vector": "tests/fixtures/session_container_vectors.json",
+      "reason": "Web Save writes the file from the browser copies of the inputs and Web Load reads it into those copies one entry at a time, before Python runs and without it (a Load that only shows the saved figure starts no Python, PD-OI-044), while the command line and the Python API read and write the same file in Python; the shared vectors pin the entries, the checks and the refusals on both sides (PD-SESSION receipt, Owner 2026-11-08)",
+      "retireWhen": "Web Save and Load read and write the container through the Python owner instead of their own reader and writer",
+      "source": "large-inputs-20261106 Q4 (Owner 2026-11-08: Python owns the container, the Web reader and writer is a registered twin)",
+      "pending": true
     }
   ]
 }
