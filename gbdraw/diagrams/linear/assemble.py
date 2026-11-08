@@ -175,7 +175,7 @@ from ...tracks import (
     normalize_linear_track_slots_with_axis,
     parse_nonnegative_integer,
 )
-from ...tracks.parsing import slot_dinucleotide, slot_legend_label
+from ...tracks.parsing import slot_dinucleotide, slot_legend_label, slots_draw_features
 from ...annotations import (
     AnnotationOptions,
     LabelSizing,
@@ -2179,7 +2179,7 @@ def build_linear_legend_table(
     """
 
     features_present, used_color_rules, default_used_features = feature_legend_presence(
-        records, sources.features
+        records, sources.features, slots
     )
     legend_table = prepare_legend_table(
         sources.gc,
@@ -3979,7 +3979,6 @@ def _draw_linear_record(canvas: Drawing, drawing: _LinearRecordDrawing) -> Drawi
     """Draw one record: its slots by depth order, its region label fronts, its axis when no slot draws
     features, and its definition."""
 
-    feature_rendered = False
     vertical_plan = drawing.vertical_plan
     for slot in sorted(drawing.plan.tracks.linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
         slot_drawing = _LinearSlotDrawing(
@@ -3992,9 +3991,8 @@ def _draw_linear_record(canvas: Drawing, drawing: _LinearRecordDrawing) -> Drawi
         if drawer is None:
             continue
         canvas = drawer(canvas, drawing, slot_drawing)
-        feature_rendered = feature_rendered or slot.renderer == "features"
     _draw_linear_region_label_fronts(canvas, drawing)
-    if not feature_rendered:
+    if not slots_draw_features(drawing.plan.tracks.normalized_linear_track_slots):
         _draw_linear_axis_only(canvas, drawing)
     _draw_linear_record_definition(canvas, drawing)
     return canvas

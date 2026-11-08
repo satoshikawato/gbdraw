@@ -132,6 +132,8 @@ from gbdraw.render.interactive_context import (
     require_interactive_svg_metadata,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext
+from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, parse_circular_track_slots, parse_linear_track_slots
+from gbdraw.tracks.parsing import slots_draw_features
 
 from .diagram import (
     DEFAULT_SELECTED_FEATURES,
@@ -3218,7 +3220,23 @@ def _plan_input_summary(
         specific_color_rules=inputs.features.specific_color_rules if inputs is not None else None,
         record_features=inputs.record_features if inputs is not None else (),
         comparisons=comparisons,
+        draws_features=_plan_draws_features(plan),
     )
+
+
+def _plan_draws_features(plan: CircularRequestPlan | LinearRequestPlan) -> bool:
+    """Whether the plan's track stack draws features: the slot list the drawing reads, parsed as it parses it."""
+
+    slots: list[CircularTrackSlot] | list[LinearTrackSlot] | None = None
+    if isinstance(plan, CircularRequestPlan):
+        circular = plan.request.options.tracks
+        if circular is not None and circular.circular_track_slots is not None:
+            slots = parse_circular_track_slots(list(circular.circular_track_slots))
+    else:
+        linear = plan.request.options.tracks
+        if linear is not None and linear.linear_track_slots is not None:
+            slots = parse_linear_track_slots(list(linear.linear_track_slots))
+    return slots_draw_features(slots)
 
 
 def build_request_diagram(

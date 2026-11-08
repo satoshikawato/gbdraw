@@ -28,6 +28,7 @@ from gbdraw.api import (
     InMemoryRecordSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    LinearTrackOptions,
     RecordInput,
     RenderOutputRequest,
 )
@@ -227,6 +228,49 @@ def test_linear_reports_its_rows(tmp_path):
     assert facts["drawn"] == svg_keys
     assert "repeat_region" in facts["suppressed"]
     assert "repeat_region" not in facts["drawn"]
+
+
+def _linear(tmp_path: Path, **options):
+    output = RenderOutputRequest(output_prefix="linear", formats=("svg",), output_directory=tmp_path, overwrite=True)
+    record = _record("rec", repeats=False)
+    return LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record), record_key=record.id),),
+        options=LinearDiagramOptions(**options),
+        output=output,
+    )
+
+
+_NO_FEATURES_SLOTS = ["gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"]
+
+
+@pytest.mark.parametrize(
+    "request_of",
+    [
+        lambda tmp_path, **options: _circular(
+            tmp_path,
+            records=[_record("rec", repeats=False)],
+            tracks=CircularTrackOptions(circular_track_slots=_NO_FEATURES_SLOTS),
+            **options,
+        ),
+        lambda tmp_path, **options: _linear(
+            tmp_path, tracks=LinearTrackOptions(linear_track_slots=_NO_FEATURES_SLOTS), **options
+        ),
+    ],
+    ids=["circular", "linear"],
+)
+def test_a_track_stack_without_a_features_slot_draws_no_feature_row(tmp_path, request_of):
+    """A stack with no enabled features slot draws no feature, so its Legend names none (OV-2797).
+
+    The records hold no repeat_region: its default underlay needs a features slot.
+    """
+    [(facts, svg_keys)] = _render(
+        request_of(tmp_path, colors=_color_table(("CDS", "locus_tag", "_1$", "#c83366", "Zeta"))), tmp_path
+    )
+    assert facts["drawn"] == svg_keys
+    assert {"GC content", "GC skew (+)", "GC skew (-)"} <= set(facts["drawn"])
+    assert not {"CDS", "Zeta", "other proteins"} & set(facts["drawn"])
+    # The rows are producible, as the rows of a switched-off GC track are.
+    assert {"CDS", "Zeta"} <= set(facts["suppressed"])
 
 
 def test_a_drawing_without_facts_reports_empty_lists():

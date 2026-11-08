@@ -182,6 +182,13 @@ write-up of a release.
   with Restore and merge fitted the figure twice: the first fit was thrown away
   and the line "Fitting the figure to the requested size." stayed longer. The
   figure is now fitted once, so the wait is shorter.
+- Fixed: a custom Circular or Linear track stack without an enabled features
+  track slot draws no feature, but its Legend still listed the feature types
+  and color rule captions of the records, and the command line said the
+  features were drawn. The Legend now lists no feature rows for such a stack,
+  and the record's line says "drew no features (no enabled features track
+  slot)". Figures with a features track do not change. This applies on the
+  command line, in the Python API and in the Web app.
 - Performance: a per-base depth file takes much less memory on the command
   line, in the Python API and in the Web app. Each reference's depths are held
   as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a

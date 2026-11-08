@@ -81,3 +81,24 @@ test('Web Circular default legend uses custom slot labels and added skew slots',
   expect(result.legendKeys).toEqual(expect.arrayContaining(['AT skew (+)', 'AT skew (-)']));
   expect(result.legendKeys).not.toContain('GC content');
 });
+
+test('Web Circular custom stack without a Features row names no feature in the Legend', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await uploadGenbank(page, 'HmmtDNA.gbk', hmmt);
+
+  const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+  await reveal(panel);
+  if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click();
+  await page.getByText('Use custom stack', { exact: true }).locator('input').check();
+  await (await reveal(page.getByRole('checkbox', { name: 'Enable circular track slot features', exact: true }))).uncheck();
+
+  const outcome = await generateAndWaitForResult(page);
+  const result = await inspectResult(page);
+
+  // The stack draws no feature, so its Legend names none (OV-2797); the GC rows stay.
+  expect(outcome.errorSummary).toBe('');
+  expect(result.slotIds).not.toContain('features');
+  expect(result.legendKeys).toEqual(expect.arrayContaining(['GC content', 'GC skew (+)', 'GC skew (-)']));
+  expect(result.legendKeys.filter((key) => ['CDS', 'tRNA', 'rRNA'].includes(key))).toEqual([]);
+});

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 from numbers import Integral
-from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Collection, Iterable, Literal, Mapping, Protocol, Sequence
 
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.io.colors import resolve_color_to_hex
@@ -236,6 +236,17 @@ class SlotView(SlotWithParams, Protocol):
     def enabled(self) -> bool: ...
 
 
+def slots_draw_features(slots: Iterable[SlotView] | None) -> bool:
+    """Whether a drawing on ``slots`` draws its features, in either mode.
+
+    The mode's default track stack (``None``) draws them; a custom stack draws
+    them only with an enabled ``features`` slot. The drawing, its Legend and its
+    input summary read this one answer.
+    """
+
+    return slots is None or any(slot.enabled and str(slot.renderer) == "features" for slot in slots)
+
+
 def _slot_param_text(slot: SlotWithParams, *names: str) -> str | None:
     params = slot.params
     for name in names:
@@ -306,6 +317,7 @@ __all__ = [
     "reject_unread_slot_params",
     "slot_legend_label",
     "slot_skew_colors",
+    "slots_draw_features",
     "parse_track_slot_text",
     "slot_dinucleotide",
     "split_kv_list",
