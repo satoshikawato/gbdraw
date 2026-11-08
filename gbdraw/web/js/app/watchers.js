@@ -121,15 +121,15 @@ export const createAuxiliaryFileImports = (reactive, store) => {
  * The card failures with `failure` as `drawing`'s, and without those of drawings a Load or History restore
  * replaced. A failure dropped here ends its use of its file's copy.
  * @param {Readonly<Record<string, AuxiliaryImportFailure>>} failures
- * @param {DrawingState} drawing
+ * @param {DrawingState | null} drawing null when only the replaced drawings' failures go
  * @param {AuxiliaryImportFailure | null} failure
  * @param {readonly DrawingState[]} drawings The drawings now.
  * @returns {Readonly<Record<string, AuxiliaryImportFailure>>}
  */
 const withImportFailure = (failures, drawing, failure, drawings) => {
-  const kept = Object.entries(failures).filter(([id, held]) => id !== drawing.id && drawings.includes(held.drawing));
+  const kept = Object.entries(failures).filter(([id, held]) => id !== drawing?.id && drawings.includes(held.drawing));
   for (const held of Object.values(failures)) if (held !== failure && !kept.some(([, other]) => other === held)) held.releaseCopy();
-  return Object.freeze(Object.fromEntries(failure ? [...kept, [drawing.id, failure]] : kept));
+  return Object.freeze(Object.fromEntries(failure && drawing ? [...kept, [drawing.id, failure]] : kept));
 };
 
 /** @param {WatchersOptions} options */
@@ -297,6 +297,11 @@ export const setupWatchers = ({
   const setAuxiliaryImportFailure = (drawing, failure) => {
     auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, drawing, failure, state.drawingList());
   };
+  // A Load or History restore replaces drawings: their failures, and the copies those keep, end then.
+  // Every write of the drawing store writes new tabs, and a switch of the shown drawing writes none.
+  watch(() => state.drawingTabs.value, () => {
+    auxiliaryImportFailures.value = withImportFailure(auxiliaryImportFailures.value, null, null, state.drawingList());
+  });
   /** @param {DrawingState} drawing */
   const retryableAuxiliaryImportFailure = (drawing) => {
     const failure = auxiliaryImportFailureOf(drawing);

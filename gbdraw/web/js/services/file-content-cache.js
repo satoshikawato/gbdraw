@@ -118,6 +118,16 @@ export const contentTokenOfBytes = async (bytes) => {
 };
 
 /**
+ * The facts of `bytes`, their length taken before they are hashed.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<FileContentFacts>}
+ */
+const factsOfBytes = async (bytes) => {
+  const byteLength = bytes.byteLength;
+  return { token: await contentTokenOfBytes(bytes), byteLength };
+};
+
+/**
  * Keeps `facts` as the facts of `key` until they fail.
  * @param {object} key @param {Promise<FileContentFacts>} facts
  */
@@ -235,7 +245,8 @@ const readThroughCopy = async (file, copy, facts) => {
 
 /**
  * Writes `plain` to a new copy in 16 MiB pieces, one at a time, while its facts
- * are hashed, and closes it under their token; null when no copy could be written.
+ * are hashed, and closes it under their token; null when no copy could be
+ * written, or when it holds fewer bytes than the facts count.
  * Every piece goes through one buffer, which the Worker gives back, so the copy
  * holds one piece beside `plain`.
  * @param {InputCopyStore} store @param {Uint8Array} plain @param {Promise<FileContentFacts>} facts
@@ -247,13 +258,17 @@ const writeCopy = async (store, plain, facts) => {
   try {
     /** @type {ArrayBuffer | null} */
     let spare = null;
+    let written = 0;
     for (let start = 0; start === 0 || start < plain.byteLength; start += TOKEN_PIECE_BYTES) {
       const piece = plain.subarray(start, start + TOKEN_PIECE_BYTES);
       const buffer = spare?.byteLength === piece.byteLength ? spare : new ArrayBuffer(piece.byteLength);
       new Uint8Array(buffer).set(piece);
       spare = await writer.write(buffer);
+      written += piece.byteLength;
     }
-    return await writer.finish((await facts).token);
+    const { token, byteLength } = await facts;
+    if (written !== byteLength) throw new Error(`Copied ${written} of ${byteLength} bytes.`);
+    return await writer.finish(token);
   } catch {
     writer.abort();
     return null;
@@ -263,7 +278,7 @@ const writeCopy = async (store, plain, facts) => {
 /**
  * The first read of a File: the one read of its own bytes. Readers get them, a
  * gzip file's expanded, as soon as they are read, and their facts follow from
- * them. For a File the input store holds, a copy is then written from them in
+ * them. For a File the input store holds or a use holds, a copy is then written from them in
  * the background (PD-OI-121); a gzip file's expanded bytes are dropped once it
  * is written, and kept when no copy could be.
  * @param {object} key @param {ReadableFile} file
@@ -275,10 +290,8 @@ const readFirst = (key, file) => {
     if (plain !== raw) expandedFiles.add(key);
     return plain;
   });
-  const facts = rememberFacts(key, bytes.then(async (plain) => ({
-    token: await contentTokenOfBytes(plain), byteLength: plain.byteLength
-  })));
-  const store = keptFiles.has(key) ? copyStore : null;
+  const facts = rememberFacts(key, bytes.then(factsOfBytes));
+  const store = keptFiles.has(key) || copyUses.get(key) ? copyStore : null;
   const copy = store ? bytes.then((plain) => writeCopy(store, plain, facts), () => null) : Promise.resolve(null);
   fileCopies.set(key, copy);
   const copied = copy.then((written) => {
@@ -377,9 +390,7 @@ export const readFileContentFacts = (file) => {
   if (known) return known;
   // A File's first read keeps its facts; a Session resource view's are hashed from its bytes.
   const bytes = readFileBytes(file);
-  return fileContentFacts.get(key) ?? rememberFacts(key, bytes.then(async (read) => ({
-    token: await contentTokenOfBytes(read), byteLength: read.byteLength
-  })));
+  return fileContentFacts.get(key) ?? rememberFacts(key, bytes.then(factsOfBytes));
 };
 
 /**
@@ -419,8 +430,9 @@ export const releaseFileCopy = (file) => {
 
 /**
  * Keeps the copy of `file` while a state the input store does not see can
- * read it again (a failed card import that offers Retry), even after the
- * input store lets it go.
+ * read it again (a failed import that offers Retry), even after the input
+ * store lets it go. A File no other use holds gets a copy when this use holds
+ * it during its first read.
  * @param {unknown} file
  * @returns {() => void} Ends this use; a second call does nothing.
  */
@@ -435,6 +447,22 @@ export const holdFileCopy = (file) => {
     copyUses.set(key, (copyUses.get(key) ?? 1) - 1);
     if (fileCopies.has(key)) releasedFiles.add(key);
     dropSharedReads();
+  };
+};
+
+/**
+ * The copy that one kind of import's failure offers to Retry (PD-OI-121), so
+ * Retry reads the content chosen even after the file changed: each call keeps
+ * the copy of `file` (a failure that offers Retry of it) and lets go of the one
+ * kept before; null (no failure offers Retry) lets it go.
+ * @returns {(file: unknown) => void}
+ */
+export const createRetryCopyHold = () => {
+  let end = () => {};
+  return (file) => {
+    const next = file ? holdFileCopy(file) : () => {};
+    end();
+    end = next;
   };
 };
 

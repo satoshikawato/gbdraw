@@ -27,6 +27,8 @@ const notFound = () => new DOMException('missing', 'NotFoundError');
 const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, writeGate = async () => {} } = {}) => {
   const folder = () => ({ entries: new Map() });
   const root = folder();
+  /** An open file, or a folder with one inside: OPFS refuses to delete it while a sync access handle is open. */
+  const holdsOpen = (entry) => Boolean(entry.open || [...(entry.entries?.values() ?? [])].some(holdsOpen));
   const handleOf = (node) => ({
     async getDirectoryHandle(name, { create = false } = {}) {
       if (!node.entries.has(name)) {
@@ -52,7 +54,7 @@ const createFakeFileSystem = ({ writeResult = (buffer) => buffer.byteLength, wri
     async removeEntry(name, { recursive = false } = {}) {
       const entry = node.entries.get(name);
       if (!entry) throw notFound();
-      if (entry.open) throw new DOMException('open', 'NoModificationAllowedError');
+      if (holdsOpen(entry)) throw new DOMException('open', 'NoModificationAllowedError');
       if (entry.entries?.size && !recursive) throw new DOMException('not empty', 'InvalidModificationError');
       node.entries.delete(name);
     },
@@ -174,6 +176,26 @@ const TIMED_OUT = Symbol('timed out');
 /** `promise`'s value, or TIMED_OUT when it has not settled after the event loop ran a while. */
 const settledSoon = async (promise) => Promise.race([promise, flush().then(() => TIMED_OUT)]);
 
+/**
+ * `promise`'s value; rejects when it has not settled within `ms` of real time. A gzip
+ * file expands through a stream, which takes more than a few event-loop rounds.
+ */
+const within = (promise, ms = 10_000) => {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`not settled within ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+};
+/** Waits, in real time up to `ms`, until `check()` holds. */
+const until = async (check, ms = 10_000) => {
+  const end = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > end) throw new Error(`not reached within ${ms} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+};
+
 /** Chooses `file` (the input store holds it) and waits until its copy is written. */
 const choose = async (file) => {
   keepFileCopy(file);
@@ -239,6 +261,22 @@ test('a copy that cannot be written falls back to reading the File, which refuse
   await flush();
   file.change(new TextEncoder().encode('LOCUS y\n//\n'));
   await assert.rejects(readFileBytes(file), (error) => error.code === 'INPUT_UNREADABLE' && error.stage === 'read');
+});
+
+test('a first read whose bytes are detached before they are copied keeps its facts\' length, and its copy fails', async () => {
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const bytes = new TextEncoder().encode('LOCUS detached\n//\n');
+  const file = chosenFile(bytes);
+  keepFileCopy(file);
+  const read = await readFileBytes(file);
+  // The first read's bytes go elsewhere before the copy writes them.
+  structuredClone(read.buffer, { transfer: [read.buffer] });
+  assert.equal((await readFileContentFacts(file)).byteLength, bytes.byteLength);
+  await until(() => fileSystem.copyFiles().every(({ open }) => !open));
+  await flush();
+  assert.deepEqual(fileSystem.copyFiles(), [], 'the short copy is deleted');
+  assert.deepEqual(await readFileBytes(file), bytes, 'the File is read again');
 });
 
 test('without a copy, a File that returns other bytes than its first read is refused (Firefox)', async () => {
@@ -319,14 +357,15 @@ test('a first reading and its facts resolve before a slow copy is written, for a
   const plain = new TextEncoder().encode('LOCUS slow\n//\n');
   const expanded = new TextEncoder().encode('LOCUS slow-gzip\n//\n');
   const files = [[chosenFile(plain), plain], [chosenFile(new Uint8Array(gzipSync(expanded)), 'slow.gb.gz'), expanded]];
+  // The gate stays closed until both readings resolved: they cannot wait for a copy byte.
   for (const [file, content] of files) {
     keepFileCopy(file);
-    assert.deepEqual(await settledSoon(readFileBytes(file)), content, `${file.name}: the bytes wait for no copy`);
-    assert.equal((await settledSoon(readFileContentFacts(file))).byteLength, content.byteLength, `${file.name}: nor the facts`);
+    assert.deepEqual(await within(readFileBytes(file)), content, `${file.name}: the bytes wait for no copy`);
+    assert.equal((await within(readFileContentFacts(file))).byteLength, content.byteLength, `${file.name}: nor the facts`);
   }
   assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes.byteLength), [0, 0], 'the copies are still being written');
   gate.open();
-  await flush();
+  await until(() => fileSystem.copyFiles().every(({ bytes, open }) => bytes.byteLength && !open));
   assert.deepEqual(fileSystem.copyFiles().map(({ bytes }) => bytes), [plain, expanded]);
 });
 
@@ -433,4 +472,35 @@ test('a copy goes through one buffer, which the Worker gives back after each pie
   assert.equal(seen.given.length, 4);
   assert.equal(seen.given[1], seen.back[0]);
   assert.equal(seen.given[2], seen.back[1]);
+});
+
+test('a failed Feature Edits TSV import keeps a copy, which its Retry reads after the file changed on disk', async () => {
+  const { createFeatureEditTableActions } = await import('../../gbdraw/web/js/app/feature-editor/feature-edit-table.js');
+  const fileSystem = createFakeFileSystem();
+  useInputCopyStore(copyStoreOn(fileSystem));
+  const table = new TextEncoder().encode('record_id\tfeature_id\tlabel_text\nr1\tf1\tEdited\n');
+  const file = chosenFile(table, 'feature_edits.tsv');
+  const sent = [];
+  const errorLog = { value: null };
+  const actions = createFeatureEditTableActions({
+    state: { activeDrawing: () => ({}), errorLog, sessionOperationAvailability: () => null },
+    ref: (value) => ({ value }),
+    computed: (getter) => ({ get value() { return getter(); } }),
+    getCommittedSession: () => ({ renderRequest: { records: [{ recordKey: 'r1' }] }, resources: {} }),
+    readResourceRecordCount: async () => 1,
+    // The helper fails each time: the test reads what each attempt sent.
+    readFeatureOverrideTable: async ({ files }) => {
+      sent.push(new Uint8Array(files[0].bytes));
+      throw new Error('helper failed');
+    },
+    projectFeatureEdits: async () => {}
+  });
+  assert.equal(await actions.loadFeatureEditTable({ target: { files: [file], value: 'feature_edits.tsv' } }), false);
+  assert.equal(actions.canRetryFeatureEditTableImport.value, true);
+  await until(() => fileSystem.copyFiles().some(({ bytes, open }) => bytes.byteLength && !open));
+  file.refused = true;
+  assert.equal(await actions.retryFeatureEditTableImport(), false);
+  assert.deepEqual(sent, [table, table], 'Retry sends the content first read, from its copy');
+  assert.equal(file.reads, 1);
+  assert.notEqual(errorLog.value?.code, 'INPUT_UNREADABLE');
 });

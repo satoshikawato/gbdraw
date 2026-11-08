@@ -24,6 +24,17 @@ const { installShownDrawing } = await import('../../gbdraw/web/js/services/confi
 const card = (key) => state.activeDrawing().files[key];
 const bindCard = (key, file) => bindInputFile(state.inputFiles, state.activeDrawing().slices.inputs, key, file);
 
+// The watcher owner's watches: `runWatches()` calls each one whose getter now returns another value, as Vue does.
+/** @type {{ source: () => unknown, callback: (value: unknown) => unknown, last: unknown }[]} */
+const watches = [];
+const runWatches = () => {
+  for (const entry of watches) {
+    const value = entry.source();
+    if (Object.is(value, entry.last)) continue;
+    entry.last = value;
+    entry.callback(value);
+  }
+};
 // Any other port of the watcher owner: a function that does nothing.
 const port = () => new Proxy({}, { get: () => () => {} });
 let inputs = 0;
@@ -40,7 +51,10 @@ const {
   trackAuxiliaryFileImport: imports.track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
-  watch: () => () => {},
+  watch: (source, callback) => {
+    if (typeof source === 'function') watches.push({ source, callback, last: source() });
+    return () => {};
+  },
   nextTick: async () => {},
   onMounted: () => {},
   legendActions: port(),
@@ -255,6 +269,41 @@ test('Retry reads the copy of a rules file that changed on disk after the store 
     state.inputFiles.retainOnly(new Set());
     for (let round = 0; round < 100 && released.length === 0; round += 1) await settle();
     assert.equal(released.length, 1, 'the copy goes once nothing uses the file');
+  } finally {
+    useInputCopyStore(null);
+  }
+});
+
+test('a Load or History restore that replaces the drawings ends their card failures and the copies those keep', async () => {
+  const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
+  const { readFileContentFacts, useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  /** @type {string[]} */
+  const released = [];
+  useInputCopyStore({
+    openWriter: async () => ({
+      write: async (buffer) => buffer,
+      finish: async (token) => ({ read: async () => new Uint8Array(0), release: () => released.push(token) }),
+      abort: () => {}
+    })
+  });
+  try {
+    const rules = new TextEncoder().encode('CDS\tproduct\tATP\t#654321\tReplaced\n');
+    const file = { name: 'replaced.tsv', size: rules.byteLength, arrayBuffer: async () => rules.slice().buffer };
+    bindCard('t_color', null);
+    state.errorLog.value = null;
+    owner.outcome = false;
+    assert.equal(await importAuxiliaryTable('t_color', file), false);
+    await readFileContentFacts(file);
+    bindCard('t_color', null);
+    state.inputFiles.retainOnly(new Set());
+    runWatches();
+    for (let round = 0; round < 20; round += 1) await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(released, [], 'the failure keeps the copy');
+    // A Load commits new drawing states under the same IDs.
+    state.replaceDrawings(state.drawingList().map((drawing) => createDrawingState(drawing.id, drawing.mode)), state.drawingTabs.value);
+    runWatches();
+    for (let round = 0; round < 500 && released.length === 0; round += 1) await new Promise((resolve) => setTimeout(resolve, 2));
+    assert.equal(released.length, 1, 'the replaced drawing\'s failure lets the copy go');
   } finally {
     useInputCopyStore(null);
   }

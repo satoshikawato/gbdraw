@@ -1140,3 +1140,60 @@ test('a popup sync keeps the label text and visibility typed and not applied (OV
   assert.equal(otherPopup.labelText, 'TYPING');
   assert.equal(otherPopup.labelVisibility, 'off');
 });
+
+// PD-OI-121: a failed Label TSV import keeps a copy of its file while it offers
+// Retry, so Retry reads the content chosen even after the file changed on disk.
+test('Retry of a failed Label TSV import reads the copy of a file that changed on disk', async () => {
+  const { useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  /** @type {string[]} */
+  const released = [];
+  let copies = 0;
+  useInputCopyStore({
+    openWriter: async () => {
+      /** @type {Uint8Array[]} */
+      const pieces = [];
+      return {
+        write: async (buffer) => { pieces.push(new Uint8Array(buffer.slice(0))); return buffer; },
+        finish: async (token) => {
+          copies += 1;
+          return { read: async () => pieces[0], release: () => released.push(token) };
+        },
+        abort: () => {}
+      };
+    }
+  });
+  try {
+    const svg = new DOMParser().parseFromString(`<svg>${batchLabel('fa', 'alpha')}</svg>`, 'image/svg+xml').documentElement;
+    const evaluated = [];
+    const harness = buildHarness({
+      svg,
+      featureId: 'fa',
+      rulePreparation: { snapshot: () => 'inputs', isCurrent: () => true },
+      evaluateLabelRules: async ({ rules }) => {
+        evaluated.push(rules.map((rule) => rule.labelText));
+        throw new Error('evaluation failed');
+      }
+    });
+    harness.state.errorLog = ref(null);
+    const tsv = new TextEncoder().encode('*\t*\tlabel\t^alpha$\tCHOSEN\n');
+    let changed = false;
+    const file = {
+      name: 'labels.tsv',
+      arrayBuffer: async () => {
+        if (changed) throw new DOMException('changed', 'NotReadableError');
+        return tsv.slice().buffer;
+      }
+    };
+    await harness.actions.loadLabelOverrideTable({ target: { files: [file], value: 'labels.tsv' } });
+    assert.equal(harness.actions.canRetryLabelImportFailure.value, true);
+    for (let round = 0; round < 500 && !copies; round += 1) await new Promise((resolve) => setTimeout(resolve, 2));
+    assert.equal(copies, 1, 'the failure keeps a copy of its file');
+    changed = true;
+    await harness.actions.retryLabelImportFailure();
+    assert.deepEqual(evaluated, [['CHOSEN'], ['CHOSEN']], 'Retry reads the copy');
+    assert.notEqual(harness.state.errorLog.value?.code, 'INPUT_UNREADABLE');
+    assert.deepEqual(released, [], 'the copy stays while Retry is offered');
+  } finally {
+    useInputCopyStore(null);
+  }
+});

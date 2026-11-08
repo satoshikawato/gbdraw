@@ -17,13 +17,17 @@ Functions:
 
 
 import argparse
+import hashlib
+import os
+import socket
 import sys
 import warnings
 import webbrowser
 import http.server
 import socketserver
+from http import HTTPStatus
 from collections.abc import Callable
-from typing import TYPE_CHECKING, NoReturn, TextIO
+from typing import TYPE_CHECKING, BinaryIO, NoReturn, TextIO
 from importlib import resources
 from functools import partial
 
@@ -42,10 +46,42 @@ if TYPE_CHECKING:
 
 
 class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the browser UI with the headers required for SharedArrayBuffer."""
+    """Serve the browser UI with the headers required for SharedArrayBuffer.
+
+    The browser revalidates every file, and a cached file is reused only when its
+    ETag matches exactly: the ETag names the file's path, size and modification
+    time and the gbdraw version, so another installation or an older gbdraw at the
+    same address never runs from the cache. A modification date alone never
+    answers 304: a downgrade or another environment can serve older dates."""
+
+    _etag: str | None = None
+
+    def _file_etag(self) -> str | None:
+        path = self.translate_path(self.path)
+        if os.path.isdir(path):
+            path = os.path.join(path, "index.html")
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        if not os.path.isfile(path):
+            return None
+        identity = f"{os.path.realpath(path)}\0{stat.st_size}\0{stat.st_mtime_ns}\0{__version_display__}"
+        return '"' + hashlib.sha256(identity.encode("utf-8", "surrogateescape")).hexdigest()[:32] + '"'
+
+    def send_head(self) -> BinaryIO | None:
+        del self.headers["If-Modified-Since"]
+        self._etag = self._file_etag()
+        matches = {tag.strip() for tag in self.headers.get("If-None-Match", "").split(",")}
+        if self._etag is not None and self._etag in matches:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.end_headers()
+            return None
+        return super().send_head()
 
     def end_headers(self) -> None:
-        # Revalidate every file, so a browser never runs an older gbdraw's cached files at the same address.
+        if self._etag is not None:
+            self.send_header("ETag", self._etag)
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
@@ -69,13 +105,30 @@ class _GuiServer(socketserver.TCPServer):
     allow_reuse_address = sys.platform != "win32"
 
 
+def _port_answers(port: int) -> bool:
+    """Whether a server already accepts connections on ``port`` of 127.0.0.1 or ::1,
+    either of which ``localhost`` can reach. It also finds a server on every
+    address, which the reuse option would let a bind on macOS share."""
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.5)
+                if probe.connect_ex((host, port)) == 0:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def bind_gui_server(handler: Callable[..., http.server.BaseHTTPRequestHandler]) -> tuple[socketserver.TCPServer, bool]:
-    """The server on ``GUI_PORT`` of 127.0.0.1, or, when that port is in use, on a free
-    port; the flag says whether it fell back."""
-    try:
-        return _GuiServer(("127.0.0.1", GUI_PORT), handler), False
-    except OSError:
-        return _GuiServer(("127.0.0.1", 0), handler), True
+    """The server on ``GUI_PORT`` of 127.0.0.1, or, when a server answers on that port
+    or it cannot be bound, on a free port; the flag says whether it fell back."""
+    if not _port_answers(GUI_PORT):
+        try:
+            return _GuiServer(("127.0.0.1", GUI_PORT), handler), False
+        except OSError:
+            pass
+    return _GuiServer(("127.0.0.1", 0), handler), True
 
 
 def start_local_server(directory: str):

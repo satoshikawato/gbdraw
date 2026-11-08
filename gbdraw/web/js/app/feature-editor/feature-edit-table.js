@@ -10,7 +10,7 @@ import {
   updateFeatureOverride
 } from '../../services/feature-placement.js';
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
+import { cloneFileBytesForTransfer, createRetryCopyHold, holdFileCopy } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { featureEditsOf } from '../../services/drawing/feature-edits.js';
 import { errorText } from '../../utils/error-text.js';
@@ -120,6 +120,7 @@ export const createFeatureEditTableActions = ({
   };
 
   const failure = ref(null);
+  const keepRetryCopy = createRetryCopyHold();
   const canRetryFeatureEditTableImport = computed(() => Boolean(failure.value
     && state.errorLog?.value === failure.value.error));
   const retryFeatureEditTableImport = () => (canRetryFeatureEditTableImport.value ? failure.value.retry() : false);
@@ -137,6 +138,7 @@ export const createFeatureEditTableActions = ({
     if (!file) return false;
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
+    const endRead = holdFileCopy(file);
     try {
       if (!committed || !records.length) {
         showNotice({ text: t('No diagram is shown. Generate a diagram, then load the Feature Edits TSV.'), tone: 'warning' });
@@ -155,6 +157,7 @@ export const createFeatureEditTableActions = ({
       await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
+      keepRetryCopy(null);
       showNotice({
         text: joinSentences(tn(rows.length + unmatchedRows.length, 'Loaded {count} row.', 'Loaded {count} rows.'), tn(rows.length, 'Applied {count} feature edit.', 'Applied {count} feature edits.')),
         items: unmatchedRows.length > 0
@@ -168,8 +171,10 @@ export const createFeatureEditTableActions = ({
       const sourceInput = event.sourceInput || input;
       failure.value = { error: model, input: sourceInput,
         retry: () => loadFeatureEditTable({ target: { files: [file], value: '' }, sourceInput }) };
+      keepRetryCopy(file);
       return false;
     } finally {
+      endRead();
       if (input?.files?.[0] === file) input.value = '';
     }
   };

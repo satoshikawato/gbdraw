@@ -18,7 +18,7 @@ import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { editorTableRef } from '../../services/file-imports.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
-import { readFileText } from '../../services/file-content-cache.js';
+import { createRetryCopyHold, holdFileCopy, readFileText } from '../../services/file-content-cache.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
@@ -643,6 +643,15 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
+/** @param {unknown} value */
+const normalizeVisibilityMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+};
+
+/** @param {DrawingState} drawing */
+const labelIntentSignature = (drawing) => JSON.stringify([drawing.featureOverrides, drawing.labelTextBulkOverrides]);
+
 /** @param {FeatureLabelActionsOptions} options */
 export const createFeatureLabelActions = ({
   state,
@@ -795,12 +804,6 @@ export const createFeatureLabelActions = ({
     labelReflowLastError.value = null;
     if (force) requestAutomaticRerender();
     else if (autoLabelReflowEnabled.value) labelReflowRequestSeq.value += 1;
-  };
-
-  /** @param {unknown} value */
-  const normalizeVisibilityMode = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'on' || normalized === 'off' ? normalized : 'default';
   };
 
   /** @param {DrawingState} drawing @param {Element} svg */
@@ -1693,6 +1696,7 @@ export const createFeatureLabelActions = ({
 
   let labelImportRevision = 0;
   const labelImportFailure = ref(null);
+  const keepRetryCopy = createRetryCopyHold();
   const canRetryLabelImportFailure = computed(() => {
     const drawing = state.activeDrawing();
     return Boolean(labelImportFailure.value
@@ -1705,8 +1709,6 @@ export const createFeatureLabelActions = ({
   const editLabelImportFailure = () => {
     if (canRetryLabelImportFailure.value) labelImportFailure.value.input?.click?.();
   };
-  /** @param {DrawingState} drawing */
-  const labelIntentSignature = (drawing) => JSON.stringify([drawing.featureOverrides, drawing.labelTextBulkOverrides]);
   /** @param {{ target: LabelTableInput | null, sourceInput?: LabelTableInput }} event A file input's change event, or the retry's stand-in for it. */
   const loadLabelOverrideTable = async (event) => {
     const drawing = state.activeDrawing();
@@ -1720,6 +1722,7 @@ export const createFeatureLabelActions = ({
     const labelIntent = labelIntentSignature(drawing);
     const revision = ++labelImportRevision;
     const previousError = state.errorLog?.value;
+    const endRead = holdFileCopy(file);
 
     try {
       const text = await readFileText(file);
@@ -1821,6 +1824,7 @@ export const createFeatureLabelActions = ({
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
+      keepRetryCopy(null);
       const notice = showNotice({ text: message, items: skipped });
       labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
@@ -1831,7 +1835,9 @@ export const createFeatureLabelActions = ({
       labelImportFailure.value = { error: model, snapshot: before, intent: labelIntent, revision,
         input: event.sourceInput || input,
         retry: () => loadLabelOverrideTable({ target: { files: [file], value: '' }, sourceInput: event.sourceInput || input }) };
+      keepRetryCopy(file);
     } finally {
+      endRead();
       if (input?.files?.[0] === file) input.value = '';
     }
   };
