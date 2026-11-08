@@ -105,7 +105,8 @@ import {
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
-  readStoredRenderRequest
+  readStoredRenderRequest,
+  linearWindowsPayload
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -302,8 +303,8 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { drawsSeveralUnits, planRequestUnitSearch } from './linear-units.js';
-/** @import { LinearUnitPlanPayload } from './linear-units.js' */
+import { drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
+/** @import { LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -6904,6 +6905,14 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * @property {ReadonlyMap<string, InputFileRef>} filesByResource
  */
 /**
+ * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout),
+ * for the drawn-unit plan (`planLinearUnitSearch`) of the draft request and of the LOSAT job estimate.
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown } }} drawing
+ * @returns {LinearUnitWindowsOf}
+ */
+export const linearDrawingWindowsOf = (drawing) => (card) => linearWindowsPayload(card,
+  { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+/**
  * The facts of a drawing's draft request that the app holds: the Linear
  * record catalog, the record display rows, and the annotation records left
  * out; and the runner of the Worker helper that plans a Linear drawing's drawn
@@ -6950,9 +6959,9 @@ export const projectDraftRequest = async (sourceState, drawing, {
   const activeFiles = await serializeActiveRenderFiles({ inputFiles: reading }, drawing,
     { comparisonPlan: cardPlan, linearRecordCatalog });
   // The request writes the indexes of the drawn units, as Generate writes them (OV-2738).
-  const comparisonPlanSnapshot = cardPlan && drawsSeveralUnits(drawing.drawnLinearSeqs.value)
-    ? ((await planRequestUnitSearch(drawing.drawnLinearSeqs.value, cardPlan,
-      Boolean(drawing.linearRecordLayoutEnabled?.value), planLinearUnits))?.resolution ?? cardPlan)
+  const comparisonPlanSnapshot = cardPlan?.hasComparisonIntent === true && drawsSeveralUnits(drawing.drawnLinearSeqs.value)
+    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingWindowsOf(drawing),
+      planLinearUnits)).resolution
     : cardPlan;
   const envelope = buildCanonicalRenderRequest({
     state: sourceState, drawing, filesData: activeFiles, recordDisplayRows, comparisonPlanSnapshot,

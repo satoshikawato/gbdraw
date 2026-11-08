@@ -477,7 +477,7 @@ test('(a) round trip of the Linear region drawing of a Circular source', async (
 
 test('the draft request of a card drawn in two windows writes the unit pairs Generate writes', async () => {
   // OV-2738 on Save without a Result and on New drawing from a region: Python reads a request's comparison indexes
-  // as drawn units, so the draft request plans the units as Generate does (`planRequestUnitSearch`).
+  // as drawn units, so the draft request plans the units as Generate does (`planLinearUnitSearch`).
   const { createLinearComparisonEdge } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
   const source = withNewDrawingDefaults(state, createDrawingState('windows-pairs', 'linear'));
   source.inputType.value = 'gb';

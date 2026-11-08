@@ -72,7 +72,8 @@ import {
   readCanonicalResourceFileBytes,
   readCanonicalResourceText,
   requestLabelProjection,
-  requireLinearComparisonPlanSnapshot
+  requireLinearComparisonPlanSnapshot,
+  linearWindowsPayload
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
@@ -110,7 +111,7 @@ import {
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
-import { planRequestUnitSearch } from '../services/linear-units.js';
+import { planLinearUnitSearch } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -3512,10 +3513,13 @@ export const createRunAnalysis = ({
         // Python plans the drawn units: a record drawn in several windows draws one unit per window, and a pair of
         // records compares every window pair. Every search below runs over the units, and every index the request
         // writes is a unit's (OV-2738).
-        const unitSearch = await planRequestUnitSearch(
-          linearSeqs, comparisonResolution, Boolean(drawing.linearRecordLayoutEnabled.value),
-          (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
-        );
+        const unitSearch = hasComparisonIntent
+          ? await planLinearUnitSearch(
+              linearSeqs, comparisonResolution,
+              (card) => linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled.value) }),
+              (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
+            )
+          : null;
         const unitResolution = unitSearch ? unitSearch.resolution : comparisonResolution;
         const unitSeqs = unitSearch ? unitSearch.sequences : linearSeqs;
         requestComparisonPlan = unitResolution;

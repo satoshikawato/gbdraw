@@ -272,15 +272,15 @@ assert.equal(globalThis.crossOriginIsolated, undefined);
 assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailable here)');
 
 // OV-2741: a card drawn in two windows is two drawn units, and a pair of records compares every window pair, so the
-// estimate counts the searches of Python's unit plan, as Generate plans them (`planRequestUnitSearch`).
+// estimate counts the searches of Python's unit plan, as Generate plans them (`planLinearUnitSearch`).
 {
   const { execFileSync } = await import('node:child_process');
   const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+  const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
   const window = (start, end) => ({ start, end, reverseComplement: false, column: null });
   const windowsState = {
     linearSeqs: [createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }), createLinearSeq({ uid: 'b' })],
-    linearRecordLayoutEnabled: { value: false },
     linearComparisonResolution: { value: {
       mode: 'selected', valid: true, hasComparisonIntent: true, hasLosatIntent: true,
       edges: [{ source: 'losat', ordinal: 0, queryIndex: 0, subjectIndex: 1, queryUid: 'a', subjectUid: 'b',
@@ -293,6 +293,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
   const asked = [];
   const windowsSettings = createLosatSettings({
     state: withDrawings(windowsState),
+    windowsOf: () => (card) => linearWindowsPayload(card, { arranged: false }),
     planLinearUnits: async (payload) => {
       asked.push(payload);
       return { result: JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `

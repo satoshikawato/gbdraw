@@ -115,7 +115,8 @@ import {
   duplicateDrawingState,
   applyDrawingStyle,
   writeLosatCacheInfo,
-  CIRCULAR_RECORD_FORM_DEFAULTS
+  CIRCULAR_RECORD_FORM_DEFAULTS,
+  linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
@@ -399,7 +400,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 // The shown Result as the region tools (Select region, New drawing from region) and Sequence search read it.
 /** The mounted root of the shown Result, which the band of Select region and the outline of search hits follow. */
 const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? null;
-// The Worker helper that plans a Linear request's drawn units (`planRequestUnitSearch`).
+// The Worker helper that plans a Linear request's drawn units (`planLinearUnitSearch`).
 /** @param {LinearUnitPlanPayload} payload */
 const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
 /** The records of every Result of the shown drawing whose axis Python wrote (the subjects of Sequence search). */
@@ -1392,7 +1393,7 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const losatSettings = createLosatSettings({ state, planLinearUnits });
+  const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
     linearRegionNote, linearCardWindowRows, circularRegionNote, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
