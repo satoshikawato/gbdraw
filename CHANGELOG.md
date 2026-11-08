@@ -199,8 +199,13 @@ write-up of a release.
   interval now steps 1, 2, 5, 10, 20, 50 ... Mbp, and a record takes a longer
   interval only where the labels of the shorter one would overlap in the
   default figure: a 113 Mbp record has a tick every 5 Mbp. Figures of records up
-  to 35.8 Mbp do not change. The Auto hint of the scale interval in the Web app
-  shows the same interval.
+  to 35.8 Mbp do not change. Linear ruler labels (`--scale_style ruler` and the
+  axis ruler) overlapped above 50 Mbp in the same way and now take the same
+  steps from 49,968,282 bp; the scale bar of a default Linear figure that long
+  takes the same longer interval as its length (5 Mbp at 113 Mbp instead of a
+  1 Mbp bar narrower than its label). Linear figures of records shorter than
+  49,968,282 bp do not change. The Auto hint of the scale interval in the Web
+  app shows the same interval.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.

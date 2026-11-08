@@ -42,7 +42,9 @@ _CIRCULAR_TICK_TIERS: tuple[tuple[int, int, int], ...] = (
 )
 # Its labels fit records up to 12.8 Gbp.
 _CIRCULAR_TICKS_ABOVE_TIERS = (500_000_000, 100_000_000)
-# (below bp, tick interval); longer records use the last interval.
+# (below bp, tick interval); longer records use the last interval. The scale bar takes its length from them
+# too. Above 5 Mbp the interval steps 1-2-5 Mbp, and each row ends where the ruler labels, at their drawn widths
+# and the default width, start to overlap (OV-2747; tests/test_linear_ruler_ticks.py measures every bound again).
 _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
     (2_000, 100),
     (20_000, 1_000),
@@ -52,8 +54,17 @@ _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
     (1_000_000, 100_000),
     (2_000_000, 200_000),
     (5_000_000, 500_000),
+    (49_968_282, 1_000_000),
+    (99_936_564, 2_000_000),
+    (214_136_345, 5_000_000),
+    (428_272_690, 10_000_000),
+    (856_545_379, 20_000_000),
+    (1_873_604_860, 50_000_000),
+    (3_747_209_720, 100_000_000),
+    (7_494_419_439, 200_000_000),
 )
-_LINEAR_TICK_ABOVE_TIERS = 1_000_000
+# Its ruler labels fit records up to 16.6 Gbp.
+_LINEAR_TICK_ABOVE_TIERS = 500_000_000
 _SCALAR_TICK_FONT_RANGE_PX = (5.0, 8.0)
 _SCALAR_TICK_FONT_THICKNESS_FRACTION: Mapping[DiagramMode, float] = {
     "circular": 0.22,
