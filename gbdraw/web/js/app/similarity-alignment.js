@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
+/** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
@@ -44,7 +45,7 @@ const { computed, ref, watch } = window.Vue;
  *   mode?: string,
  *   records?: {
  *     recordKey?: unknown,
- *     windows: { start: number, end: number, reverseComplement: boolean }[],
+ *     windows: CanonicalRecordWindow[],
  *     presentation: { reverseComplement: boolean }
  *   }[]
  * } | null | undefined} CommittedAlignmentRequest The committed render request, as the helper request reads it.
@@ -111,10 +112,10 @@ const { computed, ref, watch } = window.Vue;
  *   identityIsUnique: boolean, hidden: boolean, representative: boolean, role: string
  * }} AlignmentMemberFacts
  * @typedef {{
- *   recordKey: string, recordLength: number | null,
- *   region: { start: number, end: number, reverseComplement: boolean } | null,
+ *   recordKey: string, recordLength: number | null, windows: CanonicalRecordWindow[],
  *   presentation: { reverseComplement: boolean }
- * }} AlignmentRequestRecord
+ * }} AlignmentRequestRecord A displayed record of a helper request: its windows as the request stores them (Python's
+ *   `AlignmentHelperRecord`, which maps an anchor through the window that holds it).
  * @typedef {{
  *   schema: 2, groupId: string, records: AlignmentRequestRecord[], reference: AnchorIdentity,
  *   members: AlignmentMemberFacts[], directEdges: never[], choices: AlignmentChoice[]
@@ -535,13 +536,6 @@ const successfulSummary = (plan, reversed) => {
 };
 
 const baseReverseComplement = canonicalRecordReverseComplement;
-/**
- * A helper request record drawn reverse-complemented: by its one window (`region`) or by its presentation, which
- * `buildHelperRequest` never sets both of (Python's `_record_fact` refuses both).
- * @param {AlignmentRequestRecord} record
- */
-const helperRecordReverseComplement = (record) => record.presentation.reverseComplement
-  || (record.region !== null && record.region.reverseComplement);
 
 /**
  * @param {Record<string, any> | null | undefined} plan
@@ -797,7 +791,7 @@ const validateProjection = (value, request) => {
     const record = exactObject(recordValue, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
       'beforeAnchors', 'variants'], 'alignment projection record');
     if (record.recordKey !== keys[index] || typeof orientations[record.recordKey] !== 'boolean'
-      || record.beforeReverseComplement !== helperRecordReverseComplement(request.records[index])) {
+      || record.beforeReverseComplement !== baseReverseComplement(request.records[index])) {
       throw new Error('Alignment projection changed record orientation binding.');
     }
     const base = exactObject(record.base, ['x', 'y'], 'alignment projection base');
@@ -1101,19 +1095,11 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
-    // The helper places a record drawn whole or in one window in order (request schema 10 writes its crop as
-    // `windows`); a record drawn in several windows, or in one across the origin, has no one span to place.
-    const [window, ...more] = record.windows;
-    if (more.length || (window && window.start > window.end)) {
-      throw new Error(`renderRequest.records[${index}] is drawn in several windows or across the origin; Align places a record drawn in one span.`);
-    }
-    if (window && (!Number.isSafeInteger(window.start) || !Number.isSafeInteger(window.end))) {
-      throw new Error(`renderRequest.records[${index}].windows is invalid.`);
-    }
+    // The windows go as the request stores them; Python validates them and places each anchor by its window.
     return {
       recordKey,
       recordLength: lengths.get(recordKey) || null,
-      region: window ? { start: window.start, end: window.end, reverseComplement: window.reverseComplement } : null,
+      windows: record.windows.map(({ start, end, reverseComplement, column }) => ({ start, end, reverseComplement, column })),
       presentation: { reverseComplement: record.presentation.reverseComplement }
     };
   });
@@ -1625,7 +1611,7 @@ export const createSimilarityAlignmentActions = ({
       const helper = await runHelperOperation(resolveOperation, { request,
         projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request,
           orientations: Object.fromEntries(
-            request.records.map(record => [record.recordKey, helperRecordReverseComplement(record)])) },
+            request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
         resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       response = validateSimilarityAlignmentResolution(helper?.result, request);

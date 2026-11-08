@@ -181,18 +181,19 @@ def test_native_comparison_choice_corrections(validator, field, reason):
     assert result['context'] == {'field': field, 'reason': reason}
 
 
-@pytest.mark.parametrize(('region', 'reason'), [
-    ({'start': 5, 'end': 1, 'reverseComplement': False}, 'ORDER'),
-    ({'start': 1, 'end': 11, 'reverseComplement': False}, 'RECORD_BOUNDS'),
+# A window whose start is after its end runs across the origin (OV-2771); only its bounds are refused.
+@pytest.mark.parametrize('window', [
+    {'start': 1, 'end': 11, 'reverseComplement': False, 'column': None},
+    {'start': 11, 'end': 2, 'reverseComplement': False, 'column': None},
 ])
-def test_native_alignment_region_correction(region, reason):
+def test_native_alignment_region_correction(window):
     from gbdraw.web_support.similarity_alignment import _record_fact
     with pytest.raises(ValidationError) as caught:
-        _record_fact({'recordKey': 'PRIVATE_RECORD', 'recordLength': 10, 'region': region,
+        _record_fact({'recordKey': 'PRIVATE_RECORD', 'recordLength': 10, 'windows': [window],
                       'presentation': {'reverseComplement': False}}, 'records[0]')
     result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
     assert result['code'] == 'INPUT_INVALID'
-    assert result['context'] == {'field': 'region', 'reason': reason}
+    assert result['context'] == {'field': 'region', 'reason': 'RECORD_BOUNDS'}
 
 
 def test_missing_gff_fasta_match_keeps_correction_without_record_name():

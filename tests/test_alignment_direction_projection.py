@@ -66,8 +66,9 @@ def build_fixture(tmp_path):
             parse_region_spec('unusable:401-700') if key == 'unusable' else None)
         presentation = RecordPresentation(reverse_complement=key == 'skip')
         records.append(RecordInput(GenBankInputSource(path), record_key=key, region=region, presentation=presentation))
-        helpers.append(dict(recordKey=key, recordLength=length, region=None if region is None else
-                            dict(start=region.start, end=region.end, reverseComplement=region.reverse_complement),
+        helpers.append(dict(recordKey=key, recordLength=length, windows=[] if region is None else
+                            [dict(start=region.start, end=region.end, reverseComplement=region.reverse_complement,
+                                  column=None)],
                             presentation=dict(reverseComplement=presentation.reverse_complement)))
         if key != 'missing':
             members.append(dict(groupId='group', anchor=anchor, sourceStart=100, sourceEnd=260,
@@ -220,11 +221,10 @@ def test_source_anchor_claims_and_canonical_coverage_rejected(fixture):
 def _refresh_fixture(request, helper, paths):
     helper = copy.deepcopy(helper)
     encoded = encode_canonical_request(request)
-    for fact, record in zip(helper['records'], request.records, strict=True):
-        fact['presentation']['reverseComplement'] = record.presentation.reverse_complement
-        fact['region'] = None if not record.windows else dict(
-            start=record.windows[0].start, end=record.windows[0].end,
-            reverseComplement=record.windows[0].reverse_complement)
+    for fact, stored in zip(helper['records'], encoded.payload['records'], strict=True):
+        # The Web sends each record's presentation and windows as the request stores them.
+        fact['presentation']['reverseComplement'] = stored['presentation']['reverseComplement']
+        fact['windows'] = copy.deepcopy(stored['windows'])
     context = dict(canonicalRequest=encoded.payload, orientations=None)
     resources = {item.resource_id: str(item.source_path) for item in encoded.resources}
     response = resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resources)
@@ -308,3 +308,64 @@ def test_concurrent_baseline_placement_change_is_explicitly_stale(fixture):
     refreshed = resolve_similarity_alignment_payload(helper, projection=changed, resource_paths=resources)
     stale = project(refreshed, helper, {'mode': 'right'}, response['projection']['binding'])
     assert stale['status'] == 'stale' and stale['reason'] == 'binding_changed'
+
+
+def _circular_fixture(tmp_path, *, windows, reverse=False):
+    """A linear reference and a circular 1000-bp record whose CDS 20..60 the helper and the renderer place."""
+
+    records, members, paths = [], [], {}
+    for key, topology, location in (('ref', 'linear', SimpleLocation(99, 130, strand=1)),
+                                    ('circ', 'circular', SimpleLocation(19, 60, strand=1))):
+        record = SeqRecord(Seq('ACGT' * 250), id=key, description=key)
+        record.annotations.update(molecule_type='DNA', topology=topology)
+        record.features = [SeqFeature(location, type='CDS', qualifiers={'protein_id': [key + '-protein']})]
+        path = tmp_path / (key + '.gbk')
+        SeqIO.write(record, path, 'genbank')
+        identity = capture_source_features(SeqIO.read(path, 'genbank')).entries[0]
+        members.append(dict(groupId='group', anchor=dict(
+            recordKey=key, biologicalFeatureId=identity.biological_feature_id,
+            sourceFeatureIndex=identity.source_feature_index, stableFeatureSvgId=identity.stable_feature_id),
+            sourceStart=int(location.start), sourceEnd=int(location.end), sourceStrand=1, identityIsUnique=True,
+            hidden=False, representative=False, role='member'))
+        records.append(RecordInput(GenBankInputSource(path), record_key=key,
+                                   windows=windows if key == 'circ' else (),
+                                   presentation=RecordPresentation(reverse_complement=reverse and key == 'circ')))
+    request = LinearDiagramRequest(records=tuple(records), options=LinearDiagramOptions(
+        selected_features_set=('CDS',), output=LinearOutputOptions(legend='none'),
+        config_overrides={'canvas.show_gc': False, 'canvas.show_skew': False, 'objects.scale.show': False}))
+    encoded = encode_canonical_request(request)
+    paths = {item.resource_id: str(item.source_path) for item in encoded.resources}
+    helper = dict(schema=2, groupId='group', reference=members[0]['anchor'], members=members, directEdges=[],
+                  choices=[], records=[dict(recordKey=stored['recordKey'], recordLength=1000,
+                                            windows=copy.deepcopy(stored['windows']),
+                                            presentation=dict(reverseComplement=stored['presentation']['reverseComplement']))
+                                       for stored in encoded.payload['records']])
+    return helper, dict(canonicalRequest=encoded.payload, orientations=None), paths
+
+
+@pytest.mark.parametrize('windows,reverse,center', [
+    ((), False, 39.5),
+    ((), True, 960.5),
+    ((RecordWindow(1, 200),), False, 39.5),
+    ((RecordWindow(1, 200, True),), False, 160.5),
+    # Presentation reverse complement applies after the crop (OV-2854).
+    ((RecordWindow(11, 300),), True, 260.5),
+    # A window across the origin of a circular record (OV-2771).
+    ((RecordWindow(901, 100),), False, 139.5),
+    ((RecordWindow(901, 100, True),), False, 60.5),
+    ((RecordWindow(500, 900),), False, None),
+    ((RecordWindow(950, 10),), False, None),
+])
+def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center):
+    helper, context, paths = _circular_fixture(tmp_path, windows=windows, reverse=reverse)
+    rendered = resolve_similarity_alignment_payload(helper, projection=context, resource_paths=paths)
+    alone = resolve_similarity_alignment_payload(helper)
+
+    def circ_center(response):
+        (row,) = [row for row in response['records'] if row['recordKey'] == 'circ']
+        (candidate,) = row['candidates']
+        return candidate['displayCenter'], candidate['displayedStrand'], candidate['usable']
+
+    assert circ_center(alone) == circ_center(rendered)
+    assert circ_center(rendered)[0] == center
+    assert rendered['plan']['records'][1]['status'] == ('aligned' if center is not None else 'skipped')

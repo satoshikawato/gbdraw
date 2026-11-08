@@ -8,7 +8,7 @@ const anchor = (recordKey) => ({ recordKey, biologicalFeatureId: `${recordKey}-p
   sourceFeatureIndex: 0, stableFeatureSvgId: `stable-${recordKey}` });
 const fixture = () => {
   const request = { groupId: 'group', reference: anchor('ref'),
-    records: ['ref', 'target'].map((recordKey) => ({ recordKey, region: null,
+    records: ['ref', 'target'].map((recordKey) => ({ recordKey, windows: [],
       presentation: { reverseComplement: false } })),
     members: ['ref', 'target'].map((key) => ({ anchor: anchor(key) })) };
   const records = ['ref', 'target'].map((recordKey, index) => ({ kind: 'decision', recordKey,

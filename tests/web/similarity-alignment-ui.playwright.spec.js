@@ -1960,10 +1960,10 @@ test('exclusive directions include the minority reference and keep Custom Select
   await page.screenshot({ path: testInfo.outputPath('minority-reference-right.png') });
 });
 
-const loadDirectionSession = async (page, testInfo) => {
+const loadDirectionSession = async (page, testInfo, variant = []) => {
   const directory = testInfo.outputPath('direction-fixture');
   mkdirSync(directory, { recursive: true });
-  execFileSync('python', ['tests/web/helpers/alignment-direction-fixture.py', directory],
+  execFileSync('python', ['tests/web/helpers/alignment-direction-fixture.py', directory, ...variant],
     { cwd: process.cwd(), stdio: 'pipe' });
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
@@ -2101,6 +2101,20 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect(combined).toHaveAccessibleDescription(/does not record which directions the latest Align changed/);
   await positions.focus(); await page.keyboard.press('ArrowDown'); await expect(positions).toBeChecked();
   await positions.press('Escape'); await expect(reset).toBeHidden(); await expect(resetButton).toBeFocused();
+});
+
+// OV-2771: a record drawn in one window across the origin is placed by the window that holds its anchor.
+test('Review alignment places a record drawn in one window across the origin', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await loadDirectionSession(page, testInfo, ['origin']);
+  const committed = await artifactSnapshot(page);
+  expect(committed.session.renderRequest.records[1].windows).toEqual([{ start: 401, end: 300, reverseComplement: false, column: null }]);
+  const dialog = await openDirectionReview(page);
+  const outcome = await applyAndSettle(page, dialog);
+  expect(outcome.error).toBe('');
+  const aligned = await artifactSnapshot(page);
+  expect(aligned.plan.records.find(({ recordKey }) => recordKey === 'record-2'))
+    .toMatchObject({ status: 'aligned', anchor: { recordKey: 'record-2' } });
 });
 
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {

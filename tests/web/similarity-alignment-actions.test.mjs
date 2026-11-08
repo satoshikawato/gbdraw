@@ -21,6 +21,7 @@ const { createSimilarityAlignmentActions } = await import(
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
 
 const anchor = (recordKey, biologicalFeatureId, sourceFeatureIndex) => ({
   recordKey, biologicalFeatureId, sourceFeatureIndex,
@@ -67,8 +68,11 @@ const deferred = () => {
   const promise = new Promise((done) => { resolve = done; });
   return { promise, resolve };
 };
+// A helper request record is drawn reversed by its presentation or by its windows, all reversed.
+const reversedRow = (row) => row.presentation.reverseComplement
+  || (row.windows.length > 0 && row.windows.every((window) => window.reverseComplement));
 const serializedCandidate = (item, request) => {
-  const reverse = key => {const row=request.records.find(r=>r.recordKey===key);return Boolean(row.region ? row.region.reverseComplement : row.presentation?.reverseComplement);};
+  const reverse = key => reversedRow(request.records.find(r=>r.recordKey===key));
   const displayedStrand = item.sourceStrand === null ? null : item.sourceStrand*(reverse(item.anchor.recordKey)?-1:1);
   const referenceSourceStrand = request.members.find(({ anchor: selected }) => (
     selected.recordKey === request.reference.recordKey
@@ -154,7 +158,7 @@ const create = ({
   const projectCommittedAlignment=({committed,plan,translations,orientations})=>{
     const next={...committed,renderRequest:structuredClone(committed.renderRequest)};
     next.renderRequest.layout={recordTranslations:structuredClone(translations),similarityAlignment:structuredClone(plan??null)};
-    for(const direction of orientations)next.renderRequest.records.find(r=>r.recordKey===direction.recordKey).presentation.reverseComplement=direction.reverseComplement;
+    for(const direction of orientations)writeCanonicalRecordReverseComplement(next.renderRequest.records.find(r=>r.recordKey===direction.recordKey),direction.reverseComplement);
     return next;
   };
   // History compares handles by their identity (OV-2208): this fake's
@@ -226,7 +230,7 @@ const create = ({
         r.referenceDisplayedStrand=refCandidate.displayedStrand;
         r.projection={binding:'a'.repeat(64),geometryOrientations:payload.projection.orientations||Object.fromEntries(request.records.map(r=>[r.recordKey,Boolean(r.presentation?.reverseComplement)])),records:request.records.map(record=>{
           const candidates=request.members.filter(m=>m.anchor.recordKey===record.recordKey);
-          const before=Boolean(record.region?record.region.reverseComplement:record.presentation?.reverseComplement);
+          const before=reversedRow(record);
           const facts=reverse=>candidates.map(m=>{
             const candidate=r.records.find(row=>row.recordKey===record.recordKey).candidates.find(c=>JSON.stringify(c.anchor)===JSON.stringify(m.anchor));
             const center=candidate?.usable===false?null:reverse?300-(m.sourceStart+m.sourceEnd)/2:(m.sourceStart+m.sourceEnd)/2;
@@ -254,6 +258,25 @@ const startReview = (fixture, selected = reference) => fixture.actions.startFrom
 });
 const startAlign = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected
+});
+
+// OV-2771: Python places an anchor by the window that holds it, so the helper request carries each record's
+// windows as the request stores them, a window across the origin included.
+test('the helper request carries each record\'s windows as stored, a window across the origin included', async () => {
+  const committed = structuredClone(renderRequest);
+  committed.records[1].windows = [{ start: 250, end: 40, reverseComplement: true, column: null }];
+  committed.records[2].windows = [{ start: 11, end: 200, reverseComplement: false, column: null }];
+  const fixture = create({ members: [reference, targetA, targetC], getCommittedRequest: () => committed });
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+  const [{ payload }] = fixture.helperCalls;
+  assert.deepEqual(payload.request.records.map(({ recordKey, windows, presentation }) => ({ recordKey, windows, presentation })), [
+    { recordKey: 'a', windows: [], presentation: { reverseComplement: false } },
+    { recordKey: 'b', windows: [{ start: 250, end: 40, reverseComplement: true, column: null }],
+      presentation: { reverseComplement: false } },
+    { recordKey: 'c', windows: [{ start: 11, end: 200, reverseComplement: false, column: null }],
+      presentation: { reverseComplement: false } }
+  ]);
+  assert.deepEqual(payload.projection.orientations, { a: false, b: true, c: false });
 });
 
 test('normal Align applies only-usable and unusable targets with one helper and one Result', async () => {

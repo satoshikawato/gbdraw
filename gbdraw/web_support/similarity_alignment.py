@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import hashlib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from collections.abc import Mapping, Sequence, Set
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
@@ -16,7 +16,9 @@ from gbdraw.api.record_planning import (
 )
 from gbdraw.api.request_render import plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
-from gbdraw.session_request_codec import decode_canonical_request
+from gbdraw.io.regions import RecordWindow
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.session_request_codec import StoredRecordWindow, _decode_windows, decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
     SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
@@ -112,12 +114,81 @@ def _anchor(value: object, path: str) -> AlignmentAnchorIdentity:
     )
 
 
-def _record_fact(value: object, path: str) -> dict[str, Any]:
-    raw = _object(
+class AlignmentHelperPresentation(TypedDict):
+    """The presentation fact of a helper request record."""
+
+    reverseComplement: bool
+
+
+class AlignmentHelperRecord(TypedDict):
+    """One displayed record of a helper request, as the Web's ``buildHelperRequest`` sends it.
+
+    ``recordLength`` is the complete source length, ``None`` when the Web does
+    not know it; ``windows`` are the record's windows as request schema 10
+    stores them (``StoredRecordWindow``), empty for a whole record.
+    """
+
+    recordKey: str
+    recordLength: int | None
+    windows: list[StoredRecordWindow]
+    presentation: AlignmentHelperPresentation
+
+
+@dataclass(frozen=True)
+class _RecordFact:
+    """A validated helper request record: the span it draws and its orientation."""
+
+    record_key: str
+    record_length: int | None
+    window: RecordWindow | None
+    presentation_reverse: bool
+
+    @property
+    def reverse(self) -> bool:
+        """Whether the record is drawn reverse-complemented: by its window or by its presentation (never both)."""
+
+        return self.presentation_reverse or (self.window is not None and self.window.reverse_complement)
+
+    def display_center(self, source_center: float) -> float | None:
+        """The display offset at which the record draws the source boundary ``source_center``.
+
+        The crop draws a window as a unit whose coordinate map starts at the
+        window's start, or at its end when the unit is reversed (by the window
+        or by the presentation, applied after the crop); the unit's
+        ``RecordDisplayTransform`` maps the source onto its axis, round the
+        origin for a window across it. ``None`` when the window does not hold
+        the position, or when the map needs the source length and it is unknown.
+        """
+
+        window, length = self.window, self.record_length
+        if window is None:
+            if not self.reverse:
+                return source_center
+            if length is None or source_center > length:
+                return None
+            transform = RecordDisplayTransform(length, length, -1, None, False)
+            return transform.source_position_to_display_offset(source_center)
+        if window.crosses_origin and length is None:
+            return None
+        bound = length if length is not None else window.end
+        if not 0.0 <= source_center <= float(bound):
+            return None
+        span = bound - window.start + 1 + window.end if window.crosses_origin else window.end - window.start + 1
+        transform = RecordDisplayTransform(
+            bound, window.end if self.reverse else window.start, -1 if self.reverse else 1, None,
+            window.crosses_origin, display_length=span, crosses_origin=window.crosses_origin,
+        )
+        offset = transform.source_position_to_display_offset(source_center)
+        return offset if 0.0 <= offset <= span else None
+
+
+def _record_fact(value: object, path: str) -> _RecordFact:
+    raw = cast(AlignmentHelperRecord, _object(
         value,
-        {"recordKey", "recordLength", "region", "presentation"},
+        {"recordKey", "recordLength", "windows", "presentation"},
         path,
-    )
+    ))
+    record_key = _text(raw["recordKey"], f"{path}.recordKey")
     record_length = _integer(
         raw["recordLength"], f"{path}.recordLength", minimum=1, nullable=True
     )
@@ -127,38 +198,28 @@ def _record_fact(value: object, path: str) -> dict[str, Any]:
     presentation_reverse = _boolean(
         presentation["reverseComplement"], f"{path}.presentation.reverseComplement"
     )
-    region = raw["region"]
-    normalized_region = None
-    if region is not None:
-        region = _object(
-            region,
-            {"start", "end", "reverseComplement"},
-            f"{path}.region",
-        )
-        start = _integer(region["start"], f"{path}.region.start", minimum=1)
-        end = _integer(region["end"], f"{path}.region.end", minimum=1)
-        assert start is not None and end is not None
-        if start > end:
-            raise ValidationError(f"{path}.region start must not exceed end.")
-        if record_length is not None and end > record_length:
-            raise ValidationError(f"{path}.region exceeds recordLength.")
-        normalized_region = {
-            "start": start,
-            "end": end,
-            "reverseComplement": _boolean(
-                region["reverseComplement"], f"{path}.region.reverseComplement"
-            ),
-        }
-    if normalized_region is not None and normalized_region["reverseComplement"] and presentation_reverse:
+    try:
+        windows = _decode_windows(raw["windows"], path=f"{path}.windows")
+    except ValueError as exc:
+        raise ValidationError(f"{path}.windows is invalid: {exc}") from exc
+    if len(windows) > 1:
+        # Plans and record translations key a record drawn in several windows by
+        # record, its drawn units by window; the two do not meet yet.
         raise ValidationError(
-            f"{path} cannot reverse complement both region and presentation."
+            f"Record {record_key!r} is drawn in {len(windows)} windows; Similarity alignment places a record "
+            "drawn whole or in one window."
         )
-    return {
-        "recordKey": _text(raw["recordKey"], f"{path}.recordKey"),
-        "recordLength": record_length,
-        "region": normalized_region,
-        "presentation": {"reverseComplement": presentation_reverse},
-    }
+    window = windows[0] if windows else None
+    if window is not None and record_length is not None and max(window.start, window.end) > record_length:
+        raise ValidationError(
+            f"{path}.windows exceeds recordLength.",
+            diagnostic={"code": "INPUT_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
+    if window is not None and window.reverse_complement and presentation_reverse:
+        raise ValidationError(
+            f"{path} cannot reverse complement both window and presentation."
+        )
+    return _RecordFact(record_key, record_length, window, presentation_reverse)
 
 
 def _member_candidate(
@@ -166,7 +227,7 @@ def _member_candidate(
     path: str,
     *,
     group_id: str,
-    record_facts: Mapping[str, Mapping[str, Any]],
+    record_facts: Mapping[str, _RecordFact],
 ) -> SimilarityAlignmentCandidate:
     raw = _object(
         value,
@@ -204,33 +265,10 @@ def _member_candidate(
     if not isinstance(role, str) or "\0" in role:
         raise ValidationError(f"{path}.role must be text without NUL.")
 
-    region = record["region"]
-    record_length = record["recordLength"]
-    presentation_reverse = record["presentation"]["reverseComplement"]
-    region_reverse = region["reverseComplement"] if region is not None else False
-    effective_reverse = presentation_reverse ^ region_reverse
-    source_center = (start + end) / 2
-    if presentation_reverse and record_length is None:
-        presented_center = None
-    else:
-        presented_center = (
-            float(record_length) - source_center
-            if presentation_reverse else source_center
-        )
-    if region is None:
-        display_center = presented_center
-    else:
-        region_start = region["start"] - 1
-        region_end = region["end"]
-        display_center = None
-        if presented_center is not None and region_start <= presented_center <= region_end:
-            display_center = (
-                region_end - presented_center
-                if region_reverse else presented_center - region_start
-            )
+    display_center = record.display_center((start + end) / 2)
     displayed_strand = (
         None if source_strand is None
-        else source_strand * (-1 if effective_reverse else 1)
+        else source_strand * (-1 if record.reverse else 1)
     )
     display_name = raw.get("displayName", anchor.biological_feature_id)
     return SimilarityAlignmentCandidate(
@@ -504,10 +542,10 @@ def resolve_similarity_alignment_payload(
         _record_fact(value, f"request.records[{index}]")
         for index, value in enumerate(_list(raw["records"], "request.records"))
     ]
-    record_keys = [record["recordKey"] for record in records]
+    record_keys = [record.record_key for record in records]
     if not record_keys or len(record_keys) != len(set(record_keys)):
         raise ValidationError("request.records must have unique record keys.")
-    record_facts = {record["recordKey"]: record for record in records}
+    record_facts = {record.record_key: record for record in records}
     reference = _anchor(raw["reference"], "request.reference")
     candidates = [
         _member_candidate(
