@@ -3311,17 +3311,17 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label v-if="seq.windows.length < 2" class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
+                                        <label v-if="!seq.windows.length" class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
                                             <input type="checkbox"
                                                    v-model="seq.region_reverse"
                                                    :aria-label="t('Reverse complement for sequence {n}', { n: idx + 1 })"
                                                    class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Reverse complement') }}
                                         </label>
                                     </div>
-                                    <div v-if="seq.windows.length > 1" data-record-windows class="space-y-1">
+                                    <div v-if="seq.windows.length" data-record-windows class="space-y-1">
                                         <div class="flex items-center justify-between text-[10px] text-slate-600">
                                             <span class="font-semibold">{{ t('Windows') }}</span>
-                                            <span>{{ t('{n} windows of this record', { n: seq.windows.length }) }}</span>
+                                            <span>{{ tn(seq.windows.length, '{count} window of this record', '{count} windows of this record') }}</span>
                                         </div>
                                         <ol class="space-y-0.5" :aria-label="t('Windows of sequence {n}', { n: idx + 1 })">
                                             <li v-for="row in linearRecordWindowRows(seq.windows)" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
@@ -7684,10 +7684,8 @@
                                     </div>
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-new-drawing
-                                                :disabled="regionPopup.busy || !drawingSwitchAvailable || !!regionPopup.newDrawingReason"
-                                                :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
+                                                :disabled="regionPopup.busy || !drawingSwitchAvailable"
                                                 @click="regionSelect.newDrawing()"><i class="ph ph-file-plus" aria-hidden="true"></i><span>{{ t('New drawing from region') }}</span></button>
-                                        <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="text-xs text-slate-500 mt-0.5 px-1" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
                                     </div>
                                     <!-- Use as search query: a query of the Sequence search panel (transient, no History step). -->
                                     <div>

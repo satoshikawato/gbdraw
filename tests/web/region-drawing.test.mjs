@@ -241,8 +241,28 @@ test('(b) a derived request the Load readers would repair is refused, not instal
     (error) => error.code === 'RESULT_INVALID' && error.operation === 'deriveRegionDrawing');
 });
 
-test('(c) a region that crosses the origin is refused: no drawing, the tabs and History unchanged', async () => {
-  circularSource([recordA]);
+test('(c) a region across the origin of a circular record is one window across it, kept as such by the card', async () => {
+  // D-34: Python draws the span as one window from base 900 through the origin to base 100; the card that holds it
+  // writes the same window back (its Start/End fields would read 900-100 as a reversed span, so it is not theirs).
+  const source = withNewDrawingDefaults(state, createDrawingState('across-origin', 'linear'));
+  source.inputType.value = 'gb';
+  source.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'mito', gb: state.inputFiles.registerFile(genbankFile('a.gb', [recordA])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  const [{ recordKey }] = (await projectOf(source)).envelope.renderRequest.records;
+  const installed = await deriveAndInstall(source, [{ recordKey, start: 900, end: 100 }]);
+  assert.equal(installed.derived.mode, 'linear');
+  const [record] = installed.derived.renderRequest.records;
+  assert.deepEqual(record.windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement })),
+    [{ start: 900, end: 100, reverseComplement: false }]);
+  const [card] = installed.made.linearSeqs;
+  assert.deepEqual([card.region_start, card.region_end, card.region_reverse], [null, null, false]);
+  assert.deepEqual(card.windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement })),
+    [{ start: 900, end: 100, reverseComplement: false }]);
+  await assertRoundTrip(installed);
+});
+
+test('(c) a start after the end of a linear record is refused: no drawing, the tabs and History unchanged', async () => {
+  circularSource([genbankRecord('recL', 1200, [[101, 400, 'L1']], 'linear')]);
   const before = listView();
   const created = [];
   const regions = createRegionDrawing({
@@ -252,7 +272,7 @@ test('(c) a region that crosses the origin is refused: no drawing, the tabs and 
     newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
   });
   const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true);
-  assert.deepEqual(offer, { status: 'refused', reason: 'ORIGIN_CROSSING', recordKey: 'record-1', start: 900, end: 100 });
+  assert.deepEqual(offer, { status: 'refused', reason: 'START_AFTER_END', recordKey: 'record-1', start: 900, end: 100 });
   assert.equal('create' in offer, false, 'a refusal offers no Create');
   assert.deepEqual(created, []);
   assert.deepEqual(listView(), before);

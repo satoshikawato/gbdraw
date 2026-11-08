@@ -1,5 +1,5 @@
 {
- "description": "New drawing from region on a circular record: a span whose start is after its end crosses the origin and cannot be drawn on its own. The Web (gbdraw/web/js/services/region-axis.js sourceSpanOf, read by gbdraw/web/js/app/region-select.js) turns a dragged display span into a source span and disables the action when wrapsOrigin is true; Python (gbdraw/api/region_drawing.py _resolve_regions) refuses the same source span with StartAfterEndRegion, reason ORIGIN_CROSSING. Each case gives the axis source map Python writes for the 16,569 bp record of tests/test_inputs/HmmtDNA.gbk (anchorBase is the display start, step -1 a reverse-complemented record), a display span (start index, length in bases), the source span the Web gives for it, and Python's outcome for that source span: accepted, or ORIGIN_CROSSING. Read by tests/web/region-axis.test.mjs and tests/test_region_drawing.py.",
+ "description": "New drawing from region on a circular record: a span whose start is after its end crosses the origin and is drawn as one window across it (D-34). The Web (gbdraw/web/js/services/region-axis.js sourceSpanOf, read by gbdraw/web/js/app/region-select.js) turns a dragged display span into a source span and says \"crosses the origin\" when wrapsOrigin is true; Python (gbdraw/api/region_drawing.py _resolve_regions) draws the same source span as one window across the origin. Each case gives the axis source map Python writes for the 16,569 bp record of tests/test_inputs/HmmtDNA.gbk (anchorBase is the display start, step -1 a reverse-complemented record), a display span (start index, length in bases), the source span the Web gives for it, and Python's outcome for that source span: withinRecord (a window inside the record, or the whole record), or acrossOrigin (one window across the origin). Read by tests/web/region-axis.test.mjs and tests/test_region_drawing.py.",
  "cases": [
   {
    "name": "a span inside the record",
@@ -21,7 +21,7 @@
     "length": 801,
     "wrapsOrigin": false
    },
-   "pythonOutcome": "accepted"
+   "pythonOutcome": "withinRecord"
   },
   {
    "name": "a span across the origin",
@@ -43,7 +43,7 @@
     "length": 770,
     "wrapsOrigin": true
    },
-   "pythonOutcome": "ORIGIN_CROSSING"
+   "pythonOutcome": "acrossOrigin"
   },
   {
    "name": "a whole turn of a rotated record is the whole record, 1 to its length",
@@ -65,7 +65,7 @@
     "length": 16569,
     "wrapsOrigin": false
    },
-   "pythonOutcome": "accepted"
+   "pythonOutcome": "withinRecord"
   },
   {
    "name": "one base short of a whole turn of a rotated record crosses the origin",
@@ -87,7 +87,7 @@
     "length": 16568,
     "wrapsOrigin": true
    },
-   "pythonOutcome": "ORIGIN_CROSSING"
+   "pythonOutcome": "acrossOrigin"
   },
   {
    "name": "a reverse-complemented record: a span that does not cross the origin",
@@ -109,7 +109,7 @@
     "length": 500,
     "wrapsOrigin": false
    },
-   "pythonOutcome": "accepted"
+   "pythonOutcome": "withinRecord"
   },
   {
    "name": "a reverse-complemented record: a span across the origin",
@@ -131,7 +131,7 @@
     "length": 400,
     "wrapsOrigin": true
    },
-   "pythonOutcome": "ORIGIN_CROSSING"
+   "pythonOutcome": "acrossOrigin"
   },
   {
    "name": "a rotated record: a span away from 12 o'clock that crosses the origin",
@@ -153,7 +153,7 @@
     "length": 21,
     "wrapsOrigin": true
    },
-   "pythonOutcome": "ORIGIN_CROSSING"
+   "pythonOutcome": "acrossOrigin"
   },
   {
    "name": "a rotated record: a span across 12 o'clock that does not cross the origin",
@@ -175,7 +175,7 @@
     "length": 21,
     "wrapsOrigin": false
    },
-   "pythonOutcome": "accepted"
+   "pythonOutcome": "withinRecord"
   }
  ]
 }

@@ -456,7 +456,6 @@ export const createRegionSelect = ({
       featureCount: featureIds.length,
       featureText: chosen.source.wrapsOrigin ? t('{features} · crosses the origin', { features: featureText }) : featureText,
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
-      newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
       // Every action button is disabled while one of them runs; each action's own state is its label and status.
       busy: selectionBusy(chosen),
       copy: actionView(chosen, 'copy'),
@@ -496,10 +495,10 @@ export const createRegionSelect = ({
   };
   /** Add to annotation set: the annotation owner adds one "Region N" row (after reading the records, when needed). */
   const addToAnnotationSet = () => runAction('add', (chosen) => addRegionAnnotation(targetOf(chosen)), '', 'addRegionAnnotation');
-  /** New drawing from region; refused by Python, and disabled here, for a span across the origin. */
+  /** New drawing from region: a span across the origin of a circular record is one window across it (Python's). */
   const newDrawing = async () => {
     const chosen = openSelection();
-    if (!chosen || chosen.source.wrapsOrigin || selectionBusy(chosen)) return null;
+    if (!chosen || selectionBusy(chosen)) return null;
     const outcome = await newDrawingFromRegion(targetOf(chosen));
     closeRegionPopup();
     return outcome;

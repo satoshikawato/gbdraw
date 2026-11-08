@@ -5,6 +5,7 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
+import { cardCropWindow } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 import {
   canonicalFeatureOverrides,
@@ -1476,18 +1477,21 @@ const windowEndpoints = (rawStart, rawEnd) => {
 
 /**
  * The windows a Linear card draws: its crop as one window (an End before the
- * Start reverses it), or the windows of a record drawn in several, each placed
- * by its own column when the Record Layout arranges the rows (D-08, D-17).
+ * Start reverses it), or the windows its list holds (`cardCropWindow`): those
+ * of a record drawn in several, each placed by its own column when the Record
+ * Layout arranges the rows (D-08, D-17), or one window across the origin,
+ * placed by the record's column (D-14).
  * @param {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} seq
  * @param {{ arranged: boolean }} options
  * @returns {CanonicalRecord['windows']}
  */
 const linearWindowsPayload = (seq, { arranged }) => {
-  if (seq.windows && seq.windows.length > 1) {
+  if (seq.windows && seq.windows.length) {
+    const placed = arranged && seq.windows.length > 1;
     return seq.windows.map((window) => {
       const span = windowEndpoints(window.start, window.end);
       if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
-      return { ...span, reverseComplement: window.reverseComplement, column: arranged ? window.column : null };
+      return { ...span, reverseComplement: window.reverseComplement, column: placed ? window.column : null };
     });
   }
   const span = windowEndpoints(seq.region_start, seq.region_end);
@@ -1505,16 +1509,16 @@ const linearWindowsPayload = (seq, { arranged }) => {
 // (`createLinearSeq`).
 /** @param {RequestRecordView | null | undefined} record */
 const linearSeqRecordFields = (record) => {
-  const windows = record?.windows || [];
-  const [only] = windows.length === 1 ? windows : [null];
+  const windows = (record?.windows || []).map(({ start, end, reverseComplement, column }) => ({
+    start, end, reverseComplement, column
+  }));
+  const only = cardCropWindow(windows);
   return {
     region_record_id: canonicalRecordSelector(record) || '',
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
     region_reverse: Boolean(only ? only.reverseComplement : record?.presentation?.reverseComplement),
-    windows: windows.length > 1 ? windows.map(({ start, end, reverseComplement, column }) => ({
-      start, end, reverseComplement, column
-    })) : []
+    windows: only ? [] : windows
   };
 };
 

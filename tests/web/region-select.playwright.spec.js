@@ -248,7 +248,7 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
   }
 });
 
-test('Circular: a span across the origin leaves New drawing from region disabled with its reason', async ({ browser }) => {
+test('Circular: a span across the origin says so and leaves New drawing from region enabled', async ({ browser }) => {
   test.setTimeout(420_000);
   const page = await load(browser, seeds.circular);
   try {
@@ -260,13 +260,8 @@ test('Circular: a span across the origin leaves New drawing from region disabled
     await expect(popup).toBeVisible();
     await expectHeading(page, 'NC_012920.1', '16,001-501 (1,070 bp)');
     await expect(page.locator('[data-region-feature-count]')).toHaveText(/^\d+ features? · crosses the origin$/);
-    await expect(popup.locator('[data-region-new-drawing]')).toBeDisabled();
-    await expect(popup.locator('[data-region-new-drawing-reason]')).toHaveText('A region that crosses the origin cannot be drawn on its own.');
-    // The reason lies directly under the disabled button.
-    const [button, reason] = await Promise.all(['[data-region-new-drawing]', '[data-region-new-drawing-reason]']
-      .map((selector) => popup.locator(selector).boundingBox()));
-    expect(reason.y - (button.y + button.height)).toBeGreaterThanOrEqual(0);
-    expect(reason.y - (button.y + button.height)).toBeLessThan(8);
+    // Python draws such a span as one window across the origin.
+    await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
     await expectPopupClear(page);
 
     // Copy FASTA: the popup started no Python; the click asks Python for the bases on the source strand.
@@ -366,7 +361,6 @@ test('Circular: on a record that is not circular a drag through 12 o\'clock stop
   await expectHeading(page, 'NC_001416.1', '45,501-48,502 (3,002 bp)');
   await expect(page.locator('[data-region-feature-count]')).not.toContainText('crosses the origin');
   await expect(popup.locator('[data-region-new-drawing]')).toBeEnabled();
-  await expect(popup.locator('[data-region-new-drawing-reason]')).toHaveCount(0);
   await popup.locator('[data-region-add-annotation]').click();
   const [row] = await regionRows(page);
   expect(row.target).toEqual(expect.objectContaining({ start: 45_501, end: 48_502, wrapsOrigin: false }));

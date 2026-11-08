@@ -483,10 +483,9 @@ ORIGIN_CROSSING = json.loads(
 
 
 @pytest.mark.parametrize("case", ORIGIN_CROSSING, ids=lambda case: case["name"])
-def test_python_refuses_exactly_the_spans_the_web_says_cross_the_origin(case: dict[str, Any]) -> None:
+def test_python_draws_across_the_origin_exactly_the_spans_the_web_says_cross_it(case: dict[str, Any]) -> None:
     """The origin-crossing twin (tools/twins.json): tests/web/region-axis.test.mjs reads the same vectors."""
     from gbdraw.api import RecordDisplayOptions
-    from gbdraw.api.region_drawing import StartAfterEndRegion
     from gbdraw.api.request_render import plan_request
 
     axis = case["axisSource"]
@@ -500,12 +499,12 @@ def test_python_refuses_exactly_the_spans_the_web_says_cross_the_origin(case: di
     span = case["sourceSpan"]
     selection = [RegionSelection("mito", span["start"], span["end"])]
     [record] = derive_region_request(request, selection).request.records
-    if case["pythonOutcome"] == "ORIGIN_CROSSING":
-        # D-34: Python now draws the span the Web says crosses the origin as one window across it.
+    if case["pythonOutcome"] == "acrossOrigin":
+        # D-34: Python draws the span the Web says crosses the origin as one window across it.
         assert (record.windows[0].start, record.windows[0].end) == (span["start"], span["end"])
         assert record.windows[0].crosses_origin
         return
-    assert case["pythonOutcome"] == "accepted"
+    assert case["pythonOutcome"] == "withinRecord"
     whole = (span["start"], span["end"]) == (1, axis["sourceLength"])
     assert (record.windows == ()) if whole else ((record.windows[0].start, record.windows[0].end) == (span["start"], span["end"]))
 

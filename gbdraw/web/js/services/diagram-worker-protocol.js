@@ -181,11 +181,12 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * A refused region (`RefusedRegionDrawing`): a region whose start is after its
- * end, by a reason worded for the record's topology (`StartAfterEndReason`).
+ * A refused region (`RefusedRegionDrawing`): a region of a linear record whose
+ * start is after its end (`StartAfterEndReason`); on a circular record such a
+ * region is one window across the origin.
  * @typedef {object} RefusedRegionDrawing
  * @property {'refused'} status
- * @property {'ORIGIN_CROSSING' | 'START_AFTER_END'} reason
+ * @property {'START_AFTER_END'} reason
  * @property {string} recordKey
  * @property {number} start
  * @property {number} end

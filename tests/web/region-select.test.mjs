@@ -159,11 +159,11 @@ test('a drag on a record that is not circular stops at its last base instead of 
   owner.pointerUp(press(canvas, pointAt(axis, 3_000.5)));
   const [{ selection }] = opened;
   assert.deepEqual(selection.source, { start: length - 3_000, end: length, length: 3_001, wrapsOrigin: false });
-  assert.equal(owner.popup.value.newDrawingReason, '');
+  assert.equal('newDrawingReason' in owner.popup.value, false);
   assert.equal(owner.popup.value.featureText, '0 features');
 });
 
-test('a span across the origin of a circular record says so and disables New drawing from region with its reason', () => {
+test('a span across the origin of a circular record says so and leaves New drawing from region to draw it (D-34)', () => {
   const axis = axisOf('circular-display-start');
   const { owner, opened, canvas } = setup({ axis });
   owner.toggle();
@@ -174,7 +174,7 @@ test('a span across the origin of a circular record says so and disables New dra
   owner.pointerUp(press(canvas, pointAt(axis, 700.5)));
   assert.equal(opened[0].selection.source.wrapsOrigin, true);
   assert.equal(owner.popup.value.featureText, '0 features · crosses the origin');
-  assert.equal(owner.popup.value.newDrawingReason, 'A region that crosses the origin cannot be drawn on its own.');
+  assert.equal('newDrawingReason' in owner.popup.value, false, 'no reason: Python draws it as one window across the origin');
 });
 
 test('Esc, leaving the window, turning the tool off, and another Result shown cancel a drag: no popup, capture released', () => {

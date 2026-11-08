@@ -55,9 +55,10 @@ const normalizeLinearSeqNumber = (value) => {
  *   a Session load stores the saved value as it is; the request projection validates it (R7)
  * @property {unknown} region_end a draft, as `region_start`
  * @property {boolean} region_reverse
- * @property {LinearSeqWindow[]} windows the windows of a record drawn in several (D-01), in the order the request
- *   gave them; empty for a record drawn whole or in one window, which `region_*` hold. The card shows them and
- *   cannot edit them (D-10).
+ * @property {LinearSeqWindow[]} windows the windows the card's crop fields cannot hold (`cardCropWindow`): those of a
+ *   record drawn in several (D-01), in the order the request gave them, or one window across the origin of a
+ *   circular record (D-34); empty for a record drawn whole or in one window that `region_*` hold. The card shows
+ *   them and cannot edit them (D-10).
  */
 
 /**
@@ -88,6 +89,18 @@ const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : []).map(
 });
 
 /**
+ * The window a card's own crop fields (`region_*`) hold: the only window of `windows`, unless it crosses the origin
+ * of a circular record (its start after its end, D-34), which those fields would read as a reversed span (an End
+ * before the Start reverses the crop). Null when `windows` stays the card's list.
+ * @param {readonly LinearSeqWindow[]} windows
+ * @returns {LinearSeqWindow | null}
+ */
+export const cardCropWindow = (windows) => {
+  const [only] = windows.length === 1 ? windows : [null];
+  return only && !(only.start !== null && only.end !== null && only.start > only.end) ? only : null;
+};
+
+/**
  * @param {Partial<LinearSeq> | Record<string, unknown> | null} [overrides] a slot,
  *   or unvalidated data (a session, an import) that is normalized here
  * @returns {LinearSeq}
@@ -98,9 +111,10 @@ export const createLinearSeq = (overrides = {}) => {
   );
   const rawUid = String(source.uid ?? '').trim();
   const rawLosatGencode = Number(source.losat_gencode);
-  // One window is the card's own crop, which `region_*` hold and the card edits; `windows` holds two or more.
-  const windows = readLinearSeqWindows(source.windows);
-  const [onlyWindow] = windows.length === 1 ? windows : [null];
+  // One window is the card's own crop, which `region_*` hold and the card edits; `windows` holds the rest.
+  const stored = readLinearSeqWindows(source.windows);
+  const onlyWindow = cardCropWindow(stored);
+  const windows = onlyWindow ? [] : stored;
   return {
     uid: rawUid || generateLinearSeqUid(),
     gb: source.gb ?? null,
@@ -117,7 +131,7 @@ export const createLinearSeq = (overrides = {}) => {
     region_start: onlyWindow ? onlyWindow.start : windows.length ? null : normalizeLinearSeqNumber(source.region_start),
     region_end: onlyWindow ? onlyWindow.end : windows.length ? null : normalizeLinearSeqNumber(source.region_end),
     region_reverse: onlyWindow ? onlyWindow.reverseComplement : windows.length ? false : Boolean(source.region_reverse),
-    windows: windows.length > 1 ? windows : []
+    windows
   };
 };
 
