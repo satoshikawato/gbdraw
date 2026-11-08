@@ -427,7 +427,7 @@ def _letters_6px_each(annotation, style, font_size, _place_bp, _mark_offset):
 
     width = 0.6 * len(annotation.label) * font_size
     lead = {"start": 0.0, "end": 1.0}.get(style.label_position, 0.5) * width
-    return LabelExtent(-lead, width - lead, 10.0)
+    return LabelExtent(-lead, width - lead, 10.0, drawn=True)
 
 
 @pytest.mark.parametrize(("position", "lanes"), (("center", {"a": 0, "b": 0}), ("start", {"a": 0, "b": 1})))

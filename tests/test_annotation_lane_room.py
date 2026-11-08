@@ -20,6 +20,7 @@ import re
 import warnings
 from dataclasses import replace
 from pathlib import Path
+from typing import NamedTuple
 from xml.etree import ElementTree
 
 import pytest
@@ -364,7 +365,7 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
         return original(track, **kwargs)
 
     monkeypatch.setattr(assemble_module, "circular_annotation_label_room", counting)
-    with pytest.warns(UserWarning, match="definition lines do not fit"):
+    with pytest.warns(UserWarning, match="definition lines"):
         gbdraw.draw_circular(record, options=options)
 
     distinct = {(id(track), *rest) for track, *rest in measured}
@@ -410,7 +411,7 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
     monkeypatch.setattr(assemble_module, "layout_annotation_track", counting_pack)
     monkeypatch.setattr(assemble_module, "circular_annotation_labels", counting_place)
     monkeypatch.setattr(drawer._ObstacleIndex, "__init__", counting_index)
-    with pytest.warns(UserWarning, match="definition lines do not fit"):
+    with pytest.warns(UserWarning, match="definition lines"):
         drawing = gbdraw.draw_circular(record, options=options)
 
     report = label_fit_report(drawing._drawing)
@@ -573,7 +574,7 @@ def _packed(
         record_lengths={0: 1000},
         params=AnnotationTrackParams(set_id="s", overflow=overflow, **params),
         available_extent_px=available,
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-10.0, 10.0, 10.0), labels_above=above),
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-10.0, 10.0, 10.0, drawn=True), labels_above=above),
         join_origin=join_origin,
     )
 
@@ -656,7 +657,7 @@ def test_a_clipped_slot_keeps_the_room_of_a_label_that_fits_where_another_of_its
     )
 
     def letters(annotation, _style, _font_size, _place_bp, _mark_offset):
-        return LabelExtent(-10.0, 10.0, 60.0 if annotation.label == "LONG" else 8.0)
+        return LabelExtent(-10.0, 10.0, 60.0 if annotation.label == "LONG" else 8.0, drawn=True)
 
     track = _clipped(annotations, letters, _BASE + 20.0)
 
@@ -679,7 +680,7 @@ def test_a_clipped_linear_slot_measures_its_lanes_where_the_drawer_draws_them() 
         for identity, segment, label, lane in (("a", (100, 500), "A", 0), ("b", (600, 700), "", 1), ("c", (250, 350), "", 2))
     )
     depth = 18.0 - 2.0 * style.label_offset - style.stroke_width
-    letters = lambda *_: LabelExtent(-10.0, 10.0, depth)  # noqa: E731
+    letters = lambda *_: LabelExtent(-10.0, 10.0, depth, drawn=True)  # noqa: E731
 
     track = _clipped(annotations, letters, 51.0)
 
@@ -788,7 +789,7 @@ def test_a_clipped_slot_leaves_out_a_label_its_edge_would_cut() -> None:
         )
         for identity, segment, label, lane in (("x", (100, 200), "X", 0), ("y", (600, 700), "", 1), ("z", (250, 350), "Z", 2))
     )
-    track = _clipped(annotations, lambda *_: LabelExtent(-10.0, 10.0, 8.0), 49.0)
+    track = _clipped(annotations, lambda *_: LabelExtent(-10.0, 10.0, 8.0, drawn=True), 49.0)
     by_id = {placement.annotation.id: placement.annotation for placement in track.placements}
 
     assert track.clipped
@@ -920,7 +921,7 @@ def test_the_slot_grows_by_the_largest_room_of_a_record_not_their_sum() -> None:
         annotations,
         record_lengths={0: 1000, 1: 1000},
         params=AnnotationTrackParams(set_id="s"),
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-10.0, 10.0, 10.0)),
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-10.0, 10.0, 10.0, drawn=True)),
         join_origin=False,
     )
 
@@ -1069,11 +1070,21 @@ def test_an_inside_label_that_keeps_no_letter_is_left_out_and_counted() -> None:
     assert region["counts"] == counts and region["labelCount"] == 10
 
 
-@pytest.mark.parametrize("slot", ("", ",w=600px,overflow=error"))
-def test_a_label_that_keeps_no_letter_claims_no_lane_room(monkeypatch: pytest.MonkeyPatch, slot: str) -> None:
-    # RGN-CUT-EMPTY-OMIT (OV-2804): at 60 pt, labels of middle lanes of seven nested bands keep no letter on their
-    # circle. The lane packer reads the drawer's verdict (``LabelExtent.drawn``), so such a label claims no room
-    # between the lanes and is no obstacle there: every band stands where it stands when that label has no text.
+class _LeftOut(NamedTuple):
+    bands: dict[str, tuple[float, float]]
+    without_letters: frozenset[str]
+    messages: list[str]
+    items: dict[str, ElementTree.Element]
+
+
+def _bands_and_left_out(
+    regions: tuple[tuple[str, int, int, str], ...], slot: str, orientation: str, empty: frozenset[str] = frozenset()
+) -> _LeftOut:
+    """The band radii of ``regions`` (id, start, end, label) labelled at 60 pt in ``orientation`` in an inside slot
+    (``slot`` adds settings), the labels of ``empty`` without text, the labels left out because no letter of them
+    fits their circle (``CircularAnnotationLabels.without_letters``), as the assembler gets them, the warnings and
+    each annotation's group."""
+
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     left_out: list[str] = []
@@ -1084,35 +1095,132 @@ def test_a_label_that_keeps_no_letter_claims_no_lane_room(monkeypatch: pytest.Mo
         left_out.extend(label.annotation_id for label in labels.without_letters)
         return labels
 
-    monkeypatch.setattr(assemble_module, "circular_annotation_labels", spying)
-
-    def bands(empty: frozenset[str]) -> dict[str, tuple[float, float]]:
-        step = 100
-        regions = tuple(
-            RegionAnnotation(
-                f"r{index}",
-                CoordinateSpan(None, 1501 + step * index, 3500 - step * index),
-                label="" if f"r{index}" in empty else f"Region {index + 1} label text",
-                mark="band",
-                style=RegionAnnotationStyle(fill="#ffcc00", label_orientation="arc", label_font_size=60),
-            )
-            for index in range(7)
+    annotations = tuple(
+        RegionAnnotation(
+            identity,
+            CoordinateSpan(None, start, end),
+            label="" if identity in empty else label,
+            mark="band",
+            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=60),
         )
-        options = gbdraw.CircularOptions(
-            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
-            tracks=gbdraw.CircularTrackOptions(slots=("features:features", f"regions:annotations@side=inside,set_id=regions{slot}")),
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            items = _groups(gbdraw.draw_circular(_record(), options=options)._drawing.tostring())
-        return {identity: _signed_radii(items[identity]) for identity in (f"r{index}" for index in range(7))}
+        for identity, start, end, label in regions
+    )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", f"regions:annotations@side=inside,set_id=regions{slot}")),
+    )
+    with pytest.MonkeyPatch.context() as patch, warnings.catch_warnings(record=True) as caught:
+        patch.setattr(assemble_module, "circular_annotation_labels", spying)
+        warnings.simplefilter("always")
+        items = _groups(gbdraw.draw_circular(_record(), options=options)._drawing.tostring())
+    bands = {identity: _signed_radii(items[identity]) for identity, *_rest in regions}
+    return _LeftOut(bands, frozenset(left_out), [str(item.message) for item in caught], items)
 
-    drawn = bands(frozenset())
-    without_letters = frozenset(left_out)
-    # A middle lane's label is among them: a band further in exists.
-    assert without_letters and min(int(identity[1:]) for identity in without_letters) < 6, without_letters
-    left_out.clear()
-    assert bands(without_letters) == drawn
+
+_SEVEN_NESTED = tuple((f"r{index}", 1501 + 100 * index, 3500 - 100 * index, f"Region {index + 1} label text") for index in range(7))
+# OV-2805 (``ov2804/m1/case.tsv``, with ``w=600px,overflow=error``): r1 meets r2's letters in r2's lane, and the lane
+# further in, where its letters meet nothing, lies past the label rooms so near the centre that no letter of it fits
+# there (the set width stretches the lanes toward the centre).
+_DODGING_INWARD = (
+    ("r0", 418, 2243, "Region 0 xxxxxxxxxx"),
+    ("r1", 8990, 10000, "Region 1 xxxxxxxxxxxx"),
+    ("r2", 2125, 3625, "Region 2 xxxxxxxxxxxxxxxxxxxx"),
+    ("r3", 2184, 5656, "Region 3 xxx"),
+)
+
+
+@pytest.mark.parametrize(
+    ("regions", "orientation", "slot"),
+    (
+        (_SEVEN_NESTED, "arc", ""),
+        (_SEVEN_NESTED, "arc", ",w=600px,overflow=error"),
+        (_DODGING_INWARD, "auto", ",w=600px,overflow=error"),
+    ),
+)
+def test_a_label_that_keeps_no_letter_moves_no_band(
+    regions: tuple[tuple[str, int, int, str], ...], orientation: str, slot: str
+) -> None:
+    # RGN-CUT-EMPTY-OMIT (OV-2804, OV-2805): a label that keeps no letter on its circle is not drawn, so it claims no
+    # room between the lanes, is no obstacle there, and does not move its own band inward to keep its letters clear
+    # of other labels: every band stands where it stands when the labels left out have no text.
+    drawn = _bands_and_left_out(regions, slot, orientation)
+
+    assert drawn.without_letters, drawn.bands
+    assert _bands_and_left_out(regions, slot, orientation, drawn.without_letters).bands == drawn.bands
+
+
+def test_a_label_left_out_for_want_of_a_letter_keeps_its_band_where_it_stands_without_text() -> None:
+    # OV-2805: r1's letters meet r2's in r2's lane, and the lane further in lies so near the centre that no letter
+    # of r1 fits there. r1's band stays in r2's lane, beside r2's mark, not at the centre.
+    bands, without_letters, _messages, _items = _bands_and_left_out(_DODGING_INWARD, ",w=600px,overflow=error", "auto")
+
+    assert "r1" in without_letters
+    assert bands["r1"] == pytest.approx(bands["r2"], abs=0.01), bands
+
+
+def test_a_label_without_letters_in_a_clipped_slot_is_counted_once_as_without_letters() -> None:
+    # RGN-CUT-EMPTY-OMIT with LBL-ROOM-CLIP-FIT-OMIT: seven nested bands at 60 pt in a clipped inside slot 300 px
+    # wide. The clip leaves out four labels; the innermost keeps no letter on its circle and is counted once, as a
+    # label without letters, not also as cut by the clip.
+    left_out = _bands_and_left_out(_SEVEN_NESTED, ",w=300px,overflow=clip", "arc")
+    not_drawn = sorted(identity for identity, item in left_out.items.items() if not _labelled(item))
+
+    assert left_out.without_letters == {"r6"}
+    assert not_drawn == ["r2", "r3", "r4", "r5", "r6"]
+    counts = "4 region labels left out in clipped slots, 1 region label left out: no letter fits its circle"
+    assert any(counts in message for message in left_out.messages), left_out.messages
+
+
+def test_the_warning_reports_a_label_without_letters_at_its_own_size() -> None:
+    # The label fit warning names the largest font size among the labels it counts: the innermost label, at 20 pt,
+    # keeps no letter on its circle, and the warning reports 20 pt, not the 14 pt of the labels drawn.
+    from gbdraw.api.diagram import label_fit_report
+    from gbdraw.web_support.label_fit import label_fit_report_payload
+
+    innermost = RegionAnnotation(
+        "z", CoordinateSpan(None, 2401, 2600), label="Region z label text", mark="band",
+        style=RegionAnnotationStyle(fill="#ffcc00", label_orientation="auto", label_font_size=20),
+    )
+    items, caught, drawing = _nested_inside(9, orientation="auto", extra=(innermost,))
+
+    assert not _labelled(items["z"])
+    assert any("10 region labels at 20 pt" in str(item.message) for item in caught), [str(item.message) for item in caught]
+    payload = label_fit_report_payload(label_fit_report(drawing), "circular")
+    (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
+    assert region["fontSize"] == 20.0 and "1 region label left out: no letter fits its circle" in region["counts"]
+
+
+def test_a_label_without_letters_puts_no_ink_on_the_definition() -> None:
+    # A label left out because no letter of it fits its circle paints nothing: the definition line its lone
+    # ellipsis met at the centre no longer overlaps a track (``ov2804/scripts/probe.py``, random set 2).
+    regions = (
+        ("q0", 5916, 6116, "Region label", "bracket"), ("q1", 3477, 3507, "origin of replication", "band"),
+        ("q2", 7057, 10000, "origin of replication", "bracket"), ("q3", 8916, 10000, "origin of replication", "bracket"),
+        ("q4", 589, 619, "Region label", "line"), ("q5", 5218, 8218, "A long region label text that runs on", "band"),
+        ("q6", 9184, 9384, "IRa", "band"), ("q7", 391, 591, "Region label", "band"),
+        ("q8", 2240, 3040, "origin of replication", "band"), ("q9", 7302, 10000, "origin of replication", "bracket"),
+        ("q10", 5797, 6597, "A long region label text that runs on", "band"),
+        ("q11", 6552, 9552, "origin of replication", "band"),
+        ("q12", 8029, 8829, "A long region label text that runs on", "bracket"), ("q13", 7450, 10000, "Region label", "line"),
+    )
+    annotations = tuple(
+        RegionAnnotation(
+            identity, CoordinateSpan(None, start, end), label=label, mark=mark,
+            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation="auto"),
+        )
+        for identity, start, end, label, mark in regions
+    )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "regions:annotations@side=inside,set_id=regions,r=0.3")),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        gbdraw.draw_circular(_record(), options=options)
+    messages = [str(item.message) for item in caught]
+
+    assert any("1 region label left out: no letter fits its circle" in message for message in messages), messages
+    assert not any("overlap" in message and "definition line" in message for message in messages), messages
 
 
 def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:
@@ -1211,7 +1319,7 @@ def test_an_inside_slot_measures_each_lane_where_it_is_drawn() -> None:
     # its own.
     def letters(_annotation, _style, _font_size, _place_bp, mark_offset):
         reach = 400.0 if mark_offset > 40.0 else 50.0
-        return LabelExtent(-reach, reach, 10.0)
+        return LabelExtent(-reach, reach, 10.0, drawn=True)
 
     lanes = _inside_lanes(_two_stacks(300), letters, limit=1_000.0)
 
@@ -1225,7 +1333,7 @@ def test_an_inside_slot_whose_lanes_would_pass_the_centre_measures_its_letters_i
     # their three lanes.
     def letters(_annotation, _style, _font_size, _place_bp, mark_offset):
         reach = 50.0 if mark_offset < 20.0 else 4_900.0
-        return LabelExtent(-reach, reach, 10.0)
+        return LabelExtent(-reach, reach, 10.0, drawn=True)
 
     lanes = _inside_lanes(_two_stacks(5_000), letters, limit=40.0)
 
@@ -1265,7 +1373,7 @@ def test_an_inside_slot_keeps_the_room_of_a_label_that_fits_where_another_of_its
     )
 
     def letters(annotation, _style, _font_size, _place_bp, _mark_offset):
-        return LabelExtent(-10.0, 10.0, 60.0 if annotation.label == "LONG" else 8.0)
+        return LabelExtent(-10.0, 10.0, 60.0 if annotation.label == "LONG" else 8.0, drawn=True)
 
     track = layout_annotation_track(
         "regions", "s", annotations, record_lengths={0: 1000}, params=AnnotationTrackParams(set_id="s"),
@@ -1310,7 +1418,7 @@ def test_a_linear_label_is_measured_with_the_lanes_of_its_own_record() -> None:
     )
     track = layout_annotation_track(
         "regions", "s", annotations, record_lengths={0: 1000, 1: 1000}, params=AnnotationTrackParams(set_id="s"),
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-50.0, 50.0, 30.0)), join_origin=False,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-50.0, 50.0, 30.0, drawn=True)), join_origin=False,
     )
     padding, half_stroke = AnnotationTrackParams(set_id="s").padding_px, 0.5 * RegionAnnotationStyle().stroke_width
     height = lane_width_px(track.required_extent_px, padding_px=padding, room_px=track.lane_room_px, lane_count=3)

@@ -431,13 +431,14 @@ def linear_annotation_label_extent(
 ) -> LabelExtent:
     """A region label's letters as ``linear_annotation_labels`` draws them at its place (``label_ink_offsets`` at
     its anchor): the bp they reach on each side of the place, at the record's ``bp_per_px``, and the height they
-    take. The lane packer's measure (``LabelSizing.extent``); a Linear label's letters do not depend on its lane."""
+    take. The lane packer's measure (``LabelSizing.extent``); a Linear label's letters do not depend on its lane,
+    and are never cut, so it is drawn wherever it stands."""
 
     left, right, top, bottom = label_ink_offsets(
         italic_markup_runs(annotation.label), font_family, font_size, _label_anchor(style)
     )
     scale = float(bp_per_px.get(annotation.record_index, 1.0))
-    return LabelExtent(left * scale, right * scale, bottom - top)
+    return LabelExtent(left * scale, right * scale, bottom - top, drawn=True)
 
 
 def linear_annotation_labels(

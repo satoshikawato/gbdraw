@@ -90,7 +90,10 @@ class _LaneBand(NamedTuple):
     """The band the lane packer puts a slot's lanes in: ``lane_count`` lanes of ``lane_extent_px`` with
     ``lane_gap_px`` between them and ``padding_px`` on each side, stopped at ``limit_px`` by ``stop`` (``RoomStop``;
     no limit when None): lanes that pass the centre share the band up to it (``lane_width_px``), and lanes that pass
-    a clipped set size are drawn ``lane_extent_px`` apart. ``labels_above`` as in ``LabelSizing``."""
+    a clipped set size are drawn ``lane_extent_px`` apart. ``labels_above`` as in ``LabelSizing``. ``set_px`` is
+    the extent the drawer gives a slot whose size is set (that size, stopped at the centre for an inside Circular
+    slot; None where the slot takes the extent its lanes and rooms need): its lanes share it less the slot's label
+    room (``width_px``)."""
 
     lane_extent_px: float
     lane_gap_px: float
@@ -98,6 +101,7 @@ class _LaneBand(NamedTuple):
     limit_px: float | None
     stop: RoomStop
     labels_above: bool
+    set_px: float | None
 
     def bare_px(self, lane_count: int) -> float:
         """The extent of ``lane_count`` lanes without label room, past any limit."""
@@ -118,12 +122,14 @@ class _LaneBand(NamedTuple):
             return 2.0 * self.padding_px + lane_count * self.lane_extent_px
         return self.bare_px(lane_count)
 
-    def width_px(self, record_lanes: int, slot_lanes: int) -> float:
+    def width_px(self, record_lanes: int, slot_lanes: int, *, room_px: float | None = None) -> float:
         """The width of each lane of a record with ``record_lanes`` lanes in a slot whose records take at most
         ``slot_lanes``, where the drawer puts them (``lane_width_px``): the record's lanes share the band the slot's
         lanes take (each record's lanes fill the slot, as the drawers draw them). Lanes that pass the limit share
         the band up to it, as the drawer draws an inside slot clamped at the centre; a clipped slot draws each of
-        them ``lane_extent_px`` wide."""
+        them ``lane_extent_px`` wide. With the slot's label room (``room_px``, ``ResolvedAnnotationTrack
+        .lane_room_px``) the lanes of a slot of set size share that size less the room (``set_px``), as the drawer
+        draws them; without it (while the rooms are reckoned) they are measured at the extent they take."""
 
         lanes = max(1, slot_lanes)
         band = self.bare_px(lanes)
@@ -131,6 +137,8 @@ class _LaneBand(NamedTuple):
             if self.stop == "clip":
                 return self.lane_extent_px
             band = self.limit_px
+        elif self.set_px is not None and room_px is not None:
+            return lane_width_px(self.set_px, padding_px=self.padding_px, room_px=room_px, lane_count=record_lanes)
         return lane_width_px(band, padding_px=self.padding_px, room_px=0.0, lane_count=record_lanes)
 
     def mark_edge_px(self, lane: int, width: float, *, room_before_px: float, past_lane_edge_px: float) -> float:
@@ -160,7 +168,7 @@ class LabelExtent(NamedTuple):
     low_bp: float
     high_bp: float
     depth_px: float
-    drawn: bool = True
+    drawn: bool
 
 
 # A label's letters (``LabelExtent``) from its annotation, its effective style, its font size, the bp it stands at
@@ -222,6 +230,10 @@ class ResolvedAnnotationTrack:
     # The font size of each label the track leaves out (record index, size; ``annotation_label_font_size``), in
     # the order of ``without_room``: what the label fit warning reports for them (``left_out_font_sizes``).
     without_room_font_sizes: tuple[tuple[int, float], ...] = ()
+    # The labels (record index, annotation id) the track leaves out because no letter of them fits their circle
+    # where their text would put their mark (RGN-CUT-EMPTY-OMIT, OV-2805; ``layout_annotation_track``): their marks
+    # stand where they stand without that text. The drawer counts them with the labels whose cut keeps no letter.
+    without_letters: tuple[tuple[int, str], ...] = ()
 
     def labels_without_room(self, record_index: int) -> int:
         """How many of the record's labels the track leaves out (``without_room``)."""
@@ -235,9 +247,17 @@ class ResolvedAnnotationTrack:
 
     def draws_label(self, annotation: ResolvedRegionAnnotation) -> bool:
         """Whether the track draws the annotation's label: it has one, and the track does not leave it out
-        (``without_room``). The drawers, the label placement and the label room a slot reserves read it."""
+        (``without_room``, ``without_letters``). The drawers, the label placement and the label room a slot reserves
+        read it."""
 
-        return bool(annotation.label) and (annotation.record_index, annotation.id) not in self.without_room
+        key = (annotation.record_index, annotation.id)
+        return bool(annotation.label) and key not in self.without_room and key not in self.without_letters
+
+    def leaves_out_letters(self, annotation: ResolvedRegionAnnotation) -> bool:
+        """Whether the track leaves the annotation's label out because no letter of it fits its circle where its
+        text would put its mark (``without_letters``)."""
+
+        return (annotation.record_index, annotation.id) in self.without_letters
 
     def room_before(self, record_index: int, row: int, lane: int) -> float:
         """How far ``lane`` of the record's ``row`` moves on from where it stands without label room: the rooms of
@@ -466,11 +486,20 @@ class _LaneRooms(NamedTuple):
 class _TrackMeasures(NamedTuple):
     """The measures of one slot's annotations as its drawer makes them: each one's effective style (set, slot and
     annotation precedence), its label's place along the region, its label's font size and letters
-    (``LabelSizing.extent``), and how far its mark paints past its lane (``LabelSizing.reach``)."""
+    (``LabelSizing.extent``), and how far its mark paints past its lane (``LabelSizing.reach``). The labels of
+    ``without_letters`` (record index, annotation id) are left out because no letter of them fits their circle
+    (``ResolvedAnnotationTrack.without_letters``): the packer places their marks as if they had no text."""
 
     params: AnnotationTrackParams
     labels: LabelSizing
     join_origin: bool
+    without_letters: frozenset[tuple[int, str]]
+
+    def has_letters(self, annotation: ResolvedRegionAnnotation) -> bool:
+        """Whether the annotation has a label the packer gives letters: one with text, not left out for want of a
+        letter (``without_letters``)."""
+
+        return bool(annotation.label) and (annotation.record_index, annotation.id) not in self.without_letters
 
     def style(self, annotation: ResolvedRegionAnnotation) -> RegionAnnotationStyle:
         return effective_annotation_style(annotation, self.params)
@@ -573,7 +602,7 @@ def _lane_rooms(
     every_label = [
         (placement, annotation.label_anchor(measures.label_position(annotation), join_origin=join_origin))
         for placement in placements
-        if (annotation := placement.annotation).label
+        if measures.has_letters(annotation := placement.annotation)
     ]
     labelled = [item for item in every_label if 0 <= item[0].lane + step < lane_count]
     rooms = {(room.record_index, room.row, room.gap): room.px for room in at_least}
@@ -701,30 +730,62 @@ def _cut_by_clip(
 
     if not (track.clipped and labelled):
         return track
-    extent_at, paint_of = measures.extent, measures.paint
     limit = float(band.limit_px or 0.0)
+    cut: set[tuple[int, str]] = set()
+    for placed in _placed_labels(track, band, measures):
+        # A label the drawer leaves out for want of a letter (``LabelExtent.drawn``) is counted there, not here.
+        if not placed.extent.drawn:
+            continue
+        placement, edge = placed.placement, placed.edge
+        reach = placed.extent.depth_px + float(measures.style(placement.annotation).label_offset)
+        hidden = band.hides_mark(placement.lane, placed.width, room_before_px=placed.room, past_lane_edge_px=placed.paint)
+        if hidden or ((edge - reach < 0.0) if band.labels_above else (edge + reach > limit)):
+            cut.add((placement.annotation.record_index, placement.annotation.id))
+    return replace(track, without_room=tuple(sorted({*track.without_room, *cut}))) if cut else track
+
+
+class _PlacedLabel(NamedTuple):
+    """A label the track draws, measured where the track places it (``_placed_labels``): its letters
+    (``LabelExtent``), how far its mark's painted edge lies from where the lanes stack (``edge``), the width of its
+    record's lanes, how far its mark paints past its lane and the rooms before its lane on its row."""
+
+    placement: PlacedRegionAnnotation
+    extent: LabelExtent
+    edge: float
+    width: float
+    paint: float
+    room: float
+
+
+def _placed_labels(track: ResolvedAnnotationTrack, band: _LaneBand, measures: _TrackMeasures) -> Iterable[_PlacedLabel]:
+    """Each label ``track`` draws (``ResolvedAnnotationTrack.draws_label``), measured as the drawer measures it
+    (``_TrackMeasures.extent``) beside its mark's paint (``_TrackMeasures.paint``, the drawer's ``LabelSizing.reach``)
+    where its lane lies with the track's rooms (``_LaneBand.mark_edge_px``, ``ResolvedAnnotationTrack.room_before``)
+    and is as wide as the drawer draws it (``_LaneBand.width_px`` with the track's label room)."""
+
     lane_count = lane_count_of(track.placements)
     record_lanes = _record_lane_counts(track.placements)
-    cut: set[tuple[int, str]] = set()
     for placement in track.placements:
         annotation = placement.annotation
         if not track.draws_label(annotation):
             continue
         place = annotation.label_anchor(measures.label_position(annotation), join_origin=track.join_origin)
-        style = measures.style(annotation)
         room = track.room_before(annotation.record_index, place.part.row, placement.lane)
-        width = band.width_px(record_lanes[annotation.record_index], lane_count)
-        paint = paint_of(annotation, width)
+        width = band.width_px(record_lanes[annotation.record_index], lane_count, room_px=track.lane_room_px)
+        paint = measures.paint(annotation, width)
         edge = band.mark_edge_px(placement.lane, width, room_before_px=room, past_lane_edge_px=paint)
-        extent = extent_at(annotation, place.bp, edge)
-        # A label the drawer leaves out for want of a letter (``LabelExtent.drawn``) is counted there, not here.
-        if not extent.drawn:
-            continue
-        reach = extent.depth_px + float(style.label_offset)
-        hidden = band.hides_mark(placement.lane, width, room_before_px=room, past_lane_edge_px=paint)
-        if hidden or ((edge - reach < 0.0) if band.labels_above else (edge + reach > limit)):
-            cut.add((annotation.record_index, annotation.id))
-    return replace(track, without_room=tuple(sorted({*track.without_room, *cut}))) if cut else track
+        yield _PlacedLabel(placement, measures.extent(annotation, place.bp, edge), edge, width, paint, room)
+
+
+def _keeping_no_letter(track: ResolvedAnnotationTrack, band: _LaneBand, measures: _TrackMeasures) -> frozenset[tuple[int, str]]:
+    """The labels ``track`` draws that keep no letter where it places them (``_placed_labels``,
+    ``LabelExtent.drawn``), by record index and annotation id."""
+
+    return frozenset(
+        (placed.placement.annotation.record_index, placed.placement.annotation.id)
+        for placed in _placed_labels(track, band, measures)
+        if not placed.extent.drawn
+    )
 
 
 def _letters_in_lanes(
@@ -732,7 +793,7 @@ def _letters_in_lanes(
     extent_at: Callable[[ResolvedRegionAnnotation, float, float], LabelExtent],
     paint_of: Callable[[ResolvedRegionAnnotation, float], float],
     *,
-    shows_labels: bool,
+    shows: Callable[[ResolvedRegionAnnotation], bool],
     by_lane: bool,
 ) -> LettersInLane:
     """A label's letters beside its mark in the lane the lane packer tries (``LettersInLane``), as the drawer
@@ -742,15 +803,15 @@ def _letters_in_lanes(
     that only shortens the letters, so the lane keeps more than they paint; in an inside slot the letters of a lane
     past a room span more of the circle than measured, by the ratio of the two radii.
 
-    A Linear label's letters do not depend on its lane (``LabelSizing.extent``). An inside Circular slot whose lanes,
-    measured by lane, would pass the centre (``_LaneBand.passes``) is measured in lane 0: near the centre a label's
-    letters cover most of the circle, so each such label would take a lane of its own, and the lanes would leave no
-    room before the centre."""
+    Only the labels ``shows`` gives letters have them. A Linear label's letters do not depend on its lane
+    (``LabelSizing.extent``). An inside Circular slot whose lanes, measured by lane, would pass the centre
+    (``_LaneBand.passes``) is measured in lane 0: near the centre a label's letters cover most of the circle, so each
+    such label would take a lane of its own, and the lanes would leave no room before the centre."""
 
     measured: dict[tuple[int, str, int], LabelExtent] = {}
 
     def letters(annotation: ResolvedRegionAnnotation, place_bp: float, lane: int) -> LabelExtent | None:
-        if not shows_labels or not annotation.label:
+        if not shows(annotation):
             return None
         at = lane if by_lane else 0
         key = (annotation.record_index, annotation.id, at)
@@ -781,14 +842,17 @@ def _lane_band(
     centre = room_bounds.limit_px
     limit: float | None = centre
     stop: RoomStop = "centre"
+    set_px: float | None = None
     if available_extent_px is not None:
         clips = track_params.overflow == "clip" and track_params.to_slot is None
         if clips and (centre is None or float(available_extent_px) <= centre):
             limit, stop = float(available_extent_px), "clip"
         elif not clips:
             limit = None
+        if track_params.to_slot is None:
+            set_px = float(available_extent_px) if centre is None else min(float(available_extent_px), centre)
     return _LaneBand(
-        LANE_EXTENT_PX, float(track_params.lane_gap_px), float(track_params.padding_px), limit, stop, labels_above
+        LANE_EXTENT_PX, float(track_params.lane_gap_px), float(track_params.padding_px), limit, stop, labels_above, set_px
     )
 
 
@@ -827,7 +891,6 @@ def layout_annotation_track(
         and (track_params.marks is None or item.mark in track_params.marks)
     )
 
-    measures = _TrackMeasures(track_params, labels, join_origin)
     band = _lane_band(
         track_params, available_extent_px=available_extent_px, room_bounds=room_bounds,
         labels_above=labels.labels_above,
@@ -835,41 +898,62 @@ def layout_annotation_track(
 
     def padding(annotation: ResolvedRegionAnnotation) -> float:
         scale = float(labels.bp_per_px.get(annotation.record_index, 1.0))
-        cap = measures.style(annotation).stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
+        cap = effective_annotation_style(annotation, track_params).stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
         return (track_params.padding_px + cap) * scale
 
     highlight_track = track_params.marks == ("highlight",)
-
-    def packed(by_lane: bool) -> tuple[PlacedRegionAnnotation, ...]:
-        return assign_annotation_lanes(
-            selected,
-            record_lengths=record_lengths,
-            letters_in_lane=_letters_in_lanes(
-                band, measures.extent, measures.paint, shows_labels=track_params.show_labels, by_lane=by_lane
-            ),
-            padding_bp=padding,
-            overflow="compress" if highlight_track else track_params.overflow,
-            join_origin=join_origin,
-            label_position=measures.label_position,
-        )
-
-    # A Circular label's letters depend on its lane; an inside slot whose lanes would pass the centre measured so
-    # measures them all in its outer lane (``_letters_in_lanes``).
-    placements = packed(join_origin)
-    if band.stop == "centre" and band.passes(lane_count_of(placements)) and not highlight_track:
-        placements = packed(False)
-    if highlight_track:
-        placements = tuple(replace(item, lane=0) for item in placements)
     labelled = track_params.show_labels and not (track_params.to_slot is not None or track_params.cover_anchor)
-    lane_rooms = (
-        _LaneRooms(())
-        if not labelled
-        else _lane_rooms(
-            placements, record_lengths=record_lengths, measures=measures, band=band, join_origin=join_origin,
-            at_least=room_bounds.at_least,
+
+    def settled(without_letters: frozenset[tuple[int, str]]) -> tuple[_TrackMeasures, ResolvedAnnotationTrack]:
+        """The lanes and rooms with the labels of ``without_letters`` left out (``_TrackMeasures``)."""
+
+        measures = _TrackMeasures(track_params, labels, join_origin, without_letters)
+
+        def packed(by_lane: bool) -> tuple[PlacedRegionAnnotation, ...]:
+            return assign_annotation_lanes(
+                selected,
+                record_lengths=record_lengths,
+                letters_in_lane=_letters_in_lanes(
+                    band, measures.extent, measures.paint, by_lane=by_lane,
+                    shows=lambda annotation: track_params.show_labels and measures.has_letters(annotation),
+                ),
+                padding_bp=padding,
+                overflow="compress" if highlight_track else track_params.overflow,
+                join_origin=join_origin,
+                label_position=measures.label_position,
+            )
+
+        # A Circular label's letters depend on its lane; an inside slot whose lanes would pass the centre measured
+        # so measures them all in its outer lane (``_letters_in_lanes``).
+        placements = packed(join_origin)
+        if band.stop == "centre" and band.passes(lane_count_of(placements)) and not highlight_track:
+            placements = packed(False)
+        if highlight_track:
+            placements = tuple(replace(item, lane=0) for item in placements)
+        lane_rooms = (
+            _LaneRooms(())
+            if not labelled
+            else _lane_rooms(
+                placements, record_lengths=record_lengths, measures=measures, band=band, join_origin=join_origin,
+                at_least=room_bounds.at_least,
+            )
         )
-    )
-    room = _largest_room(lane_rooms.rooms)
+        return measures, ResolvedAnnotationTrack(
+            slot_id=str(slot_id), set_id=str(set_id), placements=placements, required_extent_px=0.0,
+            label_font_size=float(labels.font_size), join_origin=join_origin, lane_rooms=lane_rooms.rooms,
+            labels_above=labels.labels_above, without_room=lane_rooms.without_room,
+            rooms_stop=None if band.limit_px is None else band.stop, without_letters=tuple(sorted(without_letters)),
+        )
+
+    # RGN-CUT-EMPTY-OMIT (OV-2805): a label that keeps no letter where the lanes put it is not drawn, so its text
+    # moves no band: it is packed again as if it had no text, and so is every label that then keeps no letter, until
+    # each label drawn keeps one. Each round leaves out at least one more label and none comes back, so the rounds
+    # end within one more than the number of labels.
+    measures, track = settled(frozenset())
+    while labelled and (more := _keeping_no_letter(track, band, measures)):
+        measures, track = settled(frozenset(track.without_letters) | more)
+    placements = track.placements
+    room = track.lane_room_px
     lane_count = lane_count_of(placements)
     lane_gap = float(track_params.lane_gap_px)
     required = band.bare_px(lane_count) + room
@@ -902,20 +986,7 @@ def layout_annotation_track(
         elif track_params.overflow == "clip":
             # Its rooms fit within the set size (``_lane_rooms``), so only lanes that pass it alone are clipped.
             clipped = band.passes(lane_count)
-    track = ResolvedAnnotationTrack(
-        slot_id=str(slot_id),
-        set_id=str(set_id),
-        placements=placements,
-        required_extent_px=float(required),
-        label_font_size=float(labels.font_size),
-        join_origin=join_origin,
-        clipped=clipped,
-        lane_gap_px=lane_gap,
-        lane_rooms=lane_rooms.rooms,
-        labels_above=labels.labels_above,
-        without_room=lane_rooms.without_room,
-        rooms_stop=None if band.limit_px is None else band.stop,
-    )
+    track = replace(track, required_extent_px=float(required), clipped=clipped, lane_gap_px=lane_gap)
     track = _cut_by_clip(track, band, labelled=labelled, measures=measures)
     return replace(track, without_room_font_sizes=measures.left_out_font_sizes(track))
 

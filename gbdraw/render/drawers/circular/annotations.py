@@ -167,12 +167,14 @@ class CircularAnnotationLabel:
 @dataclass(frozen=True)
 class CircularAnnotationLabels:
     """The labels of one record's annotation track (``circular_annotation_labels``): those drawn, and those left
-    out because no letter of their text fits their circle (``without_letters``, RGN-CUT-EMPTY-OMIT, OV-2804). A
-    label left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts
-    it, with its font size."""
+    out because no letter of their text fits their circle (``without_letters``, RGN-CUT-EMPTY-OMIT, OV-2804): the
+    labels whose cut keeps no letter, and those the track leaves out because their cut would keep none where their
+    text would put their mark (``ResolvedAnnotationTrack.without_letters``, OV-2805), each at its midpoint. A label
+    left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts it,
+    with its font size."""
 
     drawn: tuple[CircularAnnotationLabel, ...]
-    without_letters: tuple[CircularAnnotationLabel, ...] = ()
+    without_letters: tuple[CircularAnnotationLabel, ...]
 
 
 def _record_lanes(
@@ -488,11 +490,12 @@ def circular_annotation_labels(
     letters meet one, or a label of this track placed before it, moves along
     its region (``_along_region``) within the room the default places take, to
     a place where it keeps a letter. A label whose cut at its midpoint keeps no
-    letter is left out (``CircularAnnotationLabels.without_letters``).
+    letter, or that the track leaves out for want of a letter, is left out
+    (``CircularAnnotationLabels.without_letters``).
     """
 
     if not params.show_labels:
-        return CircularAnnotationLabels(())
+        return CircularAnnotationLabels((), ())
     placements, lane_width = _record_lanes(
         track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
     )
@@ -500,8 +503,9 @@ def circular_annotation_labels(
     entries: list[tuple[ResolvedRegionAnnotation, Callable[[float], CircularAnnotationLabel]]] = []
     for placement in placements:
         annotation = placement.annotation
-        # A label the track leaves out (no room, or cut by its clip) is not drawn, placed or given room.
-        if not track.draws_label(annotation):
+        # A label the track leaves out (no room, or cut by its clip) is not drawn, placed or given room; one it leaves
+        # out for want of a letter is counted below.
+        if not (track.draws_label(annotation) or track.leaves_out_letters(annotation)):
             continue
         style = effective_annotation_style(annotation, params)
         lane_inner, lane_outer = _lane_radii(
@@ -542,8 +546,9 @@ def circular_annotation_labels(
             )
         )
     defaults = [label_at(annotation.label_midpoint_bp(join_origin=track.join_origin)) for annotation, label_at in entries]
-    without_letters = tuple(label for label in defaults if label.keeps_no_letter)
-    kept = [(entry, label) for entry, label in zip(entries, defaults) if not label.keeps_no_letter]
+    letterless = [label.keeps_no_letter or track.leaves_out_letters(entry[0]) for entry, label in zip(entries, defaults)]
+    without_letters = tuple(label for label, left_out in zip(defaults, letterless) if left_out)
+    kept = [(entry, label) for entry, label, left_out in zip(entries, defaults, letterless) if not left_out]
     if obstacles is None:
         return CircularAnnotationLabels(tuple(label for _entry, label in kept), without_letters)
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for _entry, label in kept), default=0.0)
@@ -749,7 +754,8 @@ def _curved_label(
     """A label drawn along the circle through its anchor at ``angle``, upright (OV-1210).
 
     The text keeps one em clear of each end of a path just short of a whole
-    circle; a text longer than that is cut: it keeps its start and ends with an
+    circle, measured on the circle its letters come nearest the centre on; a
+    text longer than that is cut: it keeps its start and ends with an
     ellipsis, centred on the label like a whole one, and the label is ``cut``.
     """
 
@@ -769,8 +775,10 @@ def _curved_label(
             return max(target - (low if outward else high), 1e-6 - low)
 
         radius = clear(extent, radius_for)
-        # How far the ink may reach each way from the label's middle, along its baseline.
-        room = math.radians(_MAX_HALF_PATH_DEG) * radius - font_size
+        # How far the ink may reach each way from the label's middle, along the circle its letters come nearest the
+        # centre on (OV-2806): there they stand closest together, and a circle about as small as the letters, or
+        # letters pressed against the centre past their mark, leave no room for one.
+        room = math.radians(_MAX_HALF_PATH_DEG) * extent(radius)[0] - font_size
         if max(-left, right) <= room or shown == _CUT_ONLY:
             break
         shown = _cut_to(runs, room, ink)
