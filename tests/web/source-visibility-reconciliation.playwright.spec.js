@@ -15,8 +15,9 @@ const source = async (file, name) => {
   return { name, mimeType: 'text/plain', buffer: Buffer.from(
     session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') };
 };
+// The file of the first Circular File card: a Replace of that card's file.
 const upload = async (page, file) => {
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
+  await page.locator('[data-circular-source-card]').first().getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
   await expect.poll(() => page.evaluate(async () =>
     (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
 };
