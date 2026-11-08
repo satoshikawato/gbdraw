@@ -1484,6 +1484,21 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
 const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain: string }} */ row) => (
   row.domain === 'config' || row.domain.startsWith('config.')
 ));
+/**
+ * The places (dotted, under `config`) of the registry fields a stored slice config holds that its Session's
+ * version did not write yet (`since`; Python's `slice_containers`): a field no writer of that version wrote.
+ * @param {unknown} sliceConfig
+ * @param {number} sliceVersion
+ * @returns {string[]}
+ */
+const unwrittenSliceFields = (sliceConfig, sliceVersion) => (isPlainObject(sliceConfig) ? CONFIG_SLICE_ROWS : [])
+  .filter((/** @type {{ since: number }} */ row) => row.since > sliceVersion)
+  .map((/** @type {{ domain: string, path: string }} */ row) => [row.domain.slice('config.'.length), row.path].filter(Boolean).join('.'))
+  .filter((at) => {
+    const parts = at.split('.');
+    const container = parts.slice(0, -1).reduce((/** @type {unknown} */ value, part) => (isPlainObject(value) ? value[part] : undefined), sliceConfig);
+    return isPlainObject(container) && Object.hasOwn(container, parts[parts.length - 1]);
+  });
 // A drawing's settings on Load (plan 4.1): the projection of its mode's
 // committed request, then each registry row its slice holds. A slice may
 // omit any row; the drawing's defaults fill what neither holds. The
@@ -6739,6 +6754,8 @@ const liveFileStateOf = ({ target, linearSeqs }) => /** @type {LiveFileState} */
  * @property {boolean} resolveTrackPlacements False for settings only or a stored slice without its request projection.
  * @property {Record<string, unknown> | null} validatedConfig The restored config whose unmanaged overrides Load read already, else null.
  * @property {number | undefined} sourceSessionVersion The version of the file it is in.
+ * @property {number} sliceVersion The version of the document that holds its slice: the file's, or for a Session
+ *   27-44 the version of Python's conversion of it.
  */
 /**
  * One stored drawing's draft as Load installs it, and the settings its
@@ -6774,8 +6791,14 @@ const readStoredDrawingDraft = async (view, repairs) => {
   droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
     code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
   })));
+  // A field the file's version did not write yet is dropped with a row, as any other field no writer wrote.
+  const unwritten = unwrittenSliceFields(slice.config, view.sliceVersion);
+  unwritten.forEach((field) => repairs.push(loadRepair({
+    code: 'setting-replaced', path: `${pathIn(at, 'config')}.${field}`, effect: 'dropped'
+  })));
+  const storedConfig = withoutFieldsAt(slice.config, unwritten);
   /** @type {Record<string, any>} */
-  let config = view.config;
+  let config = /** @type {typeof view.config} */ (withoutFieldsAt(view.config, unwritten));
   // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
   if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
   // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
@@ -6798,9 +6821,9 @@ const readStoredDrawingDraft = async (view, repairs) => {
   // What `applyModeSliceData` installs.
   const installedConfig = overlayModeSliceConfig(null, config);
   repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
-    stored: slice.config, mode, resolveTrackPlacements: view.resolveTrackPlacements
+    stored: storedConfig, mode, resolveTrackPlacements: view.resolveTrackPlacements
   }));
-  repairs.push(...unreadFieldRepairs(slice.config,
+  repairs.push(...unreadFieldRepairs(storedConfig,
     pathIn(at, 'config'), mode, { slice: true }));
   // (A Session 27-44 keeps them in its `ui` and `features`.)
   repairs.push(...sliceFieldRepairs(slice, at, mode));
@@ -6884,7 +6907,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
     id, mode, part, config,
     legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }),
     files, storedConservationBlasts: null, resolveTrackPlacements: true, validatedConfig: null,
-    sourceSessionVersion: SESSION_VERSION
+    sourceSessionVersion: SESSION_VERSION, sliceVersion: SESSION_VERSION
   }, repairs);
   return {
     mode,
@@ -7901,7 +7924,7 @@ const importSessionDocument = async (e, options = {}) => {
         storedConservationBlasts: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts,
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         validatedConfig: unmanagedConfigValidation ? restoredConfig : null,
-        sourceSessionVersion
+        sourceSessionVersion, sliceVersion: storedDocument.version
       }, repairs);
       installedSettings.set(id, settings);
       drafts.set(id, draft);

@@ -6,7 +6,7 @@ named by the rows below and nothing else: a ``config`` with its ``form``,
 ``adv``, and ``losat`` groups, ``features``, the Legend part of
 ``editorState`` (with ``featureStrokes``), and a few ``ui`` keys.
 
-A row is ``{domain, path, modes, key, migrate}``:
+A row is ``{domain, path, modes, key, migrate, since}``:
 
 - ``domain``: the slice container that holds the value (``config.form``,
   ``config``, ``editorState.legend``, ...).
@@ -16,6 +16,9 @@ A row is ``{domain, path, modes, key, migrate}``:
   entry by entry by the multi-drawing step (PD-OI-090)); otherwise ``None``.
 - ``migrate``: the token by which the split of a Session 27-44 draft fills the
   two slices (``MIGRATION_TOKENS``).
+- ``since``: the first Session version whose slices hold the row. A reader
+  admits a row only in a Session of that version or later
+  (``slice_containers``): a Session written before it holds no such field.
 
 The Web reads the same rows from ``gbdraw/web/js/mode-scoped-settings.generated.js``,
 which ``tools/generate_mode_scoped_settings.py`` writes from this module.
@@ -30,6 +33,8 @@ DiagramMode = Literal["circular", "linear"]
 RowModes = Literal["both", "circular", "linear"]
 
 DIAGRAM_MODES: tuple[DiagramMode, ...] = ("circular", "linear")
+# The first Session version that keeps each mode's draft in a slice (``modes``).
+MODE_SCOPED_FIRST_SESSION_VERSION = 46
 # The revision of Phase E's registry table (``registry-v46.tsv``) these rows follow.
 MODE_SCOPED_SETTINGS_REVISION = 5
 
@@ -73,6 +78,7 @@ class ModeScopedSetting:
     modes: RowModes
     key: str | None
     migrate: str
+    since: int = MODE_SCOPED_FIRST_SESSION_VERSION
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -81,11 +87,16 @@ class ModeScopedSetting:
             "modes": self.modes,
             "key": self.key,
             "migrate": self.migrate,
+            "since": self.since,
         }
 
 
-def _rows(domain: str, *entries: tuple[str, RowModes, str]) -> tuple[ModeScopedSetting, ...]:
-    return tuple(ModeScopedSetting(domain, path, modes, None, migrate) for path, modes, migrate in entries)
+def _rows(
+    domain: str, *entries: tuple[str, RowModes, str] | tuple[str, RowModes, str, int]
+) -> tuple[ModeScopedSetting, ...]:
+    """Rows of ``domain``: ``(path, modes, migrate)``, with ``since`` as a fourth item when it is not the first."""
+
+    return tuple(ModeScopedSetting(domain, entry[0], entry[1], None, entry[2], *entry[3:]) for entry in entries)
 
 
 _FORM_ROWS = _rows(
@@ -95,8 +106,8 @@ _FORM_ROWS = _rows(
     ("strain", "circular", "own"),
     ("plot_title", "both", "profile"),
     # The requested figure size (canvas.figure_width / figure_height): null (Auto) or a length with a unit.
-    ("figure_width", "both", "copy"),
-    ("figure_height", "both", "copy"),
+    ("figure_width", "both", "copy", 51),
+    ("figure_height", "both", "copy", 51),
     ("track_type", "circular", "own"),
     ("linear_track_layout", "linear", "own"),
     ("show_scale", "both", "copy"),
@@ -111,7 +122,7 @@ _FORM_ROWS = _rows(
     ("circular_region_end", "circular", "own"),
     ("circular_reverse", "circular", "own"),
     # The window across the origin a CLI or Python Session gave the record; the Start/End fields cannot hold it.
-    ("circular_windows", "circular", "own"),
+    ("circular_windows", "circular", "own", 51),
     ("circular_record_label", "circular", "own"),
     ("circular_record_subtitle", "circular", "own"),
     ("separate_strands", "both", "copy"),
@@ -323,11 +334,14 @@ MODE_SCOPED_SETTINGS: tuple[ModeScopedSetting, ...] = (
 LOSAT_EXECUTION_FIELDS = ("executionMode", "totalThreadBudget", "threadsPerJob", "parallelWorkers")
 
 
-def _slice_containers() -> dict[str, frozenset[str]]:
-    """Each slice container (``""`` is the slice itself) and the keys it may hold."""
+def _slice_containers(version: int | None) -> dict[str, frozenset[str]]:
+    """Each slice container (``""`` is the slice itself) and the keys it may hold in a Session of ``version``
+    (``None``: the current writer's)."""
 
     containers: dict[str, set[str]] = {"": set()}
     for row in MODE_SCOPED_SETTINGS:
+        if version is not None and row.since > version:
+            continue
         parts = row.domain.split(".")
         for depth in range(len(parts)):
             parent = ".".join(parts[:depth])
@@ -337,8 +351,18 @@ def _slice_containers() -> dict[str, frozenset[str]]:
     return {container: frozenset(keys) for container, keys in containers.items()}
 
 
-# Each slice container and the keys it may hold; a slice holds nothing else.
-SLICE_CONTAINERS: dict[str, frozenset[str]] = _slice_containers()
+# Each slice container and the keys the current writer's slice may hold; a slice holds nothing else.
+SLICE_CONTAINERS: dict[str, frozenset[str]] = _slice_containers(None)
+_VERSION_SLICE_CONTAINERS: dict[int, dict[str, frozenset[str]]] = {}
+
+
+def slice_containers(version: int) -> dict[str, frozenset[str]]:
+    """Each slice container and the keys a slice of a Session of ``version`` may hold: the rows of that version
+    or older (``since``). The one reader of a row's first version."""
+
+    if version not in _VERSION_SLICE_CONTAINERS:
+        _VERSION_SLICE_CONTAINERS[version] = _slice_containers(version)
+    return _VERSION_SLICE_CONTAINERS[version]
 
 
 def unmanaged_config_override_modes(path: str) -> tuple[DiagramMode, ...]:
@@ -376,7 +400,9 @@ __all__ = [
     "MODE_SCOPED_SETTINGS",
     "MODE_SCOPED_SETTINGS_REVISION",
     "ModeScopedSetting",
+    "MODE_SCOPED_FIRST_SESSION_VERSION",
     "SLICE_CONTAINERS",
     "mode_scoped_settings_payload",
+    "slice_containers",
     "unmanaged_config_override_modes",
 ]

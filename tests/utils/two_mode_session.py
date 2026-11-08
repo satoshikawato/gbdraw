@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_drawing_view import drawing_view, view_at
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
@@ -43,8 +43,8 @@ def two_mode_session(linear: dict[str, Any] | None = None) -> dict[str, Any]:
     resources = dict(circular["resources"])
     for resource_id, descriptor in linear["resources"].items():
         resources[aliases[resource_id]] = {**descriptor, "name": f"linear-{descriptor['name']}"}
-    session = copy.deepcopy(circular)
-    session["version"] = 48  # the 46-48 layout this helper builds; a 49 holds no otherModeResult
+    # The 46-48 layout this helper builds; a 49 holds no otherModeResult.
+    session = view_at(copy.deepcopy(circular), 48)
     session["resources"] = resources
     session["otherModeResult"] = {
         "renderRequest": _rename_references(linear["renderRequest"], aliases),

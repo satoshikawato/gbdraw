@@ -44,6 +44,8 @@ A Session 51 Circular drawing whose record is drawn in one window across the ori
 after its end, such as a Session the Python API saved with `RecordWindow(16000, 100)`) keeps that window in
 `config.form.circular_windows`; the Web app shows it read-only under Region and draws and saves it unchanged. A
 Session without the key reads as no such window.
+These three form fields are Session 51's: a Session 46-50 that holds one in a drawing's slice is refused by the
+command line and the Python API, and the Web app loads it without that field, listed in the Load dialog.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
 `axis` (with `axis.source.isCircular`, whether a selected span may cross the

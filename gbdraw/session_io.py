@@ -94,10 +94,11 @@ from .tracks.circular import _LEGACY_SPACING_PARAM, _migrate_legacy_circular_tra
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
+    MODE_SCOPED_FIRST_SESSION_VERSION,
     MODE_SCOPED_SETTINGS,
-    SLICE_CONTAINERS,
     DiagramMode,
     ModeScopedSetting,
+    slice_containers,
     unmanaged_config_override_modes,
 )
 
@@ -121,7 +122,7 @@ CURRENT_SESSION_VERSION = 51
 # and the config leaf ``canvas.linear.wrap_length`` (a record drawn over
 # several rows).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
-MODE_SCOPED_SESSION_MIN_VERSION = 46
+MODE_SCOPED_SESSION_MIN_VERSION = MODE_SCOPED_FIRST_SESSION_VERSION
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 48 a Session without a Web draft (CLI, Python API) holds each
 # table only as its file card's file: the Web reads every row as that file's.
@@ -794,7 +795,7 @@ def _validate_document_body(
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
-        _validate_mode_slices(session)
+        _validate_mode_slices(session, version)
     elif version >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION:
         _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
@@ -1201,10 +1202,10 @@ def _container_at(source: Mapping[str, Any], domain: str) -> object:
     return current
 
 
-def _validate_mode_slices(session: Mapping[str, Any]) -> None:
+def _validate_mode_slices(session: Mapping[str, Any], version: int) -> None:
     """Validate each Session 46 mode slice against its own mode.
 
-    A slice holds only registry fields (MODE_SCOPED_SETTINGS); a missing field
+    A slice holds only the registry fields of its version (``slice_containers``); a missing field
     is that mode's default, and a missing slice is all defaults. Each slice
     runs the draft validators with its own mode, so a lane placement or a
     GUI-unmanaged override of one mode never reaches the other (OV-106).
@@ -1222,8 +1223,9 @@ def _validate_mode_slices(session: Mapping[str, Any]) -> None:
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
     cards = bindings.get("linearSeqs") if isinstance(bindings, Mapping) else None
     bound_uids = {card.get("uid") for card in cards if isinstance(card, Mapping)} if isinstance(cards, list) else set()
+    containers = slice_containers(version)
     for mode, mode_slice in modes.items():
-        _validate_mode_slice_fields(mode_slice, mode)
+        _validate_mode_slice_fields(mode_slice, mode, containers)
         config = mode_slice.get("config", {})
         if "recordsOff" in config:
             _validate_records_off(config["recordsOff"], mode, bound_uids)
@@ -1258,21 +1260,37 @@ def _validate_records_off(records_off: object, mode: str, bound_uids: set[object
         )
 
 
-def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -> None:
-    """Reject a slice field that the registry does not name."""
+def mode_slice_of_version(value: Mapping[str, Any], version: int, container: str = "") -> dict[str, Any]:
+    """``value`` (a slice, or its ``container``) with only the keys a slice of a Session of ``version`` may hold
+    (``slice_containers``): what a writer of that version writes from a current slice."""
+
+    containers = slice_containers(version)
+    kept: dict[str, Any] = {}
+    for key, child in value.items():
+        if key not in containers[container]:
+            continue
+        path = f"{container}.{key}" if container else key
+        kept[key] = mode_slice_of_version(child, version, path) if path in containers and isinstance(child, Mapping) else child
+    return kept
+
+
+def _validate_mode_slice_fields(
+    value: object, mode: str, containers: Mapping[str, frozenset[str]], container: str = ""
+) -> None:
+    """Reject a slice field that the registry of the Session's version (``containers``) does not name."""
 
     label = f"modes.{mode}" + (f".{container}" if container else "")
     if not isinstance(value, Mapping):
         raise ValidationError(f"Session {label} must be an object.", diagnostic=_SESSION_FIELDS_INVALID)
-    unknown = sorted(str(field) for field in set(value) - SLICE_CONTAINERS[container])
+    unknown = sorted(str(field) for field in set(value) - containers[container])
     if unknown:
         raise ValidationError(
             f"Session {label} cannot contain {', '.join(unknown)}.", diagnostic=_SESSION_FIELDS_INVALID
         )
     for field, child in value.items():
         child_container = f"{container}.{field}" if container else field
-        if child_container in SLICE_CONTAINERS:
-            _validate_mode_slice_fields(child, mode, child_container)
+        if child_container in containers:
+            _validate_mode_slice_fields(child, mode, containers, child_container)
 
 
 def _validate_current_retired_active_config_paths(

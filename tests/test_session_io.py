@@ -85,7 +85,7 @@ from gbdraw.session_io import (
     write_serialized_session,
     write_session_json,
 )
-from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view
+from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view, view_at
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session import (
@@ -4539,7 +4539,7 @@ def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_wr
     from gbdraw.api.request_render import CurrentRequestArtifacts
 
     # The drawing's view is the 48 layout this case exercises (a 49 holds no top-level manifest).
-    payload = {**drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), "version": 48}
+    payload = view_at(drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), 48)
     raw = copy.deepcopy(payload["proteinIdentityManifest"])
     protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
     protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])

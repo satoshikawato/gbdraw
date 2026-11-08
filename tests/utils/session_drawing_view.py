@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from gbdraw.session_drawings import _drawing_view
+from gbdraw.session_io import mode_slice_of_version
 
 
 def drawing_view(
@@ -30,6 +31,13 @@ def drawing_view(
     ]
     assert len(drawings) == 1, [(d["id"], d["mode"]) for d in document["drawings"]]
     return _drawing_view(document, drawings[0])
+
+
+def view_at(view: Mapping[str, Any], version: int) -> dict[str, Any]:
+    """``view`` as a Session ``version`` holds it: no slice field a later Session added (``since``)."""
+
+    modes = {mode: mode_slice_of_version(slice_, version) for mode, slice_ in view.get("modes", {}).items()}
+    return {**view, "version": version, **({"modes": modes} if "modes" in view else {})}
 
 
 def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
