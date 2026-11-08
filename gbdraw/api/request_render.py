@@ -2704,14 +2704,30 @@ def _source_protein_mode(
     return "orthogroup" if request.options.orthogroups is not None else "pairwise"
 
 
+def _record_analysis_selector(item: ResolvedRecordProvenance) -> str | None:
+    """The record selector a protein record analysis of ``item`` names: its input's, else ``#n`` for the n-th record
+    of a file its ALL input expanded to (``<key>:<n>``), the selector of the Web card each such record becomes.
+
+    The planned request holds no selector (its records are materialized), so the plan's provenance gives it.
+    """
+
+    if item.selector is not None:
+        return item.selector.raw
+    if item.cardinality is RecordCardinality.ALL and item.source_record_count > 1:
+        return f"#{item.source_record_index + 1}"
+    return None
+
+
 def _extract_linear_request_proteins(
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
     inputs: PreparedDiagramInputs,
     provenance: Sequence[ResolvedRecordProvenance],
 ) -> ProteinExtractionResult:
-    """The proteins of the drawn units of a planned request; each unit of a window names the region its search
-    reads (``ResolvedWindow.search_region``), as the Web's extraction of that unit names it."""
+    """The proteins of the drawn units of a planned request, with the record analyses the Web's extraction of each
+    unit writes: each unit of a window names the region its search reads (``ResolvedWindow.search_region``), each
+    unit the record selector of its card (:func:`_record_analysis_selector`), and the manifest names every protein
+    in its record's search frame (``extract_protein_identity_manifest``)."""
 
     record_instance_keys = _request_record_instance_keys(request)
     extraction = render_stage(
@@ -2720,10 +2736,7 @@ def _extract_linear_request_proteins(
         records,
         record_instance_keys=record_instance_keys,
         record_source_ids=tuple(str(record.id) for record in records),
-        record_selectors=tuple(
-            record_input.selector.raw if record_input.selector is not None else None
-            for record_input in request.records
-        ),
+        record_selectors=tuple(_record_analysis_selector(item) for item in provenance),
         regions=tuple(
             item.window.search_region if item.window is not None else None
             for item, _record in zip(provenance, records, strict=True)

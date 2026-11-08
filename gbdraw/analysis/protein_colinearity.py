@@ -64,7 +64,7 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
-from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _source_feature_index
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _read_coord_map, _source_feature_index
 from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
@@ -1688,11 +1688,27 @@ def _protein_identity_core(protein: CdsProtein) -> dict[str, object]:
     }
 
 
+def _search_frame_extent(protein: CdsProtein, record: SeqRecord) -> tuple[int, int]:
+    """The protein's linear extent in its record's search frame: the record before its display reverse complement
+    (PD-OI-073). A record analysis names its proteins there, so the drawn frame of the caller (the CLI extracts from
+    the drawn records, the Web from the search frame) does not change its display binding."""
+
+    if _read_coord_map(record)[1] == 1:
+        return int(protein.start), int(protein.end)
+    length = len(record)
+    return length - int(protein.end), length - int(protein.start)
+
+
 def _protein_binding_metadata(
     protein: CdsProtein,
     *,
     export_ordinal: int | None,
+    record: SeqRecord,
 ) -> dict[str, object]:
+    """The display metadata of one protein of ``record``'s analysis, its extent in the search frame
+    (:func:`_search_frame_extent`)."""
+
+    start, end = _search_frame_extent(protein, record)
     return {
         "displayAlias": protein.display_alias,
         "exportOrdinal": export_ordinal,
@@ -1709,8 +1725,8 @@ def _protein_binding_metadata(
         "dbXref": list(protein.db_xref),
         "parentIds": list(protein.parent_ids),
         "geneParentId": protein.gene_parent_id,
-        "start": protein.start,
-        "end": protein.end,
+        "start": start,
+        "end": end,
     }
 
 
@@ -1876,8 +1892,7 @@ def extract_protein_identity_manifest(
         )
         feature_metadata = {
             str(protein.feature_analysis_id): _protein_binding_metadata(
-                protein,
-                export_ordinal=export_ordinals[str(protein.feature_analysis_id)],
+                protein, export_ordinal=export_ordinals[str(protein.feature_analysis_id)], record=records[record_index],
             )
             for protein in identified
         }
