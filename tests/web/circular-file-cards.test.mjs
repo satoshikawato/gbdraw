@@ -53,6 +53,7 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { readCircularSourceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
+const { circularDiscoveryForInput } = await import('../../gbdraw/web/js/services/record-discovery.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 
 const root = process.cwd();
@@ -139,6 +140,11 @@ await test('Generate right after loading a CLI Session in batch grouping writes 
     assert.equal((await load(bytes)).status, 'ok');
     // Load seeds no records from the committed request.
     assert.deepEqual(modeDrawing(state, 'circular').circularRecordList.value, []);
+    // OV-2881: the cards' read waits for Generate (as dev's one input did), so
+    // no automatic read after Load writes the Record Order into the draft.
+    const loaded = modeDrawing(state, 'circular');
+    assert.equal(loaded.circularRecordDiscovery.status, 'deferred');
+    assert.equal(circularDiscoveryForInput(loaded).current, true);
     const records = await nextGenerateRecords();
     assert.deepEqual(records.map(shapeOf), cliRequest.records.map(shapeOf));
     assert.equal(records.some(record => record.cardinality === 'all'), false);
