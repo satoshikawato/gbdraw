@@ -17,7 +17,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -309,6 +309,7 @@ if TYPE_CHECKING:
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
 
 logger = logging.getLogger(__name__)
+_RecordValue = TypeVar("_RecordValue")
 
 
 @dataclass(frozen=True)
@@ -1016,6 +1017,28 @@ def _estimate_square_grid(record_count: int) -> tuple[int, int]:
     cols = int(math.ceil(math.sqrt(record_count)))
     rows = int(math.ceil(float(record_count) / float(cols)))
     return cols, rows
+
+
+def _circular_drawn_order(
+    records: Sequence[SeqRecord],
+    positions: Sequence[str] | None,
+) -> tuple[list[int], list[int]]:
+    """The request indices of a Circular canvas's records in drawn order, and the record count of each row."""
+
+    if not positions:
+        return list(range(len(records))), _resolve_multi_record_default_row_counts(len(records))
+    resolved_order, rows_by_record = resolve_record_row_positions(records, positions, _compatibility="circular")
+    ordered_indices = list(resolved_order)
+    return ordered_indices, [
+        sum(rows_by_record[index] == row for index in ordered_indices) for row in sorted(set(rows_by_record))
+    ]
+
+
+def _in_drawn_order(values: Sequence[_RecordValue] | None, ordered_indices: Sequence[int]) -> list[_RecordValue] | None:
+    """A per-record input aligned with the canvas records, put into their drawn order with them, so a
+    record that a position moves keeps its own edits, depth, display transform and presentation (OV-2907)."""
+
+    return None if values is None else [values[index] for index in ordered_indices]
 
 
 def _resolve_multi_record_default_row_counts(record_count: int) -> list[int]:
@@ -3070,34 +3093,12 @@ def assemble_circular_diagram_from_records(
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
-    if not records:
-        ordered_indices, row_counts = [], []
-    elif layout.multi_record_positions:
-        resolved_order, rows_by_record = resolve_record_row_positions(
-            records,
-            layout.multi_record_positions,
-            _compatibility="circular",
-        )
-        ordered_indices = list(resolved_order)
-        row_counts = [
-            sum(rows_by_record[index] == row for index in ordered_indices)
-            for row in sorted(set(rows_by_record))
-        ]
-    else:
-        ordered_indices = list(range(len(records)))
-        row_counts = _resolve_multi_record_default_row_counts(len(records))
-    # Every per-record input aligned with ``records`` follows it into the drawn order, so a
-    # moved record keeps its own edits, display transform and presentation (OV-2907).
+    ordered_indices, row_counts = _circular_drawn_order(records, layout.multi_record_positions)
     records = [records[idx] for idx in ordered_indices]
-    if record_depth_tracks is not None:
-        record_depth_tracks = [record_depth_tracks[idx] for idx in ordered_indices]
-    record_features = tuple(inputs._resolved_record_features[idx] for idx in ordered_indices) if (
-        inputs._resolved_record_features
-    ) else ()
-    if _record_transforms is not None:
-        _record_transforms = [_record_transforms[idx] for idx in ordered_indices]
-    if _record_presentations is not None:
-        _record_presentations = [_record_presentations[idx] for idx in ordered_indices]
+    record_depth_tracks = _in_drawn_order(record_depth_tracks, ordered_indices)
+    record_features = tuple(_in_drawn_order(inputs._resolved_record_features or None, ordered_indices) or ())
+    _record_transforms = _in_drawn_order(_record_transforms, ordered_indices)
+    _record_presentations = _in_drawn_order(_record_presentations, ordered_indices)
     if ordered_indices != list(range(len(ordered_indices))):
         display_index_by_input = {
             input_index: display_index
