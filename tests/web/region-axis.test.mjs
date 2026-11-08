@@ -137,6 +137,18 @@ test('a feature counts only when every part lies inside the span', () => {
   assert.ok(!partsInsideSpan(source, span, []));
 });
 
+// OV-2718: the catalog gives a feature's parts in the input file's coordinates; on a cropped or reverse-complemented
+// record they are not the drawn record's own bases.
+test('a feature of a cropped, reverse-complemented record counts where its source bases are drawn', () => {
+  const [crop] = caseRecords('linear-two-records-crop-reverse');
+  const { source } = crop.axis;
+  // The crop 1001-9000:rc draws 9,000 first: bases 8,901..9,000, [8_900, 9_000), are display 0..99.
+  assert.ok(partsInsideSpan(source, { start: 0, length: 100 }, [{ start: 8_900, end: 9_000 }]));
+  assert.ok(!partsInsideSpan(source, { start: 0, length: 100 }, [{ start: 8_899, end: 9_000 }]));
+  assert.ok(partsInsideSpan(source, { start: 7_900, length: 100 }, [{ start: 1_000, end: 1_100 }]));
+  assert.equal(partsMidpoint(source, [{ start: 8_900, end: 9_000 }]), 50);
+});
+
 test('the band covers the span on the feature tracks', () => {
   const [lambda] = caseRecords('linear-single');
   const row = lambda.axis.rows[0];

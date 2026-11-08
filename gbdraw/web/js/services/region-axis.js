@@ -93,14 +93,15 @@ import { t } from '../utils/i18n.js';
  */
 
 /** @typedef {{ x: number, y: number }} FramePoint */
-/** @typedef {{ start: number, end: number }} RecordPart A feature part in its record's own bases, 0-based, end excluded. */
+/** @typedef {{ start: number, end: number }} RecordPart A feature part in the input file's coordinates (the catalog's `location_parts`), 0-based, end excluded. */
 
 /**
- * A drawn feature of the feature catalog as the converter reads it: its record key and its parts in its record's own
- * bases (the catalog rows of `extractedFeatures` have no typedef of their own).
+ * A drawn feature of the feature catalog as the converter reads it: its record key, the drawn unit it lies in, and its
+ * parts in the input file's coordinates (the catalog rows of `extractedFeatures` have no typedef of their own).
  * @typedef {object} RegionFeatureRow
  * @property {unknown} [svg_id]
  * @property {unknown} [record_key]
+ * @property {unknown} [drawn_record_index] The unit's index in the Result, as `RegionAxisRecord.recordIndex`.
  * @property {unknown} [start]
  * @property {unknown} [end]
  * @property {unknown} [location_parts]
@@ -318,6 +319,16 @@ export const displayIndexOfRecordOffset = (source, offset) => mod(
 );
 
 /**
+ * The display index of the first drawn base of a feature part given in the input file's coordinates (OV-2718): the
+ * part's first base, or its last on a reverse-complemented record, as the drawn record's own base.
+ * @param {AxisSourceMap} source
+ * @param {RecordPart} part
+ */
+const displayIndexOfPart = (source, { start, end }) => displayIndexOfRecordOffset(
+  source, source.step === 1 ? mod(start - (source.recordBase - 1), source.sourceLength) : mod(source.recordBase - end, source.sourceLength)
+);
+
+/**
  * Whether every part of a feature lies inside a display span.
  * @param {AxisSourceMap} source
  * @param {DisplaySpan} span
@@ -327,7 +338,7 @@ export const partsInsideSpan = (source, span, parts) => parts.length > 0 && part
   const length = end - start;
   if (!(length > 0)) return false;
   if (span.length >= source.sourceLength) return true;
-  const offset = mod(displayIndexOfRecordOffset(source, start) - span.start, source.sourceLength);
+  const offset = mod(displayIndexOfPart(source, { start, end }) - span.start, source.sourceLength);
   return offset + length <= span.length;
 });
 
@@ -339,7 +350,7 @@ export const partsInsideSpan = (source, span, parts) => parts.length > 0 && part
  */
 export const partsMidpoint = (source, parts) => {
   if (parts.length === 0) return null;
-  const starts = parts.map(({ start }) => displayIndexOfRecordOffset(source, start));
+  const starts = parts.map((part) => displayIndexOfPart(source, part));
   const first = starts[0];
   // Each part's extent along the axis measured from the first part's start.
   const reach = Math.max(...parts.map(({ start, end }, index) => mod(starts[index] - first, source.sourceLength) + (end - start)));
@@ -347,7 +358,7 @@ export const partsMidpoint = (source, parts) => {
 };
 
 /**
- * The parts of a feature in its record's own bases.
+ * The parts of a feature in the input file's coordinates.
  * @param {RegionFeatureRow} feature
  * @returns {RecordPart[]}
  */
