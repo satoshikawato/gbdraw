@@ -87,7 +87,7 @@ def test_linear_comparison_selector_refuses_non_ascii_digits(digit: str) -> None
 
     records = [SeqRecord(Seq("ACGT"), id=f"r{i}") for i in range(2)]
     kwargs = {"table_path": "t.tsv", "row_number": 1, "column": "query"}
-    assert _resolve_linear_comparison_selector(records, "#2", **kwargs) == 1
+    assert _resolve_linear_comparison_selector(records, "#2", **kwargs) == (1,)
     with pytest.raises(ValidationError, match="invalid record selector"):
         _resolve_linear_comparison_selector(records, f"#{digit}", **kwargs)
 

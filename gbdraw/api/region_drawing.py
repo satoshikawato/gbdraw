@@ -242,16 +242,16 @@ class _Region:
     def drawn_lengths(self) -> tuple[int, ...]:
         return tuple(sum(end - start + 1 for start, end in _span_pieces(span, self.length)) for span in self.spans)
 
+    @property
+    def units(self) -> range:
+        """The drawn indexes of the record's windows in the new drawing."""
+        return range(self.first_unit, self.first_unit + len(self.spans))
+
 
 def _span_pieces(span: tuple[int, int], length: int) -> tuple[tuple[int, int], ...]:
     """A 1-based inclusive span as ascending runs: one, or two for a span across the origin (start after end)."""
     start, end = span
     return ((start, length), (1, end)) if start > end else (span,)
-
-    @property
-    def units(self) -> range:
-        """The drawn indexes of the record's windows in the new drawing."""
-        return range(self.first_unit, self.first_unit + len(self.spans))
 
 
 def derive_region_drawing(

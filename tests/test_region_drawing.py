@@ -353,6 +353,24 @@ def test_comparison_tables_are_not_carried(materialize) -> None:
     assert "The comparison tables (they use the coordinates of the whole records)." in region.dropped
 
 
+def test_a_losat_search_pairs_the_windows_of_the_drawn_records() -> None:
+    from gbdraw.api import LosatSearchOptions
+
+    examples = REPO / "examples"
+    source = LinearDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(examples / "MjeNMV.gb"), record_key="a"),
+            RecordInput(GenBankInputSource(examples / "MelaMJNV.gb"), record_key="b"),
+        ],
+        options=LinearDiagramOptions(losat_search=LosatSearchOptions(program="tlosatx", pairs=[(0, 1)])),
+    )
+    request = derive_region_request(
+        source, [RegionSelection("a", 1, 3000), RegionSelection("a", 9001, 12000), RegionSelection("b", 1, 3000)]
+    ).request
+    # Record a is drawn in two windows (units 0 and 1); each is searched against record b (unit 2).
+    assert list(request.options.losat_search.pairs) == [(0, 2), (1, 2)]
+
+
 @pytest.mark.parametrize(
     ("selections", "options", "message"),
     [

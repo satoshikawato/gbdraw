@@ -1237,22 +1237,7 @@ def _encode_records(
                         if members_records[index].annotations.get(WINDOW_OF_ANNOTATION) == window_of
                     ]
                     absorbed.update(other for other, _found in units[1:])
-                    transformed[position] = replace(
-                        record,
-                        record_key=str(window_of),
-                        windows=tuple(
-                            RecordWindow(
-                                unit_span[0],
-                                unit_span[1],
-                                unit_reverse,
-                                # A unit is placed by its window's column (D-08).
-                                records[other].presentation.grid_column,
-                            )
-                            for other, (unit_span, unit_reverse) in units
-                            if unit_span is not None
-                        ),
-                        presentation=replace(record.presentation, reverse_complement=False, grid_column=None),
-                    )
+                    transformed[position] = _record_of_units(records, units, record_key=str(window_of))
                 else:
                     transformed[position] = replace(
                         record,
@@ -1281,6 +1266,27 @@ def _encode_records(
         for position, record in enumerate(records)
     )
     return payloads, frames
+
+
+def _record_of_units(
+    records: Sequence[RecordInput],
+    units: Sequence[tuple[int, tuple[tuple[int, int] | None, bool]]],
+    *,
+    record_key: str,
+) -> RecordInput:
+    """The record whose drawn units are ``units`` (position, (source span, reversed)), with one window per unit."""
+    first = records[units[0][0]]
+    return replace(
+        first,
+        record_key=record_key,
+        windows=tuple(
+            # A unit is placed by its window's column (D-08).
+            RecordWindow(span[0], span[1], reverse, records[position].presentation.grid_column)
+            for position, (span, reverse) in units
+            if span is not None
+        ),
+        presentation=replace(first.presentation, reverse_complement=False, grid_column=None),
+    )
 
 
 def _encode_record(
