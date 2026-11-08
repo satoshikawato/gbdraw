@@ -15,6 +15,7 @@ import {
   isAutoFeatureUnderlay
 } from './feature-dom.js';
 import {
+  drawnLegendRowName,
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
   legendRowFeatureIds,
@@ -31,7 +32,8 @@ import {
   pythonOrderedLegendRows,
   recordedGroupOrder,
   setsFeatureStroke,
-  SPECIFIC_COLOR_FILE_OWNER
+  SPECIFIC_COLOR_FILE_OWNER,
+  writeDrawnLegendRowName
 } from './legend-svg.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
@@ -836,8 +838,8 @@ const nameLegendRows = (svg) => {
     const drawn = drawnLegendNames(rows.map((row) => ({ name: legendRowName(row), swatch: legendRowSwatch(row) })));
     rows.forEach((row, at) => {
       const label = row.querySelector('text');
-      if (!label || label.textContent === drawn[at]) return;
-      label.textContent = drawn[at];
+      if (!label || drawnLegendRowName(row) === drawn[at]) return;
+      writeDrawnLegendRowName(label, drawn[at]);
       changed = true;
     });
   });

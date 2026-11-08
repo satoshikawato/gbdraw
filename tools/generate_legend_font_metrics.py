@@ -31,13 +31,16 @@ sys.path.insert(0, str(REPO_ROOT))
 from gbdraw.core import fonts as gbdraw_fonts  # noqa: E402
 from gbdraw.core import text as gbdraw_text  # noqa: E402
 
-# The Legend measures with the default weight and style (drawn_text_box
-# is called without them), so it reads only the Regular faces. Another face
-# costs about 95 KB here.
+# The Legend measures with the default weight, upright and, for the ``<i>``
+# runs of a caption (gbdraw.legend.metrics.legend_caption_runs), italic, so it
+# reads the Regular and Italic faces. Another face costs about 95 KB here.
 MEASURED_FACES = (
     "LiberationSans-Regular",
     "LiberationSerif-Regular",
     "LiberationMono-Regular",
+    "LiberationSans-Italic",
+    "LiberationSerif-Italic",
+    "LiberationMono-Italic",
 )
 NUMBERS_PER_LINE = 40
 
@@ -122,9 +125,10 @@ def render_legend_font_metrics_module() -> str:
 # ``resolve_font_family_among``; ``replaced``: the families before the one
 # drawn, which the Session-load question and the CLI warning name, OV-743), the custom families
 # (``custom_font_families_among``, the rule of the custom-font warnings, D-10),
-# and the face the normal weight and style is measured with (``face``:
-# services/legend-layout.js ``resolveLegendFontFace``; a registered family wins
-# over the bundled alias of its name, review R2).
+# and the faces the normal weight is measured with, upright (``face``) and
+# italic (``italicFace``, a caption's ``<i>`` runs): services/legend-layout.js
+# ``resolveLegendFontFace``; a registered family wins over the bundled alias of
+# its name, review R2.
 RESOLUTION_CASES = (
     ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", ()),
     ("'DejaVu Serif', serif", ()),
@@ -168,8 +172,9 @@ RESOLUTION_CASES = (
 
 
 # The (weight, italic) faces of one registered family, in registration order:
-# the face Python's CSS matching picks for the normal weight and style, which
-# the Web Legend layout ports (services/legend-layout.js `normalFace`).
+# the faces Python's CSS matching picks for the normal weight, upright and
+# italic, which the Web Legend layout ports (services/legend-layout.js
+# `normalFace`).
 FACE_MATCH_CASES = (
     ((400, False), (700, False)),
     ((700, False), (400, False)),
@@ -210,7 +215,7 @@ def render_font_family_rules_module() -> str:
     )
 
 
-def _face_resolution(requested: str, registered: tuple[str, ...]) -> str:
+def _face_resolution(requested: str, registered: tuple[str, ...], italic: bool = False) -> str:
     """A bundled face's measurement name, or ``registered:<family>``."""
     names = {gbdraw_fonts._comparable_name(family) for family in registered}
 
@@ -220,10 +225,10 @@ def _face_resolution(requested: str, registered: tuple[str, ...]) -> str:
 
     family, face = gbdraw_fonts._first_resolving_family(
         requested,
-        lambda name: gbdraw_fonts._registered_or_bundled_face(name, 400, False, registered_face),
+        lambda name: gbdraw_fonts._registered_or_bundled_face(name, 400, italic, registered_face),
     )
     if face is None:
-        face = gbdraw_fonts.resolve_font_face("")
+        face = gbdraw_fonts.resolve_font_face("", "normal", "italic" if italic else "normal")
     assert face is not None
     return f"registered:{family}" if face.content_id else face.measurement_name
 
@@ -240,6 +245,7 @@ def render_resolution_vectors() -> str:
             "replaced": list(resolution.replaced),
             "custom": list(gbdraw_fonts.custom_font_families_among(requested, registered)),
             "face": _face_resolution(requested, registered),
+            "italicFace": _face_resolution(requested, registered, italic=True),
         })
     face_match = []
     for faces in FACE_MATCH_CASES:
@@ -247,10 +253,14 @@ def render_resolution_vectors() -> str:
             (weight, italic, gbdraw_fonts.FontFace(path=str(index)))
             for index, (weight, italic) in enumerate(faces)
         ]
-        chosen = gbdraw_fonts._match_face(candidates, 400, False)
+        def chosen(italic: bool) -> int:
+            face = gbdraw_fonts._match_face(candidates, 400, italic)
+            return next(index for index, candidate in enumerate(candidates) if candidate[2] == face)
+
         face_match.append({
             "faces": [{"weight": weight, "italic": italic} for weight, italic in faces],
-            "normal": next(index for index, candidate in enumerate(candidates) if candidate[2] == chosen),
+            "normal": chosen(False),
+            "italic": chosen(True),
         })
     return json.dumps(
         {"schema": 1, "vectors": vectors, "faceMatch": face_match},

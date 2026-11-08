@@ -110,6 +110,11 @@ class FakeSvgElement {
     return this.getAttribute('id') || '';
   }
 
+  // Creates elements of the fake (a Legend caption's tspans).
+  get ownerDocument() {
+    return { createElementNS: (_namespace, tagName) => new FakeSvgElement(`<${tagName}>`) };
+  }
+
   // The text the element and its descendants hold, in document order,
   // entities decoded; setting it replaces the children, as the DOM does.
   get textContent() {

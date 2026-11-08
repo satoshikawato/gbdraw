@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: a Legend name written with `<i>...</i>` (a similarity-ring label, a
+  color table's legend name, a renamed Legend row, a gradient title) showed the
+  tags as text, in the CLI, the Python API, and the Web app. The words between
+  the tags are now drawn in italics, as Species, record names, and plot titles
+  draw them, and the Legend is sized for the italic words. A name with other
+  markup, or with `<`, `>`, or `&` elsewhere, is still drawn as written
+  (OV-2760).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while

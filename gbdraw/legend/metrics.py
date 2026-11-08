@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
+from gbdraw.core.text import drawn_runs_box, parse_mixed_content_text
 from gbdraw.exceptions import ValidationError
 
 
@@ -45,6 +47,40 @@ def legend_text_x_offset(color_rect_size: float) -> float:
     """Return the authoritative rectangle-to-text offset for legend entries."""
 
     return LEGEND_TEXT_OFFSET_RATIO * legend_swatch_size(color_rect_size)
+
+
+LegendCaptionStyle = Literal["normal", "italic"]
+LegendCaptionRun = tuple[str, LegendCaptionStyle]
+
+# The markup a Legend caption may use (OV-2760): non-empty ``<i>...</i>`` runs, lower case and not nested, with no
+# other ``<``, ``>`` or ``&`` and no character XML rewrites or refuses (a carriage return, the other control
+# characters but tab and line feed, a lone surrogate, U+FFFE, U+FFFF). In this subset the XML parse and a plain
+# split give the same runs, so the Web (services/legend-layout.js ``legendCaptionRuns``) needs no XML parser.
+_CAPTION_CHARACTER = r"[^<>&\x00-\x08\x0b-\x1f\ud800-\udfff\ufffe\uffff]"
+_ITALIC_CAPTION = re.compile(rf"{_CAPTION_CHARACTER}*(?:<i>{_CAPTION_CHARACTER}+</i>{_CAPTION_CHARACTER}*)+")
+
+
+def legend_caption_runs(text: str) -> tuple[LegendCaptionRun, ...]:
+    """The styled runs a Legend caption is drawn and measured as, in drawing order.
+
+    A caption in the italic subset gives the runs ``parse_mixed_content_text`` (the owner of ``<i>`` markup in
+    Species, record names and plot titles) reads from it; any other caption is one literal upright run.
+    """
+
+    if _ITALIC_CAPTION.fullmatch(text) is None:
+        return ((text, "normal"),)
+    return tuple(
+        (str(part["text"]), "italic" if part["italic"] else "normal")
+        for part in parse_mixed_content_text(text)
+        if part["text"]
+    )
+
+
+def legend_caption_box(text: str, font_family: str, font_size: float) -> tuple[float, float]:
+    """The box a Legend caption is drawn in (``drawn_runs_box`` of its runs): every Legend layout measures its
+    captions here."""
+
+    return drawn_runs_box(legend_caption_runs(text), font_family, font_size)
 
 
 def single_gradient_block_x(bar_width: float, title_width: float) -> tuple[float, float]:
@@ -154,8 +190,12 @@ __all__ = [
     "GRADIENT_SCALE_NAME_ATTRIBUTES",
     "GradientScaleLayout",
     "LEGEND_SWATCH_SIZE_PATH",
+    "LegendCaptionRun",
+    "LegendCaptionStyle",
     "gradient_label_text",
     "gradient_scale_texts",
+    "legend_caption_box",
+    "legend_caption_runs",
     "legend_line_height",
     "legend_swatch_size",
     "legend_text_x_offset",

@@ -1001,6 +1001,13 @@ quote is part of the cell it is in:
 | `hidden` | `true` hides the row; `false` or blank shows it. |
 | `position` | The row's place, from 1, on every shown line or on none; a hidden row may leave it blank. Rows the table does not list follow the listed ones in their order. |
 
+Any Legend name (a name here, a color table's legend name, a similarity-ring
+label, a gradient title) can set words in italics with `<i>...</i>`, as
+`--species` does: `<i>Danio rerio</i> (zebrafish)`. The name is read as markup
+only when its `<i>` and `</i>` tags are lower case, paired, not nested, and not
+empty, and it has no other `<`, `>`, or `&`; any other name is drawn as
+written. The Legend is as wide as the drawn italic words.
+
 A key the Legend does not draw is ignored. Two shown rows with one name and
 one swatch are drawn as one row; with different swatches their names are
 numbered, `Genes (1)` and `Genes (2)`. A hidden row stays in the SVG with

@@ -11,13 +11,13 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.metrics import GradientScaleLayout, write_gradient_scale_names
+from ....legend.metrics import GradientScaleLayout, legend_caption_runs, write_gradient_scale_names
 from ....legend.table import as_legend_table, LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
 from ....svg.result_records import LEGEND_ORDER_RECORD
 from ....svg.path_data import path_number, path_point
-from ....svg.text_path import generate_text_path
+from ....svg.text_path import generate_runs_text_path, generate_text_path
 
 
 class LegendGroup:
@@ -120,13 +120,9 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
-            legend_path = generate_text_path(
-                drawn_name,
-                0,
-                0,
-                0,
+            legend_path = generate_runs_text_path(
+                legend_caption_runs(drawn_name),
                 self.font_size,
-                "normal",
                 self.font_family,
                 dominant_baseline="central",
                 text_anchor="start",
@@ -210,13 +206,9 @@ class LegendGroup:
             )
             entry_group.add(gradient)
 
-            title_path = generate_text_path(
-                drawn_name,
-                0,
-                0,
-                0,
+            title_path = generate_runs_text_path(
+                legend_caption_runs(drawn_name),
                 self.font_size,
-                "normal",
                 self.font_family,
                 dominant_baseline=(
                     "central" if layout.compact else "hanging"

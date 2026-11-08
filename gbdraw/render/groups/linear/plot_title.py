@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from gbdraw.svg.elements import Group, TSpan, Text
+from gbdraw.svg.elements import Group, Text
 
 from ....core.text import measure_mixed_text_line, parse_mixed_content_text
 from ....layout.spatial import Aabb
 from ....render.group_content import GroupContent
+from ....svg.text_path import add_text_runs
 
 
 def plot_title_content(
@@ -37,14 +38,7 @@ def plot_title_content(
         text_anchor="middle",
         dominant_baseline="middle",
     )
-    for part in parts:
-        part_text = part.get("text")
-        if part_text is None:
-            continue
-        if part.get("italic"):
-            text.add(TSpan(str(part_text), font_style="italic"))
-        else:
-            text.add(TSpan(str(part_text)))
+    add_text_runs(text, styled)
     group = Group(id="plot_title")
     group.add(text)
     return GroupContent.of(

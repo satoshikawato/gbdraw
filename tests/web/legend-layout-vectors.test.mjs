@@ -15,6 +15,7 @@ import {
   legendMeasurementFace,
   linearLegendLocalBounds,
   loadLegendFontMetrics,
+  measureCaptionBox,
   measureTextBox,
   planLegendComposition,
   pythonFloatSum,
@@ -161,6 +162,7 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
   assert.ok(branches.some((expected) => expected.gradient?.moreScales?.length > 0), 'Circular gradient rows of two scales');
   assert.ok(branches.some((expected) => expected.horizontal?.gradient?.moreScales?.length > 0), 'Linear gradient rows of two scales');
   assert.ok(branches.some((expected) => expected.rings && expected.gradient), 'Circular rings and gradient rows in one side block');
+  assert.ok(vectors.layout.some((vector) => vector.rows.some((row) => row.type === 'ring' && row.key.includes('<i>'))), 'italic ring names');
   assert.ok(branches.some((expected) => expected.composition.overlayResolution === 'canvas_growth'), 'an overlay that grows the canvas');
   const sized = vectors.layout.filter((vector) => vector.composition.requestedCanvas);
   assert.ok(sized.some((vector) => vector.expected.composition.canvas[2] === vector.composition.requestedCanvas.widthPx), 'a requested canvas width');
@@ -168,10 +170,11 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
   assert.ok(vectors.measurement.length >= 200);
 });
 
-test('text measurement equals drawn_text_box', () => {
+test('caption measurement equals legend_caption_box', () => {
+  assert.ok(vectors.measurement.some((vector) => vector.text.includes('<i>')), 'captions written with <i>');
   vectors.measurement.forEach((vector, index) => {
     assert.equal(resolveLegendFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
-    const measured = measureTextBox(metrics, vector);
+    const measured = measureCaptionBox(metrics, vector);
     assertExact(measured, vector.expected, `measurement[${index}] ${JSON.stringify(vector.text)} ${vector.fontFile} ${vector.fontSize}`);
   });
 });
