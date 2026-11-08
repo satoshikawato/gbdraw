@@ -25,7 +25,7 @@ import {
   readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
-import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
+import { DEFAULT_PNG_DPI, LEGACY_SCALAR_AXIS_LABELS, SCALAR_AXIS_LABELS } from '../contracts/schema.generated.js';
 import {
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
   SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
@@ -96,6 +96,13 @@ import { isCardRow, markedRows } from './file-imports.js';
  * @returns {FieldRow}
  */
 const row = (field, read) => ({ field, read: (value) => read(value) });
+
+/**
+ * How a depth or GC Percent axis is labelled. A Session or request saved before the setting
+ * has none and drew numbered ticks, so an absent style reads as Python reads it (D-24).
+ * @type {(value: unknown) => { value: string, lost: boolean }}
+ */
+export const readScalarAxisLabels = textChoice(SCALAR_AXIS_LABELS.values, LEGACY_SCALAR_AXIS_LABELS);
 
 /**
  * A fixed identity colour scale `[MIN, MAX]` (two finite numbers), or null:
@@ -603,6 +610,7 @@ const advRows = (mode) => Object.freeze([
   row('depth_normalize', onlyTrue),
   row('depth_show_axis', trueUnlessFalse),
   row('depth_show_ticks', trueUnlessFalse),
+  row('depth_axis_labels', readScalarAxisLabels),
   row('depth_share_axis', onlyTrue),
   row('depth_height', positiveNumberOrNull),
   row('depth_width_circular', positiveNumberOrNull),
@@ -615,6 +623,7 @@ const advRows = (mode) => Object.freeze([
   row('gc_content_mode', textChoice(['percent', 'deviation'], 'deviation')),
   row('gc_content_show_axis', trueUnlessFalse),
   row('gc_content_show_ticks', trueUnlessFalse),
+  row('gc_content_axis_labels', readScalarAxisLabels),
   row('gc_content_tick_interval', positiveNumberOrNull),
   row('gc_content_small_tick_interval', positiveNumberOrNull),
   row('gc_content_tick_font_size', positiveNumberOrNull),

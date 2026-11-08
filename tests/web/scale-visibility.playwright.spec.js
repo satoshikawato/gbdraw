@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -155,6 +155,42 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   const hiddenLinearScale = await inspectResultSvg(page);
   expect(hiddenLinearScale.lengthBar).toBe(false);
   expect(hiddenLinearScale.recordAxisCount).toBeGreaterThan(0);
+});
+
+// D-24 (2026-11-08): the GC Percent axis draws one range label by default; Numbered Ticks prints a
+// number on each large tick, as the CLI's --gc_content_axis_labels numbered does.
+test('Numbered Ticks in the GC Percent settings draws a number on each large tick', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(genbankPath, 'utf8');
+  await openApp(page);
+  await showDrawing(page, { kind: 'circular' });
+  await page.evaluate(async (genbankText) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    const app = window.__GBDRAW_APP__;
+    app.setCircularInputType('gb');
+    app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1 }));
+    app.form.labels_mode = 'none';
+    app.adv.gc_content_mode = 'percent';
+    await window.Vue.nextTick();
+  }, genbank);
+  const percentLabels = () => page.evaluate(() => {
+    const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    return [...svg.querySelectorAll('text')].map((text) => text.textContent.trim()).filter((text) => text.endsWith('%]') || /^\d+%$/.test(text));
+  });
+  const generated = { result: { status: 'ok' }, errorSummary: '', errorDetails: [] };
+
+  expect(await runDiagram(page)).toEqual(generated);
+  expect(await percentLabels()).toEqual(['[0–100%]']);
+
+  const numbered = await reveal(page.getByRole('checkbox', { name: 'Numbered Ticks', exact: true, includeHidden: true })
+    .and(page.locator('[aria-describedby="help-gc-percent-numbered-ticks"]')));
+  await expect(numbered).not.toBeChecked();
+  await numbered.check();
+  expect(await runDiagram(page)).toEqual(generated);
+  const labels = await percentLabels();
+  expect(labels.length).toBeGreaterThan(1);
+  expect(labels.every((text) => /^\d+%$/.test(text))).toBe(true);
 });
 
 // D-03 (ui-copy-diet 2026-11-02): with Custom Track Slots on, the coordinate scale follows the Ticks

@@ -109,6 +109,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("SESSION_PNG_DPI_CHOICES", "gbdraw.session", "SESSION_PNG_DPI_CHOICES"),
     # The DPI of a PNG without one: the Web's DPI menu starts there, and the CLI and Python draw at it.
     ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
+    # What an absent axis label style reads as: every writer before the setting drew numbered ticks.
+    ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.
@@ -137,6 +139,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
 _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
     ("ORTHOGROUP_MEMBER_ROLE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "role"),
     ("ORTHOGROUP_MEMBER_CONFIDENCE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "confidence"),
+    # How a depth or GC Percent axis is labelled (Web: the Numbered Ticks checkboxes).
+    ("SCALAR_AXIS_LABELS", "gbdraw.config.models.objects", "ObjectsDepthConfig", "axis_labels"),
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 

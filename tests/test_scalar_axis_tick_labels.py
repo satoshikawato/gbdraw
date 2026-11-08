@@ -303,3 +303,50 @@ def test_a_session_written_before_the_label_style_keeps_its_numbered_ticks(tmp_p
     assert [text for text, _, _ in _axis_labels(svg, "x")] == ["0x", "20x", "40x", "60x"]
     assert [text for text, _, _ in _axis_labels(svg, "%")] == ["20%", "30%", "40%", "50%", "60%", "70%"]
     assert _range_labels(ET.fromstring(svg)) == []
+
+
+V0145_WEB_SESSION = (
+    Path(__file__).parent / "fixtures" / "sessions" / "HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz"
+)
+_LABEL_PATHS = ("objects.depth.axis_labels", "objects.gc_content.axis_labels")
+
+
+def test_stored_overrides_without_the_label_style_read_as_numbered(tmp_path: Path) -> None:
+    """The v0.14.5 Web saved its request with config overrides and no ``axis_labels``; its axes drew numbers (D-24)."""
+
+    from gbdraw.session import materialize_session, session_to_request
+
+    with materialize_session(V0145_WEB_SESSION, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+
+    overrides = request.options.config_overrides
+    assert overrides is not None
+    assert [overrides[path] for path in _LABEL_PATHS] == ["numbered", "numbered"]
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [(None, ["range", "range"]), (NUMBERED, ["numbered", "numbered"])],
+)
+def test_written_overrides_state_the_label_style_the_request_draws(
+    config: dict[str, str] | None, expected: list[str]
+) -> None:
+    """A writer of config overrides states both styles, from its config or the default, so a reader never takes a
+    current request for an older writer's (D-24)."""
+
+    from gbdraw.api.options import CircularDiagramOptions
+    from gbdraw.api.requests import CircularDiagramRequest, GenBankInputSource, RecordInput
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    options = CircularDiagramOptions(
+        config=None if config is None else apply_config_overrides(None, config),
+        config_overrides={"canvas.show_skew": False},
+    )
+    request = CircularDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"))),),
+        options=options,
+    )
+    payload = encode_canonical_request(request).payload
+
+    overrides = payload["diagramOptions"]["configOverrides"]
+    assert [overrides[path] for path in _LABEL_PATHS] == expected

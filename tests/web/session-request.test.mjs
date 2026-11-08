@@ -7,6 +7,9 @@ import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
+// The axis label style leaves every request states since D-24.
+const SCALAR_AXIS_LABEL_LEAVES = ['objects.depth.axis_labels', 'objects.gc_content.axis_labels'];
+
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-request-'));
@@ -511,6 +514,29 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
+
+// D-24: a request states the depth and GC axis label styles of its draft. A request without them (every writer
+// before the setting) drew numbered ticks, and Load reads its draft so, as Python reads the request.
+{
+  const labelsOf = (request) => SCALAR_AXIS_LABEL_LEAVES.map(
+    (leaf) => request.renderRequest.diagramOptions.configOverrides[leaf]
+  );
+  const draftOf = (request) => {
+    const { adv } = projectStoredSession(request).config;
+    return [adv.depth_axis_labels, adv.gc_content_axis_labels];
+  };
+  const before = [state.adv.depth_axis_labels, state.adv.gc_content_axis_labels];
+  state.adv.depth_axis_labels = 'numbered';
+  state.adv.gc_content_axis_labels = 'range';
+  // Raw: not one of the characterized requests below.
+  const stated = buildCanonicalRenderRequestRaw({ state, filesData });
+  [state.adv.depth_axis_labels, state.adv.gc_content_axis_labels] = before;
+  assert.deepEqual(labelsOf(stated), ['numbered', 'range']);
+  assert.deepEqual(draftOf(stated), ['numbered', 'range']);
+  const older = structuredClone(stated);
+  for (const leaf of SCALAR_AXIS_LABEL_LEAVES) delete older.renderRequest.diagramOptions.configOverrides[leaf];
+  assert.deepEqual(draftOf(older), ['numbered', 'numbered']);
+}
 assert.equal(canonical.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 // Schema 10 carries per-feature edits by source identity (design Q4); this
 // state has no edits.
@@ -5785,8 +5811,9 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   // Re-recorded when the default merge orientation became "strand" (OV-2301), and when the split of a File card
   // stopped writing rows while Arrange in rows is off (OV-2500, R17-41): one request's two members lost row 1, and
   // its layout, which then carries nothing, is left out. Re-recorded for request schema 10 (record windows replace
-  // the region; the 81 requests differ from the schema-9 ones only in that shape).
-  'ab184198750b2b02f0690aef9356d35f45bd774b261b5793016cc47b8a859d5a',
+  // the region; the 81 requests differ from the schema-9 ones only in that shape), and when every request began to
+  // state its depth and GC axis label styles (D-24): without those two leaves each request is the schema-10 one.
+  '43878b3649784163d2d21c3336653065fd44edc8e5a9bea941f2b4b738b76a32',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.
@@ -6299,7 +6326,12 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   // selector) becoming `windows` beside the record's selector.
   const offRequest = JSON.stringify(requestOf({ ...base.form, linear_wrap_length: null }).renderRequest);
   assert.equal(offRequest, JSON.stringify(requestOf(formBeforeTheField).renderRequest), 'off: no leaf');
-  assert.equal(createHash('sha256').update(offRequest).digest('hex'),
+  // The axis label styles every request states since D-24 are left out of that comparison.
+  const { [SCALAR_AXIS_LABEL_LEAVES[0]]: _depthLabels, [SCALAR_AXIS_LABEL_LEAVES[1]]: _gcLabels, ...offOverrides } =
+    JSON.parse(offRequest).diagramOptions.configOverrides;
+  const offRequestBeforeLabelStyles = JSON.parse(offRequest);
+  offRequestBeforeLabelStyles.diagramOptions.configOverrides = offOverrides;
+  assert.equal(createHash('sha256').update(JSON.stringify(offRequestBeforeLabelStyles)).digest('hex'),
     '4c1978d0495f864924b1588a2cfdba33ba6c1a93486f0483be7ba47fd009117b', 'off: the request 893e3c153 compiled, at schema 10');
   assert.ok(managedConfigOverridePathsForMode('linear').includes(WRAP));
   assert.ok(!managedConfigOverridePathsForMode('circular').includes(WRAP));
@@ -6397,3 +6429,4 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     ]
   });
 }
+

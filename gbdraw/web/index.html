@@ -2864,6 +2864,13 @@
                                             </label>
                                             <help-tip id="help-circular-shared-y-axis" :text="t('Use one depth axis range across all records so coverage differences between records remain visible.')"></help-tip>
                                         </div>
+                                        <div class="col-span-2 flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_axis_labels" true-value="numbered" false-value="range" aria-describedby="help-circular-depth-numbered-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Numbered Ticks') }}</span>
+                                            </label>
+                                            <help-tip id="help-circular-depth-numbered-ticks" :text="t('Print a number on each large depth tick instead of one range label such as [0–80x].')"></help-tip>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -3396,6 +3403,13 @@
                                                 <span>{{ t('Shared Y-axis') }}</span>
                                             </label>
                                             <help-tip id="help-linear-shared-y-axis" :text="t('Use one depth axis range across all records so coverage differences between records remain visible.')"></help-tip>
+                                        </div>
+                                        <div class="col-span-2 flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_axis_labels" true-value="numbered" false-value="range" aria-describedby="help-linear-depth-numbered-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Numbered Ticks') }}</span>
+                                            </label>
+                                            <help-tip id="help-linear-depth-numbered-ticks" :text="t('Print a number on each large depth tick instead of one range label such as [0–80x].')"></help-tip>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
@@ -6391,6 +6405,13 @@
                                             <span>{{ t('Percent Ticks') }}</span>
                                         </label>
                                         <help-tip id="help-gc-percent-ticks" :text="t('Show GC content percent-axis tick marks and labels.')"></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="adv.gc_content_axis_labels" true-value="numbered" false-value="range" aria-describedby="help-gc-percent-numbered-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>{{ t('Numbered Ticks') }}</span>
+                                        </label>
+                                        <help-tip id="help-gc-percent-numbered-ticks" :text="t('Print a number on each large percent tick instead of one range label such as [0–100%].')"></help-tip>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-3 gap-1.5">

@@ -18903,7 +18903,9 @@
       ],
       {
        "show_gc": false,
-       "canvas.show_skew": true
+       "canvas.show_skew": true,
+       "objects.depth.axis_labels": "numbered",
+       "objects.gc_content.axis_labels": "numbered"
       }
      ]
     ],
@@ -18943,7 +18945,9 @@
       ],
       {
        "canvas.show_gc": false,
-       "canvas.show_skew": true
+       "canvas.show_skew": true,
+       "objects.depth.axis_labels": "numbered",
+       "objects.gc_content.axis_labels": "numbered"
       }
      ]
     ],
@@ -18984,7 +18988,9 @@
       {
        "linear_axis_stroke_color": "black",
        "canvas.show_gc": true,
-       "canvas.show_skew": true
+       "canvas.show_skew": true,
+       "objects.depth.axis_labels": "numbered",
+       "objects.gc_content.axis_labels": "numbered"
       }
      ]
     ],
@@ -19025,7 +19031,9 @@
       ],
       {
        "show_skew": false,
-       "canvas.show_gc": true
+       "canvas.show_gc": true,
+       "objects.depth.axis_labels": "numbered",
+       "objects.gc_content.axis_labels": "numbered"
       }
      ]
     ],
@@ -19068,7 +19076,9 @@
        "label_blacklist": null,
        "show_gc": null,
        "canvas.show_gc": true,
-       "canvas.show_skew": true
+       "canvas.show_skew": true,
+       "objects.depth.axis_labels": "numbered",
+       "objects.gc_content.axis_labels": "numbered"
       }
      ]
     ],

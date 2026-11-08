@@ -76,6 +76,7 @@ from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+    LEGACY_SCALAR_AXIS_LABELS,
 )
 from .session_contract import (
     FeatureOverrideDraftRow,
@@ -6658,6 +6659,13 @@ def _append_common_gui_args(
             _append_flag(run_args, invocation_args, "--hide_gc_content_axis")
         if adv.get("gc_content_show_ticks") is False:
             _append_flag(run_args, invocation_args, "--hide_gc_content_ticks")
+    # A draft without an axis label style drew numbered ticks (D-24); the CLI draws the range label by default.
+    for shown, key, option in (
+        (form.get("show_depth") is True, "depth_axis_labels", "--depth_axis_labels"),
+        (adv.get("gc_content_mode") == "percent", "gc_content_axis_labels", "--gc_content_axis_labels"),
+    ):
+        if shown:
+            _append_pair(run_args, invocation_args, option, str(adv.get(key) or LEGACY_SCALAR_AXIS_LABELS))
 
 
 def _gui_color_table_cell(value: object) -> str:

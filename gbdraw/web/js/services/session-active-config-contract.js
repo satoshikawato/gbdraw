@@ -23,7 +23,7 @@ import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION, SESSION_PNG_DPI_CHOICES } from '../contracts/schema.generated.js';
+import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION, SCALAR_AXIS_LABELS, SESSION_PNG_DPI_CHOICES } from '../contracts/schema.generated.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
@@ -113,10 +113,10 @@ export const createDefaultAdv = (mode = 'circular') => ({
   legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   ...DEFAULT_DEPTH_SETTINGS, depth_tracks: ensureDepthTrackConfigCount([], 1, depthTrackEditDefaults(DEFAULT_DEPTH_SETTINGS)), depth_window_size: null, depth_step_size: null, depth_share_axis: false,
-  depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,
+  depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_axis_labels: SCALAR_AXIS_LABELS.default, depth_large_tick_interval: null,
   depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
-  gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
+  gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_axis_labels: SCALAR_AXIS_LABELS.default, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
   gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), identity_scale: null, scale_interval: null,
   scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,

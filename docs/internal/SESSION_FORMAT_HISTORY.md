@@ -146,6 +146,25 @@ requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*`
 Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
 refuses every Session 51 file by its version.
 
+## Unreleased: depth and GC Percent axis label styles
+
+No Session or request version changes. The config leaves `objects.depth.axis_labels` and
+`objects.gc_content.axis_labels` (`"range"` or `"numbered"`) say how a depth or GC Percent axis is labelled: one
+`[min–max]` range label, the default since D-16 (Owner 2026-11-08), or a number on each large tick, as every writer
+before drew it. Each Session 51 drawing's draft holds them as `config.adv.depth_axis_labels` and
+`config.adv.gc_content_axis_labels` (Web: **Numbered Ticks**), and every writer of `configOverrides` (the Web, and
+Python for a request with overrides) now states both leaves (D-24).
+
+A reader takes an absent style for an older writer's: a stored full config (`migrate_legacy_full_config`), stored
+`configOverrides` (`_decode_config_overrides`), and a stored draft (`readScalarAxisLabels` in
+`gbdraw/web/js/services/config-field-readers.js`) without it read as `"numbered"`, the value
+`LEGACY_SCALAR_AXIS_LABELS` of `gbdraw/session_legacy_values.py`, which `tools/generate_web_contracts.py` carries to
+the Web. A request without config and without overrides draws the default. Evidence: tag v0.14.5 (no writer states
+the style); positive fixtures `tests/fixtures/sessions/REGEX-scalar-axes.v50-cli0145.gbdraw-session.json.gz` (a
+full config the v0.14.5 CLI wrote) and `HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz` (overrides and a
+draft a v0.14.5 Web Save wrote), read by `tests/test_scalar_axis_tick_labels.py`; the Web Load records of the
+legacy fixtures (`legacy-request-load.expected.json`) hold the numbered drafts.
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

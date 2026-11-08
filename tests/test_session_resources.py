@@ -216,19 +216,19 @@ def test_a_request_reference_must_resolve() -> None:
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110;
 # the italic gene label leaves; the identity colour scale leaves; the figure size leaves, #1427;
 # the unused Linear leaf canvas.linear.canvas_padding, removed; the scalar axis label
-# style leaves, which a stored full config reads as numbered; request schema 10 writing
-# record windows).
+# style leaves, which a stored full config or configOverrides without them reads as
+# numbered; request schema 10 writing record windows).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "897531e28a23022700319af6b43d06051f2a1c3eedafbaca36d309d6a6baae7d",
+        "c2df544b1ee3116a204ed306025a3ada65e0388ecf17960b5d1c24ee5f954912",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "e010045ac2d9da97b4a897670aa935a639675147578dfdb8347d05cabb7fc47b",
+        "cba4557b663adde43ffd2b9b86b1fcf4ddf8dbd9dc234bcde29718e1aef41224",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
         "7edd7f795b2fcee40b28c0c8ec83ed7e4093e3055720364f9c2b08d468f673cf",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
-        "cf89040896a6e9cd6cecec39c1617665cd15fe6603174e28405c314cd5bd49f8",
+        "31a911105b1c256269a62125407195658853db749ece05f1149b3fd93222e5e2",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
-        "5d1905f1e61c00a786ba658241ed9266a46bfe45825e34ebfff0c8e3c54fb61e",
+        "e6eaf5cfcec72f56b446ed904d207fd70467ebe5c5d8fcef22da9fc1305b5e2f",
 }
 
 

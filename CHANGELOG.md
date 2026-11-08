@@ -470,7 +470,9 @@ write-up of a release.
   ticks stay a setting: `--depth_axis_labels numbered` and
   `--gc_content_axis_labels numbered` on the command line, or
   `objects.depth.axis_labels` and `objects.gc_content.axis_labels` set to
-  `"numbered"` in a config or in Python.
+  `"numbered"` in a config or in Python, or **Numbered Ticks** in the Web app's
+  depth and GC Percent settings. A Session, request, or config saved before the
+  setting existed keeps its numbered ticks.
 - Fixed: numbered tick labels of a depth axis or of a GC content axis in Percent
   mode no longer overlap. When two labels would be closer than one line of
   their font, the axis keeps the label of its upper bound, then its lower

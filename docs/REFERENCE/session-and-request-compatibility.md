@@ -57,6 +57,11 @@ feature track, covering the features, also with a custom track stack that names 
 without the key. Each row Sequence search wrote has a `strand` (`"+"` or `"-"`, on the record's source): when the
 feature track separates the strands, the hit covers that strand's lane. Other rows are written as before, without it.
 gbdraw 0.14.5 reads Sessions up to 50 and so never meets these keys.
+A Session 51 drawing also stores how its depth and GC Percent axes are labelled
+(`config.adv.depth_axis_labels` and `config.adv.gc_content_axis_labels`, `"range"` or `"numbered"`), and its
+request's `configOverrides` state the leaves `objects.depth.axis_labels` and `objects.gc_content.axis_labels`. A
+Session, request, or stored config without them was written before the setting existed and drew a number on each
+large tick, so it loads and replays with **Numbered Ticks** on.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
