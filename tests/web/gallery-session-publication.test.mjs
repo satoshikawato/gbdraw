@@ -35,6 +35,9 @@ const {
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+const { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } = await import(
+  '../../gbdraw/web/js/services/session-active-config-contract.js'
+);
 const { SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
   '../../gbdraw/web/js/contracts/schema.generated.js'
 );
@@ -154,7 +157,7 @@ for (const name of sessionNames) {
     entries: [{ caption: 'Z', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] }],
     colorOverrides: { Z: '#ff0000' }
   } };
-  const admitted = admitGallerySession({ ...source, version: 46 });
+  const admitted = await admitGallerySession({ ...source, version: 46 });
   assert.equal(admitted.version, CURRENT_SESSION_VERSION);
   assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
 }
@@ -163,20 +166,56 @@ for (const name of sessionNames) {
 // results of a reverse-complemented record, which only Python converts.
 {
   const source = structuredClone(await loadSession(sessionNames[0]));
-  assert.equal(admitGallerySession({ ...source, version: 47 }).version, CURRENT_SESSION_VERSION);
+  assert.equal((await admitGallerySession({ ...source, version: 47 })).version, CURRENT_SESSION_VERSION);
   const stored = await loadReleasedSession('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz');
-  assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
+  await assert.rejects(admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
+}
+
+// A Session 46-50 stores a request schema 9, whose cropped Linear card kept its record selector in the region (the
+// v0.14.5 Web), and an alignment reset receipt bound to that request as stored. Admission promotes the request and
+// rebinds the receipt as Load does (`readStoredSimilarityAlignmentResetReceipt`), so the published Session's receipt
+// binds the published request.
+{
+  const source = structuredClone(await loadSession('BGC0000708-BGC0000713.gbdraw-session.json'));
+  const window = { start: 1, end: 5000, reverseComplement: false, column: null };
+  const selector = { kind: 'recordId', value: 'record-1-id' };
+  const promoted = structuredClone(source.renderRequest);
+  promoted.records[0] = { ...promoted.records[0], selector, windows: [window] };
+  // The binding the v0.14.5 Web wrote: the record's own selector, null, and the region's span.
+  const asStored = structuredClone(promoted);
+  asStored.records[0].selector = null;
+  const canonical = (renderRequest) => ({ renderRequest, resources: source.resources });
+  const receipt = await buildSimilarityAlignmentResetReceipt({ before: canonical(asStored), after: canonical(asStored) });
+  const { windows: _windows, ...unwindowed } = promoted.records[0];
+  const storedRequest = { ...structuredClone(source.renderRequest), schema: 9, records: promoted.records.map((record, index) => {
+    const { windows: _recordWindows, ...rest } = record;
+    return index === 0
+      ? { ...unwindowed, selector: null, region: { selector, start: window.start, end: window.end, reverseComplement: false } }
+      : { ...rest, region: null };
+  }) };
+  const stored = { ...source, version: 50, renderRequest: storedRequest,
+    editorState: { ...source.editorState, alignmentResetReceipt: receipt } };
+  const admitted = await admitGallerySession(stored);
+  assert.equal(admitted.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+  assert.deepEqual(admitted.renderRequest.records[0].selector, selector);
+  const rebound = admitted.editorState.alignmentResetReceipt;
+  assert.notEqual(rebound.binding, receipt.binding);
+  assert.equal(await validateSimilarityAlignmentResetReceipt(rebound, canonical(admitted.renderRequest)), rebound);
+  // A receipt that binds neither request is refused, as publication repairs nothing.
+  const staleReceipt = { ...receipt, binding: '0'.repeat(64) };
+  await assert.rejects(admitGallerySession({ ...stored, editorState: { ...stored.editorState, alignmentResetReceipt: staleReceipt } }),
+    /cannot read the Similarity alignment reset receipt/);
 }
 
 // Gallery publication admits Sessions 46-51 only; an older Session is refused with the way to convert it.
 for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz']) {
   const released = await loadReleasedSession(name);
-  assert.throws(() => admitGallerySession(released),
+  await assert.rejects(admitGallerySession(released),
     /Gallery publication supports Sessions 46-51; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-const admittedLambda = admitGallerySession(lambda);
+const admittedLambda = await admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedLambda.results, lambda.results);
@@ -329,15 +368,15 @@ await assert.rejects(
 for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   const invalid = structuredClone(lambda);
   invalid.modes.linear.config.adv[field] = [];
-  assert.throws(
-    () => admitGallerySession(invalid),
+  await assert.rejects(
+    admitGallerySession(invalid),
     { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
   );
 }
 
 for (const version of [27, 30, 34, 38, 43]) {
-  assert.throws(
-    () => admitGallerySession({ ...lambda, version }),
+  await assert.rejects(
+    admitGallerySession({ ...lambda, version }),
     /Gallery publication supports Sessions 46-51;/
   );
 }

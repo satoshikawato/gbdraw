@@ -1,5 +1,8 @@
 // @ts-check
-import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
+import {
+  createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
+  readStoredSimilarityAlignmentResetReceipt, validateCurrentWriterActiveConfig
+} from './session-active-config-contract.js';
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
@@ -88,7 +91,7 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {Record<string, PublicationModeSlice>} [modes]
  * @property {unknown} [ui]
  * @property {{ generatedBy?: unknown, fileBindings?: unknown }} [cliInvocation]
- * @property {{ featureCatalog?: FeatureCatalog | null }} [editorState]
+ * @property {{ featureCatalog?: FeatureCatalog | null, alignmentResetReceipt?: unknown }} [editorState]
  * @property {Record<string, unknown> | null} [orthogroupState]
  * @property {{ entries?: PublicationLosatEntry[] }} [losatCache]
  * @property {{ entries?: unknown[] }} [losatDerivedCache]
@@ -318,6 +321,26 @@ const publicationCanonicalRequest = (session, readRequest) => readRequest(sessio
   resourceIds: new Set(isObject(session.resources) ? Object.keys(session.resources) : [])
 });
 /**
+ * A Session whose request the file stored at an earlier schema, read as Load reads it: the request promoted by the
+ * one request reader, and its alignment reset receipt read against the promoted request by Load's reader
+ * (`readStoredSimilarityAlignmentResetReceipt`), which rebinds a receipt bound to the request as stored (OV-2772).
+ * A receipt that binds neither is refused: publication repairs nothing.
+ * @param {PublicationSession} session
+ * @param {GallerySessionPublicationOwners['readRequest']} readRequest
+ * @returns {Promise<PublicationSession>}
+ */
+const withPromotedRequest = async (session, readRequest) => {
+  const renderRequest = publicationCanonicalRequest(session, readRequest);
+  const editorState = session.editorState ?? {};
+  const receipt = editorState.alignmentResetReceipt;
+  if (receipt === null || receipt === undefined) return { ...session, renderRequest };
+  const { value, stale } = await readStoredSimilarityAlignmentResetReceipt(receipt,
+    { renderRequest, resources: session.resources }, session.renderRequest);
+  if (stale) throw new Error('Gallery publication cannot read the Similarity alignment reset receipt: it binds neither '
+    + 'the stored nor the promoted request.');
+  return { ...session, renderRequest, editorState: { ...editorState, alignmentResetReceipt: value } };
+};
+/**
  * Save writes each Linear File card's own state into `webFiles.bindings.linearSeqs`, among it a record's typed
  * name apart from its inferred one. A published Session keeps those rows, so Load and Reset Settings read the
  * names as after that Save (OV-1701). The imported table files stay unpublished (OV-367): only the card rows and
@@ -481,7 +504,7 @@ const mergeReplayResources = (prepared, replayed) => {
  */
 export const createGallerySessionPublication = (owners) => {
   /** @param {PublicationSession} session */
-  const admit = (session) => {
+  const admit = async (session) => {
     const version = Number(session?.version);
     // Only Python converts the protein results these Sessions stored in the drawn frame (OV-1145).
     if (storesDrawnFrameProteinResults(session)) {
@@ -496,7 +519,7 @@ export const createGallerySessionPublication = (owners) => {
       const stored = version === CURRENT_VERSION
         ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
       const current = isObject(stored.renderRequest) && Number(stored.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA
-        ? { ...stored, renderRequest: publicationCanonicalRequest(stored, owners.readRequest) } : stored;
+        ? await withPromotedRequest(stored, owners.readRequest) : stored;
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
@@ -506,7 +529,7 @@ export const createGallerySessionPublication = (owners) => {
   const rebuild = (session) => rebuildIntent(session, owners);
   /** @param {PublicationSession} source */
   const prepare = async (source) => {
-    const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
+    const admitted = await admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const cards = publishedCardBindings(admitted);
     const session = {
       ...(await publishedSession(admitted, config, layout, projection, features, owners.splitDraft)),
