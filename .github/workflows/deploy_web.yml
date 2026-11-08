@@ -51,12 +51,16 @@ jobs:
           python tools/prepare_browser_wheel.py
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
+      - name: Cache the test inputs
+        uses: ./.github/actions/test-data-cache
       - name: Run all public Gallery parity owners
         run: |
           npm run test:web:gallery-publication
           npm run test:web:vibrio-generate
 
       - name: Verify reviewed Gallery artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node --test tests/web/gallery-session-publication.test.mjs
           python -m pytest tests/test_gallery_session_semantics.py tests/test_refresh_gallery_sessions.py -q
