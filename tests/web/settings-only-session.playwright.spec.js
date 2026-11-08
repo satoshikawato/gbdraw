@@ -15,7 +15,7 @@ const snapshot = page => page.evaluate(async () => {
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
     // A mode the project has no drawing of (a new Session starts with a Circular one) holds no source.
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(circular?.files[key])),
+    circularSources: ['gb', 'gff', 'fasta'].map(key => Boolean(circular?.circularSources.some(card => card[key]))),
     linearSources: (linear ? linear.linearSeqs : []).map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
@@ -291,7 +291,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
     ['config', d => { savedDrawing(d, 'circular').config.form = []; }, [`Settings: the value "[]" (drawings[${at('circular')}].config.form) cannot be used; its default is used.`]],
-    ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
+    ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.circularSources[0].gb.resourceId = 'absent'; }, [unbound('circularSources[0].gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
     // A top-level `config` is the pre-49 shape: the file takes the migrated path and opens the Circular drawing, not the one shown at Save.
     // A Session 49 holds each drawing's settings in its drawing only (Session format).
@@ -300,7 +300,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
     // Each drawing binds its own color table, so each saved drawing loses it;
     // the unused Linear drawing is not saved (R16-8).
-    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]]
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('d_color'), unbound('circularSources[0].gb')]]
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
