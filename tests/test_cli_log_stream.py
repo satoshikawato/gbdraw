@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import subprocess
 import sys
@@ -129,3 +130,47 @@ def test_an_argument_error_carries_one_label(tmp_path: Path) -> None:
     assert run.stdout == ""
     assert "error: --gff requires --fasta." in run.stderr
     assert "Error:" not in run.stderr
+
+
+def test_cli_label_matches_the_log_formatter() -> None:
+    import logging
+
+    from gbdraw.cli_utils.common import CLI_LOG_FORMAT, cli_label
+
+    record = logging.LogRecord("n", logging.ERROR, __file__, 1, "x", None, None)
+    assert record.levelname == "ERROR"
+    assert cli_label("ERROR", "x") == logging.Formatter(CLI_LOG_FORMAT).format(record)
+
+
+_LEVEL_WORD = re.compile(r"^ *(DEBUG|INFO|WARNING|ERROR|CRITICAL):")
+_LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical", "log"}
+
+
+def _leading_text(node: "ast.expr") -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        first = node.values[0] if node.values else None
+        return _leading_text(first) if first is not None else None
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _leading_text(node.left)
+    return None
+
+
+def test_no_call_writes_its_own_level_word() -> None:
+    offenders = []
+    for path in sorted((ROOT / "gbdraw").rglob("*.py")):
+        if "web" in path.relative_to(ROOT / "gbdraw").parts[:1]:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and node.args):
+                continue
+            func = node.func
+            is_log = isinstance(func, ast.Attribute) and func.attr in _LOG_METHODS
+            is_print = isinstance(func, ast.Name) and func.id == "print"
+            if not (is_log or is_print):
+                continue
+            text = _leading_text(node.args[0])
+            if text is not None and _LEVEL_WORD.match(text):
+                offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not offenders, offenders

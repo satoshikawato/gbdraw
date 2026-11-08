@@ -69,6 +69,14 @@ _DEPTH_TRACK_HELP_BY_MODE = {
 }
 
 
+CLI_LOG_FORMAT = "%(levelname)s: %(message)s"
+
+
+def cli_label(levelname: str, message: str) -> str:
+    """Return the label of one CLI line, shared by the log formatter and the CLI's own prints."""
+    return CLI_LOG_FORMAT % {"levelname": levelname, "message": message}
+
+
 def setup_logging() -> None:
     """Log INFO and above to standard error, each line labelled with its level.
 
@@ -79,7 +87,7 @@ def setup_logging() -> None:
     root_logger.setLevel(logging.INFO)
     if not root_logger.handlers:
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        handler.setFormatter(logging.Formatter(CLI_LOG_FORMAT))
         root_logger.addHandler(handler)
 
 
@@ -948,6 +956,7 @@ __all__ = [
     "add_feature_args",
     "add_input_args",
     "add_label_args",
+    "cli_label",
     "handle_output_formats",
     "setup_logging",
     "validate_input_args",

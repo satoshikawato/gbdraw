@@ -30,6 +30,7 @@ from functools import partial
 
 from .api.request_render import _without_derived_losat_entries
 from .circular import circular_main
+from .cli_utils.common import cli_label
 from .linear import linear_main
 from .exceptions import LabelLeadersCrossWarning, LabelsMayNotFitWarning, GbdrawError
 from .render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
@@ -180,7 +181,7 @@ class _CliWarningPrinter:
         line: str | None = None,
     ) -> None:
         if issubclass(category, (LabelLeadersCrossWarning, LabelsMayNotFitWarning)):
-            print(f"WARNING: {message}", file=sys.stderr)
+            print(cli_label("WARNING", str(message)), file=sys.stderr)
             return
         self._show_other(message, category, filename, lineno, file, line)
 
@@ -246,7 +247,7 @@ def main() -> None:
                 )
                 sys.exit(1)
         except GbdrawError as exc:
-            print(f"ERROR: {_cli_error_message(exc)}", file=sys.stderr)
+            print(cli_label("ERROR", _cli_error_message(exc)), file=sys.stderr)
             sys.exit(1)
 
 

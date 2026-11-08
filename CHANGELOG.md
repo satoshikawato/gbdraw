@@ -13,10 +13,13 @@ write-up of a release.
 ## [Unreleased]
 
 - Changed: the command line writes its progress messages, warnings, and errors
-  to standard error, and standard output stays empty while it draws. Each
-  message starts with one level word (`INFO:`, `WARNING:`, or `ERROR:`), so
-  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`, and
-  `gbdraw linear` names the config file it loads once instead of twice. A
+  to standard error, and standard output stays empty while it draws. Each log
+  message carries one level label (`INFO:`, `WARNING:`, or `ERROR:`), so
+  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`. The `gbdraw
+  gui` status lines and the argument usage and error lines carry no label.
+  An argument error now reads `error: --gff requires --fasta.` instead of
+  `error: Error: --gff requires --fasta.`, and `Loading config file` appears
+  once per process instead of twice. A
   script that saved the messages with `> log.txt` now needs `2> log.txt`.
   The status lines of `gbdraw gui` also go to standard error. In Python, the
   messages gbdraw logs no longer begin with a level word; a log format with
