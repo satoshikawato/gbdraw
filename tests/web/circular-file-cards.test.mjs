@@ -241,7 +241,8 @@ await test('one pick of several files is one History step that adds a card per f
 
 await test('rows an older Session left under record-<n> move to their record on the first Generate', () => {
   // Session 50 and older named a Circular record by its place among all the drawing's records.
-  const next = drawnRecordIdentities(allOf('card-a', 'card-b'), circularSources([CARD_A, CARD_B]));
+  // The cards as Load installed them (OV-2867).
+  const next = drawnRecordIdentities(allOf('card-a', 'card-b'), { ...circularSources([CARD_A, CARD_B]), legacyOrder: ['card-a', 'card-b'] });
   const moves = recordKeyMoves([], next);
   assert.equal(moves.get('record-1'), 'card-a:1');
   assert.equal(moves.get('record-2'), 'card-a:2');
@@ -256,7 +257,7 @@ await test('rows an older Session left under record-<n> move to their record on 
 // not to b.gb's record, as it would if the cards were record-1 and record-2.
 await test('a row a composite Session keyed record-2 lands on its record after the first Generate', () => {
   const cards = [['source-1', entries('chr', 'pA')], ['source-2', entries('pB')]];
-  const moves = recordKeyMoves([], drawnRecordIdentities(allOf('source-1', 'source-2'), circularSources(cards)));
+  const moves = recordKeyMoves([], drawnRecordIdentities(allOf('source-1', 'source-2'), { ...circularSources(cards), legacyOrder: ['source-1', 'source-2'] }));
   assert.equal(moves.get('record-2'), 'source-1:2');
   assert.equal(moves.get('record-3'), 'source-2');
   const colliding = [['record-1', entries('chr', 'pA')], ['record-2', entries('pB')]];
@@ -300,4 +301,19 @@ await test('the Circular annotation source key survives new file IDs and is dev\
   const keyOf = (cards, id) => circularAnnotationSourceKey(cardDrawing(id, cards));
   assert.notEqual(keyOf([two[0], ['source-2', 'c.gb', 'LOCUS bb']], 'annotation-key-other'), keyOf(two, 'annotation-key-two-c'));
   assert.notEqual(keyOf([two[1], two[0]], 'annotation-key-moved'), keyOf(two, 'annotation-key-two-d'));
+});
+
+// OV-2867: Load keeps the cards an older Session moved its Circular input to
+// (not saved), so its flat record positions count over them in that order.
+await test('Load of a Session 50 or older keeps the cards its record positions count over', async () => {
+  const { cardsTakeLegacyRecordPositions } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const bytes = gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz')));
+  assert.equal((await load(bytes)).status, 'ok');
+  const drawing = modeDrawing(state, 'circular');
+  const uids = drawing.circularSources.map((card) => card.uid);
+  // The Session 44 drew a composite of three files as one concatenated source (D-12: `source-<n>`).
+  assert.deepEqual(uids, ['source-1', 'source-2', 'source-3']);
+  assert.equal(cardsTakeLegacyRecordPositions(drawing.circularSources), true);
+  assert.deepEqual(drawing.files.c_legacy_record_cards?.map(({ uid, primaryFile }) => [uid, primaryFile]),
+    drawing.circularSources.map(({ uid, gb }) => [uid, gb]));
 });

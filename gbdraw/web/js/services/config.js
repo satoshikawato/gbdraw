@@ -52,7 +52,7 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
+import { cardsTakeLegacyRecordPositions, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -352,7 +352,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -5045,14 +5045,15 @@ const withStoredComparisonPlan = (config, readFiles) => {
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState: LoadCandidateInputs,
  *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'> & { readonly slices: { readonly settings: SettingsSlice } },
- *   repairs?: LoadRepair[] | null, at?: string, circularRequest?: boolean
+ *   repairs?: LoadRepair[] | null, at?: string, circularRequest?: boolean, legacyRecordPositions?: boolean
  * }} options `repairs`: Load lists what it drops from the saved inputs, at
  *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
  *   `circularRequest`: the files are the projection of a Circular request.
+ *   `legacyRecordPositions`: the Session is older than its Circular File cards (50 and older).
  */
 const applyFiles = (filesData, {
   adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files',
-  circularRequest = false
+  circularRequest = false, legacyRecordPositions = false
 }) => {
   targetState.circularRecordList.value = [];
   Object.assign(targetState.circularRecordDiscovery, idleCircularRecordDiscovery());
@@ -5100,6 +5101,12 @@ const applyFiles = (filesData, {
       sources: loadedInputs.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' }))
     });
   }
+  // OV-2867: the cards as loaded, which an older Session's flat record
+  // positions count over (`legacyCircularRecordKeys`); refs once bound.
+  const loadedCards = /** @type {CircularCardMark[]} */ (/** @type {unknown} */ (loadedInputs
+    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
+  targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
+    ? loadedCards : null;
   // A Depth slot holds a list.
   targetState.files.c_depth = deserializeFile(read.c_depth);
   // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
@@ -6729,7 +6736,9 @@ const pathIn = (at, field) => (at ? `${at}.${field}` : field);
  * current Session wrote, whether it resolves record inputs (settings only
  * does not), and the list its file rows go to.
  * @typedef {{ adoptCanonicalPayloads: boolean, resolveRecordInputs: boolean, repairs: LoadRepair[],
- *   circularRequest?: boolean }} LoadFilesReading `circularRequest`: the files are a Circular request's projection.
+ *   circularRequest?: boolean, legacyRecordPositions?: boolean }} LoadFilesReading `circularRequest`: the files
+ *   are a Circular request's projection; `legacyRecordPositions`: the Session is 50 or older (`applyFiles`), by
+ *   the file's own version (Python gives a Session 27-44 as a Session 51).
  */
 /**
  * One drawing's restored files (`loadFiles`): its file slots and record rows
@@ -6747,7 +6756,9 @@ const pathIn = (at, field) => (at ? `${at}.${field}` : field);
  * @param {string} cInputType @param {string} at Where the files are in the file.
  * @param {LoadFilesReading} reading
  */
-const loadFiles = (restored, draftConfig, cInputType, at, { adoptCanonicalPayloads, resolveRecordInputs, repairs, circularRequest = false }) => {
+const loadFiles = (restored, draftConfig, cInputType, at, {
+  adoptCanonicalPayloads, resolveRecordInputs, repairs, circularRequest = false, legacyRecordPositions = false
+}) => {
   const layout = SETTINGS_SLICE.create({
     linearRecordRows: readLinearRecordRows(draftConfig?.linearRecordLayout?.rows).value,
     linearComparisonPlan: normalizeLinearComparisonPlan(draftConfig?.linearComparisonPlan)
@@ -6762,7 +6773,7 @@ const loadFiles = (restored, draftConfig, cInputType, at, { adoptCanonicalPayloa
     slices: { settings: layout.handle }
   };
   const { collapsedLinearSeqs, linearSeqs, circularSources } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
-    adoptCanonicalPayloads, resolveRecordInputs, circularRequest,
+    adoptCanonicalPayloads, resolveRecordInputs, circularRequest, legacyRecordPositions,
     targetState: target, targetDrawing: target, repairs, at
   });
   return { target, linearSeqs, circularSources, collapsed: collapsedLinearSeqs, at };
@@ -7633,15 +7644,14 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {LoadRepair[]} */
     const fileRows = legacyRead ? [] : repairs;
     /** How this Load's files are read (`loadFiles`). @type {LoadFilesReading} */
-    const fileReading = { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, repairs: fileRows };
+    const fileReading = { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, repairs: fileRows, legacyRecordPositions: !versionHoldsDrawings(fileDocument.version) };
     recordSessionLifecycleEvent('session-candidate-files-start');
     // The files the Load projects: a Session 51's opened drawing's, else the
     // file's one set of a Session 27-50, whose drawings each take their
     // mode's part (`installLiveFileState`).
     const filesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     const projectedFiles = loadFiles(canonicalSession ? projectionResult.restoredFiles : data.files,
-      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt,
-      { ...fileReading, circularRequest: canonicalSession && !settingsOnly && committedMode === 'circular' });
+      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt, { ...fileReading, circularRequest: canonicalSession && !settingsOnly && committedMode === 'circular' });
     /**
      * Every other Session 51 drawing's own files, by drawing ID (B2d-3a-2);
      * a drawing the document lacks has none (D-15-105 (5)).

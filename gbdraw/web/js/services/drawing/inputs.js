@@ -253,6 +253,19 @@ export const createCircularSource = (overrides = {}) => ({
  * @property {InputFileRef | null} blacklist the Blacklist card's file
  * @property {InputFileRef | null} whitelist the Whitelist card's file
  * @property {InputFileRef | null} qualifier_priority the Priority card's file
+ * @property {readonly CircularCardMark[] | null} c_depth_rows the cards whose records the rows of a
+ *   record-major `c_depth` stand for, in row order (not saved; History keeps it with the matrix);
+ *   null: the rows stand for the records as the drawing's cards list them when they are first read
+ * @property {readonly CircularCardMark[] | null} c_legacy_record_cards the cards a Session 50 or older
+ *   moved its Circular input to, as Load installed them (`cardsTakeLegacyRecordPositions`; not saved);
+ *   null: no record of the drawing has a flat position of then
+ */
+/**
+ * A Circular File card as it was at one moment (a Load, the write of a Depth
+ * matrix): its uid, the files its input type reads, and its record count when
+ * that was known.
+ * @typedef {{ uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null,
+ *   recordCount: number | null }} CircularCardMark
  */
 /**
  * The five card files' fields (Default colors, Specific rules, Blacklist,
@@ -281,6 +294,8 @@ const BOUND_FILE_KEYS = Object.freeze([
   'c_conservation_sequence_sources', 'd_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority'
 ]);
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
+// The fields of `files` that hold card marks (`CircularCardMark`), whose files bind no input.
+const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards']);
 const CIRCULAR_SOURCE_FILE_KEYS = Object.freeze(/** @type {const} */ (['gb', 'gff', 'fasta']));
 
 /**
@@ -485,6 +500,13 @@ const bindFileFields = (store, loaded) => {
   if (Array.isArray(files.linearCanonicalComparisons)) {
     files.linearCanonicalComparisons = bindCanonicalComparisons(store, files.linearCanonicalComparisons);
   }
+  // A card mark names its files by their refs, as the cards do.
+  CARD_MARK_KEYS.forEach((key) => {
+    const marks = /** @type {readonly CircularCardMark[] | null | undefined} */ (files[key]);
+    if (Array.isArray(marks)) {
+      files[key] = marks.map((mark) => ({ ...mark, primaryFile: store.registerFile(mark.primaryFile), pairedFile: store.registerFile(mark.pairedFile) }));
+    }
+  });
   return files;
 };
 
@@ -614,7 +636,8 @@ const emptyDrawingInputFiles = () => ({
   c_depth: null,
   c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [],
   c_conservation_sequence_sources: [], linearCanonicalComparisons: [],
-  d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null
+  d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null,
+  c_depth_rows: null, c_legacy_record_cards: null
 });
 const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.keys(emptyDrawingInputFiles()));
 

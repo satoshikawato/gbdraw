@@ -18,6 +18,7 @@ import { circularSourceInputs } from '../services/input-types.js';
 import { groupLinearSourceRecords, planLinearSourceRemoval } from '../services/linear-sources.js';
 import {
   circularRecordDrawKey,
+  heldCardPrefix,
   legacyCircularRecordKeys,
   linearCardHasSettings,
   RECORD_SETTINGS_DEFAULTS,
@@ -31,7 +32,7 @@ import { fileCardLine } from './file-card.js';
 /** @import { CircularRecordEntry } from '../services/drawing/inputs.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { CircularRecordDiscovery, SequenceRecord } from '../services/record-discovery.js' */
-/** @import { RecordDrawKey, RecordEditData, RecordSettingsOwner } from '../services/record-draw-selection.js' */
+/** @import { RecordDrawKey, RecordEditData, RecordIdentitySources, RecordSettingsOwner } from '../services/record-draw-selection.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { ApplyLinearSeqMutation, AskLinearFileRemoval, RemoveLinearSource } from './linear-source-edits.js' */
@@ -92,6 +93,20 @@ export const createRecordSettingsSources = ({
     const entries = circularEntriesOf(drawing);
     return new Map(drawing.circularSources.map((source) => [source.uid, entries.filter((entry) => entry.uid === source.uid)]));
   };
+  /**
+   * The record lists a Circular drawing's record identities are read from,
+   * with the cards an older Session's flat record positions still count over
+   * (OV-2867): those Load installed, up to the first one gone or whose file
+   * changed (`heldCardPrefix`).
+   * @param {DrawingState} drawing
+   * @returns {RecordIdentitySources}
+   */
+  const circularIdentitySources = (drawing) => ({
+    mode: 'circular',
+    cards: circularRecordCards(drawing),
+    legacyOrder: heldCardPrefix(drawing.files.c_legacy_record_cards ?? [],
+      circularSourceInputs(drawing.inputType.value, drawing.circularSources))
+  });
   /** @param {DrawingState} drawing @returns {RecordSettingsOwner[]} */
   const circularRecordSettingsOwners = (drawing) => {
     const discovery = getCircularRecordDiscoveryState(drawing);
@@ -99,7 +114,7 @@ export const createRecordSettingsSources = ({
       { sourceKey: circularAnnotationSourceKey(drawing), hasInput: discovery.hasInput, status: discovery.status, records: discovery.records },
       'circular-source'
     );
-    const legacy = legacyCircularRecordKeys({ mode: 'circular', cards: circularRecordCards(drawing) });
+    const legacy = legacyCircularRecordKeys(circularIdentitySources(drawing));
     return circularEntriesOf(drawing).map((entry, index) => ({
       key: circularRecordDrawKey(entry),
       requestKeys: [entry.identity, ...(legacy.get(entry.identity) || [])],
@@ -173,7 +188,7 @@ export const createRecordSettingsSources = ({
       })
     };
   };
-  return { circularRecordCards, recordSettingsOwners, recordEditData, recordSourceOf };
+  return { circularIdentitySources, recordSettingsOwners, recordEditData, recordSourceOf };
 };
 
 /**

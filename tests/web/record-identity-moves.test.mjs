@@ -5,8 +5,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  cardsTakeLegacyRecordPositions,
   drawnRecordIdentities,
   expandedRecordKey,
+  heldCardPrefix,
   legacyCircularRecordKeys,
   recordIdentity,
   recordKeyExpansion,
@@ -63,8 +65,11 @@ test('Circular canvas <-> one record moves no record row; the keys of an older S
   }
   // Session 50 numbered the records over the drawing (`record-<n>`): `record-1` is a live identity here, so only
   // `record-2` and `record-3` are aliases, of the records at those places.
-  assert.deepEqual([...legacyCircularRecordKeys(sources)].map(([identity, keys]) => [identity, keys.filter((key) => key.startsWith('record-'))]),
+  const loaded = { ...sources, legacyOrder: ['record-1', 'record-2'] };
+  assert.deepEqual([...legacyCircularRecordKeys(loaded)].map(([identity, keys]) => [identity, keys.filter((key) => key.startsWith('record-'))]),
     [['record-1', []], ['record-2:1', ['record-2']], ['record-2:2', ['record-3']]]);
+  // Without a Load-time card order (a Session 51, CLI per-file keys) there is no alias (OV-2867).
+  assert.deepEqual([...legacyCircularRecordKeys(sources)], []);
 });
 
 test('Linear ALL <-> one record <-> region, a file of one record, and a record 2 -> 3 change', () => {
@@ -136,9 +141,54 @@ test('no row moves out of or into a record key whose source the Generate replace
   assert.deepEqual(Object.fromEntries(recordKeyMoves(all, one, new Set(['U']))), {});
 });
 
+// OV-2882 (D-20): a Replace in the same card keeps its first record. The record
+// of a one-record file is `U`, the first record of a file of several `U:1`;
+// across the Replace they are one record, so its rows move from `U` to `U:1`
+// (and back), the replaced key included: the prune then keeps the edits of the
+// features the new file still has.
+test('the record of a one-record file and the first record of its replacement are one record', () => {
+  const one = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', windows: [] }, { recordKey: 'V', cardinality: 'all', windows: [] }],
+    circular({ U: ['r1'], V: ['v'] }));
+  const several = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', windows: [] }, { recordKey: 'V', cardinality: 'all', windows: [] }],
+    circular({ U: ['r1', 'r2'], V: ['v'] }));
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(one, several, new Set(['U']))), { U: 'U:1' });
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(several, one, new Set(['U:1', 'U:2']))), { 'U:1': 'U' });
+  // Another card's uid is never taken for it.
+  const other = drawnRecordIdentities([{ recordKey: 'W', cardinality: 'all', windows: [] }], circular({ W: ['w1', 'w2'] }));
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(one, other)), {});
+});
+
+// OV-2867: an older Session's flat positions count over its cards in their
+// order at Load, never in the order of now: a card moved after Load keeps its
+// records' aliases, and the walk stops at the first card gone or whose file
+// changed, so a removed card retargets no alias.
+test('legacy aliases count over the cards as loaded and stop at the first one gone or replaced', () => {
+  const fileA = Object.freeze({ fileId: 'file-a' });
+  const fileB = Object.freeze({ fileId: 'file-b' });
+  const marks = [{ uid: 'source-1', primaryFile: fileA, pairedFile: null, recordCount: null },
+    { uid: 'source-2', primaryFile: fileB, pairedFile: null, recordCount: null }];
+  const input = (uid, primaryFile) => ({ uid, primaryFile, pairedFile: null });
+  // File 2 moved up: the order of Load stays.
+  assert.deepEqual(heldCardPrefix(marks, [input('source-2', fileB), input('source-1', fileA)]), ['source-1', 'source-2']);
+  // File 1 removed, or replaced: no card of then is placed past it.
+  assert.deepEqual(heldCardPrefix(marks, [input('source-2', fileB)]), []);
+  assert.deepEqual(heldCardPrefix(marks, [input('source-1', Object.freeze({ fileId: 'file-c' })), input('source-2', fileB)]), []);
+  assert.deepEqual(heldCardPrefix(marks, [input('source-1', fileA)]), ['source-1']);
+  const moved = { ...circular({ 'source-2': ['b'], 'source-1': ['a'] }), legacyOrder: ['source-1', 'source-2'] };
+  assert.deepEqual(Object.fromEntries([...legacyCircularRecordKeys(moved)].map(([identity, keys]) => [identity, keys[0]])),
+    { 'source-1': 'record-1', 'source-2': 'record-2' });
+  // A card not read yet ends the walk.
+  assert.deepEqual([...legacyCircularRecordKeys({ ...circular({ 'source-1': [], 'source-2': ['b'] }), legacyOrder: ['source-1', 'source-2'] })], []);
+  // Which migrated cards take flat positions (D-12): one card, or several not keyed by the CLI's per-file keys.
+  assert.equal(cardsTakeLegacyRecordPositions([{ uid: 'record-1' }]), true);
+  assert.equal(cardsTakeLegacyRecordPositions([{ uid: 'source-1' }, { uid: 'source-2' }]), true);
+  assert.equal(cardsTakeLegacyRecordPositions([{ uid: 'record-1' }, { uid: 'record-2' }]), false);
+  assert.equal(cardsTakeLegacyRecordPositions([]), false);
+});
+
 // A Circular record of an older Session (50 and older) may have rows under the
 // keys of then: `record-<n>` and `circular-<record ID>-#<n>` (`legacyCircularRecordKeys`).
-const OLDER = circular({ K: ['A', 'B'] });
+const OLDER = { ...circular({ K: ['A', 'B'] }), legacyOrder: ['K'] };
 const recordB = drawnRecordIdentities([{ recordKey: 'K:2', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'B' } }], OLDER);
 
 test('aliases bring the rows an older Session left under its keys, after the record\'s own rows', () => {

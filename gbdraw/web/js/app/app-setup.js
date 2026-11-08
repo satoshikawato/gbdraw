@@ -1707,7 +1707,7 @@ export const createAppSetup = () => {
   // Circular list first (OV-2489).
   /** @param {DrawingState} drawing @returns {Promise<RecordIdentitySources>} */
   const readRecordIdentitySources = async (drawing) => {
-    if (drawing.mode === 'circular') return { mode: drawing.mode, cards: circularRecordCards(drawing) };
+    if (drawing.mode === 'circular') return circularIdentitySources(drawing);
     await awaitLinearRecordDiscovery(drawing);
     return {
       mode: drawing.mode,
@@ -3219,7 +3219,7 @@ export const createAppSetup = () => {
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  const { circularRecordCards, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+  const { circularIdentitySources, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
     shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
