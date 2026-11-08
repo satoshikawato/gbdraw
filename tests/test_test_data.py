@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
+import urllib.error
+import urllib.request
+from email.message import Message
 from pathlib import Path
 
 import pytest
@@ -117,3 +121,88 @@ def test_no_copy_that_does_not_match_is_placed(tmp_path: Path) -> None:
     assert (cache / expected.sha256).read_bytes() == b"corrupted in place\n"
     assert sorted(path.name for path in cache.iterdir()) == [expected.sha256]
     assert any("does not match" in message for message in messages)
+
+
+TAG = "test-data-2026-11"
+API_RELEASE = f"https://api.github.com/repos/{test_data.RELEASE_REPOSITORY}/releases/tags/{TAG}"
+
+
+class _Response:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> "_Response":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self, size: int = -1) -> bytes:
+        size = len(self._body) if size < 0 else size
+        chunk, self._body = self._body[:size], self._body[size:]
+        return chunk
+
+
+def _serve(monkeypatch: pytest.MonkeyPatch, content: bytes, name: str, *, lookup_ok: bool = True) -> list[urllib.request.Request]:
+    """Make the browser route answer 504; the API serves the tag lookup and the asset."""
+
+    seen: list[urllib.request.Request] = []
+
+    def urlopen(request: str | urllib.request.Request, timeout: float = 0) -> _Response:
+        if isinstance(request, str):
+            request = urllib.request.Request(request)
+        seen.append(request)
+        url = request.full_url
+        if url.startswith(RELEASE_PREFIX):
+            raise urllib.error.HTTPError(url, 504, "Gateway Time-out", Message(), None)
+        if url == API_RELEASE:
+            if not lookup_ok:
+                raise urllib.error.HTTPError(url, 500, "Server Error", Message(), None)
+            body = {"assets": [{"name": name, "url": "https://api.github.com/assets/7"}]}
+            return _Response(json.dumps(body).encode())
+        if url == "https://api.github.com/assets/7":
+            assert request.get_header("Accept") == "application/octet-stream"
+            return _Response(content)
+        raise AssertionError(url)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return seen
+
+
+def _release_input(content: bytes) -> InputFile:
+    name = f"{hashlib.sha256(content).hexdigest()[:12]}-big.gb"
+    return _input("examples/big.gb", content, "6" * 40, f"{RELEASE_PREFIX}{TAG}/{name}")
+
+
+@pytest.mark.parametrize("token", [None, "secret"])
+def test_the_api_route_delivers_when_the_download_route_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, token: str | None
+) -> None:
+    for variable in ("GITHUB_TOKEN", "GH_TOKEN"):
+        monkeypatch.delenv(variable, raising=False)
+    if token:
+        monkeypatch.setenv("GITHUB_TOKEN", token)
+    item = _release_input(b"big file\n")
+    seen = _serve(monkeypatch, b"big file\n", item.url.rsplit("/", 1)[1])
+    messages: list[str] = []
+
+    missing = test_data.fetch([item], root=tmp_path / "root", cache=tmp_path / "cache", require=True, log=messages.append)
+
+    assert missing == ()
+    assert (tmp_path / "root" / item.path).read_bytes() == b"big file\n"
+    asset_request = seen[-1]
+    assert asset_request.full_url == "https://api.github.com/assets/7"
+    assert asset_request.unredirected_hdrs.get("Authorization") == (f"Bearer {token}" if token else None)
+    assert "Authorization" not in asset_request.headers
+    assert any("504" in message for message in messages)
+
+
+def test_a_failed_tag_lookup_leaves_the_item_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    item = _release_input(b"big file\n")
+    _serve(monkeypatch, b"big file\n", item.url.rsplit("/", 1)[1], lookup_ok=False)
+    messages: list[str] = []
+
+    missing = test_data.fetch([item], root=tmp_path / "root", cache=tmp_path / "cache", log=messages.append)
+
+    assert missing == (item,)
+    assert sum("release lookup" in message for message in messages) == 1
