@@ -6,7 +6,7 @@
 // refresh as ports.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { circularRecordEntries, circularRecordSelection, formatRecordLength } from '../services/record-options.js';
-import { circularRecordsToDraw } from '../services/record-draw-selection.js';
+import { cardHoldsRecordKey, circularRecordsToDraw, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { circularSourceInputs } from '../services/input-types.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
@@ -14,6 +14,7 @@ import { buildDefaultMultiRecordPositions } from './run-analysis.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { MultiRecordPosition } from '../services/config.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const { computed } = window.Vue;
 
@@ -32,6 +33,8 @@ const { computed } = window.Vue;
  * @property {() => SessionBusy | null} sessionOperationAvailability
  * @property {ShownDrawingOfMode} shownDrawingOfMode
  * @property {() => unknown} refreshCircularRecordOrder The record read of the shown drawing, with its Record Order.
+ * @property {(drawing: { id: string }) => CanonicalRenderRequest | null} shownCommittedRequest The committed request of
+ *   the Result a drawing shows; null while it shows no Result of its own (app/shown-drawing-readers.js).
  */
 
 /**
@@ -39,7 +42,8 @@ const { computed } = window.Vue;
  * @param {CircularRecordPresentationPorts} ports
  */
 export const createCircularRecordPresentation = ({
-  state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder
+  state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder,
+  shownCommittedRequest
 }) => {
   // The file name a record's label begins with: its card's file when the drawing has several source cards.
   /** @param {DrawingState} drawing @returns {(uid: string) => string} */
@@ -47,6 +51,28 @@ export const createCircularRecordPresentation = ({
     const cards = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
     const names = new Map(cards.length > 1 ? cards.map((card) => [card.uid, String(card.primaryFile?.name || '')]) : []);
     return (uid) => names.get(uid) || '';
+  };
+  /**
+   * The name shown for a Record select or Record Order value whose record is not
+   * in the read list (OV-2949): a record identity (`<uid>`, `<uid>:<k>`) by the
+   * record ID that the request of the Result this drawing shows names it by
+   * (the record ID selector of the record keyed by that identity), else by its
+   * card's file name, with `#k` for the k-th record of a file; any other value
+   * (a kept `#N`, a record ID) as it is. The one owner of an unread record's
+   * name in the panel.
+   * @param {DrawingState} drawing
+   * @param {string} value
+   */
+  const unreadRecordName = (drawing, value) => {
+    const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
+    if (!card) return value;
+    const request = shownCommittedRequest(drawing);
+    const named = request?.mode === 'circular' ? request.records.find((record) => record.recordKey === value) : undefined;
+    if (named?.selector?.kind === 'recordId' && named.selector.value.trim()) return named.selector.value.trim();
+    const [input] = circularSourceInputs(drawing.inputType.value, [card]);
+    const fileName = String(input.primaryFile?.name || '') || card.uid;
+    const k = recordKeyExpansion(value, card.uid);
+    return k === null ? fileName : `${fileName} #${k}`;
   };
   // A Record Order row names its record by identity; its label is the record's ID, after its file's name.
   /** @param {unknown} identity */
@@ -57,7 +83,7 @@ export const createCircularRecordPresentation = ({
     /** @type {CircularListRecord[]} */
     const records = drawing.circularRecordList.value;
     const matched = records.find((entry) => entry.identity === normalized);
-    if (!matched) return normalized;
+    if (!matched) return unreadRecordName(drawing, normalized);
     const recordId = matched.record_id.trim() || t('Unknown');
     const fileName = cardFileNames(drawing)(matched.uid);
     return fileName ? `${fileName}: ${recordId}` : `${matched.selector} (${recordId})`;
@@ -84,6 +110,7 @@ export const createCircularRecordPresentation = ({
     const fileNameOf = cardFileNames(drawing);
     const current = String(drawing.form.circular_record_selector || '').trim();
     const selection = circularRecordSelection(entries, current);
+    const shown = unreadRecordName(drawing, current);
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const drawnCount = circularDrawnRecordCount.value;
@@ -101,9 +128,9 @@ export const createCircularRecordPresentation = ({
       ...(current && selection.status !== 'resolved'
         ? [{
             value: current,
-            label: !inspected ? t('{selector} (not inspected)', { selector: current })
-              : selection.status === 'ambiguous' ? t('{selector} (ambiguous)', { selector: current })
-                : t('{selector} (not found)', { selector: current }),
+            label: !inspected ? t('{selector} (not inspected)', { selector: shown })
+              : selection.status === 'ambiguous' ? t('{selector} (ambiguous)', { selector: shown })
+                : t('{selector} (not found)', { selector: shown }),
             synthetic: true
           }]
         : []),
@@ -121,10 +148,10 @@ export const createCircularRecordPresentation = ({
     if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
     const selection = circularRecordSelection(circularRecordPresentationEntries(), current);
     if (selection.status === 'ambiguous') {
-      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
+      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: unreadRecordName(drawing, current) });
     }
     if (selection.status === 'missing') {
-      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: current });
+      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: unreadRecordName(drawing, current) });
     }
     return '';
   });

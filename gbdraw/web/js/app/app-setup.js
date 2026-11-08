@@ -3062,7 +3062,7 @@ export const createAppSetup = () => {
     circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
     circularSingleRecordPresentationEnabled
   } = createCircularRecordPresentation({
-    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder
+    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder, shownCommittedRequest
   });
 
   // The legend-entry and record-definition popups (match popup frame): views
@@ -3140,8 +3140,7 @@ export const createAppSetup = () => {
   });
   const { sourceReplacementRetiresPresentation, replaceCircularSourceFile, setCircularSourceFile, addCircularSourceFiles,
     removeCircularSourceOf, removeCircularSourceCard, canMoveCircularSource, moveCircularSourceCard } = createCircularSourceEdits({
-    state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction,
-    runUndoable: history.runUndoable
+    state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction, runUndoable: history.runUndoable
   });
   const circularFileCards = createCircularFileCards({ shownDrawingOfMode, circularRecordDiscoveryState, addCircularSourceFiles, removeCircularSourceCard });
 

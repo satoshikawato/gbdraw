@@ -192,11 +192,13 @@ for (const width of [1280, 390]) {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
     const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
     await upload.focus();
-    const uploadAnchor = await upload.boundingBox();
     await nativeUpload(page, singleSource);
     await ready(page);
-    await expect(upload).toBeFocused();
-    await expect.poll(async () => Math.abs((await upload.boundingBox()).y - uploadAnchor.y)).toBeLessThanOrEqual(2);
+    // The first file makes File card 1, which takes the place of the empty input's uploader: the focus moves to
+    // the card's file button, opened to show it (OV-2905), as a Linear card keeps it on its own.
+    const cardFile = page.locator('[data-circular-source-card]').first().getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+    await expect(cardFile).toBeFocused();
+    await expect(cardFile).toBeInViewport();
     await expect(panel(page)).toHaveAttribute('open', '');
     await expect(page.getByLabel('Circular region start')).toBeEnabled();
     const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -332,7 +334,8 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   // A Session load does not inspect the source; the saved selector is unverified, not missing.
   await expect(page.locator('[data-circular-discovery-status]')).toHaveText('Records not inspected');
   await shot('record-control-loaded.png');
-  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (not inspected)');
+  // The record of a file of one record has no record ID in the request: its file names it (OV-2949).
+  await expect(select.locator('option:checked')).toHaveText('presentation.gb (not inspected)');
 
   // Inspection resolves the selector to the real record entry.
   await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();
