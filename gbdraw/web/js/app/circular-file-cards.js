@@ -10,14 +10,14 @@ import { circularSourceInputs } from '../services/input-types.js';
 import { linearCardFileFields } from '../services/linear-sources.js';
 import { formatRecordLength } from '../services/record-options.js';
 import { tn } from '../utils/i18n.js';
-import { fileCardLine } from './file-card.js';
+import { fileCardLine, keepFocusInFileCard } from './file-card.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { InputSlot } from '../services/input-types.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 
-const { computed, reactive } = window.Vue;
+const { computed, nextTick, reactive } = window.Vue;
 
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 
@@ -101,14 +101,21 @@ export const createCircularFileCards = ({
 
   /**
    * New cards, one per file, each with its file in `field` (one History step);
-   * a new card that still waits for a file shows open.
+   * a new card that still waits for a file shows open. The first card replaces
+   * the empty list's uploaders, so a focus on them moves to it (`keepFocusInFileCard`).
    * @param {InputSlot} field
    * @param {readonly (InputFileCandidate | InputFileRef)[]} files
    */
   const addFiles = async (field, files) => {
+    const focused = document.activeElement;
     const before = new Set(cards.value.map((card) => card.uid));
     const outcome = await addCircularSourceFiles(field, files);
-    cards.value.filter((card) => !before.has(card.uid) && !card.ready).forEach((card) => openCards.add(card.uid));
+    const added = cards.value.filter((card) => !before.has(card.uid));
+    added.filter((card) => !card.ready).forEach((card) => openCards.add(card.uid));
+    if (added.length) {
+      await nextTick();
+      keepFocusInFileCard('circular', added[0].uid, focused);
+    }
     return outcome;
   };
   /**

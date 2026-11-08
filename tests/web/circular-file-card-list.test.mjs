@@ -12,6 +12,8 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const Vue = loadPageVue();
 globalThis.window = { Vue };
+// No element has focus here, so an add moves none (`keepFocusInFileCard`; the browser spec checks the move).
+globalThis.document = { activeElement: null, body: null };
 const { reactive } = Vue;
 const { createCircularFileCards } = await import('../../gbdraw/web/js/app/circular-file-cards.js');
 const { fileCardLine } = await import('../../gbdraw/web/js/app/file-card.js');
