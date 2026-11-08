@@ -47,19 +47,6 @@ from gbdraw.mode_profiles import LINEAR_MODE_PROFILE
 FIXTURES = Path(__file__).parent / "fixtures" / "locate"
 
 
-def _origin_windows() -> bool:
-    try:
-        RecordWindow(2, 1)
-    except ValueError:
-        return False
-    return True
-
-
-# A window across the origin of a circular record is one RecordWindow with start > end (Owner D-28, 2026-11-08);
-# the record-windows change (PR-W) adds it to RecordWindow and the crop.
-needs_origin_windows = pytest.mark.skipif(
-    not _origin_windows(), reason="needs PR-W's origin-crossing RecordWindow (start > end on a circular record)"
-)
 GENE_BP = 900
 GENE_AA = 300
 OPTIONS = LocateOptions.for_program()
@@ -176,7 +163,6 @@ def test_reference_windows_are_refused_when_they_cannot_be_searched(windows: lis
                          windows=windows, cds=cds)
 
 
-@needs_origin_windows
 def test_a_reference_window_may_cross_the_origin_of_a_circular_reference() -> None:
     cds = [
         ReferenceCds("a", None, None, None, 9101, 9900, "+", 266, 800),
@@ -414,7 +400,6 @@ def test_a_rotation_stored_in_a_linear_record_gives_two_abutting_windows_in_refe
     assert file_plan.warnings == ()
 
 
-@needs_origin_windows
 def test_a_circular_record_stored_from_another_start_is_one_window_from_the_reference_start() -> None:
     reference = _reference((20,), circular=True)
     target = _Target(("c1", 21_000, True)).place(_genes(0, [*range(12, 20), *range(12)]), "c1", 1001)
@@ -425,7 +410,6 @@ def test_a_circular_record_stored_from_another_start_is_one_window_from_the_refe
     assert [(w.across_origin, w.touches_start, w.touches_end, len(w.genes)) for w in windows] == [(True, False, False, 20)]
 
 
-@needs_origin_windows
 def test_a_reversed_circular_record_stored_from_another_start_is_read_from_the_reference_start() -> None:
     reference = _reference((20,), circular=True)
     target = _Target(("c1", 21_000, True)).place(
@@ -437,7 +421,6 @@ def test_a_reversed_circular_record_stored_from_another_start_is_read_from_the_r
     assert _spans(windows) == [("c1", 12_951, 12_950, True, 1)]
 
 
-@needs_origin_windows
 def test_an_arc_across_the_origin_is_one_window() -> None:
     reference = _reference((10,))
     target = (_Target(("c1", 100_000, True))
@@ -629,10 +612,7 @@ REAL_COVERAGE = {
 
 
 # The files whose windows cross a circular record's origin.
-ORIGIN_CASES = {"fengycin_CBMB205_rotated", "pva1_19-021-D1"}
-REAL_CASES = [
-    pytest.param(name, marks=needs_origin_windows) if name in ORIGIN_CASES else name for name in sorted(REAL_WINDOWS)
-]
+REAL_CASES = sorted(REAL_WINDOWS)
 
 
 @pytest.mark.parametrize("name", REAL_CASES)
