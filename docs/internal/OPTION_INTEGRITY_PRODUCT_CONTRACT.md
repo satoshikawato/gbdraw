@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `125`
+- Contract revision: `126`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -44,7 +44,7 @@ Status: active Product authority
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
-  `PD-OI-118`, `PD-OI-119`, and `PD-OI-120`
+  `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, and `PD-OI-121`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4739,6 +4739,39 @@ Status: active Product authority
     outcome do not change.
   - No other record is amended or retired. `PD-OI-016`, `PD-OI-046`, and
     `PD-OI-055` stay.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 126 changes: `PD-OI-121` is added (concern
+  `input.file-changed-after-choosing`, scenario revision `2`; the outcome
+  `B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY`). It supersedes `PD-OI-120`
+  scenario revision `1`. When a file is chosen, the page writes its contents
+  (a gzip input's expanded contents) to a temporary file in the browser's
+  private site storage and releases them from memory. Generate, Save Session,
+  and every later reading of the file read that copy, so a file changed,
+  moved, renamed, or deleted on disk after it was chosen, or one whose
+  modification time alone changed, continues with the contents as chosen. A
+  copy is deleted when no state uses its file and when the page closes, and
+  the leftovers of a page that ended without that are deleted when the page
+  next opens; a copy that another tab uses is never deleted. A file whose copy
+  could not be written is read itself and, if it changed after it was chosen,
+  stops with `INPUT_UNREADABLE` and the approved text, as `PD-OI-120`
+  describes.
+  - The Product Decision Owner `satoshikawato` chose to adopt the copy on
+    `2026-11-07` (「採用する（推奨）」) after the measurement of the copy in
+    the browser, in the campaign `large-inputs-20261106`. On the same day the
+    complete receipt below was shown and the Owner approved it: 「承認（全文このまま）」.
+    The session drafted the receipt's fields from the measurement and from the
+    `PD-OI-120` record; the Owner approved them as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-121` scenario revision `2`
+    `78aa51447d63731b714770906f8441bdc31d6b113492db77b888bdb97f507b95`.
+  - The `PD-OI-120` record, receipt, and JSON are kept unchanged: the
+    `PD-OI-121` receipt names it for a file whose copy could not be written, and
+    its May retire names the part it retires.
+  - No other record is amended or retired. `PD-OI-016`, `PD-OI-046`,
+    `PD-OI-055`, and `PD-OI-116` stay.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -12216,6 +12249,60 @@ Decision date: 2026-11-07
   "mustPreserve": "失敗しても直前の Result、draft、History を保ち、選び直して Generate し直せること（PD-OI-016）。選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。Details と Copy diagnostics（PD-OI-046）。変わっていないファイルでの Generate と Save Session の動作。gzip 入力と Session から読んだ入力の扱い。",
   "mayRetire": "選んだ後にディスク上で変わったファイルを、選んだ時点の中身で描くこと、また Session に書くこと。",
   "acceptedResidualRisk": "内容が同じでも、更新日時が変わるだけでブラウザは読み込みを拒む（エディタで保存し直した、同期ツールがファイルに触れた、など）。そのときも、ファイルを選び直す必要がある。Retry Generate を押しても、ファイルを選び直すまでは同じ文が出る。確かめたのは Chrome だけで、Firefox と Safari は確かめていない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-07"
+}
+```
+
+### PD-OI-121: Input file kept in a browser copy after choosing
+
+- Concern key: `input.file-changed-after-choosing`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-120`, scenario revision `1`
+  (`A REFUSE-CHANGED-FILE`), for every file whose copy was written. A file
+  whose copy could not be written keeps the `PD-OI-120` outcome, as the
+  receipt below says.
+- Status: `ACCEPTED`
+- Selected outcome: `B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-07` described in the Revision 126 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `78aa51447d63731b714770906f8441bdc31d6b113492db77b888bdb97f507b95`.
+
+```text
+PRODUCT_DECISION
+Concern: input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）
+Scenario revision: 2
+Choice: B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY
+  - ファイルを選ぶと、ページはその中身（gzip 入力は展開した中身）を、ブラウザのサイト専用の保存領域（OPFS）に一時ファイルとして書き、メモリからは手放す。Generate、Save Session、選んだ後の読み直し（入力の種類の切り替え、取り込みに失敗したカードの Retry など）は、この一時ファイルを読む。
+  - 選んだ後に元のファイルがディスク上で変更・移動・改名・削除されても、内容が同じで更新日時だけが変わっても、選んだ時点の中身で続ける。止まらない。新しい中身を使うときは、ファイルを選び直す。
+  - 一時ファイルは、そのファイルを使う状態がなくなったとき（差し替えや取り外しのあと、History からもそのファイルがなくなったとき）と、ページを閉じたときに消す。異常終了などで残った一時ファイルは、次にページを開いたときに消す。ほかのタブが使っている一時ファイルは消さない。
+  - 一時ファイルを書けなかったファイル（空き容量が足りない、ブラウザが保存領域を使わせない、など）は、元のファイルを直接読む。そのファイルが選んだ後に変わっていれば、PD-OI-120 と同じく INPUT_UNREADABLE で止まり、"An input could not be read. Replace or reselect it." を表示する。
+  - 一時ファイルは、ブラウザのプロファイルの中（ディスク上）に置かれ、ほかのサイトからは読めず、外部には送らない。FAQ と Web アプリの説明（実行・プライバシー・オフラインの節）に、このことを書く。
+  - 表示、Generate の結果、Session の中身と形式、gzip の展開の上限（PD-OI-116）は変えない。Session から読んだ入力の扱いも変えない。
+Rationale: 0.14.5 と同じく、選んだ時点の中身で描ける。中身をメモリに持たないので、そのぶんメモリが減る（1.12 GiB の depth の表なら 1.12 GiB）。Worker は一時ファイルから直接読めるので、Generate でファイルを読む時間も短くなる（1.12 GiB で、約 1.3 秒から約 0.2 秒。Chromium で計測）。変わったファイルの扱いはブラウザによって違う（Chromium は読み込みを拒み、Firefox は新しい中身を返す）ので、PD-OI-120 の形では、ブラウザによって結果が変わる。一時ファイルなら、どのブラウザでも同じになる。
+Must preserve: 選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。入力ファイルをアップロードしないこと。Save Session が、選んだ時点の中身を Session に入れること。Session の形式と上限。gzip の展開の上限とその断り方（PD-OI-116）。
+May retire: 一時ファイルを書けたファイルについて、選んだ後に変わったら Generate と Save Session が止まること（PD-OI-120）。
+Accepted residual risk: 選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip 入力は展開後の大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。
+Owner: satoshikawato
+Decision date: 2026-11-07
+```
+
+```json
+{
+  "concern": "input.file-changed-after-choosing（選んだ後にディスク上で変わった入力ファイル）",
+  "scenarioRevision": 2,
+  "choice": "B KEEP-CHOSEN-CONTENT-IN-BROWSER-COPY\n  - ファイルを選ぶと、ページはその中身（gzip 入力は展開した中身）を、ブラウザのサイト専用の保存領域（OPFS）に一時ファイルとして書き、メモリからは手放す。Generate、Save Session、選んだ後の読み直し（入力の種類の切り替え、取り込みに失敗したカードの Retry など）は、この一時ファイルを読む。\n  - 選んだ後に元のファイルがディスク上で変更・移動・改名・削除されても、内容が同じで更新日時だけが変わっても、選んだ時点の中身で続ける。止まらない。新しい中身を使うときは、ファイルを選び直す。\n  - 一時ファイルは、そのファイルを使う状態がなくなったとき（差し替えや取り外しのあと、History からもそのファイルがなくなったとき）と、ページを閉じたときに消す。異常終了などで残った一時ファイルは、次にページを開いたときに消す。ほかのタブが使っている一時ファイルは消さない。\n  - 一時ファイルを書けなかったファイル（空き容量が足りない、ブラウザが保存領域を使わせない、など）は、元のファイルを直接読む。そのファイルが選んだ後に変わっていれば、PD-OI-120 と同じく INPUT_UNREADABLE で止まり、\"An input could not be read. Replace or reselect it.\" を表示する。\n  - 一時ファイルは、ブラウザのプロファイルの中（ディスク上）に置かれ、ほかのサイトからは読めず、外部には送らない。FAQ と Web アプリの説明（実行・プライバシー・オフラインの節）に、このことを書く。\n  - 表示、Generate の結果、Session の中身と形式、gzip の展開の上限（PD-OI-116）は変えない。Session から読んだ入力の扱いも変えない。",
+  "rationale": "0.14.5 と同じく、選んだ時点の中身で描ける。中身をメモリに持たないので、そのぶんメモリが減る（1.12 GiB の depth の表なら 1.12 GiB）。Worker は一時ファイルから直接読めるので、Generate でファイルを読む時間も短くなる（1.12 GiB で、約 1.3 秒から約 0.2 秒。Chromium で計測）。変わったファイルの扱いはブラウザによって違う（Chromium は読み込みを拒み、Firefox は新しい中身を返す）ので、PD-OI-120 の形では、ブラウザによって結果が変わる。一時ファイルなら、どのブラウザでも同じになる。",
+  "mustPreserve": "選んだファイルの中身だけで描き、ほかの中身では描かないこと（PD-OI-055）。失敗しても直前の Result、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics（PD-OI-046）。入力ファイルをアップロードしないこと。Save Session が、選んだ時点の中身を Session に入れること。Session の形式と上限。gzip の展開の上限とその断り方（PD-OI-116）。",
+  "mayRetire": "一時ファイルを書けたファイルについて、選んだ後に変わったら Generate と Save Session が止まること（PD-OI-120）。",
+  "acceptedResidualRisk": "選んだときに、入力と同じ大きさの書き込みが裏で起きる（1.12 GiB で約 1 秒）。書き終わる前に Generate を押すと、書き終わるまで待つ。ディスクに、使っている入力の合計の大きさ（gzip 入力は展開後の大きさ）の空きが要り、History に残っている入力のぶんも含む。シークレットウィンドウでは、ブラウザが一時ファイルをメモリに置くので、メモリは減らない。一時ファイルを書けなかったファイルは、選んだ後に変わると止まる。ページやブラウザが異常終了すると、次にページを開くまで一時ファイルがディスクに残る。確かめたのは Chromium と Firefox だけで、Safari は確かめていない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
 }

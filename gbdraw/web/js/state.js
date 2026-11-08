@@ -20,6 +20,8 @@ import {
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createInputFileStore } from './services/history-files.js';
+import { keepFileCopy, releaseFileCopy, useInputCopyStore } from './services/file-content-cache.js';
+import { createBrowserInputCopyStore } from './services/input-copies.js';
 import { INPUTS_SLICE } from './services/drawing/inputs.js';
 import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
@@ -193,11 +195,17 @@ const losatThreadingStatus = ref({
   state: 'unknown',
   message: ''
 });
+// The temporary copies of the chosen inputs (PD-OI-121): creating the store takes
+// this tab's folder and lock and deletes the folders of closed tabs.
+useInputCopyStore(createBrowserInputCopyStore());
 // The project's input file store: History steps and the input bindings name
 // its files by `InputFileRef` (services/history-files.js). The views of one
 // Session resource share its descriptor, so their refs share a `sourceId`.
 const inputFiles = createInputFileStore({
-  sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor
+  sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor,
+  // A held File is copied when it is chosen, and its copy is deleted when no step or binding names it (PD-OI-121).
+  onHold: keepFileCopy,
+  onRelease: releaseFileCopy
 });
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());

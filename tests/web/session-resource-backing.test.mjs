@@ -27,6 +27,7 @@ const {
 const {
   holdReadBytes,
   readFileBytes,
+  readFileContentFacts,
   readFileText
 } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { adoptRuntimeCanonicalSession } = await import(
@@ -247,7 +248,7 @@ test('lazy resource failures identify the resource and remain cached', async () 
   }
 });
 
-// PD-OI-120 (OV-2619): a file-backed resource whose File the browser refuses to read (it changed
+// PD-OI-121, OV-2619: a file-backed resource whose File has no copy and the browser refuses to read (it changed
 // on disk after it was chosen) fails Save with INPUT_UNREADABLE and the approved text, not with
 // an "invalid encoded data" error that reads as UNKNOWN.
 test('a refused read of a file-backed resource keeps its INPUT_UNREADABLE error', async () => {
@@ -281,6 +282,9 @@ test('ordinary uploaded File objects keep the native read behavior', async () =>
   assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
   assert.equal(reads, 1);
   releaseReads();
+  // The first read settles once its pieces are hashed; a read after that reads again.
+  await readFileContentFacts(file);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(new TextDecoder().decode(await readFileBytes(file)), 'native upload');
   assert.equal(reads, 2);
 });

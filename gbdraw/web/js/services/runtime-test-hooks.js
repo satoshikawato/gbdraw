@@ -15,6 +15,12 @@ export const testByteCap = (name) => {
 };
 
 /**
+ * A test's stand-in for a write of an input copy that the browser refuses
+ * (no space left, a short write): every copy write then fails (`services/input-copies.js`).
+ */
+export const testFailsInputCopyWrites = () => testHooks()?.failInputCopyWrites === true;
+
+/**
  * @param {unknown} name
  * @param {unknown} [value]
  * @param {unknown} [detail]

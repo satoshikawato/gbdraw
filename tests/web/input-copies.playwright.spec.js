@@ -1,0 +1,150 @@
+// The temporary copies of the chosen input files (PD-OI-121 in
+// docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md): the page keeps the
+// content of a chosen file in a copy in the browser's private site storage, so
+// a file changed, touched, moved, or deleted on disk after it was chosen still
+// Generates and Saves as chosen. A copy is deleted when no state uses its
+// File, and the folders of closed tabs are deleted when the page next opens.
+const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
+const path = require('node:path');
+const { gunzipSync, gzipSync } = require('node:zlib');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openFresh } = require('./helpers/audit-browser.cjs');
+const { generate } = require('./helpers/mode-transition.cjs');
+
+const SOURCE = path.resolve('tests/test_inputs/NC_001416.gb');
+const OTHER = path.resolve('tests/test_inputs/AP027078.gb');
+
+// Every copy file of every tab folder: [{ tab, name, size }].
+const copyFiles = (page) => page.evaluate(async () => {
+  const base = await (await navigator.storage.getDirectory()).getDirectoryHandle('gbdraw-input-copies', { create: true });
+  const files = [];
+  for await (const [tab, folder] of base.entries()) {
+    for await (const [name, handle] of folder.entries()) {
+      files.push({ tab, name, size: (await handle.getFile()).size });
+    }
+  }
+  return files;
+});
+const copySizes = async (page) => (await copyFiles(page)).map(({ size }) => size).sort((a, b) => a - b);
+
+const placeCopy = (info, from, name) => {
+  const to = info.outputPath(name);
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
+  return to;
+};
+const changes = {
+  modified: (file) => fs.appendFileSync(file, '\n'),
+  touched: (file) => { const later = new Date(Date.now() + 5000); fs.utimesSync(file, later, later); },
+  moved: (file) => fs.renameSync(file, `${file}.moved`),
+  deleted: (file) => fs.unlinkSync(file)
+};
+
+const chooseGenBank = async (page, file) => {
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status),
+    { timeout: 60_000 }).toBe('ready');
+};
+const genbankResources = (value, found = []) => {
+  if (Array.isArray(value)) value.forEach((member) => genbankResources(member, found));
+  else if (value && typeof value === 'object') {
+    if (value.encoding === 'base64' && value.kind === 'genbank') found.push(Buffer.from(value.data, 'base64'));
+    Object.values(value).forEach((member) => genbankResources(member, found));
+  }
+  return found;
+};
+const saveSession = async (page, title) => {
+  const pending = page.waitForEvent('download', { timeout: 60_000 });
+  await evaluateWithRetainedPromise(page, async (sessionTitle) => {
+    const app = window.__GBDRAW_APP__;
+    app.sessionTitle = sessionTitle;
+    await app.saveSessionWithTitle();
+  }, title);
+  return genbankResources(JSON.parse(gunzipSync(fs.readFileSync(await (await pending).path())).toString('utf8')));
+};
+
+test('a file changed, touched, moved, or deleted after it was chosen Saves and Generates as chosen', async ({ page }, info) => {
+  test.setTimeout(480_000);
+  const chosenBytes = fs.readFileSync(SOURCE);
+  await openFresh(page);
+  for (const [kind, change] of Object.entries(changes)) {
+    const chosen = placeCopy(info, SOURCE, `${kind}/chosen.gb`);
+    await chooseGenBank(page, chosen);
+    await expect.poll(() => copySizes(page), { timeout: 30_000 }).toContain(chosenBytes.byteLength);
+    change(chosen);
+    const saved = await saveSession(page, `copy-${kind}`);
+    expect(saved, kind).toHaveLength(1);
+    expect(saved[0].equals(chosenBytes), `${kind}: Save writes the content as chosen`).toBe(true);
+    await generate(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length), kind).toBe(1);
+  }
+});
+
+test('a replaced file\'s copy is deleted once History no longer holds the File', async ({ page }, info) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  const first = fs.statSync(SOURCE).size;
+  const second = fs.statSync(OTHER).size;
+  await chooseGenBank(page, placeCopy(info, SOURCE, 'first.gb'));
+  await chooseGenBank(page, placeCopy(info, OTHER, 'second.gb'));
+  // Undo can bring the first file back, so its copy stays.
+  await expect.poll(() => copySizes(page), { timeout: 30_000 }).toEqual([first, second].sort((a, b) => a - b));
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.captureBaseline('No more Undo'));
+  await expect.poll(() => copySizes(page), { timeout: 30_000 }).toEqual([second]);
+});
+
+test('the page deletes the folders of closed tabs when it opens, and keeps an open tab\'s', async ({ page }, info) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  await chooseGenBank(page, placeCopy(info, SOURCE, 'live.gb'));
+  await expect.poll(() => copyFiles(page), { timeout: 30_000 }).toHaveLength(1);
+  const [{ tab: liveTab }] = await copyFiles(page);
+  // A tab that ended without deleting its folder (a crash): nobody holds its lock.
+  await page.evaluate(async () => {
+    const base = await (await navigator.storage.getDirectory()).getDirectoryHandle('gbdraw-input-copies');
+    const folder = await base.getDirectoryHandle('tab-closed', { create: true });
+    const writable = await (await folder.getFileHandle('copy-1.bin', { create: true })).createWritable();
+    await writable.write(new Uint8Array(64));
+    await writable.close();
+  });
+  const later = await page.context().newPage();
+  await openFresh(later);
+  await expect.poll(async () => (await copyFiles(later)).map(({ tab }) => tab)).toEqual([liveTab]);
+  await later.close();
+});
+
+test('a file whose copy could not be written is read itself, and refuses once it changed', async ({ page }, info) => {
+  test.setTimeout(240_000);
+  await page.addInitScript(() => {
+    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), failInputCopyWrites: true };
+  });
+  await openFresh(page);
+  const chosen = placeCopy(info, SOURCE, 'unwritten.gb');
+  await chooseGenBank(page, chosen);
+  await page.waitForTimeout(1000);
+  expect(await copyFiles(page)).toEqual([]);
+  changes.modified(chosen);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value?.code ?? null),
+    { timeout: 180_000 }).toBe('INPUT_UNREADABLE');
+  await expect(page.getByText('An input could not be read. Replace or reselect it.')).toBeVisible();
+});
+
+test('a gzip input\'s copy holds its expanded content', async ({ page }, info) => {
+  test.setTimeout(240_000);
+  const plain = fs.readFileSync(SOURCE);
+  const gzipped = info.outputPath('NC_001416.gb.gz');
+  fs.writeFileSync(gzipped, gzipSync(plain));
+  await openFresh(page);
+  await chooseGenBank(page, gzipped);
+  await expect.poll(() => copySizes(page), { timeout: 30_000 }).toEqual([plain.byteLength]);
+  const copied = await page.evaluate(async () => {
+    const base = await (await navigator.storage.getDirectory()).getDirectoryHandle('gbdraw-input-copies');
+    for await (const folder of base.values()) {
+      for await (const handle of folder.values()) return Array.from(new Uint8Array(await (await handle.getFile()).arrayBuffer()));
+    }
+    return null;
+  });
+  expect(Buffer.from(copied).equals(plain)).toBe(true);
+});

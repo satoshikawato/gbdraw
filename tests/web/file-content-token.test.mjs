@@ -1,7 +1,9 @@
 // The content token of an input and how long the page keeps the input's bytes
 // (memory plan P2): one token scheme for every size, computed from the read the
-// page already does, and the bytes dropped once no reader holds them. A File
-// changed on disk after its bytes were dropped is refused at its next read (PD-OI-120).
+// page already does, and the bytes dropped once no reader holds them. These
+// cases have no copy store, so a later read reads the File itself: a File
+// changed on disk after its bytes were dropped is refused at its next read
+// (PD-OI-121, the PD-OI-120 outcome for a file whose copy could not be written).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, webcrypto } from 'node:crypto';
@@ -24,6 +26,14 @@ const expectedToken = (bytes) => {
     digests.push(sha256(bytes.subarray(start, start + PIECE)));
   }
   return sha256(Buffer.concat(digests)).toString('hex');
+};
+
+// A first read settles once its pieces are hashed (and copied, when the File
+// has a copy), so a read that starts meanwhile shares its bytes; a read after
+// `settled` reads again.
+const settled = async (file) => {
+  await readFileContentFacts(file).catch(() => {});
+  await new Promise((resolve) => setImmediate(resolve));
 };
 
 /** A File whose every read is counted. */
@@ -53,6 +63,7 @@ test('the read that discovers a File gives its token and length, and the page th
   const facts = await readFileContentFacts(file);
   assert.equal(file.reads, 1, 'the token comes from the read the page already did');
   assert.deepEqual(facts, { token: expectedToken(Buffer.from(bytes)), byteLength: bytes.byteLength });
+  await settled(file);
   await readFileBytes(file);
   assert.equal(file.reads, 2, 'the bytes were dropped once the read settled');
   assert.equal((await readFileContentFacts(file)).token, facts.token);
@@ -67,6 +78,7 @@ test('reads that one hold covers share one read, and the bytes are dropped when 
   assert.equal(file.reads, 1);
   release();
   release();
+  await settled(file);
   await readFileBytes(file);
   assert.equal(file.reads, 2);
 });
@@ -92,6 +104,7 @@ test('a File the browser refuses after its bytes were dropped fails its next rea
   const bytes = new TextEncoder().encode('LOCUS c\n//\n');
   const file = countingFile(bytes);
   await readFileBytes(file);
+  await settled(file);
   // The file changed on disk: Chrome refuses every later read of this File.
   file.arrayBuffer = async () => { throw new DOMException('changed', 'NotReadableError'); };
   await assert.rejects(readFileBytes(file), (error) => error.code === 'INPUT_UNREADABLE' && error.stage === 'read');
@@ -102,7 +115,7 @@ test('Generate after the bytes were dropped reads the File again and sends the s
   const bytes = new TextEncoder().encode('LOCUS b\nORIGIN\n//\n');
   const file = countingFile(bytes);
   await readFileBytes(file);
-  await readFileContentFacts(file);
+  await settled(file);
   const prepared = await createDiagramResourceTransport().prepare({
     request: fileRequest, resources: fileResources(file, bytes.byteLength)
   });
@@ -144,6 +157,7 @@ test('a hold ends when its reading rejects or throws', async () => {
     await readFileBytes(rejected);
     throw new Error('the reading failed');
   }), /the reading failed/);
+  await settled(rejected);
   await readFileBytes(rejected);
   assert.equal(rejected.reads, 2, 'a rejected reading gave its bytes back');
 
@@ -151,6 +165,7 @@ test('a hold ends when its reading rejects or throws', async () => {
   await assert.rejects(readOncePerFile([thrown], 'test-throw:', () => { throw new Error('thrown at once'); }),
     /thrown at once/);
   await readFileBytes(thrown);
+  await settled(thrown);
   await readFileBytes(thrown);
   assert.equal(thrown.reads, 2, 'no hold stayed open after a reading that threw');
 
@@ -158,6 +173,7 @@ test('a hold ends when its reading rejects or throws', async () => {
   await assert.rejects(createDiagramResourceTransport().prepare({
     request: fileRequest, resources: fileResources(staged, bytes.byteLength + 1)
   }), /byte size does not match/);
+  await settled(staged);
   await readFileBytes(staged);
   assert.equal(staged.reads, 2, 'a staging that failed after its read gave the bytes back');
 });

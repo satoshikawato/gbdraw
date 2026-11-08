@@ -50,6 +50,7 @@
     "tests/web/history-region.playwright.spec.js": 0.22,
     "tests/web/history-rule-preparation.playwright.spec.js": 0.25,
     "tests/web/identity-scale.playwright.spec.js": 1.5,
+    "tests/web/input-copies.playwright.spec.js": 1.2,
     "tests/web/input-summary.playwright.spec.js": 0.5,
     "tests/web/interactive-svg-v3.playwright.spec.js": 1.61,
     "tests/web/issue-564-label-leader-visibility.playwright.spec.js": 0.78,
@@ -221,7 +222,8 @@
       "tests/web/session-save-lifecycle.playwright.spec.js",
       "tests/web/similarity-alignment-ui.playwright.spec.js",
       "tests/web/small-ui-placement.playwright.spec.js",
-      "tests/web/visual-state-regressions.playwright.spec.js"
+      "tests/web/visual-state-regressions.playwright.spec.js",
+      "tests/web/input-copies.playwright.spec.js"
     ],
     [
       "tests/web/annotation-feature-identity.playwright.spec.js",

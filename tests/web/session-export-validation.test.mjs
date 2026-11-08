@@ -376,8 +376,9 @@ assert.ok(downloadedBlob instanceof Blob);
   assert.equal(inputReads, readsAfterSave + 1, 'Save gave the input bytes back');
 }
 
-// PD-OI-120: an input the browser refuses to read again (it changed on disk after
-// it was chosen) ends Save with INPUT_UNREADABLE and its text, and no download starts.
+// PD-OI-121 (the PD-OI-120 outcome for a file without a copy): an input with no
+// copy that the browser refuses to read again (it changed on disk after it was
+// chosen) ends Save with INPUT_UNREADABLE and its text, and no download starts.
 {
   const file = state.inputFiles.fileOf(circularFiles.c_gb);
   const { arrayBuffer } = file;
