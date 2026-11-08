@@ -138,7 +138,7 @@ class ObjectsGcContentConfig:
             large_tick_interval=_optional_gc_content_positive(d.get("large_tick_interval", 20)),
             small_tick_interval=_optional_gc_content_positive(d.get("small_tick_interval", None)),
             tick_font_size=_optional_gc_content_positive(d.get("tick_font_size", None)),
-            percent_background_color=str(d.get("percent_background_color", "#737373")),
+            percent_background_color=str(d.get("percent_background_color", "#e5e5e5")),
             percent_background_opacity=_gc_content_opacity(d.get("percent_background_opacity", 1.0)),
             percent_border_color=str(d.get("percent_border_color", "#4b5563")),
             percent_border_width=_gc_content_nonnegative_float(d.get("percent_border_width", 0.8)),

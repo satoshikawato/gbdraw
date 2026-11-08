@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import math
-
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Line, Path, Text
 
@@ -14,13 +12,12 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarRow,
     _depth_axis_bounds,
-    _format_depth_tick,
     _prepare_depth_plot_dataframe,
+    depth_axis_large_ticks,
     plot_data_once,
     _scaled_depth_fraction,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
-    scalar_axis_tick_values,
 )
 from ....svg.linear_tracks import calculate_depth_path_desc
 
@@ -88,18 +85,22 @@ class DepthDrawer:
 
         axis_min, axis_max = _depth_axis_bounds(depth_df, self.min_depth, self.max_depth)
         font_size = linear_scalar_axis_tick_font_size_px(self, track_height)
-        large_tick_values = scalar_axis_tick_values(
+        large_ticks = depth_axis_large_ticks(
             axis_min,
             axis_max,
+            min_depth=self.min_depth,
+            normalize=self.normalize,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
+            length_px=track_height,
+            label_line_px=font_size,
         )
         small_tick_values = scalar_axis_small_tick_values(
             axis_min,
             axis_max,
             show_ticks=self.show_ticks,
             small_tick_interval=self.small_tick_interval,
-            large_tick_values=large_tick_values,
+            large_tick_values=[tick.value for tick in large_ticks],
         )
         for tick_value in small_tick_values:
             normalized = _scaled_depth_fraction(
@@ -114,11 +115,8 @@ class DepthDrawer:
                     stroke_width=self.axis_stroke_width,
                 )
             )
-        for tick_value in large_tick_values:
-            normalized = _scaled_depth_fraction(
-                tick_value, axis_min, axis_max, normalize=self.normalize
-            )
-            tick_y = baseline_y - (float(track_height) * normalized)
+        for tick in large_ticks:
+            tick_y = baseline_y - tick.offset_px
             axis_group.add(
                 Line(
                     start=(start_x - self.axis_tick_size, tick_y),
@@ -127,15 +125,10 @@ class DepthDrawer:
                     stroke_width=self.axis_stroke_width,
                 )
             )
-            tick_label = (
-                None
-                if self.min_depth is None and math.isclose(tick_value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
-                else _format_depth_tick(tick_value)
-            )
-            if tick_label is not None:
+            if tick.label is not None:
                 axis_group.add(
                     Text(
-                        tick_label,
+                        tick.label,
                         insert=(start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX, tick_y),
                         fill=self.axis_stroke,
                         font_size=font_size,

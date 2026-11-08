@@ -49,8 +49,11 @@ def test_main_cli_linear_session_preserves_no_raw_filtering():
         managed_paths=PROVENANCE["managedPaths"],
     )
     # The sidecar stores the whole config of its run, so it keeps the 50 kb
-    # short/long boundary it was drawn with.
-    assert projected == {"labels.length_threshold.linear": 50000}
+    # short/long boundary and the dark Percent-mode band it was drawn with.
+    assert projected == {
+        "labels.length_threshold.linear": 50000,
+        "objects.gc_content.percent_background_color": "#737373",
+    }
 
 
 def test_main_web_saved_raw_with_derived_maps_is_dropped_on_load_and_save():

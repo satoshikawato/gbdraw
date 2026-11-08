@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, NamedTuple, TypeVar, cast
 
 import numpy as np
@@ -147,6 +147,120 @@ def scalar_axis_tick_values(
     return deduplicated
 
 
+ScalarTickFormatter = Callable[[float], str]
+
+
+class ScalarAxisLargeTick(NamedTuple):
+    """One large tick of a scalar axis (depth, GC content in percent) as drawn: its value, its distance from
+    the axis baseline along the axis (``offset_px``: a Circular radius or a Linear height above the baseline)
+    and its label, or none when the axis draws no label there."""
+
+    value: float
+    offset_px: float
+    label: str | None
+
+
+def scalar_axis_kept_labels(positions_px: Sequence[float], line_px: float) -> tuple[int, ...]:
+    """Which labels of an axis are drawn so that no two overlap, as indices into ``positions_px``: the centres
+    of the labelled ticks along the axis, lowest value first. The label of the last tick (the upper bound) is
+    always drawn; then each label from the bottom up whose centre is at least one label line (``line_px``, the
+    label font size) from every label already drawn. Only labels are thinned; every tick is still drawn."""
+
+    if not positions_px:
+        return ()
+    top = len(positions_px) - 1
+    kept = [top]
+    for index in range(top):
+        if all(abs(positions_px[index] - positions_px[other]) >= line_px - 1e-9 for other in kept):
+            kept.append(index)
+    return tuple(sorted(kept))
+
+
+def scalar_axis_large_ticks(
+    axis_min: float,
+    axis_max: float,
+    *,
+    show_ticks: bool,
+    large_tick_interval: float | None,
+    length_px: float,
+    fraction: Callable[[float], float],
+    format_label: ScalarTickFormatter,
+    label_line_px: float,
+    label_axis_min: bool = True,
+) -> tuple[ScalarAxisLargeTick, ...]:
+    """The large ticks of a scalar axis ``length_px`` long, each with the label it draws: the one derivation
+    that the drawers, the Circular ink and the Linear left room read. ``fraction`` places a value on the axis
+    (0 at the baseline, 1 at the end); ``label_axis_min`` false leaves the lower bound unlabelled."""
+
+    values = scalar_axis_tick_values(
+        axis_min, axis_max, show_ticks=show_ticks, large_tick_interval=large_tick_interval
+    )
+    offsets = [float(length_px) * fraction(value) for value in values]
+    labelled = [
+        index
+        for index, value in enumerate(values)
+        if label_axis_min or not math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
+    ]
+    kept = {
+        labelled[index]
+        for index in scalar_axis_kept_labels([offsets[index] for index in labelled], label_line_px)
+    }
+    return tuple(
+        ScalarAxisLargeTick(value, offset, format_label(value) if index in kept else None)
+        for index, (value, offset) in enumerate(zip(values, offsets))
+    )
+
+
+def percent_axis_large_ticks(
+    min_percent: float,
+    max_percent: float,
+    *,
+    show_ticks: bool,
+    large_tick_interval: float | None,
+    length_px: float,
+    label_line_px: float,
+) -> tuple[ScalarAxisLargeTick, ...]:
+    """:func:`scalar_axis_large_ticks` of a GC content axis in percent: every large tick may carry a label."""
+
+    return scalar_axis_large_ticks(
+        min_percent,
+        max_percent,
+        show_ticks=show_ticks,
+        large_tick_interval=large_tick_interval,
+        length_px=length_px,
+        fraction=lambda value: scaled_scalar_fraction(value, min_percent, max_percent),
+        format_label=format_percent_tick,
+        label_line_px=label_line_px,
+    )
+
+
+def depth_axis_large_ticks(
+    axis_min: float,
+    axis_max: float,
+    *,
+    min_depth: float | None,
+    normalize: bool,
+    show_ticks: bool,
+    large_tick_interval: float | None,
+    length_px: float,
+    label_line_px: float,
+) -> tuple[ScalarAxisLargeTick, ...]:
+    """:func:`scalar_axis_large_ticks` of a depth axis, linear or log-scaled: without a set ``min_depth`` the
+    lower bound has no label."""
+
+    return scalar_axis_large_ticks(
+        axis_min,
+        axis_max,
+        show_ticks=show_ticks,
+        large_tick_interval=large_tick_interval,
+        length_px=length_px,
+        fraction=lambda value: _scaled_depth_fraction(value, axis_min, axis_max, normalize=normalize),
+        format_label=_format_depth_tick,
+        label_line_px=label_line_px,
+        label_axis_min=min_depth is not None,
+    )
+
+
 def scalar_axis_small_tick_values(
     axis_min: float,
     axis_max: float,
@@ -264,20 +378,22 @@ def linear_scalar_axis_tick_font_size_px(
     return scalar_axis_tick_font_size("linear", track_height_px)
 
 
-ScalarTickFormatter = Callable[[float], str]
-
-
 __all__ = [
     "plot_data_once",
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",
     "ProjectedScalarLine",
+    "ScalarAxisLargeTick",
     "ScalarTickFormatter",
+    "depth_axis_large_ticks",
     "format_percent_tick",
     "has_tick_value",
     "linear_scalar_axis_tick_font_size_px",
+    "percent_axis_large_ticks",
     "project_scalar_line",
+    "scalar_axis_kept_labels",
+    "scalar_axis_large_ticks",
     "scalar_axis_small_tick_values",
     "scalar_axis_tick_values",
     "scaled_scalar_fraction",

@@ -1732,7 +1732,7 @@ def _assert_quantitative_tracks(
         "20%",
         "30%",
         "40%",
-        "50%",
+        # 50% is one label line below the bound 55%, so the axis leaves it unlabelled.
         "55%",
         "DRR394922 mean depth",
         "GC content (%)",

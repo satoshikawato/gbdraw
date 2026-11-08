@@ -87,7 +87,7 @@ def _assert_quantitative_map(report: Mapping[str, Any]) -> None:
         "20%",
         "30%",
         "40%",
-        "50%",
+        # 50% is one label line below the bound 55%, so the axis leaves it unlabelled.
         "55%",
     }:
         raise AssertionError(

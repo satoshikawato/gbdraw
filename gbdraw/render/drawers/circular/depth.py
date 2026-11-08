@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import math
-
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle, Group, Line, Path, Text
 
@@ -19,11 +17,10 @@ from ....layout.circular_depth_axis import (
 from ....layout.circular_ink import CircularInk, CircularInkProfile, stroke_pad_px
 from ....layout.scalar_axis import (
     _depth_axis_bounds,
-    _format_depth_tick,
     _prepare_depth_plot_dataframe,
     _scaled_depth_fraction,
+    depth_axis_large_ticks,
     scalar_axis_small_tick_values,
-    scalar_axis_tick_values,
 )
 from ....svg.circular_tracks import circular_scalar_area_line, generate_circular_depth_path_desc
 
@@ -59,34 +56,35 @@ class DepthDrawer:
         """The axis ticks as drawn: small ticks first, then large ticks with their labels."""
 
         axis_min, axis_max = _depth_axis_bounds(depth_df, self.min_depth, self.max_depth)
-        large_tick_values = scalar_axis_tick_values(
+        large_ticks = depth_axis_large_ticks(
             axis_min,
             axis_max,
+            min_depth=self.min_depth,
+            normalize=self.normalize,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
+            length_px=track_width,
+            label_line_px=depth_axis_tick_font_size_px(self._depth_config, track_width),
         )
         small_tick_values = scalar_axis_small_tick_values(
             axis_min,
             axis_max,
             show_ticks=self.show_ticks,
             small_tick_interval=self.small_tick_interval,
-            large_tick_values=large_tick_values,
+            large_tick_values=[tick.value for tick in large_ticks],
         )
-
-        def tick_radius(tick_value: float) -> float:
-            normalized = _scaled_depth_fraction(tick_value, axis_min, axis_max, normalize=self.normalize)
-            return baseline_radius + (float(track_width) * normalized)
-
-        ticks = [ScalarAxisTick(tick_radius(value), self.axis_small_tick_size, None) for value in small_tick_values]
-        ticks.extend(
+        ticks = [
             ScalarAxisTick(
-                tick_radius(value),
-                self.axis_tick_size,
-                None
-                if self.min_depth is None and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
-                else _format_depth_tick(value),
+                baseline_radius + float(track_width) * _scaled_depth_fraction(
+                    value, axis_min, axis_max, normalize=self.normalize
+                ),
+                self.axis_small_tick_size,
+                None,
             )
-            for value in large_tick_values
+            for value in small_tick_values
+        ]
+        ticks.extend(
+            ScalarAxisTick(baseline_radius + tick.offset_px, self.axis_tick_size, tick.label) for tick in large_ticks
         )
         return ticks
 

@@ -1260,6 +1260,8 @@ def test_linear_depth_track_tick_options_are_per_track() -> None:
             depth_track_large_tick_intervals=[5, 20],
             depth_track_small_tick_intervals=["auto", 10],
             depth_track_tick_font_sizes=[8, 14],
+            # Tall enough for every label: labels closer than one font size are not drawn (OV-2763).
+            depth_track_heights=[40, 40],
             cfg=apply_config_overrides(
                 None, {"canvas.show_gc": False, "canvas.show_skew": False}
             ),

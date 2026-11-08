@@ -16,9 +16,8 @@ from ....layout.circular_depth_axis import (
     scalar_axis_ink,
 )
 from ....layout.scalar_axis import (
-    format_percent_tick,
+    percent_axis_large_ticks,
     scalar_axis_small_tick_values,
-    scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
 from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, paint_shows, stroke_pad_px
@@ -56,7 +55,7 @@ class GcContentDrawer:
         self.small_tick_interval: float | None = getattr(gc_config, "small_tick_interval", None)
         self.tick_font_size: float | None = getattr(gc_config, "tick_font_size", None)
         self.font_family: str = gc_config.font_family
-        self.percent_background_color: str = str(getattr(gc_config, "percent_background_color", "#737373"))
+        self.percent_background_color: str = str(gc_config.percent_background_color)
         self.percent_background_opacity: float = float(getattr(gc_config, "percent_background_opacity", 1.0))
         self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
         self.percent_border_width: float = float(getattr(gc_config, "percent_border_width", 0.8))
@@ -125,30 +124,30 @@ class GcContentDrawer:
     def _percent_axis_ticks(self, baseline_radius: float, track_width: float) -> list[ScalarAxisTick]:
         """The percent axis ticks as drawn: small ticks first, then large ticks with their labels."""
 
-        large_tick_values = scalar_axis_tick_values(
+        large_ticks = percent_axis_large_ticks(
             self.min_percent,
             self.max_percent,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
+            length_px=track_width,
+            label_line_px=self._tick_font_size(track_width),
         )
-
-        def tick_radius(tick_value: float) -> float:
-            normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
-            return baseline_radius + (float(track_width) * normalized)
-
         ticks = [
-            ScalarAxisTick(tick_radius(value), self.axis_small_tick_size, None)
+            ScalarAxisTick(
+                baseline_radius + float(track_width) * scaled_scalar_fraction(value, self.min_percent, self.max_percent),
+                self.axis_small_tick_size,
+                None,
+            )
             for value in scalar_axis_small_tick_values(
                 self.min_percent,
                 self.max_percent,
                 show_ticks=self.show_ticks,
                 small_tick_interval=self.small_tick_interval,
-                large_tick_values=large_tick_values,
+                large_tick_values=[tick.value for tick in large_ticks],
             )
         ]
         ticks.extend(
-            ScalarAxisTick(tick_radius(value), self.axis_tick_size, format_percent_tick(value))
-            for value in large_tick_values
+            ScalarAxisTick(baseline_radius + tick.offset_px, self.axis_tick_size, tick.label) for tick in large_ticks
         )
         return ticks
 
