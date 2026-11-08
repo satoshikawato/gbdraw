@@ -40,10 +40,13 @@ export { FEATURE_CATALOG_SCHEMA };
  * @typedef {object} FeatureCatalogItem
  * @property {number} resultIndex
  * @property {string} resultName
- * @property {string[]} recordKeys
+ * @property {string[]} recordKeys The drawn records (units), in drawing order.
+ * @property {Record<string, string>} [windowOf] Each unit that is a window of a record, by unit key, to the key of
+ *   that record, which the item's rows name (OV-2717); written only when a record is drawn in windows.
  * @property {FeatureCatalogRow[]} [sequenceSources]
  * @property {FeatureCatalogRow[]} biologicalFeatures
- * @property {FeatureCatalogRow[]} features Rendered features, each with `drawnSelector`.
+ * @property {FeatureCatalogRow[]} features Rendered features, each with `drawnSelector`; a row of a record drawn in
+ *   windows names its unit (`recordIndex`).
  * @property {FeatureCatalogRow[]} orthogroups
  * @property {FeatureCatalogRow[]} comparisonMatches
  * @property {FeatureCatalogRow[]} annotations
@@ -405,6 +408,64 @@ const rememberRenderedResultIndex = (target, renderedId, resultIndex) => {
 };
 
 /**
+ * The drawn units of each record a catalog item names, by record key, in drawing order: Python's
+ * `catalog_record_units` (gbdraw/render/interactive_svg.py), read here as admission reads every catalog field.
+ * @param {Record<string, unknown>} item
+ * @param {readonly string[]} recordKeys
+ * @returns {Map<string, number[]>}
+ */
+const catalogRecordUnits = (item, recordKeys) => {
+  const windows = item.windowOf === undefined ? {} : item.windowOf;
+  if (!isObject(windows) || Object.entries(windows).some(([unit, key]) => (
+    !recordKeys.includes(unit) || typeof key !== 'string' || !key || recordKeys.includes(key)
+  ))) throw catalogError();
+  /** @type {Map<string, number[]>} */
+  const units = new Map();
+  recordKeys.forEach((unitKey, unitIndex) => {
+    const key = Object.hasOwn(windows, unitKey) ? String(windows[unitKey]) : unitKey;
+    units.set(key, [...(units.get(key) ?? []), unitIndex]);
+  });
+  return units;
+};
+
+/**
+ * The record index of each record a catalog item's rows name: the index of its first drawn unit in the item, as
+ * Python writes its rows. A record drawn in windows enters the catalog's record index under that unit's index there.
+ * @param {Map<string, number[]>} recordUnits `catalogRecordUnits`
+ * @param {readonly string[]} recordKeys
+ * @param {Pick<CatalogAdmissionContext, 'recordIndexByKey'>} context
+ * @returns {Map<string, number>}
+ */
+const itemRecordIndexes = (recordUnits, recordKeys, context) => {
+  const indexes = new Map([...recordUnits].map(([recordKey, units]) => [recordKey, units[0]]));
+  indexes.forEach((unitIndex, recordKey) => {
+    if (!context.recordIndexByKey.has(recordKey)) {
+      context.recordIndexByKey.set(recordKey, /** @type {number} */ (context.recordIndexByKey.get(recordKeys[unitIndex])));
+    }
+  });
+  return indexes;
+};
+
+/**
+ * The drawn unit of a rendered row, by its index in the item: a row of a record drawn in windows names its unit
+ * (OV-2717); any other row lies in its record's only unit and names none. The key of a row joins the record key and
+ * the feature ID by NUL, so a known key does not prove the record key: it must be one of the item's (OV-567). null
+ * when the row breaks either rule.
+ * @param {Record<string, unknown>} feature
+ * @param {Map<string, number[]>} recordUnits `catalogRecordUnits`
+ * @param {readonly string[]} recordKeys
+ * @returns {number | null}
+ */
+const renderedRowUnit = (feature, recordUnits, recordKeys) => {
+  const recordKey = text(feature.recordKey);
+  const units = recordUnits.get(recordKey);
+  const named = feature.recordIndex;
+  if (!units) return null;
+  if (recordKeys.includes(recordKey)) return named === undefined ? units[0] : null;
+  return typeof named === 'number' && units.includes(named) ? named : null;
+};
+
+/**
  * @param {Pick<CatalogAdmissionContext, 'mode' | 'recordIndexByKey' | 'publicRecordIdByKey'>} context
  * @param {string} recordKey
  */
@@ -439,10 +500,8 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
       context.recordKeys.push(recordKey);
     }
   });
-  const knownRecordKeys = new Set(recordKeys);
-  const itemRecordIndexByKey = new Map(
-    recordKeys.map((recordKey, recordIndex) => [recordKey, recordIndex])
-  );
+  const recordUnits = catalogRecordUnits(item, recordKeys);
+  const itemRecordIndexByKey = itemRecordIndexes(recordUnits, recordKeys, context);
   const sequenceSources = item.sequenceSources === undefined
     ? []
     : requireArray(item.sequenceSources);
@@ -480,7 +539,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     const key = biologicalFeatureKey(recordKey, featureId);
     if (
       !key
-      || !knownRecordKeys.has(recordKey)
+      || !recordUnits.has(recordKey)
       || knownFeatures.has(key)
     ) {
       throw catalogError();
@@ -581,10 +640,9 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
       feature.recordKey,
       feature.biologicalFeatureId
     );
-    // The key joins the record key and the feature ID by NUL, so a known key
-    // does not prove the record key: it must be one of the item's (OV-567).
-    const recordIndex = itemRecordIndexByKey.get(text(feature.recordKey));
-    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key) || recordIndex === undefined
+    const { recordIndex: namedUnit, ...row } = feature;
+    const recordIndex = renderedRowUnit(feature, recordUnits, recordKeys);
+    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key) || recordIndex === null
       || !validDrawnSelector(feature.drawnSelector)) {
       throw catalogError();
     }
@@ -597,7 +655,10 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     // their nested values instead of holding another copy of each feature.
     const projectedFeature = {
       ...biological,
-      ...feature,
+      ...row,
+      drawn_record_index: recordIndex,
+      fileIdx: context.recordIndexByKey.get(recordKeys[recordIndex]),
+      record_idx: context.recordIndexByKey.get(recordKeys[recordIndex]),
       id: key,
       record_key: text(feature.recordKey),
       biological_feature_id: text(feature.biologicalFeatureId),

@@ -4,9 +4,13 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer, parse_ascii_nonnegative_integer
 from gbdraw.core.record_metadata import (
-    _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
+    _source_intervals,
+    _source_period,
 )
+
+# A drawn record's map to its source: base, step, and the period of a unit across the origin (D-28).
+_CoordMap = tuple[int, int, int | None]
 
 
 def _text(value: Any) -> str:
@@ -194,10 +198,12 @@ def _strand_display(strand: Any) -> str:
     return _text(strand)
 
 
-def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, tuple[int, int]]:
+def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, _CoordMap]:
     if records is None:
         return {}
-    return {index: _read_record_coord_map(record) for index, record in enumerate(records)}
+    return {
+        index: (*_read_record_coord_map(record), _source_period(record)) for index, record in enumerate(records)
+    }
 
 
 def _serialize_orthogroup_name_candidate(candidate: Any) -> dict[str, object]:
@@ -237,7 +243,7 @@ FeatureIdMapper = Callable[[int, str], str]
 def _serialize_member(
     member: Any,
     feature_id_mapper: FeatureIdMapper | None = None,
-    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
+    record_coord_maps: Mapping[int, _CoordMap] | None = None,
     include_stable_feature_ids: bool = True,
 ) -> dict[str, object]:
     record_index = int(member.record_index)
@@ -251,7 +257,8 @@ def _serialize_member(
     end = int(member.end)
     coord_map = (record_coord_maps or {}).get(record_index)
     if coord_map is not None:
-        start, end = _absolute_display_interval(start, end, coord_map[0], coord_map[1])
+        intervals = _source_intervals(start, end, *coord_map)
+        start, end = min(low for low, _ in intervals), max(high for _, high in intervals)
     payload = {
         "orthogroupId": member.orthogroup_id,
         "proteinId": member.protein_id,
@@ -307,7 +314,7 @@ def serialize_orthogroups_payload(
     *,
     feature_id_mapper: FeatureIdMapper | None = None,
     records: Sequence[Any] | None = None,
-    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
+    record_coord_maps: Mapping[int, _CoordMap] | None = None,
     include_stable_feature_ids: bool = True,
 ) -> list[dict[str, object]]:
     """Serialize OrthogroupResult to the web interactive SVG payload shape."""

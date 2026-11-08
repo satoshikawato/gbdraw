@@ -23,6 +23,7 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
+    catalog_record_units,
     _RenderedFeatureEntry,
     _compact_wire_value,
     _feature_record_index_status,
@@ -441,7 +442,8 @@ class _SourceFeatureCandidate:
 @dataclass(frozen=True)
 class _IndexedBiologicalFeature:
     normalized: Mapping[str, object]
-    record_index: int
+    # The drawn units that show the feature: one, or each window of its record that shows it.
+    record_indexes: tuple[int, ...]
     stable_id: str
     feature_index: int | None
 
@@ -1021,6 +1023,33 @@ def _record_keys(context: InteractiveSvgContext) -> list[str]:
     return keys
 
 
+def _record_identity_keys(
+    context: InteractiveSvgContext,
+    record_keys: Sequence[str],
+) -> list[str]:
+    """The record each drawn unit draws: the unit's own key, or for a window the key of its record (D-01)."""
+
+    keys = [_text(value) for value in context.record_identity_keys]
+    if not keys:
+        return list(record_keys)
+    if len(keys) != len(record_keys) or any(not key for key in keys):
+        raise GbdrawError("Feature catalog record identity keys must name every drawn record.")
+    return keys
+
+
+def _windows_of_records(
+    record_keys: Sequence[str],
+    identity_keys: Sequence[str],
+) -> dict[str, str]:
+    """The catalog's ``windowOf``: each drawn unit that is a window of a record, by unit key, to that record's key."""
+
+    return {
+        unit_key: identity_key
+        for unit_key, identity_key in zip(record_keys, identity_keys, strict=True)
+        if unit_key != identity_key
+    }
+
+
 def _record_key(record_keys: Sequence[str], record_index: int | None) -> str:
     if record_index is None or not 0 <= record_index < len(record_keys):
         raise GbdrawError(
@@ -1032,6 +1061,7 @@ def _record_key(record_keys: Sequence[str], record_index: int | None) -> str:
 def _normalized_biological_features(
     context: InteractiveSvgContext,
     record_keys: Sequence[str],
+    identity_keys: Sequence[str],
 ) -> tuple[
     list[dict[str, object]],
     list[_IndexedBiologicalFeature],
@@ -1051,6 +1081,10 @@ def _normalized_biological_features(
     from gbdraw.api.prepared import cancel_checkpoint
 
     candidates: list[_SourceFeatureCandidate] = []
+    # A feature that two windows of one record show is one biological feature of that record (OV-2717): the first
+    # unit's row stands for it, and every unit that shows it resolves to that row.
+    first_by_identity: dict[tuple[str, str, int | None], int] = {}
+    units_by_candidate: dict[int, list[int]] = {}
     for feature in source_features:
         cancel_checkpoint()
         if not isinstance(feature, Mapping):
@@ -1065,8 +1099,15 @@ def _normalized_biological_features(
             record_keys,
             description="Feature catalog source feature",
         )
-        record_key = _record_key(record_keys, record_index)
+        _record_key(record_keys, record_index)
+        record_key = identity_keys[record_index]
         identity_base = stable_id or f"feature-{feature_index}"
+        identity = (record_key, identity_base, feature_index)
+        first = first_by_identity.setdefault(identity, len(candidates))
+        if first < len(candidates) and candidates[first].record_index != record_index:
+            units_by_candidate[first].append(record_index)
+            continue
+        units_by_candidate[len(candidates)] = [record_index]
         candidate = _SourceFeatureCandidate(
             feature=feature,
             record_index=record_index,
@@ -1083,7 +1124,7 @@ def _normalized_biological_features(
     normalized: list[dict[str, object]] = []
     indexed: list[_IndexedBiologicalFeature] = []
 
-    for candidate, biological_feature_id in zip(candidates, biological_ids, strict=True):
+    for position, (candidate, biological_feature_id) in enumerate(zip(candidates, biological_ids, strict=True)):
         cancel_checkpoint()
         feature = candidate.feature
         record_key = candidate.record_key
@@ -1226,7 +1267,7 @@ def _normalized_biological_features(
         indexed.append(
             _IndexedBiologicalFeature(
                 normalized=compact,
-                record_index=candidate.record_index,
+                record_indexes=tuple(units_by_candidate[position]),
                 stable_id=stable_id,
                 feature_index=feature_index,
             )
@@ -1254,17 +1295,16 @@ class _BiologicalFeatureIndex:
         ] = {}
         for indexed in indexed_features:
             normalized = indexed.normalized
-            record_index = indexed.record_index
             stable_id = indexed.stable_id
             feature_index = indexed.feature_index
-            if record_index is not None and feature_index is not None:
-                self._add_unique(
-                    self._by_record_feature_index,
-                    (record_index, feature_index),
-                    normalized,
-                )
-            if stable_id:
-                if record_index is not None:
+            for record_index in indexed.record_indexes:
+                if feature_index is not None:
+                    self._add_unique(
+                        self._by_record_feature_index,
+                        (record_index, feature_index),
+                        normalized,
+                    )
+                if stable_id:
                     self._add_stable(
                         self._by_record_stable,
                         (record_index, stable_id),
@@ -1487,15 +1527,18 @@ def _normalized_rendered_features(
             raise GbdrawError(
                 f"Rendered feature SVG ID {svg_id!r} is duplicated."
             )
-        normalized.append(
+        row: dict[str, object] = {"svgId": svg_id, "recordKey": record_key}
+        if record_key != record_keys[record_index]:
+            # A window of a record: the row names its record and the drawn unit it lies in (OV-2717).
+            row["recordIndex"] = record_index
+        row.update(
             {
-                "svgId": svg_id,
-                "recordKey": record_key,
                 "biologicalFeatureId": biological_feature_id,
                 "fillColor": resolved.entry.fill,
                 "drawnSelector": _drawn_selector(resolved.feature),
             }
         )
+        normalized.append(row)
         references_by_svg_id[svg_id] = reference
         match_identity: dict[str, object] = {
             "svg_id": svg_id,
@@ -1555,7 +1598,8 @@ def _normalized_orthogroups(
             if collection:
                 payload[count_key] = len(collection)
         members: list[dict[str, object]] = []
-        known_member_references: set[tuple[str, str]] = set()
+        # The drawn unit of each member: a feature that two windows of its record show is one member (OV-2717).
+        known_member_references: dict[tuple[str, str], int | None] = {}
         for member in raw_members:
             if not isinstance(member, Mapping):
                 continue
@@ -1575,11 +1619,14 @@ def _normalized_orthogroups(
                     "feature ID or source feature index."
                 )
             canonical_reference = (record_key, biological_feature_id)
+            member_unit = _record_index(member)
             if canonical_reference in known_member_references:
-                raise GbdrawError(
-                    f"Orthogroup {group_id!r} contains duplicate biological members."
-                )
-            known_member_references.add(canonical_reference)
+                if known_member_references[canonical_reference] in (None, member_unit):
+                    raise GbdrawError(
+                        f"Orthogroup {group_id!r} contains duplicate biological members."
+                    )
+                continue
+            known_member_references[canonical_reference] = member_unit
             compact_member = {
                 "recordKey": record_key,
                 "biologicalFeatureId": biological_feature_id,
@@ -2145,12 +2192,15 @@ def _reference_reconstructible_nucleotide_sequences(
     record_keys: Sequence[str],
     sequence_sources: Sequence[Mapping[str, object]],
 ) -> None:
-    """Reference a record source only after exact sequence reconstruction."""
+    """Reference a record source only after exact sequence reconstruction.
 
-    record_index_by_key = {
-        str(record_key): record_index
-        for record_index, record_key in enumerate(record_keys)
-    }
+    ``record_keys`` names the record of each drawn unit; a record drawn in windows is read from its first unit, whose
+    row stands for the feature (``_normalized_biological_features``).
+    """
+
+    record_index_by_key: dict[str, int] = {}
+    for unit_index, record_key in enumerate(record_keys):
+        record_index_by_key.setdefault(str(record_key), unit_index)
     canonical_sources = canonical_catalog_sequence_sources(sequence_sources)
     if any(source is None for source in canonical_sources):
         raise GbdrawError(
@@ -2339,11 +2389,13 @@ def _feature_catalog_item(
     from gbdraw.api.prepared import cancel_checkpoint
 
     record_keys = _record_keys(context)
+    identity_keys = _record_identity_keys(context, record_keys)
     stored_features, stored_index = render_stage(
         "catalog_normalization",
         _normalized_biological_features,
         context,
         tuple(record_keys),
+        tuple(identity_keys),
     )
     # Per-request copies (M11): this request changes the feature dicts
     # (``_reference_reconstructible_nucleotide_sequences``); the stored ones
@@ -2408,7 +2460,7 @@ def _feature_catalog_item(
     cancel_checkpoint()
     _reference_reconstructible_nucleotide_sequences(
         biological_features,
-        record_keys,
+        identity_keys,
         sequence_sources,
     )
     cancel_checkpoint()
@@ -2436,6 +2488,7 @@ def _feature_catalog_item(
         "resultIndex": int(result_index),
         "resultName": str(result_name),
         "recordKeys": record_keys,
+        **({"windowOf": windows} if (windows := _windows_of_records(record_keys, identity_keys)) else {}),
         "features": rendered_features,
         "biologicalFeatures": biological_features,
         "orthogroups": normalized_orthogroups,
@@ -2539,6 +2592,7 @@ def select_feature_catalog_item(
         raise GbdrawError(
             "Feature catalog record keys must be non-empty and unique."
         )
+    record_units = catalog_record_units(item, record_keys)
     known_features: set[tuple[str, str]] = set()
     biological_source_indexes: dict[
         tuple[str, str],
@@ -2575,7 +2629,7 @@ def select_feature_catalog_item(
         )
         if (
             not all(reference)
-            or reference[0] not in record_keys
+            or reference[0] not in record_units
             or reference in known_features
         ):
             raise GbdrawError(
@@ -2656,7 +2710,7 @@ def select_feature_catalog_item(
                 or _text(source.get("origin"))
                 not in {"linear-record", "circular-reference"}
                 or type(source.get("recordIndex")) is not int
-                or source.get("recordIndex") != record_keys.index(reference[0])
+                or source.get("recordIndex") != record_units[reference[0]][0]
                 or not _reconstruct_nucleotide_sequence(
                     feature,
                     source,
@@ -2694,10 +2748,15 @@ def select_feature_catalog_item(
             _text(feature.get("recordKey")),
             _text(feature.get("biologicalFeatureId")),
         )
+        # A row of a record drawn in windows names its unit; any other row's unit is its record's.
+        windowed = reference[0] not in record_keys
+        unit = feature.get("recordIndex", _MISSING)
         if (
             not svg_id
             or svg_id in rendered_ids
             or reference not in known_features
+            or windowed != (unit is not _MISSING)
+            or (windowed and (type(unit) is not int or unit not in record_units[reference[0]]))
         ):
             raise GbdrawError(
                 "Feature catalog contains an invalid rendered feature "

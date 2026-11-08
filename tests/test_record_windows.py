@@ -740,3 +740,71 @@ def test_conservation_hits_on_a_window_across_the_origin_are_drawn_in_its_search
     )
     drawn = sorted(zip(rows["draw_start"], rows["draw_end"]))
     assert drawn == ([(870.0, 970.0), (1470.0, 1570.0)] if reverse else [(0.0, 100.0), (600.0, 700.0)])
+
+
+def _web_catalog_item(request: LinearDiagramRequest, tmp_path: Path) -> dict:
+    """The feature catalog item the Web receives for ``request`` (`render_canonical_web_request`)."""
+    from gbdraw.api import resolve_request
+    from gbdraw.web_support.request_render import render_canonical_web_request
+
+    encoded = encode_canonical_request(resolve_request(request))
+    paths = {}
+    for index, resource in enumerate(encoded.resources):
+        path = tmp_path / f"resource-{index}"
+        path.write_bytes(resource.content if resource.content is not None else Path(str(resource.source_path)).read_bytes())
+        paths[resource.resource_id] = str(path)
+    reply = render_canonical_web_request(encoded.payload, resource_paths=paths, output_directory=tmp_path / "out")
+    [item] = reply["featureCatalog"]["items"]
+    return item
+
+
+@pytest.mark.parametrize(
+    ("windows", "feature"),
+    [
+        ((RecordWindow(1000, 6000), RecordWindow(4000, 9000)), _IN_OVERLAP),
+        ((RecordWindow(1000, 6500), RecordWindow(7000, 9000)), _ACROSS_GAP),
+    ],
+    ids=["inside-an-overlap", "across-a-left-out-interval"],
+)
+def test_the_web_catalog_names_a_windowed_feature_by_its_record_and_python_binds_its_edit(
+    windows, feature: str, tmp_path: Path
+) -> None:
+    """OV-2717: catalog rows name the record (its identity key); a rendered row names its drawn unit by index.
+
+    The Web keys a feature edit by a catalog row's record key and biological feature ID; Python binds that edit to
+    the feature in every window that draws it.
+    """
+    item = _web_catalog_item(LinearDiagramRequest(records=(_windowed(*windows),)), tmp_path)
+    assert item["recordKeys"] == ["mito~w1", "mito~w2"], "the drawn units, in drawing order"
+    assert {row["recordKey"] for row in item["biologicalFeatures"]} == {"mito"}
+    assert len({row["biologicalFeatureId"] for row in item["biologicalFeatures"]}) == len(item["biologicalFeatures"])
+    drawn = [row for row in item["features"] if row["biologicalFeatureId"] == feature]
+    assert sorted(row["recordIndex"] for row in drawn) == [0, 1], "one rendered row in each window"
+    assert {row["recordKey"] for row in item["features"]} == {"mito"}
+    [edited_row] = {(row["recordKey"], row["biologicalFeatureId"]) for row in drawn}
+    plan = plan_linear_request(
+        LinearDiagramRequest(
+            records=(_windowed(*windows),),
+            options=LinearDiagramOptions(feature_overrides=(FeatureOverride(*edited_row, label_text="EDITED"),)),
+        )
+    )
+    assert plan.inputs is not None
+    assert [[override.label_text for override in unit.overrides.values()] for unit in plan.inputs.record_features] == [
+        ["EDITED"],
+        ["EDITED"],
+    ]
+    assert not plan.inputs.feature_identity_notices
+
+
+def test_the_web_catalog_gives_source_coordinates_for_a_window_across_the_origin(tmp_path: Path) -> None:
+    """A window across the origin (D-28): every catalog location is a span of the source record, split at its origin."""
+    item = _web_catalog_item(LinearDiagramRequest(records=(_windowed(RecordWindow(16000, 700)),)), tmp_path)
+    rows = {(row["type"], row.get("start"), row.get("end")): row for row in item["biologicalFeatures"]}
+    # tRNA-Phe, 577..647, lies after the origin.
+    assert ("tRNA", 576, 647) in rows
+    for row in item["biologicalFeatures"]:
+        for part in row.get("location_parts") or [{"start": row["start"], "end": row["end"]}]:
+            assert 0 <= part["start"] < part["end"] <= 16569, row
+    # The D-loop, complement(join(16024..16569,1..576)), is drawn whole and named in both of its source parts.
+    [d_loop] = [row for row in item["biologicalFeatures"] if row["type"] == "D-loop"]
+    assert sorted((part["start"], part["end"]) for part in d_loop["location_parts"]) == [(0, 576), (16023, 16569)]

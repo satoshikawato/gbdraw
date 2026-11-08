@@ -359,14 +359,10 @@ export const createRegionSelect = ({
   /** The selection the band shows: the open popup's, or the one being opened. */
   const selection = computed(() => openSelection() ?? shownSelection.value);
 
-  /**
-   * The record of a selection in the shown Result, found by its key and window; null once the Result no longer draws
-   * it.
-   * @param {RegionSelection} chosen
-   */
-  const recordOf = (chosen) => readAxisRecords().find((record) => (
-    record.resultIndex === chosen.resultIndex && record.recordKey === chosen.recordKey
-      && record.windowIndex === chosen.windowIndex
+  /** The record of a selection in the shown Result, by its key and window; null once that Result no longer draws it. */
+  /** @param {RegionSelection} chosen */
+  const recordOf = ({ resultIndex, recordKey, windowIndex }) => readAxisRecords().find((record) => (
+    record.resultIndex === resultIndex && record.recordKey === recordKey && record.windowIndex === windowIndex
   )) ?? null;
 
   // The band is drawn over the Result in the overlay's own SVG (never in the Result), placed by the record group's
@@ -414,16 +410,16 @@ export const createRegionSelect = ({
   });
 
   /**
-   * The drawn features fully inside the selection, by feature id.
+   * The drawn features fully inside the selection, by feature id: those its record's drawn unit draws, as two windows
+   * of a record each draw a feature they both show (OV-2717).
    * @param {RegionSelection} chosen
-   * @returns {string[]}
    */
   const featuresInside = (chosen) => {
     const record = recordOf(chosen);
     if (!record) return [];
     return drawnFeatures().flatMap((feature) => {
       const id = typeof feature.svg_id === 'string' ? feature.svg_id : '';
-      if (!id || feature.record_key !== chosen.recordKey) return [];
+      if (!id || feature.record_key !== chosen.recordKey || feature.drawn_record_index !== record.recordIndex) return [];
       return partsInsideSpan(record.axis.source, chosen.span, featureParts(feature)) ? [id] : [];
     });
   };

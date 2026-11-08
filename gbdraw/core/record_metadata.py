@@ -383,6 +383,27 @@ def _absolute_display_interval(
     return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
 
 
+def _source_intervals(
+    start: int,
+    end: int,
+    coord_base: int,
+    coord_step: int,
+    period: int | None,
+) -> tuple[tuple[int, int], ...]:
+    """The source intervals (0-based start, end) of the drawn interval ``start..end`` of a unit.
+
+    One interval, or two where a unit across the origin of a circular record (``period``, :func:`_source_period`)
+    draws the interval across that origin: the part up to the source end, then the part from its start (D-28).
+    """
+
+    low, high = _absolute_display_interval(start, end, coord_base, coord_step)
+    if period is None:
+        return ((low, high),)
+    shift = (low // period) * period
+    low, high = low - shift, high - shift
+    return ((low, high),) if high <= period else ((low, period), (0, high - period))
+
+
 class RecordSourceMetadata(NamedTuple):
     organism: str
     strain: str

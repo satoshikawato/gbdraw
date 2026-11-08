@@ -286,3 +286,53 @@ test('Add to annotation set that fails shows the normalized error under its butt
   // The operation the action names is one the normalizer knows, not 'unknown'.
   assert.equal(normalizeUserFacingError(failure, { operation: 'addRegionAnnotation', stage: 'helper' }).operation, 'addRegionAnnotation');
 });
+
+// OV-2717 parity: Python's catalog of a record drawn in two windows, admitted by the Web, binds each drawn feature to
+// its record (the key a Web feature edit names, which Python binds: tests/test_record_windows.py) and to its window.
+test('a span of a window counts the features that window draws, by the record and the drawn unit', async () => {
+  const { evaluatePython } = await import('./helpers/python-evaluator.mjs');
+  const { admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const { readRegionAxisRecords } = await import('../../gbdraw/web/js/services/region-axis.js');
+  const rendered = JSON.parse(await evaluatePython(`
+import json, tempfile
+from pathlib import Path
+from gbdraw.api import GenBankInputSource, LinearDiagramRequest, RecordInput, resolve_request
+from gbdraw.io.regions import RecordWindow
+from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.web_support.request_render import render_canonical_web_request
+directory = Path(tempfile.mkdtemp())
+request = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(Path('tests/test_inputs/HmmtDNA.gbk')),
+    record_key='mito', windows=(RecordWindow(1000, 6500), RecordWindow(7000, 9000))),))
+encoded = encode_canonical_request(resolve_request(request))
+paths = {}
+for index, resource in enumerate(encoded.resources):
+    path = directory / f'r{index}'
+    path.write_bytes(resource.content if resource.content is not None else Path(str(resource.source_path)).read_bytes())
+    paths[resource.resource_id] = str(path)
+reply = render_canonical_web_request(encoded.payload, resource_paths=paths, output_directory=directory / 'out')
+result = json.dumps({'catalog': reply['featureCatalog'], 'geometry': reply['metadata']['trackSlotGeometry'],
+    'name': reply['results'][0]['name']})
+`));
+  const { extractedFeatures } = admitFeatureCatalog(rendered.catalog, [{ name: rendered.name }], { mode: 'linear' });
+  const geometry = { ...rendered.geometry, records: rendered.geometry.records.map((record) => ({ ...record, resultIndex: 0 })) };
+  const axisRecords = readRegionAxisRecords(geometry, 0);
+  assert.deepEqual(axisRecords.map(({ recordIndex, recordKey, windowIndex }) => ({ recordIndex, recordKey, windowIndex })),
+    [{ recordIndex: 0, recordKey: 'mito', windowIndex: 0 }, { recordIndex: 1, recordKey: 'mito', windowIndex: 1 }]);
+  const rows = rendered.catalog.items[0].features;
+  for (const axisRecord of axisRecords) {
+    let open = null;
+    const { owner } = setup({ ports: {
+      readAxisRecords: () => axisRecords, openSelection: () => open, drawnFeatures: () => extractedFeatures
+    } });
+    // The whole window.
+    const span = { start: 0, length: axisRecord.axis.source.drawnLength };
+    open = { resultIndex: 0, recordIndex: axisRecord.recordIndex, recordKey: 'mito', windowIndex: axisRecord.windowIndex, span,
+      source: { start: 0, end: 0, length: span.length, wrapsOrigin: false } };
+    const drawnHere = rows.filter((row) => row.recordKey === 'mito' && row.recordIndex === axisRecord.recordIndex);
+    // Every feature the window draws whole; one cut by the window's edge has a part outside it.
+    const whole = drawnHere.filter((row) => !extractedFeatures.find((feature) => feature.svg_id === row.svgId)
+      .location_parts?.some((part) => part.start < axisRecord.axis.source.anchorBase - 1));
+    assert.ok(whole.length > 0, `window ${axisRecord.windowIndex + 1} draws features`);
+    assert.equal(owner.popup.value.featureCount, whole.length, `the features of window ${axisRecord.windowIndex + 1}`);
+  }
+});

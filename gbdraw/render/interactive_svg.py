@@ -105,7 +105,10 @@ class InteractiveSvgContext:
     annotations: Sequence[Mapping[str, object]] = ()
     sequence_sources: Sequence[Mapping[str, object]] = ()
     biological_features: Sequence[Mapping[str, object]] = ()
+    # The key of each drawn unit (``gbdraw_record_key``), and of the record each unit draws (``record_identity_key``):
+    # the windows of one record are units of that record (D-01); empty when every unit is its own record.
     record_keys: Sequence[str] = ()
+    record_identity_keys: Sequence[str] = ()
     collinearity_search_scope: Literal["adjacent", "all"] | None = None
 
 
@@ -1491,6 +1494,26 @@ def _catalog_array(catalog_item: Mapping[str, object], key: str) -> Sequence[obj
     return cast("Sequence[object]", catalog_item[key])
 
 
+def catalog_record_units(item: Mapping[str, object], record_keys: Sequence[str]) -> dict[str, tuple[int, ...]]:
+    """The drawn units of each record a catalog item names, by record key, in drawing order.
+
+    ``windowOf`` (written only when a record is drawn in windows) maps each window's unit key to its record's key; any
+    other unit is its own record. Catalog rows name records by these keys (OV-2717).
+    """
+
+    windows = item.get("windowOf", {})
+    if (
+        not isinstance(windows, Mapping)
+        or not all(type(unit) is str and unit in record_keys and type(key) is str and key for unit, key in windows.items())
+        or set(windows.values()) & set(record_keys)
+    ):
+        raise GbdrawError("Feature catalog windowOf must map window record keys to other record keys.")
+    units: dict[str, list[int]] = {}
+    for unit_index, unit_key in enumerate(record_keys):
+        units.setdefault(str(windows.get(unit_key, unit_key)), []).append(unit_index)
+    return {key: tuple(indexes) for key, indexes in units.items()}
+
+
 def _validate_catalog_feature_bindings(
     root: ET.Element,
     catalog_item: Mapping[str, object],
@@ -1514,7 +1537,7 @@ def _validate_catalog_feature_bindings(
         raise GbdrawError(
             "Interactive feature catalog record keys must be non-empty and unique."
         )
-    record_indexes = {record_key: index for index, record_key in enumerate(record_keys)}
+    record_units = catalog_record_units(catalog_item, record_keys)
 
     biological_identities: dict[tuple[str, str], tuple[str, int | None]] = {}
     for feature in biological_value:
@@ -1542,7 +1565,7 @@ def _validate_catalog_feature_bindings(
             or not stable_id_valid
             or not source_index_valid
             or not all(key)
-            or record_key not in record_indexes
+            or record_key not in record_units
             or key in biological_identities
         ):
             raise GbdrawError(
@@ -1574,6 +1597,9 @@ def _validate_catalog_feature_bindings(
         )
         reference = (record_key, biological_id)
         biological_identity = biological_identities.get(reference)
+        # The drawn unit of the row: its record's, or for a window of a record the one it names (OV-2717).
+        units = record_units.get(record_key, ())
+        unit = feature.get("recordIndex", units[0] if len(units) == 1 and record_key in record_keys else None)
         if (
             not svg_id_valid
             or not record_key_valid
@@ -1582,6 +1608,8 @@ def _validate_catalog_feature_bindings(
             or svg_id != _normalize_feature_id(svg_id)
             or svg_id in catalog_features
             or biological_identity is None
+            or type(unit) is not int
+            or unit not in units
         ):
             raise GbdrawError(
                 "Interactive feature catalog contains an invalid or duplicate "
@@ -1589,7 +1617,7 @@ def _validate_catalog_feature_bindings(
             )
         stable_id, source_index = biological_identity
         catalog_features[svg_id] = (
-            record_indexes[record_key],
+            unit,
             stable_id,
             source_index,
         )

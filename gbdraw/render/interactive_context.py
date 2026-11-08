@@ -13,6 +13,7 @@ from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.api.prepared import cancel_checkpoint, record_prepared_input_metric
+from gbdraw.core.record_metadata import record_identity_key
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -278,20 +279,19 @@ def interactive_svg_context(
                 }
             )
 
+    record_keys = tuple(
+        str((getattr(record, "annotations", {}) or {}).get("gbdraw_record_key", f"record-{record_index + 1}"))
+        for record_index, record in enumerate(record_list)
+    )
     return InteractiveSvgContext(
         features=features,
         biological_features=biological_features,
         orthogroups=orthogroup_payload,
         annotations=annotation_payload,
         sequence_sources=sequence_sources,
-        record_keys=tuple(
-            str(
-                (getattr(record, "annotations", {}) or {}).get(
-                    "gbdraw_record_key",
-                    f"record-{record_index + 1}",
-                )
-            )
-            for record_index, record in enumerate(record_list)
+        record_keys=record_keys,
+        record_identity_keys=tuple(
+            record_identity_key(record) or unit_key for record, unit_key in zip(record_list, record_keys, strict=True)
         ),
         # Callers pass the already validated option value ("adjacent" or "all").
         collinearity_search_scope=cast("Literal['adjacent', 'all'] | None", collinearity_search_scope),

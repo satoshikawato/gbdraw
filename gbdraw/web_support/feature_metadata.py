@@ -8,11 +8,12 @@ from gbdraw.io.genome import read_flat_file_records
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
-    _absolute_display_interval,
     _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
     _source_feature_index,
+    _source_intervals,
+    _source_period,
 )
 from gbdraw.core.sequence import translate_cds
 from gbdraw.features.overrides import feature_override_lookup
@@ -143,22 +144,24 @@ def _biological_location_parts(
     location: Any,
     coord_base: int,
     coord_step: int,
+    period: int | None = None,
 ) -> list[tuple[int, int, int | None]]:
-    """Map processed-record locations back to their source-record coordinates."""
+    """Map processed-record locations back to their source-record coordinates (split at the origin, ``period``)."""
 
     parts: list[tuple[int, int, int | None]] = []
     for part in _get_location_parts(location):
         try:
-            start, end = _absolute_display_interval(
+            intervals = _source_intervals(
                 int(part.start),
                 int(part.end),
                 coord_base,
                 coord_step,
+                period,
             )
         except Exception:
             continue
         strand = part.strand if part.strand is not None else location.strand
-        parts.append((start, end, _biological_strand(strand, coord_step)))
+        parts.extend((start, end, _biological_strand(strand, coord_step)) for start, end in intervals)
     return parts
 
 
@@ -209,6 +212,7 @@ def _format_location_parts(
     location: Any,
     coord_base: int = 1,
     coord_step: int = 1,
+    period: int | None = None,
 ) -> list[dict[str, object]]:
     return [
         {
@@ -221,6 +225,7 @@ def _format_location_parts(
             location,
             coord_base,
             coord_step,
+            period,
         )
     ]
 
@@ -314,6 +319,7 @@ def extract_features_from_records_payload(
         hash_record_id = record.id
         organism = _get_record_organism(record)
         coord_base, coord_step = _read_record_coord_map(record)
+        period = _source_period(record)
         record_ids.append(record_id)
         prepared_features = []
         # The rendered ID of one of identical features carries its instance
@@ -376,17 +382,14 @@ def extract_features_from_records_payload(
             cancel_checkpoint()
             feature_start = int(feat.location.start)
             feature_end = int(feat.location.end)
-            start, end = _absolute_display_interval(
-                feature_start,
-                feature_end,
-                coord_base,
-                coord_step,
-            )
+            intervals = _source_intervals(feature_start, feature_end, coord_base, coord_step, period)
+            start, end = min(low for low, _ in intervals), max(high for _, high in intervals)
             strand_raw = _biological_strand(feat.location.strand, coord_step)
             location_parts = _format_location_parts(
                 feat.location,
                 coord_base,
                 coord_step,
+                period,
             )
             nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
             amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(
