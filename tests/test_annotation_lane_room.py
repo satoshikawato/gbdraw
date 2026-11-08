@@ -42,7 +42,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.render.drawers.annotation_marks import label_ink_offsets
 from gbdraw.layout.text_geometry import SECTOR_PART_DEG
-from gbdraw.render.drawers.circular.annotations import _label_at, _label_ink
+from gbdraw.render.drawers.circular.annotations import _label_at
 
 _SVG = "{http://www.w3.org/2000/svg}"
 _OFFSET = RegionAnnotationStyle().label_offset
@@ -438,7 +438,7 @@ def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> No
         font_size=12.0,
         color="",
         orientation=style.label_orientation,
-        ink=_label_ink("Arial", 12.0, style.label_orientation),
+        font_family="Arial",
         rings=(),
     )
 
