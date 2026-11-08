@@ -643,7 +643,7 @@ def _serialize_linear_track_slot_geometry(
         record_id = str(getattr(drawn.record, "id", "") or "")
         row_bands = [(row.axis_offset_y, row.plan.feature_lanes_band.translate(row.axis_offset_y)) for row in plan.rows]
         window_of = (getattr(drawn.record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION)
-        window_entry: dict[str, Any] = {}
+        window_entry: dict[str, int] = {}
         if window_of is not None:
             window_entry = {"windowIndex": window_counts.get(str(window_of), 0)}
             window_counts[str(window_of)] = window_entry["windowIndex"] + 1

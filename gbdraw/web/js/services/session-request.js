@@ -303,7 +303,8 @@ const requestDrawingMode = (drawing) => {
  * (a record of a Session is unvalidated until the request is promoted).
  * @typedef {object} RequestRecordView
  * @property {{ kind?: unknown, value?: unknown, index?: unknown } | null} [selector]
- * @property {readonly { start?: unknown, end?: unknown, reverseComplement?: unknown, column?: unknown }[]} [windows]
+ * @property {readonly { start?: unknown, end?: unknown, reverseComplement?: unknown, column?: unknown }[]} windows Required at
+ *   request schema 10, which Load promotes every stored request to first.
  * @property {{ reverseComplement?: unknown } | null} [presentation]
  */
 /**
@@ -1512,7 +1513,7 @@ export const linearWindowsPayload = (seq, { arranged }) => {
  * @param {RequestRecordView | null | undefined} record
  */
 const cropFieldsOfWindows = (record) => {
-  const windows = (record?.windows || []).map(({ start, end, reverseComplement, column }) => ({
+  const windows = (record ? record.windows : []).map(({ start, end, reverseComplement, column }) => ({
     start, end, reverseComplement, column
   }));
   const only = cardCropWindow(windows);

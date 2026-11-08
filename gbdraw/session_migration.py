@@ -15,7 +15,7 @@ from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
-from gbdraw.session_request_codec import stored_record_windows
+from gbdraw.session_request_codec import StoredRecordWindow, stored_record_windows
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -236,9 +236,9 @@ def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, .
             if isinstance(index, bool) or not isinstance(index, int):
                 return None  # Invalid; the request decode names it.
             record_selector = f"#{index + 1}"
-        window: Mapping[str, Any] = windows[0] if windows else {}
-        reverse = bool(window.get("reverseComplement") or presentation.get("reverseComplement"))
-        start, end = window.get("start"), window.get("end")
+        window = windows[0] if windows else StoredRecordWindow(start=None, end=None, reverseComplement=None, column=None)
+        reverse = bool(window["reverseComplement"] or presentation.get("reverseComplement"))
+        start, end = window["start"], window["end"]
         if (start is None) != (end is None):
             return None
         reads.append(

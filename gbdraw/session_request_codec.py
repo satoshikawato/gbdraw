@@ -1334,7 +1334,7 @@ def _encode_record(
     }
 
 
-def _encode_window(window: RecordWindow) -> dict[str, Any]:
+def _encode_window(window: RecordWindow) -> StoredRecordWindow:
     return {
         "start": window.start,
         "end": window.end,
@@ -1518,7 +1518,7 @@ class StoredRecordWindow(TypedDict):
     column: object
 
 
-def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]:
+def stored_record_windows(record: Mapping[str, object]) -> list[StoredRecordWindow]:
     """The windows of a stored request record of any schema, as schema 10 writes them.
 
     The one reader of a record's spans in a stored payload that is not decoded

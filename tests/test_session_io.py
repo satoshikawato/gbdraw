@@ -4595,3 +4595,12 @@ def test_cli_only_legacy_draft_states_its_protein_comparison_as_the_adjacent_pla
 
     assert migrated_config.get("linearComparisonPlan") == plan
     assert migrated_files["linearComparisons"] == []
+
+
+def test_python_card_bindings_keep_the_card_windows_as_the_web_writes_them() -> None:
+    # One card shape (the Web's `linearBindings` in services/session-resources.js): a card's windows travel with it.
+    windows = [{"start": 16000, "end": 100, "reverseComplement": False, "column": None}]
+    payload: dict = {"resources": {}}
+    session_io_module._attach_current_web_file_bindings(payload, {"linearSeqs": [{"uid": "a", "windows": windows}]})
+    card = payload["webFiles"]["bindings"]["linearSeqs"][0]
+    assert card["windows"] == windows

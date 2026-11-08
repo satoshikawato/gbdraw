@@ -1538,7 +1538,7 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
 
     from .session_request_codec import stored_record_windows
 
-    def region_binding(record: Mapping[str, Any]) -> object:
+    def region_binding(record: Mapping[str, object]) -> object:
         # One window binds as the region it was before windows (request schema 10), so stored receipts still match.
         spans = [{"start": window["start"], "end": window["end"]} for window in stored_record_windows(record)]
         return spans[0] if len(spans) == 1 else spans or None
@@ -5540,6 +5540,8 @@ def _attach_current_web_file_bindings(
                 "region_start": sequence.get("region_start"),
                 "region_end": sequence.get("region_end"),
                 "region_reverse": bool(sequence.get("region_reverse")),
+                # The card's window list (several windows, or one across the origin), as the Web writes it.
+                "windows": [dict(window) for window in _mapping_list(sequence.get("windows"))],
             }
         )
     comparison_bindings = []
@@ -7126,7 +7128,7 @@ def _append_linear_gui_sequence_options(
         _append_pair(run_args, invocation_args, "--region", spec)
 
 
-def _card_window_region_spec(index: int, window: Mapping[str, Any]) -> str:
+def _card_window_region_spec(index: int, window: Mapping[str, object]) -> str:
     """The ``--region`` of one window of Linear card ``index`` (0-based)."""
 
     start = _nonnegative_integer(window.get("start"))
