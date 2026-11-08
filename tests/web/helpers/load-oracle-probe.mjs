@@ -29,6 +29,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
+import { readSavedSession } from './session-documents.mjs';
 import { createHash } from 'node:crypto';
 import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -121,8 +122,11 @@ const readInput = (arg) => {
 };
 const source = readInput(inputArg);
 const isGzip = (bytes) => bytes[0] === 0x1f && bytes[1] === 0x8b;
-const text = (isGzip(source.raw) ? gunzipSync(source.raw) : source.raw).toString('utf8');
-const parsedInput = JSON.parse(text);
+// A Session file container (a ZIP) is read into its JSON form, each entry as a base64 descriptor.
+const isContainer = (bytes) => bytes[0] === 0x50 && bytes[1] === 0x4b;
+const parsedInput = isContainer(source.raw)
+  ? await readSavedSession(new Blob([source.raw]))
+  : JSON.parse((isGzip(source.raw) ? gunzipSync(source.raw) : source.raw).toString('utf8'));
 
 // Canonical form: sorted keys; long strings and bytes as SHA-256; Files as
 // name, size, type, SHA-256; Maps and Sets as sorted entries.
@@ -235,9 +239,11 @@ const dump = {
 const dialogs = [];
 let loaded;
 try {
-  const file = isGzip(source.raw)
-    ? new File([source.raw], 'session.json.gz', { type: 'application/gzip' })
-    : new File([source.raw], 'session.json', { type: 'application/json' });
+  const file = isContainer(source.raw)
+    ? new File([source.raw], 'session.gbdraw', { type: 'application/zip' })
+    : isGzip(source.raw)
+      ? new File([source.raw], 'session.json.gz', { type: 'application/gzip' })
+      : new File([source.raw], 'session.json', { type: 'application/json' });
   loaded = await importSession({ target: { files: [file], value: 'selected' } }, {
     transformLegacyResultSvg,
     confirmLoadRepairs: async (dialog) => { dialogs.push(canon(dialog)); return true; }
@@ -269,9 +275,12 @@ try {
   const result = await exportSession(state.sessionTitle.value || 'probe', { askChoice: async () => 'download', onError: () => {} });
   if (result?.status === 'saved') {
     const compressed = new Uint8Array(await result.blob.arrayBuffer());
-    const raw = isGzip(compressed) ? gunzipSync(compressed) : Buffer.from(compressed);
-    // Save writes a Session 49; the oracle reads the shown drawing as its one-drawing view.
-    const saved49 = JSON.parse(raw.toString('utf8'));
+    // Save writes a Session file container (an older tree: JSON, plain or gzip), read as its JSON form.
+    const saved49 = isContainer(compressed)
+      ? await readSavedSession(new Blob([compressed]))
+      : JSON.parse((isGzip(compressed) ? gunzipSync(compressed) : Buffer.from(compressed)).toString('utf8'));
+    const raw = isContainer(compressed) ? Buffer.from(JSON.stringify(saved49)) : (isGzip(compressed) ? gunzipSync(compressed) : Buffer.from(compressed));
+    // The oracle reads the shown drawing as its one-drawing view.
     const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     const request = document.renderRequest;
     const otherRequest = document.otherModeResult?.renderRequest;

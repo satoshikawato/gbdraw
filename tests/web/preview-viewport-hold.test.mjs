@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { callerSession } from './helpers/session-caller.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 // While Review alignment is open the figure is fitted, and what is saved or captured is the view
 // from before the review. The pan/zoom owner holds it; the Session writer and the UI capture with
@@ -76,7 +77,7 @@ test('a Session saved during the hold stores the view from before it', async () 
     const result = await exportSession(title);
     assert.equal(result.status, 'saved');
     // The view is the shown drawing's (Session 49 keeps it in that drawing's `ui`).
-    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const saved = await readSavedSession(result.blob);
     return savedDrawingView(saved, saved.ui.activeDrawingId).ui;
   };
   setHeldPreviewViewportReader(panZoom.heldPreviewViewport);

@@ -10,6 +10,7 @@ import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { createHistoryRouter } from '../../gbdraw/web/js/services/history.js';
+import { sessionLoadEvent } from './helpers/session-documents.mjs';
 
 // A case's look at the store at each Vue tick (OV-2132).
 let onNextTick = () => {};
@@ -35,9 +36,7 @@ const { importSession } = callerSession(sessionConfig, state, await sessionRollb
 
 const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v51.gbdraw-session.json.gz`, import.meta.url))));
 const load = async (session) => {
-  const loaded = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await sessionLoadEvent(session), { confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   return loaded;
 };
@@ -66,9 +65,7 @@ test('a Session 51 Load of two Circular drawings and a Linear one into one Circu
   session.ui.activeDrawingId = 'circular-2';
   /** @type {string[]} */
   const historyAtAfterImport = [];
-  const loaded = await routed.importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, {
+  const loaded = await routed.importSession(await sessionLoadEvent(session), {
     confirmLoadRepairs: async () => true,
     afterImport: async () => {
       router.canUndo();
@@ -116,9 +113,7 @@ test('a Load that fails after its commit with a shown drawing the page did not h
     shownHistoryIsFound.push(state.activeDrawingId.value === shownBefore && history === historyBefore);
   };
   try {
-    const loaded = await routed.importSession({
-      target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-    }, {
+    const loaded = await routed.importSession(await sessionLoadEvent(session), {
       confirmLoadRepairs: async () => true,
       afterImport: async () => { throw new Error('a failure after the commit'); }
     });

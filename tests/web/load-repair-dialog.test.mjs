@@ -16,6 +16,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import { savedDrawingView, savedModesView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -67,9 +68,7 @@ const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/se
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
-const input = (session) => ({
-  target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
-});
+const input = (session) => sessionLoadEvent(session);
 // What a Load replaces: the drawings and their settings and edits, the shown
 // mode and Results, the title, the input files. `shownResults: false` leaves
 // the shown Results out.
@@ -93,7 +92,7 @@ const unmatchedEditSession = () => {
 };
 
 test('a lossy Load asks once before it changes anything, and Cancel leaves everything as it was (PLAN 12.7 (1), (2))', async () => {
-  const before = await importSession(input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
+  const before = await importSession(await input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
     confirmLoadRepairs: async () => assert.fail('a file Load restores fully asks nothing')
   });
   assert.equal(before.status, 'ok', JSON.stringify(before.error));
@@ -102,7 +101,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
 
   const dialogs = [];
   const reached = [];
-  const event = input(unmatchedEditSession());
+  const event = await input(unmatchedEditSession());
   const canceled = await importSession(event, {
     confirmLoadRepairs: async (dialog) => {
       dialogs.push(dialog);
@@ -128,7 +127,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   assert.deepEqual(reached, []);
   assert.equal(event.target.value, '');
 
-  const loaded = await importSession(input(unmatchedEditSession()), { confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await input(unmatchedEditSession()), { confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(loaded.repairs.map(({ code, count }) => ({ code, count })), [{ code: 'feature-edit-unmatched', count: 1 }]);
   assert.deepEqual(loaded.notices, []);
@@ -145,7 +144,7 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
     circular: { single: { legend: ' Upper_Left ' }, multi: { legend: null } }, linear: { legend: 'banana' }
   };
   const dialogs = [];
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Legend: the position "upper_left" (ui.generatedLegendPosition) is not one of its mode\'s positions; bottom is used.',
@@ -166,7 +165,7 @@ test('a Session 27-44 layout kept in legacy ui fields reaches its drawings (OV-1
   session.ui.legend = 'top';
   session.ui.linearLegendPosition = 'banana';
   const dialogs = [];
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Legend: the position "banana" (ui.linearLegendPosition) is not one of its mode\'s positions; it is not used.'
@@ -185,7 +184,7 @@ test('a Session 27-44 layout kept in legacy ui fields reaches its drawings (OV-1
 const savedSession = async (title) => {
   const result = await exportSession(title, { askChoice: async () => 'download' });
   assert.equal(result?.status, 'saved', JSON.stringify(result));
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 // The saved Session 49 read as one 46-48-shaped file of every drawing: each
 // drawing's `modes.<mode>`, and the input bindings of every drawing in the
@@ -291,7 +290,7 @@ const filledSession = async ({ overrides = false } = {}) => {
   }];
   draft.modes.linear.config.recordsOff = [draft.webFiles.bindings.linearSeqs[0].uid];
   draft.modes.linear.editorState.legend.strokeOverrides = { CDS: { strokeColor: '#123456', strokeWidth: 1 } };
-  const loaded = await importSession(input(draft), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  const loaded = await importSession(await input(draft), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   for (const drawing of state.drawingList()) {
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...modeDrawing(state, 'linear').linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
@@ -306,7 +305,7 @@ const filledSession = async ({ overrides = false } = {}) => {
  * in the saved Session; a row names the leaf by its place in the file.
  */
 const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
-  const loadedBase = await importSession(input(base), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  const loadedBase = await importSession(await input(base), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.ok(['ok', 'legacy'].includes(loadedBase.status), JSON.stringify(loadedBase.error));
   assert.ok(Object.isFrozen(loadedBase.repairs));
   const baseSaved = await savedView('g2-base');
@@ -325,7 +324,7 @@ const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
       const file = structuredClone(base);
       valueAt(file, parts.slice(0, -1))[parts.at(-1)] = mutated;
       let committed = false;
-      const loaded = await importSession(input(file), {
+      const loaded = await importSession(await input(file), {
         confirmLoadRepairs: async () => true,
         rollbackState: spyOnPort(() => { committed = true; })
       });
@@ -380,7 +379,7 @@ test('no apply step after the dialog drops or changes a stored value the dialog 
 // drawing of the same Session, as a standalone file, applied over that drawing.
 test('no apply step after the dialog drops or changes a stored value of a configuration file the dialog did not list (G2)', async () => {
   const session = await filledSession();
-  const loadedSession = await importSession(input(session), { confirmLoadRepairs: async () => assert.fail('the fixture loads as is') });
+  const loadedSession = await importSession(await input(session), { confirmLoadRepairs: async () => assert.fail('the fixture loads as is') });
   assert.equal(loadedSession.status, 'ok', JSON.stringify(loadedSession.error));
   const mode = state.mode.value;
   const configFile = structuredClone(session.modes[mode].config);
@@ -422,13 +421,13 @@ test('a legacy configuration with malformed record display settings loads with t
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length);
   const formBefore = JSON.stringify(drawing.form);
   const dialogs = [];
-  const canceled = await importSession(input(legacy), { confirmLoadRepairs: async (dialog) => { dialogs.push(dialog); return false; } });
+  const canceled = await importSession(await input(legacy), { confirmLoadRepairs: async (dialog) => { dialogs.push(dialog); return false; } });
   assert.equal(canceled.status, 'canceled');
   assert.equal(JSON.stringify(drawing.form), formBefore);
   assert.deepEqual(dialogs.map(({ items }) => items), [
     ['Settings: 3 entries of recordDisplayDrafts could not be read and were dropped.']
   ]);
-  const loaded = await importSession(input(legacy), { confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await input(legacy), { confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
   assert.deepEqual(loaded.repairs.map(({ code, path }) => [code, path]), [['setting-entries-dropped', 'recordDisplayDrafts']]);
   assert.deepEqual([...drawing.recordDisplayDrafts], []);
@@ -499,7 +498,7 @@ test('no module outside utils/load-repairs.js words what Load could not restore 
 /** Load `session`, answering [Load]; returns the result and the dialogs' items. */
 const loadAnswering = async (session) => {
   const dialogs = [];
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   return { loaded, items: dialogs.flat() };
 };
@@ -522,7 +521,7 @@ test('a Legend edit a later edit of its row overwrites is listed for a Session 2
   const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   // `GC skew (+)` is the caption of the row `GC content`: both edits set it.
   session46.modes.circular.editorState.legend.colorOverrides['GC content'] = '#222222';
-  const quiet = await importSession(input(session46), { confirmLoadRepairs: async () => assert.fail('no row (Q1)') });
+  const quiet = await importSession(await input(session46), { confirmLoadRepairs: async () => assert.fail('no row (Q1)') });
   assert.equal(quiet.status, 'ok', JSON.stringify(quiet.error));
   assert.deepEqual(codes(quiet), ['legend-edit-overwritten-session46']);
 });
@@ -618,7 +617,7 @@ test('a track slot value Load cannot use is listed; a slot that cannot be read r
 
   session = fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
   session.config.adv.circular_track_slots_schema_version = 1;
-  const quiet = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  const quiet = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(quiet.status, 'ok', JSON.stringify(quiet.error));
 });
 
@@ -660,7 +659,7 @@ test('an older Session whose feature information cannot be restored lists it (B5
   session.features.extractedFeatures = [];
   Object.keys(session.files).forEach((key) => { session.files[key] = null; });
   const dialogs = [];
-  const loaded = await importSession(input(session), {
+  const loaded = await importSession(await input(session), {
     transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
@@ -694,9 +693,9 @@ test('a Load without features does not keep the previous Load\'s "Feature editor
   failed.features.extractedFeatures = [];
   Object.keys(failed.files).forEach((key) => { failed.files[key] = null; });
   const confirmLoadRepairs = async () => true;
-  assert.equal((await importSession(input(failed), { transformLegacyResultSvg, confirmLoadRepairs })).status, 'ok');
+  assert.equal((await importSession(await input(failed), { transformLegacyResultSvg, confirmLoadRepairs })).status, 'ok');
   assert.equal(state.featureEditorStatusText.value, 'Feature editor unavailable');
-  const next = await importSession(input(fixture('file-card-imports-circular.v48.gbdraw-session.json.gz')), {
+  const next = await importSession(await input(fixture('file-card-imports-circular.v48.gbdraw-session.json.gz')), {
     transformLegacyResultSvg, confirmLoadRepairs
   });
   assert.equal(next.status, 'ok', JSON.stringify(next.error));
@@ -712,7 +711,7 @@ test('an older Session whose match sequences cannot be read again lists it (OV-7
   const session = fixture('scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz');
   session.files.linearSeqs[0].gb.data = Buffer.from('LOCUS broken\nORIGIN\n 1 zzzz\n').toString('base64');
   const dialogs = [];
-  const loaded = await importSession(input(session), {
+  const loaded = await importSession(await input(session), {
     transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
@@ -743,7 +742,7 @@ test('a Depth binding that names no resource is dropped with its row (OV-890)', 
     else bare.resources = resources;
     const repairs = readSessionDocument(bare).repairs;
     assert.ok(repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(repairs));
-    const result = await importSession(input(bare), { confirmLoadRepairs: async () => true });
+    const result = await importSession(await input(bare), { confirmLoadRepairs: async () => true });
     assert.equal(result.status, 'ok', JSON.stringify(result.error));
     assert.ok(result.repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(result.repairs));
   }
@@ -755,7 +754,7 @@ test('a null definition lock loads as OFF with no row (OV-891)', async () => {
   const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   assert.equal(session.modes.linear.config.form.keep_definition_left_aligned, true);
   session.modes.linear.config.form.keep_definition_left_aligned = null;
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async () => assert.fail('no row (E-OD06)') });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async () => assert.fail('no row (E-OD06)') });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.equal(modeDrawing(state, 'linear').form.keep_definition_left_aligned, false);
 });
@@ -765,14 +764,14 @@ test('a null definition lock loads as OFF with no row (OV-891)', async () => {
 // called an old one.
 test('a Session older than 27 is refused as an old version (B51)', async () => {
   for (const version of [8, 13, 26]) {
-    const refused = await importSession(input({ format: 'gbdraw-session', version }), {
+    const refused = await importSession(await input({ format: 'gbdraw-session', version }), {
       confirmLoadRepairs: async () => assert.fail('no dialog for a refusal')
     });
     assert.equal(refused.status, 'error');
     assert.deepEqual([refused.error.code, refused.error.context.reason], ['INPUT_INVALID', 'SESSION_TOO_OLD']);
     assert.match(refused.error.summary, /gbdraw 0\.11\.0 or older/);
   }
-  const other = await importSession(input({ format: 'other', version: 26 }), { confirmLoadRepairs: async () => true });
+  const other = await importSession(await input({ format: 'other', version: 26 }), { confirmLoadRepairs: async () => true });
   assert.equal(other.status, 'error');
   assert.notEqual(other.error.context.reason, 'SESSION_TOO_OLD');
 });
@@ -800,7 +799,7 @@ test('a stored setting its reader cannot restore is listed before the Load (B37,
   });
   session.config.losat = { ...session.config.losat, totalThreadBudget: 'auto', executionMode: 'turbo' };
   const dialogs = [];
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Settings: the value "sideways" (config.adv.label_rendering) cannot be used; auto is used.',
@@ -825,7 +824,7 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
   const rowsOf = ({ repairs }) => repairs.map(({ code, path, stored, used }) => `${code} ${path} ${stored} -> ${used}`);
   const load = async (session, name) => {
     const dialogs = [];
-    const loaded = await importSession(input(session), {
+    const loaded = await importSession(await input(session), {
       transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
     });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
@@ -870,14 +869,14 @@ test('a Session 27-33 shape map that is no object reads as the repeat-region sha
   const session = fixture('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz');
   const features = Array.isArray(session.config.adv?.features) ? session.config.adv.features : [];
   session.config.adv = { ...session.config.adv, features: [...new Set([...features, 'repeat_region'])], feature_shapes: ['arrow'] };
-  const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(loaded.repairs.filter(({ path }) => path.includes('feature_shapes')), []);
   assert.equal(modeDrawing(state, state.mode.value).adv.feature_shapes.repeat_region, 'rectangle');
   const drawing = modeDrawing(state, state.mode.value);
   const shapes = JSON.stringify(drawing.adv.feature_shapes);
   const asked = [];
-  const fromFile = await importSession(input({ adv: { feature_shapes: ['arrow'] } }), {
+  const fromFile = await importSession(await input({ adv: { feature_shapes: ['arrow'] } }), {
     confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; }
   });
   assert.equal(fromFile.status, 'legacy', JSON.stringify(fromFile.error));
@@ -929,7 +928,7 @@ test('a Session 46 app setting Load cannot restore is listed; a pending palette 
   };
   session.modes.linear.ui = { ...session.modes.linear.ui, pendingPaletteName: 'Pastel' };
   const dialogs = [];
-  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  const loaded = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [[
     'Settings: the value "banana" (ui.featurePanelTab) cannot be used; colors is used.',
@@ -943,7 +942,7 @@ test('a Session 46 app setting Load cannot restore is listed; a pending palette 
 });
 
 test('a legacy configuration lists a setting its reader cannot restore (B48)', async () => {
-  const loaded = await importSession(input({ form: { legend: 'left' }, adv: { gc_content_mode: 'ratio' } }), {
+  const loaded = await importSession(await input({ form: { legend: 'left' }, adv: { gc_content_mode: 'ratio' } }), {
     confirmLoadRepairs: async () => true
   });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
@@ -1008,7 +1007,7 @@ test('a configuration field Load refused is read with its row before the dialog 
   const outcomes = [];
   for (const [name, file] of files) {
     const asked = [];
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; } });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; } });
     outcomes.push([name, loaded.status, asked.flat().length]);
     if (loaded.status === 'ok' || loaded.status === 'legacy') await savedSession(name);
   }
@@ -1040,7 +1039,7 @@ const LOADED_BEFORE = [
 test('no file the Web loaded before the dialog existed is refused (BA-OD100)', async () => {
   const outcomes = [];
   for (const [name, file] of LOADED_BEFORE) {
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async () => true });
     outcomes.push([name, loaded.status === 'ok' || loaded.status === 'legacy' ? 'loaded' : loaded.error?.message ?? loaded.status]);
     if (loaded.status === 'ok' || loaded.status === 'legacy') await savedSession(name);
   }
@@ -1066,7 +1065,7 @@ test('a configuration file with a shape or Linear visibility that is no text, or
       feature_shapes: { ...file.adv.feature_shapes, CDS: 5, gene: 'bogus', misc_feature: ' Rectangle ' },
       linear_accession_visibility: true, linear_length_visibility: 0
     });
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
     assert.deepEqual(loaded.repairs.filter(({ path }) => /feature_shapes|visibility/.test(path))
       .map(({ code, path, effect, stored, used }) => [code, path, effect, stored, used]), [
@@ -1095,7 +1094,7 @@ test('a configuration file or a Session drops and lists a rule or whitelist entr
   const file = { form: { plot_title: 'Rules' }, rules: [null, rule, 5], whitelist: [null, { feat: 'CDS', qual: 'gene', key: 'dnaA' }] };
   let committed = false;
   const asked = [];
-  const loaded = await importSession(input(file), {
+  const loaded = await importSession(await input(file), {
     confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; },
     rollbackState: spyOnPort(() => { committed = true; })
   });
@@ -1112,7 +1111,7 @@ test('a configuration file or a Session drops and lists a rule or whitelist entr
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     session.modes.circular.config[list] = [null];
     const dialogs = [];
-    const read = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+    const read = await importSession(await input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
     assert.deepEqual([read.status, dialogs], ['ok', [[`Settings: 1 entry of modes.circular.config.${list} could not be read and was dropped.`]]], list);
   }
 });
@@ -1163,12 +1162,12 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
   for (const [file, , mode = 'circular'] of cases) {
     addPairDrawings();
     installShownDrawing(mode);
-    assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
+    assert.equal((await importSession(await input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
     const drawing = modeDrawing(state, state.mode.value);
     assert.deepEqual([held(drawing), ratios(drawing)], [firstHeld, [0.5, 0.3]]);
     const shapes = JSON.stringify(drawing.adv.feature_shapes);
     const asked = [];
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
     // The Load commits a new drawing state (D-15-112): read the shown one.
     const loadedDrawing = modeDrawing(state, state.mode.value);
     outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
@@ -1180,7 +1179,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
   for (const [field, value] of [['feature_shapes', 5], ['plot_title', {}]]) {
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     session.modes.circular.config[field === 'plot_title' ? 'form' : 'adv'][field] = value;
-    const loaded = await importSession(input(session), { confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(session), { confirmLoadRepairs: async () => true });
     assert.deepEqual([loaded.status, loaded.repairs.filter(({ path }) => path.endsWith(field)).map(({ effect }) => effect)],
       ['ok', ['defaulted']], field);
   }
@@ -1194,15 +1193,15 @@ test('an arrow ratio stored as its text loads as its number with no row', async 
   const noDialog = { confirmLoadRepairs: async () => assert.fail('a ratio read as its number asks nothing') };
   const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   Object.assign(session.modes.circular.config.adv, ratios);
-  const fromSession = await importSession(input(session), noDialog);
+  const fromSession = await importSession(await input(session), noDialog);
   assert.deepEqual([fromSession.status, fromSession.repairs?.length], ['ok', 0], JSON.stringify(fromSession.error));
   const { adv } = modeDrawing(state, 'circular');
   assert.deepEqual([adv.arrow_shaft_width_ratio, adv.arrow_head_length_ratio], [0.5, 0.3]);
-  const fromFile = await importSession(input({ form: { plot_title: 'Ratios' }, adv: { arrow_shaft_width_ratio: '0.25' } }), noDialog);
+  const fromFile = await importSession(await input({ form: { plot_title: 'Ratios' }, adv: { arrow_shaft_width_ratio: '0.25' } }), noDialog);
   assert.deepEqual([fromFile.status, fromFile.repairs?.length], ['legacy', 0], JSON.stringify(fromFile.error));
   assert.equal(modeDrawing(state, state.mode.value).adv.arrow_shaft_width_ratio, 0.25);
   const snapshot = loadedState();
-  const refused = await importSession(input({ adv: { arrow_shaft_width_ratio: 'x' } }), noDialog);
+  const refused = await importSession(await input({ adv: { arrow_shaft_width_ratio: 'x' } }), noDialog);
   assert.deepEqual([refused.status, loadedState() === snapshot], ['error', true]);
 });
 
@@ -1234,7 +1233,7 @@ test('a value the app writes into a setting of another kind loads with no row, i
   /** Loads `file`; returns its status and the rows the dialog listed. */
   const load = async (file) => {
     const items = [];
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async (prompt) => { items.push(...prompt.items); return true; } });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async (prompt) => { items.push(...prompt.items); return true; } });
     return [loaded.status, items];
   };
   // A blank reads as '' or as unset (null).
@@ -1335,7 +1334,7 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
       losat: { blastp: { collinearMaxConflictsInMergeGap: blank, collinearMaxUnitGap: blank } },
       linearRecordLayout: { recordGap: blank }
     };
-    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+    const loaded = await importSession(await input(file), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
     assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
     assert.deepEqual(read(), READS[String(blank)], `blank ${JSON.stringify(blank)}`);
   }
@@ -1364,7 +1363,7 @@ test('a Session 44 font override adopted into an adv that is no object lists the
   session.config.adv = 5;
   session.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
   const dialogs = [];
-  const loaded = await importSession(input(session), {
+  const loaded = await importSession(await input(session), {
     confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; },
     confirmSessionFonts: async () => true
   });
@@ -1378,7 +1377,7 @@ test('a Session 44 font override adopted into an adv that is no object lists the
   // An object `adv` takes the font with no row.
   const kept = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   kept.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
-  const plain = await importSession(input(kept), {
+  const plain = await importSession(await input(kept), {
     confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')), confirmSessionFonts: async () => true
   });
   assert.equal(plain.status, 'ok', JSON.stringify(plain.error));
@@ -1418,7 +1417,7 @@ test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)
 // The shape of a feature type the user added is a key the default
 // shapes lack; Load kept only the default keys and dropped it without a row.
 test('a feature shape of a feature type the user added survives Save and Load', async () => {
-  const loaded = await importSession(input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
+  const loaded = await importSession(await input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
     confirmLoadRepairs: async () => assert.fail('a file Load restores fully asks nothing')
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
@@ -1426,7 +1425,7 @@ test('a feature shape of a feature type the user added survives Save and Load', 
   adv.features.push('gene');
   adv.feature_shapes.gene = 'arrow';
   const saved = await savedSession('shapes');
-  const again = await importSession(input(saved), {
+  const again = await importSession(await input(saved), {
     confirmLoadRepairs: async () => assert.fail('a file Load restores fully asks nothing')
   });
   assert.equal(again.status, 'ok', JSON.stringify(again.error));
@@ -1478,7 +1477,7 @@ test('a similarity-group edit of an unknown group and a dropped cache entry are 
   const [derived] = session.losatDerivedCache.entries;
   session.losatDerivedCache.entries.push(...Array.from({ length: 16 }, (_, index) => ({ ...derived, key: `${derived.key}-${index}` })));
   const dialogs = [];
-  const loaded = await importSession(input(session), {
+  const loaded = await importSession(await input(session), {
     transformLegacyResultSvg,
     confirmLoadRepairs: async (dialog) => {
       dialogs.push(dialog.items.filter((line) => !line.startsWith('Features: the feature information')));
@@ -1662,7 +1661,7 @@ test('a schema 1/2 request lists an invalid comparison height of its full config
     const session = fixture(name);
     session.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
     const dialogs = [];
-    const loaded = await importSession(input(session), {
+    const loaded = await importSession(await input(session), {
       transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
     });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
@@ -1681,7 +1680,7 @@ test('a Session 31-39 CLI draft loads with no comparison and a Web draft keeps i
     ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'none', 0, null],
     ['BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'adjacent', 5, 'og_1']
   ]) {
-    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     assert.equal(modeDrawing(state, 'linear').linearComparisonPlan.mode, mode, name);
     assert.deepEqual([state.linearRecordTranslations.value.length, state.similarityAlignmentPlan.value?.groupId ?? null],
@@ -1694,7 +1693,7 @@ test('a Session 31-39 CLI draft loads with no comparison and a Web draft keeps i
 // fills no Circular Depth series (auto height, as the old Load; OV-2059).
 test('a Session 27-44 Linear Depth height draws the Linear series and leaves the Circular one at auto (OV-2059)', async () => {
   for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']) {
-    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null], name);
   }
@@ -1704,7 +1703,7 @@ test('a Session 27-44 Linear Depth height draws the Linear series and leaves the
   // takes no Linear-own row from its Circular request's projection: its Depth
   // series stays at auto and those rows keep their defaults, as the old Load
   // (OV-2049).
-  const loaded = await importSession(input(fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz')),
+  const loaded = await importSession(await input(fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz')),
     { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null]);
@@ -1717,7 +1716,7 @@ test('a flat configuration override name of a schema-1 request loads as the deco
   const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
   delete session.renderRequest.diagramOptions.config;
   session.renderRequest.diagramOptions.configOverrides = { show_gc: false };
-  const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.equal(modeDrawing(state, 'circular').form.suppress_gc, true);
 });
@@ -1730,7 +1729,7 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
     const [key] = Object.keys(overrides);
     const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
     session.modes.circular.config.unmanagedConfigOverrides = overrides;
-    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]),
       [['setting-replaced', `modes.circular.config.unmanagedConfigOverrides["${key}"]`, 'dropped']], JSON.stringify(overrides));
@@ -1779,7 +1778,7 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
   const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
   const corpus = [
     ...sessions('../fixtures/sessions/', (name) => /\.json(\.gz)?$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),
-    ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.json(\.gz)?$/.test(name))
+    ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.(json(\.gz)?|gbdraw)$/.test(name))
   ];
   assert.ok(corpus.length > 50, String(corpus.length));
   const ImportWorker = globalThis.Worker;
@@ -1796,10 +1795,10 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
   setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
   for (const [name, url] of corpus) {
     const bytes = readFileSync(url);
-    const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+    const session = await readSavedSession(new Blob([bytes]));
     askedDiagramWorker = false;
     current = name;
-    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
     assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
@@ -1834,7 +1833,7 @@ test('a Session 39 with a protein table of a reversed record installs the bytes 
   const calls = [];
   setStoredProteinResultFrameConverter(async (payload) => { calls.push(payload.version); return { result: { resources: {} } }; });
   try {
-    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(calls, [], 'Python converted the table: Load asks no second conversion');
     const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
@@ -1868,7 +1867,7 @@ test('a Collinear Session 47 with a reversed record installs the converted bytes
     } } } };
   });
   try {
-    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => assert.fail('no row') });
+    const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => assert.fail('no row') });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(calls, [{ version: 47, resources: Object.keys(session.resources).sort() }]);
     const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
@@ -1891,7 +1890,7 @@ test('a failed protein result conversion fails the Load and keeps what was commi
   const savedBefore = await savedSession('before');
   setStoredProteinResultFrameConverter(async () => { throw new Error('probe: conversion failed'); });
   try {
-    const loaded = await importSession(input(fixture('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz')), {
+    const loaded = await importSession(await input(fixture('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz')), {
       transformLegacyResultSvg, confirmLoadRepairs: async () => true
     });
     assert.equal(loaded.status, 'error');
@@ -1918,7 +1917,7 @@ test('the font question of a lossy Session comes after the repair dialog', async
   /** @param {boolean} loadRepairs @param {boolean} loadFont */
   const answered = async (loadRepairs, loadFont) => {
     const asked = [];
-    const loaded = await importSession(input(session), {
+    const loaded = await importSession(await input(session), {
       confirmLoadRepairs: async () => { asked.push('repairs'); return loadRepairs; },
       confirmSessionFonts: async (fonts) => { asked.push(['fonts', fonts]); return loadFont; }
     });

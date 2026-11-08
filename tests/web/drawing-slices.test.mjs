@@ -381,7 +381,7 @@ const saveSession = async () => {
   saves += 1;
   const saved = await exportSession(`slices-${saves}`);
   assert.equal(saved.status, 'saved', JSON.stringify(saved));
-  return new Blob([gunzipSync(Buffer.from(await saved.blob.arrayBuffer()))], { type: 'application/json' });
+  return saved.blob;
 };
 
 // Before Load the edit is undone: by the slice's reset, or, for the inputs

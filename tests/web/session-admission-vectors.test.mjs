@@ -14,6 +14,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { sessionLoadEvent } from './helpers/session-documents.mjs';
 
 // R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
 // decided the refusal, not another producer of the same diagnostic.
@@ -80,9 +81,7 @@ for (const vector of FIXTURE.vectors) {
   test(`${vector.id}: the Web's Load: ${vector.web} (${vector.finding})`, async () => {
     const verdicts = [];
     globalThis.restoresNothingVerdicts = verdicts;
-    const outcome = await importSession({
-      target: { files: [new Blob([JSON.stringify(edited(vector))], { type: 'application/json' })], value: 'selected' }
-    }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    const outcome = await importSession(await sessionLoadEvent(edited(vector)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     const repairs = (outcome?.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`);
     const verdict = outcome?.status !== 'ok' ? 'refused' : repairs.length > 0 ? 'repaired' : 'loaded';
     assert.equal(verdict, vector.web, JSON.stringify(outcome?.error ?? repairs));
@@ -105,9 +104,7 @@ test('a Session 40-43 display row without the fields Session 44 added loads into
   const [row] = document.config.recordDisplayDrafts;
   delete row.reverseComplementOverride;
   delete row.anchorIntent;
-  const outcome = await importSession({
-    target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  const outcome = await importSession(await sessionLoadEvent(document), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
   assert.deepEqual((outcome.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`), []);
   // The drawing that opens is the file's Circular one (its `ui.mode`).

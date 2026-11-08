@@ -10,6 +10,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -46,9 +47,7 @@ const storedFigurePreview = {
   show: ({ fit }) => previewEvents.push(['show', fit, state.results.value]),
   restore: (view) => previewEvents.push(['restore', view, state.results.value])
 };
-const load = (session) => importSession({
-  target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-}, {
+const load = async (session) => importSession(await sessionLoadEvent(session), {
   confirmLoadRepairs: async () => true,
   storedFigurePreview,
   // The composition root's port; these Results need no change.
@@ -167,7 +166,7 @@ test('a request-less Session 30 shows its alignment target and saves a file Pyth
 
   const saved = await exportSession('alignment target', { askChoice: async () => 'download' });
   assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
-  const written = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+  const written = await readSavedSession(saved.blob);
   // A Session 49 drawing's target is its typed request's (D-15-149): a drawing
   // that holds none writes none beside the request it is saved with.
   assert.deepEqual(written.drawings.map(({ id, renderRequest, orthogroupState }) => [

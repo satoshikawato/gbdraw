@@ -5,6 +5,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { gallerySessionDocument, sessionLoadEvent, sessionFileOf } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -372,10 +373,7 @@ assert.throws(
   /unsupported side/
 );
 
-const divergentSession = JSON.parse(await readFile(
-  'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
-  'utf8'
-));
+const divergentSession = await gallerySessionDocument('BGC0000708-BGC0000713');
 // The Linear drawing's draft is the one drawing of the Session 51.
 const divergentSlice = divergentSession.drawings[0];
 divergentSlice.ui ||= {};
@@ -455,7 +453,7 @@ divergentSlice.ui.pendingPaletteName = 'mint';
 divergentSlice.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
   target: {
-    files: [new Blob([JSON.stringify(divergentSession)], { type: 'application/json' })],
+    files: [await sessionFileOf(divergentSession)],
     value: 'selected'
   }
 };
@@ -542,7 +540,7 @@ const withoutStoredLayoutPreferences = () => {
 };
 const importPayload = async (payload, options = {}) => importSession({
   target: {
-    files: [new Blob([JSON.stringify(payload)], { type: 'application/json' })],
+    files: [await sessionFileOf(payload)],
     value: 'selected'
   }
 }, options);
@@ -672,10 +670,7 @@ assert.equal(groupFreeDrawerImport.status, 'ok');
 assert.equal(state.showRightDrawer.value, false);
 assert.equal(state.rightDrawerTab.value, 'features');
 
-const activeIntentSession = JSON.parse(await readFile(
-  'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
-  'utf8'
-));
+const activeIntentSession = await gallerySessionDocument('HmmtDNA_basic_circular');
 const activeFeature = activeIntentSession.drawings[0].editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
 // The Circular drawing's draft is its Session 46 slice; per-feature edits are
@@ -931,7 +926,7 @@ const invalidActiveConfigSession = structuredClone(activeIntentSession);
 invalidActiveConfigSession.drawings[0].config.form = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
-    files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
+    files: [await sessionFileOf(invalidActiveConfigSession)],
     value: 'selected'
   }
 };
@@ -1341,7 +1336,7 @@ console.error = () => {};
 let failedImport;
 const failedImportEvent = {
   target: {
-    files: [new Blob([JSON.stringify(failingSession)], { type: 'application/json' })],
+    files: [await sessionFileOf(failingSession)],
     value: 'selected'
   }
 };
@@ -1412,7 +1407,7 @@ console.error = () => {};
 let failed49;
 try {
   failed49 = await importSession(
-    { target: { files: [new Blob([JSON.stringify(session49)], { type: 'application/json' })], value: 'selected' } },
+    await sessionLoadEvent(session49),
     {
       rollbackState: sessionImportRollbackState,
       transformLegacyResultSvg,

@@ -8,6 +8,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { gallerySessionDocument, sessionFileOf, sessionLoadEventOfBytes } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -33,13 +34,10 @@ const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
-const session = await readFile(
-  'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
-  'utf8'
-);
+const session = await gallerySessionDocument('HmmtDNA_basic_circular');
 const imported = await importSession({
   target: {
-    files: [new Blob([session], { type: 'application/json' })],
+    files: [await sessionFileOf(session)],
     value: 'selected'
   }
 });
@@ -89,7 +87,7 @@ circularSlice.editorState.legend = {
 const maliciousLegendDialogs = [];
 const importedMaliciousLegend = await importSession({
   target: {
-    files: [new Blob([JSON.stringify(maliciousLegendSession)], { type: 'application/json' })],
+    files: [await sessionFileOf(maliciousLegendSession)],
     value: 'selected'
   }
 }, { confirmLoadRepairs: async (dialog) => { maliciousLegendDialogs.push(dialog); return true; } });
@@ -109,12 +107,7 @@ assert.equal(
 const conservationSession = gunzipSync(await readFile(
   'tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz'
 ));
-const importedConservation = await importSession({
-  target: {
-    files: [new Blob([conservationSession], { type: 'application/json' })],
-    value: 'selected'
-  }
-});
+const importedConservation = await importSession(await sessionLoadEventOfBytes(conservationSession));
 assert.equal(importedConservation.status, 'ok');
 const comparisonSources = state.matchSequenceRegistry.values()
   .filter((source) => source.origin === 'homology-comparison');

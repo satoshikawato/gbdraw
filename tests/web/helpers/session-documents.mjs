@@ -86,3 +86,27 @@ export const gallerySessionDocument = async (id) => {
   }
   throw new Error(`the Gallery holds no Session "${id}"`);
 };
+
+/**
+ * The Load event of Session bytes a test holds (a container, or a JSON file
+ * plain or gzip): a JSON Session 51 or later becomes its container; anything
+ * else is handed over as it is.
+ * @param {Uint8Array | string} bytes
+ */
+export const sessionLoadEventOfBytes = async (bytes) => {
+  const raw = typeof bytes === 'string' ? Buffer.from(bytes) : Buffer.from(bytes);
+  if (raw[0] === 0x50 && raw[1] === 0x4b) return { target: { files: [new Blob([raw])], value: 'selected' } };
+  try {
+    const document = await readSavedSession(new Blob([raw]));
+    return sessionLoadEvent(document);
+  } catch {
+    return { target: { files: [new Blob([raw], { type: 'application/json' })], value: 'selected' } };
+  }
+};
+
+/**
+ * The JSON text of the Session a file holds (container, JSON or gzip JSON).
+ * @param {Uint8Array} bytes
+ * @returns {Promise<Buffer>}
+ */
+export const sessionJsonBytes = async (bytes) => Buffer.from(JSON.stringify(await readSavedSession(new Blob([bytes]))));

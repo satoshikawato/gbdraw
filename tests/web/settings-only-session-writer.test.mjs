@@ -6,6 +6,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -31,7 +32,7 @@ const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await
 const savedDocument = async title => {
   const result = await exportSession(title);
   assert.equal(result.status, 'saved');
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 
 // These files are refused before the Load dialog; a dialog would cancel the
@@ -67,9 +68,7 @@ test('OV-591: Save writes form and adv in the settings of its mode, as Python re
     mutate(view);
     assert.throws(() => validateSessionAuthorityInventory(structuredClone(view), LAST_SETTINGS_ONLY_VERSION), /settings of its mode/, name);
     const document = withSavedDrawingView(saved, 'circular', mutate);
-    const loaded = await importSession({
-      target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: refuseLoadDialog });
+    const loaded = await importSession(await sessionLoadEvent(document), { confirmLoadRepairs: refuseLoadDialog });
     assert.equal(loaded.status, 'ok', name);
     assert.deepEqual(loaded.repairs ?? [], [], name);
   }
@@ -195,9 +194,7 @@ test('writer and current admission reject invalid scalar drafts without altering
     const invalidBefore = structuredClone(invalid);
     /** @type {unknown} */
     let listed = null;
-    const loaded = await importSession({
-      target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
+    const loaded = await importSession(await sessionLoadEvent(invalid), { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
     assert.equal(loaded.status, 'canceled', text);
     assert.match(JSON.stringify(listed), /circular_track_slots\[0\]\.width/, text);
     assert.deepEqual(invalid, invalidBefore);
