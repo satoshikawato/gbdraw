@@ -96,7 +96,8 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   expect(failed.request).toEqual(before.request);
   expect(failed.results).toEqual(before.results);
   expect(failed.history).toEqual(before.history);
-  expect(failed.positions).toEqual([{ selector: '#1', row: 1 }]);
+  // A Record Order row names its record by identity: the one record of the Session's File card `record-1`.
+  expect(failed.positions).toEqual([{ selector: 'record-1', row: 1 }]);
   expect(failed.annotations.map(annotation => annotation.record)).toEqual(
     before.annotations.map(annotation => annotation.record));
   const keys = failed.annotations.map(annotation => annotation.key);
@@ -202,7 +203,7 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
   expect(canceled.results).toEqual(before.results);
   expect(canceled.width).toEqual(before.width);
   expect(canceled.history).toEqual(before.history);
-  expect(canceled.positions).toEqual([{ selector: '#1', row: 1 }]);
+  expect(canceled.positions).toEqual([{ selector: 'record-1', row: 1 }]);
   expect(canceled.annotations.every(annotation => annotation.record?.value === 'NC_001879.2'
     && annotation.key?.endsWith('::[0,"NC_001879.2",155943]'))).toBe(true);
   const canceledFile = info.outputPath('canceled.gbdraw-session.json.gz');
@@ -256,7 +257,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await openApp(page);
   await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    app.setCircularSourceFile('c_gb', new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 }));
+    void app.addCircularSourceFiles('gb', [new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
     const set = app.addAnnotationSet('s04');
     const annotation = app.addCoordinateAnnotation(set, { start: 1, end: 10 });
@@ -270,7 +271,9 @@ test('failed multi-record Generate retains a validated binding to the selected s
   });
   const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'), { title: 'S04 multi' });
   const before = await snapshot(page);
-  expect(before.positions.map(position => position.selector)).toEqual(['#1', '#2']);
+  // Record Order rows name the records by identity (`<card uid>:<k>`).
+  const card = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularSources[0].uid);
+  expect(before.positions.map(position => position.selector)).toEqual([`${card}:1`, `${card}:2`]);
   expect(before.annotations[0].record).toEqual({ kind: 'recordId', value: 'RecB' });
   expect(before.annotations[0].key).toBeNull();
   try {
@@ -289,7 +292,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   expect(failed.request).toEqual(before.request);
   expect(failed.results).toEqual(before.results);
   expect(failed.history).toEqual(before.history);
-  expect(failed.positions.map(position => position.selector)).toEqual(['#1', '#2']);
+  expect(failed.positions.map(position => position.selector)).toEqual([`${card}:1`, `${card}:2`]);
   expect(failed.annotations[0].record).toEqual(before.annotations[0].record);
   expect(failed.annotations[0].key).toMatch(/::\[1,"RecB",300\]$/);
   const failedFile = info.outputPath('multi-failed.gbdraw-session.json.gz');
