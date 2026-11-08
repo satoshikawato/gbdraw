@@ -3,8 +3,8 @@
 
 """Native LOSAT and NCBI BLAST+ runtime owner for every comparison program.
 
-LOSATN, TLOSATX, and LOSATP share one resolution order, one argv builder, one
-subprocess path, and one raw-cache store. Programs differ only by the data in
+LOSATN, TLOSATX, TLOSATN, and LOSATP share one resolution order, one argv
+builder, one subprocess path, and one raw-cache store. Programs differ only by the data in
 ``LOSAT_PROGRAMS``. Program identity (protein manifests, nucleotide hashes)
 and result parsing stay with their analysis owners. Installation and the
 managed cache stay in ``gbdraw.losat_setup``.
@@ -41,7 +41,9 @@ _UNAVAILABLE: Mapping[str, str] = MappingProxyType(
     {"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE"}
 )
 
-LosatProgramName = Literal["losatn", "tlosatx", "losatp"]
+LosatProgramName = Literal["losatn", "tlosatx", "tlosatn", "losatp"]
+# The molecule of a search side: what its FASTA holds.
+LosatMolecule = Literal["nucleotide", "protein"]
 LosatRuntimeKind = Literal["losat", "ncbi-blast"]
 # Sessions written by gbdraw 0.14.2 or earlier may also record "bundled" (a
 # development build once tracked in the source tree). Python never reads the
@@ -111,7 +113,18 @@ class LosatProgram:
     activity: str
     options: tuple[str, ...]
     required_options: frozenset[str]
-    fasta_suffix: str
+    # The query and subject molecules, in that order.
+    molecules: tuple[LosatMolecule, LosatMolecule]
+
+    @property
+    def fasta_suffixes(self) -> tuple[str, str]:
+        """The query and subject FASTA file suffixes."""
+
+        query, subject = self.molecules
+        return _FASTA_SUFFIXES[query], _FASTA_SUFFIXES[subject]
+
+
+_FASTA_SUFFIXES: Mapping[LosatMolecule, str] = MappingProxyType({"nucleotide": ".fna", "protein": ".faa"})
 
 
 LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
@@ -123,7 +136,7 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "nucleotide comparison",
             ("task",),
             frozenset({"task"}),
-            ".fna",
+            ("nucleotide", "nucleotide"),
         ),
         "tlosatx": LosatProgram(
             "tlosatx",
@@ -133,7 +146,18 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             ("query_gencode", "db_gencode"),
             # An unset table is the runtime default (1), as in the Web (D17).
             frozenset(),
-            ".fna",
+            ("nucleotide", "nucleotide"),
+        ),
+        # Protein queries against nucleotide subjects: the locate search
+        # (gbdraw.comparisons.locate) and the Web's Sequence search.
+        "tlosatn": LosatProgram(
+            "tlosatn",
+            "tblastn",
+            "translated TBLASTN",
+            "protein search of nucleotide records",
+            ("db_gencode",),
+            frozenset(),
+            ("protein", "nucleotide"),
         ),
         "losatp": LosatProgram(
             "losatp",
@@ -142,7 +166,7 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "protein colinearity",
             ("max_hsps", "max_target_seqs"),
             frozenset(),
-            ".faa",
+            ("protein", "protein"),
         ),
     }
 )
@@ -410,6 +434,51 @@ def require_losat_task_support(
     )
 
 
+_PROGRAM_SUPPORT: dict[tuple[str, str], bool] = {}
+
+
+def losat_supports_program(executable: str, search: str) -> bool:
+    """Whether a LOSAT runtime has the subcommand ``search``.
+
+    Released LOSAT v0.1.0 has ``blastn``, ``tblastx`` and ``blastp`` and
+    answers ``losat tblastn --help`` with an error. Probed once per executable
+    and subcommand.
+    """
+
+    key = (str(executable), str(search))
+    if key not in _PROGRAM_SUPPORT:
+        completed = _probe([key[0], key[1], "--help"])
+        _PROGRAM_SUPPORT[key] = completed is not None and completed.returncode == 0
+    return _PROGRAM_SUPPORT[key]
+
+
+def require_losat_program(
+    program: str | LosatProgram,
+    *,
+    losat_bin: str | None = None,
+    ncbi_blast_bin: str | None = None,
+) -> LosatRuntime:
+    """Resolve the runtime of ``program`` and fail before searching when it lacks the program.
+
+    A resolved LOSAT runtime is probed (:func:`losat_supports_program`); an
+    NCBI BLAST+ runtime is the program's own executable. There is no fallback
+    to another program: another program is another search.
+    """
+
+    spec = losat_program(program)
+    runtime = resolve_losat_runtime(spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin)
+    if runtime.kind != "losat" or losat_supports_program(runtime.executable, spec.search):
+        return runtime
+    version = _runtime_version(runtime) or "unknown version"
+    raise ValidationError(
+        f"The LOSAT runtime at {runtime.executable} ({version}) has no {spec.search}, which the "
+        f"{spec.description} search needs. Pass a LOSAT build that has {spec.search} with "
+        f"{LOSAT_BIN_OPTION}, pass NCBI BLAST+ {spec.search} with {NCBI_BLAST_BIN_OPTION}, "
+        "or choose another search program.",
+        diagnostic={"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE", "program": spec.name},
+    )
+
+
 def _runtime_version(runtime: LosatRuntime) -> str | None:
     key = (runtime.kind, runtime.executable)
     if key in _RUNTIME_VERSIONS:
@@ -545,8 +614,9 @@ def run_losat_search(
     runtime = resolve_losat_runtime(spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin)
     with tempfile.TemporaryDirectory(prefix="gbdraw_losat_") as temp_dir:
         temp_path = Path(temp_dir)
-        query_path = temp_path / f"query{spec.fasta_suffix}"
-        subject_path = temp_path / f"subject{spec.fasta_suffix}"
+        query_suffix, subject_suffix = spec.fasta_suffixes
+        query_path = temp_path / f"query{query_suffix}"
+        subject_path = temp_path / f"subject{subject_suffix}"
         query_path.write_text(query_fasta, encoding="utf-8")
         subject_path.write_text(subject_fasta, encoding="utf-8")
 
@@ -780,6 +850,7 @@ __all__ = [
     "LOSAT_PROGRAMS",
     "LosatCacheWrite",
     "LosatCacheWriteKind",
+    "LosatMolecule",
     "LosatProgram",
     "LosatRawCache",
     "LosatRuntime",
@@ -792,7 +863,9 @@ __all__ = [
     "losat_program",
     "losat_runtime_record",
     "losat_search_flags",
+    "losat_supports_program",
     "losat_task_values",
+    "require_losat_program",
     "require_losat_task_support",
     "resolve_losat_runtime",
     "run_losat_search",

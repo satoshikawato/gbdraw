@@ -463,10 +463,11 @@ def nucleotide_losat_cache_key(
     flow: str | None = None,
     search_context: str | None = None,
 ) -> str:
-    """Raw key of one nucleotide record pair (Web ``buildLosatCachePayload``).
+    """Raw key of one search against nucleotide records (Web ``buildLosatCachePayload``).
 
-    ``program`` is the search program (``blastn`` or ``tblastx``); the hashes
-    are of each record's search-frame FASTA.
+    ``program`` is the search program (``blastn``, ``tblastx``, or ``tblastn``,
+    whose query is protein FASTA); the hashes are of each side's FASTA: a
+    record's search-frame FASTA, or a batch side's text.
     """
 
     payload: dict[str, object] = {

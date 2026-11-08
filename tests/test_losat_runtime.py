@@ -41,6 +41,7 @@ from gbdraw.comparisons.losat_runtime import (
     build_losat_command,
     losat_cache_args,
     losat_runtime_record,
+    require_losat_program,
     resolve_losat_runtime,
     run_losat_search,
 )
@@ -49,11 +50,12 @@ from tests.test_protein_colinearity import _cds, _record
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL_DATA = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
-PROGRAMS = ("losatn", "tlosatx", "losatp")
-NCBI_EXECUTABLES = {"losatn": "blastn", "tlosatx": "tblastx", "losatp": "blastp"}
+PROGRAMS = ("losatn", "tlosatx", "tlosatn", "losatp")
+NCBI_EXECUTABLES = {"losatn": "blastn", "tlosatx": "tblastx", "tlosatn": "tblastn", "losatp": "blastp"}
 OPTIONS = {
     "losatn": LosatSearchArgs(task="megablast"),
     "tlosatx": LosatSearchArgs(query_gencode=5, db_gencode=2),
+    "tlosatn": LosatSearchArgs(db_gencode=11),
     "losatp": LosatSearchArgs(max_hsps=1, max_target_seqs=5),
 }
 
@@ -107,6 +109,7 @@ def _logged_calls(log: Path) -> list[list[str]]:
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
+    monkeypatch.setattr(runtime_module, "_PROGRAM_SUPPORT", {})
 
 
 # Resolution order (design 3.6): explicit, conda, managed, PATH losat,
@@ -268,6 +271,8 @@ ARGV_GOLDENS = {
         "/opt/ncbi/tblastx", *_IO,
         "-query_gencode", "5", "-db_gencode", "2", "-num_threads", "4",
     ],
+    ("tlosatn", "v2"): ["/opt/losat", "tblastn", *_IO, "-db_gencode", "11", "-num_threads", "4"],
+    ("tlosatn", "ncbi"): ["/opt/ncbi/tblastn", *_IO, "-db_gencode", "11", "-num_threads", "4"],
     ("losatp", "v2"): [
         "/opt/losat", "blastp", *_IO,
         "-max_hsps", "1", "-max_target_seqs", "5", "-num_threads", "4",
@@ -332,6 +337,9 @@ CACHE_ARG_GOLDENS = {
     # The Web passes a translation table only when the record sets one.
     ("tlosatx", LosatSearchArgs(query_gencode=11)): ["--query-gencode", "11"],
     ("tlosatx", LosatSearchArgs()): [],
+    # tblastn translates the subject only; its query is protein.
+    ("tlosatn", LosatSearchArgs(db_gencode=11)): ["--db-gencode", "11"],
+    ("tlosatn", LosatSearchArgs()): [],
     ("losatp", LosatSearchArgs(max_hsps=1, max_target_seqs=5)): [
         "--max-hsps-per-subject", "1", "--max-target-seqs", "5",
     ],
@@ -652,3 +660,66 @@ def test_native_tlosatx_reproduces_metazoan_mtdna_bytes(
     assert _native_search("tlosatx", query, subject, options) == (
         fixture / expected_name
     ).read_text(encoding="utf-8")
+
+
+# Program probe: released LOSAT v0.1.0 has no tblastn (``losat tblastn --help`` exits 2).
+
+_NO_TBLASTN = """#!{python}
+import json, os, sys
+args = sys.argv[1:]
+with open({log!r}, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(args) + "\\n")
+if args == ["--version"]:
+    print("losat 0.1.0")
+    sys.exit(0)
+if args[:1] == ["tblastn"]:
+    sys.stderr.write("error: unknown option or argument 'tblastn'; use -help for CLI v2 syntax\\n")
+    sys.exit(2)
+sys.exit(0)
+"""
+
+
+def _losat_without_tblastn(tmp_path: Path) -> tuple[str, Path]:
+    log = tmp_path / "probe.jsonl"
+    path = tmp_path / "losat-0.1.0"
+    path.write_text(_NO_TBLASTN.format(python=sys.executable, log=str(log)), encoding="utf-8")
+    path.chmod(0o755)
+    return str(path), log
+
+
+def test_tlosatn_refuses_a_losat_runtime_without_tblastn(tmp_path: Path) -> None:
+    losat, log = _losat_without_tblastn(tmp_path)
+
+    with pytest.raises(ValidationError) as exc_info:
+        require_losat_program("tlosatn", losat_bin=losat)
+    with pytest.raises(ValidationError):
+        require_losat_program("tlosatn", losat_bin=losat)
+
+    message = str(exc_info.value)
+    assert f"The LOSAT runtime at {losat} (0.1.0) has no tblastn" in message
+    assert "--losat_bin" in message and "--ncbi_blast_bin" in message and "another search program" in message
+    assert exc_info.value.diagnostic == {"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE", "program": "tlosatn"}
+    # Probed once per executable; no search ran, nothing fell back to blastn.
+    assert [call for call in _logged_calls(log) if call[:1] == ["tblastn"]] == [["tblastn", "--help"]]
+    assert all("-query" not in call for call in _logged_calls(log))
+
+
+def test_program_probe_passes_runtimes_that_have_the_program(tmp_path: Path) -> None:
+    losat, _log = _losat_without_tblastn(tmp_path)
+    fake = _fake_runtime(tmp_path / "losat-0.2.0", version="losat 0.2.0")
+
+    assert require_losat_program("losatn", losat_bin=losat) == LosatRuntime("losat", losat, "explicit")
+    assert require_losat_program("tlosatn", losat_bin=str(fake)) == LosatRuntime("losat", str(fake), "explicit")
+    # An NCBI BLAST+ runtime is the program's own executable and is not probed.
+    assert require_losat_program("tlosatn", ncbi_blast_bin="/opt/ncbi/tblastn") == LosatRuntime(
+        "ncbi-blast", "/opt/ncbi/tblastn", "explicit"
+    )
+
+
+def test_program_table_gives_each_side_its_molecule() -> None:
+    assert {name: spec.fasta_suffixes for name, spec in LOSAT_PROGRAMS.items()} == {
+        "losatn": (".fna", ".fna"),
+        "tlosatx": (".fna", ".fna"),
+        "tlosatn": (".faa", ".fna"),
+        "losatp": (".faa", ".faa"),
+    }
