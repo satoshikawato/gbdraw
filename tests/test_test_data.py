@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import subprocess
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -52,6 +54,78 @@ def test_the_block_is_replaced_in_place_or_appended() -> None:
     assert appended == "*.pyc\n\n" + test_data.gitignore_block([old])
     replaced = test_data.with_gitignore_block(appended + "/after\n", [new])
     assert replaced == "*.pyc\n\n" + test_data.gitignore_block([new]) + "/after\n"
+
+
+@pytest.fixture(autouse=True)
+def waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    recorded: list[float] = []
+    monkeypatch.setattr(test_data, "_wait", recorded.append)
+    return recorded
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://example.invalid/x", code, "error", {}, None)  # type: ignore[arg-type]
+
+
+def _fetch_with_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answers: list[object]
+) -> tuple[InputFile, Path, list[str]]:
+    content = b"served after retries\n"
+    item = _input("examples/retry.gb", content, "6" * 40, "https://example.invalid/retry.gb")
+    root = tmp_path / "not-a-repository"
+    root.mkdir()
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    calls = iter(answers)
+
+    def urlopen(url: str, timeout: float) -> io.BytesIO:
+        answer = next(calls)
+        if isinstance(answer, Exception):
+            raise answer
+        return io.BytesIO(answer)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(test_data.urllib.request, "urlopen", urlopen)
+    messages: list[str] = []
+    test_data.fetch([item], root=root, cache=cache, log=messages.append)
+    return item, root, messages
+
+
+def test_download_waits_and_retries_after_a_5xx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, waits: list[float]
+) -> None:
+    item, root, _ = _fetch_with_answers(
+        tmp_path, monkeypatch, [_http_error(504), _http_error(504), b"served after retries\n"]
+    )
+
+    assert (root / item.path).read_bytes() == b"served after retries\n"
+    assert waits == [5, 15]
+
+
+def test_download_gives_up_after_the_last_wait(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, waits: list[float]
+) -> None:
+    item, root, _ = _fetch_with_answers(tmp_path, monkeypatch, [_http_error(504)] * 5)
+
+    assert not (root / item.path).exists()
+    assert waits == [5, 15, 30, 60]
+
+
+def test_download_does_not_retry_a_404(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, waits: list[float]
+) -> None:
+    item, root, _ = _fetch_with_answers(tmp_path, monkeypatch, [_http_error(404)])
+
+    assert not (root / item.path).exists()
+    assert waits == []
+
+
+def test_download_does_not_retry_a_manifest_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, waits: list[float]
+) -> None:
+    _, _, messages = _fetch_with_answers(tmp_path, monkeypatch, [b"changed upstream\n"])
+
+    assert waits == []
+    assert any("does not match" in message for message in messages)
 
 
 def _input(path: str, content: bytes, git_blob: str, url: str) -> InputFile:
