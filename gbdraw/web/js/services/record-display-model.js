@@ -5,6 +5,7 @@
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
@@ -301,6 +302,25 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
 };
 
 /**
+ * The windows a stored schema <= 9 record's `region` reads as at schema 10: one window, none for a value that is no
+ * object. A region with the larger number first is the reversed span (v0.14.5); only a schema 10 window whose start
+ * is after its end crosses the origin, so the window states the span in order (Python's `_decode_region`). The one
+ * reader of a stored region's span and orientation, for the request promotion (`promoteRecordRegionsToWindows`,
+ * session-request.js) and the protein-frame check that reads a stored request before it (`storedRecordReverses`,
+ * main-session-comparison-frame.js).
+ * @param {unknown} region
+ * @returns {{ start: unknown, end: unknown, reverseComplement: unknown, column: null }[]}
+ */
+export const storedRegionWindows = (region) => {
+  if (!isPlainObject(region)) return [];
+  const { start, end } = region;
+  const reversed = typeof start === 'number' && typeof end === 'number' && start > end;
+  return [reversed
+    ? { start: end, end: start, reverseComplement: true, column: null }
+    : { start, end, reverseComplement: region.reverseComplement, column: null }];
+};
+
+/**
  * The orientation and windows of a request record of schema 10, as the readers below read them.
  * @typedef {{ windows: readonly { reverseComplement: boolean }[], presentation: { reverseComplement: boolean } }} CanonicalRecordOrientation
  */
@@ -325,6 +345,44 @@ export const writeCanonicalRecordReverseComplement = (record, reverseComplement)
     record.windows.forEach((window) => { window.reverseComplement = reverseComplement; });
     record.presentation.reverseComplement = false;
   } else record.presentation.reverseComplement = reverseComplement;
+};
+
+/**
+ * The orientation fields of a crop form, a Linear File card (`windows`, `region_reverse`) or the Circular Region block
+ * (`circular_windows`, `circular_reverse`): the windows it lists (several, or one across the origin), each with its
+ * own orientation, and its Reverse complement, which orients only a record it lists no window of, as the request
+ * writers read them (Load folds a record-wide reverse complement into the listed windows).
+ * @template {{ reverseComplement: boolean }} W
+ * @typedef {{ windows: readonly W[], reverse: boolean }} CropFormOrientation
+ */
+/**
+ * @template {{ reverseComplement: boolean }} W
+ * @param {CropFormOrientation<W>} form
+ * @returns {{ windows: W[], presentation: { reverseComplement: boolean } }} new window objects
+ */
+const cropFormRecord = ({ windows, reverse }) => ({
+  windows: windows.map((window) => ({ ...window })), presentation: { reverseComplement: windows.length ? false : reverse }
+});
+
+/**
+ * Whether a crop form draws its record reverse-complemented (`canonicalRecordReverseComplement`).
+ * @template {{ reverseComplement: boolean }} W
+ * @param {CropFormOrientation<W>} form
+ */
+export const cropFormReverseComplement = (form) => canonicalRecordReverseComplement(cropFormRecord(form));
+
+/**
+ * The orientation fields that draw a crop form's record in the absolute direction `reverseComplement`
+ * (`writeCanonicalRecordReverseComplement`): its listed windows, as new objects, else its Reverse complement.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {CropFormOrientation<W>} form
+ * @param {boolean} reverseComplement
+ * @returns {CropFormOrientation<W> & { windows: W[] }}
+ */
+export const orientedCropForm = (form, reverseComplement) => {
+  const record = cropFormRecord(form);
+  writeCanonicalRecordReverseComplement(record, reverseComplement);
+  return { windows: record.windows, reverse: record.presentation.reverseComplement };
 };
 
 /**

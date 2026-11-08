@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
+  catalogDrawnUnits,
   buildMatchSequenceBundle,
   createSequenceSourceRegistry,
   extractMatchedSpan,
@@ -81,7 +82,7 @@ const analyzeCircularHomologyCoverage = ({
 } = {}) => analyzeCatalogSequenceSourceCoverage({
   mode: 'circular',
   renderRequest: {
-    records: [{ recordKey: 'record-reference' }]
+    records: [{ recordKey: 'record-reference', windows: [] }]
   },
   catalogFeatureState: {
     items: [{
@@ -237,7 +238,7 @@ test('coverage reports a match endpoint whose displayed record source is missing
   const coverage = analyzeCatalogSequenceSourceCoverage({
     mode: 'linear',
     renderRequest: {
-      records: [{ recordKey: 'record-a' }, { recordKey: 'record-b' }]
+      records: [{ recordKey: 'record-a', windows: [] }, { recordKey: 'record-b', windows: [] }]
     },
     catalogFeatureState: {
       items: [{
@@ -799,7 +800,7 @@ const windowedCatalogItem = () => ({
 test('coverage reads the units of a record drawn in several windows as that record (review S5)', () => {
   const coverage = analyzeCatalogSequenceSourceCoverage({
     mode: 'linear',
-    renderRequest: { records: [{ recordKey: 'a' }, { recordKey: 'b' }] },
+    renderRequest: { records: [{ recordKey: 'a', windows: [{ start: 1, end: 4 }, { start: 5, end: 8 }] }, { recordKey: 'b', windows: [] }] },
     catalogFeatureState: { items: [windowedCatalogItem()] }
   });
   assert.equal(coverage.complete, true, JSON.stringify(coverage.missingConsumers));
@@ -820,9 +821,22 @@ test('restored Linear sources are keyed by drawn unit and leave windows to the c
       { uid: 'a', gb: gb('A', 'aaccggtt'), windows: [{ start: 1, end: 4 }, { start: 5, end: 8 }] },
       { uid: 'b', gb: gb('B', 'acgt') }
     ],
-    units: catalogUnitRecords(item.recordKeys, item.windowOf)
+    units: catalogDrawnUnits({ items: [item] })
   });
   assert.deepEqual(sources.map(({ key, recordIndex, sequence }) => ({ key, recordIndex, sequence })), [
     { key: 'linear:record:2', recordIndex: 2, sequence: 'ACGT' }
   ]);
+});
+
+// Follow-up 2 of the #1750 review: Load keys the sources it reads again by the units the catalog names whenever the
+// catalog names them (every item names the same units), not only for a catalog of one item; a catalog without items
+// keys none (the cards in order), and items that name different units cannot key one set of sources.
+test('a Linear catalog names its drawn units through every item, or none without an item', () => {
+  const item = windowedCatalogItem();
+  const units = catalogUnitRecords(item.recordKeys, item.windowOf);
+  assert.deepEqual(catalogDrawnUnits({ items: [item] }), units);
+  assert.deepEqual(catalogDrawnUnits({ items: [item, structuredClone(item)] }), units);
+  assert.equal(catalogDrawnUnits({ items: [] }), null);
+  assert.throws(() => catalogDrawnUnits({ items: [item, { ...item, windowOf: {} }] }),
+    { code: 'RESULT_INVALID', context: { reason: 'CATALOG_UNITS' } });
 });

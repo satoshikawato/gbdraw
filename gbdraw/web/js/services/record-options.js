@@ -208,6 +208,17 @@ export const regionWithinRecord = (start, end, recordLength) => {
 };
 
 /**
+ * The bases a window draws, both ends included. A window whose start is after its end crosses the origin of a
+ * circular record (D-34): its bases need the record's length, and are null until the record is read (Python's
+ * `region_slice`). The one reader of a window's length for the window lists and the Circular crop.
+ * @param {number} start @param {number} end
+ * @param {number | null} recordLength the length of the record the window draws, once read
+ */
+const windowBases = (start, end, recordLength) => (
+  start <= end ? end - start + 1 : recordLength === null ? null : recordLength - start + 1 + end
+);
+
+/**
  * One row of the read-only window list of a record drawn in several windows (D-10): its number (1-based, in column
  * order), its span in source coordinates, its length, and whether it is drawn reverse-complemented.
  * @typedef {{ number: number, span: string, length: string, reverseComplement: boolean }} LinearRecordWindowRow
@@ -226,9 +237,7 @@ export const linearRecordWindowRows = (windows, recordLength) => windows
   .map(({ window }, order) => {
     const { start, end } = window;
     const stated = start !== null && end !== null;
-    const across = stated && start > end;
-    const bases = !stated || (across && recordLength === null) ? null
-      : across ? /** @type {number} */ (recordLength) - start + 1 + end : end - start + 1;
+    const bases = stated ? windowBases(start, end, recordLength) : null;
     return {
       number: order + 1,
       span: stated ? `${formatGroupedNumber(start)}\u2013${formatGroupedNumber(end)}` : '',
@@ -322,8 +331,7 @@ export const circularFormCrop = (form, record = null) => {
       return { error: diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }) };
     }
     const length = Number(record?.recordLength ?? record?.record_length);
-    const known = Number.isInteger(length) && length > 0;
-    const bases = start <= end ? end - start + 1 : known ? length - start + 1 + end : null;
+    const bases = windowBases(start, end, Number.isInteger(length) && length > 0 ? length : null);
     return { start, end, reverseComplement: listed.reverseComplement, bases, region: null };
   }
   const region = circularFormRegion(form, record);

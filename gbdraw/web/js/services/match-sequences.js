@@ -15,8 +15,9 @@ import { linearCardRegion } from './record-options.js';
 import { catalogUnitRecords, unitRecordsOf } from './linear-units.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
 import { t } from '../utils/i18n.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
-/** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from './linear-units.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
 
@@ -629,10 +630,15 @@ const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
  * source that its feature and match-popup consumers require.
  */
 /**
+ * The records of a request of schema 10 as the coverage reads them: `windows` is required at that schema, which Load
+ * promotes every stored request to before the coverage reads it.
+ * @typedef {{ recordKey: string, windows: readonly unknown[] }} CoverageRequestRecord
+ */
+/**
  * @param {{
  *   mode?: string,
  *   catalogFeatureState?: Record<string, any>,
- *   renderRequest?: Record<string, any>,
+ *   renderRequest?: { records: readonly CoverageRequestRecord[] } | null,
  *   comparisonSourceAvailability?: Record<string, any>[]
  * }} [options]
  */
@@ -643,8 +649,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   comparisonSourceAvailability
 } = {}) => {
   const normalizedMode = text(mode).toLowerCase();
-  const records = (Array.isArray(renderRequest?.records) ? renderRequest.records : []).map((record) => ({
-    recordKey: text(record?.recordKey), windows: Array.isArray(record?.windows) ? record.windows : []
+  const records = (renderRequest ? renderRequest.records : []).map(({ recordKey, windows }) => ({
+    recordKey: text(recordKey), windows
   }));
   const displayedRecords = records.map(({ recordKey }, recordIndex) => ({ recordIndex, recordKey }));
   const displayedIndexByKey = new Map(
@@ -1142,6 +1148,21 @@ const readComparisonRecords = async (file) => {
  * second persisted copy. Sources that were never supplied (for example, a
  * BLAST upload without its optional comparison FASTA) remain unavailable.
  */
+/**
+ * The drawn units a Linear Result set's catalog names (`catalogUnitRecords`), which key the set's sources: those of
+ * its items, one per Result, which name the same units. Null for a catalog without items, which keys no source.
+ * Items that name different units cannot key one set of sources (RESULT_INVALID).
+ * @param {Pick<FeatureCatalog, 'items'>} catalog
+ * @returns {LinearUnitRecords | null}
+ */
+export const catalogDrawnUnits = (catalog) => {
+  const [units = null, ...others] = catalog.items.map((item) => catalogUnitRecords(item.recordKeys, item.windowOf));
+  if (others.some((other) => JSON.stringify(other) !== JSON.stringify(units))) {
+    throw diagnosticError('RESULT_INVALID', { reason: 'CATALOG_UNITS' }, { stage: 'result-admission' });
+  }
+  return units;
+};
+
 /**
  * A Linear source is keyed by the drawn unit it stands for (`linear:record:<unit>`, as Python writes the catalog's):
  * with the catalog's `units`, each unit's card is found by its record key; without (a Session older than the

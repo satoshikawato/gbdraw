@@ -1,5 +1,5 @@
 // @ts-check
-import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
+import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   CIRCULAR_INPUT_FIELDS, INPUT_TYPES, circularInputSlots, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
   recordSourceOf, recordSourceSlotIds
@@ -1508,16 +1508,36 @@ export const linearWindowsPayload = (seq, { arranged }) => {
 };
 
 /**
- * A request record's windows as a crop form holds them: the one window its Start/End fields hold
- * (`cardCropWindow`), else the list it shows read-only (several windows, or one across the origin).
+ * The record-wide reverse complement a Linear card's request record writes beside `windows`, its windows as
+ * `linearWindowsPayload` writes them: the card's Reverse complement orients a record without windows; windows carry
+ * their own orientation (the card's crop folds it in).
+ * @param {Pick<RequestLinearSeq, 'region_reverse'>} seq @param {CanonicalRecord['windows']} windows
+ */
+const linearPresentationReverse = (seq, windows) => (windows.length ? false : Boolean(seq.region_reverse));
+
+/**
+ * A request record's windows and orientation as a crop form holds them: the one window its Start/End fields hold
+ * (`cardCropWindow`), else the list it shows read-only (several windows, or one across the origin), and `reverse`,
+ * the form's own Reverse complement, which orients a record without windows. A record-wide reverse complement over
+ * windows (Python allows it over one forward window, `RecordInput._validate_windows`) draws them reversed: it is
+ * folded into them (`writeCanonicalRecordReverseComplement`), so a listed window holds its own orientation, the one
+ * the request writes.
  * @param {RequestRecordView | null | undefined} record
  */
 const cropFieldsOfWindows = (record) => {
-  const windows = (record ? record.windows : []).map(({ start, end, reverseComplement, column }) => ({
-    start, end, reverseComplement, column
-  }));
-  const only = cardCropWindow(windows);
-  return { only, listed: only ? [] : windows };
+  const oriented = {
+    windows: (record ? record.windows : []).map(({ start, end, reverseComplement, column }) => ({
+      start, end, reverseComplement: Boolean(reverseComplement), column
+    })),
+    presentation: { reverseComplement: Boolean(record?.presentation?.reverseComplement) }
+  };
+  if (oriented.presentation.reverseComplement) writeCanonicalRecordReverseComplement(oriented, true);
+  const only = cardCropWindow(oriented.windows);
+  return {
+    only,
+    listed: only ? [] : oriented.windows,
+    reverse: only ? only.reverseComplement : oriented.presentation.reverseComplement
+  };
 };
 
 // The Linear card fields that hold a request record's selection, windows, and
@@ -1525,13 +1545,12 @@ const cropFieldsOfWindows = (record) => {
 // (`createLinearSeq`).
 /** @param {RequestRecordView | null | undefined} record */
 const linearSeqRecordFields = (record) => {
-  const { only, listed } = cropFieldsOfWindows(record);
+  const { only, listed, reverse } = cropFieldsOfWindows(record);
   return {
     region_record_id: canonicalRecordSelector(record) || '',
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
-    // A record's own reverse complement applies after its crop, as the window's does (`crop_record_windows`).
-    region_reverse: Boolean(only?.reverseComplement || record?.presentation?.reverseComplement),
+    region_reverse: reverse,
     windows: listed
   };
 };
@@ -1617,7 +1636,7 @@ const buildRecords = ({ drawing, filesData, resources }) => {
               ? (resolvedRows[index]?.canonicalColumn ?? null)
               : null
           }),
-          reverseComplement: windows.length ? false : Boolean(seq.region_reverse)
+          reverseComplement: linearPresentationReverse(seq, windows)
         }
       };
     });
@@ -4547,7 +4566,7 @@ export const linearCardRequestedCircular = ({ drawing, card, index, recordDispla
     record: {
       selector: linearCardSelector(card),
       windows,
-      presentation: { reverseComplement: windows.length ? false : Boolean(card.region_reverse) }
+      presentation: { reverseComplement: linearPresentationReverse(card, windows) }
     },
     recordDisplayRows,
     drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows)
@@ -7052,7 +7071,9 @@ export const projectCanonicalSessionRequest = ({
     renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
   ) ? records[0] : null;
   // The crop the Start/End fields hold, or the window across the origin the list holds (D-45).
-  const { only: circularPresentationRegion, listed: circularWindows } = cropFieldsOfWindows(circularPresentationRecord);
+  const {
+    only: circularPresentationRegion, listed: circularWindows, reverse: circularReverse
+  } = cropFieldsOfWindows(circularPresentationRecord);
   const form = {
     prefix: projectedOutputPrefix(
       renderRequest,
@@ -7072,8 +7093,7 @@ export const projectCanonicalSessionRequest = ({
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,
     circular_windows: circularWindows,
-    circular_reverse: Boolean(circularPresentationRegion?.reverseComplement
-      || circularPresentationRecord?.presentation?.reverseComplement),
+    circular_reverse: circularReverse,
     circular_record_label: circularPresentationRecord?.presentation?.label || '',
     circular_record_subtitle: circularPresentationRecord?.presentation?.subtitle || '',
     suppress_gc: renderRequest.mode === 'circular' ? overrides.show_gc === false : false,
@@ -7533,19 +7553,8 @@ const promoteRecordRegionsToWindows = (records) => {
     const record = /** @type {{ selector?: unknown, region?: unknown, windows?: unknown }} */ (value);
     const region = record.region;
     delete record.region;
-    if (!isPlainObject(region)) {
-      record.windows = [];
-      return;
-    }
-    if (region.selector != null && record.selector == null) record.selector = region.selector;
-    // A schema <= 9 region with the larger number first is the reversed span (v0.14.5); only a schema 10 window
-    // whose start is after its end crosses the origin, so the promoted window states the span in order (Python's
-    // `_decode_region`).
-    const { start, end } = region;
-    const reversed = typeof start === 'number' && typeof end === 'number' && start > end;
-    record.windows = [reversed
-      ? { start: end, end: start, reverseComplement: true, column: null }
-      : { start, end, reverseComplement: region.reverseComplement, column: null }];
+    if (isPlainObject(region) && region.selector != null && record.selector == null) record.selector = region.selector;
+    record.windows = storedRegionWindows(region);
   });
 };
 

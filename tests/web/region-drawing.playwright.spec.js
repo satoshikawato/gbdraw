@@ -184,4 +184,22 @@ test('A Circular Session whose record has one window across the origin loads it,
   const bytes = await download(page, 'Save Session', testInfo.outputPath('saved.gbdraw-session.json'));
   const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
   expect(shownSavedDrawing(saved).renderRequest.records[0].windows).toEqual([originWindow]);
+
+  // Review X1 of #1750: the listed window holds the record's orientation. The record popup's Reverse complement
+  // reads and writes that window, and Generate draws the window reversed.
+  await page.locator('.gbdraw-preview-surface [data-gbdraw-role^="record-definition"] text').first().click();
+  const reverse = page.locator('.preview-item-popup[role="dialog"]').getByRole('checkbox', { name: 'Reverse complement', exact: true });
+  await expect(reverse).not.toBeChecked();
+  await expect(reverse).toBeEnabled();
+  await reverse.check();
+  expect(await page.evaluate(() => {
+    const { circular_reverse, circular_windows } = window.__GBDRAW_APP__.form;
+    return { circular_reverse, circular_windows };
+  })).toEqual({ circular_reverse: false, circular_windows: [{ ...originWindow, reverseComplement: true }] });
+  await generate(page);
+  const committed = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+  expect([committed.records[0].windows, committed.records[0].presentation.reverseComplement])
+    .toEqual([[{ ...originWindow, reverseComplement: true }], false]);
+  await expect(page.locator('[data-circular-record-presentation] [data-record-window]'))
+    .toHaveText([/^16,000\u2013100 \(Reverse complement\)\s*670 bp$/]);
 });

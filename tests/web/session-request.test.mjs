@@ -30,7 +30,8 @@ const {
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   projectCanonicalSessionRequest,
-  readStoredRenderRequest
+  readStoredRenderRequest,
+  requestRecordPlan
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
@@ -1121,6 +1122,23 @@ Object.assign(state.form, originCircularProjection.config.form);
 assert.deepEqual(
   buildCanonicalRenderRequestRaw({ state, filesData: originCircularProjection.files }).renderRequest.records[0].windows,
   [{ start: 15, end: 3, reverseComplement: true, column: null }]
+);
+// Review X1 of #1750: Python allows a record-wide reverse complement over one forward window (the CLI records table
+// writes it for `16000-100:origin` with reverse_complement=true), which draws that window reversed. Load folds it
+// into the listed window, the one owner of a listed window's orientation, so Generate draws the record reversed.
+const reversedOriginCanonical = structuredClone(selectedCircularCanonical);
+reversedOriginCanonical.renderRequest.records[0].windows = [{ start: 15, end: 3, reverseComplement: false, column: null }];
+reversedOriginCanonical.renderRequest.records[0].presentation.reverseComplement = true;
+const reversedOriginProjection = projectCanonicalSessionRequest(reversedOriginCanonical);
+assert.deepEqual(
+  [reversedOriginProjection.config.form.circular_reverse, reversedOriginProjection.config.form.circular_windows],
+  [false, [{ start: 15, end: 3, reverseComplement: true, column: null }]]
+);
+Object.assign(state.form, reversedOriginProjection.config.form);
+const reversedOriginRecord = buildCanonicalRenderRequestRaw({ state, filesData: reversedOriginProjection.files }).renderRequest.records[0];
+assert.deepEqual(
+  [reversedOriginRecord.windows, reversedOriginRecord.presentation.reverseComplement],
+  [[{ start: 15, end: 3, reverseComplement: true, column: null }], false]
 );
 // An End typed before the Start keeps its meaning: refused (ORDER), with no window in the list.
 Object.assign(state.form, { circular_windows: [], circular_region_start: 15, circular_region_end: 3 });
@@ -3932,6 +3950,25 @@ assert.deepEqual(
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+// Review X1 of #1750, the Linear twin: a record-wide reverse complement over one window across the origin is that
+// window reversed. Load folds it into the window the card lists (the card's Reverse complement checkbox is hidden
+// while it lists one), and the request writes the reversed window.
+const reversedOriginLinear = structuredClone(linearCanonical);
+reversedOriginLinear.renderRequest.records[2].windows = [{ start: 15, end: 3, reverseComplement: false, column: null }];
+reversedOriginLinear.renderRequest.records[2].presentation.reverseComplement = true;
+const reversedOriginCard = projectCanonicalSessionRequest(reversedOriginLinear).files.linearSeqs[2];
+assert.deepEqual(
+  [reversedOriginCard.region_reverse, reversedOriginCard.windows],
+  [false, [{ start: 15, end: 3, reverseComplement: true, column: null }]]
+);
+const reversedOriginLinearRecord = requestRecordPlan({
+  drawing: { mode: 'linear', inputType: { value: 'genbank' }, linearRecordRows: [], linearRecordLayoutEnabled: { value: false } },
+  filesData: { linearSeqs: [reversedOriginCard] }
+})?.[0];
+assert.deepEqual(
+  [reversedOriginLinearRecord?.windows, reversedOriginLinearRecord?.presentation.reverseComplement],
+  [[{ start: 15, end: 3, reverseComplement: true, column: null }], false]
+);
 
 const pythonConfigCanonical = structuredClone(linearCanonical);
 delete pythonConfigCanonical.renderRequest.diagramOptions.configOverrides;
