@@ -2163,8 +2163,8 @@ def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
             is_circular=None if topology is None else topology == "circular",
             start_coordinate=first.display_start,
         ),
-        region=parse_region_spec(first.region) if first.region and not windowed else None,
-        windows=windows,
+        # One region is the record's span; a group's windows are its spans (a region passed replaces windows).
+        **({"windows": windows} if windowed or not first.region else {"region": parse_region_spec(first.region)}),
         presentation=RecordPresentation(
             label=record.record_label or None,
             subtitle=record.record_subtitle or None,

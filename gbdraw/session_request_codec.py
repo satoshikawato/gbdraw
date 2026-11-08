@@ -1457,8 +1457,12 @@ def _decode_record(
             else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
-        region=None if schema >= RECORD_WINDOWS_SCHEMA else _decode_region(item["region"], path=f"{path}.region"),
-        windows=_decode_windows(item["windows"], path=f"{path}.windows") if schema >= RECORD_WINDOWS_SCHEMA else (),
+        # A schema <= 9 region is the record's one span (D-09); schema 10 stores its windows.
+        **(
+            {"windows": _decode_windows(item["windows"], path=f"{path}.windows")}
+            if schema >= RECORD_WINDOWS_SCHEMA
+            else {"region": _decode_region(item["region"], path=f"{path}.region")}
+        ),
         presentation=presentation,
         display=display,
         record_key=(
