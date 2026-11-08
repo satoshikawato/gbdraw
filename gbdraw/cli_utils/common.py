@@ -23,6 +23,7 @@ from gbdraw.config.models.canvas import (
     canvas_padding_from_config,
 )
 from gbdraw.config.models.objects import (
+    SCALAR_AXIS_LABEL_STYLES,
     LEGEND_HIDDEN_ROWS_PATH,
     LEGEND_ROW_NAMES_PATH,
     LEGEND_ROW_ORDER_PATH,
@@ -539,6 +540,13 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
         help='Hide depth coverage axis ticks and labels.',
         action='store_false')
     parser.add_argument(
+        '--depth_axis_labels',
+        help=(
+            'Depth coverage axis labels: range (one [min-max] label for the axis; default) or numbered '
+            '(a number on each large tick).'
+        ),
+        choices=SCALAR_AXIS_LABEL_STYLES)
+    parser.add_argument(
         '--depth_large_tick_interval',
         help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
         type=argparse_float)
@@ -660,6 +668,13 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
         dest='gc_content_show_ticks',
         help='Hide GC content percent-mode axis ticks and labels.',
         action='store_false')
+    parser.add_argument(
+        '--gc_content_axis_labels',
+        help=(
+            'GC content percent-mode axis labels: range (one [min-max] label for the axis; default) or numbered '
+            '(a number on each large tick).'
+        ),
+        choices=SCALAR_AXIS_LABEL_STYLES)
 
 
 def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:

@@ -47,6 +47,23 @@ def _normalize_curve_tension(value: Any) -> float:
     return tension
 
 
+# How a depth or GC Percent axis is labelled: one ``[min–max]`` range label (the default, Owner 2026-11-08), or a
+# number on each large tick that keeps one line apart from the others.
+ScalarAxisLabelStyle = Literal["range", "numbered"]
+SCALAR_AXIS_LABEL_STYLES: tuple[ScalarAxisLabelStyle, ...] = get_args(ScalarAxisLabelStyle)
+
+
+def _scalar_axis_label_style(value: object, *, path: str) -> ScalarAxisLabelStyle:
+    normalized = str(value).strip().lower()
+    for style in SCALAR_AXIS_LABEL_STYLES:
+        if normalized == style:
+            return style
+    raise ValidationError(
+        f"{path} must be one of: {', '.join(SCALAR_AXIS_LABEL_STYLES)}",
+        diagnostic={"code": "INPUT_INVALID", "configPath": path},
+    )
+
+
 def _normalize_gc_content_mode(value: Any) -> GcContentMode:
     normalized = str(value if value is not None else "deviation").strip().lower()
     if normalized not in _GC_CONTENT_MODES:
@@ -115,6 +132,7 @@ class ObjectsGcContentConfig:
     large_tick_interval: float | None
     small_tick_interval: float | None
     tick_font_size: float | None
+    axis_labels: ScalarAxisLabelStyle
     percent_background_color: str
     percent_background_opacity: float
     percent_border_color: str
@@ -138,7 +156,8 @@ class ObjectsGcContentConfig:
             large_tick_interval=_optional_gc_content_positive(d.get("large_tick_interval", 20)),
             small_tick_interval=_optional_gc_content_positive(d.get("small_tick_interval", None)),
             tick_font_size=_optional_gc_content_positive(d.get("tick_font_size", None)),
-            percent_background_color=str(d.get("percent_background_color", "#737373")),
+            axis_labels=_scalar_axis_label_style(d.get("axis_labels", "range"), path="objects.gc_content.axis_labels"),
+            percent_background_color=str(d.get("percent_background_color", "#e5e5e5")),
             percent_background_opacity=_gc_content_opacity(d.get("percent_background_opacity", 1.0)),
             percent_border_color=str(d.get("percent_border_color", "#4b5563")),
             percent_border_width=_gc_content_nonnegative_float(d.get("percent_border_width", 0.8)),
@@ -240,6 +259,7 @@ class ObjectsDepthConfig:
     small_tick_interval: float | None
     tick_font_size: float | None
     share_axis: bool
+    axis_labels: ScalarAxisLabelStyle
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDepthConfig":
@@ -261,6 +281,7 @@ class ObjectsDepthConfig:
             small_tick_interval=_optional_depth_bound(d.get("small_tick_interval", None)),
             tick_font_size=_optional_depth_bound(d.get("tick_font_size", None)),
             share_axis=_bool_from_config(d.get("share_axis", False), default=False),
+            axis_labels=_scalar_axis_label_style(d.get("axis_labels", "range"), path="objects.depth.axis_labels"),
         )
 
 

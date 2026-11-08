@@ -531,6 +531,8 @@ def test_a_depth_track_counts_its_area_and_axis_not_its_band(monkeypatch: pytest
         _assemble(
             depth_table=depth, depth_window=100, depth_step=100,
             circular_track_slots=["features:features", "depth:depth"], circular_track_axis_index=1,
+            # Numbered tick labels reach past the band; the default range label sits inside it.
+            overrides={"objects.depth.axis_labels": "numbered"},
         ),
     )
     slot = _slot(slots, "depth")

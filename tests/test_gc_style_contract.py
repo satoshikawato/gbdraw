@@ -27,6 +27,7 @@ def _gc_content_config(*, stroke_color: str, stroke_width: float) -> SimpleNames
         fill_opacity=0.75,
         mode="deviation",
         font_family="Liberation Sans",
+        percent_background_color="#e5e5e5",
     )
 
 

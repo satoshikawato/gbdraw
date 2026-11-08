@@ -24,8 +24,14 @@ LEGACY_FEATURE_TYPES: tuple[str, ...] = (
 LEGACY_FEATURE_SHAPES: Mapping[str, str] = MappingProxyType({"repeat_region": "rectangle"})
 # The Circular multi-record size modes an older writer wrote under another name.
 LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES: Mapping[str, str] = MappingProxyType({"sqrt": "auto"})
+# The depth and GC content axes of a config written before they had a label style (v0.14.5 and earlier) drew a
+# number on each large tick: the config sections, by name, and the style they read as (D-16, 2026-11-08).
+LEGACY_SCALAR_AXIS_LABEL_SECTIONS: tuple[str, ...] = ("depth", "gc_content")
+LEGACY_SCALAR_AXIS_LABELS = "numbered"
 
 __all__ = [
+    "LEGACY_SCALAR_AXIS_LABELS",
+    "LEGACY_SCALAR_AXIS_LABEL_SECTIONS",
     "LEGACY_FEATURE_SHAPES",
     "LEGACY_FEATURE_TYPES",
     "LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES",

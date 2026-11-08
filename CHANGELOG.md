@@ -412,6 +412,30 @@ write-up of a release.
   at least one setting instead of stopping at once with every row "not
   computed". Such a run can take up to the limit longer; the limits and their
   messages are unchanged (OV-2527).
+- Changed: a depth axis and a GC content axis in Percent mode print one range
+  label, such as `[0–80x]` or `[10–55%]` (`[1–1000x, log]` on a log-scaled
+  depth axis), instead of a number on each large tick; every tick mark is still
+  drawn. In Circular diagrams the label runs along the circle inside the track,
+  near its outer edge, from just clockwise of the axis; in Linear diagrams it
+  sits left of the axis, centred on the track. A Circular depth ring with the
+  range label no longer reserves half a line outside its band. The numbered
+  ticks stay a setting: `--depth_axis_labels numbered` and
+  `--gc_content_axis_labels numbered` on the command line, or
+  `objects.depth.axis_labels` and `objects.gc_content.axis_labels` set to
+  `"numbered"` in a config or in Python.
+- Fixed: numbered tick labels of a depth axis or of a GC content axis in Percent
+  mode no longer overlap. When two labels would be closer than one line of
+  their font, the axis keeps the label of its upper bound, then its lower
+  bound, then the others from the bottom up; every tick is still drawn. A
+  10-55 % axis with a tick every 10 % drew `50%` on top of `55%`, and a
+  narrow axis drew every label on the next (OV-2763). In Circular and Linear
+  diagrams, from the command line, Python and the Web app.
+- Changed: the band that GC content in Percent mode draws behind its fill
+  (`objects.gc_content.percent_background_color`) is light gray `#e5e5e5`
+  instead of dark gray `#737373`, so the GC content is the darkest part of the
+  track instead of the empty part of the scale (OV-2759). A saved Session
+  keeps the color it was saved with, and a config or option that sets the
+  color keeps it.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-03
 

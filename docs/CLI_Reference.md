@@ -155,6 +155,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--depth_min DEPTH_MIN] [--depth_max DEPTH_MAX]
               [--depth_log_scale] [--no_depth_log_scale] [--show_depth_axis]
               [--hide_depth_axis] [--show_depth_ticks] [--hide_depth_ticks]
+              [--depth_axis_labels {range,numbered}]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [-l LEGEND]
@@ -199,6 +200,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
+              [--gc_content_axis_labels {range,numbered}]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS] [--legend_rows FILE]
               [--legend_box_size LEGEND_BOX_SIZE]
@@ -483,6 +485,10 @@ options:
   --hide_depth_axis     Hide depth coverage axis line, ticks, and labels.
   --show_depth_ticks    Show depth coverage axis ticks and labels.
   --hide_depth_ticks    Hide depth coverage axis ticks and labels.
+  --depth_axis_labels {range,numbered}
+                        Depth coverage axis labels: range (one [min-max] label
+                        for the axis; default) or numbered (a number on each
+                        large tick).
   --depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL
                         Depth coverage large tick interval in x coverage units
                         (optional; must be > 0).
@@ -653,6 +659,10 @@ options:
                         Show GC content percent-mode axis ticks and labels.
   --hide_gc_content_ticks
                         Hide GC content percent-mode axis ticks and labels.
+  --gc_content_axis_labels {range,numbered}
+                        GC content percent-mode axis labels: range (one [min-
+                        max] label for the axis; default) or numbered (a
+                        number on each large tick).
   --gc_skew_width GC_SKEW_WIDTH
                         GC skew track width for circular mode (in px; must be
                         > 0).
@@ -1175,6 +1185,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
+              [--gc_content_axis_labels {range,numbered}]
               [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
               [--depth_track_color COLOR [COLOR ...]]
@@ -1188,6 +1199,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_max DEPTH_MAX] [--depth_log_scale]
               [--no_depth_log_scale] [--show_depth_axis] [--hide_depth_axis]
               [--show_depth_ticks] [--hide_depth_ticks]
+              [--depth_axis_labels {range,numbered}]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [--align_center]
@@ -1468,6 +1480,10 @@ options:
                         Show GC content percent-mode axis ticks and labels.
   --hide_gc_content_ticks
                         Hide GC content percent-mode axis ticks and labels.
+  --gc_content_axis_labels {range,numbered}
+                        GC content percent-mode axis labels: range (one [min-
+                        max] label for the axis; default) or numbered (a
+                        number on each large tick).
   --depth_track DEPTH [DEPTH ...]
                         Repeatable logical depth track. Provide one file for
                         all records or one file per input record.
@@ -1513,6 +1529,10 @@ options:
   --hide_depth_axis     Hide depth coverage axis line, ticks, and labels.
   --show_depth_ticks    Show depth coverage axis ticks and labels.
   --hide_depth_ticks    Hide depth coverage axis ticks and labels.
+  --depth_axis_labels {range,numbered}
+                        Depth coverage axis labels: range (one [min-max] label
+                        for the axis; default) or numbered (a number on each
+                        large tick).
   --depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL
                         Depth coverage large tick interval in x coverage units
                         (optional; must be > 0).

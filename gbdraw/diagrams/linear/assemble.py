@@ -23,7 +23,6 @@ import copy
 from dataclasses import dataclass, replace
 from functools import partial
 import logging
-import math
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Mapping, NamedTuple, Sequence, cast
 
@@ -146,15 +145,16 @@ from ...linear_comparison import (
     search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
 )
+from ...layout.circular_depth_axis import DepthAxisSource
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
+    ScalarAxisLabels,
     _depth_axis_bounds,
-    _format_depth_tick,
-    format_percent_tick,
-    scalar_axis_tick_values,
+    depth_axis_labels,
+    percent_axis_labels,
 )
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...labels.linear_types import LinearLabel
@@ -908,11 +908,14 @@ def _slot_body_band(slot: LinearResolvedTrack) -> VerticalBand:
     return VerticalBand(-float(slot.top_extent), float(slot.bottom_extent))
 
 
-def _axis_text_overhang(axis_config: object, track_height: float) -> float:
-    if not bool(getattr(axis_config, "show_axis", False)):
+def _axis_text_overhang(axis_config: DepthAxisSource, track_height: float) -> float:
+    """How far a Linear scalar axis paints above and below its track: half its stroke, or half a label line when
+    numbered tick labels sit centred on the top and bottom ticks (the range label sits centred on the track)."""
+
+    if not bool(axis_config.show_axis):
         return 0.0
     axis_stroke = 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX
-    if not bool(getattr(axis_config, "show_ticks", False)):
+    if not bool(axis_config.show_ticks) or axis_config.axis_labels != "numbered":
         return axis_stroke
     return max(
         axis_stroke,
@@ -1696,44 +1699,44 @@ def _linear_scalar_axis_left_room(
     axis_px = 0.0
     tick_labels_px = 0.0
     for slot in slots:
-        labels: list[str] = []
-        axis_config: object
+        axis_labels: ScalarAxisLabels
         if slot.renderer == "depth":
             depth_track = depth_by_index.get(_depth_slot_track_index(slot))
             if depth_track is None or not bool(depth_track.config.show_axis):
                 continue
-            axis_config = depth_track.config
-            min_depth = depth_track.config.min_depth
-            axis_min, axis_max = _depth_axis_bounds(depth_track.df, min_depth, depth_track.config.max_depth)
-            labels = [
-                _format_depth_tick(value)
-                for value in scalar_axis_tick_values(
-                    axis_min,
-                    axis_max,
-                    show_ticks=bool(depth_track.config.show_ticks),
-                    large_tick_interval=depth_track.config.large_tick_interval,
-                )
-                if not (min_depth is None and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9))
-            ]
+            depth_config = depth_track.config
+            font_size = linear_scalar_axis_tick_font_size_px(depth_config, float(slot.height))
+            axis_min, axis_max = _depth_axis_bounds(depth_track.df, depth_config.min_depth, depth_config.max_depth)
+            axis_labels = depth_axis_labels(
+                axis_min,
+                axis_max,
+                label_style=depth_config.axis_labels,
+                min_depth=depth_config.min_depth,
+                normalize=bool(depth_config.normalize),
+                show_ticks=bool(depth_config.show_ticks),
+                large_tick_interval=depth_config.large_tick_interval,
+                length_px=float(slot.height),
+                label_line_px=font_size,
+            )
         elif slot.renderer == "dinucleotide_content":
             gc_slot_config = gc_config_of(slot.params, depth_by_index)
             if str(gc_slot_config.mode) != "percent" or not bool(gc_slot_config.show_axis):
                 continue
-            axis_config = gc_slot_config
-            labels = [
-                format_percent_tick(value)
-                for value in scalar_axis_tick_values(
-                    float(0.0 if gc_slot_config.min_percent is None else gc_slot_config.min_percent),
-                    float(100.0 if gc_slot_config.max_percent is None else gc_slot_config.max_percent),
-                    show_ticks=bool(gc_slot_config.show_ticks),
-                    large_tick_interval=gc_slot_config.large_tick_interval,
-                )
-            ]
+            font_size = linear_scalar_axis_tick_font_size_px(gc_slot_config, float(slot.height))
+            axis_labels = percent_axis_labels(
+                float(0.0 if gc_slot_config.min_percent is None else gc_slot_config.min_percent),
+                float(100.0 if gc_slot_config.max_percent is None else gc_slot_config.max_percent),
+                label_style=gc_slot_config.axis_labels,
+                show_ticks=bool(gc_slot_config.show_ticks),
+                large_tick_interval=gc_slot_config.large_tick_interval,
+                length_px=float(slot.height),
+                label_line_px=font_size,
+            )
         else:
             continue
         axis_px = max(axis_px, 0.5 * LINEAR_SCALAR_AXIS_STROKE_PX)
-        font_size = linear_scalar_axis_tick_font_size_px(axis_config, float(slot.height))
-        for label in labels:
+        texts = [tick.label for tick in axis_labels.ticks] + [axis_labels.range_label]
+        for label in (text for text in texts if text is not None):
             width, _height = calculate_svg_bbox_dimensions(
                 label,
                 cfg.objects.text.font_family,

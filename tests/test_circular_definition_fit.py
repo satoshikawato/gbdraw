@@ -377,10 +377,10 @@ def test_the_room_kept_inside_names_every_row_and_offers_only_the_gc_rows(tmp_pa
     depth.write_text("".join(f"NC_001416.1\t{position}\t{10 + position % 7}\n" for position in range(1, 48503, 50)))
     error = _lambda_resolved_overlaps(tmp_path, "--depth_track", str(depth))
     message = str(error)
-    assert "90.8px are kept for the tracks inside it ('depth', 'gc_content', 'gc_skew')" in message
+    assert "86.6px are kept for the tracks inside it ('depth', 'gc_content', 'gc_skew')" in message
     assert "turn off or narrow the GC content and GC skew tracks" in message
     context = serialize_web_error(error, operation="generate", stage="render")["context"]
-    assert (context["keptInsidePx"], context["keptInsideTracks"]) == (91, "gc_content,gc_skew")
+    assert (context["keptInsidePx"], context["keptInsideTracks"]) == (87, "gc_content,gc_skew")
     assert "slotTrack" not in context
 
 
