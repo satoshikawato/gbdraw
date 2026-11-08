@@ -1971,3 +1971,58 @@ test('Legend row edits and canvas padding read back from the Source recipe (R12,
     assert.equal(recipe.available, false, JSON.stringify(set));
   }
 });
+
+// PD-OI-122: a window across the origin is written `START-END:origin` (before `:rc`), on the command line and in the
+// records table, so the CLI draws the window the Web drew; a records table writes every window of a record, its rows
+// sharing a record_group value. Python's region parser reads each written region back as the request's window.
+test('the Source recipe writes a window across the origin with :origin and every window of a record', async () => {
+  const genbank = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_comparison_shared_block.gb'), 'utf8');
+  const windows = [
+    { start: 2501, end: 800, reverseComplement: true, column: null },
+    { start: 1001, end: 1600, reverseComplement: false, column: null }
+  ];
+  const parsedBack = (regions) => evaluatePython([
+    'from gbdraw.io.regions import parse_region_spec',
+    'result = [[spec.start, spec.end, spec.reverse_complement] for spec in map(parse_region_spec, payload)]'
+  ].join('\n'), regions);
+  const expected = windows.map(({ start, end, reverseComplement }) => [start, end, reverseComplement]);
+  // One window across the origin goes on the command line; a record drawn in several windows needs a records table.
+  for (const [isCircular, drawn] of [[null, windows.slice(0, 1)], [true, windows.slice(0, 1)], [null, windows]]) {
+    const session = canonical({
+      mode: 'linear',
+      records: [{
+        recordKey: 'r3c',
+        cardinality: 'exactly_one',
+        source: { kind: 'genbank', resourceId: 'source' },
+        selector: { kind: 'recordId', value: 'R3c' },
+        windows: drawn,
+        presentation: presentation(),
+        // A topology the Web sets is written in a records table.
+        display: { isCircular, startCoordinate: null }
+      }],
+      resources: { source: resource('genbank', 'shared.gb', genbank) },
+      webFiles: { resourceOriginalNames: { source: 'shared.gb' } }
+    });
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    const table = recipe.generatedFiles.find((file) => file.name === 'records.tsv');
+    let regions;
+    if (!table) {
+      assert.equal(isCircular, null);
+      assert.equal(drawn.length, 1);
+      regions = recipe.args.flatMap((token, index) => (token === '--region' ? [recipe.args[index + 1]] : []));
+      assert.deepEqual(regions, ['R3c:2501-800:origin:rc']);
+    } else {
+      const [header, ...lines] = table.data.trim().split('\n').map((line) => line.split('\t'));
+      const column = (name) => lines.map((line) => line[header.indexOf(name)]);
+      regions = column('region');
+      assert.deepEqual(regions, ['2501-800:origin:rc', '1001-1600'].slice(0, drawn.length));
+      assert.deepEqual(column('record_group'), drawn.length > 1 ? ['1', '1'] : [undefined]);
+      assert.deepEqual(column('topology'), drawn.map(() => (isCircular ? 'circular' : '')));
+    }
+    assert.deepEqual(await parsedBack(regions), expected.slice(0, drawn.length));
+    await assertCliParserAccepts(recipe);
+    const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+    await materializeAndRunRecipe(session, recipe, info, `origin window ${drawn.length} ${isCircular}`);
+  }
+});

@@ -3160,14 +3160,32 @@ def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_pa
     assert "--reverse_complement" not in args
 
 
-def test_gui_only_linear_session_refuses_a_window_across_the_origin_on_the_command_line(tmp_path: Path) -> None:
-    """A region string with the larger number first is a reversed span, so a window across the origin has no spelling."""
+@pytest.mark.parametrize(
+    ("windows", "regions"),
+    [
+        # One window across the origin is the card's only window (its crop fields cannot hold it).
+        ([{"start": 16001, "end": 500, "reverseComplement": False, "column": None}], ["#1:16001-500:origin"]),
+        (
+            [
+                {"start": 16001, "end": 500, "reverseComplement": True, "column": None},
+                {"start": 6001, "end": 8000, "reverseComplement": False, "column": None},
+            ],
+            ["#1:16001-500:origin:rc", "#1:6001-8000"],
+        ),
+    ],
+    ids=["one-window", "two-windows"],
+)
+def test_gui_only_linear_session_writes_a_window_across_the_origin_with_origin(
+    tmp_path: Path, windows: list[dict[str, object]], regions: list[str]
+) -> None:
+    """``:origin`` spells a window across the origin on the command line (PD-OI-122); it reads back as that window."""
 
-    with pytest.raises(ValidationError, match="across the origin"):
-        _windows_cli_args(tmp_path, [
-            {"start": 16001, "end": 500, "reverseComplement": False, "column": None},
-            {"start": 6001, "end": 8000, "reverseComplement": False, "column": None},
-        ])
+    args = _windows_cli_args(tmp_path, windows)
+    written = [args[index + 1] for index, token in enumerate(args) if token == "--region"]
+    assert written == regions
+    assert [(spec.start, spec.end, spec.reverse_complement) for spec in map(parse_region_spec, written)] == [
+        (window["start"], window["end"], window["reverseComplement"]) for window in windows
+    ]
 
 
 def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: Path) -> None:

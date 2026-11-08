@@ -1781,6 +1781,12 @@ def _apply_provenance_annotations(
         ).name
 
 
+def _drawn_circular(display: RecordDisplayOptions, topology: str) -> bool:
+    """Whether a record is drawn as circular: its display option, else the topology its file states (D-28)."""
+
+    return display.is_circular if display.is_circular is not None else topology == "circular"
+
+
 @dataclass
 class _PendingRecord:
     """One resolved record before its windows expand: its drawn records so far and how to finish them."""
@@ -1833,7 +1839,13 @@ def _expand_record_windows(
                 )
             windows = tuple(RecordWindow.from_region(spec) for spec in specs)
             try:
-                units = crop_record_windows(units[0], specs, item.pending_reverse, log=logger)
+                units = crop_record_windows(
+                    units[0],
+                    specs,
+                    item.pending_reverse,
+                    log=logger,
+                    circular=_drawn_circular(item.provenance.display, item.provenance.detected_topology),
+                )
             except ValueError as exc:
                 raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
         elif item.pending_reverse:
@@ -1959,11 +1971,7 @@ def resolve_record_inputs(
                         [window.region() for window in record_input.windows],
                         reverse,
                         log=logger,
-                        circular=(
-                            record_input.display.is_circular
-                            if record_input.display.is_circular is not None
-                            else detected_topology(source_record, source_kind) == "circular"
-                        ),
+                        circular=_drawn_circular(record_input.display, detected_topology(source_record, source_kind)),
                     )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc

@@ -654,7 +654,7 @@ def read_records_table(path: str) -> RecordsTable:
                 )
             seen_grid_cells.add(key)
         region = values.get("region", "").strip()
-        _validate_records_table_region(table_path, row.row_number, region)
+        _validate_records_table_region(table_path, row.row_number, region, values.get("record_id", "").strip())
         topology = values.get("topology", "").strip().lower()
         if topology not in {"", "auto", "circular", "linear"}:
             raise ValidationError(_cell_error(
@@ -1013,18 +1013,20 @@ def _validate_records_table_region(
     table_path: Path,
     row_number: int,
     raw_region: str,
+    record_id: str,
 ) -> None:
     if not raw_region:
         return
     try:
         parsed = parse_region_spec(raw_region)
     except ValueError as exc:
+        record = f" of record {record_id}" if record_id else ""
         raise ValidationError(
             _cell_error(
                 table_path,
                 row_number,
                 "region",
-                f"invalid region value {raw_region!r}: {exc}",
+                f"invalid region value {raw_region!r}{record}: {exc}",
             )
         ) from exc
     if (

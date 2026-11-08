@@ -91,7 +91,7 @@ from gbdraw.features.placement import (
 )
 from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
-from gbdraw.io.regions import RecordWindow, RegionSpec
+from gbdraw.io.regions import RecordWindow, RegionSpec, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
@@ -1554,7 +1554,7 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     end = _integer(region["end"], f"{path}.end")
     reverse = _boolean(region["reverseComplement"], f"{path}.reverseComplement")
     selector_text = selector.raw if selector is not None else ""
-    coordinate_text = f"{start}-{end}" + (":rc" if reverse else "")
+    coordinate_text = region_text(start, end, reverse)
     raw = f"{selector_text}:{coordinate_text}" if selector_text else coordinate_text
     return RegionSpec(
         raw=raw,

@@ -467,8 +467,8 @@ def test_a_window_across_the_origin_of_a_linear_record_is_refused() -> None:
     record = RecordInput(GenBankInputSource(MITO), windows=(_ACROSS,), display=RecordDisplayOptions(is_circular=False))
     with pytest.raises(ValidationError, match="crosses the origin of a linear record"):
         resolve_request_records(LinearDiagramRequest(records=(record,)))
-    with pytest.raises(ValidationError, match="across the origin"):
-        _ = record.region
+    # Read back, the window is the region that writes it (``:origin``, PD-OI-122).
+    assert record.region is not None and record.region.raw == "16000-1000:origin"
 
 
 def test_the_ruler_and_caption_of_a_window_across_the_origin_name_source_bases(tmp_path: Path) -> None:

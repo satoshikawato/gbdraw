@@ -24,17 +24,29 @@ from ..core.record_metadata import (
 )
 from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
+from ..layout.record_transform import detected_topology
 from .record_select import RecordSelector, reverse_records
 
 logger = logging.getLogger(__name__)
 
 _REGION_COORD_RE = re.compile(
     rf"(?P<start>{ASCII_NONNEGATIVE_INTEGER_PATTERN})(?:\.\.|-)(?P<end>{ASCII_NONNEGATIVE_INTEGER_PATTERN})"
-    r"(?::(?P<strand>rc|rev|reverse|minus|-))?$",
+    r"(?P<origin>:origin)?(?::(?P<strand>rc|rev|reverse|minus|-))?$",
     re.IGNORECASE,
 )
 
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
+
+
+def region_text(start: int, end: int, reverse_complement: bool) -> str:
+    """The region string of a span without a record selector: the one writer of the ``START-END[:origin][:rc]`` form.
+
+    A span whose ``start`` is after its ``end`` runs across the origin and is
+    written with ``:origin`` (PD-OI-122); without it the larger number first
+    reads as the reversed span.
+    """
+
+    return f"{start}-{end}" + (":origin" if start > end else "") + (":rc" if reverse_complement else "")
 
 
 @dataclass(frozen=True)
@@ -112,14 +124,12 @@ class RecordWindow:
     def region(self) -> RegionSpec:
         """The crop this window draws, as an unqualified region spec.
 
-        The spec of a window across the origin keeps ``start`` after ``end``; its
-        ``raw`` text is not a region string (a region string with the larger
-        number first reads as a reversed span), so only the crop reads it.
+        The spec of a window across the origin keeps ``start`` after ``end``, and
+        its ``raw`` text says ``:origin`` (:func:`region_text`).
         """
 
-        coordinates = f"{self.start}-{self.end}" + (":rc" if self.reverse_complement else "")
         return RegionSpec(
-            raw=coordinates,
+            raw=region_text(self.start, self.end, self.reverse_complement),
             file_selector=None,
             record_id=None,
             record_index=None,
@@ -151,8 +161,9 @@ def parse_region_spec(spec: str) -> RegionSpec:
         end = parse_ascii_nonnegative_integer(match.group("end"))
     if match is None or start is None or end is None:
         raise ValueError(
-            "Invalid region spec: '{0}'. Expected format: record_id:start-end[:rc], "
-            "#index:start-end[:rc], or file:record_selector:start-end[:rc].".format(text)
+            "Invalid region spec: '{0}'. Expected format: record_id:start-end[:origin][:rc], "
+            "#index:start-end[:origin][:rc], or file:record_selector:start-end[:origin][:rc]; "
+            ":origin marks a span across the origin of a circular record.".format(text)
         )
 
     if start < 1 or end < 1:
@@ -162,10 +173,6 @@ def parse_region_spec(spec: str) -> RegionSpec:
     strand_raw = match.group("strand")
     if strand_raw:
         reverse = True
-
-    if start > end:
-        reverse = True
-        start, end = end, start
 
     selector_text = text[: match.start()].rstrip(":")
     file_selector = None
@@ -201,6 +208,18 @@ def parse_region_spec(spec: str) -> RegionSpec:
                 )
         else:
             record_id = _extract_parenthetical(record_selector) or record_selector
+
+    if match.group("origin"):
+        # A span across the origin keeps its start after its end (D-28); the crop checks the record is circular.
+        if start <= end:
+            raise ValueError(
+                f"Region '{text}' is marked :origin, but its start ({start}) is not greater than its end ({end}); "
+                "a span across the origin starts after it ends."
+            )
+    elif start > end:
+        # Without :origin the larger number first is the reversed span, as in v0.14.5.
+        reverse = True
+        start, end = end, start
 
     return RegionSpec(
         raw=text,
@@ -628,12 +647,20 @@ def crop_then_reverse_records(
     """Crop each record to the windows the specs select, then orient them (:func:`crop_record_windows`).
 
     Returns each record's drawn windows (one record when no spec selects it)
-    and the indexes of the cropped records.
+    and the indexes of the cropped records. A record in memory is circular
+    when its ``topology`` annotation says so, which a window across the origin
+    (``:origin``) needs.
     """
 
     assignments = assign_region_specs(records, specs) if specs else {}
     oriented = [
-        crop_record_windows(record, assignments.get(index, ()), flag, log=log)
+        crop_record_windows(
+            record,
+            assignments.get(index, ()),
+            flag,
+            log=log,
+            circular=detected_topology(record, "memory") == "circular",
+        )
         for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
     ]
     return oriented, frozenset(assignments)
@@ -649,4 +676,5 @@ __all__ = [
     "crop_then_reverse_records",
     "parse_region_spec",
     "parse_region_specs",
+    "region_text",
 ]

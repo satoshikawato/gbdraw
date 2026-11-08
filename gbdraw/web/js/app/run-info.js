@@ -721,11 +721,7 @@ const validateCurrentSemanticCoverage = (request) => {
         record.selector.kind === 'recordIndex' ? ['kind', 'index'] : ['kind', 'value']
       );
     }
-    // The CLI draws one window of a record (`--region`, a records table's region); a record drawn in several
-    // windows waits for the records-table column that groups them (D-32).
-    if (record.windows.length > 1) {
-      throw recipeUnavailable(msg('semantic field "{field}" has no current CLI projection.'), { field: `${path}.windows` });
-    }
+    // A record drawn in several windows is written as records-table rows that share a record_group value (D-32).
     record.windows.forEach((window, windowIndex) => {
       coverObject(coverage, window, `${path}.windows[${windowIndex}]`, ['start', 'end', 'reverseComplement', 'column']);
     });
@@ -941,6 +937,16 @@ const layoutRows = (request, records) => {
 };
 
 /**
+ * The region string of a request window without its record (`gbdraw/io/regions.py` `region_text`, which reads it
+ * back): a window whose start is after its end runs across the origin and says `:origin` (PD-OI-122); without it the
+ * larger number first is the reversed span.
+ * @param {{ start: number, end: number, reverseComplement: boolean }} window
+ */
+const regionText = ({ start, end, reverseComplement }) => (
+  `${Number(start)}-${Number(end)}${Number(start) > Number(end) ? ':origin' : ''}${reverseComplement ? ':rc' : ''}`
+);
+
+/**
  * @param {unknown} value
  * @returns {number | ''}
  */
@@ -975,7 +981,8 @@ const appendInputArgs = async (args, request, files) => {
   const sourceKeys = sourcePaths.map((paths) => paths.join('\0'));
   const hasDuplicateSources = new Set(sourceKeys).size !== sourceKeys.length;
   const recordNeedsTable = records.some((record) => (
-    (record.display?.isCircular != null || record.display?.startCoordinate != null)
+    record.windows.length > 1
+    || (record.display?.isCircular != null || record.display?.startCoordinate != null)
     || gridCoordinate(record.presentation?.gridColumn) !== ''
     || (request.mode === 'circular' && (
       record.windows.length > 0
@@ -1037,26 +1044,37 @@ const appendInputArgs = async (args, request, files) => {
 
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
-    const columns = [...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
-    const rows = records.map((record, index) => {
-      const [region = null] = record.windows;
+    // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
+    const grouped = records.some((record) => record.windows.length > 1);
+    const columns = [
+      ...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column',
+      'topology', 'display_start', ...(grouped ? ['record_group'] : [])
+    ];
+    const rows = records.flatMap((record, index) => {
       const selector = selectorText(record.selector);
       const row = {
         ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
         record_label: String(record.presentation?.label || ''),
         record_subtitle: String(record.presentation?.subtitle || ''),
         record_id: selector,
-        region: region
-          ? `${Number(region.start)}-${Number(region.end)}${region.reverseComplement ? ':rc' : ''}`
-          : '',
-        reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
+        region: '',
+        reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
         row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
         column: gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
-        display_start: record.display?.startCoordinate ?? ''
+        display_start: record.display?.startCoordinate ?? '',
+        ...(grouped ? { record_group: '' } : {})
       };
-      return row;
+      if (record.windows.length <= 1) {
+        return [{ ...row, region: record.windows.length ? regionText(record.windows[0]) : '' }];
+      }
+      return record.windows.map((window) => ({
+        ...row,
+        region: regionText(window),
+        column: gridCoordinate(window.column) || row.column,
+        record_group: String(index + 1)
+      }));
     });
     const tablePath = files.generatedTextPath(
       'records.tsv',
@@ -1083,10 +1101,7 @@ const appendInputArgs = async (args, request, files) => {
   }
   records.forEach((record, index) => {
     const selector = selectorText(record.selector) || `#${index + 1}`;
-    record.windows.forEach((window) => args.push(
-      '--region',
-      `${selector}:${Number(window.start)}-${Number(window.end)}${window.reverseComplement ? ':rc' : ''}`
-    ));
+    record.windows.forEach((window) => args.push('--region', `${selector}:${regionText(window)}`));
   });
   const rows = requestedRows.length
     ? requestedRows

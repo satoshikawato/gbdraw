@@ -1814,13 +1814,17 @@ options:
   --normalize_length    Normalize record length (experimental; default:
                         False).
   --region REGION       Crop a region (repeatable). Format: record_id:start-
-                        end[:rc], #index:start-end[:rc], or
-                        file:record_selector:start-end[:rc]. Coordinates are
-                        1-based inclusive. For multiple records without
-                        selectors, provide one spec per record in input order
-                        (file order, then record order within each file).
-                        Repeat --region for one record to draw several windows
-                        of it side by side in one row; windows may overlap.
+                        end[:origin][:rc], #index:start-end[:origin][:rc], or
+                        file:record_selector:start-end[:origin][:rc].
+                        Coordinates are 1-based inclusive. A start greater
+                        than the end without :origin is the reversed span;
+                        with :origin it is a window across the origin of a
+                        circular record, from start through the origin to end.
+                        For multiple records without selectors, provide one
+                        spec per record in input order (file order, then
+                        record order within each file). Repeat --region for
+                        one record to draw several windows of it side by side
+                        in one row; windows may overlap.
   --record_id RECORD_ID
                         Select a record by ID or #index per input file
                         (repeatable; order matches input files). Use an empty

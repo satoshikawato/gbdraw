@@ -55,7 +55,11 @@ write-up of a release.
   accepts a region across the origin as one such window, where it used to be
   refused (`ORIGIN_CROSSING`); on a linear record a start after the end is
   still refused (`START_AFTER_END`). A region string such as `--region
-  9000-1000` still means the reverse complement of 1000..9000.
+  9000-1000` still means the reverse complement of 1000..9000; write
+  `--region 9000-1000:origin` (before `:rc`), or the same in a records table's
+  `region` column, for the window across the origin. Sessions saved by the CLI
+  or the Web, the Source recipe, `RecordInput.region`, and a browser LOSAT
+  search read and write that window.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

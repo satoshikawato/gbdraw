@@ -189,7 +189,9 @@ only and applies after selection. `reverse_complement` is a row-scoped boolean.
 A region is always counted on the record as stored in the file:
 `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both
 crop 1000..9000 and then reverse-complement the crop. `--region` and
-`--reverse_complement` follow the same order.
+`--reverse_complement` follow the same order. A `region` such as
+`65000-4000:origin` is a window across the origin of a circular record, as on
+the command line; without `:origin`, `65000-4000` is the reversed span.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values keep table order. When placement is

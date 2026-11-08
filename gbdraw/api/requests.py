@@ -276,11 +276,6 @@ class RecordInput:
                 "This record has several windows; read RecordInput.windows instead of region.",
                 diagnostic={"code": "INPUT_INVALID"},
             )
-        if self.windows[0].crosses_origin:
-            raise ValidationError(
-                "This record's window runs across the origin, which a region cannot write; read RecordInput.windows.",
-                diagnostic={"code": "INPUT_INVALID"},
-            )
         span = self.windows[0].region()
         if self.selector is None:
             return span
@@ -330,7 +325,8 @@ class RecordInput:
                 raise ValidationError(
                     "A materialized RecordInput region must not contain a file selector."
                 )
-            if region.start < 1 or region.end < region.start:
+            # A start after the end is a span across the origin (``:origin``); the crop needs a circular record.
+            if region.start < 1 or region.end < 1:
                 raise ValidationError("Record region coordinates are invalid.")
             if region.record_index is not None and region.record_index < 0:
                 raise ValidationError("Record region selector index must be non-negative.")

@@ -69,6 +69,7 @@ from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
+from .io.regions import region_text
 from .render.formats import normalize_format_token
 from .render.output_paths import OutputExistsError, commit_staged_output_file
 from .session_legacy_values import (
@@ -7084,9 +7085,10 @@ def _append_linear_gui_sequence_options(
         record_selector = str(seq.get("region_record_id") or "").strip()
         record_selectors.append(record_selector)
         card_windows = _mapping_list(seq.get("windows"))
-        if len(card_windows) > 1:
-            # A card that draws its record in several windows (D-01): one region per window, in order. The CLI places
-            # them in that order; the Record Layout columns are not written, as for every other record.
+        if card_windows:
+            # A card whose windows its crop fields cannot hold: several (D-01), or one across the origin (D-34). One
+            # region per window, in order. The CLI places them in that order; the Record Layout columns are not
+            # written, as for every other record.
             region_specs.extend(_card_window_region_spec(index, window) for window in card_windows)
             reverse_flags.append(False)
             continue
@@ -7111,6 +7113,7 @@ def _append_linear_gui_sequence_options(
                 raise ValidationError(
                     f"Linear sequence #{index + 1} region coordinates must be >= 1."
                 )
+            # The card's crop fields: an End before the Start reverses the span, as a region string without :origin.
             suffix = ":rc" if wants_reverse else ""
             region_specs.append(f"#{index + 1}:{start_int}-{end_int}{suffix}")
             reverse_flags.append(False)
@@ -7134,13 +7137,7 @@ def _card_window_region_spec(index: int, window: Mapping[str, Any]) -> str:
     end = _nonnegative_integer(window.get("end"))
     if not start or not end:
         raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
-    if start > end:
-        # A region string with the larger number first reads as a reversed span (v0.14.5).
-        raise ValidationError(
-            f"Linear sequence #{index + 1} has a window across the origin ({start}-{end}), which a command line "
-            "cannot write; save the Session and run it with gbdraw render instead."
-        )
-    return f"#{index + 1}:{start}-{end}{':rc' if _js_truthy(window.get('reverseComplement')) else ''}"
+    return f"#{index + 1}:{region_text(start, end, _js_truthy(window.get('reverseComplement')))}"
 
 
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:
