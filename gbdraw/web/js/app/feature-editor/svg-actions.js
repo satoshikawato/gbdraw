@@ -4,8 +4,8 @@
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeaturePopup } from '../../services/feature-popup.js' */
-/** @import { MatchFramePopup, PreviewItemPopup } from '../preview-item-popup.js' */
-/** @import { MatchPopupPayload, PopupRow } from '../pairwise-match-popup.js' */
+/** @import { MatchFramePopup, PreviewItem, PreviewItemPopup } from '../../services/match-frame-popup.js' */
+/** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
@@ -21,13 +21,13 @@ import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
   buildMatchPopupPayload
-} from '../pairwise-match-popup.js';
+} from '../../services/pairwise-match-popup.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
-import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../preview-item-popup.js';
+import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
@@ -836,7 +836,7 @@ export const createFeatureSvgActions = ({
   // frame while Layout edit is off; with it on, a press drags them. A Legend
   // row opens only when the drawing lists it (not a track-data row). A
   // selected region (`app/region-select.js`) opens there beside its band.
-  /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {PopupOrigin} eventLike */
+  /** @param {{ element: Element, item: PreviewItem }} target @param {PopupOrigin} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
     if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {

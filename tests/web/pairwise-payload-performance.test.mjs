@@ -12,7 +12,7 @@ const repoRoot = new URL('../..', import.meta.url);
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
 
 const modulePaths = [
-  'gbdraw/web/js/app/pairwise-match-popup.js',
+  'gbdraw/web/js/services/pairwise-match-popup.js',
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
   'gbdraw/web/js/services/match-sequences.js',
@@ -67,26 +67,28 @@ await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
   ''
 ].join('\n'), 'utf8');
 
-const popupPath = join(tempRoot, 'gbdraw/web/js/app/pairwise-match-popup.js');
+const popupPath = join(tempRoot, 'gbdraw/web/js/services/pairwise-match-popup.js');
 const instrumentedPopupPath = join(
   tempRoot,
-  'gbdraw/web/js/app/pairwise-match-popup-instrumented.js'
+  'gbdraw/web/js/services/pairwise-match-popup-instrumented.js'
 );
 const popupSource = await readFile(popupPath, 'utf8');
-const instrumentedPopupSource = popupSource
-  .replace(
-    "import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';",
-    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from '../services/feature-sequence-fasta.js';"
-  )
-  .replace(
-    "import { buildMatchSequenceBundle } from '../services/match-sequences.js';",
-    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from '../services/match-sequences.js';"
-  )
-  .replace(
+// Each instrumented specifier must be in the source: a replace that matches nothing would leave a call uncounted.
+const replaceOnce = (source, from, to) => {
+  assert.equal(source.split(from).length, 2, `instrumentation target not found once: ${from}`);
+  return source.replace(from, to);
+};
+const instrumentedPopupSource = [
+  [
+    "import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';",
+    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from './feature-sequence-fasta.js';"
+  ], [
+    "import { buildMatchSequenceBundle } from './match-sequences.js';",
+    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from './match-sequences.js';"
+  ], [
     '  featureIdentity,\n  identityMatches,\n  renderedFeatureIdentity,',
     '  featureIdentity as featureIdentityBase,\n  identityMatches,\n  renderedFeatureIdentity as renderedFeatureIdentityBase,'
-  )
-  .replace(
+  ], [
     'export const PAIRWISE_MATCH_SELECTOR = [',
     `const pairwiseMetrics = () => globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
 const buildFeatureSequenceFastas = (...args) => {
@@ -110,8 +112,7 @@ const renderedFeatureIdentity = (source) => {
 };
 
 export const PAIRWISE_MATCH_SELECTOR = [`
-  )
-  .replace(
+  ], [
     'const createPairwisePayloadContext = ({',
     `const createPairwisePayloadContext = (options = {}) => {
   if (pairwiseMetrics()) pairwiseMetrics().contextCreations += 1;
@@ -119,13 +120,14 @@ export const PAIRWISE_MATCH_SELECTOR = [`
 };
 
 const createPairwisePayloadContextImplementation = ({`
-  );
+  ]
+].reduce((source, [from, to]) => replaceOnce(source, from, to), popupSource);
 assert.notEqual(instrumentedPopupSource, popupSource, 'pairwise instrumentation was not applied');
 await writeFile(instrumentedPopupPath, instrumentedPopupSource, 'utf8');
 
 const popupModule = await import(pathToFileURL(join(
   tempRoot,
-  'gbdraw/web/js/app/pairwise-match-popup.js'
+  'gbdraw/web/js/services/pairwise-match-popup.js'
 )));
 const instrumentedPopupModule = await import(pathToFileURL(instrumentedPopupPath));
 const { admitFeatureCatalog } = await import(pathToFileURL(join(

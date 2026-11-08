@@ -79,7 +79,7 @@ test('a key carries each call site with its role and part of the app', () => {
   const context = keys.get(`size scaling${CONTEXT_SEPARATOR}Linear`);
   assert.equal(context.context, 'size scaling');
   assert.equal(context.sites[0].area, 'Settings: Layout');
-  assert.equal(keys.get(`member role${CONTEXT_SEPARATOR}anchor`).sites[0].file, 'js/app/pairwise-match-popup.js');
+  assert.equal(keys.get(`member role${CONTEXT_SEPARATOR}anchor`).sites[0].file, 'js/services/pairwise-match-popup.js');
 });
 
 test('every catalog prints back to its own bytes; other text is refused', () => {

@@ -1,18 +1,17 @@
 // @ts-check
-/** @import { DrawingState, LinearSeq } from '../state.js' */
+/** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 /** @import { SettingApplicationId } from '../services/setting-application.js' */
 /** @import { RegionSelection } from '../services/region-axis.js' */
-/** @import { MatchPopupPayload } from './pairwise-match-popup.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
 // displayed Result and the current settings. It holds no edit of its own: the
 // template calls the Legend panel's operations, and a record edit writes the
 // setting the sidebar field writes, as one History step.
-import { COMPARISON_LEGEND_SELECTOR, pythonLegendKey } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
+import { previewItemPopupOf } from '../services/match-frame-popup.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import {
@@ -25,15 +24,6 @@ import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js'
 import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
 /**
- * The item a preview popup is about: a Legend row by its key, or the
- * definition of the Result's record at `recordIndex`.
- * @typedef {{ kind: 'legend-entry', key: string }
- *   | { kind: 'record-definition', recordIndex: number, recordId: string }
- *   | RegionSelection} PreviewItem
- * @typedef {{ previewItem: PreviewItem, matchesReady: boolean }} PreviewItemPopup
- *   A popup about a preview item; a Legend row's popup counts its features once `matchesReady`.
- * @typedef {MatchPopupPayload | PreviewItemPopup} MatchFramePopup
- *   What the match popup frame shows (`state.clickedPairwiseMatch`): a match, or a preview item.
  * @typedef {{ label: string, value: string }} PreviewItemFact
  * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown }} ColorRuleLike
  * @typedef {{ start: number, end: number, reverseComplement: boolean }} RequestRecordWindow
@@ -62,7 +52,7 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 /**
  * The members of the Web state this owner reads.
  * @typedef {object} PreviewItemState
- * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open match-frame popup.
+ * @property {WebState['clickedPairwiseMatch']} clickedPairwiseMatch The open match-frame popup.
  * @property {{ value: Element | null }} svgContainer The preview's mounted Result.
  * @property {{ value: string }} mode
  * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
@@ -120,41 +110,6 @@ const plain = (value) => (text(value) ? plainTextLinearRecordLabel(text(value)) 
 const positive = (value) => {
   const number = Number(value);
   return value != null && Number.isFinite(number) && number > 0 ? number : null;
-};
-
-/**
- * The open match-frame popup when it is about a preview item, else null.
- * @param {MatchFramePopup | null} opened
- * @returns {PreviewItemPopup | null}
- */
-export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);
-
-/**
- * The open match-frame popup when it shows a match, else null.
- * @param {MatchFramePopup | null} opened
- * @returns {MatchPopupPayload | null}
- */
-export const matchPopupOf = (opened) => (opened && !('previewItem' in opened) ? opened : null);
-
-export const PREVIEW_ITEM_SELECTOR =
-  'g[data-legend-key], [data-gbdraw-role="record-definition"], [data-gbdraw-role="record-definition-row"]';
-
-/**
- * The Legend row or record definition an event in the preview reached.
- * @param {EventTarget | null} target @param {Element} svg
- * @returns {{ element: Element, item: PreviewItem } | null}
- */
-export const previewItemTarget = (target, svg) => {
-  const element = target instanceof Element ? target.closest(PREVIEW_ITEM_SELECTOR) : null;
-  if (!element || !svg.contains(element) || element.closest(COMPARISON_LEGEND_SELECTOR)) return null;
-  if (element.hasAttribute('data-legend-key')) {
-    const key = text(pythonLegendKey(element));
-    return key ? { element, item: { kind: 'legend-entry', key } } : null;
-  }
-  const index = text(element.getAttribute('data-gbdraw-record-index'));
-  const recordIndex = Number(index);
-  if (!index || !Number.isInteger(recordIndex) || recordIndex < 0) return null;
-  return { element, item: { kind: 'record-definition', recordIndex, recordId: text(element.getAttribute('data-gbdraw-record-id')) } };
 };
 
 /**

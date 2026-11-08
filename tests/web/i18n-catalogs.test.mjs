@@ -20,7 +20,7 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
-import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.generated.mjs';
 import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
@@ -918,7 +918,7 @@ test('the record row names the topology its file declares through one key per va
 // the page, or of the two option tables the page lists (comparison-ui, pairwise-match-popup).
 test('each name in a Choose sentence of an error is a control label', () => {
   const read = (path) => readFileSync(new URL(`../../gbdraw/web/${path}`, import.meta.url), 'utf8');
-  const labels = [read('index.html'), read('js/app/comparison-ui.js'), read('js/app/pairwise-match-popup.js')].join('\n');
+  const labels = [read('index.html'), read('js/app/comparison-ui.js'), read('js/services/pairwise-match-popup.js')].join('\n');
   const sentences = [...read('js/utils/error-normalization.js').matchAll(/: '(Choose [A-Z][^']*)\.'/g)].map((match) => match[1])
     .filter((sentence) => !sentence.includes(' for '));
   assert.ok(sentences.length >= 11, String(sentences.length));
@@ -938,7 +938,7 @@ test('the Collinear color mode table lists the modes Python writes', () => {
 
 // The copied summary uses the keys of the popup that shows it.
 test('the copied Collinear block summary holds no English of its own', () => {
-  const source = readFileSync(new URL('../../gbdraw/web/js/app/pairwise-match-popup.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/pairwise-match-popup.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /summaryText: `Collinear block:/);
 });
 

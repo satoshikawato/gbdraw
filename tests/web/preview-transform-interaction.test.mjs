@@ -94,7 +94,7 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'pairwise-match-popup.js'),
+  join(tempDir, 'services', 'pairwise-match-popup.js'),
   [
     'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-match-id]";',
     'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
@@ -130,7 +130,7 @@ await writeFile(
 );
 // No Legend row or record definition in these fixtures opens a popup.
 await writeFile(
-  join(tempDir, 'app', 'preview-item-popup.js'),
+  join(tempDir, 'services', 'match-frame-popup.js'),
   'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";\nexport const previewItemTarget = () => null;\n'
     + "export const previewItemPopupOf = (opened) => (opened && 'previewItem' in opened ? opened : null);\nexport const matchPopupOf = (opened) => (opened && !('previewItem' in opened) ? opened : null);\n",
   'utf8'

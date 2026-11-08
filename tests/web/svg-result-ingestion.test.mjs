@@ -8,7 +8,7 @@ import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintD
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
-import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { buildMatchPopupPayload } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { normalizeGenerationResponse, selectHeldRenderState } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { SEGMENTS } from '../../gbdraw/web/js/services/current-worker-result-source.js';
 import {

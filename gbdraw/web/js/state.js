@@ -408,10 +408,10 @@ const clickedFeature = typedRef(/** @type {FeaturePopup | null} */ (null));
 /** @import { PopupAnchor } from './utils/popup-bounds.js' */
 /** @typedef {{ x: number, y: number, maxHeight: number, anchor: PopupAnchor | null }} PopupPosition */
 const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
-// The open match-frame popup: `MatchFramePopup` of app/preview-item-popup.js, a match
-// (app/pairwise-match-popup.js) or a preview item. Its type is declared in app/, which
-// state.js does not import (R14), so readers declare the member with that type.
-const clickedPairwiseMatch = ref(null);
+/** @import { MatchFramePopup } from './services/match-frame-popup.js' */
+// The open match-frame popup: a match (services/pairwise-match-popup.js) or a preview
+// item. A deep ref: a Legend row's popup sets its `matchesReady` in place.
+const clickedPairwiseMatch = typedRef(/** @type {MatchFramePopup | null} */ (null));
 const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });

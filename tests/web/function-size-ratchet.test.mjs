@@ -92,8 +92,6 @@ const FUNCTION_LINES = {
   'app/linear-record-selector.js::createLinearRecordSelector': 320,
   'app/linear-track-slots.js::createLinearTrackSlotEditor': 1037,
   'app/orthogroups.js::createOrthogroupEditor': 671,
-  'app/pairwise-match-popup.js::buildMatchPopupPayload': 217,
-  'app/pairwise-match-popup.js::createPairwisePayloadContext': 216,
   'app/preview-item-popup.js::createPreviewItemPopup': 214,
   'app/preview-runtime.js::createPreviewRuntime': 947,
   'app/preview-runtime.js::createPreviewRuntime.bindMountedResult': 159,

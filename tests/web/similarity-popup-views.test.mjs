@@ -1,5 +1,5 @@
 // UX-1b U1: the views of the similarity popups (UX-B01 collinear block,
-// UX-B02 similarity-group ribbon) built by app/pairwise-match-popup.js, and
+// UX-B02 similarity-group ribbon) built by services/pairwise-match-popup.js, and
 // OV-420 (a pairwise match with no similarity group showed a "Similarity
 // group" section holding the query product).
 import assert from 'node:assert/strict';
@@ -10,7 +10,7 @@ import {
   buildMatchPopupPayload,
   buildPairwiseMatchHoverRows,
   groupCountText
-} from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+} from '../../gbdraw/web/js/services/pairwise-match-popup.js';
 import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const elementFrom = (attributes) => ({

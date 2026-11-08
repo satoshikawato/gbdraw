@@ -183,18 +183,25 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
+    source_path = WEB_ROOT / "js" / "services" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_source = source_path.read_text(encoding="utf-8")
+    # Each specifier the copy rewrites must be in the source: a replace that
+    # matches nothing would leave an import of a module the copy lacks.
+    for specifier, copy in (
+        ("'../contracts/schema.generated.js'", "'./schema.generated.mjs'"),
+        ("'./record-source-coordinates.js'", "'./record-source-coordinates.mjs'"),
+        ("'./feature-utils.js'", "'./feature-utils.mjs'"),
+        ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),
+        ("'./match-sequences.js'", "'./match-sequences.mjs'"),
+        ("'./losat-normalization.js'", "'./losat-normalization.mjs'"),
+        ("'./feature-identity.js'", "'./feature-identity.mjs'"),
+        ("'../utils/i18n.js'", "'./i18n.mjs'"),
+    ):
+        assert specifier in module_source, specifier
+        module_source = module_source.replace(specifier, copy)
     module_path.write_text(
-        source_path.read_text(encoding="utf-8")
-        .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
-        .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
-        .replace("../services/feature-utils.js", "./feature-utils.mjs")
-        .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("../services/match-sequences.js", "./match-sequences.mjs")
-        .replace("../services/losat-normalization.js", "./losat-normalization.mjs")
-        .replace("../services/feature-identity.js", "./feature-identity.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs")
+        module_source
         + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, integerAttr, orthogroupIndexFor, orthogroupInIndex };\n",
         encoding="utf-8",
     )

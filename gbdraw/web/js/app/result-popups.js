@@ -7,9 +7,9 @@
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 /** @import { PopupPosition, WebState } from '../state.js' */
-/** @import { FeatureListRow } from './pairwise-match-popup.js' */
-/** @import { MatchFramePopup } from './preview-item-popup.js' */
-import { matchPopupOf } from './preview-item-popup.js';
+/** @import { FeatureListRow } from '../services/pairwise-match-popup.js' */
+/** @import { MatchFramePopup } from '../services/match-frame-popup.js' */
+import { matchPopupOf } from '../services/match-frame-popup.js';
 
 const { computed, onMounted, onUnmounted, watch } = window.Vue;
 
@@ -155,7 +155,7 @@ const keepSettingsPopupSectionOpen = (event) => {
 /**
  * The similarity group the match popup lists members of, and the gene pair of a collinear block picked in it.
  * @param {object} options
- * @param {{ value: MatchFramePopup | null }} options.clickedPairwiseMatch
+ * @param {WebState['clickedPairwiseMatch']} options.clickedPairwiseMatch
  * @param {{ value: string }} options.selectedPairwiseBlockOrthogroupId
  * @param {OpenFeatureEditorForFeature} options.openFeatureEditorForFeature
  * @param {MarkSelectedPairwiseMatch} options.markSelectedPairwiseMatch
@@ -199,7 +199,7 @@ const createPairwiseGroupView = ({
 /**
  * The match popup's resize from its corner.
  * @param {object} options
- * @param {{ value: MatchFramePopup | null }} options.clickedPairwiseMatch
+ * @param {WebState['clickedPairwiseMatch']} options.clickedPairwiseMatch
  * @param {PopupElementRef} options.pairwiseMatchPopupRef
  * @param {PopupPosition} options.clickedPairwiseMatchPos
  * @param {PopupResizeState} options.pairwiseMatchPopupResize
@@ -322,7 +322,7 @@ const createFeaturePopupResize = ({
  * @property {WebState} state The app state; the settings popup's place is `state.settingsPopup`.
  * @property {WebState['clickedFeature']} clickedFeature The open feature popup's payload, or null.
  * @property {PopupPosition} clickedFeaturePos
- * @property {{ value: MatchFramePopup | null }} clickedPairwiseMatch The open match popup's payload, or null.
+ * @property {WebState['clickedPairwiseMatch']} clickedPairwiseMatch The open match popup's payload, or null.
  * @property {PopupPosition} clickedPairwiseMatchPos
  * @property {{ value: boolean }} richFeaturePopup The app-level rich popup preference.
  * @property {PopupElementRef} featurePopupRef

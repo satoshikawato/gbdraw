@@ -9,7 +9,7 @@
 /** @import { GroupOrId, OrthogroupGroup, OrthogroupMember } from './orthogroups.js' */
 /** @import { AlignmentStartOptions } from './similarity-alignment.js' */
 import { resolveUniqueOrthogroupMemberForFeature } from './orthogroups.js';
-import { groupCountText } from './pairwise-match-popup.js';
+import { groupCountText } from '../services/pairwise-match-popup.js';
 
 const { computed } = window.Vue;
 
