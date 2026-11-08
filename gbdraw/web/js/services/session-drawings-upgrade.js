@@ -772,7 +772,8 @@ export const circularSourcesOfModeScoped = (data) => {
     movedConfig.adv = {
       ...adv,
       multi_record_positions: positions.map((row) => ({ ...mapping(row), selector: identity(mapping(row).selector) }))
-        .filter((row) => row.selector !== null)
+        // A row without a selector names no record (Python drops it too, OV-2879).
+        .filter((row) => row.selector != null)
     };
   }
   moved.modes = { ...modes, circular: { ...mapping(modes.circular), config: movedConfig } };
