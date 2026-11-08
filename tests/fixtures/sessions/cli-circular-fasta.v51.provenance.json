@@ -8,7 +8,7 @@
     "HmmtDNA.fasta": "9893484675b21612dfbb92d1a655125c997f1eeacf272ec9eaa395aa8c256e92"
   },
   "values": "drawings[0].renderRequest.records[0].source {kind: fasta, fastaResourceId: record-1-fasta}; resources.record-1-fasta kind fasta; webFiles.bindings.c_fasta only",
-  "decompressedSha256": "2489529f89e63d727b7ce89950efa2edaeddf8b734a27db3c199db1d179f76fd",
+  "decompressedSha256": "74cec7ae02cdb0c48483d60fce974218226a56986fdf4e61ea13e445e1454657",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
   "sessionVersion": 51,
   "requestSchema": 9

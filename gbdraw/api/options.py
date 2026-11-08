@@ -43,7 +43,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.modify import validate_config_overrides
+from gbdraw.config.modify import checked_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import current_palette_name
 from gbdraw.features.shapes import (
@@ -1006,7 +1006,7 @@ class _ModeDiagramOptions:
         ):
             if value is not None and not isinstance(value, Mapping):
                 raise ValidationError(f"{field_name} must be a mapping or None.")
-        validate_config_overrides(self.config_overrides)
+        object.__setattr__(self, "config_overrides", checked_config_overrides(self.config_overrides))
         if self.feature_shapes is not None:
             try:
                 normalized_shapes = normalize_feature_shape_overrides(

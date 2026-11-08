@@ -7,7 +7,7 @@
     "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
   },
   "values": "drawings[0].renderRequest.diagramOptions.config.canvas: figure_width \"180mm\", figure_height \"auto\"; drawings[0].results[0] root: width=\"180mm\" height=\"133.0854mm\" viewBox=\"0.0 0.0 680.3149606299213 503.0\"",
-  "decompressedSha256": "70f35dcd41c58e6760f212db264e9b185045471c1abd2493d953bed18cdd4ecd",
+  "decompressedSha256": "44aa4bf576fa0efd92cdf8be6da9b4e9c7a907e7640b278784d8d0551a0945ab",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
   "requestSchema": 9

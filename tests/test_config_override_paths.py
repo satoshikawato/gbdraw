@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import copy
+import gzip
 import inspect
+import json
+import sys
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from gbdraw.api.config import apply_config_overrides, load_default_config
+from gbdraw.cli import main as cli_main
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import (
     canonical_config_override_paths,
+    config_to_raw_dict,
     modify_config_dict,
+    validate_config_overrides,
 )
 from gbdraw.exceptions import ValidationError
 
@@ -282,3 +290,51 @@ def test_feature_overlap_tolerance_is_one_canvas_owner_and_survives_copy():
     assert replace(changed).canvas.feature_overlap_tolerance_bp == 2
     for profile in (CircularRenderProfile(changed), LinearRenderProfile(changed)):
         assert profile.feature_overlap_tolerance_bp == 2
+
+
+# ``canvas.linear.canvas_padding`` never changed a figure; ``canvas.padding`` is the canvas padding.
+RETIRED_LINEAR_CANVAS_PADDING = "canvas.linear.canvas_padding"
+
+
+def test_retired_linear_canvas_padding_is_not_written_and_a_stored_config_with_it_still_loads() -> None:
+    default = load_default_config()
+    assert "canvas_padding" not in default["canvas"]["linear"]
+    assert RETIRED_LINEAR_CANVAS_PADDING not in canonical_config_override_paths()
+    stored = copy.deepcopy(default)
+    stored["canvas"]["linear"]["canvas_padding"] = 50
+
+    assert GbdrawConfig.from_dict(stored) == GbdrawConfig.from_dict(default)
+    options = LinearDiagramOptions(config=stored)
+    assert isinstance(options.config, GbdrawConfig)
+    assert "canvas_padding" not in config_to_raw_dict(options.config)["canvas"]["linear"]
+
+
+def test_retired_linear_canvas_padding_override_is_read_and_dropped() -> None:
+    options = LinearDiagramOptions(
+        config_overrides={RETIRED_LINEAR_CANVAS_PADDING: 50, "canvas.linear.width": 1800}
+    )
+
+    assert dict(options.config_overrides or {}) == {"canvas.linear.width": 1800}
+    assert validate_config_overrides({RETIRED_LINEAR_CANVAS_PADDING: 12.5}) == ()
+    assert apply_config_overrides(None, {RETIRED_LINEAR_CANVAS_PADDING: 50}) == apply_config_overrides(None, None)
+    with pytest.raises(ValidationError, match=RETIRED_LINEAR_CANVAS_PADDING):
+        validate_config_overrides({RETIRED_LINEAR_CANVAS_PADDING: "wide"})
+
+
+def test_a_stored_session_with_the_retired_linear_canvas_padding_draws_as_without_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = Path(__file__).parent / "fixtures/sessions/cli-linear-wrapped.v50.gbdraw-session.json.gz"
+    stored = json.loads(gzip.decompress(fixture.read_bytes()))
+    without = copy.deepcopy(stored)
+    linear_canvas = without["renderRequest"]["diagramOptions"]["config"]["canvas"]["linear"]
+    assert linear_canvas.pop("canvas_padding") == 50
+    drawn = []
+    for name, document in (("stored", stored), ("without", without)):
+        session = tmp_path / f"{name}.gbdraw-session.json"
+        session.write_text(json.dumps(document), encoding="utf-8")
+        monkeypatch.setattr(sys, "argv", ["gbdraw", "render", "--session", str(session), "-o", str(tmp_path / name), "-f", "svg"])
+        cli_main()
+        drawn.append((tmp_path / f"{name}.svg").read_bytes())
+
+    assert drawn[0] == drawn[1]

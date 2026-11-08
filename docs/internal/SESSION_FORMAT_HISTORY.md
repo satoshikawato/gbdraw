@@ -74,6 +74,14 @@ Measured against `main`'s build (0.14.5, 033a3aa89, Session 50): `load_session_d
 than this gbdraw supports (50).". The wrap length, italic gene names and identity colour scale reached `main` in
 Session 50 (entry below); Session 51 only moves them from the slices into each drawing.
 
+The full `config` that the CLI and Python store in a Session 51 request no longer has `canvas.linear.canvas_padding`,
+a Linear canvas leaf that no code read (the canvas padding is `canvas.padding`). Readers still load a stored config
+that has it (`GbdrawConfig.from_dict` reads named keys only) and draw the same figure; an override of that path is
+checked as a number and dropped (`RETIRED_CONFIG_LEAVES` in `gbdraw/config/modify.py`). The generated contracts, the
+Session version and request schema 9 do not change. 0.14.5 requires the key in a stored config, but it refuses a
+Session 51 by its version before it reads the config. Fixtures that store the key stay as they are, for example
+`tests/fixtures/sessions/cli-linear-wrapped.v50.gbdraw-session.json.gz`.
+
 Session 51 also adds the config leaves `canvas.figure_width` and `canvas.figure_height` (`"auto"`, the default, or
 a length with a unit, issue #1427) to a drawing's stored full config; a CLI or Python writer sets them as config
 overrides. The request schema keeps config opaque, and Session 51 has not reached `main`, so the version does not
