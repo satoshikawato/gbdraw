@@ -983,12 +983,14 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     resolve = linear_labels_module._resolve_above_feature_label_overlaps
 
-    def counted_resolve(labels: list[dict], min_gap_px: float, row_pitch: float, keep_clear: Sequence[Aabb]) -> None:
+    def counted_resolve(
+        labels: list[dict], min_gap_px: float, row_pitch: float, keep_clear: Sequence[Aabb], *, units: Sequence[int]
+    ) -> None:
         nonlocal resolved_labels, inside_resolver
         resolved_labels += len(labels)
         inside_resolver = True
         try:
-            resolve(labels, min_gap_px, row_pitch, keep_clear)
+            resolve(labels, min_gap_px, row_pitch, keep_clear, units=units)
         finally:
             inside_resolver = False
 
@@ -1475,6 +1477,78 @@ def test_linear_labels_of_records_in_one_row_keep_apart(tmp_path: Path) -> None:
     assert _painted_overlaps(svg) == []
 
 
+def _leaders_painted_over_labels(svg_path: Path) -> list[tuple[str, str]]:
+    """The feature label leaders (their vertical parts) painted after, so on top of, a feature label whose letters they cross:
+    (the leader's feature id, the crossed label's text). A record draws its leaders under its own labels,
+    so only a leader of a record drawn later can lie over a label (OV-2892)."""
+
+    boxes = dict(enumerate(_painted_feature_label_boxes(svg_path)))
+    painted: list[tuple[str, int, tuple[float, float, float]]] = []
+    text_index = 0
+
+    def walk(element: ET.Element, dx: float, dy: float) -> None:
+        nonlocal text_index
+        for match in _TRANSLATE.finditer(element.get("transform", "")):
+            dx += float(match.group(1))
+            dy += float(match.group(2) or 0.0)
+        feature_id = element.get("data-label-feature-id")
+        if element.tag == f"{_SVG_NS}text" and feature_id:
+            painted.append(("text", text_index, (0.0, 0.0, 0.0)))
+            text_index += 1
+        elif element.tag == f"{_SVG_NS}line" and feature_id:
+            x1, x2 = float(str(element.get("x1"))), float(str(element.get("x2")))
+            y1, y2 = float(str(element.get("y1"))), float(str(element.get("y2")))
+            if abs(x1 - x2) < 1e-6:  # a leader part; a horizontal line is an underline
+                painted.append((feature_id, -1, (dx + x1, dy + min(y1, y2), dy + max(y1, y2))))
+        for child in element:
+            walk(child, dx, dy)
+
+    walk(ET.parse(svg_path).getroot(), 0.0, 0.0)
+    over: list[tuple[str, str]] = []
+    drawn_texts: list[int] = []
+    for kind, index, (x, top, bottom) in painted:
+        if kind == "text":
+            drawn_texts.append(index)
+            continue
+        for text_at in drawn_texts:
+            text, (left, right, text_top, text_bottom) = boxes[text_at]
+            if left < x < right and min(bottom, text_bottom) - max(top, text_top) > 1e-6:
+                over.append((kind, text))
+    return over
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "args",
+    (
+        # Two windows of one record side by side in one row.
+        ["--region", "NC_012920.1:3200-6000", "--region", "NC_012920.1:9000-12000"],
+        # The same with labels stacked from their features.
+        [
+            "--region", "NC_012920.1:3200-6000", "--region", "NC_012920.1:9000-12000",
+            "--label_placement", "above_feature",
+        ],
+        # Two records in one row (OV-1188's figure).
+        [
+            "--label_font_size", "40", "--multi_record_position", "#1@1", "--multi_record_position", "#2@1",
+            "--linear_record_gap", "5",
+        ],
+    ),
+    ids=("windows", "windows-above-feature", "records"),
+)
+def test_no_leader_of_a_row_is_painted_over_a_label_of_another_unit(tmp_path: Path, args: list[str]) -> None:
+    """OV-2892: the units of one Linear row (windows or records) were stacked together, but a label of an
+    earlier unit could take a row under a leader of a later unit, whose group paints that leader on top
+    of the label's letters ("ATP synthase F0 subunit 6" over "cytochrome c oxidase subunit I")."""
+
+    hmm = str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
+    gbk = ["--gbk", hmm] if args[0] == "--region" else ["--gbk", hmm, hmm]
+    svg = _draw_linear(tmp_path, [*gbk, "--show_labels", "all", *args])
+
+    assert _leaders_painted_over_labels(svg) == []
+    assert _painted_overlaps(svg) == []
+
+
 def _row_label(start: float, width: float, *, middle_y: float = -30.0) -> dict:
     return {
         "label_text": "x",
@@ -1515,8 +1589,9 @@ def test_linear_label_fit_counts_labels_of_records_in_one_row_together() -> None
 
 @pytest.mark.linear
 def test_linear_labels_of_records_in_one_row_are_packed_together() -> None:
-    """OV-1188: the labels of the second record in a row take the rows the first record's labels leave
-    free where the row draws them; the first record keeps the rows it has alone."""
+    """OV-1188: the labels of the records in a row are packed together. The record drawn last keeps the
+    rows it has alone, and the first record's labels take the rows the second record's labels and leaders
+    leave free where the row draws them (OV-2892)."""
 
     alone = _prepare_linear_labels_for_records(
         input_filenames=("HmmtDNA.gbk", "HmmtDNA.gbk"),
@@ -1537,16 +1612,15 @@ def test_linear_labels_of_records_in_one_row_are_packed_together() -> None:
         label_frames=frames,
     )
 
-    assert packed[0] == alone[0]
+    assert packed[1] == alone[1]
     row_labels = [
         {**label, "middle_x": float(label["middle_x"]) + frame.x}
         for labels, frame in zip(packed, frames)
         for label in labels
     ]
     _assert_no_label_bounds_overlap(row_labels)
-    assert any(
-        moved["track_id"] != kept["track_id"] for moved, kept in zip(packed[1], alone[1], strict=True)
-    )
+    alone_rows = {label["source_feature_index"]: label["track_id"] for label in alone[0]}
+    assert any(label["track_id"] != alone_rows[label["source_feature_index"]] for label in packed[0])
 
 
 def _svg_translation(element: ET.Element) -> tuple[float, float]:
