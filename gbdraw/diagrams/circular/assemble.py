@@ -38,8 +38,8 @@ from ...analysis.conservation import (
 from ...analysis.depth_tracks import (
     DepthTrackData,
     depth_track_data_count,
+    depth_track_legend_name,
     index_depth_track_row,
-    sync_depth_track_legend_entries,
 )
 from ...config.models import (
     CircularRenderProfile,
@@ -2261,6 +2261,7 @@ def _sync_legend_table_for_circular_slots(
         out.discard_default_track(key)
 
     depth_by_index = index_depth_track_row(depth_tracks or ())
+    depth_count = max(depth_by_index, default=-1) + 1
     for slot in slots:
         renderer = slot.renderer
         if renderer == "depth":
@@ -2273,7 +2274,7 @@ def _sync_legend_table_for_circular_slots(
                 if track is None:
                     continue
                 swatch = track
-                label = slot_legend_label(slot, track.label)
+                label = slot_legend_label(slot, depth_track_legend_name(track, depth_count))
             elif depth is None:
                 continue
             else:
@@ -3815,6 +3816,32 @@ def _compose_circular_plot(
     return result
 
 
+def _circular_legend_slots(
+    slots: tuple[LegendSlotSource, ...] | None,
+    depth_tracks: tuple[DepthLegendSource, ...] | None,
+    *,
+    show_gc: bool,
+    show_skew: bool,
+    gc: NumericLegendSource,
+) -> tuple[LegendSlotSource, ...] | None:
+    """The slots whose order the legend's track rows follow: the explicit ones, else, with Depth series, the
+    default stack the rings are drawn in (``default_circular_track_slots``), so the Depth rows stand between
+    the feature rows and the GC rows with or without a stack (OV-2823)."""
+
+    if slots is not None or not depth_tracks:
+        return slots
+    return legend_slot_sources(
+        default_circular_track_slots(
+            show_ticks=False,
+            show_depth=True,
+            depth_track_count=max(int(track.track_index) for track in depth_tracks) + 1,
+            show_gc=show_gc,
+            show_skew=show_skew,
+            dinucleotide=str(gc.dinucleotide),
+        )
+    )
+
+
 def build_circular_legend_table(
     records: Sequence[SeqRecord],
     *,
@@ -3863,11 +3890,9 @@ def build_circular_legend_table(
         show_skew=show_skew,
         show_depth=singleton_depth,
     )
-    if depth_tracks and slots is None:
-        legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
     legend_table = _sync_legend_table_for_circular_slots(
         legend_table,
-        slots=slots,
+        slots=_circular_legend_slots(slots, depth_tracks, show_gc=show_gc, show_skew=show_skew, gc=sources.gc),
         gc=sources.gc,
         skew=sources.skew,
         depth=depth if has_depth_frame else None,
