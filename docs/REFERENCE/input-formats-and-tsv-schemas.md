@@ -233,6 +233,11 @@ target. `mark` accepts `line`, `bracket`, `band`, or `highlight`.
   automatic feature label size. In Linear that is one size for the whole
   diagram, set by the longest record in label scope as for feature labels. An
   explicit size (table column, set or slot style) wins.
+- A `label` can set words in italics with `<i>...</i>`, as a Legend name can
+  ([`--legend_rows`](../CLI_Reference.md#--legend_rows)):
+  `<i>stx2</i> phage`. The words are measured in italics when the label is
+  placed, and a label cut to fit its circle keeps them. A label with other
+  markup, or with `<`, `>`, or `&` elsewhere, is drawn as written.
 
 Coordinate targets are 1-based and inclusive. `wraps_origin=true` is
 Circular-only; split an origin-crossing Linear range into two rows. A feature

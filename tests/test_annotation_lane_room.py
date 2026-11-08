@@ -156,7 +156,7 @@ def _ink(item: ElementTree.Element) -> tuple[float, float, float, float]:
     (text,) = item.iter(f"{_SVG}text")
     x, y = float(text.get("x", "nan")), float(text.get("y", "nan"))
     left, right, top, bottom = label_ink_offsets(
-        "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
+        (("".join(text.itertext()), "normal"),), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
     )
     return x + left, x + right, y + top, y + bottom
 
@@ -169,7 +169,7 @@ def _ink_corners(item: ElementTree.Element) -> list[tuple[float, float]]:
     turn = re.match(r"rotate\(([-\d.e]+)", text.get("transform", ""))
     angle = math.radians(float(turn.group(1))) if turn else 0.0
     left, right, top, bottom = label_ink_offsets(
-        "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
+        (("".join(text.itertext()), "normal"),), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
     )
     return [
         (x + dx * math.cos(angle) - dy * math.sin(angle), y + dx * math.sin(angle) + dy * math.cos(angle))
@@ -429,7 +429,7 @@ def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> No
     label = _label_at(
         0.0,
         annotation_id="",
-        text="ace",
+        runs=(("ace", "normal"),),
         record_length=10_000,
         mark_edge=1.0,
         outward=False,

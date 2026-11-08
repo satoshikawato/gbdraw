@@ -6,6 +6,7 @@ import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 import { legendEntryKey } from './drawing/paint.js';
+import { legendCaptionRuns } from './legend-layout.js';
 
 export { parseTransform };
 
@@ -467,7 +468,8 @@ export const pythonLegendRows = (svg) => {
 // the user or Python wrote: the key a rename shows, else `data-legend-name`,
 // which Python and a rule row's addition write where the name is not the key,
 // else the key. Its swatch is what the row shows. Its drawn name is its text,
-// which the executor writes (services/svg-result-ingestion.js).
+// which the executor writes (services/svg-result-ingestion.js) with
+// `writeDrawnLegendRowName`.
 /** @param {Element} row @returns {LegendRowName} */
 export const legendRowName = (row) => /** @type {LegendRowName} */ (
   (row.hasAttribute(resultBaseAttribute('data-legend-key')) ? null : row.getAttribute('data-legend-name'))
@@ -484,8 +486,37 @@ export const legendRowSwatch = (row) => {
   const swatch = getLegendEntrySwatch(row) || row.querySelector('path');
   return legendSwatch({ fill: swatch?.getAttribute('fill'), stroke: swatch?.getAttribute('stroke'), width: swatch?.getAttribute('stroke-width') });
 };
+// A caption written with `<i>` is drawn as one tspan per run, italic runs with
+// `font-style="italic"`, as Python draws it (`italic_markup_runs`, OV-2760);
+// its drawn name reads back as that markup, so the naming pass and the Legend
+// layout see the name Python drew.
 /** @param {Element} row @returns {DrawnLegendName} */
-export const drawnLegendRowName = (row) => /** @type {DrawnLegendName} */ (String(row.querySelector('text')?.textContent ?? ''));
+export const drawnLegendRowName = (row) => {
+  const label = row.querySelector('text');
+  const runs = Array.from(label?.children || []);
+  return /** @type {DrawnLegendName} */ (runs.length === 0
+    ? String(label?.textContent ?? '')
+    : runs.map((run) => (run.getAttribute('font-style') === 'italic' ? `<i>${run.textContent}</i>` : String(run.textContent ?? ''))).join(''));
+};
+/**
+ * Draw `name` as the row's caption: a plain text, or one tspan per run of a caption written with `<i>`.
+ * @param {Element} label The row's `<text>`.
+ * @param {DrawnLegendName} name
+ */
+export const writeDrawnLegendRowName = (label, name) => {
+  const runs = legendCaptionRuns(name);
+  if (runs.length === 1 && !runs[0].italic) {
+    label.textContent = runs[0].text;
+    return;
+  }
+  label.textContent = '';
+  runs.forEach((run) => {
+    const span = label.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+    if (run.italic) span.setAttribute('font-style', 'italic');
+    span.textContent = run.text;
+    label.appendChild(span);
+  });
+};
 
 // The Legends a Result names its rows in: one, or the horizontal and the
 // vertical copy of a Result that holds both. The rows of one are named

@@ -12,9 +12,10 @@ from ....legend.circular_layout import (
     CircularRingLegendLayout,
 )
 from ....legend.table import as_legend_table, LegendTable, write_legend_row_names
+from ....core.text import italic_markup_runs
 from ....legend.metrics import write_gradient_scale_names
 from ....render.group_content import GroupContent
-from ....svg.text_path import generate_text_path
+from ....svg.text_path import generate_runs_text_path
 from ....svg.ids import stable_svg_id
 from ....svg.result_records import LEGEND_ORDER_RECORD
 from ....svg.path_data import path_number, path_point
@@ -69,8 +70,9 @@ class LegendGroup:
         anchor: str = "start",
         fill: str | None = None,
     ):
-        path = generate_text_path(
-            text, 0, 0, 0, self.font_size, "normal", self.font_family, dominant_baseline=baseline, text_anchor=anchor
+        # A caption's ``<i>`` runs draw in italics; the fixed texts are one upright run.
+        path = generate_runs_text_path(
+            italic_markup_runs(text), self.font_size, self.font_family, dominant_baseline=baseline, text_anchor=anchor
         )
         if fill is not None:
             path.attribs["fill"] = fill
@@ -214,16 +216,8 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
-            legend_path = generate_text_path(
-                drawn_name,
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="central",
-                text_anchor="start",
+            legend_path = generate_runs_text_path(
+                italic_markup_runs(drawn_name), self.font_size, font, dominant_baseline="central", text_anchor="start"
             )
             if entry is not None:
                 rect_path.translate(entry.rect_x, entry.rect_y)

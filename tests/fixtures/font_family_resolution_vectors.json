@@ -8,7 +8,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'DejaVu Serif', serif",
@@ -23,7 +24,8 @@
       "custom": [
         "DejaVu Serif"
       ],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "'DejaVu Serif', serif",
@@ -36,7 +38,8 @@
       "custom": [
         "DejaVu Serif"
       ],
-      "face": "registered:DejaVu Serif"
+      "face": "registered:DejaVu Serif",
+      "italicFace": "registered:DejaVu Serif"
     },
     {
       "requested": "\"DejaVu Serif\", serif",
@@ -49,7 +52,8 @@
       "custom": [
         "DejaVu Serif"
       ],
-      "face": "registered:DejaVu Serif"
+      "face": "registered:DejaVu Serif",
+      "italicFace": "registered:DejaVu Serif"
     },
     {
       "requested": "DejaVuSerif, serif",
@@ -62,7 +66,8 @@
       "custom": [
         "DejaVuSerif"
       ],
-      "face": "registered:DejaVuSerif"
+      "face": "registered:DejaVuSerif",
+      "italicFace": "registered:DejaVuSerif"
     },
     {
       "requested": "'Noto Sans JP', sans-serif",
@@ -77,7 +82,8 @@
       "custom": [
         "Noto Sans JP"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Comic Sans MS'",
@@ -92,7 +98,8 @@
       "custom": [
         "Comic Sans MS"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Comic Sans MS', cursive",
@@ -107,7 +114,8 @@
       "custom": [
         "Comic Sans MS"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Times New Roman', serif",
@@ -116,7 +124,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "Georgia",
@@ -131,7 +140,8 @@
       "custom": [
         "Georgia"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Source Code Pro'",
@@ -146,7 +156,8 @@
       "custom": [
         "Source Code Pro"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Fira Code', 'Courier New', monospace",
@@ -161,7 +172,8 @@
       "custom": [
         "Fira Code"
       ],
-      "face": "LiberationMono-Regular"
+      "face": "LiberationMono-Regular",
+      "italicFace": "LiberationMono-Italic"
     },
     {
       "requested": "'Missing Serif Display'",
@@ -176,7 +188,8 @@
       "custom": [
         "Missing Serif Display"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Missing Sans Serif'",
@@ -191,7 +204,8 @@
       "custom": [
         "Missing Sans Serif"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Gone A', 'Gone B', serif, monospace",
@@ -209,7 +223,8 @@
         "Gone A",
         "Gone B"
       ],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "'Gone A', 'Liberation Mono'",
@@ -224,7 +239,8 @@
       "custom": [
         "Gone A"
       ],
-      "face": "LiberationMono-Regular"
+      "face": "LiberationMono-Regular",
+      "italicFace": "LiberationMono-Italic"
     },
     {
       "requested": "'Font A', 'Font B', sans-serif",
@@ -242,7 +258,8 @@
         "Font A",
         "Font B"
       ],
-      "face": "registered:Font B"
+      "face": "registered:Font B",
+      "italicFace": "registered:Font B"
     },
     {
       "requested": "'O\\'Brien Sans', sans-serif",
@@ -257,7 +274,8 @@
       "custom": [
         "O\\'Brien Sans"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "\"O'Brien Sans\", sans-serif",
@@ -270,7 +288,8 @@
       "custom": [
         "O'Brien Sans"
       ],
-      "face": "registered:O'Brien Sans"
+      "face": "registered:O'Brien Sans",
+      "italicFace": "registered:O'Brien Sans"
     },
     {
       "requested": "serif",
@@ -279,7 +298,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "monospace, serif",
@@ -288,7 +308,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationMono-Regular"
+      "face": "LiberationMono-Regular",
+      "italicFace": "LiberationMono-Italic"
     },
     {
       "requested": "system-ui",
@@ -297,7 +318,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "",
@@ -306,7 +328,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": " , ,",
@@ -315,7 +338,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Liberation Serif', serif",
@@ -324,7 +348,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "Courier",
@@ -333,7 +358,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationMono-Regular"
+      "face": "LiberationMono-Regular",
+      "italicFace": "LiberationMono-Italic"
     },
     {
       "requested": "'Ming Light'",
@@ -348,7 +374,8 @@
       "custom": [
         "Ming Light"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Garamond Premier', fantasy",
@@ -363,7 +390,8 @@
       "custom": [
         "Garamond Premier"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Times New Roman', serif",
@@ -376,7 +404,8 @@
       "custom": [
         "Times New Roman"
       ],
-      "face": "registered:Times New Roman"
+      "face": "registered:Times New Roman",
+      "italicFace": "registered:Times New Roman"
     },
     {
       "requested": "Arial, sans-serif",
@@ -389,7 +418,8 @@
       "custom": [
         "Arial"
       ],
-      "face": "registered:Arial"
+      "face": "registered:Arial",
+      "italicFace": "registered:Arial"
     },
     {
       "requested": "'Liberation Serif', serif",
@@ -402,7 +432,8 @@
       "custom": [
         "Liberation Serif"
       ],
-      "face": "registered:Liberation Serif"
+      "face": "registered:Liberation Serif",
+      "italicFace": "registered:Liberation Serif"
     },
     {
       "requested": "'Gone A', 'Courier New', monospace",
@@ -417,7 +448,8 @@
       "custom": [
         "Gone A"
       ],
-      "face": "LiberationMono-Regular"
+      "face": "LiberationMono-Regular",
+      "italicFace": "LiberationMono-Italic"
     },
     {
       "requested": "'Gone A', 'Font B', 'Courier New'",
@@ -435,7 +467,8 @@
         "Gone A",
         "Font B"
       ],
-      "face": "registered:Font B"
+      "face": "registered:Font B",
+      "italicFace": "registered:Font B"
     },
     {
       "requested": "serif, 'Font B'",
@@ -448,7 +481,8 @@
       "custom": [
         "Font B"
       ],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "sans-serif",
@@ -459,7 +493,8 @@
       "missing": [],
       "replaced": [],
       "custom": [],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Gone A'",
@@ -474,7 +509,8 @@
       "custom": [
         "Gone A"
       ],
-      "face": "LiberationSans-Regular"
+      "face": "LiberationSans-Regular",
+      "italicFace": "LiberationSans-Italic"
     },
     {
       "requested": "'Liberation Serif', 'Gone A', serif",
@@ -487,7 +523,8 @@
       "custom": [
         "Gone A"
       ],
-      "face": "LiberationSerif-Regular"
+      "face": "LiberationSerif-Regular",
+      "italicFace": "LiberationSerif-Italic"
     },
     {
       "requested": "'Gone A', 'Font B', 'Gone C', serif",
@@ -507,7 +544,8 @@
         "Font B",
         "Gone C"
       ],
-      "face": "registered:Font B"
+      "face": "registered:Font B",
+      "italicFace": "registered:Font B"
     }
   ],
   "faceMatch": [
@@ -522,7 +560,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -535,7 +574,8 @@
           "italic": false
         }
       ],
-      "normal": 1
+      "normal": 1,
+      "italic": 1
     },
     {
       "faces": [
@@ -548,7 +588,8 @@
           "italic": false
         }
       ],
-      "normal": 1
+      "normal": 1,
+      "italic": 1
     },
     {
       "faces": [
@@ -561,7 +602,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -574,7 +616,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -587,7 +630,8 @@
           "italic": false
         }
       ],
-      "normal": 1
+      "normal": 1,
+      "italic": 1
     },
     {
       "faces": [
@@ -600,7 +644,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -609,7 +654,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -622,7 +668,8 @@
           "italic": false
         }
       ],
-      "normal": 1
+      "normal": 1,
+      "italic": 0
     },
     {
       "faces": [
@@ -635,7 +682,8 @@
           "italic": true
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 0
     },
     {
       "faces": [
@@ -652,7 +700,8 @@
           "italic": true
         }
       ],
-      "normal": 1
+      "normal": 1,
+      "italic": 1
     },
     {
       "faces": [
@@ -669,7 +718,8 @@
           "italic": false
         }
       ],
-      "normal": 0
+      "normal": 0,
+      "italic": 1
     }
   ]
 }

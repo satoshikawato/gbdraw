@@ -17,9 +17,10 @@ import pytest
 
 from gbdraw.circular import circular_main
 from gbdraw.configurators.legend import _circular_legend_local_bounds, _linear_legend_local_bounds
-from gbdraw.core.text import calculate_svg_bbox_dimensions, text_ink
+from gbdraw.core.text import calculate_svg_bbox_dimensions, text_runs_ink_offsets
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.linear_layout import build_linear_legend_layout
+from gbdraw.core.text import italic_markup_runs
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VECTORS = REPO_ROOT / "tests" / "fixtures" / "legend_layout_vectors.json"
@@ -110,9 +111,12 @@ def test_legend_reserves_at_least_the_drawn_ink_of_every_corpus_caption() -> Non
             color_rect_size=RECT,
         )
         reserved = layout.solid_entries[0].text_width
-        ink = text_ink(caption, family)
-        if ink is not None and reserved < ink.right * size - 1e-9:
-            misses.append((caption, family, size, reserved, ink.right * size))
+        # The ink of the caption as drawn: its runs, a caption written with <i> in italics (OV-2760).
+        ink = text_runs_ink_offsets(
+            italic_markup_runs(caption), family, size, dominant_baseline="central", text_anchor="start"
+        )
+        if ink is not None and reserved < ink[1] - 1e-9:
+            misses.append((caption, family, size, reserved, ink[1]))
     assert not misses, f"{len(misses)} captions drawn past their reserve, e.g. {misses[:5]}"
 
 

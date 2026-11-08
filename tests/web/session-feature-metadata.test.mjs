@@ -37,6 +37,8 @@ await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js');
+// legend-svg.js reads a caption's italic runs with the Legend layout's rule.
+await copyModule('gbdraw/web/js/services/legend-layout.js', 'services/legend-layout.js');
 await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/result-paint-bases.js');
 await copyModule('gbdraw/web/js/services/result-records.generated.js', 'services/result-records.generated.js');
 await copyModule('gbdraw/web/js/services/svg-transform.js', 'services/svg-transform.js');

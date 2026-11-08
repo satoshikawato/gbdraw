@@ -2570,7 +2570,7 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
         for element in group.iter("{http://www.w3.org/2000/svg}text")
     )
     _left, _right, top, bottom = label_ink_offsets(
-        "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
+        (("".join(text.itertext()), "normal"),), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
     )
     style = RegionAnnotationStyle()
     bracket = ResolvedRegionAnnotation(
