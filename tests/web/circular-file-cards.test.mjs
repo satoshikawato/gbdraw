@@ -317,3 +317,29 @@ await test('Load of a Session 50 or older keeps the cards its record positions c
   assert.deepEqual(drawing.files.c_legacy_record_cards?.map(({ uid, primaryFile }) => [uid, primaryFile]),
     drawing.circularSources.map(({ uid, gb }) => [uid, gb]));
 });
+
+// OV-2869: a Session 46-50 Web composite keeps the `#N` its move cannot place
+// (drawings-vectors.json). A Save before any read writes them through as a
+// Session 51; its Load keeps the cards as loaded too, so the first read
+// places them over those cards.
+await test('a Session 51 that holds a kept flat #N keeps its cards as loaded', async () => {
+  const vectors = JSON.parse(await readFile(path.join(root, 'tests/fixtures/sessions/drawings-vectors.json'), 'utf8'));
+  const vector = vectors.upgrades.find(({ name }) => name.includes('as a Web composite with #N selectors (OV-2869)'));
+  const input = JSON.parse(gunzipSync(await readFile(path.join(root, vector.input))).toString('utf8'));
+  for (const { path: [...parents], value } of vector.edits) {
+    const key = parents.pop();
+    parents.reduce((holder, part) => holder[part], input)[key] = value;
+  }
+  assert.equal((await load(Buffer.from(JSON.stringify(input)))).status, 'ok');
+  const drawing = modeDrawing(state, 'circular');
+  assert.deepEqual([...drawing.recordsOff], ['#2']);
+  assert.ok(drawing.files.c_legacy_record_cards);
+  const result = await sessionConfig.exportSession('flat-selectors', { shownDrawing: state.activeDrawing, askChoice: async () => 'download' });
+  assert.equal(result?.status, 'saved', JSON.stringify(result));
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(saved.drawings.find(({ id }) => id === 'circular').config.recordsOff, ['#2']);
+  assert.equal((await load(Buffer.from(JSON.stringify(saved)))).status, 'ok');
+  const reloaded = modeDrawing(state, 'circular');
+  assert.equal(reloaded.form.circular_record_selector, '#3');
+  assert.deepEqual(reloaded.files.c_legacy_record_cards?.map(({ uid }) => uid), reloaded.circularSources.map(({ uid }) => uid));
+});

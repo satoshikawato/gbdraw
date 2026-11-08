@@ -1672,6 +1672,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {((drawing: DrawingState) => void) | null} [placeCircularRecordChoices] Names a Circular drawing's record
+ *   choices by identity once its cards are read (record-settings.js), before its Record Order is merged.
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
  *   The record discovery owner's record lists of a drawing's inputs, awaited (DESIGN A4): the sources
  *   `readDrawingRecordIdentities` returns, from which a request's record identities are read (`drawnRecordIdentities`).
@@ -1729,6 +1731,7 @@ export const createRunAnalysis = ({
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   readRecordIdentitySources = null,
+  placeCircularRecordChoices = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
   // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
@@ -2557,7 +2560,9 @@ export const createRunAnalysis = ({
   /**
    * Writes the Record Order (`adv.multi_record_positions`) of `drawing`'s read
    * `generation` once, while that read is the drawing's latest: the list's
-   * records keep their rows, and a read without records empties it.
+   * records keep their rows, and a read without records empties it. A read
+   * that settled names the record choices by identity first
+   * (`placeCircularRecordChoices`, OV-2869, OV-2903).
    * @param {DrawingState} drawing
    * @param {number | null} generation
    */
@@ -2566,6 +2571,7 @@ export const createRunAnalysis = ({
     unappliedCircularRecordReads.delete(drawing);
     if (generation !== circularRecordReadGeneration(drawing)) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) drawing.adv.multi_record_positions = [];
+    if (drawing.circularRecordDiscovery.status === 'ready') placeCircularRecordChoices?.(drawing);
     const positions = drawing.adv.multi_record_positions;
     positions.splice(0, positions.length, ...mergeCircularRecordPositions(drawing.circularRecordList.value, positions));
   };

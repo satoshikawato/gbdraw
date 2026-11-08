@@ -271,22 +271,74 @@ export const cardsTakeLegacyRecordPositions = (cards) => cards.length === 1
  * @returns {Map<string, string[]>} each identity's legacy keys
  */
 export const legacyCircularRecordKeys = (sources) => {
-  /** @param {string} uid @param {readonly RecordSourceEntry[]} entries */
-  const identitiesOf = (uid, entries) => entries.map((entry, sourceIndex) => ({
-    identity: recordIdentity({ uid, sourceIndex, recordCount: entries.length }), entry
-  }));
+  const identities = new Set([...sources.cards].flatMap(([uid, entries]) => cardIdentities(uid, entries).map(({ identity }) => identity)));
+  return new Map(legacyFlatRecords(sources).map(({ identity, entry }, position) => [identity, [
+    cliRecordKey(position + 1),
+    `circular-${downloadSafeName(entry.recordId ?? entry.record_id, 'record')}-${downloadSafeName(`#${position + 1}`, '1')}`
+  ].filter((key) => !identities.has(key))]));
+};
+
+/** The identities of a card's records. @param {string} uid @param {readonly RecordSourceEntry[]} entries */
+const cardIdentities = (uid, entries) => entries.map((entry, sourceIndex) => ({
+  identity: recordIdentity({ uid, sourceIndex, recordCount: entries.length }), entry
+}));
+
+/**
+ * The records an older Session's flat positions name, in that order: the
+ * records of the cards as loaded (`legacyOrder`), up to the first card whose
+ * records are not read. The one walk of those positions.
+ * @param {RecordIdentitySources} sources
+ * @returns {{ identity: string, entry: RecordSourceEntry }[]}
+ */
+const legacyFlatRecords = (sources) => {
   /** @type {{ identity: string, entry: RecordSourceEntry }[]} */
   const flat = [];
   for (const uid of sources.legacyOrder ?? []) {
     const entries = sources.cards.get(uid) ?? [];
     if (entries.length === 0) break;
-    flat.push(...identitiesOf(uid, entries));
+    flat.push(...cardIdentities(uid, entries));
   }
-  const identities = new Set([...sources.cards].flatMap(([uid, entries]) => identitiesOf(uid, entries).map(({ identity }) => identity)));
-  return new Map(flat.map(({ identity, entry }, position) => [identity, [
-    cliRecordKey(position + 1),
-    `circular-${downloadSafeName(entry.recordId ?? entry.record_id, 'record')}-${downloadSafeName(`#${position + 1}`, '1')}`
-  ].filter((key) => !identities.has(key))]));
+  return flat;
+};
+
+const FLAT_RECORD_SELECTOR = /^#[1-9][0-9]*$/;
+/**
+ * Whether a key is a record selector `#N` that a Session 46-50 Session move
+ * kept as it was (OV-2869): the N-th record of all the drawing's records.
+ * @param {unknown} key
+ */
+export const isFlatRecordSelector = (key) => typeof key === 'string' && FLAT_RECORD_SELECTOR.test(key);
+
+/**
+ * The Circular record choices a Session names records in: the OFF records,
+ * the Record select value, and the Record Order rows.
+ * @template {{ selector: string }} P
+ * @typedef {{ recordsOff: readonly string[], selector: string, positions: readonly P[] }} CircularRecordChoices
+ */
+
+/**
+ * The choices with each flat `#N` (`isFlatRecordSelector`) placed at the
+ * identity of the N-th record over the cards as loaded (`legacyFlatRecords`,
+ * the walk the legacy keys take): a `#N` past them names no record now, so
+ * an OFF record or a Record Order row is dropped and the Record select
+ * cleared. Other keys stay.
+ * @template {{ selector: string }} P
+ * @param {CircularRecordChoices<P>} choices
+ * @param {RecordIdentitySources} sources
+ * @returns {CircularRecordChoices<P>}
+ */
+export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, sources) => {
+  const flat = legacyFlatRecords(sources);
+  /** @param {string} key @returns {string | null} */
+  const place = (key) => (isFlatRecordSelector(key) ? flat[Number(key.slice(1)) - 1]?.identity ?? null : key);
+  return {
+    recordsOff: recordsOff.flatMap((key) => place(key) ?? []),
+    selector: place(selector) ?? '',
+    positions: positions.flatMap((row) => {
+      const placed = place(row.selector);
+      return placed === null ? [] : [{ ...row, selector: placed }];
+    })
+  };
 };
 
 /**

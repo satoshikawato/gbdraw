@@ -226,3 +226,58 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']]);
   bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', null);
 });
+
+// OV-2869, OV-2903: a Session 46-50 whose cards drew one combined source kept
+// each `#N` it named as the N-th record of all its cards' records, in card
+// order. The first settled read places it: the Record select, the OFF records
+// and the Record Order name that record's identity (a `#N` past the cards
+// still held as loaded is dropped), and a Record select value that names one
+// record by its record ID becomes that record's identity.
+test('the first settled read places a Session\'s flat #N and a record ID Record select at their records', async () => {
+  const { INPUTS_SLICE, installBoundInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
+  const { circularDrawingRecordSet } = await import('../../gbdraw/web/js/services/record-options.js');
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = false;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50], ['B2', 60])]);
+  await settle();
+  const [cardA, cardB] = circular.circularSources.map((card) => card.uid);
+  // The cards as a Load of that Session installs them (`c_legacy_record_cards`).
+  const loadedInputs = () => {
+    const captured = INPUTS_SLICE.capture(circular.slices.inputs);
+    const marks = circularSourceInputs('gb', circular.circularSources)
+      .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }));
+    installBoundInputs(state.inputFiles, circular.slices.inputs, { ...captured, files: { ...captured.files, c_legacy_record_cards: marks } });
+  };
+  loadedInputs();
+  circular.form.circular_record_selector = '#2';
+  circular.recordsOff.splice(0, Infinity, '#3');
+  circular.adv.multi_record_positions = [{ selector: '#3', row: 1 }, { selector: '#2', row: 2 }];
+  await app.refreshCircularRecordOrder();
+  await settle();
+  // Flat #2 is B's first record (A holds one), not B's second.
+  assert.deepEqual(circularDrawingRecordSet(circular.circularRecordList.value, circular).records.map((record) => record.value), [`${cardB}:1`]);
+  assert.equal(circular.form.circular_record_selector, `${cardB}:1`);
+  assert.deepEqual([...circular.recordsOff], [`${cardB}:2`]);
+  const rowOf = (key) => circular.adv.multi_record_positions.find((position) => position.selector === key)?.row;
+  assert.deepEqual([rowOf(`${cardB}:2`), rowOf(`${cardB}:1`)], [1, 2]);
+  assert.equal(circular.adv.multi_record_positions.some((position) => position.selector.startsWith('#')), false);
+  // A record ID names one record: the Record select takes its identity.
+  circular.form.circular_record_selector = 'B2';
+  circular.recordsOff.splice(0);
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.equal(circular.form.circular_record_selector, `${cardB}:2`);
+  // A #N past the cards still held as loaded names no record now: it is dropped.
+  loadedInputs();
+  await app.setCircularSourceFile(cardA, 'gb', genbank('a2.gb', ['A1', 40], ['A3', 45]));
+  await settle();
+  circular.form.circular_record_selector = '#2';
+  circular.recordsOff.splice(0, Infinity, '#3');
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.equal(circular.form.circular_record_selector, '');
+  assert.deepEqual([...circular.recordsOff], []);
+  assert.ok(cardA);
+});

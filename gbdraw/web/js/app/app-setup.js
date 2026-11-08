@@ -1753,6 +1753,7 @@ export const createAppSetup = () => {
     ),
     prepareLinearRecordCatalog,
     readRecordIdentitySources,
+    placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -3219,7 +3220,7 @@ export const createAppSetup = () => {
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  const { circularIdentitySources, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+  const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
     shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows

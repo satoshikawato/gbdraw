@@ -52,7 +52,7 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { cardsTakeLegacyRecordPositions, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
+import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -5049,7 +5049,8 @@ const withStoredComparisonPlan = (config, readFiles) => {
  * }} options `repairs`: Load lists what it drops from the saved inputs, at
  *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
  *   `circularRequest`: the files are the projection of a Circular request.
- *   `legacyRecordPositions`: the Session is older than its Circular File cards (50 and older).
+ *   `legacyRecordPositions`: the Session may name records by their flat positions over its cards (a Session
+ *   50 or older, or a Session 51 that kept a flat `#N`, `loadFiles`).
  */
 const applyFiles = (filesData, {
   adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files',
@@ -6753,8 +6754,10 @@ const pathIn = (at, field) => (at ? `${at}.${field}` : field);
  * until the Load commits it. The layout is read as the drawing reads it
  * (a list of another kind failed the Load).
  * @param {unknown} restored
- * @param {{ linearRecordLayout?: { rows?: unknown } | null, linearComparisonPlan?: unknown } | null} draftConfig
- *   The drawing's draft config: the record layout and comparison plan its files reconcile.
+ * @param {{ linearRecordLayout?: { rows?: unknown } | null, linearComparisonPlan?: unknown, recordsOff?: unknown,
+ *   form?: { circular_record_selector?: unknown }, adv?: { multi_record_positions?: unknown } } | null} draftConfig
+ *   The drawing's draft config: the record layout and comparison plan its files reconcile, and the record
+ *   choices whose kept flat `#N` count over the cards as loaded (OV-2869).
  * @param {string} cInputType @param {string} at Where the files are in the file.
  * @param {LoadFilesReading} reading
  */
@@ -6774,8 +6777,13 @@ const loadFiles = (restored, draftConfig, cInputType, at, {
     linearComparisonPlan: layout.view.linearComparisonPlan,
     slices: { settings: layout.handle }
   };
+  // A Session 51 that a Save wrote before any read keeps the flat `#N` of the Session 46-50 it came from (OV-2869).
+  const positions = draftConfig?.adv?.multi_record_positions;
+  const choiceKeys = [...(Array.isArray(draftConfig?.recordsOff) ? draftConfig.recordsOff : []), draftConfig?.form?.circular_record_selector,
+    ...(Array.isArray(positions) ? positions.map((/** @type {{ selector?: unknown } | null} */ row) => row?.selector) : [])];
   const { collapsedLinearSeqs, linearSeqs, circularSources } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
-    adoptCanonicalPayloads, resolveRecordInputs, circularRequest, legacyRecordPositions,
+    adoptCanonicalPayloads, resolveRecordInputs, circularRequest,
+    legacyRecordPositions: legacyRecordPositions || choiceKeys.some(isFlatRecordSelector),
     targetState: target, targetDrawing: target, repairs, at
   });
   return { target, linearSeqs, circularSources, collapsed: collapsedLinearSeqs, at };
