@@ -58,6 +58,22 @@ export const shallowRef = (value) => vue()?.shallowRef?.(value) ?? { value };
 export const reactive = (value) => vue()?.reactive?.(value) ?? value;
 
 /**
+ * Calls `callback` with the getter's value each time it changes (Vue `watch`; `flush` as Vue's). Without a
+ * page nothing is reactive: an `immediate` callback runs once.
+ * @template T
+ * @param {() => T} getter
+ * @param {(value: T) => void} callback
+ * @param {{ immediate?: boolean, flush?: 'pre' | 'post' | 'sync' }} [options]
+ * @returns {() => void} Stops it.
+ */
+export const watch = (getter, callback, options = {}) => {
+  const vueWatch = vue()?.watch;
+  if (vueWatch) return vueWatch(getter, callback, options);
+  if (options.immediate) callback(getter());
+  return () => {};
+};
+
+/**
  * @template T
  * @param {() => T} getter
  * @returns {{ readonly value: T }}

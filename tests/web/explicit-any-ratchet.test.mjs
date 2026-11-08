@@ -71,7 +71,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/similarity-alignment.js': 35,
   'app/svg-styles.js': 6,
   'app/track-slot-edits.js': 4,
-  'app/ui.js': 3,
+  'app/ui.js': 1,
   'app/watchers.js': 19,
   'services/annotation-state.js': 1,
   'services/artifact-slot.js': 7,

@@ -45,7 +45,9 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
-import { computed as typedComputed, ref as typedRef, shallowRef as typedShallowRef } from './utils/reactivity.js';
+import {
+  computed as typedComputed, reactive as typedReactive, ref as typedRef, shallowRef as typedShallowRef
+} from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
@@ -124,17 +126,22 @@ const svgResultIdentity = computed(() => (
   getCommittedSvgResultRuntimeIdentity(results.value[selectedResultIndex.value])
 ));
 
-const zoom = ref(1.0);
-const layoutRepositionMode = ref(false);
+// The Preview's view: its zoom and pan, whether a pan is under way, and whether the figure is
+// hidden or shown without its transform transition. The pan and zoom owner (app/ui.js) and the
+// Load, Reset, and feature search write them; `v-preview-transform` shows them on the surface.
+const zoom = typedRef(1.0);
+const layoutRepositionMode = typedRef(false);
 
-// Pan (drag) functionality
-const isPanning = ref(false);
-const panStart = reactive({ x: 0, y: 0, panX: 0, panY: 0 });
-const canvasPan = reactive({ x: 0, y: 0 });
-// The figure a file Session Load mounted stays hidden until the Load shows it fitted
-// (OV-2702); the pan and zoom owner (app/ui.js) writes it, `v-preview-transform` reads it.
-const previewHiddenUntilShown = ref(false);
-const canvasContainerRef = ref(null);
+// Pan (drag) functionality: a pan writes its live position to `canvasPan` (OV-2722).
+const isPanning = typedRef(false);
+const panStart = typedReactive({ x: 0, y: 0, panX: 0, panY: 0 });
+const canvasPan = typedReactive({ x: 0, y: 0 });
+// The figure a file Session Load mounted stays hidden until the Load shows it fitted (OV-2702).
+const previewHiddenUntilShown = typedRef(false);
+// While it holds, the surface shows the view without the 0.2 s transition: the Fit measures the
+// current transform, not a frame of its transition, and the Fit shown at once shows its view at once.
+const previewTransitionHeld = typedRef(false);
+const canvasContainerRef = typedRef(/** @type {HTMLElement | null} */ (null));
 
 // App State
 // The drawing a new Session starts with: one Circular drawing (PD-OI-090
@@ -391,7 +398,7 @@ const labelReflowLastError = ref(null);
 const undoneTrackHides = ref(/** @type {Map<string, ReadonlySet<UndoneTrackHide>>} */ (new Map()));
 
 // SVG Feature Click state
-const svgContainer = ref(null);
+const svgContainer = typedRef(/** @type {HTMLElement | null} */ (null));
 const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 // A popup's position. A popup opened at a clicked point keeps that `anchor`
 // until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
@@ -545,8 +552,8 @@ const featureVisibilityScopeDialog = reactive({
 });
 
 // Sidebar resize state
-const sidebarWidth = ref(320); // Initial width in pixels
-const isResizing = ref(false);
+const sidebarWidth = typedRef(320); // Initial width in pixels
+const isResizing = typedRef(false);
 // The display of the settings pane and the entry docked beside its icon rail.
 // services/settings-pane-state.js holds every transition; the browser, not
 // the Session, remembers the display (app/settings-pane.js).
@@ -1243,6 +1250,7 @@ export const state = Object.freeze({
   panStart,
   canvasPan,
   previewHiddenUntilShown,
+  previewTransitionHeld,
   canvasContainerRef,
   activeDrawingId,
   mode,

@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
+  showed the figure back where the pan began until the pointer moved or the
+  button was released. The figure now stays where the pan has moved it while
+  it zooms. When a new Result appears during a pan, the figure now also stays
+  where the pan moved it, instead of sliding back to where the pan began.
+  The first pan or zoom after a Generate or Reset layout no longer pauses for
+  a moment.
 - Fixed (Web app): a pan of the Result made with the left button while
   another button was held (for example the right button) could end by opening
   the popup of the element under the pointer, or by clearing the feature
