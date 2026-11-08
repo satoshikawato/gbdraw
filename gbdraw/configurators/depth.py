@@ -54,5 +54,7 @@ class DepthConfigurator:
             cfg.objects.depth.tick_font_size if tick_font_size is None else float(tick_font_size)
         )
         self.share_axis: bool = bool(cfg.objects.depth.share_axis if share_axis is None else share_axis)
+        # The axis labels are measured and drawn in the figure's font (OV-2757).
+        self.font_family: str = str(cfg.objects.text.font_family)
 
 __all__ = ["DepthConfigurator"]

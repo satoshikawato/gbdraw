@@ -46,6 +46,7 @@ class GcContentDrawer:
         self.large_tick_interval: float | None = getattr(gc_config, "large_tick_interval", 20.0)
         self.small_tick_interval: float | None = getattr(gc_config, "small_tick_interval", None)
         self.tick_font_size: float | None = getattr(gc_config, "tick_font_size", None)
+        self.font_family: str = gc_config.font_family
         self.percent_background_color: str = str(getattr(gc_config, "percent_background_color", "#737373"))
         self.percent_background_opacity: float = float(getattr(gc_config, "percent_background_opacity", 1.0))
         self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
@@ -187,6 +188,7 @@ class GcContentDrawer:
                     insert=(start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX, tick_y),
                     fill=self.axis_stroke,
                     font_size=font_size,
+                    font_family=self.font_family,
                     text_anchor="end",
                     dominant_baseline="central",
                 )

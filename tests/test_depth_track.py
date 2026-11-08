@@ -2807,3 +2807,32 @@ def test_categorical_multi_reference_mismatch_names_the_references(tmp_path: Pat
 
     with pytest.raises(ValidationError, match=r"Available references: b, a$"):
         depth_df(_make_record("rec1"), parsed, window=10, step=10)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_depth_and_gc_percent_tick_labels_carry_the_figure_font(mode: str) -> None:
+    """OV-2757: the depth and GC% axis labels are measured in the figure's font, so they are drawn in it;
+    a label without a family drew in the viewer's default serif."""
+
+    cfg = apply_config_overrides(None, {
+        "canvas.show_gc": True,
+        "canvas.show_skew": False,
+        "objects.gc_content.mode": "percent",
+        "objects.depth.large_tick_interval": 4,
+    })
+    if mode == "circular":
+        svg = assemble_circular_diagram_from_record(
+            _make_record(length=4000),
+            CircularAssemblyInputs(legend="none", depth_table=_depth_table("rec1"), cfg=cfg),
+        ).tostring()
+    else:
+        svg = assemble_linear_diagram_from_records(
+            [_make_record(length=4000)],
+            LinearAssemblyInputs(legend="none", depth_table=_depth_table("rec1"), cfg=cfg),
+        ).tostring()
+    tick_labels = re.findall(r"<text[^>]*>[0-9.]+(?:x|%)</text>", svg)
+    assert any(label.endswith("x</text>") for label in tick_labels)
+    assert any(label.endswith("%</text>") for label in tick_labels)
+    family = str(cfg.objects.text.font_family)
+    for label in tick_labels:
+        assert f'font-family="{family}"' in label.replace("&apos;", "'"), label

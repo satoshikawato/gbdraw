@@ -698,7 +698,7 @@ def test_a_percent_background_and_border_count_only_when_they_show(
         "high_fill_color": "#000", "low_fill_color": "#000", "fill_color": "#000", "stroke_color": "none",
         "stroke_width": 0.0, "fill_opacity": 1.0, "mode": "percent", "show_axis": False,
         "percent_background_color": "none", "percent_background_opacity": 1.0,
-        "percent_border_color": "#4b5563", "percent_border_width": 2.0, **style,
+        "percent_border_color": "#4b5563", "percent_border_width": 2.0, "font_family": "Liberation Sans", **style,
     }
     if "percent_border_color" in style:
         settings["percent_background_color"] = "none"

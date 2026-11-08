@@ -47,6 +47,7 @@ class DepthDrawer:
         self.large_tick_interval: float | None = depth_config.large_tick_interval
         self.small_tick_interval: float | None = depth_config.small_tick_interval
         self.tick_font_size: float | None = depth_config.tick_font_size
+        self.font_family: str = depth_config.font_family
         self.axis_stroke: str = "#4b5563"
         self.axis_stroke_width: float = DEPTH_AXIS_STROKE_WIDTH_PX
         self.axis_tick_size: float = DEPTH_AXIS_TICK_SIZE_PX
@@ -144,6 +145,7 @@ class DepthDrawer:
                         insert=(tick.length_px + SCALAR_AXIS_LABEL_GAP_PX, -tick.radius_px),
                         fill=self.axis_stroke,
                         font_size=font_size,
+                        font_family=self.font_family,
                         text_anchor="start",
                         dominant_baseline="central",
                     )
