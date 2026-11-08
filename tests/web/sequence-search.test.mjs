@@ -166,7 +166,7 @@ test('the search names each drawn record by key alone, and names its record as t
   // Python reads the bases each record draws, each record once, and its origin window when it has one
   // (read_record_span_sequences, DrawnRecordInput): the page sends no source coordinates.
   assert.deepEqual(search.searchSpans(records, [{ reach: 600 }, { reach: 50 }]), [
-    { recordKey: 'a', originWindow: 600 }, { recordKey: 'a', originWindow: 600 }, { recordKey: 'b', originWindow: 600 }
+    { recordKey: 'a', originWindow: 600 }, { recordKey: 'b', originWindow: 600 }
   ]);
   const read = { fasta: '', spans: [
     { recordKey: 'a', recordId: 'X', start: 1, end: 100, length: 100, wrapsOrigin: false, originWindow: false, recordLength: 100, header: 'X:1-100', sequence: '' },

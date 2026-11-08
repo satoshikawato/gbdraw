@@ -707,7 +707,8 @@ const installSimpleCircularInput = (primary, inactive) => {
     region_record_id: '',
     region_start: null,
     region_end: null,
-    region_reverse: false
+    region_reverse: false,
+      windows: []
   });
 };
 
@@ -2005,7 +2006,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'SECOND',
       region_start: 2,
       region_end: 5,
-      region_reverse: true
+      region_reverse: true,
+      windows: []
     }, {
       uid: 'middle',
       gb: bound(middleView),
@@ -2020,7 +2022,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'MIDDLE',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     }, {
       uid: 'third',
       gb: bound(thirdView),
@@ -2035,7 +2038,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'THIRD',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     });
     Object.assign(state.activeDrawing().linearComparisonPlan, {
       mode: 'selected',
@@ -2449,7 +2453,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
       uid: `card-${index + 1}`, gb: bound(thirteenFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     })));
     modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
     state.similarityAlignmentPlan.value = null;
@@ -2553,7 +2558,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
       uid: `upload-${index + 1}`, gb: bound(uploadFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     })));
     const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
@@ -2611,7 +2617,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.unshift({
       uid: 'inserted-1', gb: bound(insertedFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     });
     state.activeDrawing().losatProgram.value = 'blastp';
     const messagesBeforeInsert = workerMessages.length;
@@ -2965,7 +2972,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       region_record_id: '',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     },
     {
       uid: 'linear-none-second',
@@ -2980,7 +2988,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       region_record_id: '',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     }
   );
   state.activeDrawing().linearComparisonPlan.mode = 'none';
@@ -3581,7 +3590,8 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
     region_record_id: '',
     region_start: null,
     region_end: null,
-    region_reverse: false
+    region_reverse: false,
+      windows: []
   });
   const depthRow = (id, trackIndex, height) => ({
     id, renderer: 'depth', enabled: true, side: 'below', height, spacing: '', z: 0, params: { track_index: trackIndex }

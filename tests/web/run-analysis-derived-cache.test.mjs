@@ -206,7 +206,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   const sessionWith = (visibilityText) => ({
     renderRequest: {
       comparisons,
-      records: [{ recordKey: 'a', region: {} }],
+      records: [{ recordKey: 'a', windows: [] }],
       diagramOptions: visibilityText === null ? {} : { featureVisibilityTableFile: { resourceId: 'visibility' } }
     },
     resources: visibilityText === null ? {} : {
@@ -220,7 +220,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   });
   const reuse = (session, visibility) => canReuseResolvedProteinArtifacts({
     canonicalComparisons: comparisons, committedSession: session,
-    sequences: [{ uid: 'a', region_record_id: '' }], active: active(visibility)
+    sequences: [{ uid: 'a', region_record_id: '', windows: [] }], active: active(visibility)
   });
   const hideRule = '*\tCDS\tprotein_id\tCAG38712.1\toff\n';
   assert.equal(reuse(sessionWith(null), ''), true, 'unchanged empty visibility reuses');
@@ -240,7 +240,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
         comparisons: [{ ...marker, settings: { collinearMaxParalogLinksPerOrthogroup: committed } }, { kind: 'orthogroupResult' }]
       }
     },
-    sequences: [{ uid: 'a', region_record_id: '' }],
+    sequences: [{ uid: 'a', region_record_id: '', windows: [] }],
     active: { ...active(''), maxParalogLinks: current }
   });
   assert.equal(reuseParalogs(3, 3), true, 'the same paralog links reuse');
@@ -253,7 +253,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
     return canReuseResolvedProteinArtifacts({
       canonicalComparisons: collinear,
       committedSession: { ...sessionWith(null), renderRequest: { ...sessionWith(null).renderRequest, comparisons: collinear } },
-      sequences: [{ uid: 'a', region_record_id: '' }],
+      sequences: [{ uid: 'a', region_record_id: '', windows: [] }],
       active: {
         ...active(''), mode: 'collinear', inferOrthogroups, minAnchors: 1, maxUnitGap: 0, maxDiagonalDrift: 0,
         maxConflicts: 1, mergeOrientation: 'strand', unitMode: 'auto', anchorMode: 'rbh', searchScope: 'adjacent',

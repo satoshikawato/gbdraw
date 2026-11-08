@@ -59,8 +59,8 @@ test('OV-563: a Labels mode outside the table writes the scope none', async () =
 test('OV-562: a region with an empty offered record list has no selector', () => {
   circularState({ labels_mode: 'out', circular_region_start: 3, circular_region_end: 10 });
   const { renderRequest } = buildCanonicalRenderRequest({ state, drawing, filesData: emptyRecordFiles() });
-  assert.equal(renderRequest.records[0].region.selector, null);
-  assert.equal(renderRequest.records[0].region.start, 3);
+  assert.equal(renderRequest.records[0].selector, null);
+  assert.equal(renderRequest.records[0].windows[0].start, 3);
 });
 
 test('OV-564: a committed table whose resource id is an Object.prototype member name is written', () => {

@@ -843,7 +843,7 @@ const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/err
 const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
 const continuityCanonical = (keys = ['a'], grouping = 'single') => ({
   renderRequest: { mode: 'linear', grouping, records: keys.map(recordKey => ({
-    recordKey, cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 }, region: null,
+    recordKey, cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 }, windows: [],
     source: { kind: 'genbank', resourceId: `source-${recordKey}` }
   })) },
   resources: Object.fromEntries(keys.map(key => [`source-${key}`, { encoding: 'base64', data: 'YWJj', size: 3 }]))
@@ -890,7 +890,7 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   const snapshot = captureFixture(decorationSvg());
   for (const mutate of [
     c => { c.resources['source-a'].data = 'ZGVm'; },
-    c => { c.renderRequest.records[0].region = { start: 1, end: 10 }; },
+    c => { c.renderRequest.records[0].windows = [{ start: 1, end: 10, reverseComplement: false, column: null }]; },
     c => { c.renderRequest.mode = 'circular'; },
     c => { c.renderRequest.grouping = 'grid'; },
     c => { c.renderRequest.records[0].recordKey = 'changed'; },
@@ -946,10 +946,10 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   const canonical = continuityCanonical(['collection']);
   canonical.renderRequest.records[0].cardinality = 'all';
   canonical.renderRequest.records[0].selector = null;
-  canonical.renderRequest.records[0].region = {start: 10, end: 20};
+  canonical.renderRequest.records[0].windows = [{start: 10, end: 20, reverseComplement: false, column: null}];
   const snapshot = captureFixture(decorationSvg(), canonical, ['collection:1']);
   const candidate = structuredClone(canonical);
-  canonical.renderRequest.records[0].region.start = 11;
+  canonical.renderRequest.records[0].windows[0].start = 11;
   const next = decorationSvg([0, 0]);
   snapshot(candidate, {catalog: continuityCatalog(['collection:1'])})[0](next.svg);
   assert.deepEqual(compositionUserDeltas(next.svg).legend, [40,20]);

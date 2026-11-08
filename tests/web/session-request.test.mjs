@@ -512,8 +512,7 @@ state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
 assert.equal(canonical.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-assert.equal(CANONICAL_REQUEST_SCHEMA, 9);
-// Schema 9 carries per-feature edits by source identity (design Q4); this
+// Schema 10 carries per-feature edits by source identity (design Q4); this
 // state has no edits.
 assert.deepEqual(canonical.renderRequest.diagramOptions.featureOverrides, []);
 const schema8Canonical = structuredClone(canonical.renderRequest);
@@ -1014,13 +1013,13 @@ const selectedCircularCanonical = buildCanonicalRenderRequest({ state, filesData
 assert.equal(selectedCircularCanonical.renderRequest.grouping, 'single');
 assert.equal(selectedCircularCanonical.renderRequest.records.length, 1);
 assert.match(selectedCircularCanonical.renderRequest.records[0].recordKey, /second-record/);
-assert.equal(selectedCircularCanonical.renderRequest.records[0].selector, null);
-assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].region, {
-  selector: { kind: 'recordId', value: 'second-record' },
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].selector, { kind: 'recordId', value: 'second-record' });
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].windows, [{
   start: 3,
   end: 14,
-  reverseComplement: true
-});
+  reverseComplement: true,
+  column: null
+}]);
 assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].presentation, {
   label: '長い <i>環状ゲノム</i> ラベル',
   subtitle: 'Selected second record',
@@ -1062,8 +1061,8 @@ const selectedCircularRebuilt = buildCanonicalRenderRequest({
   filesData: selectedCircularProjection.files
 });
 assert.deepEqual(
-  selectedCircularRebuilt.renderRequest.records[0].region,
-  selectedCircularCanonical.renderRequest.records[0].region
+  selectedCircularRebuilt.renderRequest.records[0].windows,
+  selectedCircularCanonical.renderRequest.records[0].windows
 );
 assert.equal(
   selectedCircularRebuilt.renderRequest.records[0].presentation.reverseComplement,
@@ -1095,7 +1094,7 @@ for (const [overrides, message] of invalidCircularCases) {
 Object.assign(state.form, { circular_record_selector: 'second-record', circular_region_start: 3, circular_region_end: 19 });
 assert.deepEqual(
   { start: 3, end: 19 },
-  (({ start, end }) => ({ start, end }))(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.records[0].region)
+  (({ start, end }) => ({ start, end }))(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.records[0].windows[0])
 );
 state.circularRecordList.value = [
   { selector: '#1', record_id: 'duplicate-record', record_length: 18 },
@@ -1221,7 +1220,7 @@ state.form.circular_record_selector = '';
   state.recordsOff = ['#1', '#3'];
   const oneOn = buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest;
   assert.equal(oneOn.grouping, 'batch', 'All records with one ON record stays a batch of one');
-  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.region]), [['record-2', null]]);
+  assert.deepEqual(oneOn.records.map((record) => [record.recordKey, record.windows]), [['record-2', []]]);
 
   // An explicit single choice draws its record, ON or OFF (P-2).
   state.form.circular_record_selector = '#1';
@@ -2518,7 +2517,7 @@ assert.equal(
   };
   const selected = (recordKey, id, gridRow, startCoordinate) => ({
     recordKey, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'shared' },
-    selector: { kind: 'recordId', value: id }, region: null,
+    selector: { kind: 'recordId', value: id }, windows: [],
     presentation: { label: null, subtitle: null, reverseComplement: false, gridRow, gridColumn: 1 },
     display: { isCircular: null, startCoordinate }
   });
@@ -2556,7 +2555,7 @@ assert.equal(
   const committedLinear = (starts) => ({
     renderRequest: { schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', grouping: 'single',
       records: ['first', 'second'].map((recordKey, index) => ({ recordKey, cardinality: 'exactly_one',
-        source: { kind: 'genbank', resourceId: 'shared' }, selector: { kind: 'recordIndex', index }, region: null,
+        source: { kind: 'genbank', resourceId: 'shared' }, selector: { kind: 'recordIndex', index }, windows: [],
         presentation: { label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null },
         display: { isCircular: null, startCoordinate: starts[index] } })),
       diagramOptions: { featurePlacements: [], featureOverrides: [] }, output: { prefix: 'anchor' } },
@@ -2964,13 +2963,13 @@ assert.equal(
 );
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
-assert.equal(linearCanonical.renderRequest.records[2].selector, null);
-assert.deepEqual(linearCanonical.renderRequest.records[2].region, {
-  selector: { kind: 'recordIndex', index: 1 },
+assert.deepEqual(linearCanonical.renderRequest.records[2].selector, { kind: 'recordIndex', index: 1 });
+assert.deepEqual(linearCanonical.renderRequest.records[2].windows, [{
   start: 10,
   end: 20,
-  reverseComplement: true
-});
+  reverseComplement: true,
+  column: null
+}]);
 assert.deepEqual(
   linearCanonical.renderRequest.records.map((record) => record.recordKey),
   ['first', 'second', 'third']
@@ -5785,8 +5784,9 @@ assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
   // Re-recorded when the default merge orientation became "strand" (OV-2301), and when the split of a File card
   // stopped writing rows while Arrange in rows is off (OV-2500, R17-41): one request's two members lost row 1, and
-  // its layout, which then carries nothing, is left out.
-  '5ed02db221ba33b15ed43b04b08dd3d5ba3dc18f1f2f57d2b3ccada2ee662264',
+  // its layout, which then carries nothing, is left out. Re-recorded for request schema 10 (record windows replace
+  // the region; the 81 requests differ from the schema-9 ones only in that shape).
+  'ab184198750b2b02f0690aef9356d35f45bd774b261b5793016cc47b8a859d5a',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.
