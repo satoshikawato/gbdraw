@@ -54,8 +54,8 @@ test('Circular: the canvas, one record drawn alone, and a loaded canvas numbered
   assert.deepEqual(pairs(singleDrawn), [['circular-B-#2', 'record-2']]);
   // Its aliases are the two keys 0.14.2 gave it.
   assert.deepEqual(singleDrawn[0].aliases, ['record-2', circularSingleRecordKey(sources.circular[1])]);
-  // A region names its record through the region's selector.
-  assert.deepEqual(pairs(drawnRecordIdentities([{ recordKey: 'k', region: { selector: { kind: 'recordIndex', index: 2 } } }], sources)),
+  // A cropped record names its record through its own selector (request schema 10).
+  assert.deepEqual(pairs(drawnRecordIdentities([{ recordKey: 'k', selector: { kind: 'recordIndex', index: 2 }, windows: [{ start: 1, end: 10, reverseComplement: false, column: null }] }], sources)),
     [['k', 'record-3']]);
   // A loaded canvas numbers its keys in request order; the selector names the record.
   const loaded = [{ recordKey: 'record-1', selector: { kind: 'recordIndex', index: 2 } },
@@ -101,7 +101,7 @@ test('A3: preserved CLI keys of another record are permuted together; aliases ne
 
 test('Linear ALL <-> one record <-> region, a file of one record, and a record 2 -> 3 change', () => {
   const sources = linear({ U: ['r1', 'r2', 'r3'], S: ['only'] });
-  const all = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', selector: null, region: null }], sources);
+  const all = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', selector: null, windows: [] }], sources);
   assert.deepEqual(pairs(all), [['U:1', 'U:1'], ['U:2', 'U:2'], ['U:3', 'U:3']]);
   const one = (index) => drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index } }], sources);
   assert.deepEqual(pairs(one(1)), [['U', 'U:2']]);
@@ -111,17 +111,17 @@ test('Linear ALL <-> one record <-> region, a file of one record, and a record 2
   // Record 2 -> record 1, then back to every record.
   assert.deepEqual(moves(one(1), one(0)), { U: 'U:2', 'U:1': 'U' });
   assert.deepEqual(moves(one(0), all), { U: 'U:1' });
-  // A region draws the record its selector names.
-  const region = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', region: { selector: { kind: 'recordId', value: 'r2' } } }], sources);
+  // A cropped record draws the record its selector names.
+  const region = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' }, windows: [{ start: 1, end: 10, reverseComplement: false, column: null }] }], sources);
   assert.deepEqual(pairs(region), [['U', 'U:2']]);
   // A file of one record has one key in every view.
-  const single = drawnRecordIdentities([{ recordKey: 'S', cardinality: 'all' }], sources);
+  const single = drawnRecordIdentities([{ recordKey: 'S', cardinality: 'all', windows: [] }], sources);
   assert.deepEqual(pairs(single), [['S', 'S']]);
   assert.deepEqual(moves(single, drawnRecordIdentities([{ recordKey: 'S', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 } }], sources)), {});
   // A split ALL input keys each record `<uid>:<k>`: the identity.
   assert.deepEqual(pairs(drawnRecordIdentities([{ recordKey: 'U:2', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 } }], sources)), [['U:2', 'U:2']]);
   // A removed card (no list) has no identity: its rows keep their key.
-  assert.deepEqual(drawnRecordIdentities([{ recordKey: 'gone', cardinality: 'all' }], sources), []);
+  assert.deepEqual(drawnRecordIdentities([{ recordKey: 'gone', cardinality: 'all', windows: [] }], sources), []);
 });
 
 // R2-H1: the cards of one uploaded file (U record 1, X record 2) are two
@@ -146,9 +146,9 @@ test('Linear: the rows of one card of a file never move onto another card of tha
 
 test('duplicates stay separate: the same file in two cards, and records with one ID', () => {
   const sources = linear({ U: ['r1', 'r2'], V: ['r1', 'r2'] });
-  const previous = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all' }, { recordKey: 'V', cardinality: 'all' }], sources);
+  const previous = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', windows: [] }, { recordKey: 'V', cardinality: 'all', windows: [] }], sources);
   const next = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 } },
-    { recordKey: 'V', cardinality: 'all' }], sources);
+    { recordKey: 'V', cardinality: 'all', windows: [] }], sources);
   // Only card U's record 2 moves; card V's rows stay under V's keys.
   assert.deepEqual(moves(previous, next), { 'U:2': 'U' });
   // Two records with one ID are told apart by position.
@@ -166,7 +166,7 @@ test('no row moves out of or into a record key whose source the Generate replace
   assert.deepEqual(Object.fromEntries(recordKeyMoves(loaded, replacement, new Set(['record-1']))), {});
   // A Linear card keeps its uid: a row moves neither out of its replaced key nor into it.
   const sources = linear({ U: ['r1', 'r2'] });
-  const all = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all' }], sources);
+  const all = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', windows: [] }], sources);
   const one = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 } }], sources);
   assert.deepEqual(moves(all, one), { 'U:2': 'U' });
   assert.deepEqual(Object.fromEntries(recordKeyMoves(all, one, new Set(['U:2']))), {});

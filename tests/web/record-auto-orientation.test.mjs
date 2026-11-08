@@ -22,8 +22,8 @@ const committed = {
     mode: 'linear',
     comparisons: [{ kind: 'nucleotideBlast' }],
     records: [
-      { recordKey: 'ca', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'a' } },
-      { recordKey: 'cb', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'b' } }
+      { recordKey: 'ca', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'a' }, windows: [], presentation: { reverseComplement: false } },
+      { recordKey: 'cb', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'b' }, windows: [], presentation: { reverseComplement: false } }
     ]
   }
 };

@@ -5030,7 +5030,7 @@ const applyFiles = (filesData, {
   if (canonicalCircularRecords.length > 0) {
     targetState.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
       .map((record, index) => {
-        const selector = record?.region?.selector || record?.selector;
+        const selector = record?.selector;
         const selectorValue = selector?.kind === 'recordId'
           ? String(selector.value || '')
           : selector?.kind === 'recordIndex'

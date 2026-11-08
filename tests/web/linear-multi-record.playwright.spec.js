@@ -4120,7 +4120,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   // Cropping record 0 changes the database or query of every job that holds
   // it: both between-file jobs, its self job, 0 against 1, and 1 against 0.
   expect(cropped.jobCount).toBe(5);
-  expect(cropped.firstRecord.region).toMatchObject({ start: 1, end: 210, reverseComplement: true });
+  expect(cropped.firstRecord.windows).toEqual([{ start: 1, end: 210, reverseComplement: true, column: null }]);
 });
 
 test('@comparison-contract Total threads reallocates Auto runs and threads in real threaded LOSATP', async ({ page }) => {

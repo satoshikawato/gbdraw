@@ -20,6 +20,7 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
 import { regionSelectionHeading } from '../services/region-axis.js';
+import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
@@ -35,13 +36,13 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  *   What the match popup frame shows (`state.clickedPairwiseMatch`): a match, or a preview item.
  * @typedef {{ label: string, value: string }} PreviewItemFact
  * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown }} ColorRuleLike
- * @typedef {{ start?: unknown, end?: unknown }} RegionLike
+ * @typedef {{ start: number, end: number, reverseComplement: boolean }} RequestRecordWindow
  * @typedef {{
  *   recordKey?: unknown,
  *   cardinality?: unknown,
- *   presentation?: { label?: unknown, subtitle?: unknown, reverseComplement?: unknown } | null,
+ *   presentation: { label?: unknown, subtitle?: unknown, reverseComplement: boolean },
  *   display?: { startCoordinate?: unknown } | null,
- *   region?: RegionLike | null
+ *   windows: RequestRecordWindow[]
  * }} RequestRecordLike
  * @typedef {{ recordKey?: unknown, status?: unknown, anchorLabel?: unknown, rationaleLabel?: unknown }} AlignmentDecisionLike
  * @typedef {{ scope?: unknown, sourceUid?: unknown, recordId?: unknown, canonicalRecordKey?: unknown }} CommittedRecordRowLike
@@ -236,13 +237,10 @@ const buildLegendEntryView = ({
   };
 };
 
-/** @param {RegionLike | null | undefined} region */
-const regionText = (region) => {
-  const start = positive(region?.start);
-  const end = positive(region?.end);
-  if (start == null && end == null) return t('Whole record');
-  return `${start == null ? '1' : NUMBER.format(start)}..${end == null ? 'end' : NUMBER.format(end)}`;
-};
+/** @param {readonly RequestRecordWindow[]} windows the request record's windows (request schema 10), none for the whole record */
+const regionText = (windows) => (windows.length
+  ? windows.map(({ start, end }) => `${NUMBER.format(start)}..${NUMBER.format(end)}`).join(', ')
+  : t('Whole record'));
 
 /** @param {AlignmentDecisionLike | null | undefined} decision */
 const alignmentText = (decision) => {
@@ -271,7 +269,7 @@ const buildRecordDefinitionView = ({
   const name = text(drawn.name)
     || (Object.values(drawn).some(Boolean) ? '' : plain(record?.presentation?.label));
   const named = Boolean(name) && name !== accession;
-  const reversed = Boolean(record?.presentation?.reverseComplement);
+  const reversed = record !== null && canonicalRecordReverseComplement(record);
   const start = positive(record?.display?.startCoordinate);
   /** @type {PreviewItemFact[]} */
   const facts = [
@@ -283,7 +281,7 @@ const buildRecordDefinitionView = ({
     { label: t('Length'), value: text(drawn.length) || '—' },
     { label: t('Reverse complement'), value: reversed ? t('Yes') : t('No') },
     { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
-    { label: t('Region'), value: regionText(record?.region) }
+    { label: t('Region'), value: regionText(record?.windows ?? []) }
   ];
   // The record's place in a similarity alignment, not a sequence alignment
   // (the match popup's Alignment section): a locale may name the two apart.

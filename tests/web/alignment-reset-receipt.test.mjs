@@ -14,7 +14,7 @@ const fixture = () => {
   const before = { resources: { source: resource }, renderRequest: {
     schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
       recordKey, source: {kind: 'genbank', resourceId: 'source'}, cardinality: 'exactly_one',
-      selector: { kind: 'recordId', id: recordKey }, region: null,
+      selector: { kind: 'recordId', id: recordKey }, windows: [],
       display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false }
     })), layout: { recordTranslations: ['a', 'b', 'c'].map(recordKey => ({recordKey, x: 7, y: -3})), similarityAlignment: null }
   }};
@@ -58,7 +58,7 @@ test('resource ID remapping with unchanged bytes preserves the binding for Save/
 for (const [name, mutate] of [
   ['source bytes', f => { const bytes = Buffer.from('different source'); Object.assign(f.after.resources.source, {data:bytes.toString('base64'),size:bytes.length}); }],
   ['selector', f => { f.after.renderRequest.records[1].selector.id = 'another-record'; }],
-  ['crop', f => { f.after.renderRequest.records[1].region = {start:2,end:10,reverseComplement:false}; }],
+  ['crop', f => { f.after.renderRequest.records[1].windows = [{start:2,end:10,reverseComplement:false,column:null}]; }],
   ['plan anchor', f => { f.after.renderRequest.layout.similarityAlignment.records[1].anchor.biologicalFeatureId = 'another-gene'; }],
   ['plan removal', f => { f.after.renderRequest.layout.similarityAlignment = null; }]
 ]) test(`reject changed ${name} without dropping evidence`, async () => {

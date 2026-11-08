@@ -42,11 +42,11 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {ReturnType<typeof reviewRows>[number]} ReviewRow One record of the Review panel.
  * @typedef {{
  *   mode?: string,
- *   records?: ({
+ *   records?: {
  *     recordKey?: unknown,
- *     region?: { start?: unknown, end?: unknown, reverseComplement?: unknown } | null,
- *     presentation?: { reverseComplement?: unknown } | null
- *   } | null)[]
+ *     windows: { start: number, end: number, reverseComplement: boolean }[],
+ *     presentation: { reverseComplement: boolean }
+ *   }[]
  * } | null | undefined} CommittedAlignmentRequest The committed render request, as the helper request reads it.
  * @typedef {AliasSource & {
  *   start?: unknown, end?: unknown, strand?: unknown, hidden?: unknown, representative?: unknown, role?: unknown
@@ -535,6 +535,13 @@ const successfulSummary = (plan, reversed) => {
 };
 
 const baseReverseComplement = canonicalRecordReverseComplement;
+/**
+ * A helper request record drawn reverse-complemented: by its one window (`region`) or by its presentation, which
+ * `buildHelperRequest` never sets both of (Python's `_record_fact` refuses both).
+ * @param {AlignmentRequestRecord} record
+ */
+const helperRecordReverseComplement = (record) => record.presentation.reverseComplement
+  || (record.region !== null && record.region.reverseComplement);
 
 /**
  * @param {Record<string, any> | null | undefined} plan
@@ -790,7 +797,7 @@ const validateProjection = (value, request) => {
     const record = exactObject(recordValue, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
       'beforeAnchors', 'variants'], 'alignment projection record');
     if (record.recordKey !== keys[index] || typeof orientations[record.recordKey] !== 'boolean'
-      || record.beforeReverseComplement !== baseReverseComplement(request.records[index])) {
+      || record.beforeReverseComplement !== helperRecordReverseComplement(request.records[index])) {
       throw new Error('Alignment projection changed record orientation binding.');
     }
     const base = exactObject(record.base, ['x', 'y'], 'alignment projection base');
@@ -1094,23 +1101,20 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
-    const region = record?.region === null || record?.region === undefined
-      ? null
-      : {
-          start: Number(record.region.start),
-          end: Number(record.region.end),
-          reverseComplement: Boolean(record.region.reverseComplement)
-        };
-    if (region && (!Number.isSafeInteger(region.start) || !Number.isSafeInteger(region.end))) {
-      throw new Error(`renderRequest.records[${index}].region is invalid.`);
+    // The helper places a record drawn whole or in one window in order (request schema 10 writes its crop as
+    // `windows`); a record drawn in several windows, or in one across the origin, has no one span to place.
+    const [window, ...more] = record.windows;
+    if (more.length || (window && window.start > window.end)) {
+      throw new Error(`renderRequest.records[${index}] is drawn in several windows or across the origin; Align places a record drawn in one span.`);
+    }
+    if (window && (!Number.isSafeInteger(window.start) || !Number.isSafeInteger(window.end))) {
+      throw new Error(`renderRequest.records[${index}].windows is invalid.`);
     }
     return {
       recordKey,
       recordLength: lengths.get(recordKey) || null,
-      region,
-      presentation: {
-        reverseComplement: Boolean(record?.presentation?.reverseComplement)
-      }
+      region: window ? { start: window.start, end: window.end, reverseComplement: window.reverseComplement } : null,
+      presentation: { reverseComplement: record.presentation.reverseComplement }
     };
   });
   const displayedRecords = new Set(records.map(({ recordKey }) => recordKey));
@@ -1621,7 +1625,7 @@ export const createSimilarityAlignmentActions = ({
       const helper = await runHelperOperation(resolveOperation, { request,
         projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request,
           orientations: Object.fromEntries(
-            request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
+            request.records.map(record => [record.recordKey, helperRecordReverseComplement(record)])) },
         resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       response = validateSimilarityAlignmentResolution(helper?.result, request);

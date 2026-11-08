@@ -12,7 +12,7 @@ const { createRecordPositionReset, recordTranslationsAtX0 } = await import('../.
 const committedSession = (recordTranslations) => ({
   renderRequest: { mode: 'linear', layout: { similarityAlignment: null, recordTranslations },
     records: ['record-1', 'record-2', 'record-3'].map((recordKey, index) => ({ recordKey,
-      presentation: { reverseComplement: index === 1 } })) },
+      presentation: { reverseComplement: index === 1 }, windows: [] })) },
   resources: {}
 });
 const MOVED = [{ recordKey: 'record-1', x: 40, y: 0 }, { recordKey: 'record-2', x: -12.5, y: 7 }];

@@ -78,7 +78,7 @@ const createPopup = ({
   mode = 'linear', busy = null, circularBlock = 'not-inspected', recordLabel = '',
   entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }],
   renameLegendRow = null, legendRenameSettled = async () => {}, readShownLegendName = undefined,
-  requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
+  requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name', reverseComplement: false }, windows: [] }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
   countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
@@ -245,8 +245,8 @@ test('a Circular record popup without its own fields names the cause', () => {
 // request record and its File card, not the drawn index.
 test('a Linear record popup finds its request record and File card by record id', () => {
   const requestRecords = [
-    { recordKey: 'uid-1', cardinality: 'all', presentation: { label: 'Old name' } },
-    { recordKey: 'uid-2', cardinality: 'exactly_one', presentation: { label: 'Other', reverseComplement: true } }
+    { recordKey: 'uid-1', cardinality: 'all', presentation: { label: 'Old name', reverseComplement: false }, windows: [] },
+    { recordKey: 'uid-2', cardinality: 'exactly_one', presentation: { label: 'Other', reverseComplement: true }, windows: [] }
   ];
   const recordRows = [
     { scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' },
@@ -268,7 +268,7 @@ test('a Linear record popup finds its request record and File card by record id'
 test('a Linear record popup without record rows uses the drawn index of one-record files only', () => {
   const item = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   const one = createPopup({
-    requestRecords: [{ recordKey: 'uid-1', cardinality: 'exactly_one', presentation: { label: 'Old name' } }], recordRows: []
+    requestRecords: [{ recordKey: 'uid-1', cardinality: 'exactly_one', presentation: { label: 'Old name', reverseComplement: false }, windows: [] }], recordRows: []
   });
   one.state.clickedPairwiseMatch.value = item;
   assert.equal(one.popup.view.value.draft.sequenceUid, 'uid-1');
@@ -425,7 +425,9 @@ test('the record-definition view lists the facts of the displayed Result', () =>
   const view = openView(createPopup({
     definitionGroup,
     requestRecords: [{
-      recordKey: 'uid-1', presentation: { reverseComplement: true }, display: { startCoordinate: 1200 }, region: { start: 10, end: 2000 }
+      // A cropped record reverse-complemented: the request writes the orientation on its window (OV-2770).
+      recordKey: 'uid-1', presentation: { reverseComplement: false }, display: { startCoordinate: 1200 },
+      windows: [{ start: 10, end: 2000, reverseComplement: true, column: null }]
     }],
     recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
     alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' }
@@ -451,7 +453,7 @@ test('the record-definition view lists the facts of the displayed Result', () =>
 // German nouns and Turkish I.
 test('a record the alignment did not move shows its reason label unchanged', () => {
   const alignmentOf = (alignment) => openView(createPopup({
-    requestRecords: [{ recordKey: 'uid-1' }],
+    requestRecords: [{ recordKey: 'uid-1', presentation: { reverseComplement: false }, windows: [] }],
     recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
     alignment: { recordKey: 'uid-1', ...alignment }
   }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' })
@@ -466,7 +468,7 @@ test('a record the alignment did not move shows its reason label unchanged', () 
 // vs Dopasowanie).
 test('the record popup labels its similarity alignment fact with its own key', async () => {
   const label = () => openView(createPopup({
-    requestRecords: [{ recordKey: 'uid-1' }],
+    requestRecords: [{ recordKey: 'uid-1', presentation: { reverseComplement: false }, windows: [] }],
     recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
     alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' }
   }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' }).facts.at(-1).label;
@@ -488,7 +490,7 @@ test('the record popup labels its similarity alignment fact with its own key', a
 test('the record popup names a definition line as Organism only where the Result marks it', () => {
   const circular = (/** @type {string[]} */ lines, label = '') => openView(createPopup({
     mode: 'circular',
-    requestRecords: [{ recordKey: 'uid-1', presentation: label ? { label } : {} }],
+    requestRecords: [{ recordKey: 'uid-1', presentation: { ...(label ? { label } : {}), reverseComplement: false }, windows: [] }],
     definitionGroup: new FakeElement({}, {
       children: lines.map((line) => new FakeElement({ tag: 'text' }, { text: line }))
     })
@@ -519,7 +521,7 @@ test('the record popup names a definition line as Organism only where the Result
   assert.equal(idOnly.subtitle, '');
 
   const linear = openView(createPopup({
-    requestRecords: [{ recordKey: 'uid-1', presentation: { label: 'Typed name' } }],
+    requestRecords: [{ recordKey: 'uid-1', presentation: { label: 'Typed name', reverseComplement: false }, windows: [] }],
     recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
     definitionGroup: new FakeElement({}, {
       children: [

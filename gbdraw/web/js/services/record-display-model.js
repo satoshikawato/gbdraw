@@ -301,20 +301,28 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
 };
 
 /**
- * @param {{ region?: { reverseComplement?: unknown } | null, presentation?: { reverseComplement?: unknown } | null } | null | undefined} record
+ * The orientation and windows of a request record of schema 10, as the readers below read them.
+ * @typedef {{ windows: readonly { reverseComplement: boolean }[], presentation: { reverseComplement: boolean } }} CanonicalRecordOrientation
  */
-export const canonicalRecordReverseComplement = (record) => Boolean(
-  record?.region ? record.region.reverseComplement : record?.presentation?.reverseComplement
-);
 
 /**
- * @param {{ region?: { reverseComplement?: boolean } | null, presentation: { reverseComplement?: boolean } }} record
+ * Whether a request record is drawn reverse-complemented: by its presentation, or by its windows, all reversed
+ * (Python's `RecordInput.is_reversed`).
+ * @param {CanonicalRecordOrientation} record
+ */
+export const canonicalRecordReverseComplement = (record) => record.presentation.reverseComplement
+  || (record.windows.length > 0 && record.windows.every((window) => window.reverseComplement));
+
+/**
+ * Draws a request record in the absolute direction `reverseComplement`: on its windows when it has them, else on
+ * the record (Python's `RecordInput.oriented`).
+ * @param {{ windows: { reverseComplement: boolean }[], presentation: { reverseComplement: boolean } }} record
  * @param {boolean} reverseComplement
  */
 export const writeCanonicalRecordReverseComplement = (record, reverseComplement) => {
   if (typeof reverseComplement !== 'boolean') throw new Error('Record orientation must be boolean.');
-  if (record.region) {
-    record.region.reverseComplement = reverseComplement;
+  if (record.windows.length) {
+    record.windows.forEach((window) => { window.reverseComplement = reverseComplement; });
     record.presentation.reverseComplement = false;
   } else record.presentation.reverseComplement = reverseComplement;
 };

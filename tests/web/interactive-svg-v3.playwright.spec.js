@@ -942,10 +942,11 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
 
   await generateAndWaitForResult(page);
   const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
-  expect(request.records.map((record) => [record.region, record.presentation.reverseComplement]))
+  // Request schema 10: the crop is the record's one window.
+  expect(request.records.map((record) => [record.selector, record.windows, record.presentation.reverseComplement]))
     .toEqual([
-      [{ selector: null, start: 21, end: 300, reverseComplement: false }, false],
-      [null, true]
+      [null, [{ start: 21, end: 300, reverseComplement: false, column: null }], false],
+      [null, [], true]
     ]);
   // Generate draws what the CLI drew, with its source coordinates.
   const semantics = (content) => {

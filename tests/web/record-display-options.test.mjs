@@ -187,7 +187,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   const file = makeFile();
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
-    selector: null })) } };
+    selector: null, windows: [], presentation: { reverseComplement: false } })) } };
   const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
@@ -606,7 +606,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const resources = { both: descriptor('both.gb', 'LOCUS       first 100 bp DNA circular\n//\nLOCUS       second 100 bp DNA circular\n//\n') };
   const table = adoptCurrentSessionResources(resources);
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
-    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
+    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' }, windows: [], presentation: { reverseComplement: false } }] } };
   const inputFiles = createInputFileStore();
   const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
     linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false, windows: [] }],
