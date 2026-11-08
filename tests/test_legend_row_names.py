@@ -123,7 +123,12 @@ def _depth_track(index: int, fill: str, label: str = "Coverage") -> SimpleNamesp
 )
 def test_depth_tracks_with_one_label(fills, keys, drawn):
     table = sync_depth_track_legend_entries(
-        LegendTable(), depth_legend_sources(_depth_track(index, fill) for index, fill in enumerate(fills))
+        LegendTable(),
+        depth_legend_sources(_depth_track(index, fill) for index, fill in enumerate(fills)),
+        slots=legend_slot_sources(
+            LinearTrackSlot(id=f"depth_{index + 1}", renderer="depth", params={"track_index": index})
+            for index in range(len(fills))
+        ),
     )
     assert list(table) == keys
     assert [names.drawn for names in table.names().values()] == drawn

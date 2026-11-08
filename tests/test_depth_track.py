@@ -1310,6 +1310,40 @@ def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize("track_count", [1, 2])
+@pytest.mark.parametrize("explicit_stack", [False, True])
+def test_circular_depth_legend_rows_follow_the_drawn_ring_order(track_count: int, explicit_stack: bool) -> None:
+    """The Depth rows stand between the feature rows and the GC rows, where the rings are drawn (OV-2823).
+
+    One series without a track stack used to append its row after the GC skew rows, so the row moved
+    when a setting (a Depth width in the Web app) wrote the stack."""
+    record = _make_record("rec1", length=40)
+    labels = ["Sample A", "Sample B"][:track_count]
+    slots = (
+        ["features:features", "ticks:ticks"]
+        + (["depth:depth"] if track_count == 1 else [f"depth_{i + 1}:depth@track_index={i}" for i in range(track_count)])
+        + ["gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"]
+    )
+    svg = assemble_circular_diagram_from_record(
+        record,
+        CircularAssemblyInputs(
+            legend="left",
+            depth_track_tables=[[_constant_depth_table("rec1", 10 * (i + 1), length=40) for i in range(track_count)]],
+            depth_track_labels=labels,
+            circular_track_slots=slots if explicit_stack else None,
+            cfg=apply_config_overrides(None, None),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
+    ).tostring()
+
+    keys = re.findall(r'data-legend-key="([^"]*)"', svg)
+    assert keys == ["CDS", *labels, "GC content", "GC skew (+)", "GC skew (-)"]
+
+
+@pytest.mark.circular
 def test_circular_multiple_depth_auto_slots_do_not_restore_hidden_scale() -> None:
     record = _make_record("rec1", length=40)
     canvas = assemble_circular_diagram_from_record(

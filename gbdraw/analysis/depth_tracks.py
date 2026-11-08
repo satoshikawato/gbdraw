@@ -792,46 +792,41 @@ def build_depth_track_dataframes(
     ]
 
 
+def depth_track_legend_name(track: DepthLegendSource, track_count: int) -> str:
+    """The Legend row name of a Depth series without a slot ``legend_label``: its label, else ``Depth`` (one
+    series) or ``Depth N``."""
+
+    return str(track.label or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}"))
+
+
 def sync_depth_track_legend_entries(
     out: LegendTable,
     depth_tracks: Sequence[DepthLegendSource] | None,
     *,
-    slots: Sequence[LegendSlotSource] | None = None,
+    slots: Sequence[LegendSlotSource],
 ) -> LegendTable:
     """Replace the singleton Depth legend with logical-track-aware entries.
 
-    When ``slots`` is supplied, it is authoritative: only enabled Depth slots are
-    represented, in slot order, and their legend label overrides are honored.
+    ``slots`` is authoritative: only enabled Depth slots are represented, in
+    slot order, and their legend label overrides are honored.
     """
 
     if not depth_tracks:
         return out
     out.discard_default_track("Depth")
     track_count = _logical_depth_track_count([depth_tracks])
-    selected: list[tuple[DepthLegendSource, LegendSlotSource | None]]
-    if slots is None:
-        selected = [(track, None) for track in depth_tracks]
-    else:
-        tracks_by_index = index_depth_track_row(depth_tracks)
-        selected = []
-        for slot in slots:
-            if slot.renderer != "depth":
-                continue
-            track_index = parse_nonnegative_integer(
-                slot.params.get("track_index", 0),
-                field_name=f"depth slot '{slot.id}' track_index",
-            )
-            track = tracks_by_index.get(track_index)
-            if track is not None:
-                selected.append((track, slot))
-
-    for track, selected_slot in selected:
-        fallback = str(
-            track.label
-            or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}")
+    tracks_by_index = index_depth_track_row(depth_tracks)
+    for slot in slots:
+        if slot.renderer != "depth":
+            continue
+        track_index = parse_nonnegative_integer(
+            slot.params.get("track_index", 0),
+            field_name=f"depth slot '{slot.id}' track_index",
         )
-        label = slot_legend_label(selected_slot, fallback) if selected_slot is not None else fallback
-        out.add_source(label, {
+        track = tracks_by_index.get(track_index)
+        if track is None:
+            continue
+        out.add_source(slot_legend_label(slot, depth_track_legend_name(track, track_count)), {
             "type": "solid",
             "fill": track.fill_color,
             "stroke": track.stroke_color,
@@ -851,6 +846,7 @@ __all__ = [
     "depth_track_count",
     "depth_track_data_count",
     "depth_track_heights",
+    "depth_track_legend_name",
     "depth_track_indices",
     "freeze_depth_tracks",
     "index_depth_track_row",

@@ -34,9 +34,8 @@ from gbdraw.api import (
 )
 from gbdraw.api.request_render import render_request
 from gbdraw.legend.row_facts import collect_legend_row_facts
-from gbdraw.analysis.depth_tracks import sync_depth_track_legend_entries
 from gbdraw.legend.sources import DepthLegendSource, NumericLegendSource, legend_slot_sources
-from gbdraw.diagrams.circular.assemble import _sync_legend_table_for_circular_slots
+from gbdraw.diagrams.circular.assemble import _circular_legend_slots, _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
@@ -399,8 +398,19 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     ) or None
     table = LegendTable({key: {"fill": fill} for key, fill in case.get("legend", [])})
     if case["slots"] is None and case["mode"] == "circular":
-        # Circular without explicit slots names a row per Depth series (circular assemble).
-        table = sync_depth_track_legend_entries(table, depth_tracks)
+        # Circular without explicit slots draws the default tracks, whose rows the Depth series' rows join in
+        # the order of the default stack the rings are drawn in (circular assemble, OV-2823).
+        defaults = _generated_legend_rows(
+            {}, [], pd.DataFrame(columns=["feature_type", "color"]), used_color_rules=None, default_used_features=set(),
+            gc=gc_config, skew=skew_config, depth=None,
+            show_gc=True, show_skew=True, show_depth=False,
+        )
+        for key, entry in defaults.items():
+            table.add_default_track(key, {"fill": entry["fill"]})
+        table = _sync_legend_table_for_circular_slots(
+            table, slots=_circular_legend_slots(None, depth_tracks, show_gc=True, show_skew=True, gc=gc_config),
+            gc=gc_config, skew=skew_config, depth=None, depth_tracks=depth_tracks,
+        )
         assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
         assert list(table.shared_keys) == case.get("shared", [])
         return

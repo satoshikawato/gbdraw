@@ -1251,6 +1251,24 @@
           "depth",
           null,
           "#e24a4a"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
         ]
       ]
     },
@@ -1497,6 +1515,24 @@
           "depth",
           null,
           "#4a90e2"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
         ]
       ]
     },
@@ -1554,6 +1590,24 @@
           "depth",
           null,
           "#4ae24a"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
         ]
       ]
     },
@@ -1595,6 +1649,24 @@
           null,
           null,
           "#e5c07b"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
         ]
       ],
       "shared": [
@@ -1645,6 +1717,24 @@
           "depth",
           null,
           "#4a90e2"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          null,
+          "#a0a0a0"
+        ],
+        [
+          "GC skew (+)",
+          "skew_high",
+          null,
+          "#111111"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          null,
+          "#222222"
         ]
       ]
     },
