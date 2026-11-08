@@ -38,10 +38,19 @@ result = legacy_session_to_drawings_json(payload)
 `, JSON.stringify(document)));
 const workerCalls = [];
 setLegacySessionUpgrader(pythonLegacySessionUpgrader(workerCalls));
+// OV-2703: the pan and zoom owner's port for the stored figure records what the Load asked of
+// it, with the Results shown at that moment.
+const previewEvents = [];
+const storedFigurePreview = {
+  hide: () => previewEvents.push(['hide', state.results.value]),
+  show: ({ fit }) => previewEvents.push(['show', fit, state.results.value]),
+  restore: (view) => previewEvents.push(['restore', view, state.results.value])
+};
 const load = (session) => importSession({
   target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
 }, {
   confirmLoadRepairs: async () => true,
+  storedFigurePreview,
   // The composition root's port; these Results need no change.
   transformLegacyResultSvg: Object.assign(() => false, { appliesToContent: () => false })
 });
@@ -51,9 +60,15 @@ test('a Session 44 Load makes one upgradeLegacySession call and installs the dra
   const session = fixture('HmmtDNA_basic_circular.v44-schema8');
   const expected = await pythonUpgrade(session);
   workerCalls.length = 0;
+  previewEvents.length = 0;
+  const shownBefore = state.results.value;
   const loaded = await load(session);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.equal(workerCalls.length, 1);
+  // The stored figure is hidden before it is drawn and then shown fitted; a Load that ends ok
+  // keeps the view (the end of the Load fits its own Result).
+  assert.deepEqual(previewEvents.map(([name, ...rest]) => [name, ...rest.slice(0, -1)]), [['hide'], ['show', true]]);
+  assert.notEqual(previewEvents[1].at(-1), shownBefore);
   assert.deepEqual(drawingsShown(), expected.document.drawings.map(({ id, mode }) => ({ id, mode })));
   assert.equal(state.activeDrawingId.value, expected.document.ui.activeDrawingId);
   assert.equal(state.results.value.length, 1);
@@ -189,9 +204,16 @@ test('a Worker failure of a Session 27-44 Load installs nothing, withdraws the s
   assert.equal(before.status, 'ok');
   const drawings = drawingsShown();
   const results = state.results.value;
+  state.zoom.value = 1.3;
+  Object.assign(state.canvasPan, { x: 5, y: -7 });
+  previewEvents.length = 0;
   setLegacySessionUpgrader(async () => { throw { code: 'HELPER_PROTOCOL', stage: 'helper', operation: 'upgradeLegacySession' }; });
   try {
     const loaded = await load(fixture('BGC0000708-BGC0000713.v39'));
+    // OV-2703: the withdrawn stored figure gives back the Results and the view from before it.
+    assert.deepEqual(previewEvents.map(([name]) => name), ['hide', 'show', 'restore']);
+    assert.deepEqual(previewEvents[2].slice(0, 2), ['restore', { zoom: 1.3, canvasPan: { x: 5, y: -7 } }]);
+    assert.equal(previewEvents[2].at(-1), results);
     assert.equal(loaded.status, 'error');
     assert.equal(loaded.error.code, 'HELPER_PROTOCOL');
     assert.equal(loaded.error.operation, 'upgradeLegacySession');

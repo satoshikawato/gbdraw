@@ -264,16 +264,19 @@ export const PreviewZoomPercent = {
 /** @type {WeakMap<HTMLElement, () => void>} */
 const previewTransformStops = new WeakMap();
 // `v-preview-transform` on the preview surface: its transform follows the pan
-// and zoom from its creation (before it is inserted) until it unmounts.
+// and zoom from its creation (before it is inserted) until it unmounts, and it
+// stays hidden while the pan and zoom owner holds it (OV-2702).
 export const previewTransform = {
   /** @param {HTMLElement} element */
   beforeMount: (element) => {
     previewTransformStops.set(element, watch(
-      () => /** @type {const} */ ([state.canvasPan.x, state.canvasPan.y, state.zoom.value, state.isPanning.value]),
-      (/** @type {readonly [number, number, number, boolean]} */ [x, y, zoom, panning]) => {
+      () => /** @type {const} */ ([state.canvasPan.x, state.canvasPan.y, state.zoom.value, state.isPanning.value,
+        state.previewHiddenUntilShown.value]),
+      (/** @type {readonly [number, number, number, boolean, boolean]} */ [x, y, zoom, panning, hidden]) => {
         element.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
         element.style.transformOrigin = 'top center';
         element.style.transition = panning ? 'none' : 'transform 0.2s';
+        element.style.visibility = hidden ? 'hidden' : '';
       },
       { immediate: true }
     ));

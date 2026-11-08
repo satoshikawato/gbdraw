@@ -37,7 +37,7 @@ test('the surface follows the zoom, the pan, and panning until it unmounts (OV-9
   state.isPanning.value = false;
   previewTransform.beforeMount(element);
   assert.deepEqual({ ...element.style }, {
-    transform: 'translate(0px, 0px) scale(1)', transformOrigin: 'top center', transition: 'transform 0.2s'
+    transform: 'translate(0px, 0px) scale(1)', transformOrigin: 'top center', transition: 'transform 0.2s', visibility: ''
   });
   state.zoom.value = 1.5;
   state.canvasPan.x = 12;
@@ -47,6 +47,13 @@ test('the surface follows the zoom, the pan, and panning until it unmounts (OV-9
   await nextTick();
   assert.equal(element.style.transition, 'none');
   state.isPanning.value = false;
+  // OV-2702: the figure a file Session Load mounted stays hidden until the Load shows it.
+  state.previewHiddenUntilShown.value = true;
+  await nextTick();
+  assert.equal(element.style.visibility, 'hidden');
+  state.previewHiddenUntilShown.value = false;
+  await nextTick();
+  assert.equal(element.style.visibility, '');
   previewTransform.unmounted(element);
   state.zoom.value = 2;
   await nextTick();
