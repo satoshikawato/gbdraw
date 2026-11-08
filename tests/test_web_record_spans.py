@@ -24,7 +24,7 @@ from gbdraw.api import (
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.regions import parse_region_spec
+from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.render.track_slot_metadata import RecordAxisInput
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.web_support.record_spans import read_record_span_sequences
@@ -257,3 +257,35 @@ def test_a_read_with_a_window_below_one_or_both_kinds_is_a_protocol_error(tmp_pa
     with pytest.raises(ValidationError) as raised:
         read_record_span_sequences(payload, paths, str(tmp_path / "out"), spans)
     assert raised.value.diagnostic["code"] == "HELPER_PROTOCOL"
+
+
+# A record drawn through windows (D-01) is named by its own key: a span reads its source, a drawn read reads each
+# window, and every reply names the record.
+def _windows_card(*windows) -> LinearDiagramRequest:
+
+    return LinearDiagramRequest(records=(
+        RecordInput(GenBankInputSource(_MITO), record_key="card", windows=tuple(RecordWindow(*w) for w in windows)),
+    ))
+
+
+def test_a_span_of_a_record_drawn_in_windows_is_read_by_the_record_key(tmp_path: Path) -> None:
+    [span] = _read(_windows_card((1001, 3000), (6001, 8000, True)), tmp_path, ("card", 2001, 2010))["spans"]
+    assert (span["recordKey"], span["header"], span["sequence"]) == ("card", "NC_012920.1:2001-2010", _BASES[2000:2010])
+
+
+def test_a_drawn_read_of_a_record_in_windows_reads_every_window(tmp_path: Path) -> None:
+    reply = _read_drawn(_windows_card((1001, 3000), (6001, 8000, True)), tmp_path, "card")
+    assert _spans(reply) == [("card", 1001, 3000, False), ("card", 6001, 8000, False)]
+    assert [span["sequence"] for span in reply["spans"]] == [_BASES[1000:3000], _BASES[6000:8000]]
+
+
+def test_a_drawn_read_of_a_window_across_the_origin_wraps(tmp_path: Path) -> None:
+    request = LinearDiagramRequest(records=(
+        RecordInput(
+            GenBankInputSource(_MITO), record_key="card", display=RecordDisplayOptions(is_circular=True),
+            windows=(RecordWindow(16001, 500),),
+        ),
+    ))
+    [span, *_origin] = _read_drawn(request, tmp_path, "card")["spans"]
+    assert (span["recordKey"], span["start"], span["end"], span["wrapsOrigin"]) == ("card", 16001, 500, True)
+    assert span["sequence"] == _BASES[16000:] + _BASES[:500]

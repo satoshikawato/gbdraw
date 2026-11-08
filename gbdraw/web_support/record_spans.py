@@ -29,7 +29,7 @@ from gbdraw.annotations.search_hits import origin_window_span
 from gbdraw.api.request_render import load_render_source_records, resolve_request_records
 from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import _record_source_start
+from gbdraw.core.record_metadata import _record_source_start, _source_period, _wrap_source_base
 from gbdraw.layout.record_transform import spans_may_cross_origin
 from gbdraw.session_request_codec import decode_canonical_request
 
@@ -119,14 +119,17 @@ def read_record_span_sequences(
     asked = _span_inputs(list(spans))
     request = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     collection = resolve_request_records(request)
-    by_key = {item.record_key: index for index, item in enumerate(collection.provenance)}
+    # A record drawn through windows (D-01) is named by its own key and draws one unit per window.
+    by_key: dict[str, list[int]] = {}
+    for index, item in enumerate(collection.provenance):
+        by_key.setdefault(item.record_identity_key, []).append(index)
     # (record index, start, end, origin window) in reading order: the drawn records once each, their windows last.
     reads: list[tuple[int, int, int, bool]] = []
     windows: list[tuple[int, int]] = []
     drawn: set[str] = set()
     for span in asked:
-        index = by_key.get(span["recordKey"])
-        if index is None:
+        units = by_key.get(span["recordKey"])
+        if units is None:
             raise ValidationError(
                 f"The drawing has no record {span['recordKey']!r}.",
                 diagnostic={"code": "INPUT_INVALID", "field": "record_selector"},
@@ -135,13 +138,16 @@ def read_record_span_sequences(
             if span["recordKey"] in drawn:
                 continue
             drawn.add(span["recordKey"])
-            record, transform = collection.records[index], collection.transforms[index]
-            start = _record_source_start(record)
-            reads.append((index, start, start + len(record.seq) - 1, False))
-            if spans_may_cross_origin(record, transform):
-                windows.append((index, span["originWindow"]))
+            for index in units:
+                record = collection.records[index]
+                start = _record_source_start(record)
+                # A window across the origin ends at a base of the record's start (D-28).
+                reads.append((index, start, _wrap_source_base(start + len(record.seq) - 1, _source_period(record)), False))
+            if any(spans_may_cross_origin(collection.records[index], collection.transforms[index]) for index in units):
+                windows.append((units[0], span["originWindow"]))
         else:
-            reads.append((index, span["start"], span["end"], False))
+            # Spans are in source coordinates, which every window of a record shares.
+            reads.append((units[0], span["start"], span["end"], False))
     sources: dict[int, str] = {}
 
     def source_bases(index: int) -> str:
@@ -165,7 +171,7 @@ def read_record_span_sequences(
         wraps = start > end
         sequence = bases[start - 1:] + bases[:end] if wraps else bases[start - 1:end]
         read.append({
-            "recordKey": item.record_key,
+            "recordKey": item.record_identity_key,
             "recordId": item.source_record_id,
             "start": start,
             "end": end,

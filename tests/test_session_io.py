@@ -3126,6 +3126,50 @@ def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
     assert spec.args[spec.args.index("--region") + 1] == "#2:10-20:rc"
 
 
+def _windows_cli_args(tmp_path: Path, windows: list[dict[str, object]]) -> list[str]:
+    session = _minimal_session(
+        {
+            "linearSeqs": [
+                {
+                    "gb": _file_entry("a.gb", b"LOCUS       A\n"),
+                    "region_record_id": "RecA",
+                    "region_start": None,
+                    "region_end": None,
+                    "region_reverse": False,
+                    "windows": windows,
+                },
+                {"gb": _file_entry("b.gb", b"LOCUS       B\n")},
+            ]
+        },
+        mode="linear",
+    )
+    return session_to_cli_args(
+        session, mode="linear", temp_dir=tmp_path, output_override=None, format_override=None
+    ).args
+
+
+def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_path: Path) -> None:
+    """A card that draws a record in several windows (``windows``, D-01) gives one ``--region`` per window, in order."""
+
+    args = _windows_cli_args(tmp_path, [
+        {"start": 1001, "end": 3000, "reverseComplement": False, "column": 2},
+        {"start": 6001, "end": 8000, "reverseComplement": True, "column": 0},
+    ])
+    regions = [args[index + 1] for index, token in enumerate(args) if token == "--region"]
+    assert regions == ["#1:1001-3000", "#1:6001-8000:rc"]
+    assert "--reverse_complement" not in args
+
+
+def test_gui_only_linear_session_refuses_a_window_across_the_origin_on_the_command_line(tmp_path: Path) -> None:
+    """A region string with the larger number first is a reversed span, so a window across the origin has no spelling."""
+
+    with pytest.raises(ValidationError, match="across the origin"):
+        _windows_cli_args(tmp_path, [
+            {"start": 16001, "end": 500, "reverseComplement": False, "column": None},
+            {"start": 6001, "end": 8000, "reverseComplement": False, "column": None},
+        ])
+
+
 def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: Path) -> None:
     session = _minimal_session(
         {

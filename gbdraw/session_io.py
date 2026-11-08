@@ -7083,6 +7083,13 @@ def _append_linear_gui_sequence_options(
             continue
         record_selector = str(seq.get("region_record_id") or "").strip()
         record_selectors.append(record_selector)
+        card_windows = _mapping_list(seq.get("windows"))
+        if len(card_windows) > 1:
+            # A card that draws its record in several windows (D-01): one region per window, in order. The CLI places
+            # them in that order; the Record Layout columns are not written, as for every other record.
+            region_specs.extend(_card_window_region_spec(index, window) for window in card_windows)
+            reverse_flags.append(False)
+            continue
         start = seq.get("region_start")
         end = seq.get("region_end")
         has_start = start not in (None, "")
@@ -7118,6 +7125,22 @@ def _append_linear_gui_sequence_options(
             _append_pair(run_args, invocation_args, "--reverse_complement", "1" if flag else "0")
     for spec in region_specs:
         _append_pair(run_args, invocation_args, "--region", spec)
+
+
+def _card_window_region_spec(index: int, window: Mapping[str, Any]) -> str:
+    """The ``--region`` of one window of Linear card ``index`` (0-based)."""
+
+    start = _nonnegative_integer(window.get("start"))
+    end = _nonnegative_integer(window.get("end"))
+    if not start or not end:
+        raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
+    if start > end:
+        # A region string with the larger number first reads as a reversed span (v0.14.5).
+        raise ValidationError(
+            f"Linear sequence #{index + 1} has a window across the origin ({start}-{end}), which a command line "
+            "cannot write; save the Session and run it with gbdraw render instead."
+        )
+    return f"#{index + 1}:{start}-{end}{':rc' if _js_truthy(window.get('reverseComplement')) else ''}"
 
 
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:
