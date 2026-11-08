@@ -276,7 +276,8 @@ def bgc_og18(tmp_path_factory):
     }
     records = [{
         "recordKey": record["recordKey"], "recordLength": lengths[record["recordKey"]],
-        "region": record["region"],
+        "region": ({key: record["windows"][0][key] for key in ("start", "end", "reverseComplement")}
+                   if record["windows"] else None),
         "presentation": {"reverseComplement": bool(record["presentation"]["reverseComplement"])},
     } for record in session["renderRequest"]["records"]]
     return session, members, anchors, paths, records, tmp

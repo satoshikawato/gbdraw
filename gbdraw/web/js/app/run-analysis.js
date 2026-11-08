@@ -111,7 +111,7 @@ import {
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
-import { planLinearUnitSearch } from '../services/linear-units.js';
+import { generateUnitSearch } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -1228,6 +1228,52 @@ const requestRecordSource = (resources, sourceKind, sourceFile, fastaFile) => {
     resources: Object.fromEntries(ids.map((id) => [id, /** @type {NonNullable<GenerationPayload['resources']>[string]} */ (resources[id])]))
   };
 };
+/**
+ * A record's LOSAT FASTA read by the diagram Worker (`extractFirstFasta`).
+ * @param {FileLike} sourceFile
+ * @param {{ fmt: string, regionSpec: string | null, recordSelector: string, reverseFlag: boolean }} read
+ * @param {number} idx
+ * @returns {Promise<LosatSeqEntry>}
+ */
+const extractFirstFastaWithWorker = async (sourceFile, { fmt, regionSpec, recordSelector, reverseFlag }, idx) => {
+  const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA, {
+    files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(sourceFile) }],
+    format: fmt,
+    regionSpec,
+    recordSelector,
+    reverseFlag
+  });
+  const res = response.result;
+  if (res.error) throw res.error;
+  return Object.freeze({
+    fasta: res.fasta,
+    recordId: res.record_id || `seq_${idx + 1}`,
+    canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
+  });
+};
+
+/**
+ * The LOSAT entry of a record's protein extraction (the `extractCdsProteinFasta` reply).
+ * @param {Record<string, any>} res
+ * @param {number} idx
+ * @param {string} recordInstanceKey The key the request names the record by, when the reply names none.
+ * @returns {Promise<LosatSeqEntry>}
+ */
+const proteinSeqEntryOfHelperResult = async (res, idx, recordInstanceKey) => Object.freeze({
+  fasta: res.fasta,
+  recordId: res.record_id || `seq_${idx + 1}`,
+  canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
+  proteinMap: res.protein_map || {},
+  proteinCount: res.protein_count || 0,
+  proteinSetHash: String(res.protein_set_hash || ''),
+  recordAnalysisId: String(res.record_analysis_id || ''),
+  recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
+  runtimeBindingHash: String(res.runtime_binding_hash || ''),
+  displayBindingHash: String(res.display_binding_hash || ''),
+  identityManifest: res.identity_manifest || null,
+  hash: await hashText(res.fasta || '')
+});
+
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
@@ -3513,15 +3559,12 @@ export const createRunAnalysis = ({
         // Python plans the drawn units: a record drawn in several windows draws one unit per window, and a pair of
         // records compares every window pair. Every search below runs over the units, and every index the request
         // writes is a unit's (OV-2738).
-        const unitSearch = hasComparisonIntent
-          ? await planLinearUnitSearch(
-              linearSeqs, comparisonResolution,
-              (card) => linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled.value) }),
-              (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
-            )
-          : null;
-        const unitResolution = unitSearch ? unitSearch.resolution : comparisonResolution;
-        const unitSeqs = unitSearch ? unitSearch.sequences : linearSeqs;
+        const unitSearch = await generateUnitSearch(
+          linearSeqs, comparisonResolution,
+          (card) => linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled.value) }),
+          (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
+        );
+        const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
         requestComparisonPlan = unitResolution;
         const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
@@ -3710,7 +3753,7 @@ export const createRunAnalysis = ({
         const losatSearch = losatSearchSequences(unitSeqs, useLosat ? drawing.linearSeqs : linearSeqs, linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
         // The card of each searched record: a unit's card, then the OFF cards.
-        const losatCards = [...(unitSearch ? unitSearch.cards : linearSeqs), ...losatSeqs.slice(losatSearch.drawnCount)];
+        const losatCards = [...unitSearch.cards, ...losatSeqs.slice(losatSearch.drawnCount)];
         /**
          * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).
          * @type {Map<number, { entry: LosatSeqEntry, readDigest: () => Promise<string> }>}
@@ -3855,7 +3898,7 @@ export const createRunAnalysis = ({
             ? proteinVisibilityRows([String(losatCards[idx]?.uid || recordInstanceKey)])
             : [];
           // The record whose window this unit is, when it is one of several: same-record evidence reads it (D-01).
-          const windowOf = (idx < losatSearch.drawnCount ? unitSearch?.windowOf[idx] : null) ?? null;
+          const windowOf = idx < losatSearch.drawnCount ? unitSearch.windowOf[idx] : null;
           // What is read from the source File (or GFF3 and FASTA pair), kept per File (OV-1587): the protein
           // extraction, or the LOSAT FASTA of this record and region.
           const persistentCacheKey = useProteinBlastp
@@ -3922,20 +3965,7 @@ export const createRunAnalysis = ({
               );
               const res = response.result;
               if (res.error) throw res.error;
-              return Object.freeze({
-                fasta: res.fasta,
-                recordId: res.record_id || `seq_${idx + 1}`,
-                canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
-                proteinMap: res.protein_map || {},
-                proteinCount: res.protein_count || 0,
-                proteinSetHash: String(res.protein_set_hash || ''),
-                recordAnalysisId: String(res.record_analysis_id || ''),
-                recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
-                runtimeBindingHash: String(res.runtime_binding_hash || ''),
-                displayBindingHash: String(res.display_binding_hash || ''),
-                identityManifest: res.identity_manifest || null,
-                hash: await hashText(res.fasta || '')
-              });
+              return proteinSeqEntryOfHelperResult(res, idx, recordInstanceKey);
             }, PROTEIN_EXTRACTIONS_PER_FILE);
             if (losatTiming) {
               if (extracted) losatTiming.fastaWorkerFallbacks += 1;
@@ -3946,30 +3976,14 @@ export const createRunAnalysis = ({
               extracted = true;
               /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
               const extractWithWorker = async (reason) => {
-                const response = await runDiagramHelperOperation(
-                  DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
-                  {
-                    files: [{
-                      role: 'source',
-                      bytes: await cloneFileBytesForTransfer(sourceFile)
-                    }],
-                    format: fmt,
-                    regionSpec,
-                    recordSelector,
-                    reverseFlag: reverseFlag === '1'
-                  }
+                const entry = await extractFirstFastaWithWorker(
+                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1' }, idx
                 );
-                const res = response.result;
-                if (res.error) throw res.error;
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;
                   console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', reason ? formatError(reason) : '');
                 }
-                return Object.freeze({
-                  fasta: res.fasta,
-                  recordId: res.record_id || `seq_${idx + 1}`,
-                  canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
-                });
+                return entry;
               };
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
@@ -4231,7 +4245,7 @@ export const createRunAnalysis = ({
           return args;
         };
 
-        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx], unitSearch?.windows[idx] ?? null));
+        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx], unitSearch.windows[idx] ?? null));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)

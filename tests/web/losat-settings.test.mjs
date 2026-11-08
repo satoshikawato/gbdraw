@@ -274,7 +274,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
 // OV-2741: a card drawn in two windows is two drawn units, and a pair of records compares every window pair, so the
 // estimate counts the searches of Python's unit plan, as Generate plans them (`planLinearUnitSearch`).
 {
-  const { execFileSync } = await import('node:child_process');
+  const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
   const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
   const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -296,12 +296,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
     windowsOf: () => (card) => linearWindowsPayload(card, { arranged: false }),
     planLinearUnits: async (payload) => {
       asked.push(payload);
-      return { result: JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
-import json, sys
-from gbdraw.web_support.linear_units import plan_linear_units_json
-payload = json.load(sys.stdin)
-print(plan_linear_units_json(json.dumps(payload["records"]), json.dumps(payload["pairs"])))
-`], { input: JSON.stringify(payload), encoding: 'utf8' })) };
+      return { result: pythonLinearUnitPlan(payload) };
     }
   });
   await new Promise((resolve) => setImmediate(resolve));

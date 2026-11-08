@@ -999,7 +999,10 @@ def _v47_bgc() -> dict:
 def _two_drawings(version: int) -> dict:
     from tests.utils.two_mode_session import two_mode_session
 
-    return {**two_mode_session(_v47_bgc()), "version": version}
+    from tests.test_session_contract import _with_current_request
+
+    # The fixture stores the schema 9 request of its time; the Circular Gallery Session is at the current schema.
+    return {**two_mode_session(_with_current_request(_v47_bgc())), "version": version}
 
 
 @pytest.mark.parametrize("version", [46, 47])

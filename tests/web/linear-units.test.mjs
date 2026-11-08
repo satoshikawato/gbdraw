@@ -3,7 +3,6 @@
 // writes, then searches the units and writes their indexes. Each case here sends the Web's payload to the real Python
 // helper and runs the Web over Python's reply.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
 import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js';
@@ -15,14 +14,9 @@ import {
   planLinearUnitSearch,
   readLinearUnitPlan
 } from '../../gbdraw/web/js/services/linear-units.js';
+import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
 
-/** Python's reply to `planLinearUnits` for a payload. */
-const pythonPlan = (payload) => JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
-import json, sys
-from gbdraw.web_support.linear_units import plan_linear_units_json
-payload = json.load(sys.stdin)
-print(plan_linear_units_json(json.dumps(payload["records"]), json.dumps(payload["pairs"])))
-`], { input: JSON.stringify(payload), encoding: 'utf8' }));
+const pythonPlan = pythonLinearUnitPlan;
 
 const window = (start, end, reverseComplement = false, column = null) => ({ start, end, reverseComplement, column });
 const cases = [

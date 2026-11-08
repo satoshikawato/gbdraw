@@ -180,3 +180,19 @@ export const planLinearUnitSearch = async (cards, resolution, windowsOf, runHelp
   const reply = await runHelper(payload);
   return linearUnitSearch(cards, resolution, readLinearUnitPlan(reply?.result, payload));
 };
+
+/**
+ * The units a Generate searches: Python's plan when the drawing has a comparison; without one nothing is searched
+ * and the cards are the units (no window, none a window of another).
+ * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
+ * @param {LinearComparisonResolution} resolution
+ * @param {LinearUnitWindowsOf} windowsOf
+ * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
+ * @returns {Promise<LinearUnitSearch>}
+ */
+export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => (resolution.hasComparisonIntent === true
+  ? planLinearUnitSearch(cards, resolution, windowsOf, runHelper)
+  : {
+      sequences: [...cards], cards: [...cards], recordKeys: cards.map((card, index) => linearSeqRecordKey(card, index)),
+      windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
+    });

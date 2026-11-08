@@ -11,6 +11,7 @@ import { caseRequest, readVectors, valueAt } from './helpers/legacy-request-vect
 
 import { liftLegacyRenderRequest } from '../../gbdraw/web/js/services/legacy-render-request.js';
 import {
+  CANONICAL_REQUEST_SCHEMA,
   projectCanonicalSessionRequest,
   readStoredRenderRequest
 } from '../../gbdraw/web/js/services/session-request.js';
@@ -123,7 +124,7 @@ test('each request of the corpus lifts and reads without repairs to the current 
     const read = readStored(renderRequest, /^BGC/.test(id) ? promotion : {});
     assert.ok(!('kind' in read), `${id}: ${JSON.stringify(read)}`);
     assert.deepEqual(read.repairs, [], id);
-    assert.equal(read.value.schema, 9, id);
+    assert.equal(read.value.schema, CANONICAL_REQUEST_SCHEMA, id);
   }
 });
 
