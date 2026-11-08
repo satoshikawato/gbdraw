@@ -257,3 +257,41 @@ await test('a row a composite Session keyed record-2 lands on its record after t
   const collided = recordKeyMoves([], drawnRecordIdentities(allOf('record-1', 'record-2'), circularSources(colliding)));
   assert.notEqual(collided.get('record-2'), 'record-1:2');
 });
+
+// OV-2880: the Circular annotation source key names each card by its uid and
+// its files' fingerprints (name, size), never by a per-page file ID, so a
+// Session saved and loaded again (new file IDs) keeps its annotations' records;
+// one card has dev's key, so Sessions dev wrote still match.
+const { createDrawingRecordCatalog } = await import('../../gbdraw/web/js/app/drawing-record-catalog.js');
+const { annotationSourceKey } = await import('../../gbdraw/web/js/app/annotations/record-catalog.js');
+const { addCircularSource, bindCircularSourceFile, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const cardDrawing = (id, cards) => {
+  const drawing = createDrawingState(id, 'circular');
+  cards.forEach(([uid, name, text]) => {
+    addCircularSource(drawing.slices.inputs, createCircularSource({ uid }));
+    bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, uid, 'gb', new File([text], name));
+  });
+  return drawing;
+};
+const { circularAnnotationSourceKey } = createDrawingRecordCatalog({
+  state, readInputRecords: async () => [], linearRecordCatalogStateFor: () => ({ status: 'idle', records: [], error: '' }),
+  linearRecordErrorModelFor: () => '', refreshLinearRecords: async () => ({ status: 'ok' })
+});
+
+await test('the Circular annotation source key survives new file IDs and is dev\'s key for one card', () => {
+  const one = [['record-1', 'a.gb', 'LOCUS a']];
+  const saved = cardDrawing('annotation-key-saved', one);
+  const loaded = cardDrawing('annotation-key-loaded', one);
+  assert.notEqual(saved.circularSources[0].gb.fileId, loaded.circularSources[0].gb.fileId);
+  assert.equal(circularAnnotationSourceKey(loaded), circularAnnotationSourceKey(saved));
+  assert.equal(circularAnnotationSourceKey(saved), annotationSourceKey({
+    scope: 'circular', inputType: 'gb', primaryFile: saved.circularSources[0].gb, pairedFile: null
+  }));
+  const two = [['source-1', 'a.gb', 'LOCUS a'], ['source-2', 'b.gb', 'LOCUS bb']];
+  assert.equal(circularAnnotationSourceKey(cardDrawing('annotation-key-two-a', two)),
+    circularAnnotationSourceKey(cardDrawing('annotation-key-two-b', two)));
+  // Another file in a card, or the cards in another order, is another source.
+  const keyOf = (cards, id) => circularAnnotationSourceKey(cardDrawing(id, cards));
+  assert.notEqual(keyOf([two[0], ['source-2', 'c.gb', 'LOCUS bb']], 'annotation-key-other'), keyOf(two, 'annotation-key-two-c'));
+  assert.notEqual(keyOf([two[1], two[0]], 'annotation-key-moved'), keyOf(two, 'annotation-key-two-d'));
+});
