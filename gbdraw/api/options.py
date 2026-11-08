@@ -62,7 +62,7 @@ from gbdraw.mode_profiles import (
 from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
-    normalize_circular_track_slots_with_axis,
+    normalize_listed_circular_track_slots,
     normalize_linear_track_slots_with_axis,
     parse_circular_track_slots,
     parse_linear_track_slots,
@@ -279,7 +279,7 @@ def _validate_track_configuration(
         raise ValidationError(f"{axis_field_name} requires {slots_field_name}.")
     normalized_axis_index = int(axis_index)
     normalizer: Callable[[Sequence[Any], int], object] = (
-        normalize_circular_track_slots_with_axis
+        normalize_listed_circular_track_slots
         if mode == "circular"
         else normalize_linear_track_slots_with_axis
     )

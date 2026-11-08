@@ -62,7 +62,7 @@ from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,
-    normalize_circular_track_slots_with_axis,
+    normalize_listed_circular_track_slots,
     parse_circular_track_slots,
 )
 
@@ -794,7 +794,7 @@ def _get_args(
         args.circular_track_slot = circular_track_slots_for_validation
     if args.circular_track_axis_index is not None:
         try:
-            normalize_circular_track_slots_with_axis(
+            normalize_listed_circular_track_slots(
                 circular_track_slots_for_validation or [],
                 args.circular_track_axis_index,
             )

@@ -15,6 +15,7 @@ from .circular import (
     default_circular_track_slots,
     normalize_circular_track_slots,
     normalize_circular_track_slots_with_axis,
+    normalize_listed_circular_track_slots,
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "linear_track_slots_with_axis_side",
     "normalize_circular_track_slots",
     "normalize_circular_track_slots_with_axis",
+    "normalize_listed_circular_track_slots",
     "normalize_linear_track_slots",
     "normalize_linear_track_slots_with_axis",
     "parse_circular_track_slot",

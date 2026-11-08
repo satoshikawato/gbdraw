@@ -257,7 +257,9 @@ says so.
 If the current Result does not draw the feature, the annotation is not written
 and the download says how many. A blank `fill`
 cell in a styled row means no fill; omitting the column keeps the Web import
-default. TSV does not keep empty sets, metadata, or the distinction between
+default. A blank cell in any other style column, `stroke` included, takes that
+column's default: a blank `stroke` draws the default `#404040` outline or line,
+not none. TSV does not keep empty sets, metadata, or the distinction between
 an inherited set style and a row override. Tabs and line breaks within cells
 are replaced with spaces.
 

@@ -23,6 +23,7 @@ from ...layout.circular import (
     LAYOUT_EPSILON,
     RadialBand,
     band_union,
+    content_outer_radius_px,
     bands_overlap,
 )
 from ...layout.circular_depth_axis import (
@@ -2622,7 +2623,7 @@ def _resolve_circular_radial_layout(
             if resolved.reserved_band_px is not None:
                 anchored_blockers.append((intent.slot_id, resolved.reserved_band_px))
             continue
-        pinned_band = resolved.packing_band_px if intent.label_room is not None else resolved.own_reserved_band_px
+        pinned_band = resolved.band_without_label_rooms_px
         if _slot_reserves(intent) and pinned_band is not None:
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
@@ -2929,14 +2930,8 @@ def _resolve_circular_radial_layout(
 
     resolved_slots = tuple(resolved_by_index[index] for index in sorted(resolved_by_index))
     _validate_same_side_order(resolved_slots, intent_by_index, movable_by_index)
-    outer_content_radius = max(
-        [axis_radius_px]
-        + ([definition_band.outer_px] if definition_band is not None else [])
-        + [
-            float(slot.reserved_band_px.outer_px)
-            for slot in resolved_slots
-            if slot.reserved_band_px is not None
-        ]
+    outer_content_radius = content_outer_radius_px(
+        axis, definition_band, [slot.reserved_band_px for slot in resolved_slots]
     )
     return CircularRadialLayout(
         axis=axis,
