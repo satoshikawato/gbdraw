@@ -751,7 +751,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
- *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
+ *   current schema (Load reads a stored one to the current schema; Generate and the rerender commit the one they built).
  * @param {readonly LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
@@ -5003,7 +5003,7 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // Load read the committed request to schema 9 (`readStoredRenderRequest`).
+        // Load read the committed request to the current schema (`readStoredRenderRequest`).
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()
