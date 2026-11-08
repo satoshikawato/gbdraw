@@ -4918,18 +4918,15 @@
                                             <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
                                             <span>{{ t('Show Depth') }}</span>
                                         </label>
-                                        <div data-setting="pairwise-comparisons" class="flex items-center gap-2">
-                                            <label
-                                                class="option-label flex items-center gap-2 text-xs select-none"
-                                                :class="circularConservationSeriesRows.length > 0 ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed opacity-60'"
-                                                :title="circularConservationSeriesRows.length > 0 ? t('Draw the comparison rings. Generate runs their comparisons only while this is on.') : t('Add a comparison file in Pairwise Comparisons to enable Show Comparison Rings.')"
-                                            >
-                                                <input type="checkbox" :checked="circularConservation.enabled" @change="setCircularConservationShown($event.target.checked)" :disabled="!semanticMutationAvailable || circularConservationSeriesRows.length === 0" aria-describedby="circular-show-rings-timing" class="form-checkbox" data-testid="circular-show-comparison-rings">
-                                                <span>{{ t('Show Comparison Rings') }}</span>
-                                            </label>
-                                            <setting-note id="circular-show-rings-timing" setting="pairwise-comparisons"></setting-note>
-                                        </div>
                                     </div>
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="circularConservationSeriesRows.length > 0 ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed opacity-60'"
+                                        :title="circularConservationSeriesRows.length > 0 ? t('Draw the comparison rings. Generate runs their comparisons only while this is on.') : t('Add a comparison file in Pairwise Comparisons to enable Show Comparison Rings.')"
+                                    >
+                                        <input type="checkbox" :checked="circularConservation.enabled" @change="setCircularConservationShown($event.target.checked)" :disabled="!semanticMutationAvailable || circularConservationSeriesRows.length === 0" class="form-checkbox" data-testid="circular-show-comparison-rings">
+                                        <span>{{ t('Show Comparison Rings') }}</span>
+                                    </label>
                                 </div>
 
                                 <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
