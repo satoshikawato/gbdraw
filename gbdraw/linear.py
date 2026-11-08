@@ -158,6 +158,7 @@ from .cli_utils.losat_output import (
 )
 from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, NUCLEOTIDE_LOSAT_PROGRAMS
 from .core.numeric import (
     argparse_float,
     argparse_integer,
@@ -169,7 +170,6 @@ from .core.numeric import (
 
 
 # ``--losat`` choices (design 3.2).
-_CLI_LOSAT_PROGRAMS = ("losatn", "tlosatx", "losatp")
 _LOSATP_MODES = ("similarity_groups", "collinear", "pairwise")
 # ``--losat_output_dir`` file for LOSATP raw evidence (design 3.7, D13).
 LOSATP_RAW_OUTPUT_NAME = "losatp.raw.tsv"
@@ -365,7 +365,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     )
     parser.add_argument(
         '--losat',
-        choices=_CLI_LOSAT_PROGRAMS,
+        choices=COMPARISON_LOSAT_PROGRAMS,
         default=None,
         help=(
             'Run a LOSAT comparison between the records: losatn compares the '
@@ -381,9 +381,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         choices=_LOSATP_MODES,
         default=None,
         help=(
-            'LOSATP display with --losat losatp: similarity_groups (Similarity groups '
-            'across all records), collinear (Collinear blocks), or pairwise '
-            '(links between records in adjacent rows) (default: similarity_groups).'
+            'LOSATP display with --losat losatp: similarity_groups (Similarity groups across all records), collinear '
+            '(Collinear blocks), or pairwise (links between records in adjacent rows, or the pairs that the source=losat '
+            'rows of --comparisons_table list) (default: pairwise with --comparisons_table, else similarity_groups).'
         ),
     )
     parser.add_argument(
@@ -1027,7 +1027,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--losat cannot be used with -b/--blast")
     if args.losatp_mode is not None and not args.losat:
         parser.error("--losatp_mode requires --losat losatp")
-    if args.losat in {"losatn", "tlosatx"}:
+    if args.losat in NUCLEOTIDE_LOSAT_PROGRAMS:
         collinear_flags = sorted(
             {
                 str(token).split("=", 1)[0]
@@ -1047,7 +1047,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
                 },
             )
     if args.losat == "losatp" and args.losatp_mode is None:
-        args.losatp_mode = "similarity_groups"
+        args.losatp_mode = "pairwise" if args.comparisons_table else "similarity_groups"
     if args.losat_output_dir and not args.losat:
         parser.error("--losat_output_dir requires --losat")
     if args.similarity_alignment_feature and args.anchor_feature:

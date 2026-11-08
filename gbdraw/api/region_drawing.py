@@ -11,7 +11,7 @@ in the coordinates of the uncut records.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
 from typing import Any, Literal, cast
@@ -28,6 +28,7 @@ from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularRequestTrackOptions,
     LinearDiagramOptions,
+    LinearMultiRecordOptions,
     _ModeDiagramOptions,
     config_override_mode,
 )
@@ -211,8 +212,8 @@ class RegionDrawing:
 
 
 @dataclass(frozen=True)
-class _Region:
-    """The spans of one source record a region drawing draws: one window each, in source order (D-01).
+class SourceRegion:
+    """The spans of one source record a derived drawing draws: one window each, in source order (D-01).
 
     ``index`` is the record's place in the new drawing; ``first_unit`` the drawn index of its first window there.
     A span whose start is after its end runs across the origin of the circular record of ``length`` bases.
@@ -319,11 +320,69 @@ def derive_region_request(
         raise ValidationError(
             "A Circular region drawing draws exactly one record.", diagnostic={"code": "INPUT_INVALID"}
         )
+    source_ids = [str(record.id) for record in collection.records]
+    derived = DerivedRecords(
+        mode=target_mode,
+        records=tuple(_record_input(source, region, reverse_complement) for region in selected),
+        record_ids=tuple(source_ids[region.item.resolved_index] for region in selected),
+        lengths=tuple(length for region in selected for length in region.drawn_lengths),
+        regions=selected,
+    )
+    return derive_from_source(
+        source,
+        collection,
+        derived,
+        adapt_sizes=adapt_sizes,
+        linear_comparisons=lambda options, dropped: _linear_comparisons(options, selected, dropped, source_mode),
+    )
 
+
+@dataclass(frozen=True)
+class DerivedRecords:
+    """The records of a drawing derived from a source drawing.
+
+    ``records`` are its record inputs and ``record_ids`` their record IDs, in
+    drawing order; ``lengths`` the drawn length of each of its units;
+    ``regions`` the records that come from records of the source drawing, each
+    placed by its ``index`` in ``records``. A record that is not in the source
+    drawing carries none of its edits. ``layout`` places records that share a
+    Linear row; without it each record takes a row of its own.
+    """
+
+    mode: DrawingMode
+    records: tuple[RecordInput, ...]
+    record_ids: tuple[str, ...]
+    lengths: tuple[int, ...]
+    regions: tuple[SourceRegion, ...]
+    layout: LinearMultiRecordOptions | None = None
+
+
+# The comparison fields of a derived Linear drawing, from the source's options; it adds what it does not carry.
+LinearComparisonRule = Callable[[LinearDiagramOptions, list[NotCarried]], Mapping[str, object]]
+
+
+def derive_from_source(
+    source: DiagramRequest,
+    collection: ResolvedRecordCollection,
+    derived: DerivedRecords,
+    *,
+    adapt_sizes: bool,
+    linear_comparisons: LinearComparisonRule,
+) -> RegionRequest:
+    """The request of ``derived`` with the settings and edits of ``source`` that apply to it.
+
+    The one reader of a source drawing's settings for a derived drawing (New
+    drawing from a region, Find in other files): a hand-set size whose Auto
+    value changes returns to Auto; per-feature edits, annotations and Depth
+    follow their records; what is not carried is listed.
+    """
+    source_mode: DrawingMode = "linear" if isinstance(source, LinearDiagramRequest) else "circular"
+    target_mode = derived.mode
+    selected = derived.regions
     options = source.options
     cfg = apply_config_overrides(options.config, None)
     source_extent = DrawnExtent(source_mode, tuple(len(record) for record in collection.records))
-    target_extent = DrawnExtent(target_mode, tuple(length for region in selected for length in region.drawn_lengths))
+    target_extent = DrawnExtent(target_mode, derived.lengths)
     adaptation = adapt_explicit_settings(
         _explicit_values(options, source_extent.size_class(cfg)),
         source=source_extent,
@@ -348,6 +407,7 @@ def derive_region_request(
     if other_mode_paths:
         dropped.append(NotCarried("OTHER_MODE_SETTINGS", source_mode, items=tuple(other_mode_paths)))
     by_key = {region.item.record_identity_key: region for region in selected}
+    by_index = {region.index: region for region in selected}
     values: dict[str, Any] = {name: getattr(options, name) for name in _SHARED_FIELDS}
     values.update(
         {name: None if name in returned else getattr(options, name) for name in _SIZE_OPTIONS},
@@ -362,8 +422,12 @@ def derive_region_request(
             for row in options.feature_placements
             if target_mode == source_mode and _keeps_feature(by_key, row.record_key, row.biological_feature_id)
         ),
-        annotations=_region_annotations(options.annotations, collection, selected, dropped, source_mode),
-        depth_tracks=_region_depth_tracks(options, selected, target_mode),
+        annotations=_region_annotations(
+            options.annotations, collection, selected, dropped, source_mode, derived.record_ids
+        ),
+        depth_tracks=_region_depth_tracks(
+            options, [by_index.get(index) for index in range(len(derived.records))], target_mode
+        ),
     )
     if target_mode != source_mode:
         # Comparison thresholds filter rings in Circular and ribbons in Linear:
@@ -375,7 +439,7 @@ def derive_region_request(
         dropped.append(NotCarried("FEATURE_PLACEMENT_TABLE", source_mode))
         values.update(feature_placement_table=None, feature_placement_table_file=None)
 
-    records = tuple(_record_input(source, region, reverse_complement) for region in selected)
+    records = derived.records
     output = getattr(source, "output", None) or RenderOutputRequest()
     request: DiagramRequest
     if target_mode == "linear":
@@ -386,14 +450,14 @@ def derive_region_request(
             assert isinstance(options, LinearDiagramOptions)
             values.update(
                 {name: getattr(options, name) for name in _LINEAR_ONLY_FIELDS},
-                **_linear_comparisons(options, selected, dropped, source_mode),
+                **linear_comparisons(options, dropped),
             )
             if source.similarity_alignment is not None:
                 dropped.append(NotCarried("SIMILARITY_ALIGNMENT", source_mode))
         elif _has_any(options, _RING_RESULTS + _RING_PLAN):
             dropped.append(NotCarried("CONSERVATION_RINGS", source_mode))
         request = LinearDiagramRequest(
-            records=records, options=LinearDiagramOptions(**values), output=output
+            records=records, options=LinearDiagramOptions(**values), output=output, layout=derived.layout
         )
     else:
         if isinstance(options, CircularDiagramOptions):
@@ -418,7 +482,7 @@ def _resolve_regions(
     selections: Sequence[RegionChoice],
     *,
     margin: int,
-) -> tuple[_Region, ...]:
+) -> tuple[SourceRegion, ...]:
     if not selections:
         raise ValidationError(
             "A region drawing needs at least one region.", diagnostic={"code": "INPUT_INVALID", "reason": "REQUIRED"}
@@ -452,11 +516,11 @@ def _resolve_regions(
             _with_margin(start, end, margin, length)
         )
     ordered = sorted(resolved.values(), key=lambda value: value[0].resolved_index)
-    regions: list[_Region] = []
+    regions: list[SourceRegion] = []
     first_unit = 0
     for index, (item, ranges, length) in enumerate(ordered):
         spans = _merged_spans(ranges, length)
-        regions.append(_Region(item, index, spans, spans == ((1, length),), first_unit, length))
+        regions.append(SourceRegion(item, index, spans, spans == ((1, length),), first_unit, length))
         first_unit += len(spans)
     return tuple(regions)
 
@@ -509,7 +573,7 @@ def _selected_span(selection: RegionChoice, item: ResolvedRecordProvenance, leng
 
 def _record_input(
     source: DiagramRequest,
-    region: _Region,
+    region: SourceRegion,
     reverse_complement: bool | None,
 ) -> RecordInput:
     item = region.item
@@ -574,7 +638,7 @@ def _explicit_values(options: _ModeDiagramOptions, size_class: str) -> dict[str,
     return explicit
 
 
-def _keeps_feature(by_key: Mapping[str, _Region], record_key: str, feature_id: str) -> bool:
+def _keeps_feature(by_key: Mapping[str, SourceRegion], record_key: str, feature_id: str) -> bool:
     region = by_key.get(record_key)
     if region is None:
         return False
@@ -588,11 +652,12 @@ def _keeps_feature(by_key: Mapping[str, _Region], record_key: str, feature_id: s
 def _region_annotations(
     annotations: AnnotationOptions | None,
     collection: ResolvedRecordCollection,
-    regions: Sequence[_Region],
+    regions: Sequence[SourceRegion],
     dropped: list[NotCarried],
     source_mode: DrawingMode,
+    new_ids: Sequence[str],
 ) -> AnnotationOptions | None:
-    """Annotation items inside or overlapping the regions, retargeted to the new records."""
+    """Annotation items inside or overlapping the regions, retargeted to the new records (``new_ids`` in order)."""
     if annotations is None:
         return None
     if annotations.table is not None or annotations.table_file is not None:
@@ -601,7 +666,6 @@ def _region_annotations(
     by_source = {region.item.resolved_index: region for region in regions}
     by_key = {region.item.record_identity_key: region for region in regions}
     source_ids = [str(record.id) for record in collection.records]
-    new_ids = [source_ids[region.item.resolved_index] for region in regions]
     outside = 0
 
     def retarget(annotation: RegionAnnotation) -> RegionAnnotation | None:
@@ -632,7 +696,7 @@ def _region_annotations(
         if selector is None or selector.record_id is None or new_ids.count(selector.record_id) != 1:
             selector = (
                 None
-                if len(regions) == 1
+                if len(new_ids) == 1
                 else RecordSelector(raw=f"#{region.index + 1}", record_id=None, record_index=region.index)
             )
         return replace(annotation, target=replace(target, record=selector))
@@ -663,15 +727,16 @@ def _bound_record(record_ids: Sequence[str], selector: RecordSelector | None) ->
 
 def _region_depth_tracks(
     options: _ModeDiagramOptions,
-    regions: Sequence[_Region],
+    slots: Sequence[SourceRegion | None],
     target_mode: DrawingMode,
 ) -> tuple[Any, ...] | None:
-    """Depth tracks of the drawn records; a per-record source follows its record."""
+    """Depth tracks of the drawn records, one slot per new record; a per-record source follows its record, and a
+    record not in the source drawing has none."""
     tracks = []
     for track in options.depth_tracks or ():
         source = track.source
         if isinstance(source, tuple):
-            source = tuple(source[region.item.resolved_index] for region in regions)
+            source = tuple(None if slot is None else source[slot.item.resolved_index] for slot in slots)
             if all(item is None for item in source):
                 continue
         tracks.append(replace(track, source=source, height=track.height if target_mode == "linear" else None))
@@ -680,7 +745,7 @@ def _region_depth_tracks(
 
 def _linear_comparisons(
     options: LinearDiagramOptions,
-    regions: Sequence[_Region],
+    regions: Sequence[SourceRegion],
     dropped: list[NotCarried],
     source_mode: DrawingMode,
 ) -> dict[str, Any]:
@@ -737,7 +802,9 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
 
 
 __all__ = [
+    "DerivedRecords",
     "FeatureRegionSelection",
+    "LinearComparisonRule",
     "NotCarried",
     "NotCarriedKind",
     "StartAfterEndReason",
@@ -746,6 +813,8 @@ __all__ = [
     "RegionDrawing",
     "RegionRequest",
     "RegionSelection",
+    "SourceRegion",
+    "derive_from_source",
     "derive_region_drawing",
     "derive_region_request",
 ]

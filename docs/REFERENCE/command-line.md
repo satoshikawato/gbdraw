@@ -319,7 +319,7 @@ LOSAT or the matching NCBI BLAST+ program. Records in adjacent rows are compared
 unless `--comparisons_table` lists `source` `losat` rows. `--losatn_task` selects
 the LOSATN task and `--losat_gencode` the TLOSATX genetic code. `--losat losatp`
 takes `--losatp_mode` (`similarity_groups`, `collinear`, or `pairwise`; default
-`similarity_groups`). `gbdraw circular` builds Circular similarity rings with
+`pairwise` with `--comparisons_table`, else `similarity_groups`). `gbdraw circular` builds Circular similarity rings with
 `--losat losatn|tlosatx` and `--conservation_sequence`. As an alternative, read
 prepared results with `--blast`, `--comparisons_table`, or
 `--conservation_blast`; `--losat` cannot be combined with `--blast`. Each

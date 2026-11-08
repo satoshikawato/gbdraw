@@ -205,13 +205,18 @@ It cannot be combined with `--losat_gencode`, and another `--losat` program
 rejects it.
 
 Linear comparison `query` and `subject` values accept a displayed `#index` or
-unique record ID. The endpoints must be different and in adjacent rows. A
-comparisons table cannot be combined with the positional `--blast` form.
+unique record ID. For a record drawn in several windows, a `losat` row may name
+one window as the record and its span, as the records table's `region` column
+writes it: `NC_009725.2:1911335-1989004`, `#2:9000-1000:origin`. A row that
+names the record compares each of its windows. The endpoints must be different and in adjacent rows. A comparisons
+table cannot be combined with the positional `--blast` form.
 
 `source` is `table` (the default for a blank cell or a table without the
 column) or `losat`. A `table` row reads its `blast` file. A `losat` row leaves
-`blast` empty; `--losat losatn`, `--losat tlosatx`, or `--losat losatp
---losatp_mode pairwise` searches that record pair. One table can mix both
+`blast` empty; `--losat losatn`, `--losat tlosatx`, or `--losat losatp`
+searches that record or window pair (LOSATP compares the listed pairs, the
+`pairwise` mode, unless `--losatp_mode` names another mode, which stops the
+run). One table can mix both
 sources. A `losat` row without `--losat`, or `--losat` without a `losat` row,
 is an error. The `comparisons.tsv` that `--losat_output_dir` writes uses this
 format.

@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Focused TSV readers for row-coupled CLI inputs."""
+"""Focused TSV readers for row-coupled CLI inputs, and the writers of the records and comparisons tables."""
 
 from __future__ import annotations
 
 import csv
+import io
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Sequence
@@ -1066,19 +1067,97 @@ def _cell_error(table_path: Path | str, row_number: int, column: str, message: s
     return f"{table_path}: row {row_number}, column {column!r}: {message}."
 
 
+# Writers. A table written here reads back through its reader unchanged.
+
+
+@dataclass(frozen=True)
+class RecordsTableEntry:
+    """One row of a records table to write (:func:`records_table_text`); the values are the cells."""
+
+    gbk: str = ""
+    gff: str = ""
+    fasta: str = ""
+    record_label: str = ""
+    record_id: str = ""
+    region: str = ""
+    reverse_complement: bool = False
+    row: int | None = None
+    column: int | None = None
+    record_group: str = ""
+
+
+@dataclass(frozen=True)
+class ComparisonsTableEntry:
+    """One row of a comparisons table to write (:func:`comparisons_table_text`)."""
+
+    query: str
+    subject: str
+    source: Literal["table", "losat"] = "losat"
+    blast: str = ""
+
+
+def _table_text(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter="\t", lineterminator="\n")
+    writer.writerow(header)
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def _cell(value: int | None) -> str:
+    return "" if value is None else str(value)
+
+
+def records_table_text(entries: Sequence[RecordsTableEntry]) -> str:
+    """A records table of ``entries`` in order: the input columns they use, then label, record, region,
+    orientation, placement and record group."""
+
+    inputs = [name for name in ("gbk", "gff", "fasta") if any(getattr(entry, name) for entry in entries)]
+    header = [*inputs, "record_label", "record_id", "region", "reverse_complement", "row", "column", RECORD_GROUP_COLUMN]
+    return _table_text(
+        header,
+        [
+            [
+                *(getattr(entry, name) for name in inputs),
+                entry.record_label,
+                entry.record_id,
+                entry.region,
+                "1" if entry.reverse_complement else "0",
+                _cell(entry.row),
+                _cell(entry.column),
+                entry.record_group,
+            ]
+            for entry in entries
+        ],
+    )
+
+
+def comparisons_table_text(entries: Sequence[ComparisonsTableEntry]) -> str:
+    """A comparisons table of ``entries`` in order."""
+
+    return _table_text(
+        ("blast", "query", "subject", "source"),
+        [[entry.blast, entry.query, entry.subject, entry.source] for entry in entries],
+    )
+
+
 __all__ = [
     "CircularTrackTable",
+    "ComparisonsTableEntry",
     "ConservationTable",
     "ConservationTableRow",
     "ComparisonTable",
     "ComparisonTableRow",
     "RECORD_GROUP_COLUMN",
     "RecordsTable",
+    "RecordsTableEntry",
     "RecordsTableRecord",
     "RecordsTableRow",
     "TablePathDependency",
+    "comparisons_table_text",
     "read_circular_track_table",
     "read_conservation_table",
     "read_comparisons_table",
     "read_records_table",
+    "records_table_text",
 ]
