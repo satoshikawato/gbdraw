@@ -18,7 +18,6 @@ import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.analysis.gc import (
     calculate_gc_percent,
-    circular_dinucleotide_content_df,
     gc_content_percent_df,
 )
 from gbdraw.analysis.skew import skew_df
@@ -140,26 +139,26 @@ def test_definition_gc_percent_agrees_with_the_gc_track_for_a_mixed_case_record(
     record = SeqRecord(Seq("gcgcATATggCCaatt"), id="soft_masked")
     length = len(record.seq)
 
-    track_df = circular_dinucleotide_content_df(record, window=length, step=length, nt="GC")
+    track_df = skew_df(record, window=length, step=length, nt="GC")
 
     assert definition_record_facts(record).gc_percent == 50.0
     assert track_df.loc[0, "GC content"] * 100.0 == pytest.approx(50.0)
 
 
-def test_circular_dinucleotide_content_df_centers_window_at_origin() -> None:
+def test_gc_windows_are_centred_on_their_sample_and_wrap_at_the_origin() -> None:
     record = SeqRecord(Seq("GGGGAAAA"), id="origin")
 
-    content_df = circular_dinucleotide_content_df(record, window=4, step=4, nt="GC")
-    legacy_df = skew_df(record, window=4, step=4, nt="GC")
+    frame = skew_df(record, window=4, step=4, nt="GC")
 
-    assert content_df.loc[0, "GC content"] == pytest.approx(0.5)
-    assert legacy_df.loc[0, "GC content"] == pytest.approx(1.0)
+    # The window of sample 0 is bases -2..1: AA (wrapped from the end) and GG.
+    assert frame.loc[0, "GC content"] == pytest.approx(0.5)
+    assert frame.loc[4, "GC content"] == pytest.approx(0.5)
 
 
-def test_circular_dinucleotide_content_df_handles_windows_larger_than_record() -> None:
+def test_gc_windows_longer_than_the_record_count_it_per_cycle() -> None:
     record = SeqRecord(Seq("GAAA"), id="short")
 
-    content_df = circular_dinucleotide_content_df(record, window=10, step=10, nt="GC")
+    content_df = skew_df(record, window=10, step=10, nt="GC")
 
     assert content_df.loc[0, "GC content"] == pytest.approx(0.3)
 

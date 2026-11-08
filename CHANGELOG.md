@@ -30,12 +30,31 @@ write-up of a release.
   placed by the width of the italic words (OV-2808). A name or label with other
   markup, or with `<`, `>`, or `&` elsewhere, is still drawn as written
   (OV-2760).
+- Fixed: a Linear GC content or GC skew track stopped at its last window,
+  short of the record end, so a 671 bp crop drew no track under its last
+  71 bp, and on a wrapped record a last row past that window drew none at all.
+  The track now holds the last window's value to the end of the record (and of
+  each row), as Depth and GC content in Percent mode already did, in the CLI,
+  the Python API, and the Web app (OV-2871).
+- Fixed: the Linear GC content track and the GC skew track of both modes drew
+  each window's value at the window's start, half a window (500 bp at the Auto
+  1 kb window) before the bases it describes, while the Circular GC content
+  ring drew it at the window's centre; a Circular figure's content and skew
+  rings were offset from each other. Every GC content and GC skew track now
+  draws a window's value at its centre, in the CLI, the Python API, and the
+  Web app (OV-2870).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web
   app, or `--depth_width` in the CLI) moved the row up, so the Legend changed
   order between two Generates. The Depth rows now follow the ring order in
   every case, in the CLI, the Python API, and the Web app (OV-2823).
+- Fixed: a Circular figure of a short span (a crop or a small record of a few
+  kilobases or less) drew its GC content, GC skew and Depth rings as straight
+  chords between the window samples, so a 670 bp crop showed a seven-sided
+  polygon instead of a ring. The rings now follow the circle between samples,
+  in the CLI, the Python API, and the Web app. Longer records draw as before
+  (OV-2863).
 - Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
   a Percent GC content axis, the GC content **Tick Font Size** field showed an
   Auto size that the figure did not use: the GC axis numbers are drawn in the

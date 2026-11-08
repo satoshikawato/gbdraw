@@ -30,8 +30,9 @@ if TYPE_CHECKING:
 class CircularRecordData:
     """The record and the data the API computed for it.
 
-    ``gc_df`` is the GC frame of the request's dinucleotide; the
-    ``dinucleotide_*`` frames hold one frame per dinucleotide a slot draws.
+    ``gc_df`` is the GC frame of the request's dinucleotide;
+    ``dinucleotide_dataframes`` holds one frame per dinucleotide a slot draws,
+    read by its content and skew slots alike (``skew_df``).
     ``depth_track_count_value`` is the number of depth tracks the request
     declares (``None``: count ``depth_tracks``).
     """
@@ -44,8 +45,6 @@ class CircularRecordData:
     conservation_tracks: Sequence[ConservationTrack] | None = None
     conservation_min_identity: float = 0.0
     dinucleotide_dataframes: dict[str, DataFrame] | None = None
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None
 
 
 @dataclass(frozen=True, slots=True)

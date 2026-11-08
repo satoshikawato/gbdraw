@@ -9,24 +9,26 @@ from ..layout.linear_coords import normalize_position_to_linear_track
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, project_scalar_line
+from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, held_to_end, project_scalar_line
 from .path_data import path_line_to, path_number
 from .track_paths import track_line_to
 
 def _samples(
     positions: ArrayLike,
     values: ArrayLike,
+    record_len: int,
     record_transform: RecordDisplayTransform | None,
     row: ScalarRow | None,
 ) -> ProjectedScalarLine:
     """The samples a Linear track path draws, in display order (projected when the record is transformed;
-    of one row, local to it, on a wrapped record)."""
+    of one row, local to it, on a wrapped record), on to the end of the ``record_len`` bases drawn."""
 
     if row is not None:
         return row.samples.line(positions, values, row.row)
     if record_transform is not None and record_transform.projects:
+        # A display start closes the periodic line at the end (``RecordDisplayTransform.project_series``).
         return project_scalar_line(positions, values, record_transform)
-    return ProjectedScalarLine(np.asarray(positions, dtype=float), np.asarray(values, dtype=float), ())
+    return ProjectedScalarLine(*held_to_end(positions, values, record_len), ())
 
 
 def _deviation_path_desc(
@@ -43,8 +45,8 @@ def _deviation_path_desc(
     """A GC content (deviation) or skew path: the line of each sample's deviation from the whole series'
     mean, closed to the baseline at ``start_y``."""
 
-    positions, values, segment_starts = _samples(series.index, series, record_transform, row)
-    if row is not None and not len(positions):
+    positions, values, segment_starts = _samples(series.index, series, record_len, record_transform, row)
+    if not len(positions):
         return ""
     xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
     # A completely flat series draws a flat line (no division by zero).
@@ -52,7 +54,7 @@ def _deviation_path_desc(
     return (
         f"M{path_number(start_x)} {path_number(start_y)}"
         + track_line_to(xs, ys, segment_starts)
-        + path_line_to([xs[-1] if len(xs) else start_x, start_x], [start_y, start_y])
+        + path_line_to([xs[-1], start_x], [start_y, start_y])
         + "z"
     )
 
@@ -121,6 +123,7 @@ def calculate_linear_scalar_area_path_desc(
         scalar_df[position_column] if record_transform is not None and record_transform.projects
         else scalar_df[position_column].to_numpy().astype(np.int64),
         scalar_df[value_column],
+        record_len,
         record_transform,
         row,
     )
@@ -129,13 +132,10 @@ def calculate_linear_scalar_area_path_desc(
     x_values = normalize_position_to_linear_track(positions, record_len, alignment_width)
     y_values = baseline_y - (float(track_height) * np.clip(values, 0.0, 1.0))
 
-    final_x = normalize_position_to_linear_track(
-        record_len, record_len, alignment_width
-    )
     path_segments = [
         f"M{path_number(start_x)} {path_number(baseline_y)}",
         track_line_to(x_values, y_values, segment_starts),
-        path_line_to([final_x, final_x, start_x], [y_values[-1], baseline_y, baseline_y]),
+        path_line_to([x_values[-1], start_x], [baseline_y, baseline_y]),
         "z",
     ]
     return "".join(path_segments)

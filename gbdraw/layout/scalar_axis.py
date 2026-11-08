@@ -64,6 +64,20 @@ def project_scalar_line(
     )
 
 
+def held_to_end(
+    positions: ArrayLike, values: ArrayLike, end: float
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """A Linear track's samples drawn on to ``end``, the end of its axis: past the last sample the line
+    holds that sample's value, the value of the last window or bin, which reaches it (OV-2871). Samples
+    that already reach ``end`` are kept as they are."""
+
+    position_array = np.asarray(positions, dtype=float)
+    value_array = np.asarray(values, dtype=float)
+    if not len(position_array) or position_array[-1] >= end:
+        return position_array, value_array
+    return np.append(position_array, float(end)), np.append(value_array, value_array[-1])
+
+
 class ScalarRows:
     """One track's samples on the rows of a wrapped record: projected once, read row by row."""
 
@@ -74,6 +88,12 @@ class ScalarRows:
 
     def line(self, positions: ArrayLike, values: ArrayLike, row: int) -> ProjectedScalarLine:
         if self._rows is None:
+            if self._transform.start_coordinate is None:
+                # On an affine axis a sample's local position is its display offset (as in
+                # ``RecordDisplayTransform.project_local_series``), so the line is held on to the drawn end
+                # before it is split into rows; a row past the last sample draws that value. A display
+                # start closes the periodic line at the end itself.
+                positions, values = held_to_end(positions, values, self._transform.drawn_length)
             self._rows = {
                 segment.row: ProjectedScalarLine(
                     np.array([point.position for point in segment.points], dtype=float),

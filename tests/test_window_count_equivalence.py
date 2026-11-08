@@ -9,7 +9,6 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.analysis.gc import circular_dinucleotide_content_df
 from gbdraw.analysis.skew import counted_dinucleotide, skew_df
 
 
@@ -48,12 +47,14 @@ def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
     p1, p2 = _old_prefix(seq_bytes, ord(nt_1)), _old_prefix(seq_bytes, ord(nt_2))
     starts, content, skews, cumulative = [], [], [], []
     skew_sum = 0.0
-    for start in range(0, seq_length, step):
+    for position in range(0, seq_length, step):
+        # Each sample's window is centred on it (OV-2870) and wraps around the record's ends.
+        start = (position - int(window) // 2) % seq_length
         c1 = _old_window_count(p1, seq_length, start=start, window=window, total_count=p1[-1])
         c2 = _old_window_count(p2, seq_length, start=start, window=window, total_count=p2[-1])
         total = c1 + c2
         skew = 0.0 if total == 0 else (c1 - c2) / total
-        starts.append(start)
+        starts.append(position)
         content.append(total / float(window))
         skews.append(skew)
         skew_sum += skew
@@ -69,24 +70,6 @@ def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
         },
         index=starts,
     )
-
-
-def _old_circular_content_df(record, window, step, nt) -> pd.DataFrame:
-    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
-    seq_length = len(seq_bytes)
-    legend = f"{nt} content"
-    if seq_length == 0 or window <= 0 or step <= 0:
-        return pd.DataFrame(columns=[legend])
-    p1, p2 = _old_prefix(seq_bytes, ord(nt_1)), _old_prefix(seq_bytes, ord(nt_2))
-    half_window = int(window) // 2
-    starts, values = [], []
-    for position in range(0, seq_length, step):
-        circular_start = (position - half_window) % seq_length
-        c1 = _old_window_count(p1, seq_length, start=circular_start, window=window, total_count=p1[-1])
-        c2 = _old_window_count(p2, seq_length, start=circular_start, window=window, total_count=p2[-1])
-        starts.append(position)
-        values.append((c1 + c2) / float(window))
-    return pd.DataFrame({legend: values}, index=starts)
 
 
 def _record(sequence: str) -> SeqRecord:
@@ -119,11 +102,6 @@ def test_vectorized_window_counts_match_the_python_loops(
         _old_skew_df(record, window, step, nt),
         check_exact=True,
     )
-    pd.testing.assert_frame_equal(
-        circular_dinucleotide_content_df(record, window, step, nt),
-        _old_circular_content_df(record, window, step, nt),
-        check_exact=True,
-    )
 
 
 def test_vectorized_window_counts_match_on_a_long_sequence() -> None:
@@ -133,11 +111,6 @@ def test_vectorized_window_counts_match_on_a_long_sequence() -> None:
     pd.testing.assert_frame_equal(
         skew_df(record, 10_000, 500, "GC"),
         _old_skew_df(record, 10_000, 500, "GC"),
-        check_exact=True,
-    )
-    pd.testing.assert_frame_equal(
-        circular_dinucleotide_content_df(record, 10_000, 500, "AT"),
-        _old_circular_content_df(record, 10_000, 500, "AT"),
         check_exact=True,
     )
 
@@ -151,10 +124,6 @@ def test_degenerate_windows_and_empty_records_return_empty_frames(
             skew_df(record, window, step, "GC"),
             _old_skew_df(record, window, step, "GC"),
         )
-        pd.testing.assert_frame_equal(
-            circular_dinucleotide_content_df(record, window, step, "GC"),
-            _old_circular_content_df(record, window, step, "GC"),
-        )
 
 
 
@@ -166,11 +135,10 @@ def test_window_counts_build_no_count_array_as_long_as_the_record() -> None:
 
     length = 2_000_000
     record = _record(_random_sequence(random.Random(3), length, "ACGT"))
-    for frame in (skew_df, circular_dinucleotide_content_df):
-        tracemalloc.start()
-        try:
-            frame(record, 10_000, 1_000, "GC")
-            peak = tracemalloc.get_traced_memory()[1]
-        finally:
-            tracemalloc.stop()
-        assert peak < 4 * length, (frame.__name__, peak / length)
+    tracemalloc.start()
+    try:
+        skew_df(record, 10_000, 1_000, "GC")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 4 * length, peak / length

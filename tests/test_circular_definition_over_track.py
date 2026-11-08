@@ -168,7 +168,8 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     warns. Its band (the farthest corner of the bold line's ink, OV-1854) is not cleared by narrowing the inside
     tracks to the floor, so they keep their widths, and no center_reserved_radius fits either: the warning offers
     the font at which the line clears the tracks (17 pt, where the floor clears the smaller band) and a shorter
-    Species or Strain. With ``--no_track_narrowing`` the font must clear the tracks at their widths (13 pt)."""
+    Species or Strain. With ``--no_track_narrowing`` the font must clear the tracks at their widths (14 pt; 13 pt
+    before the GC skew windows were centred, OV-2870, which moved the skew ring the line meets)."""
 
     from gbdraw import cli
 
@@ -199,13 +200,13 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     assert draw("mers_off", "--no_track_narrowing") == (
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 13   (smaller definition font)\n"
+        "  --definition_font_size 14   (smaller definition font)\n"
         "Narrowing the inside tracks does not fit this map.\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
-    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "13") == ""
-    assert draw("mers_off_font_13_5", "--no_track_narrowing", "--definition_font_size", "13.5").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 13.5 pt (1 line overlaps a track). The figure is drawn.\n"
+    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "14") == ""
+    assert draw("mers_off_font_14_5", "--no_track_narrowing", "--definition_font_size", "14.5").startswith(
+        "WARNING: NC_019843.3: 1 definition line does not fit at 14.5 pt (1 line overlaps a track). The figure is drawn.\n"
     )
 
 
