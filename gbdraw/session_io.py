@@ -197,8 +197,20 @@ WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "circularSources", "lin
 # ``c_fasta``. The move to drawings makes File cards of them
 # (:func:`gbdraw.session_drawings.circular_sources_of_mode_scoped`).
 MODE_SCOPED_CIRCULAR_INPUT_SLOTS = frozenset({"c_gb", "c_gff", "c_fasta"})
+
+
+class CircularSourceCard(TypedDict):
+    """One Circular File card, a ``circularSources`` row: its uid and the
+    file of each slot (a binding, or in a Web inventory a file entry) or None."""
+
+    uid: str
+    gb: Mapping[str, object] | None
+    gff: Mapping[str, object] | None
+    fasta: Mapping[str, object] | None
+
+
 # The fields of one Circular File card (``circularSources`` row).
-CIRCULAR_SOURCE_FIELDS = frozenset({"uid", "gb", "gff", "fasta"})
+CIRCULAR_SOURCE_FIELDS = CircularSourceCard.__required_keys__
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -866,7 +878,7 @@ def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
         raise ValidationError("Settings-only Session contains an unbound resource.")
 
 
-def _validate_circular_source_rows(rows: object, leaf: Callable[[Any], None]) -> None:
+def _validate_circular_source_rows(rows: object, leaf: Callable[[object], None]) -> None:
     """A Circular drawing's File cards: a list of ``{uid, gb, gff, fasta}``
     rows with distinct non-empty uids, each file a binding (``leaf``) or null.
 
@@ -5578,8 +5590,8 @@ def _web_card_binding(
 
 
 def _circular_input_bindings(
-    files: Mapping[str, Any],
-    add_file: Callable[[object], dict[str, Any] | None],
+    files: Mapping[str, object],
+    add_file: Callable[[object], Mapping[str, object] | None],
     add_value: Callable[..., object],
 ) -> dict[str, object]:
     """The Circular input of a Web inventory as bindings: File cards (Session 51,
@@ -5594,7 +5606,12 @@ def _circular_input_bindings(
     circular_input: dict[str, object] = (
         {
             "circularSources": [
-                {"uid": str(card.get("uid") or ""), **{key: add_file(card.get(key)) for key in ("gb", "gff", "fasta")}}
+                CircularSourceCard(
+                    uid=str(card.get("uid") or ""),
+                    gb=add_file(card.get("gb")),
+                    gff=add_file(card.get("gff")),
+                    fasta=add_file(card.get("fasta")),
+                )
                 for card in circular_cards
                 if isinstance(card, Mapping)
             ]

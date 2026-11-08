@@ -37,6 +37,7 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
+    CircularSourceCard,
     SessionBuildContext,
     SessionFileBinding,
     _write_validated_session_json,
@@ -1314,7 +1315,7 @@ def _set_linear_seq_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]
         raise ValidationError(f"Unsupported linear sequence file slot: {slot}")
 
 
-def _set_circular_source_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]) -> None:
+def _set_circular_source_slot(files: dict[str, object], slot: str, entry: Mapping[str, object]) -> None:
     """Fill ``files.circularSources[<i>].<gb|gff|fasta>``; card ``i`` is the
     request's record input ``i``, so its uid is that input's CLI record key."""
 
@@ -1327,8 +1328,9 @@ def _set_circular_source_slot(files: dict[str, Any], slot: str, entry: dict[str,
             diagnostic={"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"},
         )
     cards = files["circularSources"]
+    assert isinstance(cards, list), "the CLI inventory starts with a list of cards"
     while len(cards) <= index:
-        cards.append({"uid": f"{CLI_RECORD_KEY_PREFIX}{len(cards) + 1}", "gb": None, "gff": None, "fasta": None})
+        cards.append(CircularSourceCard(uid=f"{CLI_RECORD_KEY_PREFIX}{len(cards) + 1}", gb=None, gff=None, fasta=None))
     cards[index][key] = entry
 
 

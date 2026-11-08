@@ -346,7 +346,7 @@ const requestDrawingMode = (drawing) => {
 /**
  * One Circular source card as a request reads it (`CircularSource` of the inputs
  * slice): its uid and the files of its slots.
- * @typedef {{ uid: string, gb?: ResourceEntry | null, gff?: ResourceEntry | null, fasta?: ResourceEntry | null }} RequestCircularSource
+ * @typedef {{ uid: string, gb: ResourceEntry | null, gff: ResourceEntry | null, fasta: ResourceEntry | null }} RequestCircularSource
  */
 /**
  * The input files and records a request reads (the `filesData` of the draft).

@@ -53,6 +53,7 @@ from gbdraw.session_contract import (
 )
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
+    CircularSourceCard,
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
     FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
@@ -978,7 +979,7 @@ def _request_record_file(record: object) -> object:
     return source.get("resourceId") or source.get("fastaResourceId")
 
 
-def _card_record_counts(cards: Sequence[Mapping[str, Any]], records: Sequence[object]) -> list[int] | None:
+def _card_record_counts(cards: Sequence[CircularSourceCard], records: Sequence[object]) -> list[int] | None:
     """How many records each File card's file holds, when the request draws
     every record of each card's own file; else None."""
 
@@ -1015,7 +1016,7 @@ def _card_uids(files: Sequence[object], records: Sequence[object]) -> list[str]:
     return ["record-1" if len(files) == 1 else f"source-{index + 1}" for index in range(len(files))]
 
 
-def circular_sources_of_mode_scoped(data: Mapping[str, Any]) -> dict[str, Any]:
+def circular_sources_of_mode_scoped(data: Mapping[str, object]) -> dict[str, object]:
     """A Session 46-50 with its Circular input as File cards (``circularSources``).
 
     ``c_gb`` (one GenBank file, or a ``composite`` of several), ``c_gff`` and
@@ -1052,15 +1053,15 @@ def circular_sources_of_mode_scoped(data: Mapping[str, Any]) -> dict[str, Any]:
     records = records if isinstance(records, list) else []
     uids = _card_uids([files[index] if files[index] is not None else (fasta if index == 0 else None) for index in range(count)], records)
     cards = [
-        {
-            "uid": uids[index],
-            "gb": files[index] if index < len(files) else None,
-            "gff": gff if index == 0 else None,
-            "fasta": fasta if index == 0 else None,
-        }
+        CircularSourceCard(
+            uid=uids[index],
+            gb=files[index] if index < len(files) else None,
+            gff=gff if index == 0 else None,
+            fasta=fasta if index == 0 else None,
+        )
         for index in range(count)
     ]
-    moved: dict[str, Any] = {
+    moved: dict[str, object] = {
         **data,
         "webFiles": {
             **web_files,
