@@ -34,7 +34,9 @@ SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
 # only path d attributes and the ids hashed from them changed (555a3c90... before), and again when Circular arcs
 # were split so that none is near 180 or 360 degrees (OV-1840; 381911f5... before).
 # OV-165 PR-2 (labels, ticks, definition and canvas) moved OUTPUT_SHA again.
-OUTPUT_SHA = "91d361e5d2a24a0f00fea2abce86292c9a9c06d02473fe1fe52eb598f153ddf0"
+# OV-2863 (the GC content ring follows the circle between samples) and OV-2870 (GC skew windows at their centre)
+# moved it again: only the GC content and skew paths and the skew clip id changed (91d361e5... before).
+OUTPUT_SHA = "7d9560a3b8dd308c7eb7f89906278500e5da7c44ed046494cb9bd737eb22cfe3"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
@@ -42,9 +44,9 @@ OUTPUT_SHA = "91d361e5d2a24a0f00fea2abce86292c9a9c06d02473fe1fe52eb598f153ddf0"
 # side, so the boxes cannot be peeled and are left out of the comparison.
 # Since V-D03 the hash is of that replay with the Legend box at the drawn width,
 # and since D-13 D2 with 3-decimal path numbers (9a34cf0d... before), and since OV-1840 with split Circular arcs
-# (bcdd87d3... before).
+# (bcdd87d3... before), and since OV-2863 and OV-2870 with the new GC content and skew paths (8d5f0207... before).
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "8d5f02078f438bfaca3367c3d7b269a4b51630d9021a8af539a7f4ce79d48e71"
+    "428cb45b88ff3a05f4b770c6ea9018a8b725a8b70c6fe0c33238931339d9952c"
 )
 
 
