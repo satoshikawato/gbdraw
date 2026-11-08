@@ -18,7 +18,7 @@ from gbdraw.session_io import (
     SESSION_FORMAT,
     validate_session,
 )
-from gbdraw.session_request_codec import describe_canonical_request
+from gbdraw.session_request_codec import describe_canonical_request, stored_record_windows
 from gbdraw.web_support.mode_scoped_settings import DIAGRAM_MODES, MODE_SCOPED_SETTINGS
 from tests.test_canonical_request_shape import _request
 from tests.test_session_admission_vectors import VECTORS, _edited
@@ -61,12 +61,10 @@ def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
             continue
         request["schema"] = 10
         for record in request["records"]:
+            # The production reader of a stored record's spans (one normalisation of an old region).
+            record["windows"] = stored_record_windows(record)
             region = record.pop("region")
-            record["windows"] = (
-                []
-                if region is None
-                else [{**{key: region[key] for key in ("start", "end", "reverseComplement")}, "column": None}]
-            )
+            assert region is None or region["selector"] is None, "a region selector moves to the record on decode"
     return session
 
 

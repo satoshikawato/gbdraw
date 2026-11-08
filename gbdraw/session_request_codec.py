@@ -1522,9 +1522,12 @@ def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]
     """The windows of a stored request record of any schema, as schema 10 writes them.
 
     The one reader of a record's spans in a stored payload that is not decoded
-    (Session hash and receipt readers): schema 10 writes ``windows``; a schema
-    <= 9 ``region`` is one window, read as :func:`_decode_record` reads it. The
-    values are as stored; the request decode validates them.
+    (Session hash, receipt and source readers): schema 10 writes ``windows``,
+    returned as stored; a schema <= 9 ``region`` is one window, read as
+    :func:`_decode_region` reads it (:func:`legacy_region_span`: a start greater
+    than the end is the reversed span), which is what the Web's
+    ``promoteRecordRegionsToWindows`` writes. Values are not validated; the
+    request decode does that.
     """
 
     windows = record.get("windows")
@@ -1540,16 +1543,12 @@ def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]
             if isinstance(item, Mapping)
         ]
     region = record.get("region")
-    if isinstance(region, Mapping):
-        return [
-            StoredRecordWindow(
-                start=region.get("start"),
-                end=region.get("end"),
-                reverseComplement=region.get("reverseComplement"),
-                column=None,
-            )
-        ]
-    return []
+    if not isinstance(region, Mapping):
+        return []
+    start, end, reverse = region.get("start"), region.get("end"), region.get("reverseComplement")
+    if type(start) is int and type(end) is int and start > end:
+        start, end, reverse = legacy_region_span(start, end, True)
+    return [StoredRecordWindow(start=start, end=end, reverseComplement=reverse, column=None)]
 
 
 def legacy_region_span(start: int, end: int, reverse: bool) -> tuple[int, int, bool]:

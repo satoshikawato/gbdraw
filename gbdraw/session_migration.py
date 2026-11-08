@@ -15,7 +15,7 @@ from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
-from gbdraw.session_request_codec import legacy_region_span, stored_record_windows
+from gbdraw.session_request_codec import stored_record_windows
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -241,8 +241,6 @@ def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, .
         start, end = window.get("start"), window.get("end")
         if (start is None) != (end is None):
             return None
-        if region_value is not None and isinstance(start, int) and isinstance(end, int):
-            start, end, reverse = legacy_region_span(start, end, reverse)
         reads.append(
             LegacySourceRead(
                 str(source.get("resourceId")),
