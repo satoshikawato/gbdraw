@@ -619,13 +619,18 @@ test('Undo of a ring change in a LOSAT-cache replay restores its rows and Genera
 // OV-2758: Reset after a Generate that searched the rings keeps the ring rows
 // with their comparison files, as Reset does before any Generate; the search
 // result of the old settings goes, and one Undo restores it with the rows.
-test('Reset Settings after a LOSAT ring search keeps the ring rows with their files', async ({ page }) => {
+// OV-2818: Reset turns Show Comparison Rings off, as it turns Show Depth off;
+// a Session 40 (written before the setting) opens with its rings shown, and a
+// saved Session keeps the setting off.
+test('Reset Settings after a LOSAT ring search keeps the ring rows with their files', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await preparePage(page);
   await loadSession(page, conservationSession);
   const loaded = await replayState(page);
   expect(loaded.source).toBe('losat-cache');
   expect(loaded.rows.map(([, fileName]) => fileName)).toEqual(loaded.blasts);
+  const showRings = page.getByTestId('circular-show-comparison-rings');
+  await expect(showRings).toBeChecked();
   const [steps] = await historyCounts(page);
 
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
@@ -638,10 +643,24 @@ test('Reset Settings after a LOSAT ring search keeps the ring rows with their fi
     blasts: [],
     rows: loaded.fastas.map((name) => [name.replace(/\.fasta$/, ''), name])
   });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularConservation.enabled)).toBe(true);
+  await expect(showRings).not.toBeChecked();
+  await expect(showRings).toBeEnabled();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  const savedPath = testInfo.outputPath('rings-off.gbdraw-session.json.gz');
+  await (await downloadPromise).saveAs(savedPath);
+  expect(shownSavedDrawing(JSON.parse(gunzipSync(readFileSync(savedPath)))).config.circularConservation.enabled).toBe(false);
+  const reopened = await page.context().newPage();
+  await preparePage(reopened);
+  await loadSession(reopened, savedPath);
+  await expect(reopened.getByTestId('circular-show-comparison-rings')).not.toBeChecked();
+  expect((await replayState(reopened)).rows).toEqual((await replayState(page)).rows);
+  await reopened.close();
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(() => replayState(page), { message: 'Undo Reset' }).toEqual(loaded);
+  await expect(showRings).toBeChecked();
 });
 
 // PD-OI-112: the History list. A changed control's row shows its name and the

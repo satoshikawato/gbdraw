@@ -224,12 +224,21 @@ write-up of a release.
   that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
+- Added (Web app): a Circular **Show Comparison Rings** setting, beside
+  **Show Depth**. Generate draws the comparison rings and runs their LOSAT
+  searches or reads their BLAST tables only while it is on. Like **Show
+  Depth**, it turns on when a comparison file is added and off when the last
+  one is removed, and Reset Settings turns it off while the ring rows and their
+  files stay; before, a Circular drawing with comparison files always drew the
+  rings and searched them on every Generate, also after Reset Settings. A
+  Session saved by gbdraw 0.14.5 or earlier opens with the rings shown when it
+  has comparison files (OV-2818).
 - Fixed (Web app): after a Generate that searched comparison rings with
   LOSAT, Reset Settings removed the ring rows while their comparison files
   stayed, and Undo of that Reset lost the LOSAT result. Reset Settings now keeps
   a ring row for each kept comparison sequence file with its settings back to
-  the defaults and drops the earlier search results, so the next Generate
-  searches again; a kept Depth file stays hidden, as before, and its series
+  the defaults and drops the earlier search results, so a later Generate with
+  the rings shown searches again; a kept Depth file stays hidden, as before, and its series
   is named after the file again, as an upload names it, instead of "Depth".
   Undo brings back the rows and the search results.
 - Fixed: the axis labels of a depth track and of a GC content track in

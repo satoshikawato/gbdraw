@@ -254,9 +254,11 @@ shown takes its reset when it is shown next. Either choice keeps the input
 files, the record selection, file defaults, Depth assignments, and Result, and
 one Undo reverses it. A kept Depth file stays hidden (**Show Depth** turns off)
 until you show it again, and the legend names its series after the file, as an
-upload does. A kept Circular comparison sequence file keeps its ring
-row with the row's settings back to their defaults; the ring results of an
-earlier LOSAT search are dropped, so the next Generate searches again. **Cancel** changes
+upload does. A kept Circular comparison file (a comparison sequence file or a
+BLAST table) keeps its ring row with the row's settings back to their defaults,
+and the rings stay hidden (**Show Comparison Rings** turns off) until you show
+them again; the ring results of an earlier LOSAT search are dropped, so the
+next Generate after you show the rings searches again. **Cancel** changes
 nothing and records no step.
 
 The table below states when each kind of edit reaches the Result. A clock
@@ -1060,6 +1062,16 @@ without the last extension, as in the CLI. A cleared label
 field uses the file name shown as its placeholder. The Source recipe passes the
 Web labels explicitly. **Ring Width** and **Ring Gap** control the ordered
 comparison rings. **Save Raw LOSAT TSV** exports generated search rows.
+
+**Show Comparison Rings**, under **Hide GC Content**, **Hide GC Skew**, and
+**Show Depth**, draws the rings, and Generate runs the comparisons (LOSAT or
+the uploaded BLAST tables) only while it is on. Like **Show Depth**, it turns
+on when you add a comparison file or upload BLAST tables, and off when you
+remove the last one; switching between **Run LOSAT** and **Upload BLAST TSV**
+turns it on or off when one has files and the other has none. With it off,
+the ring rows and their files stay, and Generate draws no rings and runs no
+search. It applies on Generate. A Session saved by gbdraw 0.14.5 or earlier
+loads with it on when the Session has comparison files.
 
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for search boundaries,

@@ -1609,7 +1609,7 @@ export const createAppSetup = () => {
   });
   const {
     clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
-    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, setCircularConservationEnabled,
+    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
     state, writeLosatCacheInfo,
@@ -1620,7 +1620,7 @@ export const createAppSetup = () => {
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
     moveCircularConservationSeries, openCircularConservationComparisonFilePicker, changeCircularConservationSource,
-    refreshShownCircularConservationSlots
+    setCircularConservationShown, refreshShownCircularConservationSlots
   } = createCircularConservationSeriesPanel({
     state, shownAction, shownDrawingOfMode, writeLosatCacheInfo, circularConservationFastaInput,
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
@@ -1773,7 +1773,6 @@ export const createAppSetup = () => {
         : adopt();
       if (adopted) reconcileCircularConservation(drawing);
     },
-    setCircularConservationEnabled,
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
@@ -2148,13 +2147,13 @@ export const createAppSetup = () => {
       }));
     },
     rollbackState: sessionImportRollbackState, storedFigurePreview,
-    afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
+    afterImport: async (/** @type {{ status: string, ringSettingStored: boolean, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       // Only a Session Load comes here; a legacy configuration Load returns
       // before it (OV-1792).
       if (result?.status === 'ok') {
         // The comparison rings read from the loaded files and series (an older
-        // Session's series names included), before the History baseline.
-        for (const drawing of circularDrawings()) reconcileCircularConservation(drawing);
+        // Session's series names and rings setting included), before the History baseline.
+        for (const drawing of circularDrawings()) reconcileLoadedCircularConservation(drawing, result.ringSettingStored);
         // The loaded draft's live values wait for their next change or Generate (6.7).
         discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -3527,6 +3526,7 @@ export const createAppSetup = () => {
     addCircularConservationComparisonFile,
     removeCircularConservationSource,
     changeCircularConservationSource,
+    setCircularConservationShown,
     refreshCircularConservationSlots: refreshShownCircularConservationSlots,
     depthTrackRows,
     circularDepthTrackRows,

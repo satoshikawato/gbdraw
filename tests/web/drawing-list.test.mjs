@@ -126,8 +126,9 @@ test('Reset all gives a second Circular drawing its Record Order rows and compar
   await app.resetSettings();
   assert.deepEqual(second.adv.multi_record_positions.map((position) => position.selector), ['#1', '#2'],
     'one Record Order row per loaded record, at its default');
-  assert.equal(second.circularConservation.enabled, true, 'the kept ring file gives a ring');
-  assert.equal(second.circularConservation.series.length, 1);
+  // OV-2818: the kept ring file keeps its ring row; Show Comparison Rings is off, as after any Reset.
+  assert.equal(second.circularConservation.enabled, false);
+  assert.equal(second.circularConservation.series.length, 1, 'the kept ring file gives a ring row');
   assert.equal(second.files.c_conservation_fastas.length, 1, 'the ring file stays');
 });
 

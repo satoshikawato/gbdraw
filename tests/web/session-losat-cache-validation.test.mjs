@@ -1021,6 +1021,8 @@ ORIGIN
     }
   );
 
+  // OV-2818: Show Comparison Rings turned off after the Generate stays off.
+  state.activeDrawing().circularConservation.enabled = false;
   adoptCanonicalRenderArtifacts({
     renderRequest: promoteCanonicalRenderRequestToCurrent(renderRequest),
     resources,
@@ -1030,6 +1032,7 @@ ORIGIN
     }
   }, { drawing: modeDrawing(state, 'circular') });
 
+  assert.equal(state.activeDrawing().circularConservation.enabled, false);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts.length, 2);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts[0].size, 0);
@@ -1055,6 +1058,7 @@ ORIGIN
   assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
   installShownDrawing('circular');
+  state.activeDrawing().circularConservation.enabled = true;
   const serialized = await serializeActiveRenderFiles(state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);

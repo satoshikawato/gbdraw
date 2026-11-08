@@ -35,7 +35,7 @@ import {
 } from './linear-track-slot-model.js';
 import {
   DEPTH_FILES_CHANGE, depthFileSlotsFromValue, fitDepthStateToSources, isDepthSeriesAutoLabel,
-  normalizeRecordMajorDepthFileRows, padDepthFileSlots, showDepthAfterSourceChange, syncDepthSlotLabels
+  normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
 } from './depth-track-state.js';
 import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
@@ -4494,8 +4494,10 @@ export const adoptCanonicalRenderArtifacts = (
     setConservationBlastsSource(inputs, 'losat-cache');
     bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_fastas', nextCircularState.fastas);
     bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_sequence_sources', nextCircularState.sequenceSources);
+    // Show Comparison Rings stays the drawing's: a Generate searched the rings
+    // only while it was on, and an adopted committed request leaves a draft
+    // that turned it off since (OV-2818).
     if (nextCircularState.projectedConservation) {
-      drawing.circularConservation.enabled = true;
       drawing.circularConservation.source = 'losat';
       drawing.circularConservation.reference = nextCircularState.projectedConservation.reference;
       drawing.circularConservation.labels = nextCircularState.series
@@ -5677,7 +5679,7 @@ const leaveDepthSourcesBehind = (config, source) => {
       if (Array.isArray(slots)) syncDepthSlotLabels({ slots, depthTracks });
     });
   }
-  const show = showDepthAfterSourceChange({
+  const show = shownAfterSourceChange({
     wasSourced: rows.some((row) => row.some(Boolean)), isSourced: false, inShownDrawing: false, change: DEPTH_FILES_CHANGE
   });
   if (isPlainObject(form) && show !== null) form.show_depth = show;
@@ -8404,7 +8406,7 @@ const importSessionDocument = async (e, options = {}) => {
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     await options.afterImport?.({
-      status: 'ok',
+      status: 'ok', ringSettingStored: Boolean(upgrade?.sourceFacts.ringSettingStored),
       decompressedCharacters: openingSlot ? openingSlot.retainedBytes / 2 : topSetCharacters,
       isCurrent: options.isCurrent
     });

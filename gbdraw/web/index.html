@@ -4255,8 +4255,8 @@
                         <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <setting-note setting="pairwise-comparisons"></setting-note> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Upload BLAST TSV') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'losat'" value="losat" @change="changeCircularConservationSource('losat')" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'upload'" value="upload" @change="changeCircularConservationSource('upload')" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -4931,6 +4931,14 @@
                                             <span>{{ t('Show Depth') }}</span>
                                         </label>
                                     </div>
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="circularConservationSeriesRows.length > 0 ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed opacity-60'"
+                                        :title="circularConservationSeriesRows.length > 0 ? t('Draw the comparison rings. Generate runs their comparisons only while this is on.') : t('Add a comparison file in Pairwise Comparisons to enable Show Comparison Rings.')"
+                                    >
+                                        <input type="checkbox" :checked="circularConservation.enabled" @change="setCircularConservationShown($event.target.checked)" :disabled="!semanticMutationAvailable || circularConservationSeriesRows.length === 0" class="form-checkbox" data-testid="circular-show-comparison-rings">
+                                        <span>{{ t('Show Comparison Rings') }}</span>
+                                    </label>
                                 </div>
 
                                 <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
