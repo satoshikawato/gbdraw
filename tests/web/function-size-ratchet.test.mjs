@@ -134,8 +134,6 @@ const FUNCTION_LINES = {
   'services/match-sequences.js::analyzeCatalogSequenceSourceCoverage': 319,
   'services/match-sequences.js::createSequenceSourceRegistry': 167,
   'services/orthogroup-feature-metadata.js::createOrthogroupFeatureProjection': 214,
-  'services/pairwise-match-popup.js::buildMatchPopupPayload': 217,
-  'services/pairwise-match-popup.js::createPairwisePayloadContext': 216,
   'services/session-feature-recovery.js::alignRecoveredFeatureIdsToRenderedSvg': 181,
   'services/session-feature-recovery.js::buildSessionFeatureRecoveryPlan': 188,
   'services/session-request.js::buildComparisons': 273,
