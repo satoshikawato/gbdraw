@@ -13,17 +13,16 @@ write-up of a release.
 ## [Unreleased]
 
 - Changed: the command line writes its progress messages, warnings, and errors
-  to standard error, and standard output stays empty while it draws. Each log
+  to standard error, and standard output stays empty while it draws. A script
+  that saved the messages with `> log.txt` now needs `2> log.txt`. Each log
   message carries one level label (`INFO:`, `WARNING:`, or `ERROR:`), so
-  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`. The `gbdraw
-  gui` status lines and the argument usage and error lines carry no label.
-  An argument error now reads `error: --gff requires --fasta.` instead of
-  `error: Error: --gff requires --fasta.`, and `Loading config file` appears
-  once per process instead of twice. A
-  script that saved the messages with `> log.txt` now needs `2> log.txt`.
-  The status lines of `gbdraw gui` also go to standard error. In Python, the
-  messages gbdraw logs no longer begin with a level word; a log format with
-  `%(levelname)s` shows the level once. Importing `gbdraw.circular` or
+  `Generated SVG: out.svg` is now `INFO: Generated SVG: out.svg`. The status
+  lines of `gbdraw gui` also go to standard error, without a label. An
+  argument error now reads `error: --gff requires --fasta.` instead of
+  `error: Error: --gff requires --fasta.`, and `gbdraw linear` shows
+  `Loading config file` once instead of twice. In Python, the messages gbdraw
+  logs no longer begin with a level word, so a log format with
+  `%(levelname)s` shows the level once, and importing `gbdraw.circular` or
   `gbdraw.linear` no longer sets up logging.
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
