@@ -26,7 +26,7 @@ write-up of a release.
   71 bp, and on a wrapped record a last row past that window drew none at all.
   The track now holds the last window's value to the end of the record (and of
   each row), as Depth and GC content in Percent mode already did, in the CLI,
-  the Python API, and the Web app (OV-2865).
+  the Python API, and the Web app (OV-2871).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web

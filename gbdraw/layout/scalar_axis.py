@@ -68,7 +68,7 @@ def held_to_end(
     positions: ArrayLike, values: ArrayLike, end: float
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """A Linear track's samples drawn on to ``end``, the end of its axis: past the last sample the line
-    holds that sample's value, the value of the last window or bin, which reaches it (OV-2865). Samples
+    holds that sample's value, the value of the last window or bin, which reaches it (OV-2871). Samples
     that already reach ``end`` are kept as they are."""
 
     position_array = np.asarray(positions, dtype=float)

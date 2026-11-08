@@ -1,4 +1,4 @@
-"""A Linear GC content, GC skew or Depth path reaches the end of what it draws (OV-2865)."""
+"""A Linear GC content, GC skew or Depth path reaches the end of what it draws (OV-2871)."""
 
 from __future__ import annotations
 
