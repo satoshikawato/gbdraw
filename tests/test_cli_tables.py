@@ -285,7 +285,7 @@ def test_circular_track_table_runs_axis_aware_normalization(
         raise ValueError("axis-aware failure")
 
     monkeypatch.setattr(
-        "gbdraw.io.cli_tables.normalize_circular_track_slots_with_axis",
+        "gbdraw.io.cli_tables.normalize_listed_circular_track_slots",
         reject_with_axis,
     )
 

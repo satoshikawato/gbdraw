@@ -1216,12 +1216,16 @@ LINEAR_LABEL_FIT_ATTR = "_gbdraw_linear_label_fit"
 @dataclass(frozen=True)
 class RecordRegionLabels:
     """One record's drawn region (annotation) labels: their font sizes, how many pairs of
-    them and other labels or lines still overlap (LP-D68), and which labels (by placement
-    order) those are."""
+    them and other labels or lines still overlap (LP-D68), which labels (by placement
+    order) those are, and the labels left without the room between lanes they need
+    (``rooms_left_out``, ``region_rooms_left_out``) with their font sizes
+    (``left_out_font_sizes``, ``region_left_out_font_sizes``)."""
 
     font_sizes: tuple[float, ...] = ()
     overlaps: int = 0
     conflicted: tuple[int, ...] = ()
+    rooms_left_out: LabelFit = FITS
+    left_out_font_sizes: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1276,7 +1280,8 @@ def linear_label_fit(
     counted together (OV-1188). ``definition_boxes`` are each record's definition text boxes in its
     labels' record coordinates; a label over one warns (OV-1395). ``region_labels`` are each record's region
     labels as their placer counted them (LP-D68); a record whose region labels
-    overlap other labels or lines gets a ``linear_region`` record, which only warns.
+    overlap other labels or lines, or were left without room between lanes, gets a
+    ``linear_region`` record, which only warns.
     """
 
     regions = list(region_labels) if region_labels is not None else [RecordRegionLabels()] * len(record_labels)
@@ -1294,14 +1299,16 @@ def linear_label_fit(
     for (record_id, labels), region, fit in zip(record_labels, regions, fits, strict=True):
         if not fit.fits:
             failing.append(LabelFitRecord(record_id, "linear", len(labels), font_size, fit))
-        if region.overlaps:
+        region_fit = LabelFit(0, 0, region_overlaps=region.overlaps) + region.rooms_left_out
+        if not region_fit.fits:
             failing.append(
                 LabelFitRecord(
                     record_id,
                     "linear_region",
-                    len(region.font_sizes),
-                    max(region.font_sizes),
-                    LabelFit(0, 0, region_overlaps=region.overlaps),
+                    len(region.font_sizes) + region_fit.region_left_out,
+                    # The region labels' own sizes, drawn or left out.
+                    max((*region.font_sizes, *region.left_out_font_sizes), default=font_size),
+                    region_fit,
                 )
             )
     conflicts = frozenset((index, label) for index, region in enumerate(regions) for label in region.conflicted)

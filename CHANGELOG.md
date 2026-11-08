@@ -12,6 +12,21 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: a Legend name written with `<i>...</i>` (a similarity-ring label, a
+  color table's legend name, a renamed Legend row, a gradient title) showed the
+  tags as text, in the CLI, the Python API, and the Web app. The words between
+  the tags are now drawn in italics, as Species, record names, and plot titles
+  draw them, and the Legend is sized for the italic words. Region annotation
+  labels showed the tags in the same way; they are now drawn in italics too and
+  placed by the width of the italic words (OV-2808). A name or label with other
+  markup, or with `<`, `>`, or `&` elsewhere, is still drawn as written
+  (OV-2760).
+- Fixed: a Circular figure with one Depth series and no custom track stack
+  listed the Depth row last in the Legend, after GC skew, although its ring is
+  drawn between the features and GC content. Setting a Depth width (in the Web
+  app, or `--depth_width` in the CLI) moved the row up, so the Legend changed
+  order between two Generates. The Depth rows now follow the ring order in
+  every case, in the CLI, the Python API, and the Web app (OV-2823).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while
@@ -168,6 +183,25 @@ write-up of a release.
   `AnnotationGradient` and `search_hit_annotation_set` (with `SearchQuery`,
   `SearchSubject`, `SearchHit` and `SearchAnnotationResult`), which turns
   LOSAT outfmt 6 rows of a search into such an annotation set.
+- Changed: a region label that cannot get room between annotation lanes is
+  left out instead of being drawn over the next lane's mark: in a Circular
+  `inside` slot whose room stops at the centre of the circle, and in a slot
+  whose `h` (Linear) or `w` (Circular) is set with `overflow=clip`. Every mark
+  is still drawn. A clipped slot also leaves out a label whose letters its
+  edge would cut and a label whose own mark the clip hides, and it no longer
+  cuts a label's letters past the ends of the record bar. The warning counts the labels left out
+  (`N region labels left out in clipped slots`, `N region labels left out for
+  want of room before the centre`) at their own font size. A label given lane
+  room now keeps `label_offset` before the mark it would cross as well as
+  beside its own, so figures with lane rooms grow slightly. Every label
+  warning of a drawn figure now ends "The figure is drawn." instead of
+  "Drawn anyway.".
+- Changed: a Circular region label drawn along its circle that is so long for
+  its circle that not even its first letter fits is no longer drawn as a lone
+  `…`. Its mark is still drawn, it takes no room between lanes, and the warning counts it as a label left out
+  (`N region labels left out: no letter fits their circles`) instead of a cut
+  one. A label that keeps at least one letter is still drawn as its start and
+  `…`.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
@@ -190,6 +224,24 @@ write-up of a release.
   that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
+- Fixed (Web app): after a Generate that searched comparison rings with
+  LOSAT, Reset Settings removed the ring rows while their comparison files
+  stayed, and Undo of that Reset lost the LOSAT result. Reset Settings now keeps
+  a ring row for each kept comparison sequence file with its settings back to
+  the defaults and drops the earlier search results, so the next Generate
+  searches again; a kept Depth file stays hidden, as before, and its series
+  is named after the file again, as an upload names it, instead of "Depth".
+  Undo brings back the rows and the search results.
+- Fixed: the axis labels of a depth track and of a GC content track in
+  Percent mode were drawn in the browser's default serif font instead of the
+  figure's font. They now use the figure's font, as the other labels do.
+- Added: a Gallery example with a step-by-step tutorial that adds a
+  read-depth ring to the genome map of *Ca.* Hepatoplasma scabrum.
+- Fixed (Gallery tooling): a Web-saved Session that drew a depth track was
+  published with Show Depth off, so the published Session no longer drew the
+  depth track it was saved with. A command-line Session whose depth track
+  left its color, label, height, or ticks at their defaults could not be
+  published at all; it now publishes.
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was
@@ -227,19 +279,22 @@ write-up of a release.
   every base of the record; the sums are taken in pieces and kept only at the
   window edges. `gbdraw circular` with a 64 Mbp depth file peaks at 396 MiB
   instead of 780 MiB. Drawings do not change.
-- Fixed: Circular scale labels no longer overlap on records longer than about
-  36 Mbp (OV-2747). Every record above 10 Mbp had a large tick every 1 Mbp, so a
-  113 Mbp record drew 112 labels that merged into a black band. Above 10 Mbp the
-  interval now steps 1, 2, 5, 10, 20, 50 ... Mbp, and a record takes a longer
-  interval only where the labels of the shorter one would overlap in the
-  default figure: a 113 Mbp record has a tick every 5 Mbp. Figures of records up
-  to 35.8 Mbp do not change. Linear ruler labels (`--scale_style ruler` and the
-  axis ruler) overlapped above 50 Mbp in the same way and now take the same
-  steps from 49,968,282 bp; the scale bar of a default Linear figure that long
-  takes the same longer interval as its length (5 Mbp at 113 Mbp instead of a
-  1 Mbp bar narrower than its label). Linear figures of records shorter than
-  49,968,282 bp do not change. The Auto hint of the scale interval in the Web
-  app shows the same interval.
+- Fixed: Circular scale labels no longer overlap or touch on records longer
+  than about 34 Mbp (OV-2747, OV-2748). Every record above 10 Mbp had a large
+  tick every 1 Mbp, so a 113 Mbp record drew 112 labels that merged into a black
+  band. Above 10 Mbp the interval now steps 1, 2, 5, 10, 20, 50 ... Mbp, and a
+  record takes a longer interval where the labels of the shorter one would come
+  closer than a quarter of their font size, the gap feature labels keep: a
+  113 Mbp record has a tick every 5 Mbp, and a 35.8 Mbp record, whose 1 Mbp
+  labels touched, a tick every 2 Mbp. Figures of records up to 33.8 Mbp do not
+  change. Linear ruler labels (`--scale_style ruler` and the axis ruler)
+  overlapped above 50 Mbp in the same way and now take the same steps from
+  46,484,180 bp; the scale bar of a default Linear figure that long takes the
+  same longer interval as its length (5 Mbp at 113 Mbp instead of a 1 Mbp bar
+  narrower than its label). The ruler's end label is now left out when it would
+  come closer than a quarter of its font size to its neighbour; before, it was
+  left out only within 2 px, so a 4,606,000 bp ruler ended "4.5 Mbp4.6 Mbp".
+  The Auto hint of the scale interval in the Web app shows the same interval.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.
@@ -396,6 +451,30 @@ write-up of a release.
   at least one setting instead of stopping at once with every row "not
   computed". Such a run can take up to the limit longer; the limits and their
   messages are unchanged (OV-2527).
+- Changed: a depth axis and a GC content axis in Percent mode print one range
+  label, such as `[0–80x]` or `[10–55%]` (`[1–1000x, log]` on a log-scaled
+  depth axis), instead of a number on each large tick; every tick mark is still
+  drawn. In Circular diagrams the label runs along the circle inside the track,
+  near its outer edge, from just clockwise of the axis; in Linear diagrams it
+  sits left of the axis, centred on the track. A Circular depth ring with the
+  range label no longer reserves half a line outside its band. The numbered
+  ticks stay a setting: `--depth_axis_labels numbered` and
+  `--gc_content_axis_labels numbered` on the command line, or
+  `objects.depth.axis_labels` and `objects.gc_content.axis_labels` set to
+  `"numbered"` in a config or in Python.
+- Fixed: numbered tick labels of a depth axis or of a GC content axis in Percent
+  mode no longer overlap. When two labels would be closer than one line of
+  their font, the axis keeps the label of its upper bound, then its lower
+  bound, then the others from the bottom up; every tick is still drawn. A
+  10-55 % axis with a tick every 10 % drew `50%` on top of `55%`, and a
+  narrow axis drew every label on the next (OV-2763). In Circular and Linear
+  diagrams, from the command line, Python and the Web app.
+- Changed: the band that GC content in Percent mode draws behind its fill
+  (`objects.gc_content.percent_background_color`) is light gray `#e5e5e5`
+  instead of dark gray `#737373`, so the GC content is the darkest part of the
+  track instead of the empty part of the scale (OV-2759). A saved Session
+  keeps the color it was saved with, and a config or option that sets the
+  color keeps it.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-03
 

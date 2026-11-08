@@ -7,6 +7,7 @@ from ..core.text import drawn_text_box
 from .metrics import (
     GradientScaleLayout,
     gradient_scale_texts,
+    legend_caption_box,
     legend_line_height,
     legend_text_x_offset,
     single_gradient_block_x,
@@ -127,11 +128,7 @@ def _measure_solid_entries(
         _MeasuredSolidEntry(
             key=key,
             properties=properties,
-            text_width=drawn_text_box(
-                drawn_names[key].drawn,
-                font_family,
-                font_size,
-            )[0],
+            text_width=legend_caption_box(drawn_names[key].drawn, font_family, font_size)[0],
         )
         for key, properties in table.items()
         if properties.get("type") == "solid"
@@ -161,12 +158,7 @@ def _build_gradient_layout(
     scale_label_height = drawn_text_box("100%", font_family, font_size)[1]
     if len(gradient_entries) > 1:
         label_width = max(
-            drawn_text_box(
-                drawn_names[key].drawn,
-                font_family,
-                font_size,
-            )[0]
-            for key, _ in gradient_entries
+            legend_caption_box(drawn_names[key].drawn, font_family, font_size)[0] for key, _ in gradient_entries
         )
         bar_x = label_width + (GRADIENT_LABEL_GAP_RATIO * color_rect_size)
         stack = stack_compact_gradient_rows(
@@ -204,11 +196,7 @@ def _build_gradient_layout(
         )
 
     key, properties = gradient_entries[0]
-    title_width, title_height = drawn_text_box(
-        drawn_names[key].drawn,
-        font_family,
-        font_size,
-    )
+    title_width, title_height = legend_caption_box(drawn_names[key].drawn, font_family, font_size)
     min_label_text, max_label_text = gradient_scale_texts(properties)
     width, bar_x = single_gradient_block_x(bar_width, title_width)
     bar_y = title_height + (color_rect_size / 2.0)

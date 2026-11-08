@@ -218,8 +218,8 @@ Open `quantitative_genome_baseline.svg`. Verify the `AP027133.1` identifier,
 
 Open `quantitative_genome_map.svg`. From outside to inside, the semantic slot
 order is ticks, features, depth, GC content, and GC skew. Check the blue depth
-ring, the 0x–80x depth ticks, the 10%–55% GC-content ticks, and the two signed
-GC-skew fills.
+ring, its `[0–80x]` range label, the `[10–55%]` range label of the GC-content
+ring, and the two signed GC-skew fills.
 
 Your quantitative SVG should match the figure at the top of this page: the same record definition, track order, axes, tick labels, colors, and legend.
 

@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
 
+from gbdraw.core.text import drawn_runs_box, italic_markup_runs
 from gbdraw.exceptions import ValidationError
 
 
@@ -45,6 +46,13 @@ def legend_text_x_offset(color_rect_size: float) -> float:
     """Return the authoritative rectangle-to-text offset for legend entries."""
 
     return LEGEND_TEXT_OFFSET_RATIO * legend_swatch_size(color_rect_size)
+
+
+def legend_caption_box(text: str, font_family: str, font_size: float) -> tuple[float, float]:
+    """The box a Legend caption is drawn in (``drawn_runs_box`` of its ``italic_markup_runs``): every Legend layout
+    measures its captions here."""
+
+    return drawn_runs_box(italic_markup_runs(text), font_family, font_size)
 
 
 def single_gradient_block_x(bar_width: float, title_width: float) -> tuple[float, float]:
@@ -156,6 +164,7 @@ __all__ = [
     "LEGEND_SWATCH_SIZE_PATH",
     "gradient_label_text",
     "gradient_scale_texts",
+    "legend_caption_box",
     "legend_line_height",
     "legend_swatch_size",
     "legend_text_x_offset",

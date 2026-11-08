@@ -57,6 +57,10 @@ class CircularTrackInputs:
     """
 
     circular_track_slots: list[CircularTrackSlot] | None = None
+    # True when the reader gave no stack: ``circular_track_slots`` is then None or the list the
+    # engine built (rings, depth tracks; a grid's records get the grid's), and region sets get
+    # their slots on it as on the default list (OV-2820).
+    implicit_track_stack: bool = False
     circular_track_axis_index: int | None = None
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None
     annotation_record_index: int = 0

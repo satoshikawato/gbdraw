@@ -23,28 +23,30 @@ SizeClass = Literal["short", "long"]
 AutoValue = float | int
 
 # (at most bp, large tick, small tick); longer records use the last pair. Above 10 Mbp the large ticks step
-# 1-2-5 Mbp, and each row ends at the longest record whose large tick labels, at their drawn widths, do not
-# overlap in the default figure (OV-2747; tests/test_circular_ticks.py measures every bound again).
+# 1-2-5 Mbp, and each row ends at the longest record whose neighbouring large tick labels, at their drawn
+# widths, keep a quarter em (labels.label_style.ROW_LABEL_GAP_EM) between them in the default figure (OV-2747,
+# OV-2748; tests/test_circular_ticks.py measures every bound again).
 _CIRCULAR_TICK_TIERS: tuple[tuple[int, int, int], ...] = (
     (30_000, 1_000, 100),
     (50_000, 5_000, 1_000),
     (150_000, 10_000, 1_000),
     (1_000_000, 50_000, 10_000),
     (10_000_000, 500_000, 100_000),
-    (35_868_344, 1_000_000, 200_000),
-    (71_736_688, 2_000_000, 400_000),
-    (158_235_065, 5_000_000, 1_000_000),
-    (316_470_130, 10_000_000, 2_000_000),
-    (632_940_260, 20_000_000, 4_000_000),
-    (1_415_733_530, 50_000_000, 10_000_000),
-    (2_831_467_060, 100_000_000, 20_000_000),
-    (5_662_934_121, 200_000_000, 40_000_000),
+    (33_839_331, 1_000_000, 200_000),
+    (67_678_663, 2_000_000, 400_000),
+    (150_284_490, 5_000_000, 1_000_000),
+    (300_568_981, 10_000_000, 2_000_000),
+    (601_137_962, 20_000_000, 4_000_000),
+    (1_351_751_222, 50_000_000, 10_000_000),
+    (2_703_502_444, 100_000_000, 20_000_000),
+    (5_407_004_889, 200_000_000, 40_000_000),
 )
-# Its labels fit records up to 12.8 Gbp.
+# Its labels keep the gap on records up to 12.2 Gbp.
 _CIRCULAR_TICKS_ABOVE_TIERS = (500_000_000, 100_000_000)
 # (below bp, tick interval); longer records use the last interval. The scale bar takes its length from them
-# too. Above 5 Mbp the interval steps 1-2-5 Mbp, and each row ends where the ruler labels, at their drawn widths
-# and the default width, start to overlap (OV-2747; tests/test_linear_ruler_ticks.py measures every bound again).
+# too. Above 5 Mbp the interval steps 1-2-5 Mbp, and each row ends where neighbouring ruler labels, at their
+# drawn widths and the default width, would come closer than a quarter em (labels.label_style.ROW_LABEL_GAP_EM;
+# OV-2747, OV-2748; tests/test_linear_ruler_ticks.py measures every bound again).
 _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
     (2_000, 100),
     (20_000, 1_000),
@@ -54,16 +56,16 @@ _LINEAR_TICK_TIERS: tuple[tuple[int, int], ...] = (
     (1_000_000, 100_000),
     (2_000_000, 200_000),
     (5_000_000, 500_000),
-    (49_968_282, 1_000_000),
-    (99_936_564, 2_000_000),
-    (214_136_345, 5_000_000),
-    (428_272_690, 10_000_000),
-    (856_545_379, 20_000_000),
-    (1_873_604_860, 50_000_000),
-    (3_747_209_720, 100_000_000),
-    (7_494_419_439, 200_000_000),
+    (46_484_180, 1_000_000),
+    (92_968_360, 2_000_000),
+    (201_210_407, 5_000_000),
+    (402_420_813, 10_000_000),
+    (804_841_626, 20_000_000),
+    (1_773_897_378, 50_000_000),
+    (3_547_794_755, 100_000_000),
+    (7_095_589_510, 200_000_000),
 )
-# Its ruler labels fit records up to 16.6 Gbp.
+# Its ruler labels keep the gap on records up to 15.8 Gbp.
 _LINEAR_TICK_ABOVE_TIERS = 500_000_000
 _SCALAR_TICK_FONT_RANGE_PX = (5.0, 8.0)
 _SCALAR_TICK_FONT_THICKNESS_FRACTION: Mapping[DiagramMode, float] = {

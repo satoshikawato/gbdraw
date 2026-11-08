@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,10 +13,13 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.auto_sizes import tick_and_window_tiers
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.circular_ink import CircularInkRing
+from gbdraw.labels.label_style import ROW_LABEL_GAP_EM
+from gbdraw.render.groups.circular import ticks as ticks_module
 from gbdraw.render.groups.circular.ticks import TickGroup
 from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
+    CircularTickLabelGeometry,
+    circular_tick_labels,
     generate_circular_tick_labels,
     get_circular_tick_path_radius_bounds,
     resolve_circular_tick_label_geometry,
@@ -312,18 +316,38 @@ def long_record_tick_group() -> tuple[TickGroup, tuple, dict]:
     return made[-1]
 
 
-def _label_arcs(group: TickGroup) -> list[CircularInkRing]:
-    return sorted((ink for ink in group.ink() if isinstance(ink, CircularInkRing)), key=lambda ring: ring.start_turn)
+def _label_gap_shortfall_px(group: TickGroup) -> float:
+    """How far the closest two neighbouring large tick labels stay from a quarter em apart (OV-2748): their gap
+    along the circle at the smaller of their path radii, minus ``ROW_LABEL_GAP_EM`` of the label font. Negative:
+    they are closer, so they read as one. The labels are those ``TickGroup.ink()`` draws."""
 
+    drawn: list[tuple[str, float, CircularTickLabelGeometry]] = []
 
-def _smallest_label_gap_turns(group: TickGroup) -> float:
-    """The smallest gap, in turns, between the drawn boxes of two neighbouring large tick labels (negative: they
-    overlap)."""
+    def recording_labels(*args: object, **kwargs: object) -> list[tuple[str, float, CircularTickLabelGeometry]]:
+        labels = circular_tick_labels(*args, **kwargs)
+        drawn.extend(labels)
+        return labels
 
-    arcs = _label_arcs(group)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(ticks_module, "circular_tick_labels", recording_labels)
+        group.ink()
+    arcs = sorted(
+        (
+            float(tick) / group.total_len - half_turn,
+            float(tick) / group.total_len + half_turn,
+            radius,
+        )
+        for _text, tick, geometry in drawn
+        for radius in [max(1.0, geometry.path_radius_px)]
+        for half_turn in [0.5 * geometry.bbox_width_px / radius / (2.0 * math.pi)]
+    )
     assert len(arcs) > 1
-    gaps = [right.start_turn - left.end_turn for left, right in zip(arcs, arcs[1:])]
-    return min([*gaps, arcs[0].start_turn + 1.0 - arcs[-1].end_turn])
+    first_again = (arcs[0][0] + 1.0, arcs[0][1] + 1.0, arcs[0][2])
+    gap_px = min(
+        (right[0] - left[1]) * 2.0 * math.pi * min(left[2], right[2])
+        for left, right in zip(arcs, [*arcs[1:], first_again])
+    )
+    return gap_px - ROW_LABEL_GAP_EM * float(group.font_size)
 
 
 def _tick_group_of_length(captured: tuple[TickGroup, tuple, dict], length: int, interval: int | None = None) -> TickGroup:
@@ -340,36 +364,40 @@ def _tick_group_of_length(captured: tuple[TickGroup, tuple, dict], length: int, 
     return TickGroup(SeqRecord(Seq(None, length=length), id="long"), *args[1:], **kwargs)
 
 
-def test_the_tick_labels_of_a_113_mbp_record_do_not_overlap(long_record_tick_group) -> None:
+def test_the_tick_labels_of_a_113_mbp_record_keep_a_quarter_em_apart(long_record_tick_group) -> None:
     group = long_record_tick_group[0]
 
-    assert len(_label_arcs(group)) < 40
-    assert _smallest_label_gap_turns(group) >= 0.0
+    assert _LONG_RECORD_BP // group.tick_large < 40
+    assert _label_gap_shortfall_px(group) >= 0.0
 
 
 _TIERS = tick_and_window_tiers(apply_config_overrides(None, None))["circularTicks"]
 
 
 @pytest.mark.parametrize(("at_most", "large", "_small"), _TIERS["tiers"])
-def test_the_tick_labels_of_every_tier_fit_at_its_longest_record(long_record_tick_group, at_most, large, _small) -> None:
+def test_the_tick_labels_of_every_tier_keep_a_quarter_em_apart_at_its_longest_record(
+    long_record_tick_group, at_most, large, _small
+) -> None:
     group = _tick_group_of_length(long_record_tick_group, at_most)
 
     assert group.tick_large == large
-    assert _smallest_label_gap_turns(group) >= 0.0
+    assert _label_gap_shortfall_px(group) >= 0.0
 
 
 @pytest.mark.parametrize(
     ("at_most", "large"), [(at_most, large) for at_most, large, _small in _TIERS["tiers"] if at_most > 10_000_000]
 )
-def test_a_tier_above_10_mbp_ends_where_its_tick_labels_start_to_overlap(long_record_tick_group, at_most, large) -> None:
-    """The rows above 10 Mbp are measured, not chosen: each ends at the longest record whose labels fit, so a
-    figure whose labels fit keeps its interval and only figures whose labels would overlap take a coarser one."""
+def test_a_tier_above_10_mbp_ends_where_its_tick_labels_come_closer_than_a_quarter_em(
+    long_record_tick_group, at_most, large
+) -> None:
+    """The rows above 10 Mbp are measured, not chosen: each ends at the longest record whose labels keep a quarter
+    em apart, so only figures whose labels would come closer take a coarser interval."""
 
-    assert _smallest_label_gap_turns(_tick_group_of_length(long_record_tick_group, at_most + 1, large)) < 0.0
+    assert _label_gap_shortfall_px(_tick_group_of_length(long_record_tick_group, at_most + 1, large)) < 0.0
 
 
 def test_the_ticks_above_the_last_tier_fit_records_of_10_gbp(long_record_tick_group) -> None:
     group = _tick_group_of_length(long_record_tick_group, 10_000_000_000)
 
     assert group.tick_large == _TIERS["above"][0]
-    assert _smallest_label_gap_turns(group) >= 0.0
+    assert _label_gap_shortfall_px(group) >= 0.0

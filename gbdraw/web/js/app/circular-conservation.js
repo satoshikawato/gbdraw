@@ -172,6 +172,14 @@ export const createCircularConservationSources = ({
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
     refreshCircularConservationSlots(drawing);
   };
+  // Reset Settings: the rings follow the kept comparison files as a new drawing
+  // with those files uploaded has them, and the LOSAT result the old settings
+  // searched goes with those settings (OV-2758).
+  /** @param {DrawingState} drawing */
+  const rederiveCircularConservation = (drawing) => {
+    clearDerivedCircularConservationBlasts(drawing);
+    reconcileCircularConservation(drawing);
+  };
   // Generate turns the rings on or off by their source files; the managed stack
   // rows follow in the same step, also when the run then fails or is canceled.
   /** @param {DrawingState} drawing @param {boolean} enabled */
@@ -190,7 +198,8 @@ export const createCircularConservationSources = ({
   };
   return {
     clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
-    askRingSourceRemoval, reconcileCircularConservation, setCircularConservationEnabled, refreshCircularConservationSlots
+    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, setCircularConservationEnabled,
+    refreshCircularConservationSlots
   };
 };
 

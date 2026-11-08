@@ -4,7 +4,8 @@
 ``tests/fixtures/legend_layout_vectors.json`` holds inputs and Python's own
 results for:
 
-- text measurement (``drawn_text_box``);
+- caption measurement (``legend_caption_box``: ``drawn_text_box`` of a literal
+  caption, the runs of a caption written with ``<i>``);
 - the Legend of every Gallery Session Result, and edited copies of it (rows
   renamed, deleted, added, reordered; Circular Legends moved to each side);
 - synthetic Legends for the branches the Gallery does not reach (conservation
@@ -38,12 +39,12 @@ GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 sys.path.insert(0, str(REPO_ROOT))
 
 from gbdraw.comparisons.identity_scale import identity_color_domain  # noqa: E402
+from gbdraw.session_drawings import checked_drawing_views  # noqa: E402
 from gbdraw.configurators.legend import (  # noqa: E402
     _circular_legend_local_bounds,
     _linear_legend_local_bounds,
 )
 from gbdraw.core.fonts import resolve_font_face  # noqa: E402
-from gbdraw.core.text import drawn_text_box  # noqa: E402
 from gbdraw.config.models.canvas import CANVAS_PADDING_SIDES  # noqa: E402
 from gbdraw.layout.composition import (  # noqa: E402
     OVERLAY_CANDIDATE_SCORE_ORDER,
@@ -58,6 +59,7 @@ from gbdraw.layout.composition import (  # noqa: E402
 from gbdraw.layout.spatial import Aabb  # noqa: E402
 from gbdraw.legend.circular_layout import build_circular_legend_layout  # noqa: E402
 from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
+from gbdraw.legend.metrics import legend_caption_box  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
 NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
@@ -79,6 +81,9 @@ MEASUREMENT_TEXTS = (
     # NBSP kept); a character the face lacks is an em box.
     "a  b", "a\tb", "a\nb", "a\r\nb", "a\u00a0\u00a0b", " a ", " ", "Plain  ", "Plain ",
     "\tTabbed\n", "漢字 and ASCII",
+    # OV-2760: captions written with <i> measure their runs, each in its own face; the others are literal.
+    "<i>Danio rerio</i> (zebrafish)", "<i>E. coli</i> and <i>V. cholerae</i>", "<i>Homo sapiens</i>", "<i>f</i>",
+    "x <i>f</i>", "<i>a  </i>  b", "<b>x</b>", "a & <i>b</i>", "<i></i>x", "<i>a</i",
 )
 MEASUREMENT_FAMILIES = (
     "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
@@ -164,7 +169,9 @@ def _gallery_cases() -> list[dict[str, Any]]:
         opener = gzip.open if path.name.endswith(".gz") else open
         with opener(path, "rt", encoding="utf-8") as handle:
             session = json.load(handle)
-        for index, result in enumerate(session.get("results") or []):
+        # A Gallery Session is a Session 51: its Results are its drawing's.
+        results = [result for view in checked_drawing_views(session) for result in view.get("results") or []]
+        for index, result in enumerate(results):
             root = ET.fromstring(result["content"].encode())
             legend = _by_id(root, "legend")
             if legend is None:
@@ -320,6 +327,7 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
                 "composition": {**padded, "requestedCanvas": requested} if requested else padded,
             })
     cases.extend(_ring_cases(options, composition, solid))
+    cases.extend(_caption_markup_cases(options, composition, solid))
     cases.extend(_annotation_gradient_cases(options, composition, solid, conservation, compact))
     return cases
 
@@ -362,6 +370,40 @@ def _annotation_gradient_cases(
     return cases
 
 
+def _caption_markup_cases(
+    options: dict[str, Any], composition: dict[str, Any], solid: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Captions written with ``<i>`` (OV-2760): solid rows, a gradient title, compact gradient captions and, in
+    Circular, ring rows draw and measure their italic runs; a caption outside the italic subset stays literal."""
+
+    def row(key: str, kind: str = "solid", **extra: Any) -> dict[str, Any]:
+        return {"key": key, "type": kind, "stroke": "none", "strokeWidth": 0.0, **extra}
+
+    names = ("<i>Danio rerio</i> (zebrafish)", "<i>E. coli</i> and <i>V. cholerae</i>", "<b>x</b>", "a & <i>b</i>")
+    solids = [row(name) for name in names] + solid[:2]
+    one_gradient = [row("<i>Danio rerio</i> identity", "gradient", minValue=70)]
+    two_gradients = [row(name, "gradient", minValue=70) for name in names[:2]]
+    rings = [row(name, "ring", minValue=90, swatch=True) for name in names]
+    cases = []
+    for mode in ("circular", "linear"):
+        variants = [
+            ("italic captions", solids),
+            ("italic captions and an italic gradient title", solids + one_gradient),
+            ("italic gradient captions", solid[:2] + two_gradients),
+        ]
+        if mode == "circular":
+            variants.append(("italic ring names", solid[:2] + rings))
+        cases.extend(
+            {
+                "name": f"synthetic {mode}", "mode": mode, "edit": f"{label}, {side}", "rows": rows,
+                "options": {**options, "side": side, "wrapWidth": 900.0}, "composition": composition,
+            }
+            for label, rows in variants
+            for side in ("left", "top")
+        )
+    return cases
+
+
 def _ring_cases(
     options: dict[str, Any], composition: dict[str, Any], solid: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -401,17 +443,18 @@ def _layout_cases(gallery: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return layout
 
 
+def _measurement_cases() -> list[dict[str, Any]]:
+    return [
+        {"text": caption, "fontFamily": family, "fontFile": _font_file(family), "fontSize": size}
+        for family in MEASUREMENT_FAMILIES
+        for size in (14.0, 20.0, 16.5)
+        for caption in MEASUREMENT_TEXTS
+    ]
+
+
 def build_inputs() -> dict[str, Any]:
     layout = _layout_cases(_gallery_cases())
-    measurement = []
-    for family in MEASUREMENT_FAMILIES:
-        for size in (14.0, 20.0, 16.5):
-            for caption in MEASUREMENT_TEXTS:
-                measurement.append({
-                    "text": caption, "fontFamily": family, "fontFile": _font_file(family),
-                    "fontSize": size,
-                })
-    return {"overlayPolicy": OVERLAY_POLICY, "measurement": measurement, "layout": layout}
+    return {"overlayPolicy": OVERLAY_POLICY, "measurement": _measurement_cases(), "layout": layout}
 
 
 # ---- expected values (Python's own functions) ----
@@ -577,7 +620,7 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
 def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
     measurement = []
     for case in inputs["measurement"]:
-        width, height = drawn_text_box(case["text"], case["fontFamily"], case["fontSize"])
+        width, height = legend_caption_box(case["text"], case["fontFamily"], case["fontSize"])
         measurement.append({**case, "expected": {"width": width, "height": height}})
     layout = []
     for case in inputs["layout"]:
@@ -598,8 +641,9 @@ def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _stored_inputs() -> dict[str, Any]:
-    # The stored Gallery Legends stay as read; their edits and the synthetic
-    # Legends are derived again, so a new edit needs no Gallery rebuild.
+    # The stored Gallery Legends stay as read; their edits, the synthetic
+    # Legends and the measurement cases are derived again, so a new case needs
+    # no Gallery rebuild.
     stored = json.loads(TARGET.read_text(encoding="utf-8"))
     strip = lambda cases: [{key: value for key, value in case.items() if key != "expected"} for case in cases]  # noqa: E731
     gallery = [
@@ -608,7 +652,7 @@ def _stored_inputs() -> dict[str, Any]:
     ]
     return {
         "overlayPolicy": stored["overlayPolicy"],
-        "measurement": strip(stored["measurement"]),
+        "measurement": _measurement_cases(),
         "layout": _layout_cases(gallery),
     }
 

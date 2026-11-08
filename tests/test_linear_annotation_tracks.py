@@ -1816,7 +1816,7 @@ def test_a_region_label_whose_backing_would_cover_an_underline_keeps_its_place_a
     drawing, messages = _region_case("left_end")
     report = label_fit_report(drawing)
 
-    assert messages == ["left_end: 1 region label does not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert messages == ["left_end: 1 region label does not fit at 10 pt (1 region label overlap). The figure is drawn."]
     assert report is not None and report.region_overlaps == 1
     assert _front_labels(drawing.tostring()) == [] and _region_label_crossings(drawing.tostring()) == []
     plain, messages = _region_case("left_end", {"labels.linear.line": "none"})
@@ -1885,7 +1885,7 @@ def test_cli_moves_the_hmmtdna_trna_pro_label_off_the_control_region_label(
     # Without the move, the label keeps its overlap and warns, with no fix offered (LP-D77).
     monkeypatch.setattr(annotation_labels, "_make_way", lambda *args, **kwargs: None)
     kept, err = render("kept")
-    assert "WARNING: NC_012920.1: 2 region labels do not fit at 20 pt (1 region label overlap). Drawn anyway." in err
+    assert "WARNING: NC_012920.1: 2 region labels do not fit at 20 pt (1 region label overlap). The figure is drawn." in err
     assert "Run again" not in err
     assert _feature_label_ys(svg)["tRNA-Pro"] < _feature_label_ys(kept)["tRNA-Pro"]
 
@@ -1983,7 +1983,7 @@ def test_a_region_label_whose_overlap_no_way_clears_warns_with_no_fix() -> None:
     report = label_fit_report(drawing)
 
     assert report is not None and report.drawn and report.region_overlaps == 1 and report.rows == ()
-    assert messages == ["adjacent: 2 region labels do not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert messages == ["adjacent: 2 region labels do not fit at 10 pt (1 region label overlap). The figure is drawn."]
     assert _front_labels(drawing.tostring()) == []
 
 
@@ -2555,8 +2555,12 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
     }
 
     # Two lanes (35 px), and room between them for the right label, which stands above lane 1 over the left
-    # region's mark in lane 0 (PD-OI-119): its letters, its label offset and its mark's stroke.
+    # region's mark in lane 0 (PD-OI-119): its letters, its label offset on each side of them, and how far each of
+    # the two brackets paints past its lane (the drawer's measure, as the packer reads it) at the lanes' drawn width.
+    from gbdraw.annotations import AnnotationTrackParams, ResolvedRegionAnnotation
+    from gbdraw.annotations.layout import lane_width_px
     from gbdraw.render.drawers.annotation_marks import label_ink_offsets
+    from gbdraw.render.drawers.linear.annotations import linear_annotation_mark_past_lane
 
     root = ElementTree.fromstring(drawing.tostring())
     (text,) = (
@@ -2566,9 +2570,15 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
         for element in group.iter("{http://www.w3.org/2000/svg}text")
     )
     _left, _right, top, bottom = label_ink_offsets(
-        "".join(text.itertext()), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
+        (("".join(text.itertext()), "normal"),), text.get("font-family", ""), float(text.get("font-size", "nan")), "middle"
     )
     style = RegionAnnotationStyle()
+    bracket = ResolvedRegionAnnotation(
+        id="left", set_id="regions", record_index=0, segments=((100, 140),), midpoint_bp=120.0, span_bp=40,
+        label="", mark="bracket", lane=0, style=style,
+    )
+    width = lane_width_px(35.0, padding_px=AnnotationTrackParams(set_id="regions").padding_px, room_px=0.0, lane_count=2)
+    paint = linear_annotation_mark_past_lane(bracket, style, width)
     assert slots["annotations_1"]["heightPx"] == pytest.approx(
-        35.0 + bottom - top + style.label_offset + style.stroke_width
+        35.0 + bottom - top + 2.0 * style.label_offset + 2.0 * paint
     )

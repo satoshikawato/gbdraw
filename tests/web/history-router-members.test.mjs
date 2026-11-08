@@ -99,6 +99,28 @@ test('a removed History stays in the budget, held by the project step that remov
   assert.equal(fileStore.has(fileAId), false, 'evicting the holder releases the held History and its files');
 });
 
+// OV-2761: the shown drawing's part of a project step can join the step after
+// it is recorded; the files that part's before-state names stay stored, so
+// Undo binds them again.
+test('a project step keeps the files of the shown drawing it changed', async () => {
+  const { router, values, files, fileStore } = makeRouter({ drawingIds: ['circular', 'linear'], shownId: 'circular' });
+  files.circular = makeFile('ring.tsv');
+  await router.captureBaseline();
+  const fileId = router.managerOf('circular').getCurrentIntent().file.fileId;
+  await router.runProjectStep('Reset all drawings', async () => {
+    await Promise.resolve();
+    values.circular = 'r';
+    values.linear = 'r';
+    files.circular = null;
+  });
+  await router.runUndoable('Linear edit', () => { values.linear = 'l'; });
+  assert.equal(fileStore.has(fileId), true, 'the project step still names the file');
+  await router.undo();
+  await router.undo();
+  assert.equal(values.circular, '');
+  assert.equal(files.circular?.name, 'ring.tsv', 'Undo binds the file again');
+});
+
 test('a project step that is not recorded gives a removed History back', async () => {
   const { router, shown, values } = makeRouter({ drawingIds: ['circular', 'linear'], shownId: 'linear' });
   await router.captureBaseline();

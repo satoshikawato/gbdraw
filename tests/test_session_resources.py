@@ -215,14 +215,16 @@ def test_a_request_reference_must_resolve() -> None:
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110;
 # the italic gene label leaves; the identity colour scale leaves; the figure size leaves, #1427;
-# the unused Linear leaf canvas.linear.canvas_padding, removed; request schema 10 writing record windows).
+# the unused Linear leaf canvas.linear.canvas_padding, removed; the scalar axis label
+# style leaves, which a stored full config reads as numbered; request schema 10 writing
+# record windows).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
         "897531e28a23022700319af6b43d06051f2a1c3eedafbaca36d309d6a6baae7d",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
         "e010045ac2d9da97b4a897670aa935a639675147578dfdb8347d05cabb7fc47b",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "ea3b42f44dcc86a19e48f2c2773efd2f42ada1418af1ee5a6480288a5b70e609",
+        "7edd7f795b2fcee40b28c0c8ec83ed7e4093e3055720364f9c2b08d468f673cf",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
         "cf89040896a6e9cd6cecec39c1617665cd15fe6603174e28405c314cd5bd49f8",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":

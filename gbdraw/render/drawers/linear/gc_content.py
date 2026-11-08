@@ -11,11 +11,10 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarRow,
-    format_percent_tick,
+    percent_axis_labels,
     plot_data_once,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
-    scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
 from ....svg.linear_tracks import calculate_gc_content_path_desc, calculate_linear_scalar_area_path_desc
@@ -46,7 +45,8 @@ class GcContentDrawer:
         self.large_tick_interval: float | None = getattr(gc_config, "large_tick_interval", 20.0)
         self.small_tick_interval: float | None = getattr(gc_config, "small_tick_interval", None)
         self.tick_font_size: float | None = getattr(gc_config, "tick_font_size", None)
-        self.percent_background_color: str = str(getattr(gc_config, "percent_background_color", "#737373"))
+        self.font_family: str = gc_config.font_family
+        self.percent_background_color: str = str(gc_config.percent_background_color)
         self.percent_background_opacity: float = float(getattr(gc_config, "percent_background_opacity", 1.0))
         self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
         self.percent_border_width: float = float(getattr(gc_config, "percent_border_width", 0.8))
@@ -147,18 +147,22 @@ class GcContentDrawer:
         )
 
         font_size = self._tick_font_size(track_height)
-        large_tick_values = scalar_axis_tick_values(
+        axis_labels = percent_axis_labels(
             self.min_percent,
             self.max_percent,
+            label_style=self._gc_config.axis_labels,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
+            length_px=track_height,
+            label_line_px=font_size,
         )
+        large_ticks = axis_labels.ticks
         for tick_value in scalar_axis_small_tick_values(
             self.min_percent,
             self.max_percent,
             show_ticks=self.show_ticks,
             small_tick_interval=self.small_tick_interval,
-            large_tick_values=large_tick_values,
+            large_tick_values=[tick.value for tick in large_ticks],
         ):
             normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
             tick_y = baseline_y - (float(track_height) * normalized)
@@ -170,9 +174,8 @@ class GcContentDrawer:
                     stroke_width=self.axis_stroke_width,
                 )
             )
-        for tick_value in large_tick_values:
-            normalized = scaled_scalar_fraction(tick_value, self.min_percent, self.max_percent)
-            tick_y = baseline_y - (float(track_height) * normalized)
+        for tick in large_ticks:
+            tick_y = baseline_y - tick.offset_px
             axis_group.add(
                 Line(
                     start=(start_x - self.axis_tick_size, tick_y),
@@ -181,12 +184,30 @@ class GcContentDrawer:
                     stroke_width=self.axis_stroke_width,
                 )
             )
+            if tick.label is None:
+                continue
             axis_group.add(
                 Text(
-                    format_percent_tick(tick_value),
+                    tick.label,
                     insert=(start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX, tick_y),
                     fill=self.axis_stroke,
                     font_size=font_size,
+                    font_family=self.font_family,
+                    text_anchor="end",
+                    dominant_baseline="central",
+                )
+            )
+        if axis_labels.range_label is not None:
+            axis_group.add(
+                Text(
+                    axis_labels.range_label,
+                    insert=(
+                        start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
+                        float(start_y) + 0.5 * float(track_height),
+                    ),
+                    fill=self.axis_stroke,
+                    font_size=font_size,
+                    font_family=self.font_family,
                     text_anchor="end",
                     dominant_baseline="central",
                 )

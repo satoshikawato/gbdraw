@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import math
-
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle, Group, Line, Path, Text
 
@@ -12,19 +10,21 @@ from ....layout.circular_depth_axis import (
     DEPTH_AXIS_STROKE_WIDTH_PX,
     DEPTH_AXIS_TICK_SIZE_PX,
     SCALAR_AXIS_LABEL_GAP_PX,
+    CircularRangeLabel,
     ScalarAxisTick,
+    circular_range_label,
     depth_axis_tick_font_size_px,
     scalar_axis_ink,
 )
 from ....layout.circular_ink import CircularInk, CircularInkProfile, stroke_pad_px
 from ....layout.scalar_axis import (
     _depth_axis_bounds,
-    _format_depth_tick,
     _prepare_depth_plot_dataframe,
     _scaled_depth_fraction,
+    depth_axis_labels,
     scalar_axis_small_tick_values,
-    scalar_axis_tick_values,
 )
+from ....svg.circular_ticks import text_along_circle
 from ....svg.circular_tracks import circular_scalar_area_line, generate_circular_depth_path_desc
 
 
@@ -47,6 +47,7 @@ class DepthDrawer:
         self.large_tick_interval: float | None = depth_config.large_tick_interval
         self.small_tick_interval: float | None = depth_config.small_tick_interval
         self.tick_font_size: float | None = depth_config.tick_font_size
+        self.font_family: str = depth_config.font_family
         self.axis_stroke: str = "#4b5563"
         self.axis_stroke_width: float = DEPTH_AXIS_STROKE_WIDTH_PX
         self.axis_tick_size: float = DEPTH_AXIS_TICK_SIZE_PX
@@ -54,40 +55,47 @@ class DepthDrawer:
 
     def _axis_ticks(
         self, depth_df: DataFrame, baseline_radius: float, track_width: float
-    ) -> list[ScalarAxisTick]:
-        """The axis ticks as drawn: small ticks first, then large ticks with their labels."""
+    ) -> tuple[list[ScalarAxisTick], CircularRangeLabel | None]:
+        """The axis ticks as drawn, small ticks first, then large ticks with their numbers; and the range label."""
 
         axis_min, axis_max = _depth_axis_bounds(depth_df, self.min_depth, self.max_depth)
-        large_tick_values = scalar_axis_tick_values(
+        font_size = depth_axis_tick_font_size_px(self._depth_config, track_width)
+        axis_labels = depth_axis_labels(
             axis_min,
             axis_max,
+            label_style=self._depth_config.axis_labels,
+            min_depth=self.min_depth,
+            normalize=self.normalize,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
+            length_px=track_width,
+            label_line_px=font_size,
         )
+        large_ticks = axis_labels.ticks
         small_tick_values = scalar_axis_small_tick_values(
             axis_min,
             axis_max,
             show_ticks=self.show_ticks,
             small_tick_interval=self.small_tick_interval,
-            large_tick_values=large_tick_values,
+            large_tick_values=[tick.value for tick in large_ticks],
         )
-
-        def tick_radius(tick_value: float) -> float:
-            normalized = _scaled_depth_fraction(tick_value, axis_min, axis_max, normalize=self.normalize)
-            return baseline_radius + (float(track_width) * normalized)
-
-        ticks = [ScalarAxisTick(tick_radius(value), self.axis_small_tick_size, None) for value in small_tick_values]
-        ticks.extend(
+        ticks = [
             ScalarAxisTick(
-                tick_radius(value),
-                self.axis_tick_size,
-                None
-                if self.min_depth is None and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
-                else _format_depth_tick(value),
+                baseline_radius + float(track_width) * _scaled_depth_fraction(
+                    value, axis_min, axis_max, normalize=self.normalize
+                ),
+                self.axis_small_tick_size,
+                None,
             )
-            for value in large_tick_values
+            for value in small_tick_values
+        ]
+        ticks.extend(
+            ScalarAxisTick(baseline_radius + tick.offset_px, self.axis_tick_size, tick.label) for tick in large_ticks
         )
-        return ticks
+        range_label = circular_range_label(
+            axis_labels.range_label, baseline_radius + float(track_width), font_size=font_size
+        )
+        return ticks, range_label
 
     @staticmethod
     def _radii(radius: float, track_width: float, norm_factor: float) -> tuple[float, float]:
@@ -128,7 +136,8 @@ class DepthDrawer:
             )
         )
         font_size = depth_axis_tick_font_size_px(self._depth_config, track_width)
-        for tick in self._axis_ticks(depth_df, baseline_radius, track_width):
+        ticks, range_label = self._axis_ticks(depth_df, baseline_radius, track_width)
+        for tick in ticks:
             axis_group.add(
                 Line(
                     start=(0, -tick.radius_px),
@@ -144,10 +153,23 @@ class DepthDrawer:
                         insert=(tick.length_px + SCALAR_AXIS_LABEL_GAP_PX, -tick.radius_px),
                         fill=self.axis_stroke,
                         font_size=font_size,
+                        font_family=self.font_family,
                         text_anchor="start",
                         dominant_baseline="central",
                     )
                 )
+        if range_label is not None:
+            for element in text_along_circle(
+                range_label.text,
+                range_label.baseline_px,
+                -90.0 + range_label.start_deg,
+                range_label.path_span_deg,
+                id_parts=(axis_group_id,),
+                fill=self.axis_stroke,
+                font_size=font_size,
+                font_family=self.font_family,
+            ):
+                axis_group.add(element)
         group.add(axis_group)
         return group
 
@@ -159,11 +181,10 @@ class DepthDrawer:
         track_width: float,
         norm_factor: float,
         *,
-        font_family: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the area down to the baseline with half its stroke, and
-        the axis (``font_family`` is the family the axis labels inherit)."""
+        the axis, its labels measured in the figure's font as ``draw`` writes them."""
 
         plot_df = _prepare_depth_plot_dataframe(depth_df, self.min_depth, self.max_depth, normalize=self.normalize)
         line = circular_scalar_area_line(
@@ -179,12 +200,14 @@ class DepthDrawer:
                                        pad_px=pad)
         ]
         if self.show_axis:
+            ticks, range_label = self._axis_ticks(depth_df, baseline_radius, track_width)
             inks.extend(
                 scalar_axis_ink(
                     *self._radii(radius, track_width, norm_factor),
-                    self._axis_ticks(depth_df, baseline_radius, track_width),
+                    ticks,
                     font_size=depth_axis_tick_font_size_px(self._depth_config, track_width),
-                    font_family=font_family,
+                    font_family=self.font_family,
+                    range_label=range_label,
                 )
             )
         return tuple(inks)

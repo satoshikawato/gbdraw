@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `127`
+- Contract revision: `129`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4809,6 +4809,118 @@ Status: active Product authority
   - No other record is amended or retired.
   - This change is Contract-only: the runtime that implements these records
     merges after it in separate pull requests, and the Review is `REQUIRED`.
+- Revision 128 changes: `PD-OI-119` gains scenario revision `6` (concern
+  `product.region-label-place`). A lane room keeps the label's label offset
+  on each side of its letters: beside its own mark, as before, and before the
+  mark it would cross, so the label stands clear of both marks. The outcome
+  `LBL-ROOM-STOP-AT-CENTRE-OMIT` replaces `LBL-ROOM-STOP-AT-CENTRE-WARN`: in a
+  Circular slot inside the axis whose width is not set, a label whose room
+  would carry its lanes past the centre of the circle is not drawn; its mark
+  is drawn, and a warning in the form of `RGN-ROOM-WARN` counts the labels
+  left out. The outcome `LBL-ROOM-CLIP-FIT-OMIT` joins: a slot whose size is
+  set (Linear: its height `h`; Circular: its width `w`) and whose overflow is
+  clip adds no room that would carry its lanes past the set size (of a gap's
+  rooms, the largest that still fits, as at the centre of the circle); every
+  mark is drawn, a label whose room does not fit is not drawn, nor a label
+  whose letters the edge of the set size would cut, nor a label whose own mark
+  lies wholly past the set size, where the clip hides it, and a warning in the
+  form of `RGN-ROOM-WARN` counts them. A set size with overflow error or compress
+  is unchanged. It comes from the Product Decision Owner `satoshikawato`'s
+  replies in the Claude Code session `377bbdc3` of the campaign
+  `region-select-seq-search-20261104` (`DECISIONS.md` `D-75`, `D-77`, `D-78`,
+  `D-79`, `D-80`, `D-81`, `D-82`, `D-83`). The receipt names no ID of its own and is
+  recorded byte for byte. A choice in the question dialog or on the question
+  page is named by its option.
+  - D-75 and D-77 (`2026-11-08`). The session asked Q10 (a slot of set size
+    with overflow clip whose label rooms carried its lanes past the set size,
+    so the clip cut marks that 0.14.5 drew), and the Owner chose
+    「B 収まる間だけ空ける (推奨)」. Scenario revision `3` (receipt SHA-256
+    `0eb72ac2f62ad7685d75b5b6d8e1e0325dd78d04c10bbe6bba58a6d750c8ad40`), which drew the labels left without room across the mark they
+    meet, was approved in full on `2026-11-08` and replaced before merge; its
+    text is not recorded.
+  - D-78 (`2026-11-08`). Seeing the figures of scenario revision `3`, the
+    Owner wrote 「After, 劣化してない？線に字が被ってるじゃん」.
+  - D-79 and D-80 (`2026-11-08`). The session asked Q12 (what a clipped slot
+    of set size does with a label that gets no room) and Q13 (whether the
+    inside slot that stops at the centre does the same) on a question page.
+    The Owner chose X for Q12 (every mark drawn; a label without room, or one
+    the clip edge would cut, not drawn; the count warned) and X for Q13 (the
+    same at the centre: one rule for both stops). Scenario revision `4`
+    (receipt SHA-256 `23c44c5cf5b0e2104ae36f07548ffd9b9849c272565654ba92bcc79df9599502`) was approved in full on `2026-11-08` and
+    replaced before merge by scenario revision `5`; its text is not recorded.
+  - D-81 (`2026-11-08`). The session asked Q15
+    「ラベルと、その外側の印の線のあいだにも、すき間を取るか」 on the
+    question page, and the Owner chose
+    「P 越える印の手前にも、ラベルのオフセットの分のすき間を取る」. The
+    scenario revision `5` receipt, which repeats scenario revision `4` with the
+    label offset on each side of the letters in its Lane room item, was shown
+    in full on the question page; the Owner chose 「全文で承認（推奨）」 there
+    and wrote in chat 「Q15=P 受領書r5=全文で承認 Q14=A」. Scenario revision
+    `5` (receipt SHA-256 `6b74a8f8ac2b61b580a2a9a429e0682251dc4c7c8230dc8cff8a7b4d92871e1b`) was replaced before merge by scenario
+    revision `6`; its text is not recorded.
+  - D-82 (`2026-11-08`), for `PD-OI-097`. To the question
+    「ラベルを描かなかったときの警告の末尾「Drawn anyway.」をどうするか」
+    the selected option
+    「A 図を描いたすべての警告の末尾を「The figure is drawn.」にする」
+    and the answer
+    「Q14=A」.
+    Every drawn label fit warning now ends 「The figure is drawn.」; a warning
+    of a figure that is not drawn still ends 「Nothing was drawn.」. The
+    `PD-OI-097` receipt names neither ending and is unchanged; Reply 48 of the
+    Revision 69 entry keeps its quotation of the old ending as it was
+    answered. This confirmation is recorded in the `PD-OI-097` record.
+  - D-83 (`2026-11-08`). The session asked Q16
+    「レーンだけで決めた大きさを越え、印が clip で隠れたとき、そのラベルを描くか」
+    on the question page, and the Owner chose
+    「P 印が clip で隠れたラベルも描かない」. The receipt below, which repeats
+    scenario revision `5` with a label whose own mark lies wholly past the set
+    size, where the clip hides it, not drawn either, was shown in full on the
+    question page; the Owner chose 「全文で承認（推奨）」 there and wrote in
+    chat 「Q16=P 受領書r6=全文で承認」.
+  - New receipt SHA-256: `PD-OI-119` scenario revision `6`
+    `d7ec5de336177aa25d051b558029fab52ecd6dbe97587f68aa2007b96139a912`.
+  - `PD-OI-119` scenario revision `6` supersedes scenario revision `2`; its
+    May retire names what is retired. The scenario revision `1` and `2`
+    receipts and JSON are kept as they were approved.
+  - `PD-OI-097` is not revised: the warnings take the form of its
+    `RGN-ROOM-WARN` and leave its outcomes as they are, and D-82 changes only
+    the ending its receipt does not fix.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 129 changes: `PD-OI-097` gains scenario revision `22` (concern
+  `product.circular-outer-label-fit`; it adds `RGN-CUT-EMPTY-OMIT`). A
+  Circular region label drawn along its circle that would be cut so far that
+  no letter of it is left, only the ellipsis, is not drawn; the label fit
+  warning counts it as a label left out, not as a cut one. A label that keeps
+  at least one letter is drawn and warned as before (`RGN-CUT-WARN`). It
+  comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-11-08` in the Claude Code session `377bbdc3` of the campaign
+  `region-select-seq-search-20261104` (`DECISIONS.md` `D-85`, bug
+  `OV-2804`). A choice on the question page is named by its option, and the
+  chat reply is quoted as written.
+  - D-85 (`2026-11-08`). The session asked Q17
+    「円に文字が 1 つも収まらない領域ラベルを、「…」だけで描くか」 on the
+    question page, and the Owner chose option A
+    「描かない（省いたラベルとして警告で数える）」. The receipt below, which
+    repeats scenario revision `21` with `RGN-CUT-EMPTY-OMIT` added to the
+    Choice, one sentence added to each of the Rationale, the Must preserve,
+    and the May retire, and the Decision date `2026-11-08`, was shown in full
+    on the question page, where the Owner approved it. The Owner wrote in
+    chat 「Q17=A 受領書097r22=全文で承認 Q18=A Q19a=B Q19b=A 委任判断=すべて確認」.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms. The `PD-OI-097` scenario revision `7` to `21` receipts
+    and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-097` scenario revision `22`
+    `f1322be8f27fbafad1242d9dbf8cc0cf4bf6eb3391c65b75f0c610f5d98a1532`.
+  - `PD-OI-097` scenario revision `22` keeps every outcome of scenario
+    revision `21` and adds `RGN-CUT-EMPTY-OMIT`; its May retire names what is
+    retired.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -9941,8 +10053,12 @@ Decision date: 2026-11-04
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `21`
-- Supersedes: `PD-OI-097`, scenario revision `20`. Scenario revision `21`
+- Scenario revision: `22`
+- Supersedes: `PD-OI-097`, scenario revision `21`. Scenario revision `22`
+  keeps every outcome of scenario revision `21` and adds
+  `RGN-CUT-EMPTY-OMIT`; D-85 of the Revision 129 entry approves its
+  additions to the Choice, the Rationale, the Must preserve, and the May
+  retire. Scenario revision `21`
   keeps every outcome of scenario revision `20` and adds `NO-ROW-WAYS` and
   `FONT-LISTED`; D-15 of the Revision 97 entry approves its additions to the
   Choice, the Rationale, the Must preserve, and the May retire, and the
@@ -10001,10 +10117,10 @@ Decision date: 2026-11-04
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED`
-- Normative outcome: exactly the complete approved scenario revision `21`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; RGN-CUT-EMPTY-OMIT ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED`
+- Normative outcome: exactly the complete approved scenario revision `22`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` to `20` receipts are kept as they were approved.
+  scenario revision `7` to `21` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -10131,6 +10247,17 @@ Decision date: 2026-11-04
   acceptance evidence.
 - Receipt SHA-256 (scenario revision `21`; UTF-8, excluding the final newline):
   `38a477d5f434d5638054e393b0ba9a12f08148114567533903495797e76b6c41`.
+- Owner confirmation (D-82 of the Revision 128 entry above): every label fit
+  warning of a drawn figure ends 「The figure is drawn.」; one of a figure that
+  is not drawn ends 「Nothing was drawn.」.
+- Decision source (scenario revision `22`): the Owner replies of `2026-11-08`
+  quoted in the Revision 129 entry above (D-85); D-85 approves the
+  sixteenth receipt and JSON below, without translation or additional terms.
+  The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `22`; UTF-8, excluding the final newline):
+  `f1322be8f27fbafad1242d9dbf8cc0cf4bf6eb3391c65b75f0c610f5d98a1532`.
 
 ```text
 PRODUCT_DECISION
@@ -10536,6 +10663,8 @@ Decision date: 2026-10-27
 }
 ```
 
+Scenario revision `21` receipt, approved by `satoshikawato` on `2026-10-29` (D-15 of the Revision 97 entry):
+
 ```text
 PRODUCT_DECISION
 Concern: product.circular-outer-label-fit
@@ -10560,6 +10689,33 @@ Decision date: 2026-10-29
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。止まったあとは、場所を空ける方法を示す。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-29"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 22
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; RGN-CUT-EMPTY-OMIT ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。文字が 1 つも収まらないラベルは「…」だけを描かず、ラベルごと描かないで、その数を警告で知らせる（OV-2804）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。ただし Circular の外側・内側の水平ラベルが、地図のまわりの場所の 1.5 倍を超えて要り、しかも 1 つの値を変える直し方（文字を 6 pt まで小さくする、Outer の X と Y の Offset を 2 まで広げる、内側のラベルを外側へ出す）のどれでも場所が足りないと見積もれるときは、ラベルを置くことも直し方を探すこともせず、すぐに描かずに止める。ラベルの数、文字の大きさ、場所の何倍が要るかと、場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く）を示す（CAPACITY-STOP、D-03）。場所の 0.8 倍以上が要るほかの図は、置く前に「収まらないかもしれない。置くのに数分かかることがある」と知らせ、今と同じに置いて、今と同じ直し方を示す（CAPACITY-WARN）。放射ラベルと埋め込みラベルは数えない。置いて探したあとで、どの直し方の行でも収まらないとわかったときは、止めたときと同じ場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く。文字が 6 pt のときは文字を小さくするを除く）も示す（NO-ROW-WAYS）。止めたときに示す方法には、今と同じく文字を小さくするを含める（FONT-LISTED）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし文字が 1 つも収まらない Circular の領域ラベルは描かない（OV-2804）。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。止める境は、今描ける図と、今 1 つの値を変える直し方が見つかる図が、どれも止まらない値にする（調べた 195 件の描ける図で、場所の見積もりは最大 0.87 倍、直し方を入れた見積もりは最大 0.36 倍。直し方が見つかる図では最大 0.63 倍）。知らせが出る図も、知らせのほかは今と同じに置き、同じ直し方を示す。直し方の行、探す時間、描く図、Session、History、書き出しは変えない（NO-ROW-WAYS）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。場所が明らかに足りない Circular の図で、ラベルを置いて直し方を探してから止めること（AP027078 で CLI 60〜78 秒・Web 170〜185 秒、MG1655 と NC_010162 は 20 分を超えても終わらない）。どの直し方の行でも収まらないときに、閉じる以外の次の手を示さないダイアログ。文字が 1 つも収まらない Circular の領域ラベルを「…」だけで描くこと（OV-2804）。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。止まったあとは、場所を空ける方法を示す。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 22,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; RGN-CUT-EMPTY-OMIT ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。文字が 1 つも収まらないラベルは「…」だけを描かず、ラベルごと描かないで、その数を警告で知らせる（OV-2804）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。ただし Circular の外側・内側の水平ラベルが、地図のまわりの場所の 1.5 倍を超えて要り、しかも 1 つの値を変える直し方（文字を 6 pt まで小さくする、Outer の X と Y の Offset を 2 まで広げる、内側のラベルを外側へ出す）のどれでも場所が足りないと見積もれるときは、ラベルを置くことも直し方を探すこともせず、すぐに描かずに止める。ラベルの数、文字の大きさ、場所の何倍が要るかと、場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く）を示す（CAPACITY-STOP、D-03）。場所の 0.8 倍以上が要るほかの図は、置く前に「収まらないかもしれない。置くのに数分かかることがある」と知らせ、今と同じに置いて、今と同じ直し方を示す（CAPACITY-WARN）。放射ラベルと埋め込みラベルは数えない。置いて探したあとで、どの直し方の行でも収まらないとわかったときは、止めたときと同じ場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く。文字が 6 pt のときは文字を小さくするを除く）も示す（NO-ROW-WAYS）。止めたときに示す方法には、今と同じく文字を小さくするを含める（FONT-LISTED）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし文字が 1 つも収まらない Circular の領域ラベルは描かない（OV-2804）。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。止める境は、今描ける図と、今 1 つの値を変える直し方が見つかる図が、どれも止まらない値にする（調べた 195 件の描ける図で、場所の見積もりは最大 0.87 倍、直し方を入れた見積もりは最大 0.36 倍。直し方が見つかる図では最大 0.63 倍）。知らせが出る図も、知らせのほかは今と同じに置き、同じ直し方を示す。直し方の行、探す時間、描く図、Session、History、書き出しは変えない（NO-ROW-WAYS）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。場所が明らかに足りない Circular の図で、ラベルを置いて直し方を探してから止めること（AP027078 で CLI 60〜78 秒・Web 170〜185 秒、MG1655 と NC_010162 は 20 分を超えても終わらない）。どの直し方の行でも収まらないときに、閉じる以外の次の手を示さないダイアログ。文字が 1 つも収まらない Circular の領域ラベルを「…」だけで描くこと（OV-2804）。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。止まったあとは、場所を空ける方法を示す。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
 }
 ```
 
@@ -12126,26 +12282,36 @@ Decision date: 2026-11-07
 ### PD-OI-119: Region label place
 
 - Concern key: `product.region-label-place`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-119`, scenario revision `1` (Revision 123 entry above).
-  The scenario revision `2` receipt repeats the scenario revision `1`
-  receipt, adds the outcomes `LBL-ROOM-BEFORE-MET-LANE` and
-  `LBL-ROOM-STOP-AT-CENTRE-WARN` to its Choice, rewrites its Lane room item,
-  adds an item on a Circular slot inside the axis whose width is not set, and
-  adds two sentences to the Rationale, one to Must preserve, two items to May
-  retire, and one sentence to Accepted residual risk. Scenario revision `1`
-  superseded none: no earlier
-  record fixed where a region annotation's label stands or the order in which
-  a region runs. `PD-OI-097` (region label warnings and moves) stays.
+- Scenario revision: `6`
+- Supersedes: `PD-OI-119`, scenario revision `2` (Revision 124 entry above).
+  The scenario revision `6` receipt repeats the scenario revision `2`
+  receipt, replaces the outcome `LBL-ROOM-STOP-AT-CENTRE-WARN` in its Choice
+  with `LBL-ROOM-STOP-AT-CENTRE-OMIT` and adds `LBL-ROOM-CLIP-FIT-OMIT`,
+  rewrites its item on a Circular slot inside the axis whose width is not set
+  (the labels without room are not drawn; their marks are drawn), adds an
+  item on a slot whose size is set and whose overflow is clip (with the
+  labels whose own mark the clip hides), keeps the
+  label offset on each side of the letters in its Lane room item (beside the
+  label's own mark and before the mark it would cross), and adds sentences to
+  the Rationale, Must preserve, May retire, and Accepted residual risk.
+  Scenario revisions `3`, `4`, and `5` were approved but replaced before merge
+  (Revision 128 entry above); they are not recorded. Scenario revision
+  `2` superseded scenario revision `1` (Revision 123 entry above), which
+  superseded none: no earlier record fixed where a region annotation's label
+  stands or the order in which a region runs. `PD-OI-097` (region label
+  warnings and moves) stays.
 - Status: `ACCEPTED`
 - Selected outcome: `LBL-LANE-ROOM`, `LBL-ROOM-BEFORE-MET-LANE`,
-  `LBL-ROOM-STOP-AT-CENTRE-WARN`, `LBL-ORIGIN-LONGER`, `LBL-CUT-LONGEST`,
-  `LBL-START-FIRST-BASE`, `RUN-FROM-ORIGIN-STRETCH` (scenario revision `2`;
-  scenario revision `1` selected the same outcomes without
-  `LBL-ROOM-BEFORE-MET-LANE` and `LBL-ROOM-STOP-AT-CENTRE-WARN`)
-- Normative outcome: exactly the complete approved scenario revision `2`
+  `LBL-ROOM-STOP-AT-CENTRE-OMIT`, `LBL-ROOM-CLIP-FIT-OMIT`,
+  `LBL-ORIGIN-LONGER`, `LBL-CUT-LONGEST`, `LBL-START-FIRST-BASE`,
+  `RUN-FROM-ORIGIN-STRETCH` (scenario revision `6`; scenario revision `2`
+  selected `LBL-ROOM-STOP-AT-CENTRE-WARN` in place of
+  `LBL-ROOM-STOP-AT-CENTRE-OMIT` and no `LBL-ROOM-CLIP-FIT-OMIT`, and scenario
+  revision `1` also without `LBL-ROOM-BEFORE-MET-LANE` and
+  `LBL-ROOM-STOP-AT-CENTRE-WARN`)
+- Normative outcome: exactly the complete approved scenario revision `6`
   `PRODUCT_DECISION` receipt and its JSON representation below. The scenario
-  revision `1` receipt and JSON are kept as they were approved.
+  revision `1` and `2` receipts and JSON are kept as they were approved.
 - Decision source (scenario revision `1`): the Owner replies of `2026-11-07`
   quoted in the Revision 123 entry above. The receipt and JSON below
   reproduce the approved fields without translation or additional terms. The
@@ -12156,11 +12322,18 @@ Decision date: 2026-11-07
 - Decision source (scenario revision `2`): the Owner replies of `2026-11-07`
   quoted in the Revision 124 entry above. The receipt and JSON below
   reproduce the approved fields without translation or additional terms. The
+  runtime, tests, and documentation that implement it merged with it in PR
+  `#1702`.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `f2ee828966fb3ca3f185f9b8053471ca0e882f304d5d0f47676832578e0ea51c`.
+- Decision source (scenario revision `6`): the Owner replies of `2026-11-08`
+  quoted in the Revision 128 entry above. The receipt and JSON below
+  reproduce the approved fields without translation or additional terms. The
   runtime, tests, and documentation that implement it merge with it (static
   Product Contract co-change); this record supplies no runtime acceptance
   evidence.
-- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
-  `f2ee828966fb3ca3f185f9b8053471ca0e882f304d5d0f47676832578e0ea51c`.
+- Receipt SHA-256 (scenario revision `6`; UTF-8, excluding the final newline):
+  `d7ec5de336177aa25d051b558029fab52ecd6dbe97587f68aa2007b96139a912`.
 
 ```text
 PRODUCT_DECISION
@@ -12230,6 +12403,43 @@ Decision date: 2026-11-07
   "acceptedResidualRisk": "原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。Circular の内側スロットで中心までに間が取れないラベルは、出会う印に重なって描かれる（警告は出る）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-07"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: product.region-label-place
+Scenario revision: 6
+Choice: LBL-LANE-ROOM ; LBL-ROOM-BEFORE-MET-LANE ; LBL-ROOM-STOP-AT-CENTRE-OMIT ; LBL-ROOM-CLIP-FIT-OMIT ; LBL-ORIGIN-LONGER ; LBL-CUT-LONGEST ; LBL-START-FIRST-BASE ; RUN-FROM-ORIGIN-STRETCH. Where a region annotation's label stands, and the order in which a region runs.
+  - The run of a region: a region runs along its segments in ascending order on the record. A region across the origin of a circular record runs first over the origin, from its segment that ends at the record's end into its segment that starts at 0, and then along its other segments in ascending order. The run follows the record, not the region's strand.
+  - The centred label (label_position center) stands halfway along the run. Where the display leaves every part of the drawn mark whole (no display start, display cut or row boundary inside it), it stands there as the display shows it.
+  - Linear without a display start: the mark of a region across the origin is drawn as two parts, at the two ends of the record's bar (on wrapped rows, at the start of the first row and the end of the last). When only the origin cuts the region, its centred label stands on the centre of the longer part; when the two parts are equally long, on the part where the region starts (the part at the bar's right end, or on the last row).
+  - Linear, a region that a display start, the display cut or a row boundary cuts: its centred label stands on the centre of its longest drawn part. On a tie, the part on the earlier row, then the one further left (as now).
+  - label_position start puts the label at the region's first base, and end at its last base, along the run: the same for a feature span and a coordinate span, with or without a display start, and on wrapped rows on the row where that base is drawn.
+  - The gradient fill of a region runs from the start of its run to its end, by position along the record, as for any region of several segments: on a region of three or more segments across the origin, the part over the origin takes the start of the scale, and its other segments the rest.
+  - Lane room: where a lane's label, at its place along its region, would cross a mark in another lane on the label's side (the next lane or one further on), the gap just before the lane of that mark is widened until the label clears it: by the room the label takes (its letters, and its label offset on each side of them: beside its own mark and before the mark it would cross), less the lanes and rooms already between the label's mark and that lane. The label stays beside its own mark, and the lanes between its lane and the lane of that mark keep their spacing beside it. Lanes whose labels cross nothing keep their spacing. A track whose lanes get room grows by that room (Linear: the slot grows taller; Circular: the slot grows wider). Both modes.
+  - Circular, a slot inside the axis whose width is not set: a room that would carry its lanes past the centre of the circle is not added. The labels that needed it are not drawn; their marks are drawn. A warning in the form of RGN-ROOM-WARN says how many region labels were left out for want of room before the centre. The figure is drawn; no error.
+  - A slot whose size is set (Linear: its height h; Circular: its width w) and whose overflow is clip: a room that would carry its lanes past the set size is not added; of a gap's rooms, the largest that still fits is added, as at the centre of the circle. The labels that needed a room that does not fit are not drawn; their marks are drawn. A label whose letters the edge of the set size would cut is not drawn either, nor a label whose own mark lies wholly past the set size, where the clip hides it. A warning in the form of RGN-ROOM-WARN says how many region labels were left out in clipped slots. A room never carries a lane past the set size. A set size with overflow error or compress adds the room to what the slot needs, as when lanes are added (as now).
+  - Circular: a region label stands at its centred place whatever its label_position, as now.
+Rationale: 領域ラベルが自分の印のそばに、どの表示でも同じ規則で立つようにする。原点をまたぐ領域は原点をまたぐ部分から始まるので、始まり・終わり・中点・グラデーションを 1 つの並び（run）で決める。start と end は領域の最初と最後の塩基を指し、注釈の種類（feature span、coordinate span）や表示の開始位置で意味を変えない。回転しない Linear で原点をまたぐ領域のラベルは、バーの端で半分はみ出さないよう、長いほうの部分の中央に置く。印が表示で切られた領域は、ラベルが印の上に収まる最長の部分の中央に置く（今のまま）。隣のレーンの印にラベルが重なるときだけ、そのレーンとの間にラベルの分の間を空け、重ならない図の高さは変えない。ラベルの文字が隣より先のレーンの印に届くときも、その印のレーンの手前に間を空け、間にあるレーンはラベルのレーンのそばから動かさない。Circular の内側スロットで間を空けると円の中心を越えるときは、その間は空けず、そのラベルは描かずに警告で知らせる（印は描き、0.14.5 で描けた図をエラーにしない）。大きさを決めて clip にしたスロットでも、間を空けると決めた大きさを越えるときはその間は空けず、そのラベルは描かずに警告で知らせる（0.14.5 で見えていた印を間で押し出して消さず、字を線に重ねない）。clip の端で切れるラベルも、印が clip で隠れたラベルも描かない（文字の欠片も、印のないラベルも残さない）。
+Must preserve: 表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。0.14.5 で描けた図が描けること（内側スロットで間が取れなくてもエラーにしない）。clip のスロットで、空けた間がレーンを決めた大きさの外へ押し出さないこと。間の取れないラベルを描かないときも、その印は描くこと。
+May retire: 回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。2 つ以上先のレーンの印に重なって描かれるラベル（OV-2661）。Circular の内側スロットで、空けた間が円の中心を越えてレーンが潰れたり中心の反対側に描かれたりすること（OV-2665、OV-2666）。大きさを決めて clip にしたスロットで、空けた間がレーンを決めた大きさの外へ押し出し、印が消えて印のないラベルが残ること（OV-2672）。間の取れないラベルを、出会う印に重ねて描くこと（円の中心と clip のスロット）。clip の端で切れて文字の欠片だけが残るラベル。レーンだけで決めた大きさを越え、印が clip で隠れたのにラベルだけが残ること（OV-2675）。
+Accepted residual risk: 原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。円の中心までに、または clip のスロットの決めた大きさに間が収まらないラベルは描かれない（印は描かれ、警告は出る）。大きさがきつい図では、ラベルが 1 つも描かれないことがある。
+Owner: satoshikawato
+Decision date: 2026-11-08
+```
+
+```json
+{
+  "concern": "product.region-label-place",
+  "scenarioRevision": 6,
+  "choice": "LBL-LANE-ROOM ; LBL-ROOM-BEFORE-MET-LANE ; LBL-ROOM-STOP-AT-CENTRE-OMIT ; LBL-ROOM-CLIP-FIT-OMIT ; LBL-ORIGIN-LONGER ; LBL-CUT-LONGEST ; LBL-START-FIRST-BASE ; RUN-FROM-ORIGIN-STRETCH. Where a region annotation's label stands, and the order in which a region runs.\n  - The run of a region: a region runs along its segments in ascending order on the record. A region across the origin of a circular record runs first over the origin, from its segment that ends at the record's end into its segment that starts at 0, and then along its other segments in ascending order. The run follows the record, not the region's strand.\n  - The centred label (label_position center) stands halfway along the run. Where the display leaves every part of the drawn mark whole (no display start, display cut or row boundary inside it), it stands there as the display shows it.\n  - Linear without a display start: the mark of a region across the origin is drawn as two parts, at the two ends of the record's bar (on wrapped rows, at the start of the first row and the end of the last). When only the origin cuts the region, its centred label stands on the centre of the longer part; when the two parts are equally long, on the part where the region starts (the part at the bar's right end, or on the last row).\n  - Linear, a region that a display start, the display cut or a row boundary cuts: its centred label stands on the centre of its longest drawn part. On a tie, the part on the earlier row, then the one further left (as now).\n  - label_position start puts the label at the region's first base, and end at its last base, along the run: the same for a feature span and a coordinate span, with or without a display start, and on wrapped rows on the row where that base is drawn.\n  - The gradient fill of a region runs from the start of its run to its end, by position along the record, as for any region of several segments: on a region of three or more segments across the origin, the part over the origin takes the start of the scale, and its other segments the rest.\n  - Lane room: where a lane's label, at its place along its region, would cross a mark in another lane on the label's side (the next lane or one further on), the gap just before the lane of that mark is widened until the label clears it: by the room the label takes (its letters, and its label offset on each side of them: beside its own mark and before the mark it would cross), less the lanes and rooms already between the label's mark and that lane. The label stays beside its own mark, and the lanes between its lane and the lane of that mark keep their spacing beside it. Lanes whose labels cross nothing keep their spacing. A track whose lanes get room grows by that room (Linear: the slot grows taller; Circular: the slot grows wider). Both modes.\n  - Circular, a slot inside the axis whose width is not set: a room that would carry its lanes past the centre of the circle is not added. The labels that needed it are not drawn; their marks are drawn. A warning in the form of RGN-ROOM-WARN says how many region labels were left out for want of room before the centre. The figure is drawn; no error.\n  - A slot whose size is set (Linear: its height h; Circular: its width w) and whose overflow is clip: a room that would carry its lanes past the set size is not added; of a gap's rooms, the largest that still fits is added, as at the centre of the circle. The labels that needed a room that does not fit are not drawn; their marks are drawn. A label whose letters the edge of the set size would cut is not drawn either, nor a label whose own mark lies wholly past the set size, where the clip hides it. A warning in the form of RGN-ROOM-WARN says how many region labels were left out in clipped slots. A room never carries a lane past the set size. A set size with overflow error or compress adds the room to what the slot needs, as when lanes are added (as now).\n  - Circular: a region label stands at its centred place whatever its label_position, as now.",
+  "rationale": "領域ラベルが自分の印のそばに、どの表示でも同じ規則で立つようにする。原点をまたぐ領域は原点をまたぐ部分から始まるので、始まり・終わり・中点・グラデーションを 1 つの並び（run）で決める。start と end は領域の最初と最後の塩基を指し、注釈の種類（feature span、coordinate span）や表示の開始位置で意味を変えない。回転しない Linear で原点をまたぐ領域のラベルは、バーの端で半分はみ出さないよう、長いほうの部分の中央に置く。印が表示で切られた領域は、ラベルが印の上に収まる最長の部分の中央に置く（今のまま）。隣のレーンの印にラベルが重なるときだけ、そのレーンとの間にラベルの分の間を空け、重ならない図の高さは変えない。ラベルの文字が隣より先のレーンの印に届くときも、その印のレーンの手前に間を空け、間にあるレーンはラベルのレーンのそばから動かさない。Circular の内側スロットで間を空けると円の中心を越えるときは、その間は空けず、そのラベルは描かずに警告で知らせる（印は描き、0.14.5 で描けた図をエラーにしない）。大きさを決めて clip にしたスロットでも、間を空けると決めた大きさを越えるときはその間は空けず、そのラベルは描かずに警告で知らせる（0.14.5 で見えていた印を間で押し出して消さず、字を線に重ねない）。clip の端で切れるラベルも、印が clip で隠れたラベルも描かない（文字の欠片も、印のないラベルも残さない）。",
+  "mustPreserve": "表示が切らない領域の中央ラベルの位置（中点、表示を通して）。表示が切る領域の中央ラベルの位置（最長の部分の中央）。Circular のラベルの位置（start と end を使わないこと）。2 つの部分からなる原点をまたぐ領域の、表示開始位置があるときの中央ラベル（つながった印の中央）と start、end（印の左端と右端）。ラベルの重なりの警告と移動（PD-OI-097 の REGION-WARN、RGN-FRONT、RGN-YIELD-ROW、RGN-CUT-WARN、RGN-ROOM-WARN）。label_offset の意味。注釈 TSV と Session の形式（変わらない）。0.14.5 で描けた図が描けること（内側スロットで間が取れなくてもエラーにしない）。clip のスロットで、空けた間がレーンを決めた大きさの外へ押し出さないこと。間の取れないラベルを描かないときも、その印は描くこと。",
+  "mayRetire": "回転しない Linear で、feature span と coordinate span で start と end の位置が違うこと（OV-2655）。3 つ以上の部分からなる原点をまたぐ領域の、昇順の中点とグラデーション（OV-2656）。回転しない Linear で原点をまたぐ領域の中央ラベルを原点（バーの左端）に置くこと（OV-2652）。隣のレーンの印に重なって描かれるラベル（OV-2575）。2 つ以上先のレーンの印に重なって描かれるラベル（OV-2661）。Circular の内側スロットで、空けた間が円の中心を越えてレーンが潰れたり中心の反対側に描かれたりすること（OV-2665、OV-2666）。大きさを決めて clip にしたスロットで、空けた間がレーンを決めた大きさの外へ押し出し、印が消えて印のないラベルが残ること（OV-2672）。間の取れないラベルを、出会う印に重ねて描くこと（円の中心と clip のスロット）。clip の端で切れて文字の欠片だけが残るラベル。レーンだけで決めた大きさを越え、印が clip で隠れたのにラベルだけが残ること（OV-2675）。",
+  "acceptedResidualRisk": "原点をまたぐ領域の start ラベルは、回転しない Linear ではバーの右端（領域の始まり）に、end ラベルは左端に立つ。折り返した Linear では start と end が別の行に立つことがある。3 つ以上の部分からなる原点をまたぐ領域の中点は、原点をまたぐ部分から数えるので、昇順で数えたときと別の部分に立つ（例: 0-1000、5000-5500、9000-10000 では bp 5250 から bp 250 へ）。グラデーションは位置で塗るので、原点をまたぐ部分と残りの部分の間の隙間も目盛りに数える。ラベルの間を空けたトラックは高く（Circular では広く）なり、同じ図の他のトラックが動く。ラベルが印に重なるかどうかは、レーンを決めるときのラベルの位置で決める。ラベルがあとで他のラベルを避けて領域に沿って動いても、空けた間の中に留まる。円の中心までに、または clip のスロットの決めた大きさに間が収まらないラベルは描かれない（印は描かれ、警告は出る）。大きさがきつい図では、ラベルが 1 つも描かれないことがある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-08"
 }
 ```
 

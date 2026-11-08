@@ -52,7 +52,7 @@ from gbdraw.session_drawings import (  # noqa: E402
 )
 from gbdraw.session_contract import GALLERY_SESSION_DRAWN_DRAWINGS  # noqa: E402
 from gbdraw.session_resources import drawing_resource_ids  # noqa: E402
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, stored_record_windows  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -1030,13 +1030,15 @@ def _resolve_default_colors(session: dict[str, Any]) -> int:
 
 
 def _materialize_one_record_sources(session: dict[str, Any]) -> int:
-    """Store a one-record GenBank source of ``all`` as ``exactly_one``, as the CLI does.
+    """Store the record of a one-record GenBank source as the CLI replay writes it.
 
     The Web writes ``all`` for a Linear file without selector or region; the CLI
     replay materializes each record it draws as ``exactly_one``, and
-    ``finalize`` compares the two (OV-376). It reads the prepared request, which
-    the Web reader has promoted: a request schema 1-5 stores no cardinality.
-    Returns the number of records changed.
+    ``finalize`` compares the two (OV-376). The Web names the only record of a
+    Circular file by its ID; the CLI replay, which selects no record, writes no
+    selector. It reads the prepared request, which the Web reader has promoted:
+    a request schema 1-5 stores no cardinality. Returns the number of records
+    changed.
     """
 
     from io import StringIO
@@ -1046,12 +1048,29 @@ def _materialize_one_record_sources(session: dict[str, Any]) -> int:
     changed = 0
     for record in session["renderRequest"]["records"]:
         source = record.get("source") or {}
-        if record.get("cardinality") != "all" or record.get("selector") or record.get("region") or source.get("kind") != "genbank":
+        selector = record.get("selector")
+        names_a_record = (
+            session["renderRequest"].get("mode") == "circular"
+            and isinstance(selector, dict)
+            and selector.get("kind") == "recordId"
+        )
+        if stored_record_windows(record) or source.get("kind") != "genbank":
+            continue
+        if not (record.get("cardinality") == "all" and not selector) and not (
+            record.get("cardinality") == "exactly_one" and names_a_record
+        ):
             continue
         payload = base64.b64decode(session["resources"][source["resourceId"]]["data"], validate=True)
-        if sum(1 for _ in SeqIO.parse(StringIO(payload.decode("utf-8")), "genbank")) == 1:
+        records = list(SeqIO.parse(StringIO(payload.decode("utf-8")), "genbank"))
+        if len(records) != 1:
+            continue
+        if names_a_record:
+            if selector.get("value") != records[0].id:
+                continue
+            record["selector"] = None
+        else:
             record["cardinality"] = "exactly_one"
-            changed += 1
+        changed += 1
     return changed
 
 

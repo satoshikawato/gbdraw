@@ -5,8 +5,9 @@ import { FALLBACK_FACE_PREFIX, bundledFacePrefix, comparableFamilyName, isGeneri
 // Python's Legend measurement and layout, ported operation for operation so
 // that the Web places an edited Legend's rows, sizes the Legend and docks it
 // exactly where Python would (zero shift). Sources:
-// - text: gbdraw/core/text.py `drawn_text_box` and gbdraw/core/fonts.py
-//   `resolve_font_face`;
+// - text: gbdraw/core/text.py `drawn_text_box`, `drawn_runs_box`,
+//   `italic_markup_runs`, gbdraw/legend/metrics.py `legend_caption_box` and
+//   gbdraw/core/fonts.py `resolve_font_face`;
 // - rows: gbdraw/legend/metrics.py, linear_layout.py, circular_layout.py;
 // - Legend size: gbdraw/configurators/legend.py `_linear_legend_local_bounds`,
 //   `_circular_legend_local_bounds`;
@@ -202,15 +203,17 @@ const collapseSvgWhiteSpace = (value) => value
   .replace(/ +/g, ' ');
 
 /**
- * CSS font matching for weight 400 and style normal among a family's faces:
- * upright before italic; then 400 to 500 ascending, below 400 descending, above
- * 500 ascending. The Legend is measured with the normal weight and style.
+ * CSS font matching for weight 400 among a family's faces (Python's
+ * `_match_face`): the requested style (upright, or italic for a caption's `<i>`
+ * runs) before the other; then 400 to 500 ascending, below 400 descending,
+ * above 500 ascending. The Legend is measured with the normal weight.
  * @param {readonly RegisteredLegendFace[]} faces
+ * @param {boolean} [italic]
  * @returns {RegisteredLegendFace | undefined}
  */
-const normalFace = (faces) => {
-  const upright = faces.filter((face) => !face.italic);
-  const candidates = upright.length > 0 ? upright : faces;
+const normalFace = (faces, italic = false) => {
+  const styled = faces.filter((face) => face.italic === italic);
+  const candidates = styled.length > 0 ? styled : faces;
   /** @param {number} weight */
   const rank = (weight) => (weight >= 400 && weight <= 500 ? [0, weight] : weight < 400 ? [1, -weight] : [2, weight]);
   return [...candidates].sort((left, right) => {
@@ -219,6 +222,18 @@ const normalFace = (faces) => {
     return leftClass - rightClass || leftKey - rightKey;
   })[0];
 };
+
+/**
+ * Python's `_bundled_variant` for the normal weight: the bundled face of a
+ * prefix in the style, else its Regular face; null when neither is bundled.
+ * @param {LegendFontMetrics} metrics
+ * @param {string} prefix
+ * @param {boolean} italic
+ * @returns {string | null}
+ */
+const bundledFace = (metrics, prefix, italic) => (
+  [...(italic ? [`${prefix}-Italic`] : []), `${prefix}-Regular`].find((stem) => metrics.bundledFaces.includes(stem)) || null
+);
 
 /**
  * The face Python measures a font family with for the default weight and style
@@ -230,20 +245,35 @@ const normalFace = (faces) => {
  * @returns {string} A measurement name such as "LiberationSans-Regular".
  */
 export const resolveLegendFontFace = (metrics, fontFamily) => {
-  /** @param {string} prefix */
-  const regular = (prefix) => {
-    const stem = `${prefix}-Regular`;
-    return metrics.bundledFaces.includes(stem) ? stem : null;
-  };
   for (const family of parseFontFamilyList(fontFamily)) {
     // A family loaded in the page wins over the bundled font of the same alias name (OV-685).
     const registered = isGenericFamily(family) ? undefined : normalFace(metrics.registeredFamilies.get(comparableFamilyName(family)) || []);
     if (registered) return registered.measurementName;
     const prefix = bundledFacePrefix(family);
-    const face = prefix ? regular(prefix) : null;
+    const face = prefix ? bundledFace(metrics, prefix, false) : null;
     if (face) return face;
   }
-  return regular(FALLBACK_FACE_PREFIX) || metrics.bundledFaces[0];
+  return bundledFace(metrics, FALLBACK_FACE_PREFIX, false) || metrics.bundledFaces[0];
+};
+
+/**
+ * The face a caption's `<i>` runs are measured with when its upright runs are
+ * measured with `fontFile`: the italic face of the same family, as Python
+ * resolves the caption's font family for the italic style (a registered
+ * family's face by CSS matching, a bundled face's Italic sibling, else the
+ * upright face). In a browser the italic style resolves to the family the
+ * upright one does: a registered family has a face in every style and a
+ * bundled alias falls back to its Regular face.
+ * @param {LegendFontMetrics} metrics
+ * @param {string} fontFile The upright measurement name (`legendMeasurementFace`).
+ * @returns {string}
+ */
+export const italicLegendFace = (metrics, fontFile) => {
+  for (const faces of metrics.registeredFamilies.values()) {
+    if (faces.some((face) => face.measurementName === fontFile)) return normalFace(faces, true)?.measurementName || fontFile;
+  }
+  const prefix = fontFile.endsWith('-Regular') ? fontFile.slice(0, -'-Regular'.length) : null;
+  return (prefix && bundledFace(metrics, prefix, true)) || fontFile;
 };
 
 /**
@@ -279,11 +309,22 @@ export const legendMeasurementFace = (metrics, recordedFontFile, fontFamily) => 
  *   `fontFile`: a measurement name in `metrics` (`resolveLegendFontFace` or `legendMeasurementFace`).
  * @returns {{ width: number, height: number }}
  */
-export const measureTextBox = (metrics, { text: value, fontFile, fontSize }) => {
+export const measureTextBox = (metrics, request) => {
+  const { width, height } = measureTextRun(metrics, request);
+  return { width, height };
+};
+
+/**
+ * `measureTextBox` with the text's advance (`calculate_svg_bbox_dimensions`'s width), which places the next run.
+ * @param {LegendFontMetrics} metrics
+ * @param {{ text: string, fontFile: string, fontSize: number }} request
+ * @returns {{ width: number, height: number, advance: number }}
+ */
+const measureTextRun = (metrics, { text: value, fontFile, fontSize }) => {
   const face = metrics.faces.get(fontFile);
   if (!face) throw new Error(`No font metrics for ${JSON.stringify(fontFile)}.`);
   const characters = Array.from(collapseSvgWhiteSpace(text(value)));
-  if (characters.length === 0) return { width: 0.0, height: 0.0 };
+  if (characters.length === 0) return { width: 0.0, height: 0.0, advance: 0.0 };
   let origin = 0;
   let inkRight = -Infinity;
   /** @type {number | null} */
@@ -306,7 +347,62 @@ export const measureTextBox = (metrics, { text: value, fontFile, fontSize }) => 
   const size = Number(fontSize);
   const advanceWidth = origin * (size / face.unitsPerEm);
   const width = inkRight === -Infinity ? advanceWidth : Math.max(advanceWidth, (inkRight / face.unitsPerEm) * size);
-  return { width, height: face.lineHeightEm * size };
+  return { width, height: face.lineHeightEm * size, advance: advanceWidth };
+};
+
+/**
+ * One styled run of a Legend caption (Python's `TextRun`).
+ * @typedef {object} LegendCaptionRun
+ * @property {string} text
+ * @property {boolean} italic
+ */
+
+// Python's `_ITALIC_CAPTION` (gbdraw/legend/metrics.py): non-empty `<i>...</i>` runs, lower case and not nested,
+// with no other `<`, `>` or `&`, and no character XML rewrites or refuses.
+const CAPTION_CHARACTER = '[^<>&\\u0000-\\u0008\\u000b-\\u001f\\ud800-\\udfff\\ufffe\\uffff]';
+const ITALIC_CAPTION = new RegExp(`^${CAPTION_CHARACTER}*(?:<i>${CAPTION_CHARACTER}+</i>${CAPTION_CHARACTER}*)+$`, 'u');
+
+/**
+ * Python's `italic_markup_runs`: the styled runs a Legend caption is drawn and measured as. A caption in the
+ * italic subset splits at its tags (inside the subset this is what Python's XML parse gives); any other caption is
+ * one literal upright run.
+ * @param {string} caption
+ * @returns {LegendCaptionRun[]}
+ */
+export const legendCaptionRuns = (caption) => (
+  ITALIC_CAPTION.test(caption)
+    ? caption.split(/<\/?i>/).flatMap((part, index) => (part ? [{ text: part, italic: index % 2 === 1 }] : []))
+    : [{ text: caption, italic: false }]
+);
+
+/**
+ * Python's `legend_caption_box` (`drawn_runs_box` of the caption's runs): each run measured in its own face,
+ * starting at the previous run's advance, white space collapsed across runs (a run's leading space after a space
+ * is not drawn); the width is the last advance or a run's box end past it, the height the tallest run's line box.
+ * One run measures as `measureTextBox`.
+ * @param {LegendFontMetrics} metrics
+ * @param {{ text: string, fontFile: string, fontSize: number }} request `fontFile`: the upright face.
+ * @returns {{ width: number, height: number }}
+ */
+export const measureCaptionBox = (metrics, { text: caption, fontFile, fontSize }) => {
+  const runs = legendCaptionRuns(text(caption));
+  /** @param {LegendCaptionRun} run */
+  const runFace = (run) => (run.italic ? italicLegendFace(metrics, fontFile) : fontFile);
+  if (runs.length === 1) return measureTextBox(metrics, { text: runs[0].text, fontFile: runFace(runs[0]), fontSize });
+  let right = 0.0;
+  let origin = 0.0;
+  let height = 0.0;
+  let afterSpace = false;
+  runs.forEach((run) => {
+    const collapsed = collapseSvgWhiteSpace(run.text);
+    const drawn = afterSpace && collapsed.startsWith(' ') ? collapsed.slice(1) : collapsed;
+    if (drawn) afterSpace = drawn.endsWith(' ');
+    const box = measureTextRun(metrics, { text: drawn, fontFile: runFace(run), fontSize });
+    right = Math.max(right, origin + box.width);
+    origin += box.advance;
+    height = Math.max(height, box.height);
+  });
+  return { width: Math.max(right, origin), height };
 };
 
 // ---- shared ----
@@ -396,7 +492,8 @@ const stackCompactGradientRows = (scaleTexts, { rect, lineHeight, labelHeight, m
  * @param {LegendLayoutOptions} options
  */
 const measurer = (metrics, { fontFile, fontSize }) => (
-  /** @param {string} caption */ (caption) => measureTextBox(metrics, { text: caption, fontFile, fontSize })
+  // The fixed texts (`100%`, `outer`) are one upright run, measured as `drawn_text_box`.
+  /** @param {string} caption */ (caption) => measureCaptionBox(metrics, { text: caption, fontFile, fontSize })
 );
 
 /** @param {LayoutBox} box */

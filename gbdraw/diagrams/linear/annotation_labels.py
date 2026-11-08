@@ -36,7 +36,7 @@ from gbdraw.annotations import ResolvedAnnotationTrack, annotation_track_params_
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.core.text import text_ink_offsets
 from gbdraw.features.objects import FeatureObject
-from gbdraw.labels.fit import LabelFit
+from gbdraw.labels.fit import FITS, LabelFit, region_rooms_left_out
 from gbdraw.labels.label_ink import linear_label_ink
 from gbdraw.labels.label_style import FeatureLabelStyle, label_leader_width_px
 from gbdraw.labels.linear_types import LinearLabel, is_horizontal_label
@@ -557,10 +557,15 @@ def place_linear_annotation_labels(
     proposers: list[int] = []
     conflicted: list[int] = []
     overlaps = proposed_overlaps = 0
+    rooms_left_out = FITS
+    left_out_sizes: list[float] = []
     for slot in plan.slots:
         track = annotation_track_layouts.get(slot.id)
         if slot.renderer != "annotations" or track is None:
             continue
+        left_out = region_rooms_left_out((track,), record_index)
+        rooms_left_out += left_out.fit
+        left_out_sizes.extend(left_out.left_out_font_sizes)
         params = annotation_track_params_from_mapping(slot.params)
         labels = linear_annotation_labels(
             track,
@@ -614,7 +619,7 @@ def place_linear_annotation_labels(
         placed[slot.id] = tuple(slot_labels)
     return PlacedAnnotationLabels(
         placed,
-        RecordRegionLabels(tuple(font_sizes), overlaps, tuple(conflicted)),
+        RecordRegionLabels(tuple(font_sizes), overlaps, tuple(conflicted), rooms_left_out, tuple(left_out_sizes)),
         tuple(rows),
         tuple(proposed),
         proposed_overlaps,

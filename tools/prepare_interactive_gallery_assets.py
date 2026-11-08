@@ -136,6 +136,14 @@ HMMTDNA_ATSKEW_COMMAND = (
     "--gbk HmmtDNA.gbk -f interactive_svg"
 )
 
+HEPATOPLASMA_SCABRUM_DEPTH_COMMAND = (
+    "gbdraw circular --gbk AP027133.gb -o hepatoplasma_scabrum_depth -f interactive_svg "
+    "--depth_track AP027133.DRR394922.depth-1kb.tsv --depth_track_label 'DRR394922 mean depth' "
+    "--depth_window 1 --depth_step 1000 --depth_max 80 --depth_width 60 "
+    "--depth_large_tick_interval 20 --depth_small_tick_interval 10 --depth_tick_font_size 14 "
+    "-l left --separate_strands"
+)
+
 HMMTDNA_BASIC_COMMAND = (
     "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular "
     "-f interactive_svg --separate_strands --track_type middle --labels out "
@@ -326,6 +334,25 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=TOBACCO_CHLOROPLAST_COMMAND,
         session_from_command=True,
         command_dir="gbdraw/web/tutorial-data/tobacco-plastome-regions",
+    ),
+    GallerySessionExample(
+        id="hepatoplasma_scabrum_depth",
+        title="Read depth around a bacterial genome (<i>Ca.</i> Hepatoplasma scabrum)",
+        tags=("Circular", "Read depth", "Interactive SVG"),
+        description=(
+            "The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read "
+            "depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene "
+            "ring and outside the GC content and GC skew rings. The depth scale ends at 80x. "
+            "Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp."
+        ),
+        workflow="Add a read-depth track",
+        input_summary="1 GenBank + 1 depth TSV",
+        display_order=45,
+        command_kind="runnable",
+        command_note="Download AP027133.gb and the depth table from Files, then run this command in the same directory.",
+        command=HEPATOPLASMA_SCABRUM_DEPTH_COMMAND,
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",

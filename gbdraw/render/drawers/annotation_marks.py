@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from svgwrite.base import BaseElement
 
@@ -22,7 +22,7 @@ from gbdraw.annotations import (
     region_run,
 )
 from gbdraw.core.color import interpolate_color
-from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
+from gbdraw.core.text import TEXT_ANCHOR_SHARE, TextRun, text_runs_ink_offsets
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.svg.elements import Group
 
@@ -193,19 +193,20 @@ _FALLBACK_EM_BOX = {"central": (-0.5, 0.5), "alphabetic": (-0.8, 0.2)}
 
 
 def label_ink_offsets(
-    text: str,
+    runs: Sequence[TextRun],
     font_family: str,
     font_size: float,
     anchor: TextAnchor,
     baseline: Literal["central", "alphabetic"] = "central",
 ) -> tuple[float, float, float, float]:
-    """``text_ink_offsets`` of a label on its ``baseline`` (central for straight text, alphabetic for text along a
-    path), or an em box when the font cannot be read."""
+    """``text_runs_ink_offsets`` of a label drawn as ``runs`` (``italic_markup_runs`` of its text) on its
+    ``baseline`` (central for straight text, alphabetic for text along a path), or an em box when the font cannot be
+    read."""
 
-    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline=baseline, text_anchor=anchor)
+    offsets = text_runs_ink_offsets(runs, font_family, font_size, dominant_baseline=baseline, text_anchor=anchor)
     if offsets is None:
         # The no-font estimate: 0.6 em per character.
-        width = 0.6 * len(text) * font_size
+        width = 0.6 * sum(len(text) for text, _style in runs) * font_size
         origin = -TEXT_ANCHOR_SHARE[anchor] * width
         top, bottom = _FALLBACK_EM_BOX[baseline]
         return origin, origin + width, top * font_size, bottom * font_size

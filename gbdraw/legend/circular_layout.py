@@ -12,6 +12,7 @@ from ..core.numeric import compensated_sum
 from .metrics import (
     GradientScaleLayout,
     gradient_scale_texts,
+    legend_caption_box,
     legend_line_height,
     legend_text_x_offset,
     single_gradient_block_x,
@@ -187,11 +188,7 @@ def _measure_entries(
     drawn_names = table.names()
     for key, properties in table.items():
         text = drawn_names[key].drawn
-        text_width, _ = drawn_text_box(
-            text,
-            font_family,
-            font_size,
-        )
+        text_width, _ = legend_caption_box(text, font_family, font_size)
         measured = _MeasuredLegendEntry(
             key=key,
             text=text,
@@ -341,7 +338,7 @@ def _build_gradient_layout(
         )
 
     entry = gradient_entries[0]
-    title_width, title_height = drawn_text_box(entry.text, font_family, font_size)
+    title_width, title_height = legend_caption_box(entry.text, font_family, font_size)
     bar_y = float(title_height) + (color_rect_size / 2)
     scale_label_y = bar_y + (color_rect_size / 2) + 2
     height = scale_label_y + float(label_height)

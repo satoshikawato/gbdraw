@@ -77,8 +77,8 @@ BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 11
-    assert len(_public_gallery_session_files()) == 10
+    assert len(paths) == 12
+    assert len(_public_gallery_session_files()) == 11
     assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
@@ -559,7 +559,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
         )
     )
 
-    assert len(paths) == 11
+    assert len(paths) == 12
     for path in paths:
         session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
@@ -2302,7 +2302,7 @@ def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
     one = Path("tests/test_inputs/NC_001416.gb").read_bytes()
 
     def record(index: int) -> dict[str, object]:
-        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "region": None,
+        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "windows": [],
                 "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
 
     session = {
@@ -2315,6 +2315,32 @@ def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
 
     assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 1
     assert [entry["cardinality"] for entry in session["renderRequest"]["records"]] == ["exactly_one", "all", "all"]
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 0
+
+
+def test_refresh_stores_the_only_record_of_a_circular_source_without_selector() -> None:
+    # The Web names the only record of a Circular GenBank file by its ID; the CLI
+    # replay, which selects nothing, writes no selector, and `finalize` compares
+    # the two. A selector of a file with more records, or of another ID, stays.
+    one = Path("tests/test_inputs/NC_001416.gb").read_bytes()
+
+    def record(index: int, value: str) -> dict[str, object]:
+        return {"recordKey": f"record-{index}", "cardinality": "exactly_one",
+                "selector": {"kind": "recordId", "value": value}, "windows": [],
+                "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
+
+    session = {
+        "renderRequest": {"mode": "circular", "records": [record(1, "NC_001416.1"), record(2, "NC_001416.1"), record(3, "other")]},
+        "resources": {
+            f"record-{index}-genbank": {"encoding": "base64", "data": base64.b64encode(payload).decode()}
+            for index, payload in ((1, one), (2, one + one), (3, one))
+        },
+    }
+
+    assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 1
+    assert [entry["selector"] for entry in session["renderRequest"]["records"]] == [
+        None, {"kind": "recordId", "value": "NC_001416.1"}, {"kind": "recordId", "value": "other"}
+    ]
     assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 0
 
 

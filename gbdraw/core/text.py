@@ -9,7 +9,7 @@ import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from collections.abc import Iterable, Sequence
-from typing import Dict, List, Mapping, Optional, TypedDict, Union
+from typing import Dict, List, Literal, Mapping, Optional, TypedDict, TypeVar, Union
 
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
@@ -609,6 +609,30 @@ def text_ink_offsets(
     )
 
 
+# The style a run carries through ``collapse_runs_white_space``.
+_RunStyle = TypeVar("_RunStyle")
+
+
+def collapse_runs_white_space(runs: Sequence[tuple[str, _RunStyle]]) -> list[tuple[str, _RunStyle]]:
+    """``runs`` (``(text, font_style)``) with white space collapsed as a renderer draws one text of ``tspan``s.
+
+    Each run collapses as ``collapse_svg_white_space`` does, and a run's leading
+    space after a space (ending an earlier run) is not drawn: browsers collapse
+    white space across ``tspan`` boundaries.
+    """
+
+    collapsed: list[tuple[str, _RunStyle]] = []
+    after_space = False
+    for run, font_style in runs:
+        text = collapse_svg_white_space(run)
+        if after_space and text.startswith(" "):
+            text = text[1:]
+        if text:
+            after_space = text.endswith(" ")
+        collapsed.append((text, font_style))
+    return collapsed
+
+
 def text_runs_ink_offsets(
     runs: Sequence[tuple[str, str | None]],
     font_family: str,
@@ -621,8 +645,9 @@ def text_runs_ink_offsets(
     """``text_ink_offsets`` of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``.
 
     Each run is measured in its own face and starts at the end of the previous
-    run's advance; ``text_anchor`` aligns the runs' total advance. A run that
-    paints nothing only advances.
+    run's advance, white space collapsed across runs (``collapse_runs_white_space``);
+    ``text_anchor`` aligns the runs' total advance. A run that paints nothing
+    only advances.
     """
 
     metrics = get_font_vertical_metrics(font_family, font_weight)
@@ -632,7 +657,7 @@ def text_runs_ink_offsets(
     size = float(font_size)
     advance = 0.0
     left = right = top = bottom = math.nan
-    for text, font_style in runs:
+    for text, font_style in collapse_runs_white_space(runs):
         ink = text_ink(text, font_family, font_weight, font_style)
         if ink is None:
             if resolve_font_face(font_family, font_weight, font_style) is None:
@@ -746,6 +771,36 @@ def drawn_text_box(
     return float(width), (metrics.ascent + metrics.descent) * size
 
 
+def drawn_runs_box(
+    runs: Sequence[tuple[str, str]],
+    font_family: str,
+    font_size: float,
+) -> tuple[float, float]:
+    """``drawn_text_box`` of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``.
+
+    Each run is measured in its own face and starts at the end of the previous
+    run's advance, white space collapsed across runs
+    (``collapse_runs_white_space``). The width is the last
+    advance or, when a run's box ends past it (an italic glyph painting past
+    its advance), that box's right edge; the height is the tallest run's line
+    box. One run measures as ``drawn_text_box``. Unlike
+    ``measure_mixed_text_line`` (advance width, glyph height), the box
+    contains the painted ink and has the line height a browser reports, so a
+    text measures the same whether it is one run or several.
+    """
+
+    if len(runs) == 1:
+        text, font_style = runs[0]
+        return drawn_text_box(text, font_family, font_size, "normal", font_style)
+    right = origin = height = 0.0
+    for text, font_style in collapse_runs_white_space(runs):
+        width, run_height = drawn_text_box(text, font_family, font_size, "normal", font_style)
+        right = max(right, origin + width)
+        origin += float(calculate_svg_bbox_dimensions(text, font_family, font_size, "normal", font_style)[0])
+        height = max(height, run_height)
+    return max(right, origin), height
+
+
 def dominant_baseline_shift_em(dominant_baseline: str, metrics: FontVerticalMetrics) -> Optional[float]:
     """Return how far browsers move horizontal glyphs down for ``dominant-baseline``.
 
@@ -823,18 +878,51 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
     return parts
 
 
+TextRunStyle = Literal["normal", "italic"]
+TextRun = tuple[str, TextRunStyle]
+
+# The markup user text drawn in a Legend caption or a region label may use (OV-2760, OV-2808): non-empty
+# ``<i>...</i>`` runs, lower case and not nested, with no other ``<``, ``>`` or ``&`` and no character XML rewrites
+# or refuses (a carriage return, the other control characters but tab and line feed, a lone surrogate, U+FFFE,
+# U+FFFF). In this subset the XML parse and a plain split give the same runs, so the Web
+# (services/legend-layout.js ``legendCaptionRuns``) needs no XML parser.
+_MARKUP_CHARACTER = r"[^<>&\x00-\x08\x0b-\x1f\ud800-\udfff\ufffe\uffff]"
+_ITALIC_MARKUP = re.compile(rf"{_MARKUP_CHARACTER}*(?:<i>{_MARKUP_CHARACTER}+</i>{_MARKUP_CHARACTER}*)+")
+
+
+def italic_markup_runs(text: str) -> tuple[TextRun, ...]:
+    """The styled runs user text (a Legend caption, a region label) is drawn and measured as, in drawing order.
+
+    A text in the italic subset gives the runs ``parse_mixed_content_text`` (the owner of ``<i>`` markup in
+    Species, record names and plot titles) reads from it; any other text is one literal upright run.
+    """
+
+    if _ITALIC_MARKUP.fullmatch(text) is None:
+        return ((text, "normal"),)
+    return tuple(
+        (str(part["text"]), "italic" if part["italic"] else "normal")
+        for part in parse_mixed_content_text(text)
+        if part["text"]
+    )
+
+
 __all__ = [
     "FontMetricsTable",
     "FontVerticalMetrics",
     "TextInk",
+    "TextRun",
+    "TextRunStyle",
     "calculate_svg_bbox_dimensions",
+    "collapse_runs_white_space",
     "collapse_svg_white_space",
     "create_text_element",
     "dominant_baseline_shift_em",
+    "drawn_runs_box",
     "drawn_text_box",
     "font_metrics_table",
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
+    "italic_markup_runs",
     "measure_mixed_text_line",
     "measurement_font_file",
     "parse_mixed_content_text",

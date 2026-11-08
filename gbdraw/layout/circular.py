@@ -223,12 +223,33 @@ class CircularResolvedSlot:
         return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
 
     @property
+    def band_without_label_rooms_px(self) -> RadialBand | None:
+        """The band the slot takes without the room it keeps for region labels: an annotation slot's own band
+        without its labels' room, else ``own_reserved_band_px`` (without the room of the span labels past it)."""
+
+        if self.renderer == "annotations" and self.side != "overlay":
+            return self.packing_band_px
+        return self.own_reserved_band_px
+
+    @property
     def draw_width_px(self) -> float:
         return float(self.draw_band_px.width_px) if self.draw_band_px is not None else 0.0
 
     @property
     def reserved_width_px(self) -> float:
         return float(self.reserved_band_px.width_px) if self.reserved_band_px is not None else 0.0
+
+
+def content_outer_radius_px(
+    axis: CircularAxisLayout, definition_band: RadialBand | None, bands: Sequence[RadialBand | None]
+) -> float:
+    """How far a record's drawing reaches from its centre: its axis, its centre definition band, and ``bands``."""
+
+    return max(
+        [float(axis.radius_px)]
+        + ([float(definition_band.outer_px)] if definition_band is not None else [])
+        + [float(band.outer_px) for band in bands if band is not None]
+    )
 
 
 def slots_feature_layout(slots: Sequence[CircularResolvedSlot]) -> CircularFeatureLayout | None:
@@ -249,6 +270,15 @@ class CircularRadialLayout:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "slots", tuple(self.slots))
+
+    @property
+    def ring_outer_radius_px(self) -> float:
+        """``outer_content_radius_px`` without the room the slots keep for region labels: the labels' own letters
+        bound the figure past it, so a label reaches past the rings only where it is drawn (OV-2809)."""
+
+        return content_outer_radius_px(
+            self.axis, self.definition_reserved_band_px, [slot.band_without_label_rooms_px for slot in self.slots]
+        )
 
     @property
     def features(self) -> CircularFeatureLayout | None:
@@ -485,6 +515,7 @@ __all__ = [
     "band_union",
     "bands_overlap",
     "calculate_feature_position_factors_circular",
+    "content_outer_radius_px",
     "feature_band_bounds_px",
     "feature_radii_for_coordinate",
     "feature_radii_for_object",

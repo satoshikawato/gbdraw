@@ -143,23 +143,17 @@ def _apply_baseline_shift(element: ET.Element, baseline: str, style: dict[str, A
     return True
 
 
-def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
-    """Give each tspan of a middle- or end-anchored text its browser x position.
+def _anchored_run_widths(element: ET.Element, style: dict[str, Any]) -> tuple[float, list[float]] | None:
+    """The anchor share (``_TEXT_ANCHOR_SHIFT``) and the drawn width of each tspan of a middle- or end-anchored
+    ``text`` or ``textPath`` that holds only runs, measured with the packaged font metrics like layout; None for
+    text with its own characters, tails, nested runs, run-level positioning, or fewer than two drawn runs."""
 
-    The runs are measured with the packaged font metrics, like layout, and the
-    text is drawn from the start. Text with its own characters, tails, nested
-    runs, or run-level positioning is left unchanged.
-    """
     shift = _TEXT_ANCHOR_SHIFT.get(str(style["text_anchor"] or "start").strip().lower())
     runs = list(element)
     if shift is None or len(runs) < 2 or element.text or style["font_size"] is None:
-        return False
+        return None
     if any(element.get(name) is not None for name in _RUN_LAYOUT_ATTRIBUTES[1:]):
-        return False
-    x_values = (element.get("x") or "0").replace(",", " ").split()
-    x_match = _NUMBER_RE.match(x_values[0]) if len(x_values) == 1 else None
-    if x_match is None or x_match.group(2) == "pt":
-        return False
+        return None
     texts: list[str] = []
     after_space = True
     for run in runs:
@@ -172,7 +166,7 @@ def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
             or any(char in text for char in "\t\r\n")
             or _font_size_px(run.get("font-size"), style["font_size"]) is None
         ):
-            return False
+            return None
         # Browsers and CairoSVG collapse spaces across runs the same way.
         text = re.sub(" +", " ", text)
         if after_space:
@@ -182,7 +176,7 @@ def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
         texts.append(text)
     drawn = [index for index, text in enumerate(texts) if text]
     if len(drawn) < 2:
-        return False
+        return None
     # A trailing space does not count toward the anchored width.
     texts[drawn[-1]] = texts[drawn[-1]].rstrip(" ")
     widths = [
@@ -197,11 +191,37 @@ def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
         else 0.0
         for run, text in zip(runs, texts)
     ]
-    total = sum(widths)
-    cursor = float(x_match.group(1)) - shift * total
-    for run, width in zip(runs, widths):
+    return shift, widths
+
+
+def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
+    """Give each tspan of a middle- or end-anchored text its browser x position (``_anchored_run_widths``); the
+    text is drawn from the start."""
+
+    measured = _anchored_run_widths(element, style)
+    x_values = (element.get("x") or "0").replace(",", " ").split()
+    x_match = _NUMBER_RE.match(x_values[0]) if len(x_values) == 1 else None
+    if measured is None or x_match is None or x_match.group(2) == "pt":
+        return False
+    shift, widths = measured
+    cursor = float(x_match.group(1)) - shift * sum(widths)
+    for run, width in zip(element, widths):
         run.set("x", f"{cursor:.4f}")
         cursor += width
+    element.set("text-anchor", "start")
+    return True
+
+
+def _position_text_path_runs(element: ET.Element, style: dict[str, Any]) -> bool:
+    """Start the runs of a middle- or end-anchored ``textPath`` where browsers anchor them (``_anchored_run_widths``):
+    the path is drawn from the start, its first tspan moved back along the path by the anchored share of the runs'
+    width, which carries the later runs with it."""
+
+    measured = _anchored_run_widths(element, style)
+    if measured is None:
+        return False
+    shift, widths = measured
+    element[0].set("dx", f"{-shift * sum(widths):.4f}")
     element.set("text-anchor", "start")
     return True
 
@@ -222,7 +242,7 @@ def _rewrite_text_for_cairosvg(
     tag = _local_name(element.tag)
     baseline = str(style["dominant_baseline"] or "auto").strip().lower()
     if tag == "textPath":
-        return _apply_baseline_shift(element, baseline, style)
+        return _position_text_path_runs(element, style) or _apply_baseline_shift(element, baseline, style)
     changed = False
     if tag == "text" and not in_text:
         changed = _position_text_runs(element, style)
@@ -248,8 +268,8 @@ def prepare_svg_for_cairosvg(svg_bytes: bytes) -> bytes:
     text. Those elements get the browser baseline offset as ``dy``, computed
     from the packaged font metrics, and ``dominant-baseline="alphabetic"``.
     CairoSVG also anchors each tspan of a middle- or end-anchored text on its
-    own width; those runs get their browser ``x`` and the text is drawn from
-    the start. Text CairoSVG already places like browsers is left unchanged,
+    own width; those runs get their browser ``x`` (along a ``textPath``, the
+    first run's ``dx``) and the text is drawn from the start. Text CairoSVG already places like browsers is left unchanged,
     and the input is returned unchanged when nothing needs rewriting.
     """
     if b"dominant-baseline" not in svg_bytes and not (b"text-anchor" in svg_bytes and b"tspan" in svg_bytes):

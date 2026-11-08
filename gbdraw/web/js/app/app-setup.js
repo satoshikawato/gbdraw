@@ -1609,7 +1609,8 @@ export const createAppSetup = () => {
   });
   const {
     clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
-    askRingSourceRemoval, reconcileCircularConservation, setCircularConservationEnabled, refreshCircularConservationSlots
+    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, setCircularConservationEnabled,
+    refreshCircularConservationSlots
   } = createCircularConservationSources({
     state, writeLosatCacheInfo,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
@@ -3157,7 +3158,7 @@ export const createAppSetup = () => {
   // Reset Settings and Reset Layout: created once the Linear File edits exist (a Linear
   // drawing's reset applies `applyLinearSeqMutation`); only the return reads them.
   const { resetDrawing } = createDrawingReset({
-    state, circularTrackNewRenderer, linearTrackNewRenderer, reconcileCircularConservation, applyLinearSeqMutation,
+    state, circularTrackNewRenderer, linearTrackNewRenderer, rederiveCircularConservation, applyLinearSeqMutation,
     invalidateLinearComparisonArtifacts, writeArtifactValues: historySnapshots.writeArtifactValues
   });
   const {

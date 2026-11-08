@@ -24,8 +24,16 @@ from gbdraw.annotations import (
     mark_parts,
 )
 from gbdraw.annotations.label_search import nearest_fewest_conflicts
-from gbdraw.annotations.layout import LabelExtent, PlacedRegionAnnotation, lane_count_of, lane_edge_px, lane_width_px
+from gbdraw.annotations.layout import (
+    LANE_EXTENT_PX,
+    LabelExtent,
+    PlacedRegionAnnotation,
+    lane_count_of,
+    lane_edge_px,
+    lane_width_px,
+)
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
+from gbdraw.core.text import TextRun, italic_markup_runs
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
 from gbdraw.layout.spatial import Aabb, union_aabbs
@@ -39,6 +47,7 @@ from gbdraw.layout.text_geometry import (
 from gbdraw.render.drawers.annotation_marks import (
     ANNOTATION_ID_ATTRIBUTE,
     ANNOTATION_SET_ID_ATTRIBUTE,
+    MarkReach,
     annotation_dom_id,
     cap_size,
     gradient_fill_group,
@@ -52,6 +61,7 @@ from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_patter
 from gbdraw.svg.ids import stable_svg_id
 from gbdraw.svg.circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
 from gbdraw.svg.path_data import path_number, path_point
+from gbdraw.svg.text_path import write_text_runs
 
 Polygon = tuple[Point, ...]
 
@@ -124,12 +134,14 @@ class CircularAnnotationLabel:
     its painted letters (the turned ink box, or an annular sector cut into
     nearly flat parts), which the room, the conflict count, later slots and
     the canvas bounds all read; ``ink_radii`` are how near the centre and how
-    far from it those letters come. A ``cut`` label is curved text longer than
-    its circle, drawn as the start of its text and an ellipsis (``text``).
+    far from it those letters come. ``runs`` are the styled runs it draws
+    (``italic_markup_runs`` of the region's label). A ``cut`` label is curved
+    text longer than its circle, drawn as the start of its runs and an ellipsis;
+    one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
     """
 
     annotation_id: str
-    text: str
+    runs: tuple[TextRun, ...]
     x: float
     y: float
     rotation: float
@@ -144,6 +156,23 @@ class CircularAnnotationLabel:
     @property
     def ink_bounds(self) -> Aabb:
         return _box([point for part in self.parts for point in part])
+
+    @property
+    def keeps_no_letter(self) -> bool:
+        """Whether the cut left only the ellipsis (``_cut_to``): such a label is not drawn (RGN-CUT-EMPTY-OMIT)."""
+
+        return self.cut and self.runs == _CUT_ONLY
+
+
+@dataclass(frozen=True)
+class CircularAnnotationLabels:
+    """The labels of one record's annotation track (``circular_annotation_labels``): those drawn, and those left
+    out because no letter of their text fits their circle (``without_letters``, RGN-CUT-EMPTY-OMIT, OV-2804). A
+    label left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts
+    it, with its font size."""
+
+    drawn: tuple[CircularAnnotationLabel, ...]
+    without_letters: tuple[CircularAnnotationLabel, ...] = ()
 
 
 def _record_lanes(
@@ -162,7 +191,7 @@ def _record_lanes(
     width = lane_width_px(
         outer_radius_px - inner_radius_px, padding_px=params.padding_px, room_px=track.lane_room_px, lane_count=lane_count
     )
-    return placements, 14.0 if track.clipped else width
+    return placements, LANE_EXTENT_PX if track.clipped else width
 
 
 def _lane_radii(
@@ -443,7 +472,7 @@ def circular_annotation_labels(
     rings: Sequence[RadialBand] = (),
     obstacles: CircularLabelObstacles | None = None,
     covers_slots: bool = False,
-) -> tuple[CircularAnnotationLabel, ...]:
+) -> CircularAnnotationLabels:
     """The labels of one record's annotation track, around the centre of the circle.
 
     Each label's painted letters keep ``label_offset`` from the painted edge of
@@ -457,11 +486,13 @@ def circular_annotation_labels(
 
     A label sits at its region's midpoint. With ``obstacles``, a label whose
     letters meet one, or a label of this track placed before it, moves along
-    its region (``_along_region``) within the room the default places take.
+    its region (``_along_region``) within the room the default places take, to
+    a place where it keeps a letter. A label whose cut at its midpoint keeps no
+    letter is left out (``CircularAnnotationLabels.without_letters``).
     """
 
     if not params.show_labels:
-        return ()
+        return CircularAnnotationLabels(())
     placements, lane_width = _record_lanes(
         track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
     )
@@ -469,7 +500,8 @@ def circular_annotation_labels(
     entries: list[tuple[ResolvedRegionAnnotation, Callable[[float], CircularAnnotationLabel]]] = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label:
+        # A label the track leaves out (no room, or cut by its clip) is not drawn, placed or given room.
+        if not track.draws_label(annotation):
             continue
         style = effective_annotation_style(annotation, params)
         lane_inner, lane_outer = _lane_radii(
@@ -481,8 +513,7 @@ def circular_annotation_labels(
             outer_radius_px=outer_radius_px,
             params=params,
         )
-        # A Circular band fills its whole lane; an arrow cap is drawn as a straight cap.
-        reach = mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False)
+        reach = circular_annotation_mark_reach(annotation, style, lane_width)
         if covers_slots:
             inset = outer_radius_px - lane_outer if outward else lane_inner - inner_radius_px
             beyond = past_span_edge(reach, inset)
@@ -497,7 +528,7 @@ def circular_annotation_labels(
                 partial(
                     _label_at,
                     annotation_id=annotation.id,
-                    text=annotation.label,
+                    runs=italic_markup_runs(annotation.label),
                     record_length=record_length,
                     mark_edge=mark_edge,
                     outward=outward,
@@ -511,24 +542,27 @@ def circular_annotation_labels(
             )
         )
     defaults = [label_at(annotation.label_midpoint_bp(join_origin=track.join_origin)) for annotation, label_at in entries]
+    without_letters = tuple(label for label in defaults if label.keeps_no_letter)
+    kept = [(entry, label) for entry, label in zip(entries, defaults) if not label.keeps_no_letter]
     if obstacles is None:
-        return tuple(defaults)
-    room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for label in defaults), default=0.0)
+        return CircularAnnotationLabels(tuple(label for _entry, label in kept), without_letters)
+    room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for _entry, label in kept), default=0.0)
     placed: list[CircularAnnotationLabel] = []
     index = _ObstacleIndex(obstacles)
-    for (annotation, label_at), default in zip(entries, defaults):
+    for (annotation, label_at), default in kept:
         label = _along_region(
             annotation,
             default,
             label_at,
             record_length=record_length,
-            fits=lambda label: _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
+            fits=lambda label: not label.keeps_no_letter
+            and _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
             conflicts=index.conflicts,
             join_origin=track.join_origin,
         )
         placed.append(label)
         index.add(label)
-    return tuple(placed)
+    return CircularAnnotationLabels(tuple(placed), without_letters)
 
 
 def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk:
@@ -541,6 +575,25 @@ def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk
         anchor="middle",
         baseline="alphabetic" if orientation in CURVED_LABEL_ORIENTATIONS else "central",
     )
+
+
+def circular_annotation_mark_reach(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_width: float
+) -> MarkReach:
+    """How far a Circular mark paints across its lane on its label's side (``MarkReach``), where its label stands
+    ``label_offset`` beyond: a band fills its whole lane, and an arrow cap is drawn as a straight cap. The lane
+    packer measures the same paint (``LabelSizing.reach``, ``circular_annotation_mark_past_lane``)."""
+
+    return mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False)
+
+
+def circular_annotation_mark_past_lane(
+    annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_width: float
+) -> float:
+    """How far a Circular mark paints past its lane's edge on its label's side (``circular_annotation_mark_reach``):
+    the lane packer's ``MarkReachMeasure``."""
+
+    return circular_annotation_mark_reach(annotation, style, lane_width).past_lane_edge
 
 
 def circular_annotation_label_extent(
@@ -558,14 +611,15 @@ def circular_annotation_label_extent(
     """A region label's letters as ``circular_annotation_labels`` draws them at ``place_bp`` (``_label_at``),
     beside a mark whose edge lies ``mark_offset_px`` from ``lanes_from_px``, the radius the slot's lanes stack
     from: away from the centre, or toward it when not ``outward`` (an ``inside`` slot). The bp the letters reach
-    along the circle on each side of the place, and how far they reach across the lanes: the lane packer's measure
+    along the circle on each side of the place, how far they reach across the lanes, and whether the label is drawn
+    there (not when its cut keeps no letter, ``CircularAnnotationLabel.keeps_no_letter``): the lane packer's measure
     (``LabelSizing.extent``)."""
 
     edge = lanes_from_px + mark_offset_px if outward else lanes_from_px - mark_offset_px
     label = _label_at(
         place_bp,
         annotation_id="",
-        text=annotation.label,
+        runs=italic_markup_runs(annotation.label),
         record_length=record_length,
         mark_edge=max(1.0, edge),
         outward=outward,
@@ -583,7 +637,9 @@ def circular_annotation_label_extent(
     ]
     bp_per_degree = record_length / 360.0
     near, far = label.ink_radii
-    return LabelExtent(min(turns) * bp_per_degree, max(turns) * bp_per_degree, far - near)
+    return LabelExtent(
+        min(turns) * bp_per_degree, max(turns) * bp_per_degree, far - near, drawn=not label.keeps_no_letter
+    )
 
 
 # A curved label's text path stays just short of a whole circle (one SVG arc command); the text keeps one em clear of
@@ -591,8 +647,10 @@ def circular_annotation_label_extent(
 _MAX_HALF_PATH_DEG = 179.9
 # What ends a curved label cut to fit its circle (OV-1210).
 _CUT_MARK = "\u2026"
+# A curved label cut to nothing but the ellipsis.
+_CUT_ONLY: tuple[TextRun, ...] = ((_CUT_MARK, "normal"),)
 
-LabelInk: TypeAlias = Callable[[str], tuple[float, float, float, float]]
+LabelInk: TypeAlias = Callable[[Sequence[TextRun]], tuple[float, float, float, float]]
 
 
 def _cleared_radius(
@@ -625,7 +683,7 @@ def _label_at(
     position_bp: float,
     *,
     annotation_id: str,
-    text: str,
+    runs: tuple[TextRun, ...],
     record_length: int,
     mark_edge: float,
     outward: bool,
@@ -638,7 +696,7 @@ def _label_at(
 ) -> CircularAnnotationLabel:
     """One label with its centre on the ray through ``position_bp``, ``gap`` beyond ``mark_edge`` (and any ring).
 
-    ``ink`` measures a text's ink box around the label's anchor: on the
+    ``ink`` measures the ink box of a label's ``runs`` around its anchor: on the
     central baseline for straight text, on the alphabetic baseline for curved
     text (``CURVED_LABEL_ORIENTATIONS``).
     """
@@ -649,8 +707,8 @@ def _label_at(
         CircularAnnotationLabel, annotation_id=annotation_id, font_size=font_size, color=color, label_offset=gap
     )
     if orientation in CURVED_LABEL_ORIENTATIONS:
-        return _curved_label(label, text, angle, ink, clear, outward=outward, font_size=font_size)
-    offsets = ink(text)
+        return _curved_label(label, runs, angle, ink, clear, outward=outward, font_size=font_size)
+    offsets = ink(runs)
     theta = math.radians(angle)
     rotation = _label_rotation(orientation, angle)
     turn = math.radians(rotation)
@@ -664,7 +722,7 @@ def _label_at(
     left, right, top, bottom = offsets
     cos, sin = math.cos(turn), math.sin(turn)
     return label(
-        text=text,
+        runs=runs,
         x=x,
         y=y,
         rotation=rotation,
@@ -680,7 +738,7 @@ def _label_at(
 
 def _curved_label(
     label: Callable[..., CircularAnnotationLabel],
-    text: str,
+    runs: tuple[TextRun, ...],
     angle: float,
     ink: LabelInk,
     clear: Callable[[Callable[[float], tuple[float, float]], Callable[[float], float]], float],
@@ -697,7 +755,7 @@ def _curved_label(
 
     # Text in the lower half reads anticlockwise with its tops toward the centre; elsewhere its tops face out.
     flipped = 0.0 < angle % 360.0 < 180.0
-    shown = text
+    shown = runs
     while True:
         left, right, top, bottom = ink(shown)
         low, high = (top, bottom) if flipped else (-bottom, -top)
@@ -713,16 +771,16 @@ def _curved_label(
         radius = clear(extent, radius_for)
         # How far the ink may reach each way from the label's middle, along its baseline.
         room = math.radians(_MAX_HALF_PATH_DEG) * radius - font_size
-        if max(-left, right) <= room or shown == _CUT_MARK:
+        if max(-left, right) <= room or shown == _CUT_ONLY:
             break
-        shown = _cut_to(text, room, ink)
+        shown = _cut_to(runs, room, ink)
     near, far = extent(radius)
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0
     centre = angle + sign * math.degrees(0.5 * (left + right) / radius)
     theta = math.radians(angle)
     return label(
-        text=shown,
+        runs=shown,
         x=radius * math.cos(theta),
         y=radius * math.sin(theta),
         rotation=0.0,
@@ -735,22 +793,33 @@ def _curved_label(
             half_span=min(_MAX_HALF_PATH_DEG, math.degrees((max(-left, right) + font_size) / radius)),
             flipped=flipped,
         ),
-        cut=shown != text,
+        cut=shown != runs,
     )
 
 
-def _cut_to(text: str, room: float, ink: LabelInk) -> str:
-    """The longest start of ``text``, ended with an ellipsis, whose ink reaches at most ``room`` each way from its
-    middle (only the ellipsis when no start fits)."""
+def _cut_to(runs: tuple[TextRun, ...], room: float, ink: LabelInk) -> tuple[TextRun, ...]:
+    """The longest start of ``runs``, ended with an ellipsis in the style of its last run, whose ink reaches at most
+    ``room`` each way from its middle (only the ellipsis when no start fits)."""
 
-    def cut(length: int) -> str:
-        return text[:length].rstrip() + _CUT_MARK
+    def cut(length: int) -> tuple[TextRun, ...]:
+        kept: list[TextRun] = []
+        for text, style in runs:
+            if length <= 0:
+                break
+            kept.append((text[:length], style))
+            length -= len(text)
+        while kept and not kept[-1][0].rstrip():
+            kept.pop()
+        if not kept:
+            return _CUT_ONLY
+        text, style = kept[-1]
+        return (*kept[:-1], (text.rstrip() + _CUT_MARK, style))
 
     def fits(length: int) -> bool:
         left, right, _top, _bottom = ink(cut(length))
         return max(-left, right) <= room
 
-    low, high = 0, len(text) - 1
+    low, high = 0, sum(len(text) for text, _style in runs) - 1
     while low < high:
         middle = (low + high + 1) // 2
         if fits(middle):
@@ -791,18 +860,19 @@ def circular_annotation_label_room(
         rings=rings,
         covers_slots=covers_slots,
     )
-    return max((_reach(label, band.inner_px, band.outer_px, outward) for label in labels), default=0.0)
+    return max((_reach(label, band.inner_px, band.outer_px, outward) for label in labels.drawn), default=0.0)
 
 
 def _label_text(
     label: CircularAnnotationLabel, font_family: str, definitions: dict[str, BaseElement], item_id: str
 ) -> Text:
-    """A label's ``<text>``; a curved label's path goes into the track's ``definitions``."""
+    """A label's ``<text>``, its runs written by ``write_text_runs``; a curved label's path goes into the track's
+    ``definitions``."""
 
     paint = {"fill": label.color, "stroke": "none", "font_size": label.font_size, "font_family": font_family}
     if label.arc is None:
-        text = Text(
-            label.text, insert=(label.x, label.y), text_anchor="middle", dominant_baseline="central", **paint
+        text = write_text_runs(
+            Text("", insert=(label.x, label.y), text_anchor="middle", dominant_baseline="central", **paint), label.runs
         )
         if label.rotation:
             text.rotate(label.rotation, center=(label.x, label.y))
@@ -813,7 +883,7 @@ def _label_text(
     path = Path(id=path_id, d=label.arc.path, fill="none", stroke="none")
     definitions[path_id] = path
     text = Text("", text_anchor="middle", **paint)
-    text.add(TextPath(path, text=label.text, startOffset="50%"))
+    text.add(write_text_runs(TextPath(path, text="", startOffset="50%"), label.runs))
     return text
 
 
@@ -1094,10 +1164,13 @@ __all__ = [
     "CURVED_LABEL_ORIENTATIONS",
     "AnnotationRing",
     "CircularAnnotationLabel",
+    "CircularAnnotationLabels",
     "CircularLabelArc",
     "CircularLabelObstacles",
     "LeaderSegment",
     "circular_annotation_label_extent",
+    "circular_annotation_mark_past_lane",
+    "circular_annotation_mark_reach",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

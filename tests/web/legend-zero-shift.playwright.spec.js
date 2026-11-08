@@ -266,6 +266,39 @@ for (const [mode, fontFamily] of [['linear', null], ['circular', null], ['circul
   });
 }
 
+// OV-2760: a Legend name written with <i> draws its words in italics, live and
+// at Generate, and the Legend is sized for the italic words.
+test('a row renamed with <i> markup is drawn in italics live and at Generate (OV-2760)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+  await page.evaluate((family) => { window.__GBDRAW_APP__.adv.font_family = family; }, 'Times New Roman, serif');
+  await settleLive(page);
+  await generate(page);
+  const caption = (page) => page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const row = Array.from(svg.getElementById('legend').querySelectorAll('g[data-legend-key]'))
+      .find((entry) => (entry.querySelector('text')?.textContent || '').includes('Homo sapiens'));
+    const text = row?.querySelector('text');
+    return text && {
+      text: text.textContent,
+      spans: Array.from(text.children, (span) => [span.getAttribute('font-style'), span.textContent])
+    };
+  });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => /^GC content/.test(entry.caption)), '<i>Homo sapiens</i> GC');
+  });
+  await page.waitForTimeout(150);
+  await settleLive(page);
+  const italic = { text: 'Homo sapiens GC', spans: [['italic', 'Homo sapiens'], [null, ' GC']] };
+  expect(await caption(page), 'live').toEqual(italic);
+  const live = await legendGeometry(page);
+  await generate(page);
+  expect(await caption(page), 'Generate').toEqual(italic);
+  expect(await legendGeometry(page), 'the live Legend equals the next Generate').toEqual(live);
+  expect(await legendTextOverflow(page), 'every caption the browser draws fits the Legend box').toEqual([]);
+});
+
 // Z1: a Result records the inputs Python laid its Legend out with
 // (`legendReflow`), and the layout owner reads them. A Circular Legend on top
 // wraps its rows at the width Python passed (the diagram's content width), so

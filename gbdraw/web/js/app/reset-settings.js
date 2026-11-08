@@ -13,7 +13,7 @@
 // (`layoutResetAvailable`).
 import { LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { buildDefaultCircularRecordPositions } from './circular-record-panel.js';
-import { ensureDepthTrackConfigCount } from './depth-tracks.js';
+import { ensureDepthTrackConfigCount, nameDepthSeriesAfterFiles } from './depth-tracks.js';
 import { paletteColorsEqual } from './svg-styles.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from '../services/reset.js';
 import { msg, t } from '../utils/i18n.js';
@@ -28,8 +28,8 @@ import { msg, t } from '../utils/i18n.js';
  * @property {WebState} state
  * @property {{ value: string }} circularTrackNewRenderer The Circular track menu's new-track choice.
  * @property {{ value: string }} linearTrackNewRenderer The Linear track menu's new-track choice.
- * @property {(drawing: DrawingState) => void} reconcileCircularConservation
- *   Derives the comparison rings again from the kept ring files.
+ * @property {(drawing: DrawingState) => void} rederiveCircularConservation
+ *   Derives the comparison rings again from the kept comparison files, without the LOSAT result of the old settings.
  * @property {ApplyLinearSeqMutation} applyLinearSeqMutation
  * @property {(drawing: DrawingState, options?: { preserveLosatCacheInfo?: boolean }) => void} invalidateLinearComparisonArtifacts
  * @property {(drawingId: DrawingId, values: Readonly<Record<string, unknown>>) => void} writeArtifactValues
@@ -41,7 +41,7 @@ import { msg, t } from '../utils/i18n.js';
  * @param {DrawingResetPorts} ports
  */
 export const createDrawingReset = ({
-  state, circularTrackNewRenderer, linearTrackNewRenderer, reconcileCircularConservation, applyLinearSeqMutation,
+  state, circularTrackNewRenderer, linearTrackNewRenderer, rederiveCircularConservation, applyLinearSeqMutation,
   invalidateLinearComparisonArtifacts, writeArtifactValues
 }) => {
   // What a drawing's reset changes beyond its slices, by its mode.
@@ -55,8 +55,9 @@ export const createDrawingReset = ({
       // their defaults; Reset resets settings, not the records.
       drawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(drawing));
       // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
-      // kept ring files, as a new drawing with those files uploaded has them.
-      reconcileCircularConservation(drawing);
+      // kept ring files, as a new drawing with those files uploaded has them;
+      // a ring search of the old settings goes with them (OV-2758).
+      rederiveCircularConservation(drawing);
     },
     linear: (drawing) => {
       linearTrackNewRenderer.value = 'dinucleotide_skew';
@@ -86,8 +87,10 @@ export const createDrawingReset = ({
       ? artifact
       : { ...artifact, similarityAlignmentResetReceipt: null });
     RESET_FOLLOW_UPS[drawing.mode](drawing);
-    // The reset Depth series fit the kept Depth files (OV-1164).
+    // The reset Depth series fit the kept Depth files (OV-1164), and each
+    // kept file names its series (OV-2822).
     ensureDepthTrackConfigCount(drawing);
+    nameDepthSeriesAfterFiles(drawing);
   };
 
   return { resetDrawing };

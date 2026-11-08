@@ -20,6 +20,7 @@ import {
 } from '../../gbdraw/web/js/services/font-store.js';
 import {
   createLegendFontMetrics,
+  italicLegendFace,
   legendMeasurementFace,
   measureTextBox,
   resolveLegendFontFace,
@@ -214,6 +215,8 @@ test('the Legend picks the face of a registered family Python picks for the norm
     }));
     const metrics = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), faces);
     assert.equal(resolveLegendFontFace(metrics, "'Vector Family', serif"), `face${vector.normal}`, `faceMatch[${index}]`);
+    // A caption's <i> runs (OV-2760): the face Python picks for the italic style.
+    assert.equal(italicLegendFace(metrics, `face${vector.normal}`), `face${vector.italic}`, `faceMatch[${index}] italic`);
   });
 });
 
@@ -230,6 +233,10 @@ test('the Legend face of every vector is the face Python measures with', () => {
       ? `registered:${comparableFamilyName(vector.face.slice('registered:'.length))}`
       : vector.face;
     assert.equal(resolveLegendFontFace(metrics, vector.requested), expected, `vector ${index}: ${vector.requested}`);
+    const italic = vector.italicFace.startsWith('registered:')
+      ? `registered:${comparableFamilyName(vector.italicFace.slice('registered:'.length))}`
+      : vector.italicFace;
+    assert.equal(italicLegendFace(metrics, expected), italic, `vector ${index} italic: ${vector.requested}`);
   });
 });
 

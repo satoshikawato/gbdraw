@@ -91,7 +91,7 @@ def test_gc_content_config_defaults_preserve_deviation_mode() -> None:
     assert cfg.objects.gc_content.large_tick_interval == pytest.approx(20)
     assert cfg.objects.gc_content.small_tick_interval is None
     assert cfg.objects.gc_content.tick_font_size is None
-    assert cfg.objects.gc_content.percent_background_color == "#737373"
+    assert cfg.objects.gc_content.percent_background_color == "#e5e5e5"
     assert cfg.objects.gc_content.percent_background_opacity == pytest.approx(1.0)
     assert cfg.objects.gc_content.percent_border_color == "#4b5563"
     assert cfg.objects.gc_content.percent_border_width == pytest.approx(0.8)
@@ -187,6 +187,7 @@ def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis()
                 "objects.gc_content.min_percent": 0,
                 "objects.gc_content.max_percent": 100,
                 "objects.gc_content.large_tick_interval": 50,
+                "objects.gc_content.axis_labels": "numbered",
             }),
             window=20,
             step=20,
@@ -215,6 +216,7 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
                 "objects.gc_content.min_percent": 0,
                 "objects.gc_content.max_percent": 100,
                 "objects.gc_content.large_tick_interval": 50,
+                "objects.gc_content.axis_labels": "numbered",
             }),
             window=20,
             step=20,

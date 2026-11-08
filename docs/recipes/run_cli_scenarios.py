@@ -1702,10 +1702,12 @@ def _assert_quantitative_tracks(
     for slot in root.iter():
         slot_id = slot.attrib.get("data-gbdraw-slot-id")
         if slot_id in {"depth_1", "gc_content", "gc_skew", "at_skew"}:
+            # The invisible path a range label runs along is not a series.
             paths_by_slot[slot_id] = [
                 child
                 for child in slot.iter()
                 if child.tag.rsplit("}", 1)[-1] == "path"
+                and not (child.attrib.get("fill") == "none" and child.attrib.get("stroke") == "none")
             ]
     # A track path keeps a sample only where dropping it would move the outline by more than 0.02 SVG px
     # (tests/test_track_paths.py pins that bound); for this depth table that keeps 606 line commands. The depth
@@ -1722,18 +1724,10 @@ def _assert_quantitative_tracks(
         skew_counts = [path.attrib.get("d", "").count("L") for path in paths_by_slot.get(skew_slot, [])[1:]]
         if len(skew_counts) != 2 or len(set(skew_counts)) != 1 or not 2 < skew_counts[0] <= 607:
             raise RecipeContractError(f"{scenario_id} {skew_slot} series changed.")
+    # Each axis prints one range label (D-16).
     required_text = {
-        "0x",
-        "20x",
-        "40x",
-        "60x",
-        "80x",
-        "10%",
-        "20%",
-        "30%",
-        "40%",
-        "50%",
-        "55%",
+        "[0\u201380x]",
+        "[10\u201355%]",
         "DRR394922 mean depth",
         "GC content (%)",
         "GC skew (+)",

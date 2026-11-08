@@ -682,43 +682,51 @@ def generate_circular_tick_labels(
             text_anchor=geometry.text_anchor,
         )
         # Clockwise from label_start to label_end, or anticlockwise on a reversed (lower-half) path.
-        label_axis_path_desc: str = circle_arc(
-            path_radius, position_angle(label_start, total_len), 360.0 * (label_end - label_start) / total_len
-        )
-        label_axis_path = Path(
-            id=stable_svg_id(
-                "circular_tick_label_path",
-                group_identifier,
-                record_identifier,
-                size,
-                label_index,
-                tick,
-                total_len,
+        tick_label_paths_list.extend(
+            text_along_circle(
                 label_text,
-                label_axis_path_desc,
-            ),
-            d=label_axis_path_desc,
-            stroke="none",
-            fill="none",
-        )
-        text_path = Text("", dominant_baseline=geometry.dominant_baseline)
-        text_path.add(
-            TextPath(
-                label_axis_path,
-                text=label_text,
+                path_radius,
+                position_angle(label_start, total_len),
+                360.0 * (label_end - label_start) / total_len,
+                id_parts=(group_identifier, record_identifier, size, label_index, tick, total_len),
                 startOffset=start_offset,
-                method="align",
                 text_anchor=geometry.text_anchor,
+                dominant_baseline=geometry.dominant_baseline,
                 font_size=font_size,
                 font_style="normal",
                 font_weight="normal",
                 font_family=font_family,
-                dominant_baseline=geometry.dominant_baseline,
             )
         )
-        tick_label_paths_list.append(label_axis_path)
-        tick_label_paths_list.append(text_path)
     return tick_label_paths_list
+
+
+def text_along_circle(
+    text: str,
+    radius: float,
+    start_deg: float,
+    span_deg: float,
+    *,
+    id_parts: tuple[object, ...],
+    dominant_baseline: str | None = None,
+    **text_path_attributes: object,
+) -> tuple[Path, Text]:
+    """``text`` along the circle of ``radius`` from ``start_deg`` over ``span_deg`` (positive clockwise): the
+    invisible path, with a stable id from ``id_parts`` and the arc, and the text that follows it.
+    ``dominant_baseline`` set places the path on that baseline in browsers only (CairoSVG keeps the alphabetic
+    baseline on a path), so a label both must place alike leaves it unset."""
+
+    path_desc = circle_arc(radius, start_deg, span_deg)
+    path = Path(
+        id=stable_svg_id("circular_tick_label_path", *id_parts, text, path_desc),
+        d=path_desc,
+        stroke="none",
+        fill="none",
+    )
+    baseline = {} if dominant_baseline is None else {"dominant_baseline": dominant_baseline}
+    label = Text("", **baseline)
+    label.add(TextPath(path, text=text, method="align", **baseline, **text_path_attributes))
+    return path, label
 
 
 __all__ = [
@@ -728,6 +736,7 @@ __all__ = [
     "circular_tick_marks",
     "get_circular_tick_intervals",
     "get_circular_tick_label_radius_bounds",
+    "text_along_circle",
     "get_circular_tick_path_radius_bounds",
     "get_circular_tick_path_ratio_bounds",
     "generate_circular_tick_labels",

@@ -20,6 +20,7 @@ import pytest
 
 from gbdraw.core.text import drawn_text_box
 from gbdraw.core.numeric import compensated_sum
+from gbdraw.legend.metrics import legend_caption_box
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VECTORS = REPO_ROOT / "tests" / "fixtures" / "legend_layout_vectors.json"
@@ -48,17 +49,26 @@ def test_legend_layout_vectors_match_python() -> None:
 def test_legend_layout_vectors_cover_gallery_edits_and_branches() -> None:
     vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
     gallery = [case for case in vectors["layout"] if not case["name"].startswith("synthetic")]
-    assert sum(case["edit"] == "none" for case in gallery) == 10
+    assert sum(case["edit"] == "none" for case in gallery) == 11
     assert sum(case["edit"] != "none" for case in gallery) >= 80
     assert {case["mode"] for case in vectors["layout"]} == {"circular", "linear"}
     assert len(vectors["measurement"]) >= 200
 
 
 @pytest.mark.parametrize("index", [0, 40, 100, 200])
-def test_measurement_vectors_are_drawn_text_box(index: int) -> None:
+def test_measurement_vectors_are_legend_caption_box(index: int) -> None:
     vector = json.loads(VECTORS.read_text(encoding="utf-8"))["measurement"][index]
-    width, height = drawn_text_box(vector["text"], vector["fontFamily"], vector["fontSize"])
+    width, height = legend_caption_box(vector["text"], vector["fontFamily"], vector["fontSize"])
     assert vector["expected"] == {"width": width, "height": height}
+
+
+def test_literal_measurement_vectors_are_drawn_text_box() -> None:
+    vectors = json.loads(VECTORS.read_text(encoding="utf-8"))["measurement"]
+    literal = [vector for vector in vectors if "<i>" not in vector["text"]]
+    assert len(literal) >= 456
+    for vector in literal[::37]:
+        width, height = drawn_text_box(vector["text"], vector["fontFamily"], vector["fontSize"])
+        assert vector["expected"] == {"width": width, "height": height}, vector["text"]
 
 
 def _naive_sum(values: list[float]) -> float:

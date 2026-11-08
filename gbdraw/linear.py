@@ -1481,7 +1481,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_content_min_percent: Optional[float] = args.gc_content_min_percent
     gc_content_max_percent: Optional[float] = args.gc_content_max_percent
     gc_content_show_axis: bool | None = args.gc_content_show_axis
-    gc_content_show_ticks: bool | None = args.gc_content_show_ticks
     gc_content_tick_interval: Optional[float] = args.gc_content_tick_interval
     gc_content_large_tick_interval: Optional[float] = args.gc_content_large_tick_interval
     gc_content_small_tick_interval: Optional[float] = args.gc_content_small_tick_interval
@@ -1505,7 +1504,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_max: Optional[float] = args.depth_max
     depth_normalize: bool | None = args.depth_normalize
     depth_show_axis: bool | None = args.depth_show_axis
-    depth_show_ticks: bool | None = args.depth_show_ticks
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
@@ -1639,7 +1637,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.gc_content.min_percent": gc_content_min_percent,
         "objects.gc_content.max_percent": gc_content_max_percent,
         "objects.gc_content.show_axis": gc_content_show_axis,
-        "objects.gc_content.show_ticks": gc_content_show_ticks,
+        "objects.gc_content.show_ticks": args.gc_content_show_ticks,
+        "objects.gc_content.axis_labels": args.gc_content_axis_labels,
         "objects.gc_content.large_tick_interval": gc_large_tick_interval,
         "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
         "objects.gc_content.tick_font_size": gc_content_tick_font_size,
@@ -1651,7 +1650,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.depth.max_depth": depth_max,
         "objects.depth.normalize": depth_normalize,
         "objects.depth.show_axis": depth_show_axis,
-        "objects.depth.show_ticks": depth_show_ticks,
+        "objects.depth.show_ticks": args.depth_show_ticks,
+        "objects.depth.axis_labels": args.depth_axis_labels,
         "objects.depth.large_tick_interval": depth_large_tick_interval,
         "objects.depth.small_tick_interval": depth_small_tick_interval,
         "objects.depth.tick_font_size": depth_tick_font_size,

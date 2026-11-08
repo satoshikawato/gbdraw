@@ -116,6 +116,36 @@
     "tutorialStatus": "ready"
   },
   {
+    "id": "hepatoplasma_scabrum_depth",
+    "title": "Read depth around a bacterial genome (<i>Ca.</i> Hepatoplasma scabrum)",
+    "tags": [
+      "Circular",
+      "Read depth",
+      "Interactive SVG"
+    ],
+    "svg": "./examples/hepatoplasma_scabrum_depth.svg",
+    "svgType": "interactive",
+    "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+    "thumbnail": "./thumbnails/hepatoplasma_scabrum_depth.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+    "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasma_scabrum_depth.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasma_scabrum_depth.svg",
+    "sourceNote": "The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "AP027133.gb"
+    ],
+    "fileSizeLabel": "2.7 MB",
+    "command": "gbdraw circular --gbk AP027133.gb -o hepatoplasma_scabrum_depth -f interactive_svg --depth_track AP027133.DRR394922.depth-1kb.tsv --depth_track_label 'DRR394922 mean depth' --depth_window 1 --depth_step 1000 --depth_max 80 --depth_width 60 --depth_large_tick_interval 20 --depth_small_tick_interval 10 --depth_tick_font_size 14 -l left --separate_strands",
+    "commandKind": "runnable",
+    "commandNote": "Download AP027133.gb and the depth table from Files, then run this command in the same directory.",
+    "description": "The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene ring and outside the GC content and GC skew rings. The depth scale ends at 80x. Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+    "workflow": "Add a read-depth track",
+    "inputSummary": "1 GenBank + 1 depth TSV",
+    "displayOrder": 45,
+    "tutorial": "./tutorials/hepatoplasma_scabrum_depth.json",
+    "tutorialStatus": "ready"
+  },
+  {
     "id": "Vnig_TUMSAT-TG-2018",
     "title": "Every replicon of a multi-replicon bacterial genome on one canvas (<i>Vibrio nigripulchritudo</i>)",
     "tags": [

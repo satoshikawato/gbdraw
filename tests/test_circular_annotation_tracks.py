@@ -25,7 +25,8 @@ from gbdraw.api import (
     parse_record_selector,
 )
 import gbdraw.api.render as api_render
-from gbdraw.exceptions import LabelLeadersCrossWarning
+from gbdraw.exceptions import LabelLeadersCrossWarning, ValidationError
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from tests.utils.svg_compare import assert_nested_approx
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
@@ -35,6 +36,12 @@ from gbdraw.tracks import (
     parse_circular_track_slot,
 )
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+
+def _half_stroke_reach(_annotation, style, _lane_width: float) -> float:
+    # The packer tests' own mark paint (``LabelSizing.reach``): half the stroke past the lane's edge.
+    return 0.5 * float(style.stroke_width)
+
 
 
 def test_circular_annotation_renderer_parses_width() -> None:
@@ -365,6 +372,83 @@ def test_circular_annotation_to_slot_reference_errors(spec: str, message: str) -
 
     with pytest.raises(ValueError, match=f"annotation .*slot 'regions'.*{message}|^{message}"):
         normalize_circular_track_slots([*slots, parse_circular_track_slot(_span_slot(spec))])
+
+
+def _ring_frames(count: int) -> list[pd.DataFrame]:
+    row = ("query1", "r1", 95.0, 20, 0, 0, 1, 20, 5, 24, 1e-20, 100.0)
+    return [pd.DataFrame([row], columns=COMPARISON_COLUMNS) for _ in range(count)]
+
+
+def _build_circular_span_with_rings(*slots: str, ring_count: int = 3):
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    return build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=_span_annotations(),
+            conservation_dataframes=_ring_frames(ring_count),
+            conservation_reference="subject",
+            tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+        ),
+    )
+
+
+def test_circular_annotation_reaches_a_comparison_ring_the_drawing_adds() -> None:
+    """OV-2810: a ring the drawing adds to a slot list without ring slots is a slot an overlay may name."""
+
+    bands = _circular_bands(
+        _build_circular_span_with_rings(
+            "features:features",
+            _span_slot("anchor_slot=features,to_slot=conservation_3,layer=foreground,z=5"),
+        )
+    )
+
+    assert bands["conservation_3"][1] < bands["features"][0]
+    assert bands["drawn"] == pytest.approx((bands["conservation_3"][0], bands["features"][1]), abs=1e-3)
+
+
+def test_circular_annotation_reference_to_a_ring_the_drawing_lacks_is_refused() -> None:
+    with pytest.raises(ValidationError, match="references unknown to_slot='conservation_4'"):
+        _build_circular_span_with_rings(
+            "features:features",
+            _span_slot("anchor_slot=features,to_slot=conservation_4,layer=foreground,z=5"),
+        )
+
+
+def test_cli_annotation_reaches_a_comparison_ring_the_drawing_adds(tmp_path, monkeypatch) -> None:
+    import sys
+
+    from Bio import SeqIO
+
+    from gbdraw import cli
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1", annotations={"molecule_type": "DNA"})
+    gbk = tmp_path / "r1.gb"
+    SeqIO.write([record], str(gbk), "genbank")
+    blasts = []
+    for index, frame in enumerate(_ring_frames(3), start=1):
+        path = tmp_path / f"ring{index}.tsv"
+        frame.to_csv(path, sep="\t", header=False, index=False)
+        blasts.append(str(path))
+    table = tmp_path / "regions.tsv"
+    table.write_text("set_id\tid\tmark\trecord\tstart\tend\nregions\tspan1\thighlight\tr1\t100\t300\n")
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gbdraw", "circular", "--gbk", str(gbk), "--conservation_blast", *blasts,
+            "--conservation_reference", "subject", "--annotation_table", str(table),
+            "--circular_track_slot", "features:features",
+            "--circular_track_slot",
+            _span_slot("anchor_slot=features,to_slot=conservation_3,layer=foreground,z=5"),
+            "-o", str(output), "-f", "svg",
+        ],
+    )
+
+    cli.main()
+
+    root = ElementTree.fromstring(output.with_suffix(".svg").read_text())
+    assert any(element.attrib.get("data-gbdraw-annotation-id") == "span1" for element in root.iter())
 
 
 def test_circular_annotation_to_slot_requires_overlay_side() -> None:
@@ -928,6 +1012,37 @@ def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None
     assert record_payload["labelCount"] == 2 and record_payload["fontSize"] == 14.0
 
 
+@pytest.mark.parametrize("text", ("Region", "<i>Region</i>"))
+def test_circular_region_label_keeps_a_letter_or_is_left_out(text: str) -> None:
+    # A label cut to fit its circle (LP-D87) is drawn while it keeps at least one letter, its start and an ellipsis;
+    # one cut so far that only the ellipsis is left is not drawn and is returned as left out (RGN-CUT-EMPTY-OMIT,
+    # OV-2804), for the label fit warning to count. Labels along the circle of an inside slot nearer and nearer the
+    # centre, in plain and in italic letters.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, 2000, 3000), label=text, style=RegionAnnotationStyle(label_orientation="auto"))
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+    )
+    seen: dict[str, tuple[bool, bool]] = {}
+    for step in range(200, 0, -1):
+        inner = 0.25 * step
+        labels = circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=inner, outer_radius_px=inner + 10.0,
+            side="inside", font_family="Liberation Sans", params=params,
+        )
+        ((label, drawn),) = [(label, True) for label in labels.drawn] + [(label, False) for label in labels.without_letters]
+        seen.setdefault("".join(run for run, _style in label.runs), (drawn, label.cut))
+    assert seen["Region"] == (True, False)
+    assert seen["R\u2026"] == (True, True)
+    assert seen["\u2026"] == (False, True)
+
+
 def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(monkeypatch: pytest.MonkeyPatch) -> None:
     import gbdraw.diagrams.circular.assemble as assemble
     from gbdraw.render.drawers.circular.annotations import _ObstacleIndex
@@ -959,7 +1074,7 @@ def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(mo
 
     first = next(call for call in calls if call[0] == "a")
     later = next(call for call in calls if call[0] == "b")
-    (earlier,) = first[2]
+    (earlier,) = first[2].drawn
     assert len(earlier.parts) > 1
     # The slot hand-off gives the later slot the earlier curved label as one shape (F-4).
     assert _ObstacleIndex(first[1]).conflicts(earlier) == 0
@@ -1241,7 +1356,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
         "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
-        labels=LabelSizing(font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
     )
 
     def labels(*polygons):
@@ -1255,7 +1370,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
             font_family="Liberation Sans",
             params=params,
             obstacles=CircularLabelObstacles(shapes=tuple((polygon,) for polygon in polygons), clearance=3.0) if polygons else None,
-        )
+        ).drawn
 
     (default,) = labels()
     everywhere = ((-1000.0, -1000.0), (1000.0, -1000.0), (1000.0, 1000.0), (-1000.0, 1000.0))
@@ -1567,7 +1682,7 @@ def test_circular_rings_that_cannot_make_the_room_of_split_lanes_draw_and_warn()
         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
         "gc:dinucleotide_content@side=inside",
     )
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     bands = _slot_bands(drawing)
     axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
@@ -1610,7 +1725,7 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
         "in:annotations@side=inside,set_id=regions,w=20px",
         "gc:dinucleotide_content@side=inside,r=0.8",
     )
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     gc_inner, gc_outer = _slot_bands(drawing)["gc"]
     axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
@@ -1652,7 +1767,7 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
          "overlay-spanning-nothing"],
 )
 def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
-    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. The figure is drawn\."):
         _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
 
 
@@ -1740,3 +1855,157 @@ def test_circular_span_labels_keep_label_offset_beyond_every_covered_ring(span: 
             # The span reserves that room beyond itself, so the automatic ring beyond it keeps label_offset too.
             assert bands["outer_gc"][0] - far >= 4.0 - 1e-3, bands["outer_gc"][0] - far
     assert gaps and all(gap >= 4.0 - 1e-3 for _side, gap in gaps.values()), gaps
+
+
+def _islands_drawing(*regions: tuple[str, int, int, str], orientation: str, legend: str = "none", records: int = 1):
+    """Line regions with labels on each of ``records`` 10 kb circular records (one canvas), in the default outside
+    annotation slot."""
+
+    import gbdraw
+
+    drawn = [
+        SeqRecord(
+            Seq("ACGT" * 2500), id=f"r{index}", name=f"r{index}",
+            annotations={"topology": "circular", "molecule_type": "DNA"},
+        )
+        for index in range(1, records + 1)
+    ]
+    style = RegionAnnotationStyle(label_orientation=orientation, label_font_size=22)
+    annotations = tuple(
+        RegionAnnotation(
+            f"{identity}{index}", CoordinateSpan(parse_record_selector(f"#{index}"), start, end),
+            label=text, mark="line", style=style,
+        )
+        for index in range(1, records + 1)
+        for identity, start, end, text in regions
+    )
+    return gbdraw.draw_circular(
+        drawn,
+        options=gbdraw.CircularOptions(
+            legend=legend, annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),))
+        ),
+    )._drawing
+
+
+@pytest.mark.parametrize("records", (1, 2))
+def test_circular_region_labels_reach_past_the_rings_only_where_they_are_drawn(records: int) -> None:
+    """OV-2809: a horizontal label at 3 o'clock widens the figure on its side only; the room the slot keeps for its
+    labels does not become a margin on every side (one record, and two on one canvas)."""
+
+    text = "A rather long region label"
+    bare = _islands_drawing(("a", 2400, 2600, ""), orientation="horizontal", records=records)
+    labelled = _islands_drawing(("a", 2400, 2600, text), orientation="horizontal", records=records)
+    root = ElementTree.fromstring(labelled.tostring())
+    drawn = [element for element in root.iter() if element.tag.endswith("}text") and element.text == text]
+    corners = _label_ink_corners(drawn[0])
+    label_width = max(x for x, _y in corners) - min(x for x, _y in corners)
+
+    def size(drawing, key: str) -> float:
+        return float(drawing[key].removesuffix("px"))
+
+    assert len(drawn) == records
+    assert size(labelled, "height") == pytest.approx(size(bare, "height"))
+    assert size(labelled, "width") < size(bare, "width") + records * (label_width + 20.0)
+
+
+def test_circular_region_labels_of_two_lanes_do_not_cross() -> None:
+    """OV-2811: a label whose letters would cross the letters of a label in the next lane parts the lanes as for its
+    mark, so the outer label stands clear of it (A3c: "Stx2 phage" and "Tellurite resistance island")."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    drawing = _islands_drawing(
+        ("stx2", 2281, 2376, "Stx2 phage"), ("ter", 2556, 2578, "Tellurite resistance island"), orientation="arc"
+    )
+    root = ElementTree.fromstring(drawing.tostring())
+    labels = {
+        element.attrib["data-gbdraw-annotation-id"]: _drawn_label(
+            next(child for child in element if child.tag.endswith("}text")), root
+        )
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-id")
+    }
+
+    assert not any(
+        convex_polygons_intersect(part, other) for part in labels["stx21"].parts for other in labels["ter1"].parts
+    )
+
+
+def _islands_with_rings(record_count: int) -> tuple[list[SeqRecord], CircularDiagramOptions]:
+    """Records with a highlight set and a labelled bracket set, one comparison ring, and no track stack (OV-2820)."""
+
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    records = [SeqRecord(Seq("ACGT" * 2500), id=f"r{index}", name=f"r{index}") for index in range(1, record_count + 1)]
+    hits = pd.DataFrame(
+        [("q", record.id, 90.0, 4000, 0, 0, 1, 4000, 1, 4000, 1e-20, 500.0) for record in records],
+        columns=COMPARISON_COLUMNS,
+    )
+    options = CircularDiagramOptions(
+        annotations=AnnotationOptions(
+            sets=tuple(
+                AnnotationSet(
+                    set_id,
+                    tuple(
+                        RegionAnnotation(
+                            f"{set_id}{index}",
+                            CoordinateSpan(parse_record_selector(f"#{index}"), 5000, 6000),
+                            label=f"island {index}",
+                            mark=mark,
+                        )
+                        for index in range(1, record_count + 1)
+                    ),
+                )
+                for set_id, mark in (("tint", "highlight"), ("islands", "bracket"))
+            )
+        ),
+        conservation_dataframes=[hits],
+        conservation_reference="subject",
+    )
+    return records, options
+
+
+@pytest.mark.parametrize("record_count", [1, 2])
+def test_circular_region_sets_are_drawn_with_comparison_rings_and_no_stack(
+    record_count: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Rings make the engine build the track list; the sets still get their slots, as without rings (OV-2820)."""
+
+    records, options = _islands_with_rings(record_count)
+    if record_count == 1:
+        drawing = build_circular_diagram(records[0], options=options)
+    else:
+        drawing = build_circular_multi_diagram(records, options=options)
+
+    root = ElementTree.fromstring(drawing.tostring())
+    drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
+    expected = {f"{set_id}{index}" for set_id in ("tint", "islands") for index in range(1, record_count + 1)}
+    assert expected <= drawn
+    assert "not referenced by a circular track slot" not in caplog.text
+    ring_ids = {
+        slot["slotId"] for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+    assert "conservation_1" in ring_ids
+
+
+def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack(caplog: pytest.LogCaptureFixture) -> None:
+    """Two depth tracks also make the engine build the track list; the sets keep their slots (OV-2820)."""
+
+    from gbdraw.api.options import DepthTrackInput
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    depth = pd.DataFrame({"record": ["r1"] * 10000, "pos": range(1, 10001), "depth": [20] * 10000})
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=_islands_with_rings(1)[1].annotations,
+            depth_tracks=(DepthTrackInput(source=depth, label="a"), DepthTrackInput(source=depth, label="b")),
+            depth_window=100,
+            depth_step=100,
+        ),
+    )
+
+    root = ElementTree.fromstring(drawing.tostring())
+    drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
+    assert {"tint1", "islands1"} <= drawn
+    assert "not referenced by a circular track slot" not in caplog.text

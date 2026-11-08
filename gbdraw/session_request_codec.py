@@ -80,6 +80,8 @@ from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+    LEGACY_SCALAR_AXIS_LABEL_SECTIONS,
+    LEGACY_SCALAR_AXIS_LABELS,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import SESSION_ID_RE
@@ -3114,6 +3116,12 @@ def migrate_legacy_full_config(
     """
 
     migrated = deepcopy(dict(value))
+    objects = migrated.get("objects")
+    if isinstance(objects, dict):
+        for section_name in LEGACY_SCALAR_AXIS_LABEL_SECTIONS:
+            section = objects.get(section_name)
+            if isinstance(section, dict):
+                section.setdefault("axis_labels", LEGACY_SCALAR_AXIS_LABELS)
     canvas = migrated.get("canvas")
     if not isinstance(canvas, dict):
         return migrated
