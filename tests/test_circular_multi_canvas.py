@@ -22,7 +22,7 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
-from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
+from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest, RecordPresentation
 from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import LegendMeasurement
@@ -30,12 +30,14 @@ from gbdraw.core.text import drawn_text_box
 from gbdraw.diagrams.circular.assemble import CircularAssemblyResult, circular_track_slot_geometry
 from gbdraw.diagrams.circular.parts import CircularRecordData
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.layout.composition import (
     DEFAULT_COMPOSITION_SPACING,
     CompositionPlacement,
     CompositionPlan,
 )
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
@@ -2006,6 +2008,94 @@ def test_multi_record_positions_accept_record_id_selectors(
         assert record_group is not None
         marker_group = record_group.find(f"./svg:g[@id='marker_{expected}']", ns)
         assert marker_group is not None
+
+
+def _write_two_cds_record(path: Path, record_id: str) -> SeqRecord:
+    """A record whose first CDS has the same source feature index as the other record's."""
+
+    record = SeqRecord(Seq("ATGC" * 750), id=record_id, name=record_id, annotations={"molecule_type": "DNA"})
+    record.features = [
+        SeqFeature(FeatureLocation(100, 700, strand=1), type="CDS",
+                   qualifiers={"protein_id": [f"{record_id}_P1"], "product": [f"{record_id} one"]}),
+        SeqFeature(FeatureLocation(1200, 1800, strand=1), type="CDS",
+                   qualifiers={"protein_id": [f"{record_id}_P2"], "product": [f"{record_id} two"]}),
+    ]
+    SeqIO.write(record, path, "genbank")
+    return record
+
+
+@pytest.mark.circular
+def test_a_moved_record_keeps_its_own_feature_edits(tmp_path: Path) -> None:
+    """OV-2907: a record that a position moves keeps its edits; another record does not get them."""
+
+    first = _write_two_cds_record(tmp_path / "first.gb", "first")
+    second = _write_two_cds_record(tmp_path / "second.gb", "second")
+    overrides = tmp_path / "overrides.tsv"
+    overrides.write_text(
+        "record\tfeature_selector\tlabel_visibility\tlabel_text\nsecond\tprotein_id=second_P1\ton\tSECOND_EDIT\n",
+        encoding="utf-8",
+    )
+    circular_cli_module.circular_main(
+        ["--gbk", str(tmp_path / "first.gb"), str(tmp_path / "second.gb"),
+         "--feature_override_table", str(overrides),
+         "--multi_record_canvas", "--multi_record_position", "second@1", "--multi_record_position", "first@2",
+         "-o", str(tmp_path / "moved")]
+    )
+    root = ET.parse(tmp_path / "moved.svg").getroot()
+    edited = [
+        element for element in root.iter()
+        if element.get("data-label-feature-id") and "SECOND_EDIT" in "".join(element.itertext())
+    ]
+    second_hash = compute_feature_hash(second.features[0], record_id="second")
+    assert compute_feature_hash(first.features[0], record_id="first") != second_hash
+    assert [element.get("data-label-feature-id") for element in edited] == [second_hash]
+
+
+@pytest.mark.circular
+def test_multi_record_positions_move_each_records_own_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-2907: a record's edits, display transform and presentation go with it when a position moves it."""
+
+    records = [_build_record("order_a", 20), _build_record("order_b", 220), _build_record("order_c", 420)]
+    received: list[tuple[str, str, int, str | None]] = []
+
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        context = kwargs["_record_context"]
+        (record_features,) = inputs._resolved_record_features
+        received.append((
+            str(gb_record.id),
+            record_features.record_key,
+            context.record_transform.source_base,
+            context.record_presentation.label,
+        ))
+        canvas = Drawing(filename=f"{gb_record.id}.svg", size=("400px", "300px"), viewBox="0 0 400 300", debug=False)
+        marker = canvas.g(id=f"marker_{gb_record.id}")
+        marker.add(canvas.circle(center=(10, 10), r=1))
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
+        return _with_mock_circular_result(canvas)
+
+    monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram_from_record", fake_single)
+    assemble_circular_diagram_from_records(
+        records,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            _resolved_record_features=tuple(
+                ResolvedRecordFeatureInputs(record_key=str(record.id)) for record in records
+            ),
+        ),
+        layout=CircularMultiRecordOptions(multi_record_positions=["order_c@1", "order_a@2", "order_b@2"]),
+        _record_transforms=[
+            RecordDisplayTransform(len(record.seq), index * 10 + 1, 1, None, True) for index, record in enumerate(records)
+        ],
+        _record_presentations=[RecordPresentation(label=f"label_{record.id}") for record in records],
+    )
+
+    assert received == [
+        ("order_c", "order_c", 21, "label_order_c"),
+        ("order_a", "order_a", 1, "label_order_a"),
+        ("order_b", "order_b", 11, "label_order_b"),
+    ]
 
 
 @pytest.mark.circular

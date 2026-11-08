@@ -3086,9 +3086,18 @@ def assemble_circular_diagram_from_records(
     else:
         ordered_indices = list(range(len(records)))
         row_counts = _resolve_multi_record_default_row_counts(len(records))
+    # Every per-record input aligned with ``records`` follows it into the drawn order, so a
+    # moved record keeps its own edits, display transform and presentation (OV-2907).
     records = [records[idx] for idx in ordered_indices]
     if record_depth_tracks is not None:
         record_depth_tracks = [record_depth_tracks[idx] for idx in ordered_indices]
+    record_features = tuple(inputs._resolved_record_features[idx] for idx in ordered_indices) if (
+        inputs._resolved_record_features
+    ) else ()
+    if _record_transforms is not None:
+        _record_transforms = [_record_transforms[idx] for idx in ordered_indices]
+    if _record_presentations is not None:
+        _record_presentations = [_record_presentations[idx] for idx in ordered_indices]
     if ordered_indices != list(range(len(ordered_indices))):
         display_index_by_input = {
             input_index: display_index
@@ -3306,7 +3315,7 @@ def assemble_circular_diagram_from_records(
                 alignment_length=alignment_length,
                 _resolved_feature_inputs=resolved_feature_inputs,
                 _resolved_record_features=(
-                    (inputs._resolved_record_features[record_index],) if inputs._resolved_record_features else ()
+                    (record_features[record_index],) if record_features else ()
                 ),
             ),
             _record_context=CircularRecordContext(
@@ -3419,7 +3428,7 @@ def assemble_circular_diagram_from_records(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=legend_canvas_config,
-        record_features=inputs._resolved_record_features,
+        record_features=record_features,
     )
     legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     if legend_effective != "none":
