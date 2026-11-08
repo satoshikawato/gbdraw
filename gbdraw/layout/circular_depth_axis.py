@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, NamedTuple, Protocol
+from dataclasses import dataclass, replace
+from typing import NamedTuple, Protocol
 
 from gbdraw.auto_sizes import scalar_axis_tick_font_size
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
@@ -33,8 +33,16 @@ class ScalarAxisTick(NamedTuple):
     label: str | None
 
 
-class DepthAxisSource(Protocol):
-    """What the radial layout reads of a depth track: its axis, its ticks and their font size."""
+class TickFontSource(Protocol):
+    """A scalar axis's tick font size: set, or none for the Auto size of its track."""
+
+    @property
+    def tick_font_size(self) -> float | None: ...
+
+
+class ScalarAxisSource(Protocol):
+    """What the radial layout reads of a scalar track (depth, GC content in percent): its axis, its ticks and their
+    font size."""
 
     @property
     def show_axis(self) -> bool: ...
@@ -50,10 +58,10 @@ class DepthAxisSource(Protocol):
 
 
 @dataclass(frozen=True)
-class DepthAxisStyle:
-    """A depth track's axis and ticks as a value: a render stage that replans the
-    radial layout takes this instead of the depth configurator, so a depth
-    window or scale change does not rebuild it."""
+class ScalarAxisStyle:
+    """A scalar track's axis and ticks as a value: a render stage that replans the
+    radial layout takes this instead of the track's configurator, so a window
+    or scale change does not rebuild it."""
 
     show_axis: bool
     show_ticks: bool
@@ -61,7 +69,7 @@ class DepthAxisStyle:
     axis_labels: ScalarAxisLabelStyle
 
     @classmethod
-    def of(cls, source: DepthAxisSource) -> DepthAxisStyle:
+    def of(cls, source: ScalarAxisSource) -> ScalarAxisStyle:
         return cls(
             show_axis=bool(source.show_axis),
             show_ticks=bool(source.show_ticks),
@@ -71,34 +79,77 @@ class DepthAxisStyle:
 
 
 @dataclass(frozen=True)
-class DepthAxisFootprint:
+class ScalarAxisFootprint:
     radial_inner_extra_px: float
     radial_outer_extra_px: float
 
 
 def depth_axis_tick_font_size_px(
-    depth_config: Any,
+    axis: TickFontSource,
     track_width_px: float,
 ) -> float:
-    tick_font_size = getattr(depth_config, "tick_font_size", None)
-    if tick_font_size is not None:
-        return max(0.0, float(tick_font_size))
+    """The tick font of a Circular scalar axis on a track ``track_width_px`` wide: its own size, else the Auto
+    size of that width."""
+
+    if axis.tick_font_size is not None:
+        return max(0.0, float(axis.tick_font_size))
     return scalar_axis_tick_font_size("circular", track_width_px)
 
 
-def resolve_depth_axis_footprint(
-    depth_config: DepthAxisSource,
+def scalar_axis_footprint(
+    axis: ScalarAxisSource,
     track_width_px: float,
-) -> DepthAxisFootprint:
-    if not bool(depth_config.show_axis):
-        return DepthAxisFootprint(0.0, 0.0)
+    *,
+    edge_px: float = 0.5 * DEPTH_AXIS_STROKE_WIDTH_PX,
+) -> ScalarAxisFootprint:
+    """How far a Circular scalar axis on a track ``track_width_px`` wide paints past each edge of its band: the
+    ``edge_px`` its strokes take, or half a label line when it draws numbered tick labels."""
 
-    extra = 0.5 * DEPTH_AXIS_STROKE_WIDTH_PX
+    if not bool(axis.show_axis):
+        return ScalarAxisFootprint(0.0, 0.0)
+
+    extra = float(edge_px)
     # Numbered tick labels are centred on their ticks, so the outermost and innermost ones reach half a line past
     # the band; the range label sits inside the band.
-    if bool(depth_config.show_ticks) and depth_config.axis_labels == "numbered":
-        extra = max(extra, 0.5 * depth_axis_tick_font_size_px(depth_config, track_width_px))
-    return DepthAxisFootprint(extra, extra)
+    if bool(axis.show_ticks) and axis.axis_labels == "numbered":
+        extra = max(extra, 0.5 * depth_axis_tick_font_size_px(axis, track_width_px))
+    return ScalarAxisFootprint(extra, extra)
+
+
+@dataclass(frozen=True)
+class CircularScalarAxes:
+    """The axes of a Circular record's scalar tracks, which the radial layout keeps room for and the drawers draw:
+    the depth track's and, in percent mode, the GC content track's (a deviation GC track draws no axis)."""
+
+    depth: ScalarAxisStyle | None = None
+    gc_content: ScalarAxisStyle | None = None
+
+    def with_gc_font_of_depth(self, depth_track_width_px: float | None) -> CircularScalarAxes:
+        """These axes with the GC content axis's tick font set as drawn: a GC axis without its own size beside a
+        depth axis with ticks, on a track ``depth_track_width_px`` wide (requested, before any narrowing), takes the
+        depth axis's size, so the two axes read alike; otherwise it keeps the Auto size of its own track."""
+
+        gc, depth = self.gc_content, self.depth
+        if (
+            gc is None
+            or gc.tick_font_size is not None
+            or depth is None
+            or not (depth.show_axis and depth.show_ticks)
+            or depth_track_width_px is None
+            or depth_track_width_px <= 0
+        ):
+            return self
+        return replace(self, gc_content=replace(gc, tick_font_size=depth_axis_tick_font_size_px(depth, depth_track_width_px)))
+
+    def footprint(self, renderer: str, track_width_px: float) -> ScalarAxisFootprint | None:
+        """How far the axis of a ``renderer`` track paints past its band; none for a track without an axis. The
+        GC band's border and axis strokes lie on its edges and keep no room of their own (``edge_px`` 0)."""
+
+        if renderer == "depth" and self.depth is not None:
+            return scalar_axis_footprint(self.depth, track_width_px)
+        if renderer == "dinucleotide_content" and self.gc_content is not None:
+            return scalar_axis_footprint(self.gc_content, track_width_px, edge_px=0.0)
+        return None
 
 
 # The range label of a Circular scalar axis runs clockwise along the circle inside the band: its alphabetic
@@ -186,16 +237,18 @@ def scalar_axis_ink(
 
 __all__ = [
     "CircularRangeLabel",
+    "CircularScalarAxes",
     "circular_range_label",
-    "DepthAxisSource",
-    "DepthAxisStyle",
+    "ScalarAxisSource",
+    "TickFontSource",
+    "ScalarAxisStyle",
     "DEPTH_AXIS_SMALL_TICK_SIZE_PX",
     "DEPTH_AXIS_STROKE_WIDTH_PX",
     "DEPTH_AXIS_TICK_SIZE_PX",
     "SCALAR_AXIS_LABEL_GAP_PX",
     "ScalarAxisTick",
-    "DepthAxisFootprint",
+    "ScalarAxisFootprint",
     "depth_axis_tick_font_size_px",
-    "resolve_depth_axis_footprint",
+    "scalar_axis_footprint",
     "scalar_axis_ink",
 ]

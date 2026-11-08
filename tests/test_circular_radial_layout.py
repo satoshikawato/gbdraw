@@ -13,7 +13,7 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
-from gbdraw.layout.circular_depth_axis import resolve_depth_axis_footprint
+from gbdraw.layout.circular_depth_axis import CircularScalarAxes, ScalarAxisStyle, scalar_axis_footprint
 from gbdraw.exceptions import ValidationError
 from gbdraw.diagrams.circular.radial_layout import (
     build_circular_feature_layout,
@@ -620,10 +620,10 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
                 width=ScalarSpec(width_px, "px"),
             )
         ],
-        depth_config=depth_config,
+        scalar_axes=CircularScalarAxes(depth=ScalarAxisStyle.of(depth_config)),
     )
     depth = layout.tracks[0]
-    footprint = resolve_depth_axis_footprint(depth_config, width_px)
+    footprint = scalar_axis_footprint(depth_config, width_px)
 
     assert depth.draw_band_px is not None
     assert depth.reserved_band_px is not None
@@ -648,10 +648,56 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
                 width=ScalarSpec(width_px, "px"),
             )
         ],
-        depth_config=hidden_axis_config,
+        scalar_axes=CircularScalarAxes(depth=ScalarAxisStyle.of(hidden_axis_config)),
     )
     hidden_axis_depth = hidden_axis_layout.tracks[0]
     assert hidden_axis_depth.reserved_band_px == hidden_axis_depth.draw_band_px
+
+
+@pytest.mark.parametrize(
+    ("gc_font", "depth_font", "expected_font"),
+    [
+        # Without its own size the GC axis takes the depth axis's: its own, or the Auto size of the depth track.
+        (None, None, 5.28),
+        (None, 7.0, 7.0),
+        # Its own size wins.
+        (9.0, 7.0, 9.0),
+    ],
+)
+def test_a_percent_gc_slot_reserves_half_its_numbered_label_line_in_the_font_it_is_drawn_in(
+    gc_font: float | None, depth_font: float | None, expected_font: float
+) -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 200.0
+
+    def axis(tick_font_size: float | None, axis_labels: str = "numbered") -> ScalarAxisStyle:
+        return ScalarAxisStyle(show_axis=True, show_ticks=True, tick_font_size=tick_font_size, axis_labels=axis_labels)
+
+    def layout(gc_labels: str):
+        return resolve_circular_radial_layout(
+            total_length=1000,
+            geometry=canvas_config.geometry(),
+            cfg=cfg,
+            slots=[
+                CircularTrackSlot(id="depth", renderer="depth", radius=ScalarSpec(0.8, "factor"), width=ScalarSpec(24.0, "px")),
+                CircularTrackSlot(
+                    id="gc", renderer="dinucleotide_content", radius=ScalarSpec(0.6, "factor"),
+                    width=ScalarSpec(40.0, "px"), params={"nt": "GC"},
+                ),
+            ],
+            scalar_axes=CircularScalarAxes(depth=axis(depth_font), gc_content=axis(gc_font, gc_labels)),
+        )
+
+    numbered = layout("numbered")
+    gc = next(slot for slot in numbered.tracks if slot.id == "gc")
+    assert numbered.scalar_axes is not None and numbered.scalar_axes.gc_content is not None
+    assert numbered.scalar_axes.gc_content.tick_font_size == pytest.approx(expected_font)
+    assert gc.draw_band_px is not None and gc.reserved_band_px is not None
+    assert gc.reserved_band_px.outer_px - gc.draw_band_px.outer_px == pytest.approx(0.5 * expected_font)
+    assert gc.draw_band_px.inner_px - gc.reserved_band_px.inner_px == pytest.approx(0.5 * expected_font)
+    # The range label sits inside the band: the band keeps no room past it.
+    ranged = next(slot for slot in layout("range").tracks if slot.id == "gc")
+    assert ranged.reserved_band_px == ranged.draw_band_px
 
 
 @pytest.mark.parametrize("side", ["inside", "outside"])

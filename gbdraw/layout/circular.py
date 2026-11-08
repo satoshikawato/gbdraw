@@ -10,6 +10,7 @@ from ._immutable import freeze_layout_mapping
 
 if TYPE_CHECKING:
     from ..config.models import CircularRenderProfile
+    from .circular_depth_axis import CircularScalarAxes
 
 
 LAYOUT_EPSILON = 1e-6
@@ -267,6 +268,8 @@ class CircularRadialLayout:
     slots: tuple[CircularResolvedSlot, ...]
     definition_reserved_band_px: RadialBand | None
     outer_content_radius_px: float
+    # The scalar axes the layout kept room for, with the GC axis font they are drawn in.
+    scalar_axes: CircularScalarAxes | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "slots", tuple(self.slots))
