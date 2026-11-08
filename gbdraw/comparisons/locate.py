@@ -1084,7 +1084,7 @@ def plan_locate(
 class LocateDrawnRecord:
     """One record of a row of the drawing: its windows in column order, numbered 1..k over the row's windows.
 
-    ``genes`` are the protein IDs of the reference genes its windows hold.
+    ``window_genes`` are the protein IDs of the reference genes each window holds, in the order of ``windows``.
     """
 
     file_key: str
@@ -1092,7 +1092,7 @@ class LocateDrawnRecord:
     record_id: str
     record_length: int
     windows: tuple[RecordWindow, ...]
-    genes: frozenset[str]
+    window_genes: tuple[frozenset[str], ...]
 
     @property
     def whole(self) -> bool:
@@ -1109,21 +1109,22 @@ class LocateDrawnRow:
     records: tuple[LocateDrawnRecord, ...]
 
 
-# A record of the drawing as (row, record) indexes, 0-based.
-LocateRecordPlace = tuple[int, int]
+# A window of the drawing as (row, record, window) indexes, 0-based.
+LocateWindowPlace = tuple[int, int, int]
 
 
 @dataclass(frozen=True)
 class LocateDrawing:
-    """The rows of the drawing a plan gives, and the record pairs it compares.
+    """The rows of the drawing a plan gives, and the window pairs it compares.
 
     The first row is the reference; each target File with a selected window
-    follows in plan order. ``pairs`` are the records of adjacent rows that
-    share a reference gene, upper row first.
+    follows in plan order. ``pairs`` are the windows of adjacent rows that
+    share a reference gene (PD-OI-123), upper row first, in row, record and
+    window order.
     """
 
     rows: tuple[LocateDrawnRow, ...]
-    pairs: tuple[tuple[LocateRecordPlace, LocateRecordPlace], ...]
+    pairs: tuple[tuple[LocateWindowPlace, LocateWindowPlace], ...]
 
 
 _DrawnWindow = tuple[str, str, int, RecordWindow, frozenset[str]]
@@ -1147,7 +1148,7 @@ def _drawn_row(file_key: str, windows: Sequence[_DrawnWindow]) -> LocateDrawnRow
                     RecordWindow(item[3].start, item[3].end, item[3].reverse_complement, column)
                     for column, item in items
                 ),
-                genes=frozenset().union(*(item[4] for _column, item in items)),
+                window_genes=tuple(item[4] for _column, item in items),
             )
             for key, items in grouped.items()
         ),
@@ -1187,12 +1188,18 @@ def locate_drawing(plan: LocatePlan) -> LocateDrawing:
         for file_plan in plan.files
         if file_plan.windows
     )
+    places = [
+        [((row, record_index, window_index), genes)
+         for record_index, record in enumerate(drawn.records)
+         for window_index, genes in enumerate(record.window_genes)]
+        for row, drawn in enumerate(rows)
+    ]
     pairs = tuple(
-        ((row, upper_index), (row + 1, lower_index))
+        (upper, lower)
         for row in range(len(rows) - 1)
-        for upper_index, upper in enumerate(rows[row].records)
-        for lower_index, lower in enumerate(rows[row + 1].records)
-        if upper.genes & lower.genes
+        for upper, upper_genes in places[row]
+        for lower, lower_genes in places[row + 1]
+        if upper_genes & lower_genes
     )
     return LocateDrawing(tuple(rows), pairs)
 
@@ -1510,7 +1517,7 @@ __all__ = [
     "LocateProgramName",
     "LocateQuery",
     "LocateRecord",
-    "LocateRecordPlace",
+    "LocateWindowPlace",
     "LocateReference",
     "LocateSearchJob",
     "LocateSearchPlan",

@@ -52,6 +52,7 @@ from gbdraw.io.cli_tables import (
     records_table_text,
 )
 from gbdraw.io.regions import RecordWindow
+from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.locate import LocateFileInput, LocateSearchInput, locate_search_plan_json, locate_windows_json
 
 _FAKE_LOSAT = """#!{python}
@@ -166,8 +167,8 @@ def _genomes(tmp_path: Path) -> dict[str, Path]:
     return paths
 
 
-def _run(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> int:
-    monkeypatch.setattr(sys, "argv", ["gbdraw", "locate", *argv])
+def _run(argv: list[str], monkeypatch: pytest.MonkeyPatch, command: str = "locate") -> int:
+    monkeypatch.setattr(sys, "argv", ["gbdraw", command, *argv])
     try:
         cli.main()
     except SystemExit as exc:
@@ -213,10 +214,17 @@ def _files(paths: dict[str, Path], *names: str) -> list[LocateInputFile]:
     return [LocateInputFile(str(paths[name]), str(paths[name]), None, None) for name in names]
 
 
-def _plan(paths: dict[str, Path], losat: str, targets: tuple[str, ...]) -> LocatePlan:
+# The reference span as one window, and as two windows (g1..g3 and g4..g6).
+ONE_WINDOW = (RecordWindow(1501, 8100),)
+TWO_WINDOWS = (RecordWindow(1501, 4500), RecordWindow(4501, 8100, column=2))
+
+
+def _plan(
+    paths: dict[str, Path], losat: str, targets: tuple[str, ...], windows: tuple[RecordWindow, ...] = ONE_WINDOW
+) -> LocatePlan:
     [reference] = _files(paths, "ref")
     search = prepare_locate_search(
-        reference, _files(paths, *targets), record=None, windows=[RecordWindow(1501, 8100)], program="tlosatn"
+        reference, _files(paths, *targets), record=None, windows=list(windows), program="tlosatn"
     )
     outcomes = [
         LocateSearchResult(job.file_key, run_losat_search("tlosatn", job.query_fasta, job.subject_fasta, losat_bin=losat))
@@ -237,12 +245,34 @@ def test_the_plan_finds_the_genes_reversed_and_split_over_contigs(tmp_path: Path
     assert [cds.locus_tag for cds in plan.reference.cut_genes] == ["g7"]
     drawing = locate_drawing(plan)
     assert [[record.record_id for record in row.records] for row in drawing.rows] == [["REF"], ["A1"], ["B1", "B2"]]
-    assert drawing.pairs == (((0, 0), (1, 0)), ((1, 0), (2, 0)), ((1, 0), (2, 1)))
+    assert drawing.pairs == (((0, 0, 0), (1, 0, 0)), ((1, 0, 0), (2, 0, 0)), ((1, 0, 0), (2, 1, 0)))
 
 
-def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(tmp_path: Path) -> None:
+def test_the_drawing_pairs_only_the_windows_that_share_a_reference_gene(tmp_path: Path) -> None:
     paths = _genomes(tmp_path)
-    plan = _plan(paths, _fake_losat(tmp_path), ("a", "b"))
+    drawing = locate_drawing(_plan(paths, _fake_losat(tmp_path), ("b", "a"), TWO_WINDOWS))
+
+    assert [[len(record.windows) for record in row.records] for row in drawing.rows] == [[2], [1, 1], [1]]
+    # REF 1501-4500 holds g1..g3 (B1), REF 4501-8100 holds g4..g6 (B2); A1 holds all six.
+    assert drawing.pairs == (
+        ((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 1, 0)), ((1, 0, 0), (2, 0, 0)), ((1, 1, 0), (2, 0, 0)),
+    )
+    assert locate_unit_pairs(drawing) == ((0, 2), (1, 3), (2, 4), (3, 4))
+
+
+@pytest.mark.parametrize(
+    ("targets", "windows", "comparisons"),
+    [
+        (("a", "b"), ONE_WINDOW, [("REF", "A1"), ("A1", "B1"), ("A1", "B2")]),
+        (("b", "a"), TWO_WINDOWS, [("REF:1501-4500", "B1"), ("REF:4501-8100", "B2"), ("B1", "A1"), ("B2", "A1")]),
+    ],
+    ids=["one-window", "two-windows"],
+)
+def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(
+    targets: tuple[str, ...], windows: tuple[RecordWindow, ...], comparisons: list[tuple[str, str]], tmp_path: Path
+) -> None:
+    paths = _genomes(tmp_path)
+    plan = _plan(paths, _fake_losat(tmp_path), targets, windows)
     drawing = locate_drawing(plan)
     inputs = {str(path): LocateInputFile(str(path), str(path), None, None) for path in paths.values()}
     records_text, comparisons_text = locate_tables(drawing, inputs, tmp_path)
@@ -259,7 +289,9 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(tmp_path
                            display=record.display, windows=tuple(record.windows))
 
     assert [without_key(record) for record in derived.records] == [without_key(record) for record in from_table]
-    assert [record.presentation.label for record in derived.records] == ["ref.gb", "a.gb", "b.gb", None]
+    assert [record.presentation.label for record in derived.records][0] == "ref.gb"
+    rows = read_comparisons_table(str(tmp_path / "p.comparisons.tsv")).rows
+    assert [(row.query, row.subject) for row in rows] == comparisons
 
     table_request = LinearDiagramRequest(
         records=from_table,
@@ -269,7 +301,7 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(tmp_path
     units = resolve_request_records(table_request).records
     table_pairs = tuple(
         pair
-        for row in read_comparisons_table(str(tmp_path / "p.comparisons.tsv")).rows
+        for row in rows
         for pair in comparison_unit_pairs(*(
             _resolve_linear_comparison_selector(units, selector, table_path="t", row_number=row.row_number, column="q")
             for selector in (row.query, row.subject)
@@ -411,3 +443,114 @@ def test_the_worker_payload_gives_the_plan_the_command_writes(tmp_path: Path, mo
     assert written.pop("runtime")["program"] == "tblastn"
     assert reply["plan"].pop("runtime") is None
     assert json.loads(json.dumps(reply["plan"])) == written
+
+    # The window pairs the new drawing compares are the pairs the command writes as its comparisons table.
+    a, b = (str(paths[name]) for name in ("a", "b"))
+    assert [(pair["query"]["recordKey"], pair["subject"]["recordKey"]) for pair in reply["pairs"]] == [
+        ("reference", f"{a}#1"), (f"{a}#1", f"{b}#1"), (f"{a}#1", f"{b}#2"),
+    ]
+    assert [(row.query, row.subject) for row in read_comparisons_table(str(prefix) + ".comparisons.tsv").rows] == [
+        ("REF", "A1"), ("A1", "B1"), ("A1", "B2"),
+    ]
+    windows = {(file["file_key"], w["record_key"]): w["window"] for file in written["files"] for w in file["windows"]}
+    assert all(
+        (side["start"], side["end"]) == (windows[(side["fileKey"], side["recordKey"])]["start"],
+                                         windows[(side["fileKey"], side["recordKey"])]["end"])
+        for pair in reply["pairs"] for side in (pair["query"], pair["subject"]) if side["recordKey"] != "reference"
+    )
+
+
+def _losatp_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``gbdraw linear`` resolves the stand-in LOSAT (or ``GBDRAW_TEST_LOSAT_BIN``) as if it were the installed
+    one, so the receipt's command runs as written, without ``--losat_bin``."""
+
+    from gbdraw.comparisons import losat_runtime
+
+    losat = os.environ.get("GBDRAW_TEST_LOSAT_BIN") or _fake_losat(tmp_path)
+    monkeypatch.setattr(
+        losat_runtime, "resolve_losat_runtime", lambda *_args, **_kwargs: losat_runtime.LosatRuntime("losat", losat, "explicit")
+    )
+
+
+def _locate_two_windows(paths: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    prefix = tmp_path / "P"
+    args = _locate_args(paths, _fake_losat(tmp_path), prefix, "b", "a")
+    args[args.index("1501-8100")] = "1501-4500"
+    assert _run([*args, "--reference_region", "4501-8100"], monkeypatch) == 0
+    return prefix
+
+
+def test_the_receipts_command_draws_the_plan_with_only_the_listed_window_pairs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    paths = _genomes(tmp_path)
+    _locate_two_windows(paths, tmp_path, monkeypatch)
+    _losatp_runtime(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    caplog.set_level("INFO")
+
+    # PD-OI-123: `gbdraw linear --records_table PREFIX.records.tsv --comparisons_table PREFIX.comparisons.tsv
+    # --losat losatp -o FIG` draws the plan.
+    command = "--records_table P.records.tsv --comparisons_table P.comparisons.tsv --losat losatp -o FIG".split()
+    assert _run(command, monkeypatch, "linear") == 0
+    assert (tmp_path / "FIG.svg").is_file()
+    assert not [record.getMessage() for record in caplog.records if "no protein match" in record.getMessage()]
+
+    # The Session stores the four window pairs, and replays them.
+    assert _run([*command[:-1], "FIG2", "--save_session"], monkeypatch, "linear") == 0
+    session = drawing_view(json.loads((tmp_path / "FIG2.gbdraw-session.json").read_text(encoding="utf-8")))
+    [protein] = [item for item in session["renderRequest"]["comparisons"] if item["kind"] == "generatedProteinComparison"]
+    assert protein["mode"] == "pairwise"
+    assert [(pair["queryRecordIndex"], pair["subjectRecordIndex"]) for pair in protein["pairs"]] == [
+        (0, 2), (1, 3), (2, 4), (3, 4)
+    ]
+    assert _run(["--session", "FIG2.gbdraw-session.json", "-o", "FIG3"], monkeypatch, "linear") == 0
+    assert (tmp_path / "FIG3.svg").read_bytes() == (tmp_path / "FIG2.svg").read_bytes()
+
+
+def test_a_comparisons_table_with_another_losatp_mode_names_the_pairwise_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = _genomes(tmp_path)
+    prefix = _locate_two_windows(paths, tmp_path, monkeypatch)
+    _losatp_runtime(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    assert _run([
+        "--records_table", f"{prefix}.records.tsv", "--comparisons_table", f"{prefix}.comparisons.tsv",
+        "--losat", "losatp", "--losatp_mode", "similarity_groups", "-o", str(tmp_path / "FIG"),
+    ], monkeypatch, "linear") == 1
+    error = capsys.readouterr().err
+    assert "source=losat rows list the pairs to compare" in error and "use --losatp_mode pairwise" in error
+
+
+def test_a_comparisons_table_names_a_window_by_its_record_and_span(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.api.record_planning import resolve_linear_options
+
+    paths = _genomes(tmp_path)
+    prefix = _locate_two_windows(paths, tmp_path, monkeypatch)
+    units = resolve_request_records(LinearDiagramRequest(
+        records=record_input_manifest_from_table(f"{prefix}.records.tsv").records, layout=LinearMultiRecordOptions(),
+    )).records
+
+    def resolve(selector: str) -> tuple[int, ...]:
+        return _resolve_linear_comparison_selector(units, selector, table_path="t", row_number=1, column="query")
+
+    assert [resolve(selector) for selector in ("REF", "#1", "REF:1501-4500", "#1:4501-8100", "B2", "#3:2101-6403")] == [
+        (0, 1), (0, 1), (0,), (1,), (3,), (3,),
+    ]
+    with pytest.raises(ValidationError, match=r"record REF has no window 1-100; its windows are 1501-4500, 4501-8100\."):
+        resolve("REF:1-100")
+    with pytest.raises(ValidationError, match="unresolved record selector 'REF:4501-8100:rc'"):
+        resolve("REF:4501-8100:rc")
+    # A record ID that reads as a region still names its record.
+    named = [_record("chr1:1-100", "ACGT"), _record("chr2", "ACGT")]
+    assert _resolve_linear_comparison_selector(named, "chr1:1-100", table_path="t", row_number=1, column="query") == (0,)
+    # A comparison file compares whole drawn records, also when a selector names one window.
+    blast = tmp_path / "pair.tsv"
+    blast.write_text("q\ts\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t200\n", encoding="utf-8")
+    table = tmp_path / "file.tsv"
+    table.write_text(f"blast\tquery\tsubject\n{blast}\tREF:1501-4500\tB1\n", encoding="utf-8")
+    layout = LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2", "#5@3"))
+    with pytest.raises(ValidationError, match="drawn in several windows"):
+        resolve_linear_options(LinearDiagramOptions(comparison_table_file=str(table)), records=units, layout=layout)

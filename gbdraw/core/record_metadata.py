@@ -269,6 +269,17 @@ def _copy_source_feature_identity(
 # is ``gbdraw_record_key``.
 WINDOW_OF_ANNOTATION = "gbdraw_window_of"
 
+# The span of its record a drawn unit with a window shows, as ``(start, end)``; ``start > end`` runs across the
+# origin. A comparisons table names a window by it.
+WINDOW_SPAN_ANNOTATION = "gbdraw_window_span"
+
+
+def record_window_span(record: object) -> tuple[int, int] | None:
+    """The span of its record ``record`` draws as a window, or ``None`` for a record drawn whole."""
+
+    span = (getattr(record, "annotations", None) or {}).get(WINDOW_SPAN_ANNOTATION)
+    return None if span is None else (int(span[0]), int(span[1]))
+
 
 def record_identity_key(record: object) -> str | None:
     """The key of the record ``record`` draws: the record's own, also for a unit that is one of its windows.

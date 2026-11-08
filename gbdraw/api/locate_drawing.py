@@ -3,7 +3,7 @@
 The drawing's first row holds the reference windows, labelled with the
 reference File's name; each target File with a selected window has one row
 with its windows in the plan's order, labelled with the File's name
-(:func:`gbdraw.comparisons.locate.locate_drawing`). Records of adjacent rows
+(:func:`gbdraw.comparisons.locate.locate_drawing`). Windows of adjacent rows
 that share a reference gene are compared by LOSAT. The source drawing's
 settings and edits that apply to the new records are carried as New drawing
 from a region carries them (:func:`gbdraw.api.region_drawing.derive_from_source`).
@@ -22,7 +22,6 @@ from gbdraw.api.options import (
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
-from gbdraw.api.record_planning import comparison_unit_pairs
 from gbdraw.api.region_drawing import (
     DerivedRecords,
     NotCarried,
@@ -111,22 +110,25 @@ def locate_record_inputs(drawing: LocateDrawing, files: Mapping[str, LocateFile]
 
 
 def locate_unit_pairs(drawing: LocateDrawing) -> tuple[tuple[int, int], ...]:
-    """The drawn-unit pairs LOSAT compares: every window of each record pair of ``drawing`` against every
-    window of the other, as a comparisons table names them (``comparison_unit_pairs``)."""
+    """The drawn-unit pairs LOSAT compares: the window pairs of ``drawing``, each window one drawn unit in row,
+    record and window order (``locate_record_inputs``)."""
 
-    places: dict[tuple[int, int], tuple[int, ...]] = {}
-    unit = 0
-    for row_index, row in enumerate(drawing.rows):
-        for index, record in enumerate(row.records):
-            places[(row_index, index)] = tuple(range(unit, unit + len(record.windows)))
-            unit += len(record.windows)
-    return tuple(pair for upper, lower in drawing.pairs for pair in comparison_unit_pairs(places[upper], places[lower]))
+    units = {
+        (row_index, record_index, window_index): unit
+        for unit, (row_index, record_index, window_index) in enumerate(
+            (row_index, record_index, window_index)
+            for row_index, row in enumerate(drawing.rows)
+            for record_index, record in enumerate(row.records)
+            for window_index in range(len(record.windows))
+        )
+    }
+    return tuple((units[upper], units[lower]) for upper, lower in drawing.pairs)
 
 
 def _locate_comparisons(
     options: LinearDiagramOptions, dropped: list[NotCarried], pairs: Sequence[tuple[int, int]]
 ) -> dict[str, object]:
-    """LOSATP links between the records of adjacent rows that share a reference gene; the source's comparisons
+    """LOSATP links between the windows of adjacent rows that share a reference gene; the source's comparisons
     are not carried."""
 
     search = options.losat_search

@@ -30,6 +30,7 @@ from gbdraw.comparisons.locate import (
     LocateProgramName,
     LocateSearchResult,
     LocateWarning,
+    LocateWindowPlace,
     PlannedWindow,
     finish_locate,
     locate_default_thresholds,
@@ -190,17 +191,22 @@ def _records_table(drawing: LocateDrawing, files: Mapping[str, LocateInputFile],
 
 
 def _comparisons_table(drawing: LocateDrawing) -> str:
-    """The record pairs of adjacent rows that share a reference gene, by record ID (``#n`` for a repeated ID)."""
+    """The window pairs of adjacent rows that share a reference gene. A record is named by its record ID (``#n``
+    for a repeated ID), and a window of a record drawn in several windows by the record and its span as the
+    records table writes it (``NC_009725.2:1911335-1989004``)."""
 
-    drawn = [record for row in drawing.rows for record in row.records]
-    numbers = {(row_index, index): 0 for row_index, row in enumerate(drawing.rows) for index in range(len(row.records))}
-    for number, place in enumerate(numbers, start=1):
-        numbers[place] = number
-    ids = [record.record_id for record in drawn]
+    places = [(row_index, index) for row_index, row in enumerate(drawing.rows) for index in range(len(row.records))]
+    numbers = {place: number for number, place in enumerate(places, start=1)}
+    ids = [drawing.rows[row].records[index].record_id for row, index in places]
 
-    def selector(place: tuple[int, int]) -> str:
-        record_id = ids[numbers[place] - 1]
-        return record_id if ids.count(record_id) == 1 else f"#{numbers[place]}"
+    def selector(place: LocateWindowPlace) -> str:
+        row, index, window_index = place
+        record = drawing.rows[row].records[index]
+        name = record.record_id if ids.count(record.record_id) == 1 else f"#{numbers[(row, index)]}"
+        if len(record.windows) == 1:
+            return name
+        window = record.windows[window_index]
+        return f"{name}:{region_text(window.start, window.end, False)}"
 
     return comparisons_table_text([ComparisonsTableEntry(selector(upper), selector(lower)) for upper, lower in drawing.pairs])
 

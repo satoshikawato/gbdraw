@@ -964,7 +964,7 @@ Use `--comparisons_table` in Linear mode when comparison endpoints are not impli
 | Column | Required | Meaning |
 | --- | --- | --- |
 | `blast` | yes | BLAST outfmt 6 or 7 path, resolved relative to the table. |
-| `query` | yes | Displayed query record selector, such as `#1` or a unique record ID. |
+| `query` | yes | Displayed query record selector, such as `#1` or a unique record ID; a `source=losat` row may name one window of a record drawn in several windows, such as `NC_009725.2:1911335-1989004`. |
 | `subject` | yes | Displayed subject record selector. |
 
 Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record. The `n`th `-b` file belongs to loaded records `n` and `n + 1`, so more `-b` files than adjacent record pairs stop the run before drawing. With `-b` and two or more input files, or with GFF3 input, each file contributes one record: the first, or the first that matches `--record_id`.
@@ -1327,7 +1327,9 @@ options:
                         LOSATP display with --losat losatp: similarity_groups
                         (Similarity groups across all records), collinear
                         (Collinear blocks), or pairwise (links between records
-                        in adjacent rows) (default: similarity_groups).
+                        in adjacent rows, or the pairs that the source=losat
+                        rows of --comparisons_table list) (default: pairwise
+                        with --comparisons_table, else similarity_groups).
   --losatn_task {megablast,blastn,dc-megablast}
                         LOSATN search task with --losat losatn. A native
                         runtime that does not support the task stops before
@@ -2118,7 +2120,7 @@ gbdraw locate --reference_gbk FZB42.gbff --reference_record NC_009725.2 \
   --targets CBMB205.gbff SK19.001.gbff -o fengycin
 gbdraw linear --records_table fengycin.records.tsv \
   --comparisons_table fengycin.comparisons.tsv \
-  --losat losatp --losatp_mode pairwise -o fengycin -f svg
+  --losat losatp -o fengycin
 ```
 
 - The reference is the record of `--reference_gbk` (or `--reference_gff` with
@@ -2153,7 +2155,7 @@ Outputs (an existing file stops the command unless `--overwrite` is given):
 | File | Contents |
 | --- | --- |
 | `PREFIX.records.tsv` | A [records table](#--records_table): row 1 holds the reference windows, and each target file with a window has one further row, one table row per selected window. The rows of one record share a `record_group` value such as `1:NC_009725.2`; a window that covers a whole record leaves `region` empty. The first window of each row is labelled with its file name. |
-| `PREFIX.comparisons.tsv` | A [comparisons table](#--comparisons_table) of `source=losat` rows: the records of adjacent rows whose windows share a reference gene. |
+| `PREFIX.comparisons.tsv` | A [comparisons table](#--comparisons_table) of `source=losat` rows: the windows of adjacent rows that share a reference gene. A window of a record drawn in several windows is named by the record and its span, such as `NC_009725.2:1911335-1989004`. |
 | `PREFIX.plan.json` | The whole plan: the reference genes, the selected windows and the candidates with their genes, gene coverage per file, the threshold tally, warnings, the options and the runtime. |
 | `DIR/N.FILE.PROGRAM.tsv` | With `--losat_output_dir DIR`: the raw outfmt 6 rows of the search of target file `N`, with its record IDs. |
 
@@ -2167,11 +2169,6 @@ reference file, a LOSAT without tblastn, `--ncbi_blast_bin` together with
 `--losat_bin`, and when no target file has a window. A file without a window,
 more windows than `--max_windows`, a target without annotation, and genes
 found in part or not at all are `WARNING:` lines with exit status 0.
-
-The comparisons table names records, so `gbdraw linear` compares every window
-of one record with every window of the other; it warns about a window pair
-with no protein match to draw. `source=losat` rows need `--losatp_mode
-pairwise` with `--losat losatp`.
 
 ## Related documentation
 

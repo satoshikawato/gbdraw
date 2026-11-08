@@ -4,7 +4,8 @@ The page sends the reference File, record and windows, the target Files and
 the program; :func:`locate_search_plan_json` replies with one LOSAT job per
 target File, which the page runs. :func:`locate_windows_json` takes the same
 input with each job's raw rows (or its error) and the dialog's thresholds and
-window rules, and replies with the plan. Both call the locate owner
+window rules, and replies with the plan and the window pairs the new drawing
+compares (the pairs ``gbdraw locate`` writes as its comparisons table). Both call the locate owner
 (:mod:`gbdraw.comparisons.locate`) as ``gbdraw locate`` does, so the Web has no
 copy of the search plan or of the window rules.
 """
@@ -15,12 +16,15 @@ from dataclasses import replace
 from typing import TypedDict
 
 from gbdraw.comparisons.locate import (
+    LocateDrawing,
     LocateInputFile,
     LocateOptions,
     LocateProgramName,
     LocateSearch,
     LocateSearchResult,
+    LocateWindowPlace,
     finish_locate,
+    locate_drawing,
     locate_results,
     prepare_locate_search,
 )
@@ -94,10 +98,35 @@ class LocateWindowsInput(LocateSearchInput):
     options: LocateOptionsInput
 
 
+class LocateWindowName(TypedDict):
+    """One window of the drawing: its File, its record by key, and its span (``start > end`` across the origin)."""
+
+    fileKey: str
+    recordKey: str
+    start: int
+    end: int
+
+
+class LocateWindowPairReply(TypedDict):
+    """Two windows of adjacent rows that share a reference gene, the upper row's first."""
+
+    query: LocateWindowName
+    subject: LocateWindowName
+
+
 class LocateWindowsReply(TypedDict):
-    """The plan as ``LocatePlan.to_json`` writes it (``gbdraw locate`` writes the same as ``PREFIX.plan.json``)."""
+    """The plan as ``LocatePlan.to_json`` writes it (``gbdraw locate`` writes the same as ``PREFIX.plan.json``),
+    and the window pairs of its drawing (``locate_drawing``)."""
 
     plan: dict[str, object]
+    pairs: list[LocateWindowPairReply]
+
+
+def _window_name(drawing: LocateDrawing, place: LocateWindowPlace) -> LocateWindowName:
+    row, index, window_index = place
+    record = drawing.rows[row].records[index]
+    window = record.windows[window_index]
+    return {"fileKey": record.file_key, "recordKey": record.record_key, "start": window.start, "end": window.end}
 
 
 def _file(value: LocateFileInput) -> LocateInputFile:
@@ -149,7 +178,15 @@ def locate_windows_json(payload: LocateWindowsInput) -> LocateWindowsReply:
         LocateSearchResult(str(outcome["fileKey"]), str(outcome["text"]), outcome["error"])
         for outcome in payload["outcomes"]
     ]
-    return {"plan": finish_locate(search, locate_results(search, outcomes), options).to_json()}
+    plan = finish_locate(search, locate_results(search, outcomes), options)
+    drawing = locate_drawing(plan)
+    return {
+        "plan": plan.to_json(),
+        "pairs": [
+            {"query": _window_name(drawing, upper), "subject": _window_name(drawing, lower)}
+            for upper, lower in drawing.pairs
+        ],
+    }
 
 
 __all__ = [
@@ -159,6 +196,8 @@ __all__ = [
     "LocateSearchInput",
     "LocateSearchPlanReply",
     "LocateWindowInput",
+    "LocateWindowName",
+    "LocateWindowPairReply",
     "LocateWindowsInput",
     "LocateWindowsReply",
     "locate_search_plan_json",

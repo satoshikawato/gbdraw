@@ -381,9 +381,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         choices=_LOSATP_MODES,
         default=None,
         help=(
-            'LOSATP display with --losat losatp: similarity_groups (Similarity groups '
-            'across all records), collinear (Collinear blocks), or pairwise '
-            '(links between records in adjacent rows) (default: similarity_groups).'
+            'LOSATP display with --losat losatp: similarity_groups (Similarity groups across all records), collinear '
+            '(Collinear blocks), or pairwise (links between records in adjacent rows, or the pairs that the source=losat '
+            'rows of --comparisons_table list) (default: pairwise with --comparisons_table, else similarity_groups).'
         ),
     )
     parser.add_argument(
@@ -1047,7 +1047,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
                 },
             )
     if args.losat == "losatp" and args.losatp_mode is None:
-        args.losatp_mode = "similarity_groups"
+        args.losatp_mode = "pairwise" if args.comparisons_table else "similarity_groups"
     if args.losat_output_dir and not args.losat:
         parser.error("--losat_output_dir requires --losat")
     if args.similarity_alignment_feature and args.anchor_feature:
