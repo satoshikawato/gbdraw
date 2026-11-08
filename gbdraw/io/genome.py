@@ -7,7 +7,8 @@ from contextlib import contextmanager
 from itertools import chain
 from collections import Counter
 from collections.abc import Iterator, Set as AbstractSet
-from typing import Callable, List, Dict
+import string
+from typing import Callable, List, Dict, Literal
 
 from Bio import SeqIO
 from Bio.SeqFeature import CompoundLocation, SeqFeature
@@ -46,6 +47,10 @@ _SEQUENCE_UNDEFINED = {"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED
 # A FASTA given without GFF3 is drawn as nucleotide records (D-17): each record has
 # a sequence, and the sequence holds only IUPAC nucleotide codes, in either case.
 _IUPAC_NUCLEOTIDE_CODES = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
+# A search query may also be a protein (PD-OI-117): NCBI reads every letter as an
+# amino acid code (B J O U X Z included) and "*" as a stop.
+_PROTEIN_CODES = frozenset(string.ascii_letters + "*")
+SequenceMolecule = Literal["nucleotide", "protein"]
 _FLAT_FILE_KINDS = "GenBank, DDBJ or EMBL flat file"
 # What a file without a record is, by the reason of its NO_RECORDS diagnostic.
 _ABSENCE_MESSAGES = {
@@ -252,36 +257,85 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
 
     name = os.path.basename(path)
     for position, record in enumerate(records, start=1):
-        sequence = str(record.seq)
-        shown = record.id or f"#{position}"
-        if not sequence:
-            raise ValidationError(
-                f"FASTA record {shown} in {name} has no sequence. Give each FASTA record its sequence.",
-                diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record, position),
-            )
+        sequence = _required_sequence(record, position, name)
         # The first letter that is not a nucleotide code is looked for only when one exists.
         if set(sequence) - _IUPAC_NUCLEOTIDE_CODES:
             letter = next(char for char in sequence if char not in _IUPAC_NUCLEOTIDE_CODES)
             raise ValidationError(
-                f"FASTA record {shown} in {name} holds {letter!r}, which is not a nucleotide code: "
+                f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is not a nucleotide code: "
                 "gbdraw draws nucleotide records (IUPAC codes A C G T U R Y S W K M B D H V N).",
                 diagnostic=_fasta_record_diagnostic("NOT_NUCLEOTIDE", record, position, letter),
             )
     return records
 
 
-def _read_nucleotide_fasta(path: str) -> list[SeqRecord]:
-    """The records of one FASTA file given without GFF3, refused unless each is a nucleotide record."""
+def _required_sequence(record: SeqRecord, position: int, name: str) -> str:
+    """The sequence of the ``position``-th FASTA record of file ``name``, refused when it has none."""
+
+    sequence = str(record.seq)
+    if not sequence:
+        raise ValidationError(
+            f"FASTA record {record.id or f'#{position}'} in {name} has no sequence. Give each FASTA record its sequence.",
+            diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record, position),
+        )
+    return sequence
+
+
+def sequence_molecule(sequence: str) -> SequenceMolecule | None:
+    """What a sequence is: nucleotide when it holds IUPAC nucleotide codes only (the rule of
+    :func:`require_nucleotide_records`), else protein when it holds amino acid codes and ``*`` only, else ``None``."""
+
+    letters = set(sequence)
+    if not letters - _IUPAC_NUCLEOTIDE_CODES:
+        return "nucleotide"
+    if not letters - _PROTEIN_CODES:
+        return "protein"
+    return None
+
+
+def load_query_fasta(path: str) -> list[tuple[SeqRecord, SequenceMolecule]]:
+    """The entries of a FASTA file of search queries, each with what it is (:func:`sequence_molecule`).
+
+    Refused as :func:`load_fasta` refuses a file: one without an entry, an entry
+    without sequence; and an entry holding a character that is neither a
+    nucleotide nor an amino acid code (``NOT_SEQUENCE``, with that character).
+    """
+
+    if not os.path.isfile(path):
+        raise InputFileError(f"File does not exist or is not accessible: {path}")
+    name = os.path.basename(path)
+    queries: list[tuple[SeqRecord, SequenceMolecule]] = []
+    for position, record in enumerate(_read_fasta_file(path), start=1):
+        sequence = _required_sequence(record, position, name)
+        molecule = sequence_molecule(sequence)
+        if molecule is None:
+            letter = next(char for char in sequence if char not in _PROTEIN_CODES)
+            raise ValidationError(
+                f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is neither a nucleotide "
+                "nor an amino acid code. Give DNA, RNA or protein sequences (letters, and * for a stop).",
+                diagnostic=_fasta_record_diagnostic("NOT_SEQUENCE", record, position, letter),
+            )
+        queries.append((record, molecule))
+    return queries
+
+
+def _read_fasta_file(path: str) -> list[SeqRecord]:
+    """The records of one FASTA file, a parser error refused as an unreadable input."""
 
     try:
-        records = _read_fasta_records(path)
+        return _read_fasta_records(path)
     except GbdrawError:
         raise
     except (ValueError, *GZIP_ERRORS) as e:
         raise ParseError(
             f"Error parsing FASTA file {path}: {_parser_reason(e)}.", diagnostic=_UNREADABLE_INPUT
         ) from e
-    return require_nucleotide_records(records, path)
+
+
+def _read_nucleotide_fasta(path: str) -> list[SeqRecord]:
+    """The records of one FASTA file given without GFF3, refused unless each is a nucleotide record."""
+
+    return require_nucleotide_records(_read_fasta_file(path), path)
 
 
 def load_fasta(
@@ -699,7 +753,10 @@ def load_gff_fasta(
 __all__ = [
     "load_gbks",
     "load_fasta",
+    "load_query_fasta",
     "require_nucleotide_records",
+    "sequence_molecule",
+    "SequenceMolecule",
     "read_flat_file_records",
     "require_record_sequence",
     "parse_gff_fasta",

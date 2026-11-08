@@ -165,7 +165,7 @@ test('the search names each drawn record by key alone, and names its record as t
   ];
   // Python reads the bases each record draws, each record once, and its origin window when it has one
   // (read_record_span_sequences, DrawnRecordInput): the page sends no source coordinates.
-  assert.deepEqual(search.searchSpans(records, 600), [
+  assert.deepEqual(search.searchSpans(records, [{ reach: 600 }, { reach: 50 }]), [
     { recordKey: 'a', originWindow: 600 }, { recordKey: 'a', originWindow: 600 }, { recordKey: 'b', originWindow: 600 }
   ]);
   const read = { fasta: '', spans: [
@@ -205,8 +205,8 @@ test('the subjects of a record read with its origin window name the record, and 
 });
 
 test('the helper replies are checked against their typed shapes', () => {
-  assert.deepEqual(search.readSearchQueriesReply({ queries: [{ name: 'q', length: 4, fasta: '>q\nACGT\n' }] }),
-    [{ name: 'q', length: 4, fasta: '>q\nACGT\n' }]);
+  assert.deepEqual(search.readSearchQueriesReply({ queries: [{ name: 'q', length: 4, program: 'blastn', reach: 4, fasta: '>q\nACGT\n' }] }),
+    [{ name: 'q', length: 4, program: 'blastn', reach: 4, fasta: '>q\nACGT\n' }]);
   assert.throws(() => search.readSearchQueriesReply({ queries: [{ name: 'q' }] }), (error) => error.code === 'RESULT_INVALID');
   assert.throws(() => search.readSequenceSearchReply({ annotationSet: null, hits: [{}] }), (error) => error.code === 'RESULT_INVALID');
   assert.deepEqual(search.panelQueries([{ name: 'q', length: 4, fasta: '' }], [{ name: 'q', length: 4, fasta: '', color: '#000000' }])[0].color, '#000000');
@@ -299,7 +299,8 @@ test('Use as search query adds a span as a query once; a removed query stays rem
   /** The query reader's reply for a FASTA text, as Python's `read_search_queries` reads it (one query per header). */
   const readFasta = (text) => text.split('>').filter(Boolean).map((entry) => {
     const [header, ...lines] = entry.split('\n');
-    return { name: header.trim(), length: lines.join('').length, fasta: `>${entry}` };
+    const length = lines.join('').length;
+    return { name: header.trim(), length, program: 'blastn', reach: length, fasta: `>${entry}` };
   });
   const reads = [];
   const panel = createSequenceSearch({
@@ -348,7 +349,7 @@ test('Search stays on while a pasted text is read, so a click right after the pa
     runLosatJobs: async () => ({ status: 'canceled' }),
     runHelper: async () => {
       await read;
-      return { result: { queries: [{ name: 'q', length: 4, fasta: '>q\nACGT\n' }] } };
+      return { result: { queries: [{ name: 'q', length: 4, program: 'blastn', reach: 4, fasta: '>q\nACGT\n' }] } };
     },
     helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
     addSearchSet: () => {},
@@ -402,7 +403,7 @@ const runPanelSearch = async (ports = {}) => {
     readRecordBindings: () => resultRecordBindings(axisRecords, [owner('card-a', ['card-a:1']), owner('card-b', ['card-b:1'])]),
     runLosatJobs: async () => ({ status: 'ok', results: [{ text: 'q\tX:1-100\t100\t16\t0\t0\t1\t16\t5\t20\t1e-5\t30\n' }] }),
     runHelper: async (operation, payload) => {
-      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, program: 'blastn', reach: 16, fasta: '>q\nACGT\n' }] } };
       sent.push(payload.search);
       return { result: reply(payload.search) };
     },
@@ -557,7 +558,7 @@ for (const mode of ['circular', 'linear']) {
 test('a search whose helper fails adds nothing and shows the reason', async () => {
   const { panel, added } = await runPanelSearch({
     runHelper: async (operation) => {
-      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, program: 'blastn', reach: 16, fasta: '>q\nACGT\n' }] } };
       throw new Error('The search subject ID names more than one searched sequence.');
     }
   });
@@ -595,7 +596,7 @@ test('a Session Load empties the panel: queries, settings, hit table, chips and 
 test('a search a Session Load overtakes adds nothing and leaves the emptied panel empty', async () => {
   const replied = await runPanelSearch((ref) => ({
     runHelper: async (operation) => {
-      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, program: 'blastn', reach: 16, fasta: '>q\nACGT\n' }] } };
       ref.panel.loadStarts();
       return { result: { annotationSet: null, hits: [], rowsRead: 0, rowsKept: 0, thresholds: [], unmatchedRows: 0, unmatchedSubjectIds: [] } };
     }
@@ -604,7 +605,7 @@ test('a search a Session Load overtakes adds nothing and leaves the emptied pane
   assert.equal(replied.panel.panel.outcome, null, 'the reply of the previous document is not shown');
   const failed = await runPanelSearch((ref) => ({
     runHelper: async (operation) => {
-      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, fasta: '>q\nACGT\n' }] } };
+      if (operation === 'readSearchQueries') return { result: { queries: [{ name: 'q', length: 16, program: 'blastn', reach: 16, fasta: '>q\nACGT\n' }] } };
       ref.panel.loadStarts();
       ref.panel.reset();
       throw new Error('The search subject ID names more than one searched sequence.');

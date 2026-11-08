@@ -33,7 +33,7 @@ import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
 /**
  * One pair run, by the main thread or a pool worker.
  * @typedef {object} LosatPairRun
- * @property {string} program 'blastn', 'tblastx', or 'blastp'
+ * @property {string} program one of `LOSAT_PROGRAMS`
  * @property {string} queryFasta
  * @property {string} subjectFasta
  * @property {string} [outfmt]
@@ -44,6 +44,24 @@ import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
 
 /** @type {Promise<WebAssembly.Instance> | null} */
 let directInstancePromise = null;
+
+/**
+ * The programs the app runs with LOSAT, in every execution mode (the main thread, the pair Worker and the threaded
+ * Worker): Pairwise Comparisons' blastn, tblastx and blastp, and Sequence search's blastn and tblastn (PD-OI-117).
+ * @type {ReadonlySet<string>}
+ */
+export const LOSAT_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp', 'tblastn']);
+
+/**
+ * Refuses a pair run of a program the app does not run.
+ * @param {unknown} program
+ * @returns {asserts program is string}
+ */
+export function requireLosatProgram(program) {
+  if (typeof program !== 'string' || !LOSAT_PROGRAMS.has(program)) {
+    throw new Error(`LOSAT program must be one of ${[...LOSAT_PROGRAMS].join(', ')}.`);
+  }
+}
 
 /** @type {Readonly<Record<string, string>>} */
 const SEARCH_FLAGS = LOSAT_SEARCH_FLAGS;

@@ -197,6 +197,8 @@ const REASONS = Object.freeze({
   FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
   // gbdraw/io/genome.py require_nucleotide_records: a FASTA given without GFF3 holds nucleotide records only.
   NOT_NUCLEOTIDE: 'This FASTA file holds a sequence that is not nucleotide, such as a protein; gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N).',
+  // gbdraw/io/genome.py load_query_fasta: a Sequence search query is a nucleotide or a protein sequence.
+  NOT_SEQUENCE: 'A query holds a character that is neither a nucleotide nor an amino acid code. Give DNA, RNA or protein sequences in FASTA: letters, and * for a stop.',
   EMPTY_SEQUENCE: 'A record of this FASTA file has no sequence. Give each FASTA record its sequence.',
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
@@ -368,6 +370,7 @@ const PHRASES = Object.freeze({
   outerLabelRoom: 'Outer labels need about {ratio} times the room around the map.',
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
   record: 'Record: {record}.', recordPosition: 'Record #{position}.', letter: 'First letter that is not a nucleotide code: {letter}.',
+  queryLetter: 'First character that is neither a nucleotide nor an amino acid code: {letter}.',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a Session file that this version of gbdraw supports.',
@@ -1017,6 +1020,7 @@ export const normalizeUserFacingError = (value, {
     sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
       : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
+    reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
     ...trackRoomParts(result.context),
     labelFitCounts && { text: labelFitCounts, verbatim: /** @type {const} */ (true) },

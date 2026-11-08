@@ -3,13 +3,15 @@
 The page sends the raw outfmt 6 text LOSAT wrote, the sequences it searched
 (each with the ID LOSAT names it by, the drawing's record selector, the
 request's record key, and the source coordinate of its first base), the
-panel's thresholds, the program, the queries in order with their lengths, and the colour mode.
+panel's thresholds, the queries in order with their lengths and programs, and the colour mode.
 Python reads the table with ``read_comparison_table`` and builds the set with
 ``search_hit_annotation_set``; the reply is data (the set as the canonical
 request writes it, the hit table, and the threshold tally). It renders nothing.
 
 The queries themselves are read here too (``read_search_queries``), with the
-FASTA loader of a FASTA-only input, so the Web has no sequence reader of its own.
+FASTA reader of search queries (``load_query_fasta``), which tells a nucleotide
+query from a protein query; the program that searches each is decided here
+(``search_program``), so the Web has no sequence reader or program rule of its own.
 """
 
 from __future__ import annotations
@@ -26,11 +28,12 @@ from gbdraw.annotations.search_hits import (
     SearchQuery,
     SearchSubject,
     search_hit_annotation_set,
+    search_program,
 )
 from gbdraw.comparisons.losat_jobs import losat_fasta_text
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.io.genome import load_fasta
+from gbdraw.io.genome import load_query_fasta
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.session_request_codec import decode_record_selector, encode_annotation_set
 
@@ -56,10 +59,11 @@ class SearchThresholdsInput(TypedDict):
 
 
 class SearchQueryInput(TypedDict):
-    """One query: its FASTA ID and its length (bases, or residues for a protein query)."""
+    """One query: its FASTA ID, its length (bases, or residues for a protein query) and the program that searched it."""
 
     name: str
     length: int
+    program: SearchProgram
 
 
 class SequenceSearchInput(TypedDict):
@@ -67,7 +71,6 @@ class SequenceSearchInput(TypedDict):
     setId: str
     subjects: list[SearchSubjectInput]
     thresholds: SearchThresholdsInput
-    program: SearchProgram
     queries: list[SearchQueryInput]
     colorMode: SearchColorMode
     queryColors: dict[str, str]
@@ -108,10 +111,14 @@ class SequenceSearchReply(TypedDict):
 
 
 class SearchQueryRead(TypedDict):
-    """One query as read: its FASTA ID, its length in bases, and the FASTA text LOSAT reads."""
+    """One query as read: its FASTA ID, its length (bases, or residues for a protein query), the program that
+    searches it, the most subject bases one of its hits covers (``SearchQuery.reach``, which places a record's origin
+    window), and the FASTA text LOSAT reads."""
 
     name: str
     length: int
+    program: SearchProgram
+    reach: int
     fasta: str
 
 
@@ -124,23 +131,28 @@ _DUPLICATE_QUERY_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UN
 
 
 def read_search_queries(path: str) -> SearchQueriesReply:
-    """The queries of a FASTA file: nucleotide records only, each with its own ID.
+    """The queries of a FASTA file, each with its own ID: a nucleotide query is searched with blastn, a protein
+    query with tblastn.
 
-    The FASTA-only loader (``load_fasta``) refuses a file without an entry, a
-    record without sequence and a letter that is not a nucleotide code (a
-    protein query, which PR-C searches with tblastn), each with its diagnostic.
+    The query reader (``load_query_fasta``) refuses a file without an entry, a
+    record without sequence and a character that is neither a nucleotide nor an
+    amino acid code, each with its diagnostic.
     """
 
-    records = load_fasta([path])
-    repeated = sorted(name for name, count in Counter(str(record.id) for record in records).items() if count > 1)
+    records = load_query_fasta(path)
+    repeated = sorted(name for name, count in Counter(str(record.id) for record, _ in records).items() if count > 1)
     if repeated:
         raise ValidationError(
             f"Query IDs repeat: {', '.join(repeated)}. Give each query its own ID.", diagnostic=_DUPLICATE_QUERY_IDS
         )
+    queries = [(record, SearchQuery(str(record.id), len(record.seq), search_program(molecule))) for record, molecule in records]
     return {
         "queries": [
-            {"name": str(record.id), "length": len(record.seq), "fasta": losat_fasta_text(str(record.id), str(record.seq))}
-            for record in records
+            {
+                "name": query.name, "length": query.length, "program": query.program, "reach": query.reach,
+                "fasta": losat_fasta_text(query.name, str(record.seq)),
+            }
+            for record, query in queries
         ]
     }
 
@@ -151,7 +163,7 @@ def read_search_queries_json(path: str) -> str:
     return json.dumps(read_search_queries(path))
 
 
-_FIELDS = ("table", "setId", "subjects", "thresholds", "program", "queries", "colorMode", "queryColors")
+_FIELDS = ("table", "setId", "subjects", "thresholds", "queries", "colorMode", "queryColors")
 
 
 def _protocol_error(message: str) -> ValidationError:
@@ -177,9 +189,10 @@ def _subject(value: object, index: int) -> SearchSubject:
 
 
 def _query(value: object) -> SearchQuery:
-    if not (isinstance(value, Mapping) and set(value) == {"name", "length"} and isinstance(value["name"], str)):
-        raise _protocol_error("A search query has a name and a length.")
-    return SearchQuery(value["name"], cast(int, value["length"]))  # SearchQuery checks the length.
+    if not (isinstance(value, Mapping) and set(value) == {"name", "length", "program"} and isinstance(value["name"], str)):
+        raise _protocol_error("A search query has a name, a length and a program.")
+    # SearchQuery checks the length and the program.
+    return SearchQuery(value["name"], cast(int, value["length"]), cast(SearchProgram, value["program"]))
 
 
 def sequence_search_annotation_set(payload: Mapping[str, object]) -> SequenceSearchReply:
@@ -207,7 +220,6 @@ def sequence_search_annotation_set(payload: Mapping[str, object]) -> SequenceSea
             identity=cast(float, thresholds.get("identity")),
             alignment_length=cast(int, thresholds.get("alignmentLength")),
         ),
-        program=cast(SearchProgram, payload["program"]),
         queries=[_query(item) for item in queries],
         color_mode=cast(SearchColorMode, payload["colorMode"]),
         query_colors=dict(colors),

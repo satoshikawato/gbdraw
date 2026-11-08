@@ -20,6 +20,9 @@ write-up of a release.
   click on a record's tracks that selects nothing left an open settings popup
   open unless the previous press was at the same place; it now closes it, as
   a click on the Result's background does.
+- Changed: the Web app's LOSAT is built from LOSAT `a20ad436a`, which runs
+  tblastn in every LOSAT execution mode; the blastn, tblastx and blastp
+  results of the app are unchanged.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the
@@ -102,7 +105,9 @@ write-up of a release.
   Session and no longer offers Retry, which failed the same way. Every other
   "could not be accepted" error keeps its text and Retry.
 - Added: **Sequence search** in the Web app searches the records of the shown
-  drawing for one or more query sequences with LOSAT blastn and draws the hits
+  drawing for one or more query sequences, with LOSAT blastn for a nucleotide
+  query and tblastn for a protein query (one search may hold both), and draws
+  the hits in genome coordinates
   at once, without Generate, as a new annotation set ("Search 1", ...) in front
   of the feature track, on the lane of each hit's strand; Undo removes them.
   Hits are colored one color per query or by a gradient along the query, with
@@ -110,8 +115,7 @@ write-up of a release.
   chip outlines them on the preview. A hit across the origin of a circular
   record is one hit. **Use as search query** in the Region popup adds a
   selected span as a query. Annotation sets gain a gradient style, a hit
-  strand, and an overlay marker in the Session (version 51); protein queries
-  are not searched yet. The Python API `gbdraw.api` gains
+  strand, and an overlay marker in the Session (version 51). The Python API `gbdraw.api` gains
   `AnnotationGradient` and `search_hit_annotation_set` (with `SearchQuery`,
   `SearchSubject`, `SearchHit` and `SearchAnnotationResult`), which turns
   LOSAT outfmt 6 rows of a search into such an annotation set.

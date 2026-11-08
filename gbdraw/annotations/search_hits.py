@@ -1,7 +1,8 @@
 """Sequence-search hits as one annotation set (PD-OI-117, the Web's Sequence search).
 
-A search runs its queries with LOSAT (blastn, or tblastn for a protein query)
-against sequences of the records a drawing draws. Its outfmt 6 rows, read by
+A search runs its queries with LOSAT (blastn for a nucleotide query, tblastn
+for a protein query, ``search_program``) against sequences of the records a
+drawing draws. Its outfmt 6 rows, read by
 ``read_comparison_table``, are filtered with the comparison thresholds
 (``filter_comparison_dataframe``, the rule of Pairwise Comparisons) and become
 one ``highlight`` annotation per hit, in source coordinates of the record the
@@ -22,6 +23,7 @@ from typing import Literal
 from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.genome import SequenceMolecule
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     ComparisonFilter,
@@ -36,6 +38,9 @@ from gbdraw.linear_comparison import table_id_index, table_id_matches
 from .models import AnnotationGradient, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
 
 SearchProgram = Literal["blastn", "tblastn"]
+# The program that searches a query of each molecule (PD-OI-117), and the subject bases one query letter covers.
+_SEARCH_PROGRAMS: Mapping[SequenceMolecule, SearchProgram] = {"nucleotide": "blastn", "protein": "tblastn"}
+_BASES_PER_QUERY_LETTER: Mapping[SearchProgram, int] = {"blastn": 1, "tblastn": 3}
 SearchColorMode = Literal["query", "gradient"]
 
 # The default hit colours, one per query in query order (repeated past the last), and the
@@ -113,8 +118,8 @@ class SearchSubject:
 
 def origin_window_span(record_length: int, reach: int) -> tuple[int, int]:
     """The origin window of a circular record, as a source span across its origin: its last ``w`` bases, then its
-    first ``w``, with ``w`` the longest query's length (``reach``) and at most half the record. A hit across the
-    origin lies in it whole, when it is no longer than the query."""
+    first ``w``, with ``w`` the bases the longest query can cover (``reach``, ``SearchQuery.reach``) and at most half
+    the record. A hit across the origin lies in it whole, when it is no longer than the query."""
 
     width = min(int(reach), int(record_length) // 2)
     if width < 1:
@@ -125,13 +130,21 @@ def origin_window_span(record_length: int, reach: int) -> tuple[int, int]:
     return record_length - width + 1, width
 
 
+def search_program(molecule: SequenceMolecule) -> SearchProgram:
+    """The program that searches a query of ``molecule``: blastn for a nucleotide query, tblastn for a protein query."""
+
+    return _SEARCH_PROGRAMS[molecule]
+
+
 @dataclass(frozen=True)
 class SearchQuery:
-    """One query of a search: the name the LOSAT table gives it (its FASTA ID) and its length (bases, or residues
-    for a protein query), which places each hit in the query."""
+    """One query of a search: the name the LOSAT table gives it (its FASTA ID), its length (bases, or residues
+    for a protein query), which places each hit in the query, and the program that searched it
+    (``search_program``), which each hit's metadata names."""
 
     name: str
     length: int
+    program: SearchProgram
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -141,6 +154,14 @@ class SearchQuery:
                 "A search query's length must be a positive integer.",
                 diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE_INTEGER"},
             )
+        if self.program not in _BASES_PER_QUERY_LETTER:
+            raise ValidationError("A search program is blastn or tblastn.", diagnostic={"code": "INPUT_INVALID", "reason": "LOSAT_OPTION_PROGRAM"})
+
+    @property
+    def reach(self) -> int:
+        """The most subject bases one hit of the query covers: its length, three bases per residue for tblastn."""
+
+        return self.length * _BASES_PER_QUERY_LETTER[self.program]
 
 
 @dataclass(frozen=True)
@@ -271,7 +292,6 @@ def search_hit_annotation_set(
     set_id: str,
     subjects: Sequence[SearchSubject],
     thresholds: ComparisonFilter,
-    program: SearchProgram,
     queries: Sequence[SearchQuery],
     color_mode: SearchColorMode = "query",
     query_colors: Mapping[str, str] | None = None,
@@ -280,7 +300,8 @@ def search_hit_annotation_set(
 
     ``table`` holds outfmt 6 rows (``read_comparison_table``); ``queries`` are
     the queries in the panel's order, which gives each query its default
-    colour, with their lengths; ``query_colors`` replaces a query's colour. A hit's target is the
+    colour, with their lengths and programs (a search of nucleotide and protein
+    queries holds the rows of both programs); ``query_colors`` replaces a query's colour. A hit's target is the
     span ``sstart``..``send`` of the subject it names, in source coordinates,
     and its ``strand`` the strand the query runs forward on there;
     its metadata holds ``SEARCH_HIT_METADATA_KEYS``. A row of a subject read
@@ -296,8 +317,6 @@ def search_hit_annotation_set(
     or that runs past its query's length, is refused.
     """
 
-    if program not in {"blastn", "tblastn"}:
-        raise ValidationError("A search program is blastn or tblastn.", diagnostic={"code": "INPUT_INVALID", "reason": "LOSAT_OPTION_PROGRAM"})
     if color_mode not in {"query", "gradient"}:
         raise ValidationError("A search colour mode is query or gradient.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"})
     if not str(set_id).strip():
@@ -321,6 +340,7 @@ def search_hit_annotation_set(
     tally = comparison_row_tally(known, thresholds)
     kept = filter_comparison_dataframe(known, thresholds)
     lengths = {query.name: query.length for query in queries}
+    programs = {query.name: query.program for query in queries}
     colors = {
         query.name: (query_colors or {}).get(query.name) or search_query_color(order)
         for order, query in enumerate(queries)
@@ -372,7 +392,7 @@ def search_hit_annotation_set(
         start, end, wraps = subject.source_span(min(sstart, send), max(sstart, send))
         metadata = {
             "query": query,
-            "program": program,
+            "program": programs[query],
             "identity": _number_text(values["identity"]),
             "alignment_length": str(int(values["alignment_length"])),
             "evalue": _number_text(values["evalue"]),
@@ -428,5 +448,6 @@ __all__ = [
     "SearchSubject",
     "origin_window_span",
     "search_hit_annotation_set",
+    "search_program",
     "search_query_color",
 ]

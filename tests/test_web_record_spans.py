@@ -238,7 +238,7 @@ def test_spans_with_one_header_name_their_record_keys_and_map_back_to_their_reco
             for index, span in enumerate(reply["spans"][:2])
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
-        "program": "blastn", "queries": [{"name": "q", "length": 100}], "colorMode": "query", "queryColors": {},
+        "queries": [{"name": "q", "length": 100, "program": "blastn"}], "colorMode": "query", "queryColors": {},
     })
     assert [(hit["recordKey"], hit["start"]) for hit in search["hits"]] == [("a", 1001), ("b", 2001)]
 

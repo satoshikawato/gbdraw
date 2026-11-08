@@ -4151,18 +4151,18 @@
                                     <li v-for="query in sequenceSearch.panel.queries" :key="query.name" data-sequence-search-query class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 text-[10px]">
                                         <input type="color" :value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
                                         <span class="truncate font-mono" :title="query.name">{{ query.name }}</span>
-                                        <span class="text-slate-500">{{ t('{length} bp', { length: query.length.toLocaleString() }) }}</span>
+                                        <span class="text-slate-500">{{ sequenceSearch.queryLengthText(query) }}</span>
                                         <button type="button" class="btn btn-secondary h-5 w-5 p-0" @click="sequenceSearch.removeQuery(query.name)" :aria-label="t('Remove {query}', { query: query.name })" :title="t('Remove {query}', { query: query.name })"><i class="ph ph-x" aria-hidden="true"></i></button>
                                     </li>
                                 </ul>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Program') }}</span>
-                                        <p class="text-[10px] py-0.5">blastn</p>
+                                        <p data-sequence-search-programs class="text-[10px] py-0.5">{{ sequenceSearch.programs.join(', ') }}</p>
                                     </div>
                                     <div>
                                         <label for="sequence-search-task" class="input-label text-[10px]">{{ t('Task') }}</label>
-                                        <select id="sequence-search-task" v-model="sequenceSearch.panel.task" class="form-input px-1 py-0.5 text-xs">
+                                        <select id="sequence-search-task" v-model="sequenceSearch.panel.task" :disabled="!sequenceSearch.taskApplies" :title="sequenceSearch.taskApplies ? null : t('The task applies to nucleotide queries (blastn).')" class="form-input px-1 py-0.5 text-xs">
                                             <option v-for="task in sequenceSearch.tasks" :key="task" :value="task">{{ task }}</option>
                                         </select>
                                     </div>

@@ -9,8 +9,8 @@
  * @type {Readonly<{ commit: string, version: string, threadedMemoryPages: { initial: number, maximum: number } }>}
  */
 export const LOSAT_WASM_BUILD = Object.freeze({
-  "commit": "f62da7f6b50592f1f421b3e16a4f6c0a30331202",
-  "version": "0.2.0+f62da7f6b505",
+  "commit": "a20ad436abf126c9c06e2b407e95c6eb40146b8b",
+  "version": "0.2.0+a20ad436abf1",
   "threadedMemoryPages": {
     "initial": 44,
     "maximum": 65535
