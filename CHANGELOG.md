@@ -21,6 +21,12 @@ write-up of a release.
   placed by the width of the italic words (OV-2808). A name or label with other
   markup, or with `<`, `>`, or `&` elsewhere, is still drawn as written
   (OV-2760).
+- Fixed: a Circular figure with one Depth series and no custom track stack
+  listed the Depth row last in the Legend, after GC skew, although its ring is
+  drawn between the features and GC content. Setting a Depth width (in the Web
+  app, or `--depth_width` in the CLI) moved the row up, so the Legend changed
+  order between two Generates. The Depth rows now follow the ring order in
+  every case, in the CLI, the Python API, and the Web app (OV-2823).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while
