@@ -14,7 +14,7 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from ..layout.scalar_axis import project_scalar_line
 from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
 from .path_data import path_point
-from .track_paths import track_line_to, track_polyline
+from .track_paths import TRACK_PATH_TOLERANCE_PX, track_line_to, track_polyline
 
 
 class CircularTrackLine(NamedTuple):
@@ -33,6 +33,56 @@ class CircularAreaLine(NamedTuple):
     radii: NDArray[np.float64]
     baseline_radius: float
     segment_starts: tuple[int, ...] = ()
+
+class CircularDrawnLine(NamedTuple):
+    """The points a Circular track path draws for its line: x and y, and where each drawn segment after the
+    first starts."""
+
+    xs: NDArray[np.float64]
+    ys: NDArray[np.float64]
+    segment_starts: tuple[int, ...]
+
+
+def circular_drawn_line(
+    positions: NDArray[np.float64],
+    radii: NDArray[np.float64],
+    total_len: float,
+    segment_starts: tuple[int, ...] = (),
+) -> CircularDrawnLine:
+    """The drawn points of a Circular track line: between two samples of one drawn segment, the angle and the
+    radius change linearly, so the line follows the circle.
+
+    Where two samples are so far apart on the circle that the straight piece between them would leave that
+    line by more than ``TRACK_PATH_TOLERANCE_PX`` (a short record has few windows), points of the line are
+    added between them; samples closer than that are joined directly, as before (OV-2863). The track path
+    then keeps only the points its tolerance needs (:mod:`gbdraw.svg.track_paths`).
+    """
+
+    count = len(positions)
+    pieces = np.ones(max(count - 1, 0), dtype=np.intp)
+    if count > 1:
+        span = np.abs(np.diff(positions)) * (2.0 * math.pi / float(total_len))
+        reach = np.maximum(np.abs(radii[:-1]), np.abs(radii[1:]))
+        # The longest angle whose chord stays within the tolerance of the circle of the larger radius.
+        cos_limit = np.clip(1.0 - TRACK_PATH_TOLERANCE_PX / np.maximum(reach, TRACK_PATH_TOLERANCE_PX), -1.0, 1.0)
+        max_angle = 2.0 * np.arccos(cos_limit)
+        needed = np.ceil(np.divide(span, max_angle, out=np.ones_like(span), where=max_angle > 0))
+        pieces = np.maximum(needed, 1.0).astype(np.intp)
+        breaks = np.asarray(segment_starts, dtype=np.intp)
+        breaks = breaks[(breaks > 0) & (breaks < count)]
+        pieces[breaks - 1] = 1
+    offsets = np.concatenate((np.zeros(1, dtype=np.intp), np.cumsum(pieces, dtype=np.intp)))
+    gap = np.repeat(np.arange(len(pieces), dtype=np.intp), pieces)
+    along = (np.arange(len(gap), dtype=np.intp) - offsets[gap]) / pieces[gap]
+    drawn_positions = np.concatenate((positions[gap] + (positions[gap + 1] - positions[gap]) * along, positions[-1:]))
+    drawn_radii = np.concatenate((radii[gap] + (radii[gap + 1] - radii[gap]) * along, radii[-1:]))
+    angles_rad = np.radians(360.0 * (drawn_positions / float(total_len)) - 90.0)
+    return CircularDrawnLine(
+        drawn_radii * np.cos(angles_rad),
+        drawn_radii * np.sin(angles_rad),
+        tuple(int(offsets[start]) for start in segment_starts),
+    )
+
 
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     """The closed circle of ``radius * norm_factor`` from 12 o'clock, clockwise (two arcs)."""
@@ -98,13 +148,23 @@ def generate_circular_gc_content_path_desc(
 
 def _closed_line_desc(line: CircularTrackLine, total_len: float) -> str:
     """The closed line of a GC content (deviation) or skew path: it starts at 12 o'clock on the radius of the
-    first sample, runs through every sample, and closes; the baseline circle follows as its own subpath."""
+    first sample, runs through every sample, and closes back to 12 o'clock along the circle; the baseline
+    circle follows as its own subpath."""
 
     positions, radii, segment_starts = line
-    angles_rad = np.radians(360.0 * (positions / total_len) - 90)
-    x_coords = np.concatenate(([radii[0] * math.cos(math.radians(-90))], radii * np.cos(angles_rad)))
-    y_coords = np.concatenate(([radii[0] * math.sin(math.radians(-90))], radii * np.sin(angles_rad)))
-    return track_polyline(x_coords, y_coords, [start + 1 for start in segment_starts]) + "z"
+    drawn = circular_drawn_line(
+        np.concatenate(([0.0], positions)),
+        np.concatenate((radii[:1], radii)),
+        total_len,
+        tuple(start + 1 for start in segment_starts),
+    )
+    # The close runs from the last sample to 12 o'clock on the first radius; ``z`` draws its last piece, and
+    # the points between are their own drawn segment so the last sample stays a kept end of the line.
+    close = circular_drawn_line(np.array([positions[-1], total_len]), np.array([radii[-1], radii[0]]), total_len)
+    xs = np.concatenate((drawn.xs, close.xs[1:-1]))
+    ys = np.concatenate((drawn.ys, close.ys[1:-1]))
+    closing_start = (len(drawn.xs),) if len(close.xs) > 2 else ()
+    return track_polyline(xs, ys, (*drawn.segment_starts, *closing_start)) + "z"
 
 
 def circular_gc_skew_line(
@@ -215,13 +275,13 @@ def generate_circular_scalar_area_path_desc(
     positions, outer_radii, baseline_radius, segment_starts = line
     if len(positions) == 0:
         return ""
-    angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
+    outer = circular_drawn_line(positions, outer_radii, float(record_len), segment_starts)
     first = position_angle(positions[0], record_len)
     last = position_angle(positions[-1], record_len)
     # The outer line, then the baseline back from the last sample to the first as arcs (Circular wrap kept).
     return (
         f"M {path_point(*circle_point(baseline_radius, first))}"
-        + track_line_to(outer_radii * np.cos(angles_rad), outer_radii * np.sin(angles_rad), segment_starts)
+        + track_line_to(*outer)
         + f"L {path_point(*circle_point(baseline_radius, last))} "
         + circle_arc_to(baseline_radius, last, first - last)
         + "z"
