@@ -238,9 +238,11 @@ run('record-names circular: a record label change is live and equals a Generate'
   await reveal(inspect);
   await inspect.click();
   const record = page.locator('select[aria-label="Circular record"]');
-  await expect(record.locator('option[value="NC_001879.2"]')).toHaveCount(1, { timeout: APPLY_TIMEOUT });
+  // The Record select names a record by its identity: NC_001879.2 is the one
+  // record of the Session's File card `record-1`.
+  await expect(record.locator('option[value="record-1"]')).toHaveText(/NC_001879\.2/, { timeout: APPLY_TIMEOUT });
   await reveal(record);
-  await record.selectOption('NC_001879.2');
+  await record.selectOption('record-1');
   await expect(input).toBeEnabled();
   await generateNow(page);
   await expectLiveUnit(page, 'Circular record label', () => commitValue(input, 'G2 record label'),
