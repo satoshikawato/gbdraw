@@ -161,6 +161,17 @@ export const ensureDepthTrackConfigCount = (drawing, count = activeDepthTrackCou
   );
   drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
 };
+// A drawing's Reset keeps its Depth files: each kept file names its reset
+// series, as its upload named it (OV-2822).
+/** @param {DrawingState} drawing */
+export const nameDepthSeriesAfterFiles = (drawing) => {
+  const files = representativeDepthFiles(drawing.mode === 'linear' ? linearDepthRows(drawing) : circularDepthRows(drawing));
+  files.forEach((file, index) => {
+    const config = drawing.adv.depth_tracks[index];
+    if (file && config) config.label = getDepthTrackFileBaseName(file);
+  });
+  syncDepthTrackSlotLabelsForTrack(drawing, 0);
+};
 /** @param {DrawingState} drawing @param {number} trackIndex */
 const linearDepthTrackCoverageLabelOf = (drawing, trackIndex) => {
   const covered = depthTrackCoverageCount(linearDepthRows(drawing), trackIndex);
