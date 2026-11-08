@@ -40,7 +40,7 @@ for (const mode of ['circular', 'linear']) {
     const discovery = await page.evaluate(async mode => {
       const app = window.__GBDRAW_APP__;
       const { state } = await import('./js/state.js');
-      const file = state.inputFiles.fileOf(mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb);
+      const file = state.inputFiles.fileOf(mode === 'linear' ? app.linearSeqs[0].gb : state.activeDrawing().circularSources[0].gb);
       const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/services/record-discovery.js');
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
@@ -80,7 +80,7 @@ const snapshot = (page) => page.evaluate(async () => {
     status: circular.circularRecordDiscovery.status,
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
     rows: circular.circularRecordList.value.map(row => [row.selector, row.record_id]),
-    primary: fileName(circular.files.c_gb) || fileName(circular.files.c_gff) || null,
+    primary: fileName(circular.circularSources[0]?.gb) || fileName(circular.circularSources[0]?.gff) || null,
     result: window.__GBDRAW_APP__.currentResults()[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
@@ -92,6 +92,16 @@ const waitStatus = (page, status) => expect.poll(() => page.evaluate(async () =>
 )), { timeout: 180000 }).toBe(status);
 const uploadNative = (page, text, name = 'native.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+// The GenBank file of the Circular drawing's one File card, set as its card's
+// slot sets it: a new card when there is none; null removes the card.
+const defineSetCardGenbank = (page) => page.evaluate(() => {
+  window.setCardGenbank = async (file) => {
+    const { state } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const card = state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0];
+    return card ? app.setCircularSourceFile(card.uid, 'gb', file) : app.addCircularSourceFiles('gb', [file]);
+  };
+});
 const loadPreview = async (page) => {
   page.on('dialog', dialog => dialog.accept());
   await page.locator('input[accept^=".json,"]').setInputFiles(fixture(
@@ -188,7 +198,9 @@ test('replacement draft does not inherit saved catalog; invalid, Retry, Replace 
   expect((await snapshot(page)).result).toBe(original.result);
   await uploadNative(page, genbank('circular'));
   await waitStatus(page, 'ready');
-  await page.getByRole('group', { name: 'GenBank/DDBJ File selection', exact: true }).locator('button').click();
+  // A file leaves with its File card, through the removal dialog.
+  await page.getByRole('button', { name: 'Remove File 1', exact: true }).click();
+  await page.locator('[data-circular-source-removal-dialog] [role=dialog]').getByRole('button', { name: 'Remove file' }).click();
   await waitStatus(page, 'idle');
   expect((await snapshot(page)).rows).toEqual([]);
   expect((await snapshot(page)).result).toBe(original.result);
@@ -196,12 +208,13 @@ test('replacement draft does not inherit saved catalog; invalid, Retry, Replace 
 
 test('rapid replace/remove, mode and input-type changes reject delayed native completion', async ({ page }) => {
   await openApp(page);
+  await defineSetCardGenbank(page);
   const delay = async () => {
     await page.evaluate(async text => {
       const source = new File([text], 'slow.gb');
       const pending = new Promise(resolve => { window.__releaseSlow = () => resolve(new TextEncoder().encode(text).buffer); });
       source.arrayBuffer = () => pending;
-      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
+      await setCardGenbank(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
@@ -212,7 +225,7 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await page.evaluate(() => window.__releaseSlow());
   expect((await snapshot(page)).rows).toEqual([['#1', 'new']]);
   await delay();
-  await page.evaluate(() => { window.__GBDRAW_APP__.setCircularSourceFile('c_gb', null); window.__releaseSlow(); });
+  await page.evaluate(async () => { await setCardGenbank(null); window.__releaseSlow(); });
   await waitStatus(page, 'idle');
   expect((await snapshot(page)).rows).toEqual([]);
   await delay();
@@ -247,6 +260,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
     window.__heldHelpers = [];
   });
   await openApp(page);
+  await defineSetCardGenbank(page);
   const helperSource = async () => {
     await page.evaluate(async text => {
       const source = new File([text], 'helper.gb');
@@ -257,7 +271,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
         return read();
       };
       window.__holdHelper = true;
-      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
+      await setCardGenbank(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.locator('[data-circular-inspect]')).toHaveAttribute('aria-disabled', 'true');
