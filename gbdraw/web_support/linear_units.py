@@ -17,6 +17,7 @@ from typing import Literal, TypedDict
 
 from gbdraw.api.record_planning import comparison_unit_pairs, record_drawn_windows, refuse_file_comparison_of_windows
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.regions import region_text
 from gbdraw.session_request_codec import CanonicalRequestDecodingError, _decode_windows
 
 
@@ -36,11 +37,14 @@ class LinearUnitPairInput(TypedDict):
 
 
 class LinearUnitWindow(TypedDict):
-    """The span of its record a unit draws, in source coordinates, 1-based and inclusive."""
+    """The span of its record a unit draws, in source coordinates, 1-based and inclusive (start after end: across
+    the origin), and ``searchRegion``, the region string of the span a comparison search reads: the crop before its
+    reverse complement, in the form the Worker's extraction helpers read (``region_text``)."""
 
     start: int
     end: int
     reverseComplement: bool
+    searchRegion: str
 
 
 class LinearDrawnUnit(TypedDict):
@@ -104,6 +108,7 @@ def plan_linear_units(records: Sequence[object], pairs: Sequence[object]) -> Lin
                     "start": window.span.start,
                     "end": window.span.end,
                     "reverseComplement": window.span.reverse_complement,
+                    "searchRegion": region_text(window.span.start, window.span.end, False),
                 },
             })
     planned: list[LinearUnitPair] = []

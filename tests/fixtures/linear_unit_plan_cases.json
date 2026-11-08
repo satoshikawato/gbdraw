@@ -44,7 +44,8 @@
             "window": {
               "start": 1,
               "end": 150,
-              "reverseComplement": false
+              "reverseComplement": false,
+              "searchRegion": "1-150"
             }
           },
           {
@@ -54,7 +55,8 @@
             "window": {
               "start": 151,
               "end": 300,
-              "reverseComplement": true
+              "reverseComplement": true,
+              "searchRegion": "151-300"
             }
           },
           {
@@ -149,7 +151,8 @@
             "window": {
               "start": 1,
               "end": 150,
-              "reverseComplement": false
+              "reverseComplement": false,
+              "searchRegion": "1-150"
             }
           },
           {
@@ -159,7 +162,8 @@
             "window": {
               "start": 151,
               "end": 300,
-              "reverseComplement": false
+              "reverseComplement": false,
+              "searchRegion": "151-300"
             }
           },
           {
@@ -169,7 +173,8 @@
             "window": {
               "start": 10,
               "end": 90,
-              "reverseComplement": false
+              "reverseComplement": false,
+              "searchRegion": "10-90"
             }
           },
           {
@@ -179,7 +184,8 @@
             "window": {
               "start": 200,
               "end": 280,
-              "reverseComplement": false
+              "reverseComplement": false,
+              "searchRegion": "200-280"
             }
           },
           {
@@ -189,7 +195,8 @@
             "window": {
               "start": 5,
               "end": 250,
-              "reverseComplement": true
+              "reverseComplement": true,
+              "searchRegion": "5-250"
             }
           }
         ],
@@ -286,6 +293,62 @@
           {
             "pair": 1,
             "queryUnit": 2,
+            "subjectUnit": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "a-window-across-the-origin",
+      "description": "A circular record drawn in one window across its origin, reverse-complemented: the search reads the window from its start through the origin to its end (searchRegion with :origin), before the reverse complement.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [
+            {
+              "start": 250,
+              "end": 40,
+              "reverseComplement": true,
+              "column": null
+            }
+          ]
+        },
+        {
+          "recordKey": "b",
+          "windows": []
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a",
+            "recordKey": "a",
+            "windowOf": null,
+            "window": {
+              "start": 250,
+              "end": 40,
+              "reverseComplement": true,
+              "searchRegion": "250-40:origin"
+            }
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
             "subjectUnit": 1
           }
         ]

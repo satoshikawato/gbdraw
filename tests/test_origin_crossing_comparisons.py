@@ -443,6 +443,30 @@ def test_web_rows_of_a_crop_equal_the_cli_rows(tmp_path, stage_web_losatp_transp
     assert rows and sorted(rows) == sorted(_cli_conversion(mode, 1, region="subject:1-400"))
 
 
+@pytest.mark.parametrize("mode", MODES)
+def test_web_rows_of_a_window_across_the_origin_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode) -> None:
+    """The Worker extracts a window across the origin as Python crops it (``:origin``, PD-OI-122)."""
+    region = "subject:600-250:origin"
+    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, 1, subject_region=region)
+    assert rows and sorted(rows) == sorted(_cli_conversion(mode, 1, region=region))
+    # The window is 121 + 250 bases long; the origin CDS lies inside it as one piece.
+    assert all(max(sstart, send) <= 371 for _, _, sstart, send in rows)
+
+
+def test_the_worker_nucleotide_fasta_of_a_window_across_the_origin_is_the_cli_search_frame(tmp_path: Path) -> None:
+    from gbdraw.comparisons.losat_jobs import losat_search_frame_fasta
+
+    [_query, subject] = _records(1)
+    path = tmp_path / "subject.gb"
+    SeqIO.write([subject], path, "genbank")
+    extracted = json.loads(str(_web_helpers()["extract_first_fasta"](str(path), "genbank", "600-250:origin")))
+    assert "error" not in extracted, extracted.get("error")
+    [unit] = crop_then_reverse_records([subject], parse_region_specs(["600-250:origin"]), [False])[0][0]
+    sequence = "".join(extracted["fasta"].splitlines()[1:])
+    assert sequence == str(subject.seq[599:] + subject.seq[:250])
+    assert sequence == "".join(losat_search_frame_fasta(unit).splitlines()[1:])
+
+
 # ``sequence`` travels in the FASTA, read back by _web_ordered_proteins_from_fasta,
 # so the map stays small. Every other field a comparison can read crosses in the map.
 TRANSPORT_EXEMPT = {"sequence"}

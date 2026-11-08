@@ -12,7 +12,6 @@ import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-source
 import { linearWindowsPayload } from '../../gbdraw/web/js/services/session-request.js';
 import {
   linearUnitPlanPayload,
-  linearUnitSearch,
   planLinearUnitSearch,
   readLinearUnitPlan
 } from '../../gbdraw/web/js/services/linear-units.js';
@@ -42,6 +41,12 @@ const cases = [
     ],
     pairs: [['a', 'b', 'losat'], ['b', 'c', 'losat']],
     unitPairs: [[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [3, 4]]
+  },
+  {
+    id: 'a window across the origin',
+    cards: [{ uid: 'a', windows: [window(16000, 700, true)] }, { uid: 'b' }],
+    pairs: [['a', 'b', 'losat']],
+    unitPairs: [[0, 1]]
   },
   {
     id: 'no windows',
@@ -98,22 +103,20 @@ for (const testCase of cases) {
       recordUids: search.sequences.map((seq) => seq.uid), program: 'blastn', collinearInferOrthogroups: false
     });
     assert.deepEqual(specs.map((spec) => [spec.queryIndex, spec.subjectIndex]), losatPairs);
-    // A unit of a record drawn in several windows searches its window; any other unit is its card.
+    // Each unit searches the window of Python's plan, under its unit key when it is one of several windows; a
+    // window across the origin is searched too, as Python crops it (OV-2739).
     plan.units.forEach((unit, index) => {
       const card = cards.find((item) => item.uid === unit.recordKey);
       assert.equal(search.cards[index], card);
       assert.equal(search.recordKeys[index], unit.recordKey);
       assert.equal(search.windowOf[index], unit.windowOf);
-      if (unit.windowOf === null) {
-        assert.equal(search.sequences[index], card);
-      } else {
-        const sequence = search.sequences[index];
-        assert.deepEqual(
-          [sequence.uid, sequence.region_start, sequence.region_end, sequence.region_reverse, sequence.windows],
-          [unit.unitKey, unit.window.start, unit.window.end, unit.window.reverseComplement, []]
-        );
-      }
+      assert.equal(search.windows[index], unit.window);
+      if (unit.windowOf === null) assert.equal(search.sequences[index], card);
+      else assert.deepEqual(search.sequences[index], { ...card, uid: unit.unitKey });
     });
+    const across = plan.units.filter(({ window: drawn }) => drawn && drawn.start > drawn.end);
+    assert.deepEqual(across.map(({ window: drawn }) => drawn.searchRegion),
+      testCase.id === 'a window across the origin' ? ['16000-700:origin'] : []);
     // The OFF cards follow the units, and no drawn card is searched twice.
     const off = createLinearSeq({ uid: 'off' });
     const searched = losatSearchSequences(search.sequences, [...cards, off], cards);
@@ -133,19 +136,4 @@ test('a reply that does not plan the records and pairs asked is refused', () => 
   refused({ ...plan, pairs: [{ pair: 0, queryUnit: 2, subjectUnit: 0 }] });
   refused({ ...plan, pairs: [{ pair: 1, queryUnit: 0, subjectUnit: 2 }] });
   assert.equal(readLinearUnitPlan(plan, asked), plan);
-});
-
-test('a window across the origin is refused before a browser search reads it as a reversed span (OV-2739)', () => {
-  const cards = [createLinearSeq({ uid: 'a', windows: [{ start: 16000, end: 700, reverseComplement: false, column: null }] }),
-    createLinearSeq({ uid: 'b' })];
-  const plan = {
-    units: [
-      { unitKey: 'a', recordKey: 'a', windowOf: null, window: { start: 16000, end: 700, reverseComplement: false } },
-      { unitKey: 'b', recordKey: 'b', windowOf: null, window: null }
-    ],
-    pairs: [{ pair: 0, queryUnit: 0, subjectUnit: 1 }]
-  };
-  const resolution = resolutionOf({ pairs: [{ queryRecordKey: 'a', subjectRecordKey: 'b', source: 'losat' }] }, cards);
-  assert.throws(() => linearUnitSearch(cards, resolution, plan),
-    (error) => error.code === 'COMPARISON_INPUT' && error.context?.reason === 'ORIGIN_WINDOW_SEARCH');
 });

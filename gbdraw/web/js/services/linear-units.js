@@ -29,8 +29,10 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
  */
 /** The payload of `planLinearUnits`. @typedef {{ records: LinearUnitRecordInput[], pairs: LinearUnitPairInput[] }} LinearUnitPlanPayload */
 /**
- * The span of its record a unit draws (`LinearUnitWindow`), in source coordinates, 1-based and inclusive.
- * @typedef {{ start: number, end: number, reverseComplement: boolean }} LinearUnitWindow
+ * The span of its record a unit draws (`LinearUnitWindow`), in source coordinates, 1-based and inclusive (a start
+ * after the end runs across the origin of a circular record), and `searchRegion`, the region string of the span a
+ * comparison search reads (the crop before its reverse complement), which only the Worker's extraction reads.
+ * @typedef {{ start: number, end: number, reverseComplement: boolean, searchRegion: string }} LinearUnitWindow
  */
 /**
  * One drawn unit (`LinearDrawnUnit`): its key, its record's key, the record key when it is one of several windows of
@@ -41,14 +43,15 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
 /** The `planLinearUnits` reply (`LinearUnitPlan`). @typedef {{ units: LinearDrawnUnit[], pairs: LinearUnitPair[] }} LinearUnitPlan */
 
 /**
- * The searches of one Generate over the drawn units: each unit's card with the unit's window as its crop
- * (`sequences`), the card itself (`cards`), the unit's record key and `windowOf`, and the comparison plan whose edges
- * join units (`resolution`).
+ * The searches of one Generate over the drawn units: each unit's card, under the unit's key when it is one of several
+ * windows (`sequences`), the card itself (`cards`), the unit's record key, `windowOf` and window (the span its search
+ * reads, null for a record drawn whole), and the comparison plan whose edges join units (`resolution`).
  * @typedef {object} LinearUnitSearch
  * @property {LinearSeq[]} sequences
  * @property {LinearSeq[]} cards
  * @property {string[]} recordKeys
  * @property {(string | null)[]} windowOf
+ * @property {(LinearUnitWindow | null)[]} windows
  * @property {LinearComparisonResolution} resolution
  */
 
@@ -58,8 +61,8 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const isIndex = (value) => Number.isSafeInteger(value) && Number(value) >= 0;
 
 /** @param {unknown} value @returns {value is LinearUnitWindow | null} */
-const isWindow = (value) => value === null || (isRecord(value)
-  && isIndex(value.start) && isIndex(value.end) && typeof value.reverseComplement === 'boolean');
+const isWindow = (value) => value === null || (isRecord(value) && isIndex(value.start) && isIndex(value.end)
+  && typeof value.reverseComplement === 'boolean' && typeof value.searchRegion === 'string' && value.searchRegion !== '');
 
 /** @param {unknown} value @returns {value is LinearDrawnUnit} */
 const isUnit = (value) => isRecord(value) && typeof value.unitKey === 'string' && typeof value.recordKey === 'string'
@@ -102,8 +105,8 @@ export const linearUnitPlanPayload = (cards, resolution, windowsOf) => ({
 });
 
 /**
- * The card of each unit, found by its record key, with the unit's window as its crop. A window across the origin of
- * a circular record is refused: the browser search reads a crop as one span of its record (OV-2739).
+ * The card of each unit, found by its record key; a unit that is one of several windows of its record searches
+ * under its unit key. The span a unit's search reads is its window (`LinearUnitSearch.windows`), not the card's crop.
  * @param {readonly LinearSeq[]} cards
  * @param {LinearUnitPlan} plan
  */
@@ -111,19 +114,7 @@ const unitSequences = (cards, plan) => {
   const cardByKey = new Map(cards.map((card, index) => [linearSeqRecordKey(card, index), card]));
   return plan.units.map((unit) => {
     const card = /** @type {LinearSeq} */ (cardByKey.get(unit.recordKey));
-    const { window } = unit;
-    if (window !== null && window.start > window.end) {
-      throw diagnosticError('COMPARISON_INPUT', { reason: 'ORIGIN_WINDOW_SEARCH' }, { stage: 'request-validation' });
-    }
-    // A record drawn whole or in one window is its card, whose crop fields hold that window.
-    if (window === null || unit.windowOf === null) return { card, sequence: card };
-    return {
-      card,
-      sequence: {
-        ...card, uid: unit.unitKey, region_start: window.start, region_end: window.end,
-        region_reverse: window.reverseComplement, windows: []
-      }
-    };
+    return { card, sequence: unit.windowOf === null ? card : { ...card, uid: unit.unitKey } };
   });
 };
 
@@ -163,6 +154,7 @@ export const linearUnitSearch = (cards, resolution, plan) => {
     cards: units.map(({ card }) => card),
     recordKeys: plan.units.map(({ recordKey }) => recordKey),
     windowOf: plan.units.map(({ windowOf }) => windowOf),
+    windows: plan.units.map(({ window }) => window),
     resolution: unitResolution(resolution, plan)
   };
 };

@@ -192,6 +192,25 @@ test('a record drawn in two windows searches each window against the other recor
   expect(contains(ribbons[0].subjectX, await featureSpan(page, 'R3_1'))).toBe(true);
 });
 
+// OV-2739: a window across the origin of a circular record is searched as Python crops it (PD-OI-122, ":origin"):
+// from its start through the origin to its end, so the block that lies after the origin is found inside the window.
+test('a window across the origin is searched from its start through the origin to its end', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
+  await useLosat(page, {
+    task: 'blastn',
+    configure: () => {
+      // R3c 2501..3000 then 1..800: the shared block R3c 1..800 (R2c 2001..2800) lies after the origin.
+      window.__GBDRAW_APP__.linearSeqs[1].windows = [{ start: 2501, end: 800, reverseComplement: false, column: null }];
+    }
+  });
+  await generateAndWaitForResult(page);
+  const ribbons = await committedRibbons(page);
+  expect(ribbons).toHaveLength(1);
+  expect(contains(ribbons[0].subjectX, await featureSpan(page, 'R3_1'))).toBe(true);
+  expect(contains(ribbons[0].queryX, await featureSpan(page, 'R2_1'))).toBe(false);
+});
+
 test('Save Raw LOSAT TSV of a reversed record re-uploads to the same ribbons', async ({ page }) => {
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);

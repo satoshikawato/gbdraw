@@ -9,6 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
+/** @import { LinearUnitWindow } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -794,11 +795,12 @@ const canReuseResolvedProteinArtifacts = ({
     const { selector, windows } = record;
     /** @param {{ start: unknown, end: unknown, reverseComplement: unknown }} window */
     const spanText = (window) => `${window.start}-${window.end}:${Boolean(window.reverseComplement)}`;
-    // A record drawn in several windows: its card holds them as the request does (`createLinearSeq`).
+    // A card whose windows its crop fields cannot hold (several, or one across the origin) holds them as the
+    // request does (`createLinearSeq`).
     const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
       || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
-      || (seq.windows.length > 1 || windows.length > 1
+      || (seq.windows.length > 0 || windows.length > 1
         ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
         : (only?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
           || (only?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
@@ -2981,7 +2983,7 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
-      /** @type {({ file: string, displayFile: string } | null)[]} */
+      /** @type {({ file: string, acrossOrigin: boolean } | null)[]} */
       let regionSpecs = [];
       /** @type {string[]} */
       let recordSelectors = [];
@@ -3678,26 +3680,30 @@ export const createRunAnalysis = ({
 
         /** @type {{ reverse: boolean }[]} */
         const viewTransformSpecs = [];
-        /** @param {LinearSeq} seq */
-        /** @param {LinearSeq} seq @param {LinearSeq} card The card `seq` draws a unit of. */
-        const buildRegionSpec = (seq, card) => {
+        /**
+         * The span a record's search reads: a drawn unit's window from Python's unit plan, whose `searchRegion` only
+         * the Worker reads when the window runs across the origin (`acrossOrigin`, OV-2739); else the card's crop.
+         * @param {LinearSeq} seq @param {LinearSeq} card The card `seq` draws a unit of.
+         * @param {LinearUnitWindow | null} window The unit's window, null for a record drawn whole or an OFF card.
+         * @returns {{ file: string, acrossOrigin: boolean } | null}
+         */
+        const buildRegionSpec = (seq, card, window) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
+          recordSelectors.push(recordIdRaw || '');
+          if (window) {
+            viewTransformSpecs.push({ reverse: window.reverseComplement });
+            return { file: window.searchRegion, acrossOrigin: window.start > window.end };
+          }
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
           const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(card));
-
-          recordSelectors.push(recordIdRaw || '');
 
           if (bounds) {
             const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
-            const coordinateReverse = start > end;
-            const displayReverse = wantsReverse || coordinateReverse;
-            const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
-            const canonicalSpecBody = `${canonicalStart}-${canonicalEnd}`;
-            viewTransformSpecs.push({ reverse: displayReverse });
-            return { file: canonicalSpecBody, displayFile: specBody };
+            viewTransformSpecs.push({ reverse: wantsReverse || start > end });
+            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false };
           }
 
           viewTransformSpecs.push({ reverse: wantsReverse });
@@ -3833,6 +3839,8 @@ export const createRunAnalysis = ({
           const proteinPair = useProteinBlastp && inputSpec.paired !== null;
           const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
+          // The browser reader slices one span of a record; a window across the origin is cropped by Python.
+          const acrossOrigin = Boolean(regionSpecs[idx]?.acrossOrigin);
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
           const recordSelector = !useProteinBlastp && inputSpec.paired !== null
             ? await gffFastaReaderSelector({
@@ -3971,6 +3979,7 @@ export const createRunAnalysis = ({
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
                 });
               };
+              if (acrossOrigin) return await extractWithWorker();
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
                 const { records, parsed } = await readParsedSequenceRecords(sourceFile, fmt);
@@ -4231,7 +4240,9 @@ export const createRunAnalysis = ({
           return args;
         };
 
-        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx]));
+        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(
+          seq, losatCards[idx], (idx < losatSearch.drawnCount ? unitSearch?.windows[idx] : null) ?? null
+        ));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
