@@ -5793,15 +5793,30 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
 const bridgeSessionView = (session) => Array.isArray(session.drawings)
   ? savedDrawingView(session, session.ui.activeDrawingId) : session;
 
+// A Session file as the bridge reads it: a Session file container's inputs
+// become base64 descriptors of their entry bytes; a JSON Session, plain or gzip, is read as it is.
+const readProjectSession = async (bytes) => {
+  const blob = new Blob([bytes]);
+  const { isSessionContainerFile, openSessionContainerEntry, readSessionContainer } = await import(
+    pathToFileURL(join(tempRoot, 'js/services/session-container.js')));
+  if (!await isSessionContainerFile(blob)) {
+    return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  }
+  const read = await readSessionContainer(blob);
+  const document = /** @type {Record<string, any>} */ (read.document);
+  for (const [id, entry] of Object.entries(read.resources)) {
+    const data = Buffer.from(await new Response(openSessionContainerEntry(blob, entry)).arrayBuffer());
+    document.resources[id] = { ...document.resources[id], encoding: 'base64', data: data.toString('base64') };
+  }
+  return document;
+};
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
   assert.ok(sessionPath, '--project-session requires a path');
   const sessionBytes = await readFile(sessionPath);
-  const sessionText = sessionBytes[0] === 0x1f && sessionBytes[1] === 0x8b
-    ? gunzipSync(sessionBytes).toString('utf8')
-    : sessionBytes.toString('utf8');
-  const session = bridgeSessionView(JSON.parse(sessionText));
+  const session = bridgeSessionView(await readProjectSession(sessionBytes));
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
