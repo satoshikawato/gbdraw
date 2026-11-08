@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: in a Linear row that draws several records or several windows of one
+  record side by side, a label's leader from a record drawn later could be
+  drawn over the letters of a label from a record drawn before it (with
+  `--region` given twice for HmmtDNA, the leader of "ATP synthase F0 subunit 6"
+  crossed "cytochrome c oxidase subunit I"). The labels of such a row are now
+  stacked so that a leader passes only behind labels, as it does within one
+  record, in the CLI, the Python API, and the Web app. The label fit check
+  now reports such a leader too. Rows with a single record or window are
+  drawn as before (OV-2892).
 - Fixed: a Legend name written with `<i>...</i>` (a similarity-ring label, a
   color table's legend name, a renamed Legend row, a gradient title) showed the
   tags as text, in the CLI, the Python API, and the Web app. The words between

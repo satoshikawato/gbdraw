@@ -4,6 +4,7 @@
 """Linear track-based label placement utilities."""
 
 import math
+from bisect import bisect_left, bisect_right, insort
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from ..layout.text_geometry import (
     aabb_from_points,
     anchor_x_bounds,
     convex_polygons_intersect,
+    segment_intersects_polygon,
     text_box_corner_offsets,
     translate_points,
 )
@@ -496,37 +498,73 @@ def _place_linear_label_without_overlap(
     return abs(float(label["middle_y"]) - original_y) > 0.001
 
 
+def _leader_obstacle(label: LinearLabel) -> _PlacedLinearLabel:
+    """A placed label's vertical leader as a box the labels of a record drawn before it keep clear of,
+    with their row gap: that record's group is drawn first, so the leader would lie over their letters
+    (OV-2892)."""
+
+    x = float(label["feature_anchor_x"])  # where the leader starts, in the row's coordinates here
+    top, bottom = sorted((float(label["leader_start_y"]), float(label["leader_end_y"])))
+    box = Aabb(x - GEOMETRY_EPSILON, top, x + GEOMETRY_EPSILON, bottom)
+    return _PlacedLinearLabel(box, [(box.min_x, top), (box.max_x, top), (box.max_x, bottom), (box.min_x, bottom)], True)
+
+
 def _resolve_above_feature_label_overlaps(
-    labels: list[LinearLabel], min_gap_px: float, row_pitch: float, keep_clear: Sequence[Aabb]
+    labels: list[LinearLabel],
+    min_gap_px: float,
+    row_pitch: float,
+    keep_clear: Sequence[Aabb],
+    *,
+    units: Sequence[int],
 ) -> None:
     """Stack above-feature labels away from the axis when their boxes, each with its row gap along its
     text, collide, and off the ``keep_clear`` boxes (the definition text), which are placed first. A
     horizontal label moves by whole rows of ``row_pitch`` off its feature; a turned one by the clearing
-    shift."""
+    shift.
+
+    ``units`` gives each label's record by the order the figure draws the records. A record draws its
+    leaders under its labels, so the labels are stacked from the record drawn last, and a label keeps
+    clear of the leaders of the records drawn after its own too (OV-2892)."""
     if not labels:
         return
 
     for place_above in (True, False):
-        side_labels = [label for label in labels if label["above_feature_place_above"] is place_above]
+        side_labels = [
+            (label, unit) for label, unit in zip(labels, units, strict=True)
+            if label["above_feature_place_above"] is place_above
+        ]
         if not side_labels:
             continue
         placed_by_id: dict[int, _PlacedLinearLabel] = {}
-        placed_x_index = IntervalIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
+        placed_x_index = IntervalIndex(
+            bucket_size=_above_feature_label_bucket_size([label for label, _unit in side_labels], min_gap_px)
+        )
+
+        def keep_clear_of(placed: _PlacedLinearLabel) -> None:
+            placed_id = len(placed_by_id)
+            placed_by_id[placed_id] = placed
+            placed_x_index.insert(placed_id, Interval(placed.aabb.min_x, placed.aabb.max_x))
+
         for box in keep_clear:
             corners = [(box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)]
-            placed_by_id[len(placed_by_id)] = _PlacedLinearLabel(box, corners, keeps_row_gap=False)
-            placed_x_index.insert(len(placed_by_id) - 1, Interval(box.min_x, box.max_x))
+            keep_clear_of(_PlacedLinearLabel(box, corners, keeps_row_gap=False))
         direction = -1.0 if place_above else 1.0
-        for label in sorted(side_labels, key=lambda item: float(item["feature_anchor_x"])):
+        # The leaders of the record being stacked, kept clear of from the record drawn before it on.
+        record_leaders: list[_PlacedLinearLabel] = []
+        record: int | None = None
+        for label, unit in sorted(side_labels, key=lambda item: (-item[1], float(item[0]["feature_anchor_x"]))):
+            if unit != record:
+                for leader in record_leaders:
+                    keep_clear_of(leader)
+                record_leaders, record = [], unit
             pitch = row_pitch if is_horizontal_label(label) else None
             if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction, pitch):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
             corners = _row_label_corners(label)
-            placed = _PlacedLinearLabel(Aabb(*aabb_from_points(corners)), corners, keeps_row_gap=True)
-            placed_id = len(placed_by_id)
-            placed_by_id[placed_id] = placed
-            placed_x_index.insert(placed_id, Interval(placed.aabb.min_x, placed.aabb.max_x))
+            keep_clear_of(_PlacedLinearLabel(Aabb(*aabb_from_points(corners)), corners, keeps_row_gap=True))
+            if label["leader_line"]:
+                record_leaders.append(_leader_obstacle(label))
 
 
 def _passes_orthogroup_label_eligibility(
@@ -569,17 +607,27 @@ class LinearLabelFrame(NamedTuple):
     x: float
 
 
+def linear_paint_order(record_count: int) -> range:
+    """The order in which a Linear figure draws the groups of its ``record_count`` records: record order.
+    A record's group draws its leaders under its labels, so a later group's leader lies over an earlier
+    group's labels; the one owner of that order, read by the figure's drawing loop and by the label rows
+    (``linear_label_rows``), which place and count labels by it (OV-2892)."""
+
+    return range(record_count)
+
+
 def linear_label_rows(frames: Sequence[LinearLabelFrame] | None, record_count: int) -> list[list[tuple[int, float]]]:
-    """The records of each Linear row in row order, each with the x of its start (``frames``; each of the
+    """The records of each Linear row, rows in order and the records of a row in the order the figure
+    draws them (``linear_paint_order``), each with the x of its start (``frames``; each of the
     ``record_count`` records alone in its row without them)."""
 
     resolved = list(frames) if frames is not None else [LinearLabelFrame(index, 0.0) for index in range(record_count)]
     if len(resolved) != record_count:
         raise ValueError("label frames must give one frame for every record")
     rows: dict[int, list[tuple[int, float]]] = {}
-    for index, frame in sorted(enumerate(resolved), key=lambda item: (item[1].row, item[1].x, item[0])):
-        rows.setdefault(frame.row, []).append((index, frame.x))
-    return list(rows.values())
+    for index in linear_paint_order(record_count):
+        rows.setdefault(resolved[index].row, []).append((index, resolved[index].x))
+    return [rows[row] for row in sorted(rows)]
 
 
 class LinearRecordLabels(NamedTuple):
@@ -893,13 +941,17 @@ def place_linear_label_row(
     track_layout: str,
 ) -> list[list[LinearLabel]]:
     """Stack the feature labels of the records in one Linear row, each with the x of its start in the
-    row (records in row order), so that no two labels of the row overlap (OV-1188).
+    row (records in the order the figure draws them), so that no two labels of the row overlap (OV-1188)
+    and no leader is drawn over a label's letters (OV-2892).
 
-    The external labels take the lowest row free where the row draws them, in record order, and the
-    rows of a side are one row pitch apart from the outermost feature of the row. ``above_feature``
+    A record draws its leaders under its labels, so a leader may pass behind a label of its own record
+    or of a record drawn later, never of a record drawn before. The external labels are stacked from
+    the record drawn last, each in the lowest row free where the row draws it and above the rows that
+    the leaders of the records drawn after it pass through there; the rows of a side are one row pitch
+    apart from the outermost feature of the row. ``above_feature``
     labels start at their own feature: a horizontal one in the first row off it, with a leader, a turned
     one on it (LP-D120); then they move away from the axis off each other. A record's labels keep
-    record coordinates, and the first record's external labels take the rows they take alone. Returns
+    record coordinates, and the last record's external labels take the rows they take alone. Returns
     each record's labels: those on their features first, then the external ones by row.
     """
 
@@ -928,18 +980,33 @@ def place_linear_label_row(
     track_dict: defaultdict[str, list[LinearLabel]] = defaultdict(list)
     track_indexes: dict[str, IntervalIndex] = {}
     framed_by_id: dict[int, LinearLabel] = {}
-    for record, x in records:
+    # The leaders of the records stacked so far (drawn after the record being stacked) by side: each
+    # one's x in the row and the row of its label, sorted by x.
+    later_leaders: defaultdict[tuple[float, float], list[tuple[float, int]]] = defaultdict(list)
+    for record, x in reversed(records):
+        stacked: list[tuple[tuple[float, float], tuple[float, int]]] = []
         for label in record.labels:
             if label["is_embedded"]:
                 continue
             framed: LinearLabel = {**label, "start": float(label["start"]) + x, "end": float(label["end"]) + x}
-            blocked = _keep_clear_rows(label, x, side(label), keep_clear) if keep_clear else None
-            track_id = f"track_{_find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed, blocked)}"
+            label_side = side(label)
+            keep_clear_rows = _keep_clear_rows(label, x, label_side, keep_clear) if keep_clear else None
+            floor = _rows_under_later_leaders(later_leaders[label_side], _linear_label_interval(framed))
+            blocked = (
+                keep_clear_rows
+                if not floor
+                else lambda row, rows=keep_clear_rows, floor=floor: row <= floor or (rows is not None and rows(row))
+            )
+            track_number = _find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed, blocked)
+            track_id = f"track_{track_number}"
             label["track_id"] = framed["track_id"] = track_id
             track_dict[track_id].append(framed)
             framed_id = len(framed_by_id)
             framed_by_id[framed_id] = framed
             _insert_external_label_index(track_indexes, track_id, framed_id, framed, bucket_size)
+            stacked.append((label_side, (float(label["middle"]) + x, track_number)))
+        for label_side, leader in stacked:
+            insort(later_leaders[label_side], leader)
 
     if profile.label_placement == "above_feature":
         for record, _x in records:
@@ -947,17 +1014,20 @@ def place_linear_label_row(
                 if is_horizontal_label(label):
                     _above_feature_label_in_first_row(label, track_height)
         # Every label is at its feature here; the resolver reads their anchor and box x.
-        on_features = [(label, x) for record, x in records for label in record.labels]
+        on_features = [(label, x, unit) for unit, (record, x) in enumerate(records) for label in record.labels]
         framed_labels: list[LinearLabel] = [
             {
                 **label,
                 "middle_x": float(label["middle_x"]) + x,
                 "feature_anchor_x": float(label["feature_anchor_x"]) + x,
             }
-            for label, x in on_features
+            for label, x, _unit in on_features
         ]
-        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05), track_height, keep_clear)
-        for (label, _x), framed in zip(on_features, framed_labels):
+        _resolve_above_feature_label_overlaps(
+            framed_labels, max(1.0, max_height * 0.05), track_height, keep_clear,
+            units=[unit for _label, _x, unit in on_features],
+        )
+        for (label, _x, _unit), framed in zip(on_features, framed_labels):
             label["middle_y"] = framed["middle_y"]
             if framed["leader_line"]:
                 label["leader_line"] = True
@@ -975,6 +1045,16 @@ def place_linear_label_row(
             label["middle_y"] = linear_row_y(label["row_origin_y"], label["row_pitch"], linear_label_row(label))
         placed.append([label for label in record.labels if label["is_embedded"]] + external)
     return placed
+
+
+def _rows_under_later_leaders(leaders: Sequence[tuple[float, int]], span: Interval) -> int:
+    """The highest row (0 for none) that a leader of ``leaders`` (x in the row, row of its label; sorted)
+    passes through inside ``span``: a label there would lie under that leader, which a record drawn
+    later draws on top of it (OV-2892). A leader passes through the rows below its label's row."""
+
+    low = bisect_right(leaders, (span.start, math.inf))
+    high = bisect_left(leaders, (span.end, -math.inf))
+    return max((row - 1 for _x, row in leaders[low:high]), default=0)
 
 
 def _keep_clear_rows(
@@ -1169,15 +1249,43 @@ def linear_label_shapes(labels: Sequence[LinearLabel], x: float = 0.0) -> list[L
     ]
 
 
+def _leaders_over_earlier_labels(shapes: Sequence[LabelShape], owners: Sequence[int]) -> list[int]:
+    """The owners of the leaders (``shapes``, each owned by its record's place in the row's drawing order)
+    that pass over a label of a record drawn before theirs, with the room the label keeps in its row, one
+    per such pair: the later record's group draws that leader on top of the label (OV-2892)."""
+
+    if len(set(owners)) < 2:
+        return []
+    boxes = [aabb_from_points(shape.parts[0]) for shape in shapes]
+    row_width = max(box[2] for box in boxes) - min(box[0] for box in boxes)
+    index = IntervalIndex(bucket_size=_external_label_bucket_size(row_width))
+    for label, box in enumerate(boxes):
+        index.insert(label, Interval(box[0], box[2]))
+    found: list[int] = []
+    for leader, shape in enumerate(shapes):
+        if len(shape.leader) < 2:
+            continue
+        xs = [point[0] for point in shape.leader]
+        for label_id in index.query(Interval(min(xs), max(xs))):
+            label = cast(int, label_id)  # only int ids are inserted
+            if owners[label] < owners[leader] and any(
+                segment_intersects_polygon(segment, shapes[label].parts[0], touching=False)
+                for segment in zip(shape.leader, shape.leader[1:])
+            ):
+                found.append(owners[leader])
+    return found
+
+
 def _linear_row_label_fits(
     row: Sequence[tuple[Sequence[LinearLabel], float]],
     definition_boxes: Sequence[Sequence[Aabb]] | None = None,
 ) -> tuple[list[LabelFit], bool]:
-    """The fit of each record's drawn feature labels in one Linear row (records in row order, each with
-    the x of its start), counted together with the shared rule (their layout boxes and leaders): a pair
-    of labels of two records counts for the later record (OV-1188). A label whose letters cover one of
-    its record's ``definition_boxes`` (record coordinates, as its labels) counts once for its record
-    (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
+    """The fit of each record's drawn feature labels in one Linear row (records in the order the figure
+    draws them, each with the x of its start), counted together with the shared rule (their layout boxes
+    and leaders): a pair of labels of two records counts for the record drawn later (OV-1188), and so
+    does a leader of it over a label of the earlier one, as a crossing (OV-2892). A label whose letters
+    cover one of its record's ``definition_boxes`` (record coordinates, as its labels) counts once for
+    its record (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
 
     owners: list[int] = []
     labels: list[LinearLabel] = []
@@ -1192,6 +1300,8 @@ def _linear_row_label_fits(
         counts[max(owners[left], owners[right])][0] += 1
     for left, right in crossing_pairs([shape.leader for shape in shapes]):
         counts[max(owners[left], owners[right])][1] += 1
+    for owner in _leaders_over_earlier_labels(shapes, owners):
+        counts[owner][1] += 1
     for position, ((record_labels, _x), boxes) in enumerate(zip(row, definition_boxes or [()] * len(row), strict=True)):
         counts[position][2] += sum(_label_covers_keep_clear(label, boxes) for label in record_labels)
     embedded_overlap = any(labels[left]["is_embedded"] or labels[right]["is_embedded"] for left, right in overlaps)
