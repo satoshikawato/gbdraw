@@ -290,7 +290,6 @@ from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
     ScalarSpec,
-    circular_track_slots_from_order,
     default_circular_track_slots,
     normalize_listed_circular_track_slots,
     normalize_linear_track_slots_with_axis,
@@ -2806,8 +2805,7 @@ def assemble_circular_diagram_from_record(
                 conservation_ring_gap=inputs.conservation_ring_gap,
             )
             if parsed_circular_track_slots is None:
-                parsed_circular_track_slots = circular_track_slots_from_order(
-                    "features,ticks,depth,gc_content,gc_skew",
+                parsed_circular_track_slots = default_circular_track_slots(
                     show_ticks=bool(cfg.objects.scale.show),
                     show_depth=show_depth,
                     depth_track_count=available_depth_track_count,
@@ -2974,6 +2972,7 @@ def assemble_circular_diagram_from_record(
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,
+            implicit_track_stack=inputs.circular_track_slots is None or inputs._implicit_track_stack,
             circular_track_axis_index=circular_track_axis_index,
             annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
             annotation_record_index=context.annotation_record_index,
@@ -3127,6 +3126,7 @@ def assemble_circular_diagram_from_records(
         )
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(inputs.circular_track_slots)
+    implicit_track_stack = parsed_circular_track_slots is None
     circular_track_axis_index = _validate_circular_track_axis_index(
         inputs.circular_track_axis_index,
         parsed_circular_track_slots,
@@ -3209,8 +3209,7 @@ def assemble_circular_diagram_from_records(
                 conservation_ring_gap=inputs.conservation_ring_gap,
             )
             if parsed_circular_track_slots is None:
-                parsed_circular_track_slots = circular_track_slots_from_order(
-                    "features,ticks,depth,gc_content,gc_skew",
+                parsed_circular_track_slots = default_circular_track_slots(
                     show_ticks=bool(cfg.objects.scale.show),
                     show_depth=show_depth,
                     depth_track_count=max(1, depth_track_count(record_depth_tracks)),
@@ -3318,6 +3317,7 @@ def assemble_circular_diagram_from_records(
                 plot_title_position="none",
                 center_reserved_radius=inputs.center_reserved_radius,
                 circular_track_slots=parsed_circular_track_slots,
+                _implicit_track_stack=implicit_track_stack,
                 circular_track_axis_index=circular_track_axis_index,
                 _resolved_annotations=resolved_annotations,
                 evalue=evalue,
@@ -3444,9 +3444,8 @@ def assemble_circular_diagram_from_records(
     legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
     if legend_effective != "none":
         legend_slots, legend_annotations = plan_circular_annotation_slots(
-            resolved_annotations,
+            CircularTrackInputs(parsed_circular_track_slots, implicit_track_stack, annotations=resolved_annotations),
             records,
-            parsed_circular_track_slots,
             show_ticks=bool(cfg.objects.scale.show),
             show_depth=bool(profile.show_depth and depth_config is not None),
             show_gc=profile.show_gc,

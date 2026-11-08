@@ -1898,3 +1898,83 @@ def test_circular_region_labels_of_two_lanes_do_not_cross() -> None:
     assert not any(
         convex_polygons_intersect(part, other) for part in labels["stx21"].parts for other in labels["ter1"].parts
     )
+
+
+def _islands_with_rings(record_count: int) -> tuple[list[SeqRecord], CircularDiagramOptions]:
+    """Records with a highlight set and a labelled bracket set, one comparison ring, and no track stack (OV-2820)."""
+
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    records = [SeqRecord(Seq("ACGT" * 2500), id=f"r{index}", name=f"r{index}") for index in range(1, record_count + 1)]
+    hits = pd.DataFrame(
+        [("q", record.id, 90.0, 4000, 0, 0, 1, 4000, 1, 4000, 1e-20, 500.0) for record in records],
+        columns=COMPARISON_COLUMNS,
+    )
+    options = CircularDiagramOptions(
+        annotations=AnnotationOptions(
+            sets=tuple(
+                AnnotationSet(
+                    set_id,
+                    tuple(
+                        RegionAnnotation(
+                            f"{set_id}{index}",
+                            CoordinateSpan(parse_record_selector(f"#{index}"), 5000, 6000),
+                            label=f"island {index}",
+                            mark=mark,
+                        )
+                        for index in range(1, record_count + 1)
+                    ),
+                )
+                for set_id, mark in (("tint", "highlight"), ("islands", "bracket"))
+            )
+        ),
+        conservation_dataframes=[hits],
+        conservation_reference="subject",
+    )
+    return records, options
+
+
+@pytest.mark.parametrize("record_count", [1, 2])
+def test_circular_region_sets_are_drawn_with_comparison_rings_and_no_stack(
+    record_count: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Rings make the engine build the track list; the sets still get their slots, as without rings (OV-2820)."""
+
+    records, options = _islands_with_rings(record_count)
+    if record_count == 1:
+        drawing = build_circular_diagram(records[0], options=options)
+    else:
+        drawing = build_circular_multi_diagram(records, options=options)
+
+    root = ElementTree.fromstring(drawing.tostring())
+    drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
+    expected = {f"{set_id}{index}" for set_id in ("tint", "islands") for index in range(1, record_count + 1)}
+    assert expected <= drawn
+    assert "not referenced by a circular track slot" not in caplog.text
+    ring_ids = {
+        slot["slotId"] for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+    assert "conservation_1" in ring_ids
+
+
+def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack(caplog: pytest.LogCaptureFixture) -> None:
+    """Two depth tracks also make the engine build the track list; the sets keep their slots (OV-2820)."""
+
+    from gbdraw.api.options import DepthTrackInput
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    depth = pd.DataFrame({"record": ["r1"] * 10000, "pos": range(1, 10001), "depth": [20] * 10000})
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=_islands_with_rings(1)[1].annotations,
+            depth_tracks=(DepthTrackInput(source=depth, label="a"), DepthTrackInput(source=depth, label="b")),
+            depth_window=100,
+            depth_step=100,
+        ),
+    )
+
+    root = ElementTree.fromstring(drawing.tostring())
+    drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
+    assert {"tint1", "islands1"} <= drawn
+    assert "not referenced by a circular track slot" not in caplog.text

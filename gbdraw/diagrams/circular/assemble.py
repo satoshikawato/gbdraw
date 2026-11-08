@@ -144,7 +144,6 @@ from ...tracks import (
     parse_nonnegative_integer,
 )
 from ...annotations import (
-    AnnotationOptions,
     AnnotationTrackParams,
     LabelSizing,
     LaneRoom,
@@ -280,9 +279,8 @@ class CircularAssemblyResult:
 
 
 def plan_circular_annotation_slots(
-    annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
+    tracks: CircularTrackInputs,
     records: Sequence[SeqRecord],
-    slots: list[CircularTrackSlot] | None,
     *,
     show_ticks: bool,
     show_depth: bool,
@@ -292,16 +290,20 @@ def plan_circular_annotation_slots(
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     record_indices: Sequence[int] | None = None,
 ) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle]:
-    """Bind annotation sets to the Circular slot list that the records use."""
+    """Bind the track inputs' annotation sets to the Circular slot list that the records use. A list the
+    engine built (``implicit_track_stack``: rings, depth tracks) is the default list the sets' slots join,
+    not a reader's stack that leaves them out (OV-2820)."""
 
-    slots, bundle, _auto_slot_ids = prepare_annotation_track_slots(
-        annotations,
+    slots = tracks.circular_track_slots
+    engine_slots = slots if tracks.implicit_track_stack else None
+    planned, bundle, _auto_slot_ids = prepare_annotation_track_slots(
+        tracks.annotations,
         records,
-        slots,
+        None if tracks.implicit_track_stack else slots,
         mode="circular",
         record_transforms=record_transforms,
         record_indices=record_indices,
-        default_slots=lambda: default_circular_track_slots(
+        default_slots=lambda: list(engine_slots) if engine_slots is not None else default_circular_track_slots(
             show_features=True,
             show_ticks=show_ticks,
             show_depth=show_depth,
@@ -311,7 +313,7 @@ def plan_circular_annotation_slots(
         ),
         slot_factory=CircularTrackSlot,
     )
-    return slots, bundle
+    return (planned if planned is not None else slots), bundle
 
 
 def _prepare_circular_annotation_tracks(
@@ -328,9 +330,8 @@ def _prepare_circular_annotation_tracks(
 ) -> CircularPlannedTracks:
     record_index = tracks.annotation_record_index
     slots, bundle = plan_circular_annotation_slots(
-        tracks.annotations,
+        tracks,
         [gb_record],
-        tracks.circular_track_slots,
         show_ticks=show_ticks,
         show_depth=show_depth,
         show_gc=show_gc,
