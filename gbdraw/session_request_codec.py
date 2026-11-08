@@ -125,6 +125,7 @@ from gbdraw.annotations import (
     RegionAnnotationStyle,
     annotation_track_params_from_mapping,
 )
+from gbdraw.annotations.models import DEFAULT_HIGHLIGHT_FILL
 
 from .api.options import (
     CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
@@ -3315,8 +3316,37 @@ def _decode_tracks(
     return result
 
 
-def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
-    return {
+class EncodedHatchStyle(TypedDict):
+    angle: float
+    spacing: float
+    color: str
+    width: float
+    cross: bool
+
+
+class _EncodedAnnotationStyleRequired(TypedDict):
+    stroke: str
+    strokeWidth: float
+    strokeDasharray: list[float]
+    lineCap: str
+    fill: str | None
+    fillOpacity: float
+    hatch: EncodedHatchStyle | None
+    labelColor: str
+    labelFontSize: float | None
+    labelOrientation: str
+    labelPosition: str
+    labelOffset: float
+
+
+class EncodedAnnotationStyle(_EncodedAnnotationStyleRequired, total=False):
+    """A region annotation style as the request writes it; the gradient only when the style has one."""
+
+    gradient: EncodedAnnotationGradient
+
+
+def _encode_annotation_style(style: RegionAnnotationStyle) -> EncodedAnnotationStyle:
+    encoded: EncodedAnnotationStyle = {
         "stroke": style.stroke,
         "strokeWidth": style.stroke_width,
         "strokeDasharray": list(style.stroke_dasharray),
@@ -3339,13 +3369,31 @@ def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
         "labelOrientation": style.label_orientation,
         "labelPosition": style.label_position,
         "labelOffset": style.label_offset,
-        # Written only when set, so a style without one encodes as before.
-        **(
-            {"gradient": _encode_annotation_gradient(style.gradient)}
-            if style.gradient is not None
-            else {}
-        ),
     }
+    # Written only when set, so a style without one encodes as before.
+    if style.gradient is not None:
+        encoded["gradient"] = _encode_annotation_gradient(style.gradient)
+    return encoded
+
+
+def describe_draft_annotation_style() -> EncodedAnnotationStyle:
+    """The style the Web gives a new annotation set: ``RegionAnnotationStyle()`` as the request writes it, with
+    ``DEFAULT_HIGHLIGHT_FILL`` for its fill.
+
+    Python's style has no fill, and a band without one draws none; the Web starts a set on the fill a highlight
+    draws without one, so a band or highlight made in the editor shows a fill and the Fill control starts on a
+    colour. A whole number is written as JavaScript writes it (``4``, not ``4.0``), so the Web draft and a Session
+    Python writes keep their bytes.
+    """
+
+    def whole(value: float) -> float:
+        return int(value) if float(value).is_integer() else value
+
+    encoded = _encode_annotation_style(RegionAnnotationStyle(fill=DEFAULT_HIGHLIGHT_FILL))
+    encoded["strokeWidth"] = whole(encoded["strokeWidth"])
+    encoded["fillOpacity"] = whole(encoded["fillOpacity"])
+    encoded["labelOffset"] = whole(encoded["labelOffset"])
+    return encoded
 
 
 class _EncodedAnnotationGradientRequired(TypedDict):

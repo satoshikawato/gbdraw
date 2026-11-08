@@ -4021,20 +4021,6 @@ def migrate_session_draft_values(config: object, source_version: int) -> object:
     return _with_legacy_repeat_region_shape(migrated) if legacy_shapes else dict(migrated)
 
 
-_DEFAULT_ANNOTATION_STYLE: dict[str, Any] = {
-    "stroke": "#404040",
-    "strokeWidth": 1.5,
-    "strokeDasharray": [],
-    "lineCap": "tick",
-    "fill": "#94a3b8",
-    "fillOpacity": 0.2,
-    "hatch": None,
-    "labelColor": "#202020",
-    "labelFontSize": None,
-    "labelOrientation": "auto",
-    "labelPosition": "center",
-    "labelOffset": 4,
-}
 _ANNOTATION_MARKS = ("line", "bracket", "band", "highlight")
 
 
@@ -4118,7 +4104,9 @@ def _draft_annotation_target(target: object) -> dict[str, Any]:
 
 
 def _draft_annotation_style(style: object) -> dict[str, Any]:
-    return {**_DEFAULT_ANNOTATION_STYLE, **(_json_clone(style) if isinstance(style, Mapping) else {})}
+    from .session_request_codec import describe_draft_annotation_style
+
+    return {**describe_draft_annotation_style(), **(_json_clone(style) if isinstance(style, Mapping) else {})}
 
 
 def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[dict[str, Any]]:

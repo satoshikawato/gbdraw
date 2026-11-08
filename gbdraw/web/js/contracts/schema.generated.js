@@ -500,6 +500,22 @@ export const LOSAT_SEARCH_FLAGS = Object.freeze({
   "--max-target-seqs": '-max_target_seqs'
 });
 
+// gbdraw/session_request_codec.py: describe_draft_annotation_style()
+export const DRAFT_ANNOTATION_STYLE = Object.freeze({
+  stroke: '#404040',
+  strokeWidth: 1.5,
+  strokeDasharray: Object.freeze([]),
+  lineCap: 'tick',
+  fill: '#94a3b8',
+  fillOpacity: 0.2,
+  hatch: null,
+  labelColor: '#202020',
+  labelFontSize: null,
+  labelOrientation: 'auto',
+  labelPosition: 'center',
+  labelOffset: 4
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({

@@ -32,7 +32,7 @@ from gbdraw.annotations.layout import (
     lane_edge_px,
     lane_width_px,
 )
-from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation
+from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation, annotation_solid_fill
 from gbdraw.core.text import TextRun, italic_markup_runs
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
@@ -890,9 +890,7 @@ def _label_text(
 def _band_fill(mark: str, style: RegionAnnotationStyle) -> str:
     """The fill a band or highlight mark is drawn with."""
 
-    return hatch_pattern_paint(style.hatch) if style.hatch else (
-        style.fill or ("#94a3b8" if mark == "highlight" else "none")
-    )
+    return hatch_pattern_paint(style.hatch) if style.hatch else annotation_solid_fill(mark, style)
 
 
 def _band_paint(
