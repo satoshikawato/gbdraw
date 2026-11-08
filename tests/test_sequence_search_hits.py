@@ -61,7 +61,7 @@ ROWS = "\n".join(
     )
 )
 # qA is 600 bp and its hit covers all of it; qB is 400 bp.
-QUERIES = (SearchQuery("qA", 600), SearchQuery("qB", 400))
+QUERIES = (SearchQuery("qA", 600, "blastn"), SearchQuery("qB", 400, "blastn"))
 SUBJECTS = (
     SearchSubject("rec1:1-5000", parse_record_selector("rec1"), "record-1"),
     SearchSubject("rec2:1-3000", parse_record_selector("rec2"), "record-2", source_start=1001),
@@ -74,7 +74,6 @@ def _search(**kwargs: object):
         set_id="Search 1",
         subjects=SUBJECTS,
         thresholds=THRESHOLDS,
-        program="blastn",
         queries=QUERIES,
         **kwargs,  # type: ignore[arg-type]
     )
@@ -115,7 +114,7 @@ def test_no_hit_gives_no_set() -> None:
     strict = ComparisonThresholds(evalue=1e-2, bitscore=5000.0, identity=70.0, alignment_length=0)
     result = search_hit_annotation_set(
         read_comparison_table(io.StringIO(ROWS)), set_id="Search 1", subjects=SUBJECTS, thresholds=strict,
-        program="blastn", queries=QUERIES,
+        queries=QUERIES,
     )
     assert result.annotation_set is None and result.hits == ()
     assert result.rows_removed_by_thresholds == 4
@@ -149,7 +148,7 @@ def test_ambiguous_subject_id_is_refused() -> None:
     with pytest.raises(ValidationError) as error:
         search_hit_annotation_set(
             read_comparison_table(io.StringIO(ROWS)), set_id="S", subjects=twice, thresholds=THRESHOLDS,
-            program="blastn", queries=QUERIES[:1],
+            queries=QUERIES[:1],
         )
     assert error.value.diagnostic == {"code": "COMPARISON_INPUT", "reason": "RECORD_ID", "column": 2}
 
@@ -164,7 +163,7 @@ def test_worker_helper_returns_the_set_as_the_request_writes_it() -> None:
              "originWindow": False, "recordLength": 4000},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
-        "program": "blastn", "queries": [{"name": "qA", "length": 600}, {"name": "qB", "length": 400}],
+        "queries": [{"name": "qA", "length": 600, "program": "blastn"}, {"name": "qB", "length": 400, "program": "blastn"}],
         "colorMode": "gradient", "queryColors": {},
     }
     reply = json.loads(sequence_search_annotation_set_json(json.dumps(payload)))
@@ -351,22 +350,40 @@ def test_session_fixture_keeps_the_gradient_through_load_and_save(tmp_path: Path
     assert encoded == stored["diagramOptions"]["annotations"]["sets"]
 
 
-def test_queries_are_read_as_nucleotide_fasta_records(tmp_path: Path) -> None:
+def test_queries_are_read_as_nucleotide_or_protein_fasta_records(tmp_path: Path) -> None:
     from gbdraw.web_support.sequence_search import read_search_queries_json
 
     path = tmp_path / "queries.fasta"
-    path.write_text(">q1 first\nacgtac\ngtn\n>q2\nTTTT\n", encoding="utf-8")
+    # A sequence of nucleotide codes only is nucleotide (an RNA and an IUPAC ambiguity code too); a letter that is no
+    # nucleotide code, or a stop, makes a protein, searched with tblastn, which covers three bases per residue.
+    path.write_text(">q1 first\nacgtac\ngtn\n>q2\nTTTT\n>p1 protein\nMKVLHHW\n>p2\nmkre*\n>r1\nACGURY\n", encoding="utf-8")
     reply = json.loads(read_search_queries_json(str(path)))
     assert reply == {"queries": [
-        {"name": "q1", "length": 9, "fasta": ">q1\nACGTACGTN\n"},
-        {"name": "q2", "length": 4, "fasta": ">q2\nTTTT\n"},
+        {"name": "q1", "length": 9, "program": "blastn", "reach": 9, "fasta": ">q1\nACGTACGTN\n"},
+        {"name": "q2", "length": 4, "program": "blastn", "reach": 4, "fasta": ">q2\nTTTT\n"},
+        {"name": "p1", "length": 7, "program": "tblastn", "reach": 21, "fasta": ">p1\nMKVLHHW\n"},
+        {"name": "p2", "length": 5, "program": "tblastn", "reach": 15, "fasta": ">p2\nMKRE*\n"},
+        {"name": "r1", "length": 6, "program": "blastn", "reach": 6, "fasta": ">r1\nACGURY\n"},
     ]}
+
+
+def test_a_protein_query_and_a_fasta_input_keep_their_own_rules(tmp_path: Path) -> None:
+    # A FASTA file drawn as records still holds nucleotide records only (D-17); only a search query may be a protein.
+    from gbdraw.io.genome import load_fasta
+
+    path = tmp_path / "protein.fasta"
+    path.write_text(">p\nMKVLHHW\n", encoding="utf-8")
+    with pytest.raises(ValidationError) as error:
+        load_fasta([str(path)])
+    assert error.value.diagnostic is not None and error.value.diagnostic["reason"] == "NOT_NUCLEOTIDE"
 
 
 @pytest.mark.parametrize(
     ("text", "code", "reason"),
     [
-        (">p\nMKVLHHW\n", "INPUT_INVALID", "NOT_NUCLEOTIDE"),
+        (">q\nACGT12\n", "INPUT_INVALID", "NOT_SEQUENCE"),
+        (">p\nMKV-LHHW\n", "INPUT_INVALID", "NOT_SEQUENCE"),
+        (">q\n\n", "INPUT_INVALID", "EMPTY_SEQUENCE"),
         ("not a sequence\n", "NO_RECORDS", "FASTA_NO_ENTRIES"),
         (">q\nACGT\n>q\nACGT\n", "INPUT_INVALID", "UNIQUE_IDS"),
     ],
@@ -382,6 +399,86 @@ def test_a_query_that_cannot_be_searched_is_refused_with_its_reason(
         read_search_queries(str(path))
     assert error.value.diagnostic is not None
     assert (error.value.diagnostic["code"], error.value.diagnostic.get("reason")) == (code, reason)
+
+
+def test_a_character_that_is_no_sequence_code_is_named(tmp_path: Path) -> None:
+    from gbdraw.web_support.sequence_search import read_search_queries
+
+    path = tmp_path / "queries.fasta"
+    path.write_text(">q\nACGT\n>bad\nMKV1\n", encoding="utf-8")
+    with pytest.raises(ValidationError) as error:
+        read_search_queries(str(path))
+    assert error.value.diagnostic == {
+        "code": "INPUT_INVALID", "reason": "NOT_SEQUENCE", "recordName": "bad", "recordPosition": 2, "codepoint": ord("1"),
+    }
+
+
+# tblastn rows of a 200-residue protein query pA beside the blastn query qA: the subject coordinates are bases of the
+# searched sequence and the query coordinates residues. A hit on the minus strand has sstart > send; the query always
+# runs forward (qstart < qend).
+TBLASTN_ROWS = "\n".join(
+    "\t".join(row)
+    for row in (
+        ("qA", "rec1:1-5000", "100.000", "600", "0", "0", "1", "600", "1201", "1800", "0.0", "1083"),
+        ("pA", "rec1:1-5000", "98.500", "200", "3", "0", "1", "200", "2401", "3000", "1e-120", "402"),
+        ("pA", "rec2:1-3000", "45.000", "100", "50", "2", "51", "150", "2000", "1701", "2e-20", "95.1"),
+    )
+)
+
+
+def test_tblastn_hits_are_drawn_in_genome_coordinates_with_their_strand_and_program() -> None:
+    loose = ComparisonThresholds(evalue=1e-2, bitscore=50.0, identity=0.0, alignment_length=0)
+    queries = (SearchQuery("qA", 600, "blastn"), SearchQuery("pA", 200, "tblastn"))
+    result = search_hit_annotation_set(
+        read_comparison_table(io.StringIO(TBLASTN_ROWS)), set_id="Search 1", subjects=SUBJECTS, thresholds=loose,
+        queries=queries, color_mode="gradient",
+    )
+    assert result.annotation_set is not None
+    rows = {row.id: row for row in result.annotation_set.annotations}
+    assert [(row.target.record.record_id, row.target.start, row.target.end, row.strand) for row in rows.values()] == [
+        ("rec1", 1201, 1800, "+"),
+        ("rec1", 2401, 3000, "+"),
+        # sstart 2000 > send 1701 on rec2, whose sequence starts at source base 1001: the minus strand.
+        ("rec2", 2701, 3000, "-"),
+    ]
+    assert [row.metadata["program"] for row in rows.values()] == ["blastn", "tblastn", "tblastn"]
+    # The gradient places a protein hit by its residues: 51-150 of 200, drawn against the minus strand.
+    assert (rows["pA#2"].style.gradient.query_start, rows["pA#2"].style.gradient.query_end) == (50 / 200, 150 / 200)
+    assert rows["pA#2"].style.gradient.direction == "reverse"
+    assert [(hit.query, hit.strand, hit.qstart, hit.qend) for hit in result.hits] == [
+        ("qA", "+", 1, 600), ("pA", "+", 1, 200), ("pA", "-", 51, 150),
+    ]
+
+
+def test_a_search_query_names_its_program_and_its_reach_in_bases() -> None:
+    assert (SearchQuery("q", 100, "blastn").reach, SearchQuery("p", 100, "tblastn").reach) == (100, 300)
+    with pytest.raises(ValidationError) as error:
+        SearchQuery("q", 100, "blastp")  # type: ignore[arg-type]
+    assert error.value.diagnostic == {"code": "INPUT_INVALID", "reason": "LOSAT_OPTION_PROGRAM"}
+
+
+def test_a_tblastn_hit_across_the_origin_is_one_row() -> None:
+    # A 100-residue query across the origin of NC_012920.1: its residues 1-50 on the record's last 150 bases and 51-100
+    # on its first 150; the origin window (the longest query's reach, 300 bases) holds it whole.
+    window_start = _MITO_LENGTH - 300 + 1
+    subjects = (
+        ORIGIN_SUBJECTS[0],
+        SearchSubject(
+            f"NC_012920.1:{window_start}-300", parse_record_selector("NC_012920.1"), "mito",
+            source_start=window_start, record_length=_MITO_LENGTH, origin_window=True,
+        ),
+    )
+    rows = (
+        ("pX", _MAIN, "100.000", "50", "0", "0", "1", "50", str(_MITO_LENGTH - 149), str(_MITO_LENGTH), "1e-25", "98"),
+        ("pX", _MAIN, "100.000", "50", "0", "0", "51", "100", "1", "150", "1e-25", "98"),
+        ("pX", subjects[1].subject_id, "100.000", "100", "0", "0", "1", "100", "151", "450", "1e-60", "200"),
+    )
+    result = search_hit_annotation_set(
+        read_comparison_table(io.StringIO("\n".join("\t".join(row) for row in rows))), set_id="Search 1",
+        subjects=subjects, thresholds=THRESHOLDS, queries=(SearchQuery("pX", 100, "tblastn"),),
+    )
+    assert [(hit.start, hit.end, hit.strand) for hit in result.hits] == [(_MITO_LENGTH - 149, 150, "+")]
+    assert origin_window_span(_MITO_LENGTH, SearchQuery("pX", 100, "tblastn").reach) == (window_start, 300)
 
 
 def test_a_search_set_keeps_its_highlight_overlay_through_the_request(tmp_path: Path) -> None:
@@ -663,7 +760,7 @@ ORIGIN_SUBJECTS = (
         source_start=_WINDOW_START, record_length=_MITO_LENGTH, origin_window=True,
     ),
 )
-ORIGIN_QUERIES = (SearchQuery("origin600", 600), SearchQuery("origin50", 50), SearchQuery("inner", 100))
+ORIGIN_QUERIES = (SearchQuery("origin600", 600, "blastn"), SearchQuery("origin50", 50, "blastn"), SearchQuery("inner", 100, "blastn"))
 _MAIN, _WINDOW = (subject.subject_id for subject in ORIGIN_SUBJECTS)
 # The rows LOSAT writes for the last and first 300 bases of NC_012920.1 (origin600), and for the last and first 25
 # (origin50, whose halves score under the bitscore threshold of 50): two halves on the record, one row on the window.
@@ -683,7 +780,7 @@ ORIGIN_ROWS = (
 def _origin_search(rows=ORIGIN_ROWS, thresholds=THRESHOLDS):
     return search_hit_annotation_set(
         read_comparison_table(io.StringIO("\n".join("\t".join(row) for row in rows))),
-        set_id="Search 1", subjects=ORIGIN_SUBJECTS, thresholds=thresholds, program="blastn", queries=ORIGIN_QUERIES,
+        set_id="Search 1", subjects=ORIGIN_SUBJECTS, thresholds=thresholds, queries=ORIGIN_QUERIES,
     )
 
 
@@ -762,7 +859,7 @@ def test_the_worker_helper_reads_an_origin_window_subject() -> None:
              "originWindow": True, "recordLength": _MITO_LENGTH},
         ],
         "thresholds": {"evalue": 1e-2, "bitscore": 50, "identity": 70, "alignmentLength": 0},
-        "program": "blastn", "queries": [{"name": "origin600", "length": 600}],
+        "queries": [{"name": "origin600", "length": 600, "program": "blastn"}],
         "colorMode": "query", "queryColors": {},
     }
     reply = json.loads(sequence_search_annotation_set_json(json.dumps(payload)))
@@ -852,7 +949,7 @@ def test_only_an_origin_window_drops_its_rows_that_do_not_cross_the_origin() -> 
     def hits(item: SearchSubject) -> list[tuple[int, int]]:
         result = search_hit_annotation_set(
             read_comparison_table(io.StringIO(table)), set_id="S", subjects=[item], thresholds=loose,
-            program="blastn", queries=[SearchQuery("qA", 10)],
+            queries=[SearchQuery("qA", 10, "blastn")],
         )
         return [(hit.start, hit.end) for hit in result.hits]
 
@@ -878,7 +975,7 @@ def test_a_query_longer_than_half_the_record_can_give_two_overlapping_rows_acros
     loose = ComparisonThresholds(evalue=1.0, bitscore=0.0, identity=0.0, alignment_length=0)
     result = search_hit_annotation_set(
         read_comparison_table(io.StringIO("\n".join("\t".join(row) for row in rows))), set_id="Search 1",
-        subjects=subjects, thresholds=loose, program="blastn", queries=(SearchQuery("long", 4000),),
+        subjects=subjects, thresholds=loose, queries=(SearchQuery("long", 4000, "blastn"),),
     )
     assert sorted((hit.start, hit.end, hit.alignment_length) for hit in result.hits) == [(2001, 5000, 3000), (2501, 1000, 3500)]
     assert (result.tally.rows_read, result.tally.rows_kept) == (2, 2)

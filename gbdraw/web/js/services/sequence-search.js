@@ -1,24 +1,31 @@
 // @ts-check
 // Sequence search (PD-OI-117): the data the panel sends to Python and reads
-// back. Python reads the queries (`readSearchQueries`, the FASTA-only loader)
-// and turns one search's LOSAT rows into an annotation set
-// (`searchHitAnnotationSet`, gbdraw/web_support/sequence_search.py); this
-// module types both boundaries, builds the searched sequences from the records
-// the shown drawing draws, and names the set a search adds. It reads no
-// sequence and decides no hit itself.
+// back. Python reads the queries (`readSearchQueries`, the query FASTA reader),
+// each with the program that searches it (blastn for a nucleotide query,
+// tblastn for a protein query), and turns one search's LOSAT rows into an
+// annotation set (`searchHitAnnotationSet`, gbdraw/web_support/sequence_search.py);
+// this module types both boundaries, plans one LOSAT job per program, builds the
+// searched sequences from the records the shown drawing draws, and names the set
+// a search adds. It reads no sequence and decides no program or hit itself.
 import { diagnosticError } from '../utils/error-normalization.js';
 import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.js';
+import { SEARCH_PROGRAMS } from '../utils/sequence-search-programs.generated.js';
 
 /** @import { DrawnRecordInput, RecordSpanSequencesReply } from './diagram-worker-protocol.js' */
 /** @import { AnnotationRecordSelector } from './annotation-state.js' */
 /** @import { LosatJob } from './losat.js' */
 /** @import { HistoryIntentChange } from './history.js' */
 
+/** The program that searches a query, as Python decides it: blastn for a nucleotide query, tblastn for a protein query. @typedef {import('../utils/sequence-search-programs.generated.js').SearchProgram} SearchProgram */
 /**
- * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length in bases, and the FASTA text LOSAT reads.
+ * One query as Python read it (`SearchQueryRead`): its FASTA ID, its length (bases, or residues for a protein query),
+ * the program that searches it, the most subject bases one of its hits covers (`SearchQuery.reach`, three per residue
+ * for tblastn), and the FASTA text LOSAT reads.
  * @typedef {object} SearchQueryRead
  * @property {string} name
  * @property {number} length
+ * @property {SearchProgram} program
+ * @property {number} reach
  * @property {string} fasta
  */
 /** A query of the panel: as read, with the hit colour the panel shows and the user may change. @typedef {SearchQueryRead & { color: string }} SearchQuery */
@@ -62,8 +69,7 @@ import { SEARCH_QUERY_COLORS } from '../utils/sequence-search-colors.generated.j
  * @property {string} setId
  * @property {SearchSubject[]} subjects
  * @property {SearchThresholds} thresholds
- * @property {'blastn'} program
- * @property {{ name: string, length: number }[]} queries In panel order.
+ * @property {{ name: string, length: number, program: SearchProgram }[]} queries In panel order.
  * @property {SearchColorMode} colorMode
  * @property {Record<string, string>} queryColors
  */
@@ -114,7 +120,9 @@ const invalid = (operation) => diagnosticError('RESULT_INVALID', {}, { stage: 'h
  */
 export const readSearchQueriesReply = (result) => {
   if (!isRecord(result) || !Array.isArray(result.queries)
-    || !result.queries.every((query) => isRecord(query) && strings(query, ['name', 'fasta']) && Number.isSafeInteger(query.length))) {
+    || !result.queries.every((query) => isRecord(query) && strings(query, ['name', 'fasta'])
+      && Number.isSafeInteger(query.length) && Number.isSafeInteger(query.reach)
+      && SEARCH_PROGRAMS.some((program) => program === query.program))) {
     throw invalid('readSearchQueries');
   }
   return /** @type {SearchQueryRead[]} */ (result.queries);
@@ -156,12 +164,23 @@ export const panelQueries = (read, previous = []) => read.map((query, index) => 
 /**
  * What a search reads: each record the shown drawing draws (every Result's), by its key. Python reads each once over
  * the bases it draws, on its source strand, and then the origin window of each record a span may pass the origin of,
- * placed from the longest query's length, so a hit across the origin is found whole (OV-2571).
+ * placed from the reach of the query that covers the most bases, so a hit across the origin is found whole (OV-2571).
  * @param {readonly { recordKey: string }[]} records
- * @param {number} longestQuery The length of the longest query.
+ * @param {readonly { reach: number }[]} queries
  * @returns {DrawnRecordInput[]}
  */
-export const searchSpans = (records, longestQuery) => records.map(({ recordKey }) => ({ recordKey, originWindow: longestQuery }));
+export const searchSpans = (records, queries) => {
+  const reach = Math.max(...queries.map((query) => query.reach));
+  return records.map(({ recordKey }) => ({ recordKey, originWindow: reach }));
+};
+
+/**
+ * The programs of a search's queries, each once, in Python's order (blastn, then tblastn) whatever the order of the
+ * queries: the order of the jobs, of their rows in the raw table, of the programs in its name, and in the panel.
+ * @param {readonly { program: SearchProgram }[]} queries
+ * @returns {SearchProgram[]}
+ */
+export const searchPrograms = (queries) => SEARCH_PROGRAMS.filter((program) => queries.some((query) => query.program === program));
 
 /**
  * The selector of the Result record `recordKey` in the committed request; a span of a record the Result does not draw
@@ -252,15 +271,27 @@ export const searchSetIdsOfStep = (changes, searched) => (Array.isArray(changes)
   });
 
 /**
- * The LOSAT run of one search, its job plan as data (R5): one blastn job of the queries against the searched sequences,
- * with the task the panel chose. Its rows are the search's raw output (Save Raw LOSAT TSV).
- * @param {{ queryFasta: string, subjectFasta: string, task: string }} search
+ * The LOSAT run of one search, its job plan as data (R5): one job per program of the queries against the searched
+ * sequences, the queries of that program in panel order; blastn with the task the panel chose, tblastn with its own
+ * default. The rows of the jobs, in job order, are the search's raw output (Save Raw LOSAT TSV).
+ * @param {{ queries: readonly { program: SearchProgram, fasta: string }[], subjectFasta: string, task: string }} search
  * @returns {{ jobs: LosatJob[], sequences: Map<string, string> }}
  */
-export const searchLosatPlan = ({ queryFasta, subjectFasta, task }) => ({
-  jobs: [{
-    pairIndex: 0, cacheKey: 'sequence-search', program: 'blastn', querySequenceKey: 'search-query',
-    subjectSequenceKey: 'search-subject', extraArgs: ['--task', task]
-  }],
-  sequences: new Map([['search-query', queryFasta], ['search-subject', subjectFasta]])
-});
+export const searchLosatPlan = ({ queries, subjectFasta, task }) => {
+  const sequences = new Map([['search-subject', subjectFasta]]);
+  const jobs = searchPrograms(queries).map((program, pairIndex) => {
+    const querySequenceKey = `search-query-${program}`;
+    sequences.set(querySequenceKey, queries.filter((query) => query.program === program).map((query) => query.fasta).join(''));
+    return {
+      pairIndex, cacheKey: `sequence-search-${program}`, program, querySequenceKey, subjectSequenceKey: 'search-subject',
+      extraArgs: program === 'blastn' ? ['--task', task] : []
+    };
+  });
+  return { jobs, sequences };
+};
+
+/**
+ * The rows of a search's jobs as one table, in job order: each job's text ends its last row with a newline.
+ * @param {readonly { text: string }[]} results
+ */
+export const searchRawText = (results) => results.map(({ text }) => (text === '' || text.endsWith('\n') ? text : `${text}\n`)).join('');

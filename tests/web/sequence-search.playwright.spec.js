@@ -1,7 +1,8 @@
 // Sequence search (PD-OI-117): a search adds one annotation set of its hits, drawn at once without Generate as one
 // History step; Undo removes the hits at once and Redo draws them again. A hit across the origin of a circular record
 // drawn whole is one hit in both modes. The chips and a row click outline hits outside the Result. A gradient and a
-// search colour edit apply at once; a Legend colour edit stays. No hits, Cancel and a protein query add nothing.
+// search colour edit apply at once; a Legend colour edit stays. A protein query is searched with tblastn and its hits
+// are drawn in genome coordinates. No hits, Cancel and a query that is no sequence add nothing.
 // The live draw equals Generate in tests/web/live-generate-parity.playwright.spec.js.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
@@ -298,7 +299,7 @@ test('Circular: a search colour edit applies at once and keeps a Legend colour e
 // Before the first Generate Search says why it is off; a protein query is refused with its reason under the query box;
 // a cancelled search, a failed search (dc-megablast on serial LOSAT) and a search without hits add nothing and keep the
 // Result.
-test('a protein query, Cancel, dc-megablast in Serial and a search without hits add nothing and keep the Result', async ({ page }) => {
+test('a query that is no sequence, Cancel, dc-megablast in Serial and a search without hits add nothing and keep the Result', async ({ page }) => {
   test.setTimeout(600_000);
   await openFresh(page);
   await page.getByRole('button', { name: 'Go to Sequence search', exact: true }).click();
@@ -314,14 +315,15 @@ test('a protein query, Cancel, dc-megablast in Serial and a search without hits 
     expect(await page.evaluate(() => window.__GBDRAW_APP__.annotationSets.length)).toBe(before.sets);
   };
 
-  // A protein query: the reason under the query box, and Search off.
+  // A query holding a character that is neither a nucleotide nor an amino acid code: the reason under the query box,
+  // and Search off.
   await page.getByRole('button', { name: 'Go to Sequence search', exact: true }).click();
   const query = page.locator('#sequence-search-query');
-  await query.fill('>prot\nMKVLAAGIVGLLLAQSEWQRTYHPLIDDFEKMNQ\n');
+  await query.fill('>prot\nMKVLAAGIVGLLL-AQSEWQRTYHPLIDDFEKMNQ\n');
   await query.press('Tab');
   // The first read starts Python's query reader in the diagram Worker.
   await expect(page.locator('#sequence-search-query-error')).toBeVisible({ timeout: 120_000 });
-  await expect(page.locator('#sequence-search-query-error')).not.toHaveText('');
+  await expect(page.locator('#sequence-search-query-error')).toContainText('First character that is neither a nucleotide nor an amino acid code: "-".');
   await expect(page.locator('#sequence-search-reason')).toHaveText('Correct the query to search');
   await expect(page.locator('[data-sequence-search-run]')).toBeDisabled();
   await unchanged();
@@ -364,6 +366,46 @@ test('a protein query, Cancel, dc-megablast in Serial and a search without hits 
   await searchFromPanel(page, fasta([{ name: 'nohit', bases: unrelated }]), { task: 'blastn' });
   await expect(page.locator('[data-sequence-search-no-hits]')).toHaveText(/^No hits for nohit \(300 bp\) The thresholds removed \d+ alignments?\.$/);
   await unchanged();
+});
+
+// PD-OI-117: a protein query is searched with tblastn against the same records, beside a nucleotide query searched
+// with blastn, and its hit is drawn in genome coordinates on the strand of its gene. Here the cI repressor of lambda,
+// whose gene lies on the minus strand at 37227..37940 (the stop codon is not in the protein).
+// The protein query is pasted first; blastn still runs first, so its rows lead the raw table and its name.
+test('Linear: a protein query is searched with tblastn and its hit is drawn on its gene, beside a blastn hit', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openFresh(page);
+  await loadSessionFile(page, seeds.linear);
+  await settleLive(page);
+  const lambdaText = readFileSync('tests/test_inputs/NC_001416.gb', 'utf8');
+  const cI = lambdaText.match(/\/gene="cI"\n(?:\s+\/[^\n]*\n)*?\s+\/translation="([^"]+)"/)[1].replace(/\s+/g, '');
+  const lambda = genbankBases('tests/test_inputs/NC_001416.gb').NC_001416;
+  await searchFromPanel(page, fasta([{ name: 'cI', bases: cI }, { name: 'cosL', bases: span(lambda, 5001, 5400) }]), { task: 'blastn' });
+  const { outcome, searchError } = await searchOutcome(page);
+  expect(searchError).toBeNull();
+  expect(outcome.setId).toBe('Search 1');
+  const section = page.locator('[data-settings-section="sequence-search"]');
+  await section.locator('[data-sequence-search-unfold]').click();
+  await expect(section.locator('[data-sequence-search-programs]')).toHaveText('blastn, tblastn');
+  await expect(section.locator('[data-sequence-search-query]', { hasText: 'cI' })).toContainText(`${cI.length} aa`);
+  const hit = (name) => outcome.hits.filter((entry) => entry.query === name).map(({ start, end, strand, qstart, qend }) => ({ start, end, strand, qstart, qend }));
+  expect(hit('cI')).toEqual([{ start: 37230, end: 37940, strand: '-', qstart: 1, qend: cI.length }]);
+  expect(hit('cosL')).toEqual([{ start: 5001, end: 5400, strand: '+', qstart: 1, qend: 400 }]);
+  expect(outcome.rawText.split('\t', 1)[0]).toBe('cosL');
+  const [proteinHit] = outcome.hits.filter((entry) => entry.query === 'cI');
+  await expect(section.locator('[data-sequence-search-hit]', { hasText: 'cI' }).locator('td').nth(4)).toHaveText(`${proteinHit.alignmentLength} aa`);
+  await expect(section.locator('[data-sequence-search-hit]', { hasText: 'cosL' }).locator('td').nth(4)).toHaveText('400');
+  const [saved] = await Promise.all([page.waitForEvent('download'), section.getByRole('button', { name: 'Save Raw LOSAT TSV' }).click()]);
+  expect(saved.suggestedFilename()).toBe('Search_1.losatn-tlosatn.tsv');
+  const { rows } = await setRows(page, 'Search 1');
+  expect(rows.map(({ start, end, strand }) => ({ start, end, strand }))).toEqual(expect.arrayContaining([
+    { start: 37230, end: 37940, strand: '-' }, { start: 5001, end: 5400, strand: '+' }
+  ]));
+  const programs = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.annotationSets
+    .find((set) => set.id === 'Search 1').annotations.map((row) => [row.metadata.query, row.metadata.program])));
+  expect(programs).toEqual({ cosL: 'blastn', cI: 'tblastn' });
+  const drawn = await drawnHits(page, 'Search 1');
+  expect(Object.keys(drawn).sort()).toEqual(outcome.hits.map(({ annotationId }) => annotationId).sort());
 });
 
 // Receipt: the panel's queries and settings are not saved; after a Load the panel is empty, and the hits of earlier

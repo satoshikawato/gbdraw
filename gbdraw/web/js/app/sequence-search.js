@@ -17,7 +17,8 @@ import { draftAnnotationSetsOfRequest } from '../services/annotation-state.js';
 import { boundAnnotation } from './annotations/record-selector.js';
 import { SEARCH_GRADIENT_END_COLOR, SEARCH_GRADIENT_START_COLOR } from '../utils/sequence-search-colors.generated.js';
 import {
-  nextSearchSetId, readSequenceSearchReply, resultRecordBinding, searchLosatPlan, searchSetIdsOfStep, searchSpans, searchSubjects
+  nextSearchSetId, readSequenceSearchReply, resultRecordBinding, searchLosatPlan, searchPrograms, searchRawText, searchSetIdsOfStep,
+  searchSpans, searchSubjects
 } from '../services/sequence-search.js';
 import { createSearchQueries } from './sequence-search/queries.js';
 import { createSearchHitTable } from './sequence-search/hit-table.js';
@@ -142,17 +143,18 @@ export const createSequenceSearch = ({
       const drawing = state.activeDrawing();
       // The records of the shown Result, as last generated (receipt): never the draft's (review r2 B1).
       const bindings = readRecordBindings();
-      const searchQueries = panel.queries.map(({ name, length, color }) => ({ name, length, color }));
-      const queryFasta = panel.queries.map((query) => query.fasta).join('');
+      const listed = panel.queries;
+      const searchQueries = listed.map(({ name, length, program, color }) => ({ name, length, program, color }));
       const thresholds = resolveComparisonThresholds(panel.thresholds[drawing.mode], drawing.mode);
       const records = readAxisRecords();
-      const read = await readRecordSpans(searchSpans(records, Math.max(...searchQueries.map(({ length }) => length))));
-      const run = await runLosatJobs(searchLosatPlan({ queryFasta, subjectFasta: read.fasta, task: panel.task }));
+      const read = await readRecordSpans(searchSpans(records, listed));
+      // A nucleotide query is searched with blastn, a protein query with tblastn: one job per program (PD-OI-117).
+      const run = await runLosatJobs(searchLosatPlan({ queries: listed, subjectFasta: read.fasta, task: panel.task }));
       // A cancelled search, or one a Generate or a Session load kept from running, adds nothing and keeps the Result.
       if (load !== loads) return;
       if (run.status === 'busy') panel.busy = tm(run.reason);
       if (run.status !== 'ok' || state.activeDrawing().id !== drawing.id) return;
-      const [{ text }] = run.results;
+      const text = searchRawText(run.results);
       /** @type {SequenceSearchInput} */
       const input = {
         table: text,
@@ -165,8 +167,7 @@ export const createSequenceSearch = ({
           evalue: Number(thresholds.evalue), bitscore: Number(thresholds.bitscore),
           identity: Number(thresholds.identity), alignmentLength: Number(thresholds.alignmentLength)
         },
-        program: 'blastn',
-        queries: searchQueries.map(({ name, length }) => ({ name, length })),
+        queries: searchQueries.map(({ name, length, program }) => ({ name, length, program })),
         colorMode: panel.colorMode,
         queryColors: Object.fromEntries(searchQueries.map(({ name, color }) => [name, color]))
       };
@@ -217,8 +218,13 @@ export const createSequenceSearch = ({
    */
   const searchSetIdsOf = (changes) => searchSetIdsOfStep(changes, searched.get(state.activeDrawing().id) ?? new Map());
 
-  // The folded line names the program once: "blastn" for the blastn task, "blastn, task megablast" for another task.
-  const programText = computed(() => (panel.task === 'blastn' ? 'blastn' : t('{program}, task {task}', { program: 'blastn', task: panel.task })));
+  // The programs of the listed queries (blastn before any query is listed). The Task applies to blastn only.
+  const programs = computed(() => (panel.queries.length ? searchPrograms(panel.queries) : ['blastn']));
+  const taskApplies = computed(() => programs.value.includes('blastn'));
+  // The folded line names each program once: "blastn" for the blastn task, "blastn, task megablast" for another task.
+  const programText = computed(() => programs.value
+    .map((program) => (program !== 'blastn' || panel.task === 'blastn' ? program : t('{program}, task {task}', { program, task: panel.task })))
+    .join(' · '));
 
   // A Session Load starts: a search still running is overtaken.
   const loadStarts = () => { loads += 1; };
@@ -232,7 +238,8 @@ export const createSequenceSearch = ({
 
   // Reactive, so the template reads the computed values unwrapped (`sequenceSearch.hitRows`).
   return reactive({
-    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programText, loadStarts, reset,
+    ...queries, ...table, panel, addQuery, useSpanAsQuery, searchDisabledReason, search, searchSetIdsOf, programs, taskApplies, programText,
+    loadStarts, reset,
     tasks: SEARCH_TASKS,
     // The panel's bar of the gradient by query position, the colours of the Legend's "Query position" bar.
     gradientBar: `linear-gradient(to right, ${SEARCH_GRADIENT_START_COLOR}, ${SEARCH_GRADIENT_END_COLOR})`,

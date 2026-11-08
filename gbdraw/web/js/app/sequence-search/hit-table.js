@@ -6,10 +6,10 @@
 import { computed } from '../../utils/reactivity.js';
 import { t, tn } from '../../utils/i18n.js';
 import { downloadTextFile } from '../../services/text-download.js';
-import { outlinedHitIds } from '../../services/sequence-search.js';
+import { outlinedHitIds, searchPrograms } from '../../services/sequence-search.js';
 import { createSearchHitOutline } from './hit-outline.js';
 
-/** @import { SearchHit } from '../../services/sequence-search.js' */
+/** @import { SearchHit, SearchProgram } from '../../services/sequence-search.js' */
 /** @import { DrawingId } from '../../services/drawing-view.js' */
 
 /**
@@ -18,7 +18,7 @@ import { createSearchHitOutline } from './hit-outline.js';
  * @property {DrawingId} drawingId
  * @property {string | null} setId
  * @property {SearchHit[]} hits
- * @property {{ name: string, length: number, color: string }[]} queries
+ * @property {{ name: string, length: number, program: SearchProgram, color: string }[]} queries
  * @property {number} rowsLeftOut Rows LOSAT wrote that the thresholds removed.
  * @property {Record<string, string>} recordIds The record ID of each searched record, by its request key (as Python read
  *   the spans), which the hit table shows.
@@ -49,14 +49,22 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
     return outcome.setId === null || drawing.annotationSets.some((set) => set.id === outcome.setId) ? outcome : null;
   });
   const hitRows = computed(() => (shownOutcome.value?.hits ?? []).filter((hit) => !panel.chip || hit.query === panel.chip));
+  // The aligned length of a hit as its row shows it: bases for a nucleotide query, residues (aa) for a protein query.
+  const programs = computed(() => new Map((shownOutcome.value?.queries ?? []).map(({ name, program }) => [name, program])));
+  /** @param {SearchHit} hit */
+  const hitLengthText = (hit) => (programs.value.get(hit.query) === 'tblastn'
+    ? t('{length} aa', { length: String(hit.alignmentLength) })
+    : String(hit.alignmentLength));
   const chips = computed(() => (shownOutcome.value?.queries ?? []).map(({ name }) => ({
     name, count: (shownOutcome.value?.hits ?? []).filter((hit) => hit.query === name).length
   })));
-  // "No hits for <query> (N bp)", and how many alignments the thresholds removed.
+  // "No hits for <query> (N bp)" ("N aa" for a protein query), and how many alignments the thresholds removed.
   const noHitText = computed(() => {
     const outcome = shownOutcome.value;
     if (!outcome || outcome.setId !== null) return '';
-    const names = outcome.queries.map(({ name, length }) => t('No hits for {query} ({length} bp)', { query: name, length }));
+    const names = outcome.queries.map(({ name, length, program }) => (program === 'tblastn'
+      ? t('No hits for {query} ({length} aa)', { query: name, length })
+      : t('No hits for {query} ({length} bp)', { query: name, length })));
     return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.', { count: outcome.rowsLeftOut })].join(' ');
   });
   // The hits the drawing outlines, by the shown set's id and the hits' annotation ids.
@@ -71,10 +79,13 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
   const chooseChip = (name) => { panel.chip = name; panel.selectedHit = ''; };
   /** @param {SearchHit} hit */
   const selectHit = (hit) => { panel.selectedHit = panel.selectedHit === hit.annotationId ? '' : hit.annotationId; };
+  // Named by its programs as Pairwise Comparisons names its tables: `.losatn.tsv` (blastn), `.tlosatn.tsv` (tblastn).
   const saveRawTsv = () => {
     const outcome = shownOutcome.value;
-    if (outcome) downloadTextFile(`${(outcome.setId ?? 'sequence_search').replace(/\s+/g, '_')}.losatn.tsv`, outcome.rawText);
+    if (!outcome) return;
+    const programs = searchPrograms(outcome.queries).map((program) => (program === 'tblastn' ? 'tlosatn' : 'losatn')).join('-');
+    downloadTextFile(`${(outcome.setId ?? 'sequence_search').replace(/\s+/g, '_')}.${programs}.tsv`, outcome.rawText);
   };
   const hitOutline = createSearchHitOutline({ shownRoot, target: () => outline.value });
-  return { shownOutcome, hitRows, chips, noHitText, outline, recordOf, chooseChip, selectHit, saveRawTsv, hitOutline };
+  return { shownOutcome, hitRows, hitLengthText, chips, noHitText, outline, recordOf, chooseChip, selectHit, saveRawTsv, hitOutline };
 };

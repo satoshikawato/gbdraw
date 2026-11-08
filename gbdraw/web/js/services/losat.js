@@ -6,6 +6,7 @@ import { losatSearchTask } from './losat-cache.js';
 import {
   compileLosatWasm,
   hasDirectLosatApi,
+  requireLosatProgram,
   runLosatPairDirect,
   runLosatPairWasi
 } from './losat-runtime.js';
@@ -18,7 +19,6 @@ const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losa
 // guard does not cover ends the job; a job is deterministic, so a trapped job runs
 // again, up to this many times, before the run fails.
 const THREADED_TRAP_RETRY_LIMIT = 2;
-const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 // The LOSATN tasks of the serial engine (losat.wasm, LOSAT web ABI v1: src/web_api.rs parse_blastn_args).
 // dc-megablast runs only on the threaded engine (OV-2376).
 const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
@@ -120,7 +120,7 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  * `losat` command line takes. The program and both texts are required; the
  * run throws when one is missing.
  * @typedef {object} LosatPairRequest
- * @property {string} [program] 'blastn', 'tblastx', or 'blastp'
+ * @property {string} [program] one of `LOSAT_PROGRAMS` (services/losat-runtime.js)
  * @property {string} [queryFasta]
  * @property {string} [subjectFasta]
  * @property {string} [outfmt]
@@ -291,9 +291,7 @@ export const runLosatPair = async ({
   signal
 } = {}) => {
   throwIfAborted(signal);
-  if (!program || !SUPPORTED_PROGRAMS.has(program)) {
-    throw new Error('LOSAT program must be blastn, tblastx, or blastp.');
-  }
+  requireLosatProgram(program);
   if (!queryFasta || !subjectFasta) {
     throw new Error('LOSAT requires both query and subject FASTA content.');
   }

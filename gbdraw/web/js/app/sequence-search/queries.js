@@ -3,9 +3,10 @@
 // colour), their removal and colours, and the queries Use as search query adds. They are the panel's own, transient
 // values: not in the Session and no History step.
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { t } from '../../utils/i18n.js';
 import { panelQueries, readSearchQueriesReply } from '../../services/sequence-search.js';
 
-/** @import { SearchQuery } from '../../services/sequence-search.js' */
+/** @import { SearchProgram, SearchQuery } from '../../services/sequence-search.js' */
 
 /** @typedef {ReturnType<typeof normalizeUserFacingError>} SearchError */
 
@@ -22,6 +23,14 @@ import { panelQueries, readSearchQueriesReply } from '../../services/sequence-se
  * Runs a Worker helper operation (`runDiagramHelperOperation`).
  * @typedef {(operation: string, payload: Record<string, unknown>) => Promise<{ result?: unknown }>} RunHelper
  */
+
+/**
+ * A query's length as the panel shows it: bases of a nucleotide query, residues (aa) of a protein query.
+ * @param {{ length: number, program: SearchProgram }} query
+ */
+export const queryLengthText = ({ length, program }) => (program === 'tblastn'
+  ? t('{length} aa', { length: length.toLocaleString() })
+  : t('{length} bp', { length: length.toLocaleString() }));
 
 /**
  * @param {SearchQueryState} panel
@@ -114,5 +123,7 @@ export const createSearchQueries = (panel, runHelper, operation) => {
   const setQueryColor = (name, color) => {
     panel.queries = panel.queries.map((query) => (query.name === name ? { ...query, color } : query));
   };
-  return { readQueries, unread, editQueryText, chooseQueryFile, addQuery, removeQuery, setQueryColor, clearReads };
+  return {
+    readQueries, unread, editQueryText, chooseQueryFile, addQuery, removeQuery, setQueryColor, clearReads, queryLengthText
+  };
 };
