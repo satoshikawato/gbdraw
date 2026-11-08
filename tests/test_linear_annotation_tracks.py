@@ -2299,7 +2299,9 @@ def test_a_feature_label_moved_for_a_region_label_keeps_off_the_row_neighbours_l
     in the same row, is dragged 300 px right (a stored translation), so where it is drawn, the row above
     tRNA-Pro is clear; where the label fit counts it (B's frame in the row as solved), B's first label
     hangs left into that row. The move is checked as the fit counts it, so it is not made and the figure
-    is drawn, with the region label's overlap warned about, as before the row count (review N1)."""
+    is drawn, with the region label's overlap warned about, as before the row count (review N1). Record A
+    is the second record, drawn last, so its labels keep the rows they have alone and record B's labels
+    stack around them (OV-2892)."""
 
     import warnings
 
@@ -2315,17 +2317,17 @@ def test_a_feature_label_moved_for_a_region_label_keeps_off_the_row_neighbours_l
         return item
 
     records = [
+        record("recB", (
+            (1, 40, "a very long hanging product label"),
+            (41, 80, "another very long hanging label"),
+            (81, 120, "yet another long hanging label"),
+        )),
         record("recA", (
             (5830, 5850, "tRNA-Leu"),
             (5560, 5580, "tRNA-Pro"),
             (3000, 3020, "first middle protein"),
             (3030, 3050, "second middle protein"),
             (3060, 3080, "third middle protein"),
-        )),
-        record("recB", (
-            (1, 40, "a very long hanging product label"),
-            (41, 80, "another very long hanging label"),
-            (81, 120, "yet another long hanging label"),
         )),
     ]
     style = RegionAnnotationStyle(**{**_REGION_STYLE.__dict__, "label_font_size": 20.0})
@@ -2339,8 +2341,8 @@ def test_a_feature_label_moved_for_a_region_label_keeps_off_the_row_neighbours_l
     )
     layout = LinearMultiRecordOptions(
         record_gap_px=5.0,
-        multi_record_positions=("#1@1", "#2@1"),
-        record_translations=(LinearRecordTranslation(str(stable_record_keys(records)[1]), 300.0, 0.0),),
+        multi_record_positions=("#2@1", "#1@1"),
+        record_translations=(LinearRecordTranslation(str(stable_record_keys(records)[0]), 300.0, 0.0),),
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

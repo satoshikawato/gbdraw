@@ -1517,33 +1517,46 @@ def _leaders_painted_over_labels(svg_path: Path) -> list[tuple[str, str]]:
     return over
 
 
+_TWO_WINDOWS = ["--region", "NC_012920.1:3200-6000", "--region", "NC_012920.1:9000-12000"]
+_RECORDS_AT_40_PT = ["--label_font_size", "40", "--linear_record_gap", "5"]
+
+
+def _in_columns(*selectors: str) -> list[str]:
+    """``--multi_record_position`` options that put the records in one row in the order given."""
+
+    return [option for selector in selectors for option in ("--multi_record_position", f"{selector}@1")]
+
+
 @pytest.mark.linear
 @pytest.mark.parametrize(
-    "args",
+    ("records", "args"),
     (
         # Two windows of one record side by side in one row.
-        ["--region", "NC_012920.1:3200-6000", "--region", "NC_012920.1:9000-12000"],
-        # The same with labels stacked from their features.
-        [
-            "--region", "NC_012920.1:3200-6000", "--region", "NC_012920.1:9000-12000",
-            "--label_placement", "above_feature",
-        ],
-        # Two records in one row (OV-1188's figure).
-        [
-            "--label_font_size", "40", "--multi_record_position", "#1@1", "--multi_record_position", "#2@1",
-            "--linear_record_gap", "5",
-        ],
+        (1, _TWO_WINDOWS),
+        # The same with labels stacked from their features, and below the features.
+        (1, [*_TWO_WINDOWS, "--label_placement", "above_feature"]),
+        (1, [*_TWO_WINDOWS, "--track_layout", "below"]),
+        # Two and three records in one row (OV-1188's figure), in record order and in reverse order: the
+        # figure draws the records in record order, whatever their columns.
+        (2, [*_RECORDS_AT_40_PT, *_in_columns("#1", "#2")]),
+        (2, [*_RECORDS_AT_40_PT, *_in_columns("#2", "#1")]),
+        (3, [*_RECORDS_AT_40_PT, *_in_columns("#1", "#2", "#3")]),
+        (3, [*_RECORDS_AT_40_PT, *_in_columns("#3", "#2", "#1")]),
     ),
-    ids=("windows", "windows-above-feature", "records"),
+    ids=(
+        "windows", "windows-above-feature", "windows-below", "records", "records-reversed",
+        "three-records", "three-records-reversed",
+    ),
 )
-def test_no_leader_of_a_row_is_painted_over_a_label_of_another_unit(tmp_path: Path, args: list[str]) -> None:
+def test_no_leader_of_a_row_is_painted_over_a_label_of_another_unit(
+    tmp_path: Path, records: int, args: list[str]
+) -> None:
     """OV-2892: the units of one Linear row (windows or records) were stacked together, but a label of an
     earlier unit could take a row under a leader of a later unit, whose group paints that leader on top
     of the label's letters ("ATP synthase F0 subunit 6" over "cytochrome c oxidase subunit I")."""
 
     hmm = str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
-    gbk = ["--gbk", hmm] if args[0] == "--region" else ["--gbk", hmm, hmm]
-    svg = _draw_linear(tmp_path, [*gbk, "--show_labels", "all", *args])
+    svg = _draw_linear(tmp_path, ["--gbk", *[hmm] * records, "--show_labels", "all", *args])
 
     assert _leaders_painted_over_labels(svg) == []
     assert _painted_overlaps(svg) == []
@@ -1585,6 +1598,26 @@ def test_linear_label_fit_counts_labels_of_records_in_one_row_together() -> None
 
     assert [(record.record_id, record.fit.overlap_pairs) for record in one_row.records] == [("second", 1)]
     assert two_rows.records == ()
+
+
+@pytest.mark.linear
+def test_linear_label_fit_counts_a_leader_over_a_label_of_a_record_drawn_before() -> None:
+    """OV-2892: a leader of a record drawn later lies over the letters of an earlier record's label, so
+    the fit count counts it as a crossing for the later record; a leader of the earlier record passes
+    behind the later record's label, which counts nothing. A record alone in its row counts its own
+    leaders behind its labels as before."""
+
+    low = _row_label(90.0, 20.0)
+    high = _row_label(95.0, 10.0, middle_y=-60.0)
+    frames = [LinearLabelFrame(row=1, x=0.0), LinearLabelFrame(row=1, x=0.0)]
+
+    later_over_earlier = linear_label_fit([("first", [low]), ("second", [high])], 10.0, frames=frames)
+    earlier_behind_later = linear_label_fit([("first", [high]), ("second", [low])], 10.0, frames=frames)
+    alone = linear_label_fit([("only", [low, high])], 10.0)
+
+    assert [(record.record_id, record.fit.crossing_pairs) for record in later_over_earlier.records] == [("second", 1)]
+    assert earlier_behind_later.records == ()
+    assert alone.records == ()
 
 
 @pytest.mark.linear

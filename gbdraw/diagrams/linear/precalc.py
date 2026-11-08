@@ -272,8 +272,6 @@ def _precalculate_label_dimensions(
                     track_layout=render_context.feature_track_layout,
                 )
             continue
-        # The row's records in the order the figure draws them: by record index.
-        members.sort(key=lambda member: member[0])
         placed = place_linear_label_row(
             [(unplaced, x) for _i, x, unplaced in members],
             profile=profile,

@@ -33,6 +33,7 @@ from ..layout.text_geometry import (
     aabb_from_points,
     anchor_x_bounds,
     convex_polygons_intersect,
+    segment_intersects_polygon,
     text_box_corner_offsets,
     translate_points,
 )
@@ -606,17 +607,27 @@ class LinearLabelFrame(NamedTuple):
     x: float
 
 
+def linear_paint_order(record_count: int) -> range:
+    """The order in which a Linear figure draws the groups of its ``record_count`` records: record order.
+    A record's group draws its leaders under its labels, so a later group's leader lies over an earlier
+    group's labels; the one owner of that order, read by the figure's drawing loop and by the label rows
+    (``linear_label_rows``), which place and count labels by it (OV-2892)."""
+
+    return range(record_count)
+
+
 def linear_label_rows(frames: Sequence[LinearLabelFrame] | None, record_count: int) -> list[list[tuple[int, float]]]:
-    """The records of each Linear row in row order, each with the x of its start (``frames``; each of the
+    """The records of each Linear row, rows in order and the records of a row in the order the figure
+    draws them (``linear_paint_order``), each with the x of its start (``frames``; each of the
     ``record_count`` records alone in its row without them)."""
 
     resolved = list(frames) if frames is not None else [LinearLabelFrame(index, 0.0) for index in range(record_count)]
     if len(resolved) != record_count:
         raise ValueError("label frames must give one frame for every record")
     rows: dict[int, list[tuple[int, float]]] = {}
-    for index, frame in sorted(enumerate(resolved), key=lambda item: (item[1].row, item[1].x, item[0])):
-        rows.setdefault(frame.row, []).append((index, frame.x))
-    return list(rows.values())
+    for index in linear_paint_order(record_count):
+        rows.setdefault(resolved[index].row, []).append((index, resolved[index].x))
+    return [rows[row] for row in sorted(rows)]
 
 
 class LinearRecordLabels(NamedTuple):
@@ -1238,15 +1249,43 @@ def linear_label_shapes(labels: Sequence[LinearLabel], x: float = 0.0) -> list[L
     ]
 
 
+def _leaders_over_earlier_labels(shapes: Sequence[LabelShape], owners: Sequence[int]) -> list[int]:
+    """The owners of the leaders (``shapes``, each owned by its record's place in the row's drawing order)
+    that pass over a label of a record drawn before theirs, with the room the label keeps in its row, one
+    per such pair: the later record's group draws that leader on top of the label (OV-2892)."""
+
+    if len(set(owners)) < 2:
+        return []
+    boxes = [aabb_from_points(shape.parts[0]) for shape in shapes]
+    row_width = max(box[2] for box in boxes) - min(box[0] for box in boxes)
+    index = IntervalIndex(bucket_size=_external_label_bucket_size(row_width))
+    for label, box in enumerate(boxes):
+        index.insert(label, Interval(box[0], box[2]))
+    found: list[int] = []
+    for leader, shape in enumerate(shapes):
+        if len(shape.leader) < 2:
+            continue
+        xs = [point[0] for point in shape.leader]
+        for label_id in index.query(Interval(min(xs), max(xs))):
+            label = cast(int, label_id)  # only int ids are inserted
+            if owners[label] < owners[leader] and any(
+                segment_intersects_polygon(segment, shapes[label].parts[0], touching=False)
+                for segment in zip(shape.leader, shape.leader[1:])
+            ):
+                found.append(owners[leader])
+    return found
+
+
 def _linear_row_label_fits(
     row: Sequence[tuple[Sequence[LinearLabel], float]],
     definition_boxes: Sequence[Sequence[Aabb]] | None = None,
 ) -> tuple[list[LabelFit], bool]:
-    """The fit of each record's drawn feature labels in one Linear row (records in row order, each with
-    the x of its start), counted together with the shared rule (their layout boxes and leaders): a pair
-    of labels of two records counts for the later record (OV-1188). A label whose letters cover one of
-    its record's ``definition_boxes`` (record coordinates, as its labels) counts once for its record
-    (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
+    """The fit of each record's drawn feature labels in one Linear row (records in the order the figure
+    draws them, each with the x of its start), counted together with the shared rule (their layout boxes
+    and leaders): a pair of labels of two records counts for the record drawn later (OV-1188), and so
+    does a leader of it over a label of the earlier one, as a crossing (OV-2892). A label whose letters
+    cover one of its record's ``definition_boxes`` (record coordinates, as its labels) counts once for
+    its record (OV-1395). Also whether an overlapping pair has a label drawn on its feature."""
 
     owners: list[int] = []
     labels: list[LinearLabel] = []
@@ -1261,6 +1300,8 @@ def _linear_row_label_fits(
         counts[max(owners[left], owners[right])][0] += 1
     for left, right in crossing_pairs([shape.leader for shape in shapes]):
         counts[max(owners[left], owners[right])][1] += 1
+    for owner in _leaders_over_earlier_labels(shapes, owners):
+        counts[owner][1] += 1
     for position, ((record_labels, _x), boxes) in enumerate(zip(row, definition_boxes or [()] * len(row), strict=True)):
         counts[position][2] += sum(_label_covers_keep_clear(label, boxes) for label in record_labels)
     embedded_overlap = any(labels[left]["is_embedded"] or labels[right]["is_embedded"] for left, right in overlaps)

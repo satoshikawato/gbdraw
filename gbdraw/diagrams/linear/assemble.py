@@ -167,6 +167,7 @@ from ...labels.linear import (
     linear_label_fit,
     linear_label_on_its_wrap_row,
     linear_label_rows,
+    linear_paint_order,
     with_feature_label_rows,
 )
 from ...tracks import (
@@ -1874,8 +1875,8 @@ def _place_linear_annotation_labels_by_record(
                 label_style=label_style,
                 gap=gap,
                 new_rows=new_rows,
-                label_x=next(x for other, x in label_row if other == index),
-                row_labels=[(labels_of(other), x) for other, x in label_row if other != index],
+                row=[(labels_of(other), x) for other, x in label_row],
+                row_position=next(position for position, (other, _x) in enumerate(label_row) if other == index),
                 definition_boxes=definition_boxes[index],
             )
         )
@@ -2205,7 +2206,8 @@ class _LinearRowFrame:
     """Where each record sits horizontally, solved once before its tracks and labels.
 
     ``rows_by_record`` is each record's row and ``ordered_record_indices`` the
-    drawing order; ``multi_record_enabled`` is true when a row holds more than
+    records in row and column order (the figure draws them in ``linear_paint_order``);
+    ``multi_record_enabled`` is true when a row holds more than
     one record, and then each record's definition is split into its own lines
     and its row's, and its feature labels are stacked and counted in its row's
     frame (``label_frames``: its row and its start in it, OV-1188; ``None``
@@ -4214,7 +4216,8 @@ def assemble_linear_diagram(
 
     canvas, primary_target_start = _linear_canvas(canvas_config, blast_config, record_inputs, plan)
     labels = _linear_annotation_labels(canvas_config, configurators, record_inputs, plan, feature_label_rows)
-    for record_index in range(len(record_inputs.records)):
+    # The label rows were placed for this order (``linear_label_rows``).
+    for record_index in linear_paint_order(len(record_inputs.records)):
         canvas = _draw_linear_record(
             canvas, _linear_record_drawing(canvas_config, configurators, record_inputs, plan, labels, record_index)
         )

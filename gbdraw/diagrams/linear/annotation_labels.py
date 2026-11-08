@@ -357,8 +357,9 @@ def _choose_candidate(
 class _Record(NamedTuple):
     """What the record's feature labels move within: their dicts, their origin,
     their style (what is drawn with their letters), the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
-    label fit counts them: the x of the record's start in its row, the feature labels of the
-    row's other records, each with its x (``LinearLabelFrame``), and the record's definition text boxes
+    label fit counts them: the feature labels of the records of its row, each with the x of its start
+    (``LinearLabelFrame``), in the order the figure draws them, with the record's place in that order
+    (``row_position``; its own entry gives its start), and the record's definition text boxes
     (label coordinates), which no label may newly cover (OV-1395, OV-1436)."""
 
     record_index: int
@@ -366,8 +367,8 @@ class _Record(NamedTuple):
     origin_y: float
     label_style: FeatureLabelStyle
     inks: tuple[LabelObstacle, ...]
-    label_x: float
-    row_labels: tuple[tuple[Sequence[LinearLabel], float], ...]
+    row: tuple[tuple[Sequence[LinearLabel], float], ...]
+    row_position: int
     definition_boxes: tuple[Aabb, ...]
 
     def label_fit(self, labels: Sequence[LinearLabel]) -> LabelFit:
@@ -375,7 +376,8 @@ class _Record(NamedTuple):
         other records' labels do not move here, so only the record's own definition text is counted."""
 
         return linear_row_label_fit(
-            [*self.row_labels, (labels, self.label_x)], [*(() for _ in self.row_labels), self.definition_boxes]
+            [(labels, x) if position == self.row_position else (row_labels, x) for position, (row_labels, x) in enumerate(self.row)],
+            [self.definition_boxes if position == self.row_position else () for position in range(len(self.row))],
         )
 
 
@@ -516,8 +518,8 @@ def place_linear_annotation_labels(
     label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool,
-    label_x: float,
-    row_labels: Sequence[tuple[Sequence[LinearLabel], float]],
+    row: Sequence[tuple[Sequence[LinearLabel], float]],
+    row_position: int,
     definition_boxes: Sequence[Aabb],
 ) -> PlacedAnnotationLabels:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
@@ -528,9 +530,9 @@ def place_linear_annotation_labels(
     the record's feature glyph boxes (``linear_feature_glyph_boxes``). The
     record's ``feature_labels`` may make way (LP-D82), with what their
     ``label_style`` draws with their letters; ``new_rows`` allows a move to
-    a new row. ``label_x`` and ``row_labels`` are where the label fit
-    counts the row's feature labels (the record's start and the other records'
-    labels, each with its start), with the record's ``definition_boxes`` (its definition text in its
+    a new row. ``row`` and ``row_position`` are where the label fit counts the row's feature labels
+    (each record's labels with its start, in the order the figure draws them, and this record's place in
+    that order), with the record's ``definition_boxes`` (its definition text in its
     feature labels' coordinates; required, as without them a move could cover that text, OV-1436); no
     move makes that count larger. A placed label still over an obstacle counts one pair per obstacle
     owner.
@@ -546,8 +548,8 @@ def place_linear_annotation_labels(
             LabelObstacle(box, (record_index, "ink", index))
             for index, box in enumerate(_track_inks(plan, "", glyphs, sequence_width))
         ),
-        float(label_x),
-        tuple(row_labels),
+        tuple(row),
+        row_position,
         tuple(definition_boxes),
     )
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
