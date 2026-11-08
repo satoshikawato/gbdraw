@@ -72,27 +72,15 @@ def _assert_quantitative_map(report: Mapping[str, Any]) -> None:
         raise AssertionError(f"Unexpected quantitative-map slots: {_slot_pairs(report)!r}")
 
     by_renderer = {slot["renderer"]: slot for slot in report.get("slots", [])}
-    if set(by_renderer["depth"]["tickTexts"]) != {
-        "0x",
-        "20x",
-        "40x",
-        "60x",
-        "80x",
-    }:
+    # Each axis prints one range label (D-16).
+    if by_renderer["depth"]["axisLabelTexts"] != ["[0\u201380x]"]:
         raise AssertionError(
-            f"Unexpected depth ticks: {by_renderer['depth']['tickTexts']!r}"
+            f"Unexpected depth axis labels: {by_renderer['depth']['axisLabelTexts']!r}"
         )
-    if set(by_renderer["dinucleotide_content"]["tickTexts"]) != {
-        "10%",
-        "20%",
-        "30%",
-        "40%",
-        # 50% is one label line below the bound 55%, so the axis leaves it unlabelled.
-        "55%",
-    }:
+    if by_renderer["dinucleotide_content"]["axisLabelTexts"] != ["[10\u201355%]"]:
         raise AssertionError(
-            "Unexpected GC-content ticks: "
-            f"{by_renderer['dinucleotide_content']['tickTexts']!r}"
+            "Unexpected GC-content axis labels: "
+            f"{by_renderer['dinucleotide_content']['axisLabelTexts']!r}"
         )
     required = {
         "AP027133.1",

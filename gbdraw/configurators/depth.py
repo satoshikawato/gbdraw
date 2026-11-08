@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from gbdraw.config.models import RenderProfile
+from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
 
 class DepthConfigurator:
@@ -56,5 +57,6 @@ class DepthConfigurator:
         self.share_axis: bool = bool(cfg.objects.depth.share_axis if share_axis is None else share_axis)
         # The axis labels are measured and drawn in the figure's font (OV-2757).
         self.font_family: str = str(cfg.objects.text.font_family)
+        self.axis_labels: ScalarAxisLabelStyle = cfg.objects.depth.axis_labels
 
 __all__ = ["DepthConfigurator"]

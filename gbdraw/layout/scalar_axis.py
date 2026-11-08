@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from gbdraw.auto_sizes import scalar_axis_tick_font_size
+from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
@@ -211,18 +212,35 @@ def scalar_axis_large_ticks(
     )
 
 
-def percent_axis_large_ticks(
+class ScalarAxisLabels(NamedTuple):
+    """What a depth or GC Percent axis draws besides its line: its large ticks, each numbered or not, and its
+    range label (``None`` in the ``numbered`` style or without ticks)."""
+
+    ticks: tuple[ScalarAxisLargeTick, ...]
+    range_label: str | None
+
+
+def _axis_labels(
+    ticks: tuple[ScalarAxisLargeTick, ...], label_style: ScalarAxisLabelStyle, range_label: str
+) -> ScalarAxisLabels:
+    if label_style == "numbered":
+        return ScalarAxisLabels(ticks, None)
+    return ScalarAxisLabels(tuple(tick._replace(label=None) for tick in ticks), range_label if ticks else None)
+
+
+def percent_axis_labels(
     min_percent: float,
     max_percent: float,
     *,
+    label_style: ScalarAxisLabelStyle,
     show_ticks: bool,
     large_tick_interval: float | None,
     length_px: float,
     label_line_px: float,
-) -> tuple[ScalarAxisLargeTick, ...]:
-    """:func:`scalar_axis_large_ticks` of a GC content axis in percent: every large tick may carry a label."""
+) -> ScalarAxisLabels:
+    """The large ticks and labels of a GC content axis in percent: every large tick may carry a number."""
 
-    return scalar_axis_large_ticks(
+    ticks = scalar_axis_large_ticks(
         min_percent,
         max_percent,
         show_ticks=show_ticks,
@@ -232,23 +250,25 @@ def percent_axis_large_ticks(
         format_label=format_percent_tick,
         label_line_px=label_line_px,
     )
+    return _axis_labels(ticks, label_style, scalar_axis_range_label(min_percent, max_percent, PERCENT_UNIT))
 
 
-def depth_axis_large_ticks(
+def depth_axis_labels(
     axis_min: float,
     axis_max: float,
     *,
+    label_style: ScalarAxisLabelStyle,
     min_depth: float | None,
     normalize: bool,
     show_ticks: bool,
     large_tick_interval: float | None,
     length_px: float,
     label_line_px: float,
-) -> tuple[ScalarAxisLargeTick, ...]:
-    """:func:`scalar_axis_large_ticks` of a depth axis, linear or log-scaled: without a set ``min_depth`` the
-    lower bound has no label."""
+) -> ScalarAxisLabels:
+    """The large ticks and labels of a depth axis, linear or log-scaled: numbered, the lower bound has no number
+    without a set ``min_depth``; the range label starts at the axis minimum (0 when none is set)."""
 
-    return scalar_axis_large_ticks(
+    ticks = scalar_axis_large_ticks(
         axis_min,
         axis_max,
         show_ticks=show_ticks,
@@ -258,6 +278,9 @@ def depth_axis_large_ticks(
         format_label=_format_depth_tick,
         label_line_px=label_line_px,
         label_axis_min=min_depth is not None,
+    )
+    return _axis_labels(
+        ticks, label_style, scalar_axis_range_label(axis_min, axis_max, DEPTH_UNIT, log_scale=normalize)
     )
 
 
@@ -296,22 +319,35 @@ def scaled_scalar_fraction(value: float, axis_min: float, axis_max: float) -> fl
     return max(0.0, min(1.0, (float(value) - float(axis_min)) / (float(axis_max) - float(axis_min))))
 
 
-def format_percent_tick(value: float) -> str:
+def _format_scalar_number(value: float) -> str:
+    """A scalar axis value as its tick labels and range label print it, without the unit."""
+
     value = 0.0 if not math.isfinite(value) else float(value)
     if abs(value - round(value)) < 0.05 or abs(value) >= 100.0:
-        return f"{value:.0f}%"
+        return f"{value:.0f}"
     if abs(value) >= 10.0:
-        return f"{value:.1f}%"
-    return f"{value:.2f}".rstrip("0").rstrip(".") + "%"
+        return f"{value:.1f}"
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+PERCENT_UNIT = "%"
+DEPTH_UNIT = "x"
+
+
+def format_percent_tick(value: float) -> str:
+    return _format_scalar_number(value) + PERCENT_UNIT
 
 
 def _format_depth_tick(value: float) -> str:
-    value = 0.0 if not math.isfinite(value) else float(value)
-    if abs(value - round(value)) < 0.05 or abs(value) >= 100.0:
-        return f"{value:.0f}x"
-    if abs(value) >= 10.0:
-        return f"{value:.1f}x"
-    return f"{value:.2f}".rstrip("0").rstrip(".") + "x"
+    return _format_scalar_number(value) + DEPTH_UNIT
+
+
+def scalar_axis_range_label(axis_min: float, axis_max: float, unit: str, *, log_scale: bool = False) -> str:
+    """The one label of an axis in the ``range`` style: ``[min–max<unit>]`` with an en dash, ``, log`` added on a
+    log-scaled axis (Owner 2026-11-08, D-16)."""
+
+    scale = ", log" if log_scale else ""
+    return f"[{_format_scalar_number(axis_min)}\u2013{_format_scalar_number(axis_max)}{unit}{scale}]"
 
 
 def _depth_axis_bounds(depth_df: Any, min_depth: float | None, max_depth: float | None) -> tuple[float, float]:
@@ -384,16 +420,18 @@ __all__ = [
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",
     "ProjectedScalarLine",
+    "ScalarAxisLabels",
     "ScalarAxisLargeTick",
     "ScalarTickFormatter",
-    "depth_axis_large_ticks",
+    "depth_axis_labels",
     "format_percent_tick",
     "has_tick_value",
     "linear_scalar_axis_tick_font_size_px",
-    "percent_axis_large_ticks",
+    "percent_axis_labels",
     "project_scalar_line",
     "scalar_axis_kept_labels",
     "scalar_axis_large_ticks",
+    "scalar_axis_range_label",
     "scalar_axis_small_tick_values",
     "scalar_axis_tick_values",
     "scaled_scalar_fraction",

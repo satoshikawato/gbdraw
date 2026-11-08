@@ -411,7 +411,18 @@ write-up of a release.
   at least one setting instead of stopping at once with every row "not
   computed". Such a run can take up to the limit longer; the limits and their
   messages are unchanged (OV-2527).
-- Fixed: the tick labels of a depth axis or of a GC content axis in Percent
+- Changed: a depth axis and a GC content axis in Percent mode print one range
+  label, such as `[0–80x]` or `[10–55%]` (`[1–1000x, log]` on a log-scaled
+  depth axis), instead of a number on each large tick; every tick mark is still
+  drawn. In Circular diagrams the label runs along the circle inside the track,
+  near its outer edge, from just clockwise of the axis; in Linear diagrams it
+  sits left of the axis, centred on the track. A Circular depth ring with the
+  range label no longer reserves half a line outside its band. The numbered
+  ticks stay a setting: `--depth_axis_labels numbered` and
+  `--gc_content_axis_labels numbered` on the command line, or
+  `objects.depth.axis_labels` and `objects.gc_content.axis_labels` set to
+  `"numbered"` in a config or in Python.
+- Fixed: numbered tick labels of a depth axis or of a GC content axis in Percent
   mode no longer overlap. When two labels would be closer than one line of
   their font, the axis keeps the label of its upper bound, then its lower
   bound, then the others from the bottom up; every tick is still drawn. A

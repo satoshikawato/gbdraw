@@ -6,6 +6,7 @@ import copy
 from pandas import DataFrame
 
 from gbdraw.config.models import RenderProfile
+from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.tracks.parsing import slot_skew_colors
 
 
@@ -76,6 +77,7 @@ class GcContentConfigurator:
         self.tick_font_size: float | None = cfg.objects.gc_content.tick_font_size
         # The percent axis labels are measured and drawn in the figure's font (OV-2757).
         self.font_family: str = str(cfg.objects.text.font_family)
+        self.axis_labels: ScalarAxisLabelStyle = cfg.objects.gc_content.axis_labels
         self.percent_background_color: str = cfg.objects.gc_content.percent_background_color
         self.percent_background_opacity: float = cfg.objects.gc_content.percent_background_opacity
         self.percent_border_color: str = cfg.objects.gc_content.percent_border_color

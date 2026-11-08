@@ -1,0 +1,15 @@
+{
+  "purpose": "Positive fixture of a Session that the v0.14.5 CLI wrote with a depth axis and a GC content axis in Percent mode, both with numbered ticks: its request's full config has no objects.depth.axis_labels or objects.gc_content.axis_labels (the label style did not exist), and the axes drew 0x 20x 40x 60x and 20% .. 70%. A reader keeps the numbered ticks for such a config (D-16, 2026-11-08).",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main 033a3aa89)",
+  "route": "in a directory holding a copy of tests/fixtures/regex_rules.gb as record.gb and depth.tsv (REGEX, positions 1..2051 every 50, depths 20..50): gbdraw circular --gbk record.gb --depth_track depth.tsv --depth_window 1 --depth_step 50 --depth_min 0 --depth_max 60 --show_depth_axis --show_depth_ticks --depth_large_tick_interval 20 --gc_content_mode percent --gc_content_min_percent 20 --gc_content_max_percent 70 --show_gc_content_axis --show_gc_content_ticks --gc_content_large_tick_interval 10 --window 100 --step 50 -o v0145-axes -f svg --session_output v0145-axes.gbdraw-session.json, with gbdraw from that tag; the written file was compressed with gzip -n -9",
+  "inputs": {
+    "tests/fixtures/regex_rules.gb": "e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b",
+    "depth.tsv": "591c826f751c592c4f40dd8526c84c34b8f13bc48da704c4d7940dc0e0a72ae7"
+  },
+  "values": "renderRequest.diagramOptions.config.objects.depth and .gc_content: no axis_labels; the Result draws the tick labels 0x 20x 40x 60x and 20% 30% 40% 50% 60% 70%",
+  "decompressedSha256": "8d24c7fd3908eca7bb00836cf8959028be8d9ccdbee12ecc21bfef7699613659",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

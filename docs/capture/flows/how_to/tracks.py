@@ -249,7 +249,7 @@ root => {
         slotId: String(element.getAttribute('data-gbdraw-slot-id') || ''),
         renderer: String(element.getAttribute('data-gbdraw-slot-renderer') || ''),
         pathCount: descendants.filter((item) => String(item.tagName || '').toLowerCase() === 'path').length,
-        tickTexts: slotTexts.filter((text) => /^(?:\d+(?:\.\d+)?x|\d+(?:\.\d+)?%)$/.test(text)),
+        axisLabelTexts: slotTexts.filter((text) => /^(?:\d+(?:\.\d+)?x|\d+(?:\.\d+)?%|\[[^\]]+\])$/.test(text)),
         texts: slotTexts
       };
     });
@@ -329,10 +329,10 @@ def _inspect_tracks_svg_file(path: Path) -> dict[str, Any]:
                 "pathCount": sum(
                     1 for descendant in descendants if _local_name(descendant.tag) == "path"
                 ),
-                "tickTexts": [
+                "axisLabelTexts": [
                     text
                     for text in slot_texts
-                    if re.fullmatch(r"(?:\d+(?:\.\d+)?x|\d+(?:\.\d+)?%)", text)
+                    if re.fullmatch(r"(?:\d+(?:\.\d+)?x|\d+(?:\.\d+)?%|\[[^\]]+\])", text)
                 ],
                 "texts": slot_texts,
             }
@@ -418,27 +418,15 @@ def _assert_quantitative_svg(report: Mapping[str, Any]) -> None:
     by_renderer = {slot["renderer"]: slot for slot in report["slots"]}
     if by_renderer["depth"]["pathCount"] < 1:
         raise AssertionError("The depth slot has no plotted path")
-    if set(by_renderer["depth"]["tickTexts"]) != {
-        "0x",
-        "20x",
-        "40x",
-        "60x",
-        "80x",
-    }:
+    # Each axis prints one range label (D-16).
+    if by_renderer["depth"]["axisLabelTexts"] != ["[0\u201380x]"]:
         raise AssertionError(
-            f"Unexpected depth axis ticks: {by_renderer['depth']['tickTexts']}"
+            f"Unexpected depth axis labels: {by_renderer['depth']['axisLabelTexts']}"
         )
-    if set(by_renderer["dinucleotide_content"]["tickTexts"]) != {
-        "0%",
-        "20%",
-        "40%",
-        "60%",
-        "80%",
-        "100%",
-    }:
+    if by_renderer["dinucleotide_content"]["axisLabelTexts"] != ["[0\u2013100%]"]:
         raise AssertionError(
-            "Unexpected GC percentage ticks: "
-            f"{by_renderer['dinucleotide_content']['tickTexts']}"
+            "Unexpected GC percentage axis labels: "
+            f"{by_renderer['dinucleotide_content']['axisLabelTexts']}"
         )
     required_texts = {
         "AP027133.1",

@@ -11,16 +11,19 @@ from ....layout.circular_depth_axis import (
     DEPTH_AXIS_STROKE_WIDTH_PX,
     DEPTH_AXIS_TICK_SIZE_PX,
     SCALAR_AXIS_LABEL_GAP_PX,
+    CircularRangeLabel,
     ScalarAxisTick,
+    circular_range_label,
     depth_axis_tick_font_size_px,
     scalar_axis_ink,
 )
 from ....layout.scalar_axis import (
-    percent_axis_large_ticks,
+    percent_axis_labels,
     scalar_axis_small_tick_values,
     scaled_scalar_fraction,
 )
 from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, paint_shows, stroke_pad_px
+from ....svg.circular_ticks import text_along_circle
 from ....svg.circular_tracks import (
     circular_gc_content_line,
     generate_circular_gc_content_path_desc,
@@ -121,17 +124,23 @@ class GcContentDrawer:
         group.add(border_group)
         return group
 
-    def _percent_axis_ticks(self, baseline_radius: float, track_width: float) -> list[ScalarAxisTick]:
-        """The percent axis ticks as drawn: small ticks first, then large ticks with their labels."""
+    def _percent_axis_ticks(
+        self, baseline_radius: float, track_width: float
+    ) -> tuple[list[ScalarAxisTick], CircularRangeLabel | None]:
+        """The percent axis ticks as drawn, small ticks first, then large ticks with their numbers; and the range
+        label."""
 
-        large_ticks = percent_axis_large_ticks(
+        font_size = self._tick_font_size(track_width)
+        axis_labels = percent_axis_labels(
             self.min_percent,
             self.max_percent,
+            label_style=self._gc_config.axis_labels,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
             length_px=track_width,
-            label_line_px=self._tick_font_size(track_width),
+            label_line_px=font_size,
         )
+        large_ticks = axis_labels.ticks
         ticks = [
             ScalarAxisTick(
                 baseline_radius + float(track_width) * scaled_scalar_fraction(value, self.min_percent, self.max_percent),
@@ -149,7 +158,10 @@ class GcContentDrawer:
         ticks.extend(
             ScalarAxisTick(baseline_radius + tick.offset_px, self.axis_tick_size, tick.label) for tick in large_ticks
         )
-        return ticks
+        range_label = circular_range_label(
+            axis_labels.range_label, baseline_radius + float(track_width), font_size=font_size
+        )
+        return ticks, range_label
 
     def _add_percent_axis(
         self,
@@ -183,7 +195,8 @@ class GcContentDrawer:
         )
 
         font_size = self._tick_font_size(track_width)
-        for tick in self._percent_axis_ticks(baseline_radius, track_width):
+        ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width)
+        for tick in ticks:
             axis_group.add(
                 Line(
                     start=(0, -tick.radius_px),
@@ -204,6 +217,17 @@ class GcContentDrawer:
                         dominant_baseline="central",
                     )
                 )
+        if range_label is not None:
+            for element in text_along_circle(
+                range_label.text,
+                range_label.baseline_px,
+                -90.0 + range_label.start_deg,
+                range_label.path_span_deg,
+                id_parts=(axis_group_id,),
+                fill=self.axis_stroke,
+                font_size=font_size,
+            ):
+                axis_group.add(element)
 
         group.add(axis_group)
         return group
@@ -253,13 +277,15 @@ class GcContentDrawer:
             half = 0.5 * self.percent_border_width
             inks.extend(CircularInkRing(RadialBand(edge - half, edge + half)) for edge in (baseline_radius, outer_radius))
         if self.show_axis:
+            ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width)
             inks.extend(
                 scalar_axis_ink(
                     baseline_radius,
                     outer_radius,
-                    self._percent_axis_ticks(baseline_radius, track_width),
+                    ticks,
                     font_size=self._tick_font_size(track_width),
                     font_family=self.font_family,
+                    range_label=range_label,
                 )
             )
         return tuple(inks)

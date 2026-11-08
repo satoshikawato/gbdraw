@@ -46,6 +46,10 @@ from gbdraw.linear_comparison import LinearComparison
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
+# These tests read the numbered tick labels; the default draws one range label per axis (D-16).
+NUMBERED_AXES = {"objects.depth.axis_labels": "numbered", "objects.gc_content.axis_labels": "numbered"}
+
+
 def _make_record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
     record = SeqRecord(Seq("ATGC" * (length // 4)), id=record_id, name=record_id)
     record.annotations["molecule_type"] = "DNA"
@@ -636,8 +640,7 @@ def test_linear_gc_percent_footprint_reserves_its_drawn_tick_labels() -> None:
         LinearAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": True, "objects.gc_content.mode": "percent"}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": True, "objects.gc_content.mode": "percent"}
             ),
         ),
     )
@@ -666,8 +669,7 @@ def test_circular_depth_track_is_optional() -> None:
         record,
         CircularAssemblyInputs(
             legend="none",
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": False, "canvas.show_skew": False}
             ),
         ),
     ).tostring()
@@ -676,8 +678,7 @@ def test_circular_depth_track_is_optional() -> None:
         CircularAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": True, "canvas.show_skew": True}
             ),
         ),
     ).tostring()
@@ -715,7 +716,7 @@ def test_circular_depth_origin_label_requires_explicit_min() -> None:
         CircularAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.min_depth": 5,
@@ -958,7 +959,7 @@ def test_circular_depth_axis_uses_record_start_and_tick_options() -> None:
         CircularAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.large_tick_interval": 4,
@@ -985,7 +986,7 @@ def test_circular_depth_ticks_use_right_side_and_small_ticks_are_unlabeled() -> 
         CircularAssemblyInputs(
             legend="none",
             depth_table=_constant_depth_table("rec1", 100, length=40),
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.normalize": False,
@@ -1064,7 +1065,7 @@ def test_linear_shared_depth_axis_uses_common_auto_max() -> None:
                 _constant_depth_table("rec1", 10, length=40),
                 _constant_depth_table("rec2", 100, length=40),
             ],
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.share_axis": True,
@@ -1089,7 +1090,7 @@ def test_circular_multi_record_shared_depth_axis_uses_common_auto_max() -> None:
                 _constant_depth_table("rec1", 10, length=40),
                 _constant_depth_table("rec2", 100, length=40),
             ],
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.share_axis": True,
@@ -1111,8 +1112,7 @@ def test_linear_depth_track_is_optional() -> None:
         [record],
         LinearAssemblyInputs(
             legend="none",
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": False, "canvas.show_skew": False}
             ),
         ),
     ).tostring()
@@ -1121,8 +1121,7 @@ def test_linear_depth_track_is_optional() -> None:
         LinearAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": True, "canvas.show_skew": True}
             ),
         ),
     ).tostring()
@@ -1262,8 +1261,7 @@ def test_linear_depth_track_tick_options_are_per_track() -> None:
             depth_track_tick_font_sizes=[8, 14],
             # Tall enough for every label: labels closer than one font size are not drawn (OV-2763).
             depth_track_heights=[40, 40],
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": False, "canvas.show_skew": False}
             ),
             window=10,
             step=10,
@@ -1400,7 +1398,7 @@ def test_depth_share_axis_is_per_logical_track() -> None:
                     _constant_depth_table("rec2", 50, length=40),
                 ],
             ],
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.share_axis": True,
@@ -1860,7 +1858,7 @@ def test_linear_depth_origin_label_requires_explicit_min() -> None:
         LinearAssemblyInputs(
             legend="none",
             depth_table=_depth_table("rec1"),
-            cfg=apply_config_overrides(None, {
+            cfg=apply_config_overrides(None, {**NUMBERED_AXES,
                 "canvas.show_gc": False,
                 "canvas.show_skew": False,
                 "objects.depth.min_depth": 5,
@@ -2704,8 +2702,7 @@ def test_drawn_depth_follows_crop_and_reverse_complement(
             ),
         ),
         options=options_type(
-            config=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            config=apply_config_overrides(None, {**NUMBERED_AXES, "canvas.show_gc": False, "canvas.show_skew": False}
             ),
             depth_table=_frame_table(*spans),
             depth_window=100,

@@ -11,7 +11,7 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarRow,
-    percent_axis_large_ticks,
+    percent_axis_labels,
     plot_data_once,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
@@ -147,14 +147,16 @@ class GcContentDrawer:
         )
 
         font_size = self._tick_font_size(track_height)
-        large_ticks = percent_axis_large_ticks(
+        axis_labels = percent_axis_labels(
             self.min_percent,
             self.max_percent,
+            label_style=self._gc_config.axis_labels,
             show_ticks=self.show_ticks,
             large_tick_interval=self.large_tick_interval,
             length_px=track_height,
             label_line_px=font_size,
         )
+        large_ticks = axis_labels.ticks
         for tick_value in scalar_axis_small_tick_values(
             self.min_percent,
             self.max_percent,
@@ -191,6 +193,20 @@ class GcContentDrawer:
                     fill=self.axis_stroke,
                     font_size=font_size,
                     font_family=self.font_family,
+                    text_anchor="end",
+                    dominant_baseline="central",
+                )
+            )
+        if axis_labels.range_label is not None:
+            axis_group.add(
+                Text(
+                    axis_labels.range_label,
+                    insert=(
+                        start_x - self.axis_tick_size - LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
+                        float(start_y) + 0.5 * float(track_height),
+                    ),
+                    fill=self.axis_stroke,
+                    font_size=font_size,
                     text_anchor="end",
                     dominant_baseline="central",
                 )
