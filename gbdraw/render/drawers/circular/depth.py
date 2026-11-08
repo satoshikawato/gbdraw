@@ -161,11 +161,10 @@ class DepthDrawer:
         track_width: float,
         norm_factor: float,
         *,
-        font_family: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the area down to the baseline with half its stroke, and
-        the axis (``font_family`` is the family the axis labels inherit)."""
+        the axis, its labels measured in the figure's font as ``draw`` writes them."""
 
         plot_df = _prepare_depth_plot_dataframe(depth_df, self.min_depth, self.max_depth, normalize=self.normalize)
         line = circular_scalar_area_line(
@@ -186,7 +185,7 @@ class DepthDrawer:
                     *self._radii(radius, track_width, norm_factor),
                     self._axis_ticks(depth_df, baseline_radius, track_width),
                     font_size=depth_axis_tick_font_size_px(self._depth_config, track_width),
-                    font_family=font_family,
+                    font_family=self.font_family,
                 )
             )
         return tuple(inks)

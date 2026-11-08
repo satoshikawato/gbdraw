@@ -342,7 +342,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         description=(
             "The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read "
             "depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene "
-            "ring and outside the GC content and GC skew rings. The depth axis marks 20x to 80x. "
+            "ring and outside the GC content and GC skew rings. The depth scale ends at 80x. "
             "Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp."
         ),
         workflow="Add a read-depth track",

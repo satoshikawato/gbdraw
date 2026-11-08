@@ -10,19 +10,24 @@ Capture metadata remains the executable source of truth in each tutorial JSON.
 A new Gallery example: the genome of *Ca.* Hepatoplasma scabrum (AP027133.1)
 with a read-depth ring from a table of 1-kbp means
 (`gallery/files/AP027133.DRR394922.depth-1kb.tsv`). The tutorial starts from
-the Web defaults and Generates four times: the defaults, the depth table, Depth
-Window 1 and Step 1000, and the depth scale. The Gallery Session was saved from
+the Web defaults and Generates five times: the defaults, the depth table, Depth
+Window 1 and Step 1000, the depth scale, and the Legend title, each after the
+preview that shows its problem. The Gallery Session was saved from
 a fresh upload of the two files followed by these steps and published with
 `tools/refresh_gallery_sessions.py`. **Reset Settings** keeps the depth file
-with Show Depth off, so the depth step replays as turning Show Depth on, with
-no file chosen again. The replayed final preview equals the Session's Result
+with Show Depth off and its series named Depth, so the depth step chooses the
+file again, as the reader does (the series then takes the file's name), and
+turns Show Depth on; the upload crop of step 2 ends above the **Depth TSV
+tracks** row, which the reader fills only in step 4. The step 6 text and the
+final contract name the scale by Depth Max and Depth Width, not by its tick
+labels. The replayed final preview equals the Session's Result
 element for element.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `hepatoplasma_scabrum_depth` | `manual-03-01-default-preview.webp`, `manual-04-02-depth-comb-preview.webp`, `manual-05-01-continuous-preview.webp`, `manual-06-02-final-preview.webp` | Add | Replay through steps 3, 4, 5, 6; SVG at up to 1000 px in a 1400x1400 viewport; no depth ring at step 3, Show Depth on from step 4; the final asserts Depth Max 80 and Depth Width 60 | Captured at DSF 3; accepted |
-| `hepatoplasma_scabrum_depth` | `manual-04-01-depth-file.webp`, `manual-06-01-depth-scale.webp` | Add | Replay through steps 4 and 6; the **Depth TSV tracks** card with the file chip and the Legend title, then the scale fields (`visibleControls`) | Captured at DSF 3; accepted |
-| `hepatoplasma_scabrum_depth` | `manual-01-01-circular-mode.webp`, `manual-02-01-genbank-upload.webp`, `manual-02-02-output-prefix.webp`, `manual-07-01-feature-popup.webp` | Add | Fresh page for the drawing bar; replay through step 2 for the uploader and Output Prefix; Session alone for the Details popup of the CDS BDV03503.1 (`f84777fe2`) | Captured at DSF 3; accepted |
+| `hepatoplasma_scabrum_depth` | `manual-03-01-default-preview.webp`, `manual-04-02-depth-comb-preview.webp`, `manual-05-01-continuous-preview.webp`, `manual-06-02-scale-preview.webp`, `manual-07-02-final-preview.webp` | Add | Replay through steps 3, 4, 5, 6, 7; SVG at up to 1000 px in a 1400x1400 viewport; no depth ring at step 3, Show Depth on from step 4; the file name in the Legend through step 6; steps 6 and 7 assert Depth Max 80 and Depth Width 60 | Captured at DSF 3; accepted |
+| `hepatoplasma_scabrum_depth` | `manual-04-01-depth-file.webp`, `manual-06-01-depth-scale.webp`, `manual-07-01-legend-title.webp` | Add | Replay through steps 4, 6 and 7; the **Depth TSV tracks** card with the file chip, then the scale fields, then the Legend title (`visibleControls`) | Captured at DSF 3; accepted |
+| `hepatoplasma_scabrum_depth` | `manual-01-01-circular-mode.webp`, `manual-02-01-genbank-upload.webp`, `manual-02-02-output-prefix.webp`, `manual-08-01-feature-popup.webp` | Add | Fresh page for the drawing bar; replay through step 2 for the uploader (cropped above the Depth TSV tracks row) and Output Prefix; Session alone for the Details popup of the CDS BDV03503.1 (`f84777fe2`) | Captured at DSF 3; accepted |
 
 ## Progressive hepatoplasmataceae_collinear tutorial and fresh-upload Session (2026-10-24)
 

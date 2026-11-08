@@ -138,7 +138,7 @@
     "command": "gbdraw circular --gbk AP027133.gb -o hepatoplasma_scabrum_depth -f interactive_svg --depth_track AP027133.DRR394922.depth-1kb.tsv --depth_track_label 'DRR394922 mean depth' --depth_window 1 --depth_step 1000 --depth_max 80 --depth_width 60 --depth_large_tick_interval 20 --depth_small_tick_interval 10 --depth_tick_font_size 14 -l left --separate_strands",
     "commandKind": "runnable",
     "commandNote": "Download AP027133.gb and the depth table from Files, then run this command in the same directory.",
-    "description": "The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene ring and outside the GC content and GC skew rings. The depth axis marks 20x to 80x. Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+    "description": "The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of mean read depth from sequencing run DRR394922, drawn from a table of 1-kbp means, inside the gene ring and outside the GC content and GC skew rings. The depth scale ends at 80x. Coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
     "workflow": "Add a read-depth track",
     "inputSummary": "1 GenBank + 1 depth TSV",
     "displayOrder": 45,

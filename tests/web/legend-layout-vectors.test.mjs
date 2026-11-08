@@ -151,7 +151,7 @@ const layoutCase = (vector) => {
 
 test('the vectors cover every Gallery Legend, its edits, and the synthetic branches', () => {
   const gallery = vectors.layout.filter((vector) => !vector.name.startsWith('synthetic'));
-  assert.equal(gallery.filter((vector) => vector.edit === 'none').length, 10);
+  assert.equal(gallery.filter((vector) => vector.edit === 'none').length, 11);
   assert.ok(gallery.filter((vector) => vector.edit !== 'none').length >= 80);
   assert.deepEqual(new Set(vectors.layout.map((vector) => vector.mode)), new Set(['circular', 'linear']));
   const branches = vectors.layout.map((vector) => vector.expected);

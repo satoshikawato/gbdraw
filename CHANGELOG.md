@@ -179,8 +179,10 @@ write-up of a release.
 - Fixed (Web app): after a Generate that searched comparison rings with
   LOSAT, Reset Settings removed the ring rows while their comparison files
   stayed, and Undo of that Reset lost the LOSAT result. Reset Settings now keeps
-  a ring row for each kept file with its settings back to the defaults, as
-  without a previous search, and Undo brings back the rows and the result.
+  a ring row for each kept comparison sequence file with its settings back to
+  the defaults and drops the earlier search results, so the next Generate
+  searches again; a kept Depth file stays hidden, as before. Undo brings back
+  the rows and the search results.
 - Fixed: the axis labels of a depth track and of a GC content track in
   Percent mode were drawn in the browser's default serif font instead of the
   figure's font. They now use the figure's font, as the other labels do.

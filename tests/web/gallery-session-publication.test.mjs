@@ -638,6 +638,28 @@ assert.rejects(
     assert.equal(again.session.modes.circular.config.form.show_depth, true);
     const readiness = await validateGalleryPublicationReadiness(again.session);
     assert.deepEqual(readiness.equivalence.differences, [], 'published depth');
+    // A style the command states still compares: a rebuild that draws another
+    // color is refused (OV-2819 drops only the fields the command left unstated).
+    const stated = path.join(directory, 'stated.gbdraw-session.json');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
+      '--depth_track', depth, '--depth_track_color', '#123456', '-o', path.join(directory, 'stated'), '-f', 'interactive_svg',
+      '--session_output', stated], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+    const recolored = createGallerySessionPublication({
+      assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+      /** @param {Parameters<typeof buildCanonicalRenderRequest>} args */
+      buildRequest: (...args) => {
+        const built = buildCanonicalRenderRequest(...args);
+        built.renderRequest.diagramOptions.depthTracks[0].color = '#654321';
+        return built;
+      },
+      buildRequestState: buildCanonicalRequestState,
+      readRequest: readPublishedRenderRequest,
+      projectRequest: projectCanonicalSessionRequest,
+      resolveComparisonPlan: resolveLinearComparisonPlan,
+      splitDraft
+    });
+    await assert.rejects(recolored.prepareGallerySessionForPublication(await loadSessionFile(stated)),
+      /depthTracks\[0\]\.color/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
