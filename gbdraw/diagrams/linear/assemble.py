@@ -146,7 +146,7 @@ from ...linear_comparison import (
     search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
 )
-from ...layout.circular_depth_axis import DepthAxisSource
+from ...layout.circular_depth_axis import ScalarAxisSource
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
@@ -918,7 +918,7 @@ def _slot_body_band(slot: LinearResolvedTrack) -> VerticalBand:
     return VerticalBand(-float(slot.top_extent), float(slot.bottom_extent))
 
 
-def _axis_text_overhang(axis_config: DepthAxisSource, track_height: float) -> float:
+def _axis_text_overhang(axis_config: ScalarAxisSource, track_height: float) -> float:
     """How far a Linear scalar axis paints above and below its track: half its stroke, or half a label line when
     numbered tick labels sit centred on the top and bottom ticks (the range label sits centred on the track)."""
 

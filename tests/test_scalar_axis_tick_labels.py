@@ -276,11 +276,11 @@ def test_linear_depth_axis_draws_one_range_label_left_of_the_axis_centred_on_the
 def test_a_circular_depth_axis_with_the_range_label_reserves_no_room_outside_its_band() -> None:
     from types import SimpleNamespace
 
-    from gbdraw.layout.circular_depth_axis import resolve_depth_axis_footprint
+    from gbdraw.layout.circular_depth_axis import scalar_axis_footprint
 
     def footprint(axis_labels: str) -> float:
         config = SimpleNamespace(show_axis=True, show_ticks=True, tick_font_size=10.0, axis_labels=axis_labels)
-        return resolve_depth_axis_footprint(config, 40.0).radial_outer_extra_px
+        return scalar_axis_footprint(config, 40.0).radial_outer_extra_px
 
     assert footprint("numbered") == pytest.approx(5.0)
     assert footprint("range") < 1.0
