@@ -88,6 +88,7 @@
     "Diagram Worker": [
       "app/run-analysis.js",
       "services/diagram-generation.js",
+      "services/input-copies.js",
       "services/losat.js",
       "services/session-import-client.js",
       "workers/diagram-generation-worker.js",
