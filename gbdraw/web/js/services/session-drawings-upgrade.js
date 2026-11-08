@@ -14,7 +14,6 @@
 // (gbdraw/session_io.py), pinned by
 // tests/fixtures/sessions/legend-row-key-vectors.json.
 import {
-  CLI_RECORD_KEY_PREFIX,
   EXPANDED_RECORD_KEY_SEPARATOR,
   FILE_IMPORT_ORIGIN_SESSION_VERSION,
   MODE_SCOPED_SESSION_VERSION,
@@ -29,6 +28,7 @@ import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
 import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
+import { isCliRecordKey } from './record-draw-selection.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
@@ -647,7 +647,6 @@ export const sessionDocumentOfViews = (saved, activeDrawingId) => {
 
 const MODE_SCOPED_CIRCULAR_INPUT = fieldSet(LAYOUT.modeScopedCircularInputSlots);
 const SOURCE_SELECTOR = /^#([1-9][0-9]*)$/;
-const CLI_RECORD_KEY = new RegExp(`^${CLI_RECORD_KEY_PREFIX}[1-9][0-9]*$`);
 
 /** `_request_record_file`: the resource of the file a request record reads. @param {unknown} record @returns {unknown} */
 const requestRecordFile = (record) => {
@@ -686,7 +685,7 @@ const cardUids = (files, records) => {
     const keys = new Set(records.filter((record) => resourceId && requestRecordFile(record) === resourceId)
       .map((record) => String(mapping(record).recordKey || '').split(EXPANDED_RECORD_KEY_SEPARATOR)[0]));
     const base = keys.size === 1 ? [...keys][0] : '';
-    return CLI_RECORD_KEY.test(base) ? base : '';
+    return isCliRecordKey(base) ? base : '';
   });
   if (bases.every(Boolean) && new Set(bases).size === bases.length) return bases;
   return files.map((_file, index) => (files.length === 1 ? 'record-1' : `source-${index + 1}`));
