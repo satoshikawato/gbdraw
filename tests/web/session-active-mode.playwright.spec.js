@@ -60,7 +60,7 @@ const snapshot = page => page.evaluate(async () => {
     featurePanelTab: state.featurePanelTab.value,
     downloadDpi: state.downloadDpi.value,
     // null: the project has no drawing of that mode (a one-mode Load makes none for the other mode).
-    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.files.c_gb)) : null,
+    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.circularSources[0].gb)) : null,
     linearSource: linearDrawing ? await fileInfo(state.inputFiles.fileOf(linearDrawing.linearSeqs[0]?.gb)) : null,
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
@@ -170,7 +170,8 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(firstResolved);
     expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);
-    expect(savedDrawing(second, 'circular').webFiles.bindings.c_gb).toEqual(savedDrawing(first, 'circular').webFiles.bindings.c_gb);
+    expect(savedDrawing(second, 'circular').webFiles.bindings.circularSources).toEqual(savedDrawing(first, 'circular').webFiles.bindings.circularSources);
+    expect(savedDrawing(first, 'circular').webFiles.bindings.circularSources[0].gb).toBeTruthy();
     expect(savedDrawing(second, 'linear').webFiles.bindings.linearSeqs[0].gb).toEqual(savedDrawing(first, 'linear').webFiles.bindings.linearSeqs[0].gb);
     expect(second.webFiles?.resourceOriginalNames).toEqual(first.webFiles?.resourceOriginalNames);
     expect(savedDrawing(second, 'circular').ui.selectedResultIndex).toBe(savedDrawing(first, 'circular').ui.selectedResultIndex);
