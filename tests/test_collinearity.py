@@ -1608,6 +1608,77 @@ def test_anchor_core_record_local_paralog_cluster_forms_species_specific_orthogr
     assert len({member.record_index for member in result.orthogroups["og_1"]}) == 1
 
 
+def _window_units(record_key: str, *features: list[SeqFeature]) -> list[SeqRecord]:
+    """The drawn units of one record shown in windows: each unit is annotated as a window of ``record_key``."""
+    units = []
+    for index, unit_features in enumerate(features, start=1):
+        unit = _record(f"{record_key}_w{index}", unit_features)
+        unit.annotations.update({"gbdraw_record_key": f"{record_key}~w{index}", "gbdraw_window_of": record_key})
+        units.append(unit)
+    return units
+
+
+@pytest.mark.linear
+def test_anchor_core_hits_between_windows_of_one_record_are_same_record_evidence() -> None:
+    # Two windows of record_a hold the paralogs a0 and a1: their hit is same-record evidence, as in one window.
+    records = [
+        *_window_units(
+            "record_a",
+            [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})],
+            [_cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]})],
+        ),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    assert [extraction.protein_map[name].window_of for name in ("a0", "a1", "b0")] == ["record_a", "record_a", None]
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records([_hit_row("a0", "a1", bitscore=250)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row("a1", "a0", bitscore=250)], columns=COMPARISON_COLUMNS),
+        (0, 2): pd.DataFrame.from_records([_hit_row("a0", "b0", bitscore=300)], columns=COMPARISON_COLUMNS),
+        (2, 0): pd.DataFrame.from_records([_hit_row("b0", "a0", bitscore=300)], columns=COMPARISON_COLUMNS),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == {"a0", "a1", "b0"}
+    assert result.member_by_protein_id["a1"].role == "inparalog"
+    assert {edge.edge_kind for edge in result.ortholog_edges_by_orthogroup_id["og_1"]} == {
+        "rbh",
+        "same_record_inparalog",
+    }
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_cluster_spans_the_windows_of_one_record() -> None:
+    records = _window_units(
+        "record_a",
+        [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})],
+        [_cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]})],
+    )
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records([_hit_row("a0", "a1", bitscore=300)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row("a1", "a0", bitscore=300)], columns=COMPARISON_COLUMNS),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == {"a0", "a1"}
+    assert result.scope_by_orthogroup_id["og_1"] == "record_local"
+    # The group is drawn from the first member's unit.
+    assert result.source_record_index_by_orthogroup_id["og_1"] == 0
+
+
 @pytest.mark.linear
 def test_anchor_core_record_local_singleton_remains_unassigned_with_singletons_requested() -> None:
     records = [

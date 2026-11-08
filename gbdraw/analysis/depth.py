@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
+from gbdraw.core.record_metadata import _read_coord_map, _record_source_start, _source_period
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
@@ -411,7 +411,8 @@ def _record_window_sums(
     """The depth summed over each window ``starts[i] .. ends[i] - 1`` of the record's local bases.
 
     The record shows source positions ``start .. start + record_len - 1``,
-    read backwards for a reverse complement; bases outside the parsed
+    read backwards for a reverse complement; a crop across the origin (D-28)
+    runs on from the source end to position 1. Bases outside the parsed
     positions add 0. Each sum is ``prefix[end] - prefix[start]`` of the
     running float64 sums of the per-base depths after a leading 0. The
     running sums are kept only at window bounds: the bases are summed one
@@ -424,30 +425,50 @@ def _record_window_sums(
     prefix = np.zeros(bounds.size, dtype=np.float64)
     source_start = _record_source_start(record)
     _coord_base, coord_step = _read_coord_map(record)
-    first = max(source_start, 1)
-    last = min(source_start + record_len - 1, int(depths.size))
-    if first <= last:
+    period = _source_period(record)
+    # The shown source spans in source order, each (first, last, the first's place on the unwrapped axis).
+    spans = (
+        [(source_start, source_start + record_len - 1, source_start)]
+        if period is None
+        else [(source_start, period, source_start), (1, source_start + record_len - 1 - period, period + 1)]
+    )
+    pieces: list[tuple[int, DepthArray]] = []
+    for span_first, span_last, unwrapped_first in spans:
+        first, last = max(span_first, 1), min(span_last, int(depths.size))
+        if first > last:
+            continue
         shown = depths[first - 1 : last]
+        unwrapped = unwrapped_first + first - span_first
         if coord_step > 0:
-            low = first - source_start
+            low = unwrapped - source_start
         else:
             shown = shown[::-1]
-            low = source_start + record_len - 1 - last
-        # prefix[low + 1 + i] is the running sum up to shown[i]; prefix[.. low] is 0.
+            low = source_start + record_len - 1 - (unwrapped + last - first)
+        pieces.append((low, shown))
+    carry = np.float64(0.0)
+    covered = 0
+    # The first base starts the chain (adding 0.0 would turn a -0.0 depth into 0.0).
+    summed = False
+    for low, shown in sorted(pieces, key=lambda piece: piece[0]):
+        # Bounds between the last shown base and this piece hold the running sum so far.
+        prefix[np.searchsorted(bounds, covered, side="right") : np.searchsorted(bounds, low, side="right")] = carry
+        # prefix[low + 1 + i] is the running sum up to shown[i].
         buffer = np.empty(min(_SUM_CHUNK_BASES, int(shown.size)), dtype=np.float64)
-        carry = np.float64(0.0)
         for offset in range(0, int(shown.size), buffer.size):
             sums = buffer[: min(buffer.size, int(shown.size) - offset)]
             sums[:] = shown[offset : offset + sums.size]
-            if offset:
+            if summed:
                 sums[0] += carry
+            summed = True
             np.cumsum(sums, out=sums)
             carry = sums[-1]
             chunk_first = low + 1 + offset
             inside = slice(*np.searchsorted(bounds, (chunk_first, chunk_first + sums.size)))
             prefix[inside] = sums[bounds[inside] - chunk_first]
-        # Past the last shown base the running sum stays at its total.
-        prefix[np.searchsorted(bounds, low + int(shown.size), side="right") :] = carry
+        covered = low + int(shown.size)
+    # Past the last shown base the running sum stays at its total.
+    if pieces:
+        prefix[np.searchsorted(bounds, covered, side="right") :] = carry
     return prefix[bound_of[starts.size :]] - prefix[bound_of[: starts.size]]
 
 

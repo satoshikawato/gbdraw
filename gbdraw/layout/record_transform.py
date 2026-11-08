@@ -15,7 +15,7 @@ from typing import Literal
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _read_coord_map, _source_period
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 DetectedTopology = Literal["circular", "linear", "unknown"]
@@ -44,7 +44,9 @@ def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
     is_circular = detected_topology(record, "memory") == "circular"
     source_length = record.annotations.get("gbdraw_source_length")
     if record.annotations.get("gbdraw_region_applied") and isinstance(source_length, int):
-        return RecordDisplayTransform(source_length, base, 1 if step == 1 else -1, None, is_circular)
+        return RecordDisplayTransform(
+            source_length, base, 1 if step == 1 else -1, None, is_circular, crosses_origin=_source_period(record) is not None
+        )
     if step == 1:
         return RecordDisplayTransform(base + length - 1, base, 1, None, is_circular)
     return RecordDisplayTransform(max(base, length), base, -1, None, is_circular)

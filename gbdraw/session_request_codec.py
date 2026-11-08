@@ -1088,8 +1088,9 @@ def _source_file_transforms(
 
     The planner annotates each record it reads with its source kind and its
     index among the file's records. Returns ``None`` unless each record of
-    the files is drawn at most once and each is the file's record. Only when
-    ``per_record`` allows it may some records of the files be left undrawn,
+    the files is drawn once and each is the file's record. Only when
+    ``per_record`` allows it may some records of the files be left undrawn or
+    drawn by several records (each with its own selector and window, OV-2716),
     or a record be cropped or reverse-complemented.
     """
 
@@ -1109,7 +1110,6 @@ def _source_file_transforms(
         and all(Path(path).is_file() for path in paths)
         and (indexes == list(range(count)) or (
             per_record
-            and len(set(indexes)) == len(indexes)
             and 0 <= indexes[0]
             and indexes[-1] < count
         ))

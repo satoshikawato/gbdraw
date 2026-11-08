@@ -64,7 +64,7 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
-from gbdraw.core.record_metadata import _source_feature_index
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _source_feature_index
 from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
@@ -227,7 +227,9 @@ class CdsProtein:
     order keys read. ``origin_arc`` is set only for a location across the
     record origin: its arc ``(start, end)`` with ``start > end``
     (``gbdraw.analysis.origin_arcs``). ``record_length`` is the length of the
-    record the coordinates belong to.
+    record the coordinates belong to. ``record_index`` is the drawn unit;
+    ``window_of`` is the key of the record whose window that unit is, or
+    ``None`` when the unit is its record.
     """
 
     protein_id: str
@@ -272,12 +274,19 @@ class CdsProtein:
     view_feature_svg_id: str | None = None
     origin_arc: Arc | None = None
     record_length: int | None = None
+    window_of: str | None = None
 
     @property
     def arc(self) -> Arc:
         """The CDS's arc: ``origin_arc`` across the origin, else its linear extent."""
 
         return self.origin_arc if self.origin_arc is not None else (int(self.start), int(self.end))
+
+    @property
+    def same_record_key(self) -> tuple[str, int]:
+        """The record same-record evidence compares: the windows of one record are one record (D-01)."""
+
+        return (self.window_of, -1) if self.window_of is not None else ("", int(self.record_index))
 
 
 def _refuse_change(self: object, *_args: object, **_kwargs: object) -> NoReturn:
@@ -787,8 +796,8 @@ class _DirectedHit(NamedTuple):
 
     query: str
     subject: str
-    query_record_index: int
-    subject_record_index: int
+    query_record: int
+    subject_record: int
     score: float
     evalue: float
     min_coverage: float
@@ -819,8 +828,9 @@ class _DirectedHitTable:
     codes in (record index, ID) order, so the lower code of a pair is its
     canonical query: the earlier record, then the smaller ID. ``reverse`` is the
     row of the opposite direction, or -1; ``source`` and ``source_row`` locate the
-    row in ``sources``. ``hit`` builds the record of one row, for the few hits
-    that later steps keep.
+    row in ``sources``. ``protein_record`` numbers each protein's record
+    (``CdsProtein.same_record_key``), which the same-record tests compare.
+    ``hit`` builds the record of one row, for the few hits that later steps keep.
     """
 
     protein_ids: list[str]
@@ -932,6 +942,7 @@ class _CdsProteinCandidate:
     source_feature_position: int
     origin_arc: Arc | None
     record_length: int
+    window_of: str | None
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -3260,10 +3271,8 @@ def extract_cds_proteins(
     source_id_counts: dict[str, int] = {}
     protein_map: dict[str, CdsProtein] = {}
 
-    record_index_offset = int(record_index_offset)
-
     for record_index, record in enumerate(records):
-        global_record_index = record_index + record_index_offset
+        global_record_index = record_index + int(record_index_offset)
         record_candidates: list[_CdsProteinCandidate] = []
         cds_count = 0
         feature_items = _iter_record_features(record)
@@ -3365,6 +3374,7 @@ def extract_cds_proteins(
                     source_feature_position=feature_index,
                     origin_arc=location_origin_arc(view_hash_parts, len(record)),
                     record_length=len(record),
+                    window_of=(record.annotations or {}).get(WINDOW_OF_ANNOTATION),
                 )
             )
 
@@ -3417,6 +3427,7 @@ def extract_cds_proteins(
                 source_feature_position=candidate.source_feature_position,
                 origin_arc=candidate.origin_arc,
                 record_length=candidate.record_length,
+                window_of=candidate.window_of,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein
@@ -4664,7 +4675,6 @@ def _directed_hits_from_tables(
     highest identity and longest alignment; the earliest wins a complete tie.
     """
 
-    record_index_by_id = {protein_id: int(protein.record_index) for protein_id, protein in protein_map.items()}
     protein_ids = sorted(protein_map, key=lambda protein_id: _protein_sort_key(protein_map[protein_id]))
     protein_index = pd.Index(protein_ids, dtype=object)
     tables = [table for table in normalized_tables.values() if table is not None and not table.empty]
@@ -4721,7 +4731,9 @@ def _directed_hits_from_tables(
     return _DirectedHitTable(
         protein_ids=protein_ids,
         protein_index=protein_index,
-        protein_record=np.asarray([record_index_by_id[protein_id] for protein_id in protein_ids], dtype=np.int64),
+        protein_record=pd.factorize(
+            pd.Index([protein_map[protein_id].same_record_key for protein_id in protein_ids], tupleize_cols=False)
+        )[0].astype(np.int64),
         query=query,
         subject=subject,
         score=score[ranked],
@@ -4913,8 +4925,7 @@ def _record_local_components_from_edges(
     for member_ids in components_by_root.values():
         if len(member_ids) < _RECORD_LOCAL_MIN_MEMBERS:
             continue
-        record_indices = {int(protein_map[member_id].record_index) for member_id in member_ids}
-        if len(record_indices) != 1:
+        if len({protein_map[member_id].same_record_key for member_id in member_ids}) != 1:
             continue
         components.append(
             tuple(
@@ -5055,15 +5066,15 @@ def _append_record_local_orthogroups(
         if len(component_members) < _RECORD_LOCAL_MIN_MEMBERS:
             continue
         component_set = set(component_members)
-        record_indices = {int(protein_map[member_id].record_index) for member_id in component_members}
-        if len(record_indices) != 1:
+        if len({protein_map[member_id].same_record_key for member_id in component_members}) != 1:
             continue
         group_id = f"og_{next_group_index}"
         next_group_index += 1
         group_order.append(group_id)
         group_member_ids[group_id] = set(component_members)
         scope_by_group[group_id] = "record_local"
-        source_record_index_by_group[group_id] = next(iter(record_indices))
+        # The group is drawn from its first member's unit.
+        source_record_index_by_group[group_id] = int(protein_map[component_members[0]].record_index)
         for member_id in component_members:
             group_by_protein[member_id] = group_id
             member_roles[member_id] = "local_paralog"
@@ -5167,7 +5178,7 @@ def _best_evidence_between_protein_and_members(
     supports: list[_DirectedHit | None] = [None, None]
     diagnostics: list[_DirectedHit | None] = [None, None]
     for hit in evidence:
-        record_kind = int(hit.query_record_index != hit.subject_record_index)
+        record_kind = int(hit.query_record != hit.subject_record)
         diagnostic = diagnostics[record_kind]
         if diagnostic is None or hit.score > diagnostic.score or (hit.score == diagnostic.score and hit.rank < diagnostic.rank):
             diagnostics[record_kind] = hit

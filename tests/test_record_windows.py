@@ -625,3 +625,118 @@ def test_a_cli_session_of_a_records_table_group_keeps_the_window_columns(
     ]
     _cli(monkeypatch, ["render", "--session", "g.gbdraw-session.json", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "g.svg").read_bytes()
+
+
+def test_a_cli_session_of_a_records_table_drawing_one_file_record_twice_replays_the_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-2716: two rows of one file record bind that record twice, each with its own window."""
+    monkeypatch.chdir(tmp_path)
+    table = _table(
+        tmp_path,
+        [f"{MITO}\t\tM\t1\t1\t100-900", f"{MITO}\t\tT\t1\t2\t2000-3000:rc", f"{TWO_RECORDS}\tTESTA\tN\t2\t1\t"],
+        "gbk\trecord_id\trecord_label\trow\tcolumn\tregion",
+    )
+    _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "v", "-f", "svg", "--save_session"])
+    request = _saved_request(tmp_path / "v.gbdraw-session.json")
+    records = request["records"]
+    # Both rows read the file itself, each its own window; no in-memory GenBank copy.
+    assert [record["source"]["kind"] for record in records] == ["genbank", "genbank", "genbank"]
+    assert records[0]["source"] == records[1]["source"]
+    assert [
+        [(w["start"], w["end"], w["reverseComplement"]) for w in record["windows"]] for record in records
+    ] == [[(100, 900, False)], [(2000, 3000, True)], []]
+    _cli(monkeypatch, ["render", "--session", "v.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "v.svg").read_bytes()
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_the_transform_of_a_window_across_the_origin_maps_bases_on_both_sides_of_it(reverse: bool) -> None:
+    """The transform of a crossing window maps a base after the origin into the window, not before its start."""
+    collection = resolve_request_records(
+        LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=reverse)),))
+    )
+    [transform] = collection.transforms
+    # Base 577 (tRNA-Phe start, after the origin) and base 16500 (before it), both inside the window.
+    expected = {577: 423, 16500: 1069} if reverse else {577: 1146, 16500: 500}
+    assert {base: transform.source_base_to_display_index(base) for base in expected} == expected
+    assert {transform.display_index_to_source_base(index): index for index in expected.values()} == expected
+    assert transform.source_boundary_to_display_offset(1000 if not reverse else 15999) == 1570
+
+
+def test_anchor_feature_aligns_a_feature_after_the_origin_of_a_window_across_it() -> None:
+    from gbdraw.api import FeatureSelector
+
+    request = LinearDiagramRequest(
+        records=(_windowed(_ACROSS), RecordInput(GenBankInputSource(MITO), region=parse_region_spec("1-5000"))),
+        options=LinearDiagramOptions(anchor_feature=FeatureSelector(value="tRNA-Phe", key="product")),
+    )
+    plan = plan_linear_request(request)
+    assert plan.feature_anchor is not None
+    # tRNA-Phe (577..647) is base index 1146 of the window across the origin and 576 of the region 1-5000.
+    assert plan.feature_anchor.statuses == ("reference", "aligned")
+    assert plan.feature_anchor.starts == (1146.0, 576.0)
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_a_wrapped_window_across_the_origin_draws_its_local_parts_where_they_lie(reverse: bool, tmp_path: Path) -> None:
+    from gbdraw.layout.record_coordinates import SourceInterval
+
+    request = LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=reverse)),))
+    [transform] = resolve_request_records(request).transforms
+    wrapped = transform.with_wrap(500, 1570)
+    # A local part across the source origin (local 570) stays one piece on the second row.
+    [fragment] = wrapped.project_local_parts((SourceInterval(520, 700),))
+    assert (fragment.row, fragment.display_start, fragment.display_end) == (1, 20, 200)
+    wrapped_request = replace(
+        request,
+        options=LinearDiagramOptions(config_overrides={"canvas.linear.wrap_length": 500}),
+        output=replace(request.output, output_directory=tmp_path),
+    )
+    [svg] = [path for path in render_request(wrapped_request).output_paths if path.suffix == ".svg"]
+    assert len(set(re.findall(r'data-gbdraw-wrap-row="(\d+)"', svg.read_text(encoding="utf-8")))) == 4
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_depth_on_a_window_across_the_origin_reads_both_sides_of_it(reverse: bool) -> None:
+    import pandas as pd
+
+    from gbdraw.analysis.depth import depth_df
+
+    [unit] = resolve_request_records(
+        LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=reverse)),))
+    ).records
+    # Depth 1 on bases 1..1000 (after the origin), 2 on 16000..16569 (before it); bases 1001..15999 have none.
+    positions = [*range(1, 1001), *range(16000, 16570)]
+    table = pd.DataFrame({
+        "reference_name": unit.id,
+        "position": positions,
+        "depth": [1 if position <= 1000 else 2 for position in positions],
+    })
+    depths = depth_df(unit, table, window=10, step=10)["depth"].tolist()
+    # 570 bases before the origin, then 1000 after it (read backwards when reversed).
+    expected = [1.0] * 100 + [2.0] * 57 if reverse else [2.0] * 57 + [1.0] * 100
+    assert depths == expected
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_conservation_hits_on_a_window_across_the_origin_are_drawn_in_its_search_frame(reverse: bool) -> None:
+    import pandas as pd
+
+    from gbdraw.analysis.conservation import ConservationSource, _normalize_source_hits_for_record
+
+    [unit] = resolve_request_records(
+        LinearDiagramRequest(records=(_windowed(replace(_ACROSS, reverse_complement=reverse)),))
+    ).records
+    # Frame positions 1..100 (source 16000..16099) and 601..700 (source 31..130, after the origin).
+    hits = pd.DataFrame([
+        {"source_hit_index": index, "query": unit.id, "subject": "s", "qstart": start, "qend": start + 99,
+         "sstart": 1, "send": 100, "identity": 90.0, "alignment_length": 100.0, "mismatches": 0.0,
+         "gap_opens": 0.0, "evalue": 1e-30, "bitscore": 200.0}
+        for index, start in enumerate((1, 601))
+    ])
+    rows = _normalize_source_hits_for_record(
+        ConservationSource(0, "s", None, hits), track_index=0, reference_side="query", record=unit
+    )
+    drawn = sorted(zip(rows["draw_start"], rows["draw_end"]))
+    assert drawn == ([(870.0, 970.0), (1470.0, 1570.0)] if reverse else [(0.0, 100.0), (600.0, 700.0)])

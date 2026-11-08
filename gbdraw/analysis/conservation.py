@@ -16,7 +16,7 @@ from pandas import DataFrame
 from gbdraw.config.models.objects import ConservationColorScheme
 from gbdraw.core.color import normalize_hex_color, tint_color
 from gbdraw.annotations.resolve import _source_interval_to_local
-from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
+from gbdraw.core.record_metadata import _read_coord_map, _record_frame_base
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
@@ -561,7 +561,8 @@ def _normalize_source_hits_for_record(
     # crop, on its source strand, 1-based. A reverse complemented record draws
     # them through its coordinate map (OV-1683).
     coord_base, coord_step = _read_coord_map(record)
-    frame_start = _record_source_start(record)
+    # On the map's own axis, which a crop across the origin runs on past the source end (D-28).
+    frame_start = _record_frame_base(record)
 
     start_column, end_column, id_column = (
         ("qstart", "qend", "query")

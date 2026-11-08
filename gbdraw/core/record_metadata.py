@@ -347,10 +347,19 @@ def _record_source_start(record: SeqRecord) -> int:
     a cropped record, also after a reverse complement, and 1 for a whole record.
     """
 
+    return _wrap_source_base(_record_frame_base(record), _source_period(record))
+
+
+def _record_frame_base(record: SeqRecord) -> int:
+    """The coordinate of a record's first base on its source strand, on the axis of its coordinate map.
+
+    It is :func:`_record_source_start` before the wrap: on a crop across the
+    origin it may lie past the source end or before 1, where the map's other
+    coordinates lie, so a search-frame position ``p`` is ``base + p - 1`` there.
+    """
+
     coord_base, coord_step = _read_coord_map(record)
-    return _wrap_source_base(
-        coord_base if coord_step == 1 else coord_base - len(record.seq) + 1, _source_period(record)
-    )
+    return coord_base if coord_step == 1 else coord_base - len(record.seq) + 1
 
 
 def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:

@@ -35,6 +35,7 @@ from gbdraw.core.record_metadata import (
     _SourceFeatureAnchorProfile,
     _read_coord_map,
     _source_feature_index,
+    _source_period,
 )
 from gbdraw.io.cli_tables import (
     RecordsTableRecord,
@@ -293,6 +294,7 @@ class ResolvedRecordCollection:
                 )
                 transform = RecordDisplayTransform(
                     cast(int, length), base, step, display.start_coordinate, display.is_circular,
+                    crosses_origin=_source_period(record) is not None,
                 )
             except ValidationError as exc:
                 raise ValidationError(
