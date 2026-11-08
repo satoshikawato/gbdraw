@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from collections.abc import Iterable, Sequence
 from typing import Dict, List, Literal, Mapping, Optional, TypedDict, TypeVar, Union
 
+from fontTools.pens.basePen import BasePen
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 
@@ -682,6 +683,109 @@ def text_runs_ink_offsets(
 
 
 @dataclass(frozen=True)
+class GlyphOutline:
+    """One glyph of a text as it is painted at its font size, in px: ``middle`` is the middle of its advance from the
+    start of the text's advance, and ``contours`` its outline as closed polygons (curves flattened), x from that
+    middle and y up from the alphabetic baseline. A character the face lacks is an em box (``_face_text_box``)."""
+
+    middle: float
+    contours: tuple[tuple[tuple[float, float], ...], ...]
+
+
+class _FlatPen(BasePen):
+    """A glyph's contours as polygons, each curve as straight segments."""
+
+    def __init__(self, glyph_set: Mapping[str, object]) -> None:
+        super().__init__(glyph_set)
+        self.contours: list[list[tuple[float, float]]] = []
+
+    def _moveTo(self, point: tuple[float, float]) -> None:
+        self.contours.append([point])
+
+    def _lineTo(self, point: tuple[float, float]) -> None:
+        self.contours[-1].append(point)
+
+    def _curveToOne(self, p1: tuple[float, float], p2: tuple[float, float], p3: tuple[float, float]) -> None:
+        (x0, y0) = self.contours[-1][-1]
+        for step in range(1, _CURVE_STEPS + 1):
+            t = step / _CURVE_STEPS
+            a, b, c, d = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t**3
+            self.contours[-1].append(
+                (a * x0 + b * p1[0] + c * p2[0] + d * p3[0], a * y0 + b * p1[1] + c * p2[1] + d * p3[1])
+            )
+
+    def _qCurveToOne(self, p1: tuple[float, float], p2: tuple[float, float]) -> None:
+        (x0, y0) = self.contours[-1][-1]
+        for step in range(1, _CURVE_STEPS + 1):
+            t = step / _CURVE_STEPS
+            a, b, c = (1 - t) ** 2, 2 * (1 - t) * t, t * t
+            self.contours[-1].append((a * x0 + b * p1[0] + c * p2[0], a * y0 + b * p1[1] + c * p2[1]))
+
+
+# Straight segments per curve of a glyph outline: a quarter circle of an em-high letter at 60 px strays less than
+# 0.1 px from its chords.
+_CURVE_STEPS = 8
+
+
+@functools.lru_cache(maxsize=4096)
+def _face_glyph_contours(face: FontFace, glyph_name: str) -> tuple[tuple[tuple[float, float], ...], ...]:
+    font = load_font(face)
+    if font is None:
+        return ()
+    glyph_set = font.getGlyphSet()
+    pen = _FlatPen(glyph_set)
+    glyph_set[glyph_name].draw(pen)
+    return tuple(tuple(contour) for contour in pen.contours if len(contour) > 2)
+
+
+@functools.lru_cache(maxsize=2048)
+def text_runs_glyph_outlines(
+    runs: tuple[tuple[str, str | None], ...],
+    font_family: str,
+    font_size: float,
+    font_weight: FontWeight = "normal",
+) -> tuple[GlyphOutline, ...]:
+    """The painted glyphs of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``, laid
+    out as ``text_runs_ink_offsets`` measures them: each run in its own face, kerned within it, white space collapsed
+    across runs. Empty when a face cannot be read."""
+
+    size = float(font_size)
+    glyphs: list[GlyphOutline] = []
+    origin = 0.0
+    for text, font_style in collapse_runs_white_space(runs):
+        face = resolve_font_face(font_family, font_weight, font_style)
+        font = None if face is None else load_font(face)
+        if face is None or font is None:
+            return ()
+        scale = size / float(font["head"].unitsPerEm)
+        cmap = _measured_cmap(font)
+        previous: Optional[str] = None
+        for char in text:
+            glyph_name = cmap.get(ord(char))
+            if previous is not None:
+                origin += _get_kerning_value(font, previous, glyph_name) * scale
+            if glyph_name is None:
+                em = float(font["head"].unitsPerEm)
+                top, bottom = float(font["hhea"].ascent), float(font["hhea"].descent)
+                advance = em * scale
+                contours: tuple[tuple[tuple[float, float], ...], ...] = (((0.0, bottom), (em, bottom), (em, top), (0.0, top)),)
+            else:
+                advance = float(font["hmtx"][glyph_name][0]) * scale
+                contours = _face_glyph_contours(face, glyph_name)
+            if contours:
+                half = advance / 2
+                glyphs.append(
+                    GlyphOutline(
+                        origin + half,
+                        tuple(tuple((x * scale - half, y * scale) for x, y in contour) for contour in contours),
+                    )
+                )
+            origin += advance
+            previous = glyph_name
+    return tuple(glyphs)
+
+
+@dataclass(frozen=True)
 class FontVerticalMetrics:
     """Vertical font metrics as fractions of the font size (em units)."""
 
@@ -909,6 +1013,7 @@ def italic_markup_runs(text: str) -> tuple[TextRun, ...]:
 __all__ = [
     "FontMetricsTable",
     "FontVerticalMetrics",
+    "GlyphOutline",
     "TextInk",
     "TextRun",
     "TextRunStyle",
@@ -928,6 +1033,7 @@ __all__ = [
     "parse_mixed_content_text",
     "text_ink",
     "text_ink_offsets",
+    "text_runs_glyph_outlines",
     "text_runs_ink_offsets",
 ]
 

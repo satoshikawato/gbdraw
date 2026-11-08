@@ -1149,6 +1149,35 @@ def test_a_label_that_keeps_no_letter_moves_no_band(
     assert _bands_and_left_out(regions, slot, orientation, drawn.without_letters).bands == drawn.bands
 
 
+def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() -> None:
+    # OV-2848: four nested bands at 60 pt in an inside slot without a set width. Further in, where the letters of the
+    # other labels find more room, the innermost label keeps no letter; the slot does not move there, so every label
+    # is drawn, and the lanes settle before the assembler's last pass.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    # Whether each packing where the layout draws the slots changed it, for each layout of the drawing.
+    layouts: list[list[bool]] = []
+    place, repack = assemble_module._place_annotation_tracks_where_drawn, assemble_module._annotation_tracks_packed_where_drawn
+
+    def placing(*args: object, **kwargs: object) -> object:
+        layouts.append([])
+        return place(*args, **kwargs)
+
+    def repacking(*args: object, **kwargs: object) -> dict[str, object]:
+        result = repack(*args, **kwargs)
+        layouts[-1].append(bool(result))
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(assemble_module, "_place_annotation_tracks_where_drawn", placing)
+        patch.setattr(assemble_module, "_annotation_tracks_packed_where_drawn", repacking)
+        drawn = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto")
+
+    assert not drawn.without_letters, drawn.messages
+    assert all(_labelled(drawn.items[identity]) for identity, *_rest in _SEVEN_NESTED[:4])
+    assert layouts and all(changed[-1:] == [False] for changed in layouts), layouts
+
+
 def test_a_label_left_out_for_want_of_a_letter_keeps_its_band_where_it_stands_without_text() -> None:
     # OV-2805: r1's letters meet r2's in r2's lane, and the lane further in lies so near the centre that no letter
     # of r1 fits there. r1's band stays in r2's lane, beside r2's mark, not at the centre.

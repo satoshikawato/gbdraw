@@ -168,6 +168,7 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
     CircularAnnotationLabels,
     CircularLabelObstacles,
+    CircularLabelRoom,
     LeaderSegment,
     circular_annotation_label_extent,
     circular_annotation_label_room,
@@ -1327,7 +1328,8 @@ def _feature_label_obstacles(
 
 
 class _AnnotationLabelRoom:
-    """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
+    """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), and whether the band
+    leaves out a label the slot's lanes draw (``drops_labels``), measured by the labels'
     own owner once for each band, axis ring, side, parameters and ``covers_slots`` flag it is asked for: the layouts
     of one drawing, the definition font scan's among them, ask for the same ones again and again (OV-2664). The
     memo is reused for equal lanes while annotation measures are kept (``CircularAnnotationMeasures``): within one
@@ -1341,11 +1343,19 @@ class _AnnotationLabelRoom:
         self._record_index = record_index
         self._record_length = record_length
         self._font_family = font_family
-        self._measured: dict[tuple[RadialBand, RadialBand, str, AnnotationTrackParams, bool], float] = {}
+        self._measured: dict[tuple[RadialBand, RadialBand, str, AnnotationTrackParams, bool], CircularLabelRoom] = {}
 
     def __call__(
         self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
     ) -> float:
+        return self._room(band, axis, side, params, covers_slots).px
+
+    def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool:
+        return self._room(band, axis, side, params, False).drops_labels
+
+    def _room(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+    ) -> CircularLabelRoom:
         track_params = annotation_track_params_from_mapping(params)
         key = (band, axis.paint_band_px, side, track_params, covers_slots)
         room = self._measured.get(key)

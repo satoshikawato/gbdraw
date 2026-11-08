@@ -1051,6 +1051,8 @@ def test_circular_region_label_letters_fit_their_innermost_circle(text: str, sta
     # (RGN-CUT-EMPTY-OMIT). Labels of an inside slot nearer and nearer the centre, tops toward the centre (lower
     # half) and away from it.
     from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.core.text import text_runs_glyph_outlines
+    from gbdraw.layout.text_geometry import glyphs_meet_on_circle
     from gbdraw.render.drawers.circular.annotations import _MAX_HALF_PATH_DEG, _label_ink, circular_annotation_labels
 
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
@@ -1077,7 +1079,39 @@ def test_circular_region_label_letters_fit_their_innermost_circle(text: str, sta
             # Off its mark, and along the circle its letters come nearest the centre on, one em short of each end.
             assert far <= inner, (inner, label.runs, label.ink_radii)
             assert max(-left, right) + font_size <= math.radians(_MAX_HALF_PATH_DEG) * near + 1e-6, (inner, label.runs, near)
+            # And no two of its letters' ink overlaps where they stand.
+            glyphs = text_runs_glyph_outlines(label.runs, "Liberation Sans", font_size)
+            assert not glyphs_meet_on_circle(glyphs, label.arc.radius, tops_in=label.arc.flipped), (inner, label.runs)
     assert kept == {True, False}
+
+
+def test_a_curved_region_label_whose_letters_close_up_on_its_circle_is_cut_before_they_meet() -> None:
+    # The x's of "Region 3 xxxxxxxx" at 60 pt stand apart on a line, but along a circle of about 200 px with their
+    # tops toward the centre (lower half) the top corners of each x cross the next one's: the label keeps the start
+    # whose letters stand apart. With their tops away from the centre (upper half) the whole label is drawn.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import circular_annotation_labels
+
+    texts = {}
+    for start in (2184, 7184):
+        record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+        style = RegionAnnotationStyle(label_orientation="auto", label_font_size=60.0)
+        region = RegionAnnotation("r0", CoordinateSpan(None, start, start + 1000), label="Region 3 xxxxxxxx", style=style)
+        bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+        params = annotation_track_params_from_mapping({"set_id": "s"})
+        track = layout_annotation_track(
+            "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+            labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+        )
+        labels = circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=260.0, outer_radius_px=270.0,
+            side="inside", font_family="Liberation Sans", params=params,
+        )
+        ((label,),) = [labels.drawn]
+        texts[start] = "".join(run for run, _style in label.runs)
+
+    assert texts[7184] == "Region 3 xxxxxxxx"
+    assert texts[2184].startswith("Region 3 x") and texts[2184].endswith("\u2026") and "xx" not in texts[2184], texts
 
 
 def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(monkeypatch: pytest.MonkeyPatch) -> None:
