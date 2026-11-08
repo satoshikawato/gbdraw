@@ -1824,7 +1824,7 @@ off with the reason "Generate to search".
   records, in every LOSAT execution mode, and its hits are drawn in genome
   coordinates on the strand of the reading frame, as a nucleotide query's
   hits are. One search may hold both kinds; **Program** names the programs of
-  the listed queries, and **Task** applies to the nucleotide queries only (it
+  the listed queries, blastn first, and **Task** applies to the nucleotide queries only (it
   is off when every query is a protein). **Bitscore**, **E-value**, **Minimum
   Identity**, and **Minimum Length** apply to both programs; for a protein
   query the identity is of residues and the length is in residues. They start
@@ -1858,12 +1858,14 @@ A search with no hit that passes the thresholds adds no set and says
 "No hits for <query> (N bp)" ("N aa" for a protein query) and how many
 alignments the thresholds removed.
 After a search the queries and settings fold to one line, and a table lists
-the hits of the latest search while its set exists. A click on a row, or a
+the hits of the latest search while its set exists; a protein query's hit
+shows its length in aa. A click on a row, or a
 chip (**All**, then each query with its hit count), outlines those hits on the
 preview; the outline is not drawn in the Result, not exported, not saved, and
 not an **Undo** step, and the figure keeps every hit. **Save Raw LOSAT TSV**
-saves the rows as LOSAT wrote them, the blastn rows first, in a file named
-`.losatn.tsv`, `.tlosatn.tsv`, or `.losatn-tlosatn.tsv` by its programs; a row of the origin window names its
+saves the rows as LOSAT wrote them, the blastn rows first whatever the order
+of the queries, in a file named `.losatn.tsv`, `.tlosatn.tsv`, or
+`.losatn-tlosatn.tsv` by its programs; a row of the origin window names its
 subject `<record>:<start>-<end>` with start after end. In the Region popup of
 **Select region**, **Use as search query** adds the span's bases on the source
 strand as a query named `<record>:<start>-<end>` and opens this section. The
