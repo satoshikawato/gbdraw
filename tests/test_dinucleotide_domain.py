@@ -7,7 +7,6 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pandas.testing import assert_frame_equal
 
-from gbdraw.analysis.gc import circular_dinucleotide_content_df
 from gbdraw.analysis.skew import skew_df
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.tracks.parsing import slot_dinucleotide
@@ -70,10 +69,6 @@ def test_u_is_the_same_base_as_t_for_skew_and_content():
     assert_frame_equal(at.set_axis(au.columns, axis=1), au)
     rna = skew_df(_record(DNA.replace("T", "U")), 50, 10, "AT")
     assert_frame_equal(at, rna)
-    content_at = circular_dinucleotide_content_df(_record(DNA), 50, 10, "AT")
-    content_au = circular_dinucleotide_content_df(_record(DNA.replace("T", "U")), 50, 10, "AU")
-    assert content_au.columns.tolist() == ["AU content"]
-    assert content_au["AU content"].tolist() == content_at["AT content"].tolist()
 
 
 @pytest.mark.parametrize("options_type", [CircularDiagramOptions, LinearDiagramOptions])

@@ -27,6 +27,13 @@ write-up of a release.
   The track now holds the last window's value to the end of the record (and of
   each row), as Depth and GC content in Percent mode already did, in the CLI,
   the Python API, and the Web app (OV-2871).
+- Fixed: the Linear GC content track and the GC skew track of both modes drew
+  each window's value at the window's start, half a window (500 bp at the Auto
+  1 kb window) before the bases it describes, while the Circular GC content
+  ring drew it at the window's centre; a Circular figure's content and skew
+  rings were offset from each other. Every GC content and GC skew track now
+  draws a window's value at its centre, in the CLI, the Python API, and the
+  Web app (OV-2870).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web

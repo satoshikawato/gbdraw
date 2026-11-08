@@ -69,7 +69,6 @@ from gbdraw.analysis.depth_tracks import (
 from gbdraw.analysis.depth_tracks import (
     depth_track_heights as _depth_track_heights_from_specs,
 )
-from gbdraw.analysis.gc import circular_dinucleotide_content_df
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     LosatpCacheState,
@@ -599,26 +598,14 @@ def _validate_linear_track_axis_index(
 
 
 
-def _build_circular_dinucleotide_content_dataframes(
+def _build_circular_dinucleotide_dataframes(
     record: SeqRecord,
     *,
     window: int,
     step: int,
     nts: set[str],
 ) -> dict[str, DataFrame]:
-    return {
-        nt: render_stage("gc_skew_data", circular_dinucleotide_content_df, record, window, step, nt)
-        for nt in sorted(nts)
-    }
-
-
-def _build_circular_dinucleotide_skew_dataframes(
-    record: SeqRecord,
-    *,
-    window: int,
-    step: int,
-    nts: set[str],
-) -> dict[str, DataFrame]:
+    """One ``skew_df`` frame per dinucleotide: the content and the skew slots of that dinucleotide read it."""
     return {nt: render_stage("gc_skew_data", skew_df, record, window, step, nt) for nt in sorted(nts)}
 
 
@@ -2865,19 +2852,13 @@ def assemble_circular_diagram_from_record(
         )
     else:
         requested_nts = {str(inputs.dinucleotide).upper()} if (cfg.canvas.show_gc or cfg.canvas.show_skew) else set()
-    dinucleotide_content_dataframes = _build_circular_dinucleotide_content_dataframes(
+    dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
         gb_record,
         window=int(window),
         step=int(step),
         nts=requested_nts,
     )
-    dinucleotide_skew_dataframes = _build_circular_dinucleotide_skew_dataframes(
-        gb_record,
-        window=int(window),
-        step=int(step),
-        nts=requested_nts,
-    )
-    gc_df = dinucleotide_content_dataframes.get(str(inputs.dinucleotide).upper(), DataFrame())
+    gc_df = dinucleotide_dataframes.get(str(inputs.dinucleotide).upper(), DataFrame())
     if cfg.canvas.show_depth and depth_config is not None:
         if precomputed_depth_track_list:
             resolved_depth_tracks = precomputed_depth_track_list
@@ -2967,8 +2948,7 @@ def assemble_circular_diagram_from_record(
             depth_track_count_value=available_depth_track_count,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=float(identity),
-            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
+            dinucleotide_dataframes=dinucleotide_dataframes,
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,

@@ -144,8 +144,7 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                          index=[0, 2500, 5000, 7500])
     before = frame.copy(deep=True)
     monkeypatch.setattr(api_owner, "skew_df", lambda *a, **k: frame)
-    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_content_dataframes", lambda *a, **k: {"GC": frame})
-    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_skew_dataframes", lambda *a, **k: {"GC": frame})
+    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_dataframes", lambda *a, **k: {"GC": frame})
     monkeypatch.setattr(linear_owner, "skew_df", lambda *a, **k: frame)
     project = scalar_axis.project_scalar_samples
     observed = []
@@ -399,8 +398,7 @@ def test_empty_gc_series_pass_through_real_plan_without_phantom_data(mode, monke
     import gbdraw.api.diagram as api_owner
     import gbdraw.diagrams.linear.assemble as linear_owner
     empty = pd.DataFrame({"GC content": [], "GC skew": []})
-    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_content_dataframes", lambda *a, **k: {"GC": empty})
-    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_skew_dataframes", lambda *a, **k: {"GC": empty})
+    monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_dataframes", lambda *a, **k: {"GC": empty})
     monkeypatch.setattr(linear_owner, "skew_df", lambda *a, **k: empty)
     _, root = _svg(_request(mode, _record(), 4001, overrides={"canvas.show_gc": True, "canvas.show_skew": True}))
     assert all("nan" not in n.get("d", "").lower() for n in root.iter())

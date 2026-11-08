@@ -135,8 +135,11 @@ def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, byt
 
 
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
-    """
-    Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
+    """The dinucleotide content and skew of every GC track, Circular and Linear: one row per sample.
+
+    The samples are 0, ``step``, ... below the record length (the index), and each sample's values are those of
+    the ``window`` bases centred on it, ``[p - window // 2, p - window // 2 + window)``; the windows wrap around
+    the record's ends (``window_base_counts``).
     """
     nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
     seq_length = len(seq_bytes)
@@ -149,14 +152,15 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
             columns=[content_legend, skew_legend, cumulative_skew_legend],
         )
 
-    starts = np.arange(0, seq_length, step, dtype=np.int64)
+    samples = np.arange(0, seq_length, step, dtype=np.int64)
+    starts = (samples - int(window) // 2) % seq_length
     base1_counts = window_base_counts(seq_bytes, ord(nt_1), starts=starts, window=window)
     base2_counts = window_base_counts(seq_bytes, ord(nt_2), starts=starts, window=window)
     total_counts = base1_counts + base2_counts
     skew_values = np.divide(
         base1_counts - base2_counts,
         total_counts,
-        out=np.zeros(len(starts), dtype=np.float64),
+        out=np.zeros(len(samples), dtype=np.float64),
         where=total_counts != 0,
     )
     content_values = total_counts / float(window)
@@ -172,7 +176,7 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
             skew_legend: skew_values,
             cumulative_skew_legend: normalized_cumulative,
         },
-        index=starts,
+        index=samples,
     )
     return df
 

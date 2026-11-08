@@ -7,15 +7,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.analysis.skew import (
-    counted_dinucleotide,
-    counted_sequence,
-    window_base_counts,
-)
+from gbdraw.analysis.skew import counted_sequence
 
 
 def calculate_gc_percent(seq: object) -> float:
@@ -77,29 +72,4 @@ def gc_content_percent_df(
     )
 
 
-def circular_dinucleotide_content_df(
-    record: SeqRecord,
-    window: int,
-    step: int,
-    nt: str,
-) -> DataFrame:
-    """Return centered circular dinucleotide-content data for circular tracks."""
-
-    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
-    seq_length = len(seq_bytes)
-    content_legend = f"{nt} content"
-
-    if seq_length == 0 or window <= 0 or step <= 0:
-        return pd.DataFrame(columns=[content_legend])
-
-    starts = np.arange(0, seq_length, step, dtype=np.int64)
-    circular_starts = (starts - int(window) // 2) % seq_length
-    total_counts = window_base_counts(
-        seq_bytes, ord(nt_1), starts=circular_starts, window=window
-    ) + window_base_counts(seq_bytes, ord(nt_2), starts=circular_starts, window=window)
-    content_values = total_counts / float(window)
-
-    return pd.DataFrame({content_legend: content_values}, index=starts)
-
-
-__all__ = ["calculate_gc_percent", "circular_dinucleotide_content_df", "gc_content_percent_df"]
+__all__ = ["calculate_gc_percent", "gc_content_percent_df"]

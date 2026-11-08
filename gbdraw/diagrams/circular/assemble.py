@@ -2077,8 +2077,6 @@ def _slot_paint_data(
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None,
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None,
     gc_content_tick_font_size_override: float | None,
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
@@ -2098,7 +2096,7 @@ def _slot_paint_data(
                 slot,
                 gc_df=gc_df,
                 gc_config=gc_config,
-                dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+                dataframes=dinucleotide_dataframes,
                 tick_font_size_override=gc_content_tick_font_size_override,
             )
             if content_df is not None:
@@ -2109,7 +2107,7 @@ def _slot_paint_data(
                 gc_df=gc_df,
                 gc_config=gc_config,
                 skew_config=skew_config,
-                dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+                dataframes=dinucleotide_dataframes,
             )
             if skew_df is not None:
                 data[str(slot.id)] = (skew_df, slot_skew_config)
@@ -2387,8 +2385,6 @@ def _draw_resolved_circular_slot(
     conservation_tracks: Sequence[ConservationTrack] | None,
     conservation_min_identity: float,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     gc_content_tick_font_size_override: float | None = None,
     feature_layers: FeatureBuildResult,
     render_context: CircularRecordRenderContext,
@@ -2587,7 +2583,7 @@ def _draw_resolved_circular_slot(
             resolved_slot,
             gc_df=gc_df,
             gc_config=gc_config,
-            dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+            dataframes=dinucleotide_dataframes,
             tick_font_size_override=gc_content_tick_font_size_override,
         )
         if slot_df is None:
@@ -2627,7 +2623,7 @@ def _draw_resolved_circular_slot(
             gc_df=gc_df,
             gc_config=gc_config,
             skew_config=skew_config,
-            dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+            dataframes=dinucleotide_dataframes,
         )
         if slot_df is None:
             logger.warning(
@@ -3408,8 +3404,6 @@ def add_record_on_circular_canvas(
                     gc_config=configurators.gc,
                     skew_config=configurators.skew,
                     dinucleotide_dataframes=record.dinucleotide_dataframes,
-                    dinucleotide_content_dataframes=record.dinucleotide_content_dataframes,
-                    dinucleotide_skew_dataframes=record.dinucleotide_skew_dataframes,
                     gc_content_tick_font_size_override=gc_content_tick_font_size_override,
                     depth_df=record.depth_df,
                     depth_config=configurators.depth,
@@ -3679,8 +3673,6 @@ def add_record_on_circular_canvas(
             conservation_tracks=record.conservation_tracks,
             conservation_min_identity=record.conservation_min_identity,
             dinucleotide_dataframes=record.dinucleotide_dataframes,
-            dinucleotide_content_dataframes=record.dinucleotide_content_dataframes,
-            dinucleotide_skew_dataframes=record.dinucleotide_skew_dataframes,
             gc_content_tick_font_size_override=gc_content_tick_font_size_override,
             feature_layers=feature_layers,
             render_context=render_context,

@@ -369,14 +369,19 @@ def test_each_row_draws_gc_against_the_whole_records_mean(tmp_path: Path) -> Non
         points = _path_points(next(row.iter(f"{SVG}path")).attrib["d"])
         baseline = points[0][1]
         # The path opens and closes on the baseline: every sample lies between. A row's own mean would draw it flat.
-        deviations[row.attrib[WRAP_ROW]] = sorted(y - baseline for _, y in points[1:-2])
+        deviations[row.attrib[WRAP_ROW]] = [(x, y - baseline) for x, y in points[1:-2]]
     assert deviations["0"] and deviations["1"]
-    medians = {row: values[len(values) // 2] for row, values in deviations.items()}
+    # The deviation drawn along the most of each row: its longest flat stretch (the windows near a composition
+    # change, centred on their samples, mix the two halves).
+    widest = {
+        row: max(zip(values, values[1:]), key=lambda pair: pair[1][0] - pair[0][0] if pair[0][1] == pair[1][1] else -1)[0][1]
+        for row, values in deviations.items()
+    }
     # Most of each row is one composition, a full half track from the record's mean, in opposite directions.
     # Against its own row's mean, nearly all of a row would lie close to the baseline.
-    assert medians["0"] < 0.0 < medians["1"]
-    assert medians["0"] == pytest.approx(-medians["1"])
-    assert abs(medians["0"]) == pytest.approx(max(abs(value) for value in deviations["0"]))
+    assert widest["0"] < 0.0 < widest["1"]
+    assert widest["0"] == pytest.approx(-widest["1"])
+    assert abs(widest["0"]) == pytest.approx(max(abs(value) for _, value in deviations["0"]))
 
 
 def test_gc_and_skew_have_one_path_per_row() -> None:
