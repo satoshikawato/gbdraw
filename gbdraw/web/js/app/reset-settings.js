@@ -70,7 +70,8 @@ export const createDrawingReset = ({
         record_subtitle: '',
         region_start: null,
         region_end: null,
-        region_reverse: false
+        region_reverse: false,
+        windows: []
       })), { alignmentMutation: msg('settings reset.') });
       invalidateLinearComparisonArtifacts(drawing);
     }

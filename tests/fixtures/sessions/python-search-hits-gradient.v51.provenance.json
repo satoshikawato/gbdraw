@@ -8,8 +8,8 @@
     "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
   },
   "values": "drawings[0].renderRequest.diagramOptions.annotations.sets[1].annotations[*].style.gradient {startColor #f6c9d8, endColor #5b1a4a, direction forward, forward, reverse; queryStart/queryEnd absent (whole query), 16/650..171/650, 319/650..365/650}; sets[0] styles have no gradient key; sets[0] and sets[1] keepHighlightOverlay true (written by the search set builder); sets[*].annotations[*].strand +, +, - in each set (the hit's subject strand)",
-  "decompressedSha256": "b380c3d3e411f347adf574fc8020034271d0798581760c807886afb41aba2e91",
+  "decompressedSha256": "7068da77f9e655386f8a0c7758b0399c9eb7b7df77674fecc868642a9cb739dc",
   "compression": "gzip level 9, mtime 0 (Python gzip.compress)",
   "sessionVersion": 51,
-  "requestSchema": 9
+  "requestSchema": 10
 }

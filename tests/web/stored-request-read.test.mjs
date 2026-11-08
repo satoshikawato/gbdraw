@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
-import { SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { CANONICAL_REQUEST_SCHEMA, SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -96,7 +96,7 @@ const load = async (session) => {
 };
 
 test('a request schema the app does not read is a Session-format error (OV-773); a schema that is no integer leaves the request unread (OV-863)', () => {
-  for (const schema of [3, 4, 10]) {
+  for (const schema of [3, 4, CANONICAL_REQUEST_SCHEMA + 1]) {
     assert.throws(
       () => readRequest(gallery('lambda_basic_linear'), (request) => { request.schema = schema; }),
       (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'SESSION_FORMAT',
@@ -148,13 +148,13 @@ test('a saved Collinear anchor mode that was removed reads as rbh with a row; "e
   );
 });
 
-test('a request of schema 5 to 8 is promoted once, with the Load context, without a row (OV-770)', () => {
+test('a request of schema 5 to 9 is promoted once, with the Load context, without a row (OV-770)', () => {
   for (const path of ['tests/fixtures/sessions/lambda_basic_linear.v40-schema5.json',
     'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json',
     'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz']) {
     const session = read(path);
     const result = readStoredRenderRequest(session.renderRequest, contextOf(session));
-    assert.equal(result.value.schema, 9, path);
+    assert.equal(result.value.schema, CANONICAL_REQUEST_SCHEMA, path);
     assert.deepEqual(result.repairs, [], path);
   }
   // The legacy alignment of BGC schema 5 is read with the Session's catalog (BC-1).
@@ -384,7 +384,7 @@ const frame = () => {
 
 test('a request whose comparisons Load holds is promoted like any other, and the Comparisons notice is as before (C-OD14)', async () => {
   // The frame each input showed before the reader (base b62b9ceb), against
-  // what Load now commits: schema 9, no lazy promotion left after Load.
+  // what Load now commits: the current schema, no lazy promotion left after Load.
   const missing = 'The saved comparison is missing a required resource.';
   const cases = [
     ['q-frame fixture', () => read('tests/fixtures/sessions/q-frame-main-linear-reverse.v42.gbdraw-session.json.gz'),
@@ -410,7 +410,7 @@ test('a request whose comparisons Load holds is promoted like any other, and the
     assert.deepEqual(result.repairs.map(({ code }) => code), codes, name);
     assert.equal(frame()[0], disposition, name);
     if (message) assert.equal(frame()[1], message, name);
-    assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9, name);
+    assert.equal(getCommittedCanonicalSession().renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   }
 });
 
@@ -452,7 +452,7 @@ test('Save writes the request Load read: the legacy alignment keeps the feature 
   const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
   // A Session 51 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
   const session = savedDrawingView(document, document.ui.activeDrawingId);
-  assert.equal(session.renderRequest.schema, 9);
+  assert.equal(session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
 });
 
@@ -468,7 +468,7 @@ test('Gallery publication reads a stored request through the reader and refuses 
   const context = { featureCatalog: null, legacyOrthogroupState: null, resourceIds: new Set(Object.keys(session.resources)) };
   // A schema-5 Linear record without a selector reads all records, as Load reads it.
   const published = readPublishedRenderRequest(session.renderRequest, context);
-  assert.equal(published.schema, 9);
+  assert.equal(published.schema, CANONICAL_REQUEST_SCHEMA);
   assert.deepEqual(published.records.map(({ cardinality }) => cardinality), ['all']);
   const repaired = clone(session.renderRequest);
   repaired.records[0].bogus = true;
@@ -534,7 +534,7 @@ test('a CLI or older Session whose request only loses a part loads with its Resu
     const { result } = await load(session);
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
     assert.ok(state.results.value.length > 0, name);
-    assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9, name);
+    assert.equal(getCommittedCanonicalSession().renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
     const saved = await exportSession('probe', { askChoice: async () => 'download' });
     assert.equal(saved.status, 'saved', `${name}: ${JSON.stringify(saved.error)}`);
   }
@@ -617,7 +617,7 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
       await assertRefusedUnread(cli, `${name} ${JSON.stringify(request)}`);
     }
   }
-  for (const schema of [3, 4, 10]) {
+  for (const schema of [3, 4, CANONICAL_REQUEST_SCHEMA + 1]) {
     const session = gallery('lambda_basic_linear');
     session.renderRequest.schema = schema;
     const { result } = await load(session);
@@ -670,7 +670,7 @@ test('a Session 27 to 30 loads as before whatever its renderRequest key holds: n
   const plain = await load(fixture(name));
   assert.equal(plain.result.status, 'ok', JSON.stringify(plain.result.error));
   const committed = JSON.stringify(getCommittedCanonicalSession());
-  for (const request of [...UNREADABLE_REQUESTS, { schema: 10 }, { schema: 3 }]) {
+  for (const request of [...UNREADABLE_REQUESTS, { schema: CANONICAL_REQUEST_SCHEMA + 1 }, { schema: 3 }]) {
     const session = fixture(name);
     session.renderRequest = clone(request);
     const { result } = await load(session);
@@ -719,7 +719,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       const { result } = await load(session);
       const committed = result.status === 'ok' || result.status === 'legacy'
         ? getCommittedCanonicalSession()?.renderRequest?.schema ?? null : 'not loaded';
-      const expected = stored === null ? null : 9;
+      const expected = stored === null ? null : CANONICAL_REQUEST_SCHEMA;
       const rows = (result.repairs || []).filter(requestRow).map(({ code, path }) => `${code} ${path}`);
       if (rows.length || committed !== expected) findings[folder + name] = { status: result.status, rows, committed, expected };
       loaded += 1;
@@ -822,13 +822,13 @@ test('a schema-1 Session takes a live edit and Save before any Generate (H2)', a
     await assert.rejects(save(name), { code: 'SESSION_SAVE_REQUIRES_GENERATE' }, name);
     assert.equal((await load({ ...session, results: [] })).result.status, 'ok', name);
     const committed = getCommittedCanonicalSession();
-    assert.equal(committed.renderRequest.schema, 9, name);
+    assert.equal(committed.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
     const edited = projectCommittedEditorIntent({ committed, state, drawing: state.activeDrawing() });
-    assert.equal(edited.renderRequest.schema, 9, name);
+    assert.equal(edited.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
     const saved = await save(name);
     assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
     const saved49 = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
     const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
-    assert.equal(document.renderRequest.schema, 9, name);
+    assert.equal(document.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   }
 });

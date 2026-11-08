@@ -29,8 +29,8 @@ import { storedRecordSourceResourceIds } from './input-types.js';
  *   recordKey: string,
  *   cardinality?: string,
  *   selector?: CommittedRecordSelector | null,
- *   region?: { selector?: CommittedRecordSelector | null, reverseComplement?: unknown } | null,
- *   presentation?: { reverseComplement?: unknown } | null,
+ *   windows: { start: number, end: number, reverseComplement: boolean }[],
+ *   presentation: { reverseComplement: boolean },
  *   display?: { isCircular: boolean | null, startCoordinate: number | null },
  *   source: { kind: string, resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
  * }} CommittedRecord

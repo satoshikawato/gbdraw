@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { LOSAT_WASM_BUILD } from '../../gbdraw/web/js/services/losat-build.generated.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -200,7 +201,9 @@ class AuditSimplePathWorker {
       return;
     }
     if (message.type === 'helper') {
-      const response = workerHelperResponses.shift();
+      // The unit plan is Python's (`planLinearUnits`); a test queues no reply for it.
+      const response = message.operation === 'planLinearUnits'
+        ? { ok: true, result: pythonLinearUnitPlan(message.payload) } : workerHelperResponses.shift();
       if (!response) throw new Error(`missing helper worker response for ${message.operation}`);
       Promise.resolve(response).then((payload) => this.emit('message', {
         type: 'helper',
@@ -707,7 +710,8 @@ const installSimpleCircularInput = (primary, inactive) => {
     region_record_id: '',
     region_start: null,
     region_end: null,
-    region_reverse: false
+    region_reverse: false,
+      windows: []
   });
 };
 
@@ -2005,7 +2009,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'SECOND',
       region_start: 2,
       region_end: 5,
-      region_reverse: true
+      region_reverse: true,
+      windows: []
     }, {
       uid: 'middle',
       gb: bound(middleView),
@@ -2020,7 +2025,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'MIDDLE',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     }, {
       uid: 'third',
       gb: bound(thirdView),
@@ -2035,7 +2041,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_record_id: 'THIRD',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     });
     Object.assign(state.activeDrawing().linearComparisonPlan, {
       mode: 'selected',
@@ -2449,7 +2456,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
       uid: `card-${index + 1}`, gb: bound(thirteenFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     })));
     modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
     state.similarityAlignmentPlan.value = null;
@@ -2507,6 +2515,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
     });
+    // The plan of the cards drawn now: later steps replace the cards, and a plan names the cards it was made for.
+    const twoPlanNow = () => resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
+      losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
+    });
     const twoResult = result('two-cards.svg', 'two-cards');
     workerResponses.push(response(twoResult, validCatalog(twoResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2553,7 +2566,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
       uid: `upload-${index + 1}`, gb: bound(uploadFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     })));
     const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
@@ -2611,7 +2625,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.unshift({
       uid: 'inserted-1', gb: bound(insertedFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
-      region_start: null, region_end: null, region_reverse: false
+      region_start: null, region_end: null, region_reverse: false,
+      windows: []
     });
     state.activeDrawing().losatProgram.value = 'blastp';
     const messagesBeforeInsert = workerMessages.length;
@@ -2654,11 +2669,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomResult = result('bom.svg', 'bom');
     workerResponses.push(response(bomResult, validCatalog(bomResult.name)));
     const bomWatch = await watchLosatPreparation(async () => assert.deepEqual(
-      await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value)
+      await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value)
     ));
     assert.match(bomWatch.timing, /JS FASTA=0, Worker FASTA=2/);
     assert.deepEqual(workerMessages.slice(helpersBeforeBom)
-      .filter(({ type }) => type === 'helper').map(({ operation, payload }) => [operation, payload.recordSelector]),
+      .filter(({ type, operation }) => type === 'helper' && operation !== 'planLinearUnits')
+      .map(({ operation, payload }) => [operation, payload.recordSelector]),
     [['extractFirstFasta', 'BOM1'], ['extractFirstFasta', 'BOM2']]);
 
     // The GFF3 and FASTA pair of a drawn record: after a Generate, the blastp extraction names the committed
@@ -2670,7 +2686,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
     const pairResult = result('gff-pair.svg', 'gff-pair');
     workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
-    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     const pairRun = workerMessages.findLast(({ type }) => type === 'run').payload;
     const pairTokens = Object.fromEntries(pairRun.resourceManifest.map(({ resourceId, cacheToken }) => [resourceId, cacheToken]));
     state.activeDrawing().losatProgram.value = 'blastp';
@@ -2717,7 +2733,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     };
     const namedResult = result('gff-named.svg', 'gff-named');
     workerResponses.push(response(namedResult, validCatalog(namedResult.name)));
-    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
     // The automatic record (an empty selector) is the first record the GFF3 names too: a FASTA file whose first
     // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
@@ -2726,7 +2742,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     Object.assign(state.activeDrawing().linearSeqs[0], { gff: bound(g1Gff), fasta: bound(xFirstFasta), region_record_id: '' });
     const autoResult = result('gff-auto.svg', 'gff-auto');
     workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
-    assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
     modeDrawing(state, 'linear').inputType.value = 'gb';
   } finally {
@@ -2965,7 +2981,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       region_record_id: '',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     },
     {
       uid: 'linear-none-second',
@@ -2980,7 +2997,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       region_record_id: '',
       region_start: null,
       region_end: null,
-      region_reverse: false
+      region_reverse: false,
+      windows: []
     }
   );
   state.activeDrawing().linearComparisonPlan.mode = 'none';
@@ -3581,7 +3599,8 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
     region_record_id: '',
     region_start: null,
     region_end: null,
-    region_reverse: false
+    region_reverse: false,
+      windows: []
   });
   const depthRow = (id, trackIndex, height) => ({
     id, renderer: 'depth', enabled: true, side: 'below', height, spacing: '', z: 0, params: { track_index: trackIndex }

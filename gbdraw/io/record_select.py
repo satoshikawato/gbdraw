@@ -17,6 +17,7 @@ from ..core.record_metadata import (
     _feature_source_index_map,
     _read_coord_map,
     _write_coord_map,
+    record_identity_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,48 @@ def select_record(
     return [matches[0]]
 
 
+def drawn_record_units(records: Sequence[SeqRecord]) -> tuple[tuple[int, ...], ...]:
+    """The drawn records grouped by the record they draw, in order: the units of a record with windows share one
+    group (``record_identity_key``); any other drawn record is a group of its own."""
+
+    groups: dict[object, list[int]] = {}
+    for index, record in enumerate(records):
+        key = record_identity_key(record)
+        groups.setdefault(index if key is None else key, []).append(index)
+    return tuple(tuple(indexes) for indexes in groups.values())
+
+
+def select_record_units(records: Sequence[SeqRecord], selector: RecordSelector | None) -> tuple[int, ...]:
+    """The drawn units of the one record ``selector`` names among drawn ``records`` (D-01).
+
+    ``#index`` counts records, not units, and a record ID names the record
+    whose units carry it; the units of a record with windows are selected
+    together. ``None`` selects the only record. Raises ``ValueError`` when the
+    selector names no record or more than one.
+    """
+
+    groups = drawn_record_units(records)
+    if selector is None:
+        if len(groups) != 1:
+            raise ValueError("A record selector is required when more than one record is drawn.")
+        return groups[0]
+    if selector.record_index is not None:
+        if not 0 <= selector.record_index < len(groups):
+            raise ValueError(
+                f"Record selector {selector.label()} is out of range ({len(groups)} record(s))."
+            )
+        return groups[selector.record_index]
+    record_id = selector.record_id or ""
+    matches = [group for group in groups if any(records[index].id == record_id for index in group)]
+    if not matches:
+        raise ValueError(f"Record selector '{record_id}' did not match any record ID.")
+    if len(matches) > 1:
+        raise ValueError(
+            f"Record selector '{record_id}' matched multiple records. Use #index to disambiguate."
+        )
+    return matches[0]
+
+
 def reverse_records(
     records: Sequence[SeqRecord],
     reverse_flag: bool,
@@ -165,6 +208,8 @@ __all__ = [
     "RecordSelector",
     "parse_record_selector",
     "parse_record_selectors",
+    "drawn_record_units",
     "select_record",
+    "select_record_units",
     "reverse_records",
 ]

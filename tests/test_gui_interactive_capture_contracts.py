@@ -175,7 +175,7 @@ def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
     for value in (
         "from gbdraw.session_io import CURRENT_SESSION_VERSION",
-        "CURRENT_RENDER_REQUEST_SCHEMA = 9",
+        "CURRENT_RENDER_REQUEST_SCHEMA = 10",
         'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
         'contents[:2] != b"\\x1f\\x8b"',
         'with gzip.open(path, "rt", encoding="utf-8")',

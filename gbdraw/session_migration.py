@@ -15,6 +15,7 @@ from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
+from gbdraw.session_request_codec import legacy_region_span, stored_record_windows
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -217,11 +218,15 @@ def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, .
         if not linear:
             reads.append(LegacySourceRead(str(source.get("resourceId")), None, None, False))
             continue
+        windows = stored_record_windows(record)
+        if len(windows) > 1:
+            return None  # Several windows came after catalogs; the Web reads no source for them.
         region_value = record.get("region")
-        region: Mapping[str, Any] = region_value if isinstance(region_value, Mapping) else {}
+        # A schema <= 9 region may name its record; schema 10 names it by the record's selector.
+        region_selector = region_value.get("selector") if isinstance(region_value, Mapping) else None
         presentation = record.get("presentation")
         presentation = presentation if isinstance(presentation, Mapping) else {}
-        selector = region.get("selector") or record.get("selector")
+        selector = region_selector or record.get("selector")
         selector = selector if isinstance(selector, Mapping) else {}
         record_selector = ""
         if selector.get("kind") == "recordId":
@@ -231,10 +236,13 @@ def legacy_source_reads(request: Mapping[str, Any]) -> tuple[LegacySourceRead, .
             if isinstance(index, bool) or not isinstance(index, int):
                 return None  # Invalid; the request decode names it.
             record_selector = f"#{index + 1}"
-        reverse = bool(region.get("reverseComplement") or presentation.get("reverseComplement"))
-        start, end = region.get("start"), region.get("end")
+        window: Mapping[str, Any] = windows[0] if windows else {}
+        reverse = bool(window.get("reverseComplement") or presentation.get("reverseComplement"))
+        start, end = window.get("start"), window.get("end")
         if (start is None) != (end is None):
             return None
+        if region_value is not None and isinstance(start, int) and isinstance(end, int):
+            start, end, reverse = legacy_region_span(start, end, reverse)
         reads.append(
             LegacySourceRead(
                 str(source.get("resourceId")),

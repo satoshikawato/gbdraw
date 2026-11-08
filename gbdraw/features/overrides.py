@@ -15,7 +15,7 @@ from gbdraw.exceptions import ValidationError
 
 from .source import (
     FeatureIdentity,
-    IdentityBinding,
+    IdentityBindings,
     SourceFeatureIdentity,
     read_identity_table,
     resolve_identity_table_rows,
@@ -260,17 +260,16 @@ def log_feature_identity_notices(notices: Sequence[FeatureIdentityNotice]) -> No
 
 def bind_feature_overrides(
     overrides: Sequence[FeatureOverride],
-    bindings: Mapping[FeatureIdentity, IdentityBinding],
+    bindings: Mapping[FeatureIdentity, IdentityBindings],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
 ) -> tuple[dict[int, ResolvedFeatureOverride], ...]:
-    """Key each present row by record index and drawn source feature index."""
+    """Key each present row by record index and drawn source feature index, in every unit that draws it."""
     resolved: tuple[dict[int, ResolvedFeatureOverride], ...] = tuple(
         {} for _ in source_catalogs
     )
     # One pass per record catalog, not one per row.
     entries: dict[int, dict[int, SourceFeatureIdentity]] = {}
-    for row in overrides:
-        binding = bindings[row.identity]
+    for row, binding in ((row, binding) for row in overrides for binding in bindings[row.identity]):
         if binding.status != "present":
             continue
         if binding.record_index not in entries:

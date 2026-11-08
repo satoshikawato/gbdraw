@@ -18,8 +18,9 @@ from tests.utils.session_drawing_view import drawing_view  # noqa: E402
 def main(directory: Path) -> None:
     request, helper, _context, _paths, _response, _sources = build_fixture(directory)
     # The negative-strand reference is the only left-facing selected anchor.
-    # UI fixture uses full records; native S01 tests retain the crop geometry cases.
-    records = tuple(replace(record, region=None, presentation=replace(record.presentation, label=record.record_key, reverse_complement=False),
+    # UI fixture uses full records; native S01 tests retain the crop geometry cases. ``replace`` copies a record's
+    # windows (request schema 10), so the crop and the record selector it brought are cleared here.
+    records = tuple(replace(record, selector=None, windows=(), presentation=replace(record.presentation, label=record.record_key, reverse_complement=False),
                             record_key=f'record-{index + 1}')
                     for index, record in enumerate(request.records) if record.record_key != 'unusable')
     members = []

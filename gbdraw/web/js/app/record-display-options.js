@@ -6,6 +6,7 @@ import { circularInputSlots, inputSourceFiles, storedRecordSourceResourceIds } f
 import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
+  canonicalRecordReverseComplement,
   parseRecordDisplayStart,
   recordDisplayKey,
   recordDisplaySurface,
@@ -171,7 +172,7 @@ export const createRecordDisplayControls = ({
         ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
           inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
-        cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
+        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length), reverse: seq.region_reverse })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
     /** @type {DrawingState[]} */
@@ -287,7 +288,7 @@ export const createRecordDisplayControls = ({
         || (pairedId !== undefined && (!input.paired || !matchesSavedSource(input.paired, pairedId)))) {
         throw new Error('Alignment record source binding changed.');
       }
-      const selector = record.region?.selector || record.selector;
+      const selector = record.selector;
       const drafts = drawing.recordDisplayDrafts.filter((/** @type {RecordDisplayDraft} */ draft) => draft.sourceUid === input.sourceUid
         && (selector?.kind === 'recordIndex'
           ? draft.selector === `#${selector.index + 1}`
@@ -337,7 +338,7 @@ export const createRecordDisplayControls = ({
       && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
         && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
       const selected = request.records.find((/** @type {CommittedRecord} */ record, /** @type {number} */ index) => {
-        const selector = record.region?.selector || record.selector;
+        const selector = record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
           ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value);
         return matchesSelector && (row.scope === 'circular'
@@ -350,10 +351,8 @@ export const createRecordDisplayControls = ({
       if (!matchesSavedSource(row.source, primaryId) || (row.paired && !matchesSavedSource(row.paired, pairedId))) return [];
       return [{ ...row,
         committedDisplay: selected.display || { isCircular: null, startCoordinate: null },
-        committedReverseComplement: selected.region
-          ? Boolean(selected.region.reverseComplement)
-          : Boolean(selected.presentation?.reverseComplement),
-        committedCropped: Boolean(selected.region),
+        committedReverseComplement: canonicalRecordReverseComplement(selected),
+        committedCropped: selected.windows.length > 0,
         canonicalRecordKey: selected.recordKey,
         canonicalSource: selected.source,
         recordKey: selected.cardinality === 'all'

@@ -63,17 +63,17 @@ test('a Circular drag across the display origin gives a span that wraps the sour
   assert.deepEqual(sourceSpanOf(axis.source, { start: 16_560, length: 21 }), { start: 15_991, end: 16_011, length: 21, wrapsOrigin: false });
 });
 
-// The origin-crossing twin (tools/twins.json): the Web disables New drawing from region live, from wrapsOrigin;
-// Python refuses the same source span (tests/test_region_drawing.py reads the same vectors).
+// The origin-crossing twin (tools/twins.json): the Web says a span crosses the origin from wrapsOrigin; Python draws
+// the same source span as one window across the origin (tests/test_region_drawing.py reads the same vectors).
 const ORIGIN_CROSSING = JSON.parse(readFileSync(new URL('../fixtures/region_origin_crossing_vectors.json', import.meta.url), 'utf8')).cases;
 
-test('a span crosses the origin on the Web exactly when Python refuses it as crossing the origin', () => {
-  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'ORIGIN_CROSSING'));
-  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'accepted'));
+test('a span crosses the origin on the Web exactly when Python draws it as one window across the origin', () => {
+  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'acrossOrigin'));
+  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'withinRecord'));
   for (const { name, axisSource, displaySpan, sourceSpan, pythonOutcome } of ORIGIN_CROSSING) {
     const source = sourceSpanOf(axisSource, displaySpan);
     assert.deepEqual(source, sourceSpan, name);
-    assert.equal(source.wrapsOrigin, pythonOutcome === 'ORIGIN_CROSSING', name);
+    assert.equal(source.wrapsOrigin, pythonOutcome === 'acrossOrigin', name);
   }
 });
 
@@ -135,6 +135,18 @@ test('a feature counts only when every part lies inside the span', () => {
   assert.ok(partsInsideSpan(source, span, [{ start: 16_565, end: 16_569 }, { start: 0, end: 5 }]));
   assert.ok(!partsInsideSpan(source, span, [{ start: 16_565, end: 16_569 }, { start: 0, end: 20 }]));
   assert.ok(!partsInsideSpan(source, span, []));
+});
+
+// OV-2718: the catalog gives a feature's parts in the input file's coordinates; on a cropped or reverse-complemented
+// record they are not the drawn record's own bases.
+test('a feature of a cropped, reverse-complemented record counts where its source bases are drawn', () => {
+  const [crop] = caseRecords('linear-two-records-crop-reverse');
+  const { source } = crop.axis;
+  // The crop 1001-9000:rc draws 9,000 first: bases 8,901..9,000, [8_900, 9_000), are display 0..99.
+  assert.ok(partsInsideSpan(source, { start: 0, length: 100 }, [{ start: 8_900, end: 9_000 }]));
+  assert.ok(!partsInsideSpan(source, { start: 0, length: 100 }, [{ start: 8_899, end: 9_000 }]));
+  assert.ok(partsInsideSpan(source, { start: 7_900, length: 100 }, [{ start: 1_000, end: 1_100 }]));
+  assert.equal(partsMidpoint(source, [{ start: 8_900, end: 9_000 }]), 50);
 });
 
 test('the band covers the span on the feature tracks', () => {

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
+from gbdraw.core.record_metadata import _read_coord_map, _source_period, _source_to_local_index, record_identity_key
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.selector_values import (
     get_feature_hash,
@@ -19,7 +19,7 @@ from gbdraw.features.selector_values import (
     get_feature_type,
     matches_feature_selector,
 )
-from gbdraw.io.record_select import RecordSelector
+from gbdraw.io.record_select import RecordSelector, drawn_record_units, select_record_units
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import bind_record_transforms, spans_may_cross_origin
 
@@ -38,44 +38,35 @@ from .models import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.features.source import IdentityBinding
+    from gbdraw.features.source import IdentityBinding, IdentityBindings
 
-# Planner bindings of FeatureIdentitySpan targets, keyed by (record key, feature ID).
-FeatureBindings = Mapping[tuple[str, str], "IdentityBinding"]
+# Planner bindings of FeatureIdentitySpan targets, keyed by (record key, feature ID), one per unit that draws it.
+FeatureBindings = Mapping[tuple[str, str], "IdentityBindings"]
 
 
-def _bind_record_key(records: Sequence[SeqRecord], record_key: str) -> int:
-    for index, record in enumerate(records):
-        if (getattr(record, "annotations", None) or {}).get("gbdraw_record_key") == record_key:
-            return index
+def _bind_record_key(records: Sequence[SeqRecord], record_key: str) -> tuple[int, ...]:
+    """The drawn units of the record ``record_key`` names: all windows of a record with several (D-01)."""
+
+    units = tuple(index for index, record in enumerate(records) if record_identity_key(record) == record_key)
+    if units:
+        return units
     raise ValidationError(
         f"Unknown feature identity record key {record_key!r}.",
         diagnostic={"code": "FEATURE_IDENTITY"},
     )
 
 
-def _bind_record(records: Sequence[SeqRecord], selector: RecordSelector | None) -> int:
-    if selector is None:
-        if len(records) != 1:
-            raise ValidationError(
-                "Annotation target without a record selector is ambiguous for multiple records."
-            )
-        return 0
-    if selector.record_index is not None:
-        index = int(selector.record_index)
-        if index < 0 or index >= len(records):
-            raise ValidationError(
-                f"Annotation record selector {selector.label()} is out of range for {len(records)} records."
-            )
-        return index
-    matches = [index for index, record in enumerate(records) if record.id == selector.record_id]
-    if not matches:
-        raise ValidationError(f"Annotation record selector {selector.record_id!r} did not match any record.")
-    if len(matches) > 1:
+def _bind_record(records: Sequence[SeqRecord], selector: RecordSelector | None) -> tuple[int, ...]:
+    """The drawn units of the record ``selector`` names; ``#index`` counts records (``select_record_units``)."""
+
+    if selector is None and len(drawn_record_units(records)) != 1:
         raise ValidationError(
-            f"Annotation record selector {selector.record_id!r} matched multiple records; use #index."
+            "Annotation target without a record selector is ambiguous for multiple records."
         )
-    return matches[0]
+    try:
+        return select_record_units(records, selector)
+    except ValueError as exc:
+        raise ValidationError(f"Annotation record selector: {exc}") from exc
 
 
 def merge_annotation_segments(
@@ -145,22 +136,30 @@ def _coordinate_segments(
     else:
         coord_base, coord_step = _read_coord_map(record)
         last_source = coord_base + coord_step * max(0, length - 1)
-        source_high = max(coord_base, last_source, target.start, target.end)
+        period = _source_period(record)
+        source_high = period or max(coord_base, last_source, target.start, target.end)
         ranges = (
             ((target.start, source_high), (1, target.end))
             if target.wraps_origin
             else ((target.start, target.end),)
         )
+        # A crop across the origin (D-28) counts its bases on past the source end, or below 1 when reversed: a span
+        # may show there one turn on or back.
+        shifts = (0,) if period is None else (-period, 0, period)
         resolved = [
             _source_interval_to_local(
-                start,
-                end,
+                start + shift,
+                end + shift,
                 coord_base=coord_base,
                 coord_step=coord_step,
                 record_length=length,
             )
             for start, end in ranges
+            for shift in shifts
         ]
+        if period is not None:
+            shown = sum(segment[1] - segment[0] for segment, _ in resolved if segment[1] > segment[0])
+            resolved = [(segment, shown != sum(end - start + 1 for start, end in ranges)) for segment, _ in resolved]
     segments = tuple(segment for segment, _ in resolved if segment[1] > segment[0])
     return merge_annotation_segments(segments), any(clipped for _, clipped in resolved)
 
@@ -286,6 +285,42 @@ def annotation_midpoint(
     return float(walk[-1][1]) % max(1, record_length)
 
 
+@dataclass(frozen=True)
+class _UnitPiece:
+    """An annotation target resolved on one drawn unit of its record."""
+
+    record_index: int
+    segments: tuple[tuple[int, int], ...]
+    clipped: bool
+    missing_count: int
+    is_circular: bool
+
+    @property
+    def span_bp(self) -> int:
+        return sum(end - start for start, end in self.segments)
+
+
+def _unit_piece(
+    target: CoordinateSpan | FeatureSpan | FeatureIdentitySpan,
+    record: SeqRecord,
+    record_index: int,
+    binding: IdentityBinding | None,
+    transform: RecordDisplayTransform,
+) -> _UnitPiece:
+    is_circular = spans_may_cross_origin(record, transform)
+    if isinstance(target, CoordinateSpan):
+        segments, clipped = _coordinate_segments(target, record, is_circular=is_circular)
+        return _UnitPiece(record_index, tuple(segments), clipped, 0, is_circular)
+    feature_segments = (
+        _identity_segments(target, record, binding, is_circular=is_circular)
+        if isinstance(target, FeatureIdentitySpan)
+        else _feature_segments(target, record, is_circular=is_circular)
+    )
+    return _UnitPiece(
+        record_index, tuple(feature_segments.segments), False, feature_segments.missing_count, is_circular
+    )
+
+
 def resolve_annotation_set(
     annotation_set: AnnotationSet,
     records: Sequence[SeqRecord],
@@ -303,21 +338,27 @@ def resolve_annotation_set(
     transforms = bind_record_transforms(records, record_transforms)
     for annotation in annotation_set.annotations:
         target = annotation.target
-        binding = (
-            (feature_bindings or {}).get((target.record_key, target.biological_feature_id))
-            if isinstance(target, FeatureIdentitySpan) else None
-        )
-        record_index = (
-            binding.record_index if binding is not None
-            else _bind_record_key(records, target.record_key)
-            if isinstance(target, FeatureIdentitySpan)
-            else _bind_record(records, target.record)
-        )
-        record = records[record_index]
-        is_circular = spans_may_cross_origin(record, transforms[record_index])
-        clipped = False
+        # The drawn units of the target's record: one, or each window of a record with several (D-01).
+        units: tuple[tuple[int, IdentityBinding | None], ...]
+        if isinstance(target, FeatureIdentitySpan):
+            bound = (feature_bindings or {}).get((target.record_key, target.biological_feature_id))
+            units = (
+                tuple((binding.record_index, binding) for binding in bound)
+                if bound is not None
+                else tuple((index, None) for index in _bind_record_key(records, target.record_key))
+            )
+        else:
+            units = tuple((index, None) for index in _bind_record(records, target.record))
+        pieces = [
+            _unit_piece(target, records[record_index], record_index, binding, transforms[record_index])
+            for record_index, binding in units
+        ]
+        drawn = [piece for piece in pieces if piece.missing_count == 0 and piece.segments]
+        reference = drawn[0] if drawn else pieces[0]
+        record, record_index = records[reference.record_index], reference.record_index
         if isinstance(target, CoordinateSpan):
-            segments, clipped = _coordinate_segments(target, record, is_circular=is_circular)
+            # A span is clipped when no unit draws all of it.
+            clipped = all(piece.clipped for piece in pieces)
             policy = target.out_of_bounds
             if clipped and policy == "error":
                 raise ValidationError(
@@ -346,27 +387,21 @@ def resolve_annotation_set(
                         message=f"Clipped annotation to record {record.id!r}.",
                     )
                 )
-        else:
-            feature_segments = (
-                _identity_segments(target, record, binding, is_circular=is_circular)
-                if isinstance(target, FeatureIdentitySpan)
-                else _feature_segments(target, record, is_circular=is_circular)
-            )
-            if feature_segments.missing_count:
-                warnings.append(
-                    ResolutionWarning(
-                        code="feature_selector_unmatched",
-                        set_id=annotation_set.id,
-                        annotation_id=annotation.id,
-                        record_id=record.id,
-                        record_index=record_index,
-                        missing_count=feature_segments.missing_count,
-                        message=f"Skipped annotation: {feature_segments.missing_count} feature selector(s) unmatched.",
-                    )
+        elif all(piece.missing_count for piece in pieces):
+            missing_count = pieces[0].missing_count
+            warnings.append(
+                ResolutionWarning(
+                    code="feature_selector_unmatched",
+                    set_id=annotation_set.id,
+                    annotation_id=annotation.id,
+                    record_id=record.id,
+                    record_index=record_index,
+                    missing_count=missing_count,
+                    message=f"Skipped annotation: {missing_count} feature selector(s) unmatched.",
                 )
-                continue
-            segments = feature_segments.segments
-        if not segments:
+            )
+            continue
+        if not drawn:
             warnings.append(
                 ResolutionWarning(
                     code="empty_span",
@@ -383,28 +418,32 @@ def resolve_annotation_set(
             raise ValidationError(
                 f"Annotation {annotation_set.id}/{annotation.id} uses line_cap=arrow without a directional feature target."
             )
-        span_bp = sum(end - start for start, end in segments)
-        crosses_origin = segments_cross_origin(segments, len(record.seq), is_circular=is_circular)
-        resolved.append(
-            ResolvedRegionAnnotation(
-                id=annotation.id,
-                set_id=annotation_set.id,
-                record_index=record_index,
-                segments=tuple(segments),
-                midpoint_bp=annotation_midpoint(segments, len(record.seq), crosses_origin=crosses_origin),
-                span_bp=span_bp,
-                label=annotation.label,
-                mark=annotation.mark,
-                lane=annotation.lane,
-                style=style,
-                style_is_annotation_override=annotation.style is not None,
-                legend_label=annotation.legend_label or annotation_set.legend_label,
-                metadata=annotation.metadata,
-                crosses_origin=crosses_origin,
-                source_step=-1 if _read_coord_map(record)[1] < 0 else 1,
-                strand=annotation.strand,
+        # One annotation drawn in pieces: the longest piece carries its label.
+        labelled = max(drawn, key=lambda piece: piece.span_bp)
+        for piece in drawn:
+            piece_record = records[piece.record_index]
+            segments = piece.segments
+            crosses_origin = segments_cross_origin(segments, len(piece_record.seq), is_circular=piece.is_circular)
+            resolved.append(
+                ResolvedRegionAnnotation(
+                    id=annotation.id,
+                    set_id=annotation_set.id,
+                    record_index=piece.record_index,
+                    segments=tuple(segments),
+                    midpoint_bp=annotation_midpoint(segments, len(piece_record.seq), crosses_origin=crosses_origin),
+                    span_bp=piece.span_bp,
+                    label=annotation.label if piece is labelled else "",
+                    mark=annotation.mark,
+                    lane=annotation.lane,
+                    style=style,
+                    style_is_annotation_override=annotation.style is not None,
+                    legend_label=annotation.legend_label or annotation_set.legend_label,
+                    metadata=annotation.metadata,
+                    crosses_origin=crosses_origin,
+                    source_step=-1 if _read_coord_map(piece_record)[1] < 0 else 1,
+                    strand=annotation.strand,
+                )
             )
-        )
     return ResolvedAnnotationBundle(
         tuple(resolved), tuple(warnings), (annotation_set.id,),
         (annotation_set.id,) if annotation_set.keep_highlight_overlay else (),

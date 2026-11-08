@@ -3126,6 +3126,68 @@ def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
     assert spec.args[spec.args.index("--region") + 1] == "#2:10-20:rc"
 
 
+def _windows_cli_args(tmp_path: Path, windows: list[dict[str, object]]) -> list[str]:
+    session = _minimal_session(
+        {
+            "linearSeqs": [
+                {
+                    "gb": _file_entry("a.gb", b"LOCUS       A\n"),
+                    "region_record_id": "RecA",
+                    "region_start": None,
+                    "region_end": None,
+                    "region_reverse": False,
+                    "windows": windows,
+                },
+                {"gb": _file_entry("b.gb", b"LOCUS       B\n")},
+            ]
+        },
+        mode="linear",
+    )
+    return session_to_cli_args(
+        session, mode="linear", temp_dir=tmp_path, output_override=None, format_override=None
+    ).args
+
+
+def test_gui_only_linear_session_writes_each_window_of_a_card_as_a_region(tmp_path: Path) -> None:
+    """A card that draws a record in several windows (``windows``, D-01) gives one ``--region`` per window, in order."""
+
+    args = _windows_cli_args(tmp_path, [
+        {"start": 1001, "end": 3000, "reverseComplement": False, "column": 2},
+        {"start": 6001, "end": 8000, "reverseComplement": True, "column": 0},
+    ])
+    regions = [args[index + 1] for index, token in enumerate(args) if token == "--region"]
+    assert regions == ["#1:1001-3000", "#1:6001-8000:rc"]
+    assert "--reverse_complement" not in args
+
+
+@pytest.mark.parametrize(
+    ("windows", "regions"),
+    [
+        # One window across the origin is the card's only window (its crop fields cannot hold it).
+        ([{"start": 16001, "end": 500, "reverseComplement": False, "column": None}], ["#1:16001-500:origin"]),
+        (
+            [
+                {"start": 16001, "end": 500, "reverseComplement": True, "column": None},
+                {"start": 6001, "end": 8000, "reverseComplement": False, "column": None},
+            ],
+            ["#1:16001-500:origin:rc", "#1:6001-8000"],
+        ),
+    ],
+    ids=["one-window", "two-windows"],
+)
+def test_gui_only_linear_session_writes_a_window_across_the_origin_with_origin(
+    tmp_path: Path, windows: list[dict[str, object]], regions: list[str]
+) -> None:
+    """``:origin`` spells a window across the origin on the command line (PD-OI-122); it reads back as that window."""
+
+    args = _windows_cli_args(tmp_path, windows)
+    written = [args[index + 1] for index, token in enumerate(args) if token == "--region"]
+    assert written == regions
+    assert [(spec.start, spec.end, spec.reverse_complement) for spec in map(parse_region_spec, written)] == [
+        (window["start"], window["end"], window["reverseComplement"]) for window in windows
+    ]
+
+
 def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: Path) -> None:
     session = _minimal_session(
         {
@@ -3672,25 +3734,25 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
         args = ["--gbk", str(single), str(multi),
                 "--region", "cli_single:21-300", "--region", "cli_multi_b:21-300",
                 "--reverse_complement", "0", "--reverse_complement", "1"]
-        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": False}
+        single_region = [{"start": 21, "end": 300, "reverseComplement": False, "column": None}]
     else:
         args = ["--records_table", str(_write_records_table(tmp_path))]
-        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": True}
+        single_region = [{"start": 21, "end": 300, "reverseComplement": True, "column": None}]
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [
-        (record["source"]["resourceId"], record["selector"], record["region"],
+        (record["source"]["resourceId"], record["selector"], record["windows"],
          record["presentation"]["reverseComplement"])
         for record in records
     ] == [
         (first, None, single_region, False),
-        (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
+        (second, {"kind": "recordId", "value": "cli_multi_a"}, [], True),
         # Cropped to source 21..300, then reversed.
-        (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
-                        "start": 21, "end": 300, "reverseComplement": True}, False),
+        (second, {"kind": "recordId", "value": "cli_multi_b"},
+         [{"start": 21, "end": 300, "reverseComplement": True, "column": None}], False),
     ]
     assert _resource_bytes(session, first) == single.read_bytes()
     assert _resource_bytes(session, second) == multi.read_bytes()
@@ -3742,9 +3804,9 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
-    assert [(record["source"]["resourceId"], record["selector"], record["region"])
+    assert [(record["source"]["resourceId"], record["selector"], record["windows"])
             for record in records] == [
-        (first, None, None), *((second, selector, None) for selector in selected)
+        (first, None, []), *((second, selector, []) for selector in selected)
     ]
     assert sorted(session["resources"]) == sorted({first, second})
     assert _resource_bytes(session, first) == single.read_bytes()
@@ -3781,8 +3843,8 @@ def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
-    assert [(record["region"], record["presentation"]["reverseComplement"])
-            for record in records] == [(None, False)] * 3
+    assert [(record["windows"], record["presentation"]["reverseComplement"])
+            for record in records] == [([], False)] * 3
     assert {
         _resource_bytes(session, record["source"]["resourceId"]) for record in records
     }.isdisjoint({single.read_bytes(), multi.read_bytes()})
@@ -3816,8 +3878,8 @@ def test_single_circular_session_records_crop_on_the_unchanged_input_file(
     document = drawing_view(document)
 
     [record] = document["renderRequest"]["records"]
-    assert (record["selector"], record["region"], record["presentation"]["reverseComplement"]) == (
-        None, {"selector": None, "start": 21, "end": 300, "reverseComplement": True}, False
+    assert (record["selector"], record["windows"], record["presentation"]["reverseComplement"]) == (
+        None, [{"start": 21, "end": 300, "reverseComplement": True, "column": None}], False
     )
     assert _resource_bytes(document, record["source"]["resourceId"]) == single.read_bytes()
 

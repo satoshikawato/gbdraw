@@ -323,6 +323,7 @@ export const createRegionSelect = ({
     /** @type {RegionSelection} */
     const selection = {
       kind: 'region', resultIndex: record.resultIndex, recordIndex: record.recordIndex, recordKey: record.recordKey,
+      windowIndex: record.windowIndex,
       recordId: record.recordId, span: finished.span, source: sourceSpanOf(record.axis.source, finished.span)
     };
     shownSelection.value = selection;
@@ -358,10 +359,10 @@ export const createRegionSelect = ({
   /** The selection the band shows: the open popup's, or the one being opened. */
   const selection = computed(() => openSelection() ?? shownSelection.value);
 
-  /** The record of a selection in the shown Result, found by its key; null once the Result no longer draws it. */
+  /** The record of a selection in the shown Result, by its key and window; null once that Result no longer draws it. */
   /** @param {RegionSelection} chosen */
-  const recordOf = (chosen) => readAxisRecords().find((record) => (
-    record.resultIndex === chosen.resultIndex && record.recordKey === chosen.recordKey
+  const recordOf = ({ resultIndex, recordKey, windowIndex }) => readAxisRecords().find((record) => (
+    record.resultIndex === resultIndex && record.recordKey === recordKey && record.windowIndex === windowIndex
   )) ?? null;
 
   // The band is drawn over the Result in the overlay's own SVG (never in the Result), placed by the record group's
@@ -409,16 +410,16 @@ export const createRegionSelect = ({
   });
 
   /**
-   * The drawn features fully inside the selection, by feature id.
+   * The drawn features fully inside the selection, by feature id: those its record's drawn unit draws, as two windows
+   * of a record each draw a feature they both show (OV-2717).
    * @param {RegionSelection} chosen
-   * @returns {string[]}
    */
   const featuresInside = (chosen) => {
     const record = recordOf(chosen);
     if (!record) return [];
     return drawnFeatures().flatMap((feature) => {
       const id = typeof feature.svg_id === 'string' ? feature.svg_id : '';
-      if (!id || feature.record_key !== chosen.recordKey) return [];
+      if (!id || feature.record_key !== chosen.recordKey || feature.drawn_record_index !== record.recordIndex) return [];
       return partsInsideSpan(record.axis.source, chosen.span, featureParts(feature)) ? [id] : [];
     });
   };
@@ -451,7 +452,6 @@ export const createRegionSelect = ({
       featureCount: featureIds.length,
       featureText: chosen.source.wrapsOrigin ? t('{features} · crosses the origin', { features: featureText }) : featureText,
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
-      newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
       // Every action button is disabled while one of them runs; each action's own state is its label and status.
       busy: selectionBusy(chosen),
       copy: actionView(chosen, 'copy'),
@@ -491,10 +491,10 @@ export const createRegionSelect = ({
   };
   /** Add to annotation set: the annotation owner adds one "Region N" row (after reading the records, when needed). */
   const addToAnnotationSet = () => runAction('add', (chosen) => addRegionAnnotation(targetOf(chosen)), '', 'addRegionAnnotation');
-  /** New drawing from region; refused by Python, and disabled here, for a span across the origin. */
+  /** New drawing from region: a span across the origin of a circular record is one window across it (Python's). */
   const newDrawing = async () => {
     const chosen = openSelection();
-    if (!chosen || chosen.source.wrapsOrigin || selectionBusy(chosen)) return null;
+    if (!chosen || selectionBusy(chosen)) return null;
     const outcome = await newDrawingFromRegion(targetOf(chosen));
     closeRegionPopup();
     return outcome;

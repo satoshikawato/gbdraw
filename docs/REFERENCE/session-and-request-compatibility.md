@@ -2,7 +2,7 @@
 
 # Session and request compatibility
 
-Current writers emit session version 51 and canonical `renderRequest` schema 9.
+Current writers emit session version 51 and canonical `renderRequest` schema 10.
 Session 51 lists the drawings of a project in `drawings`. The Web app and Python
 read a Session 46–50 into drawings themselves; a Session 27–44 is converted by
 Python, once, at Load (the Web app waits for it); a Session 45 is not read.
@@ -10,7 +10,7 @@ Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 51 | 27–33, 39–42, 44, and 46–51 |
-| Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
+| Canonical `renderRequest` | 10 | 1, 2, 5, 6, 7, 8, 9, and 10 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–51 |
 
 [Session and request structure](#session-and-request-structure) has the JSON
@@ -118,14 +118,23 @@ is now off by default on every surface; a Session, request or recorded command
 that names Collinear without it replays with inference on, as it was drawn.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 51,
+readable. Current saves promote that request to schema 10 and the Session to 51,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
 
+Request schema 10 writes the spans of a record as `windows`, a list of
+`{start, end, reverseComplement, column}` in source coordinates, in place of
+the single `region`; a crop names its record in the record's `selector`. A
+record with several windows draws each as its own part of one Linear row,
+leaving out the interval between them; `column` places those windows, and a
+record drawn as one part keeps its column in `presentation.gridColumn`. A
+schema 1–9 request reads its `region` as one window, and its region's selector
+as the record's.
+
 The Python reader (`gbdraw ... --session` and the Python API) checks a
-schema-9 request against `describe_canonical_request()`: it refuses a key
+schema-10 request against `describe_canonical_request()`: it refuses a key
 outside it, such as an older writer's `depthTrack*` input, and a value of
 another kind, such as `true` or `false` where a number belongs. At every
 request schema it refuses `conservationTableFile` and `comparisonTableFile`
@@ -162,8 +171,8 @@ Reading a Session 46 to 50 moves each mode's part into its own drawing.
 Each record of a drawing's request names its source by `kind`: `genbank` (a
 GenBank/DDBJ file, `resourceId`), `gffFasta` (a GFF3 file and its FASTA,
 `gffResourceId` and `fastaResourceId`), or `fasta` (a FASTA given without GFF3,
-`fastaResourceId`). The `fasta` kind is new in Session 51 and keeps request
-schema 9; its records have sequence and no features, and their topology is
+`fastaResourceId`). The `fasta` kind is new in Session 51 and adds no request
+schema; its records have sequence and no features, and their topology is
 unknown until a Circular record setting says otherwise.
 
 Sessions 46 to 50 keep the Web app's settings and edits of each diagram mode in its
@@ -432,7 +441,7 @@ are left out, with a row.
 
 The five comparison settings (unit, anchor, search scope, color and
 membership) read the same spellings in the web app and in Python in request
-schemas 5–8. In a schema 9 request the web app also reads another spelling of
+schemas 5–8. In a request of schema 9 or later the web app also reads another spelling of
 a value (such as `top1` or ` ALL `) as that value, without a row, while the CLI
 and the Python API refuse it. Eight search-scope spellings that only the web
 app accepted (`adjacent_pairs`, `adjacent_pair`, `neighbor_pairs`,

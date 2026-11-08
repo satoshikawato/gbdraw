@@ -98,10 +98,16 @@ schemas](input-formats-and-tsv-schemas.md).
 Linear mode selects and crops records with `--record_id`, `--region`, and
 `--reverse_complement`; `gbdraw circular` does not accept them.
 `--record_id` selects a record by ID or `#index` for each input file.
-`--region` accepts `record_id:start-end[:rc]`, `#index:start-end[:rc]`, or
-`file:record_selector:start-end[:rc]`. Coordinates are 1-based and inclusive.
+`--region` accepts `record_id:start-end[:origin][:rc]`,
+`#index:start-end[:origin][:rc]`, or `file:record_selector:start-end[:origin][:rc]`.
+Coordinates are 1-based and inclusive.
 A start greater than the end selects the region from end to start and draws it
 reverse-complemented, as `:rc` does: `rec:500-100` is `rec:100-500:rc`.
+`:origin` after the span marks a window across the origin of a circular record:
+`rec:65000-4000:origin` runs from base 65,000 through the last base and the
+origin to base 4,000, and `rec:65000-4000:origin:rc` draws that window
+reverse-complemented. `:origin` is refused on a linear record and on a span
+whose start is not greater than its end.
 Repeated `--reverse_complement` values follow input-file order and accept the
 boolean tokens listed by `--help`. A region is cropped first, on the record as
 stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`

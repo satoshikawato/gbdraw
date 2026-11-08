@@ -22,8 +22,8 @@ const committed = {
     mode: 'linear',
     comparisons: [{ kind: 'nucleotideBlast' }],
     records: [
-      { recordKey: 'ca', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'a' } },
-      { recordKey: 'cb', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'b' } }
+      { recordKey: 'ca', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'a' }, windows: [], presentation: { reverseComplement: false } },
+      { recordKey: 'cb', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'b' }, windows: [], presentation: { reverseComplement: false } }
     ]
   }
 };
@@ -36,7 +36,7 @@ const controlsFor = ({ mode = 'linear', runUndoable, sessionBusy = null }) => {
     inputFiles,
     mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
     linearSeqs: ['a', 'b'].map((id) => ({
-      uid: `c${id}`, gb: inputFiles.registerFile(createSessionResourceFileView(table, id)), region_record_id: '', region_reverse: false
+      uid: `c${id}`, gb: inputFiles.registerFile(createSessionResourceFileView(table, id)), region_record_id: '', region_reverse: false, windows: []
     })),
     form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: [] },

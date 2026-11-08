@@ -162,16 +162,17 @@ export const panelQueries = (read, previous = []) => read.map((query, index) => 
 }));
 
 /**
- * What a search reads: each record the shown drawing draws (every Result's), by its key. Python reads each once over
- * the bases it draws, on its source strand, and then the origin window of each record a span may pass the origin of,
- * placed from the reach of the query that covers the most bases, so a hit across the origin is found whole (OV-2571).
+ * What a search reads: each record the shown drawing draws (every Result's), once, by its key; the windows of a record
+ * drawn in several name one record (D-11). Python reads each once over the bases it draws, on its source strand, and
+ * then the origin window of each record a span may pass the origin of, placed from the reach of the query that covers
+ * the most bases, so a hit across the origin is found whole (OV-2571).
  * @param {readonly { recordKey: string }[]} records
  * @param {readonly { reach: number }[]} queries
  * @returns {DrawnRecordInput[]}
  */
 export const searchSpans = (records, queries) => {
   const reach = Math.max(...queries.map((query) => query.reach));
-  return records.map(({ recordKey }) => ({ recordKey, originWindow: reach }));
+  return [...new Set(records.map(({ recordKey }) => recordKey))].map((recordKey) => ({ recordKey, originWindow: reach }));
 };
 
 /**

@@ -69,6 +69,7 @@ from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
+from .io.regions import region_text
 from .render.formats import normalize_format_token
 from .render.output_paths import OutputExistsError, commit_staged_output_file
 from .session_legacy_values import (
@@ -1534,11 +1535,17 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
                 identity[key] = fingerprints[value]
         return identity
 
+    from .session_request_codec import stored_record_windows
+
+    def region_binding(record: Mapping[str, Any]) -> object:
+        # One window binds as the region it was before windows (request schema 10), so stored receipts still match.
+        spans = [{"start": window["start"], "end": window["end"]} for window in stored_record_windows(record)]
+        return spans[0] if len(spans) == 1 else spans or None
+
     records = [{
         "recordKey": record["recordKey"], "source": source_identity(record["source"]),
         "selector": record["selector"],
-        "region": ({"start": record["region"]["start"], "end": record["region"]["end"]}
-                   if record.get("region") else None), "display": record["display"],
+        "region": region_binding(record), "display": record["display"],
     } for record in request["records"]]
     binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"].encode("utf-16be"))},
                "records": sorted(records, key=lambda item: item["recordKey"].encode("utf-16be"))}
@@ -2511,15 +2518,14 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     rotation or a region that only selects a record changes no hash).
     """
 
-    region = record.get("region")
+    from .session_request_codec import stored_record_windows
+
     presentation = record.get("presentation")
-    return (
-        isinstance(region, Mapping)
-        and (
-            _nonnegative_integer(region.get("start")) is not None
-            or _nonnegative_integer(region.get("end")) is not None
-            or _js_truthy(region.get("reverseComplement"))
-        )
+    return any(
+        _nonnegative_integer(window["start"]) is not None
+        or _nonnegative_integer(window["end"]) is not None
+        or _js_truthy(window["reverseComplement"])
+        for window in stored_record_windows(record)
     ) or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
 
 
@@ -2798,10 +2804,14 @@ def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped, reverse-complemented, or rotated.
     """
 
+    from .session_request_codec import stored_record_windows
+
     presentation = record.get("presentation")
     display = record.get("display")
     return (
+        # A schema <= 9 region counts by JavaScript truthiness, as the Web reader reads it.
         _js_truthy(record.get("region"))
+        or bool(stored_record_windows(record))
         or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
         or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
     )
@@ -7062,6 +7072,14 @@ def _append_linear_gui_sequence_options(
             continue
         record_selector = str(seq.get("region_record_id") or "").strip()
         record_selectors.append(record_selector)
+        card_windows = _mapping_list(seq.get("windows"))
+        if card_windows:
+            # A card whose windows its crop fields cannot hold: several (D-01), or one across the origin (D-34). One
+            # region per window, in order. The CLI places them in that order; the Record Layout columns are not
+            # written, as for every other record.
+            region_specs.extend(_card_window_region_spec(index, window) for window in card_windows)
+            reverse_flags.append(False)
+            continue
         start = seq.get("region_start")
         end = seq.get("region_end")
         has_start = start not in (None, "")
@@ -7083,6 +7101,7 @@ def _append_linear_gui_sequence_options(
                 raise ValidationError(
                     f"Linear sequence #{index + 1} region coordinates must be >= 1."
                 )
+            # The card's crop fields: an End before the Start reverses the span, as a region string without :origin.
             suffix = ":rc" if wants_reverse else ""
             region_specs.append(f"#{index + 1}:{start_int}-{end_int}{suffix}")
             reverse_flags.append(False)
@@ -7097,6 +7116,16 @@ def _append_linear_gui_sequence_options(
             _append_pair(run_args, invocation_args, "--reverse_complement", "1" if flag else "0")
     for spec in region_specs:
         _append_pair(run_args, invocation_args, "--region", spec)
+
+
+def _card_window_region_spec(index: int, window: Mapping[str, Any]) -> str:
+    """The ``--region`` of one window of Linear card ``index`` (0-based)."""
+
+    start = _nonnegative_integer(window.get("start"))
+    end = _nonnegative_integer(window.get("end"))
+    if not start or not end:
+        raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
+    return f"#{index + 1}:{region_text(start, end, _js_truthy(window.get('reverseComplement')))}"
 
 
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:

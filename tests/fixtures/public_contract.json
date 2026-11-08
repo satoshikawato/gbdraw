@@ -37,7 +37,7 @@
     "representative_sha256": "180dd6e98e12a015df9d8fcdb82698bb666b7f95a9a2140918a0a467018d7ce6"
   },
   "linear_cli": {
-    "actions_sha256": "3661f2924e7e48415ef4387124f90de4561770803c699c8be9a490783b054083",
+    "actions_sha256": "41cb5a7c0349935e17508f11196068da0eabb69b0b40a31c031bc7e71b3b5466",
     "defaults_sha256": "37937de6ebae5e1e79ce06281a3c69c60ef457f0fae4ab444c6cf8ff314d094b",
     "representative_sha256": "4bf2b3c423588d5df507e7d8e61587f7211d9e4aa6fdecf05afeea73f7a5cc62"
   }

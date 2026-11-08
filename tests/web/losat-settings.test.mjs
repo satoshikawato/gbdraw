@@ -39,6 +39,7 @@ await writeFile(
   tempModulePath,
   source.replace("../services/losat-normalization.js", "./losat-normalization.mjs")
     .replace("../services/linear-comparisons.js", new URL("../services/linear-comparisons.js", sourceRoot).href)
+    .replace("../services/linear-units.js", new URL("../services/linear-units.js", sourceRoot).href)
     .replace("../services/current-option-values.js", new URL("../services/current-option-values.js", sourceRoot).href)
     .replace("../services/linear-sources.js", new URL("../services/linear-sources.js", sourceRoot).href)
     .replace("../services/record-draw-selection.js", new URL("../services/record-draw-selection.js", sourceRoot).href)
@@ -67,7 +68,7 @@ const resolved = ({ mode = 'adjacent', defaultSource = 'losat', sources = [], va
 });
 
 const state = {
-  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
@@ -87,7 +88,7 @@ assert.equal(settings.losatEffectiveThreadsPerJob.value, 4);
 assert(settings.losatThreadOptions.value.some((option) => option.value === '32'));
 
 const loadingOrderState = {
-  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
@@ -104,7 +105,7 @@ createLosatSettings({ state: withDrawings(loadingOrderState) });
 assert.equal(loadingOrderState.losatExecution.threadsPerJob, '32');
 
 const noneState = {
-  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   linearComparisonResolution: resolved({ mode: 'none', sources: [] }),
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: '17', threadsPerJob: '32', parallelWorkers: '9' },
@@ -123,7 +124,7 @@ assert.equal(noneState.losatExecution.threadsPerJob, '32');
 assert.equal(noneState.losatExecution.parallelWorkers, '9');
 
 const mixedState = {
-  linearSeqs: Array.from({ length: 4 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 4 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   linearComparisonResolution: resolved({
     mode: 'selected',
     defaultSource: 'upload',
@@ -142,7 +143,7 @@ mixedState.losatProgram.value = 'blastp';
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
 
 const expansionState = {
-  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
@@ -192,7 +193,7 @@ assert.equal(expansionSettings.losatEstimatedJobCount.value, 0);
 // Record selection D-07: an OFF record is no query and no pair, so the
 // estimate plans the searches of the drawn records only, as Generate does.
 const offState = {
-  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}` })),
+  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}`, windows: [] })),
   recordsOff: ['record-1'],
   linearComparisonResolution: resolved({ sources: ['losat'] }),
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
@@ -230,7 +231,7 @@ Object.defineProperty(globalThis, 'navigator', {
   value: { hardwareConcurrency: 64 }, configurable: true
 });
 const budgetState = {
-  linearSeqs: [{ uid: 'a' }, { uid: 'b' }],
+  linearSeqs: [{ uid: 'a', windows: [] }, { uid: 'b', windows: [] }],
   linearComparisonResolution: resolved({ sources: ['losat'] }),
   losatExecution: { totalThreadBudget: '32', threadsPerJob: 'auto', parallelWorkers: undefined },
   losat: { blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
@@ -269,3 +270,37 @@ console.log('losat total-budget allocation tests passed');
 // CO-01: Node has no cross-origin isolation, so the Threaded option says so.
 assert.equal(globalThis.crossOriginIsolated, undefined);
 assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailable here)');
+
+// OV-2741: a card drawn in two windows is two drawn units, and a pair of records compares every window pair, so the
+// estimate counts the searches of Python's unit plan, as Generate plans them (`planLinearUnitSearch`).
+{
+  const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
+  const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+  const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
+  const window = (start, end) => ({ start, end, reverseComplement: false, column: null });
+  const windowsState = {
+    linearSeqs: [createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }), createLinearSeq({ uid: 'b' })],
+    linearComparisonResolution: { value: {
+      mode: 'selected', valid: true, hasComparisonIntent: true, hasLosatIntent: true,
+      edges: [{ source: 'losat', ordinal: 0, queryIndex: 0, subjectIndex: 1, queryUid: 'a', subjectUid: 'b',
+        edgeKey: linearComparisonEdgeKey('a', 'b') }]
+    } },
+    losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
+    losat: { blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' } },
+    losatProgram: { value: 'blastn' }
+  };
+  const asked = [];
+  const windowsSettings = createLosatSettings({
+    state: withDrawings(windowsState),
+    windowsOf: () => (card) => linearWindowsPayload(card, { arranged: false }),
+    planLinearUnits: async (payload) => {
+      asked.push(payload);
+      return { result: pythonLinearUnitPlan(payload) };
+    }
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(asked.length, 1);
+  assert.equal(windowsSettings.losatEstimatedJobCount.value, 2, 'each window of a against b');
+  console.log('losat-settings unit plan tests passed');
+}

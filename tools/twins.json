@@ -1240,18 +1240,17 @@
     },
     {
       "id": "vector:tests/fixtures/region_origin_crossing_vectors.json",
-      "concern": "Whether a selected span of a circular record crosses its origin, so New drawing from region cannot draw it",
+      "concern": "Whether a selected span of a circular record crosses its origin, so New drawing from region draws it as one window across the origin",
       "pythonOwner": [
-        "gbdraw/api/region_drawing.py:_resolve_regions",
-        "gbdraw/api/region_drawing.py:StartAfterEndRegion"
+        "gbdraw/api/region_drawing.py:_resolve_regions"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/region-axis.js:sourceSpanOf",
         "gbdraw/web/js/app/region-select.js:createRegionSelect"
       ],
       "vector": "tests/fixtures/region_origin_crossing_vectors.json",
-      "reason": "the Web disables New drawing from region live, during the drag and before Python is asked, when the source span it reads from the axis starts after its end (wrapsOrigin); Python refuses the same span with StartAfterEndRegion (ORIGIN_CROSSING) for the CLI, the Python API and the Web dialog",
-      "retireWhen": "the Web asks Python whether a selected span can be drawn, or Python writes that with the selection",
+      "reason": "the Web says live, during the drag and before Python is asked, that the source span it reads from the axis crosses the origin (wrapsOrigin: it starts after its end); Python draws the same span as one window across the origin for the Python API and the Web dialog",
+      "retireWhen": "Python writes with the selection whether a span crosses the origin",
       "source": "region-select-seq-search-20261104 REVIEW-2 N1 (D-32 f, D-34)"
     },
     {

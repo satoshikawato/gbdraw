@@ -77,7 +77,7 @@ def test_release_session_history_and_acceptance_use_current_authority() -> None:
     # The 0.14.0 release notes name the version that release wrote.
     assert re.search(
         r"saves Sessions as session version 48, with\s+"
-        rf"canonical `renderRequest`\s+schema {CANONICAL_REQUEST_SCHEMA}",
+        r"canonical `renderRequest`\s+schema 9",
         release_notes,
     )
     assert "session-and-request-compatibility.md" in release_notes

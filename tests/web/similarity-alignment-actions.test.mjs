@@ -39,7 +39,7 @@ const targetB = member('b', 'target-b', 2, '+');
 const targetC = member('c', 'target-c', 3, null);
 const renderRequest = {
   schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', layout:{recordTranslations:[],similarityAlignment:null}, records: ['a', 'b', 'c'].map((recordKey) => ({
-    recordKey, source:{kind:'genbank',resourceId:'source'}, selector:{kind:'recordId',id:recordKey},cardinality:'exactly_one',display:{isCircular:null,startCoordinate:null}, region: null, presentation: { reverseComplement: false }
+    recordKey, source:{kind:'genbank',resourceId:'source'}, selector:{kind:'recordId',id:recordKey},cardinality:'exactly_one',display:{isCircular:null,startCoordinate:null}, windows: [], presentation: { reverseComplement: false }
   }))
 };
 const state = () => {

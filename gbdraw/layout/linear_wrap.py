@@ -14,6 +14,7 @@ from typing import Protocol
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.config.models.canvas import LinearWrapLength
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
 from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
@@ -238,6 +239,14 @@ def refuse_undrawable_wrap(
         raise ValidationError(
             "normalize_length cannot draw a record cut by wrap_length: every row draws at one scale.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_NORMALIZE_LENGTH"},
+        )
+    windowed = sorted({key for record in records if (key := (record.annotations or {}).get(WINDOW_OF_ANNOTATION))})
+    if windowed:
+        # The windows of a record share one row (D-01); rows of a cut record cannot hold them side by side.
+        raise ValidationError(
+            f"wrap_length cannot cut a figure with several windows of one record ({', '.join(map(str, windowed))}): "
+            "the windows share one row. Draw the windows without wrap_length, or as separate records.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_GRID_ROW"},
         )
     if len(set(rows_by_record)) != len(rows_by_record):
         raise ValidationError(

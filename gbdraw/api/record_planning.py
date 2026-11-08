@@ -29,13 +29,16 @@ from gbdraw.config.modify import modify_config_dict, raw_config_value, with_conf
 from gbdraw.exceptions import ValidationError
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
+    WINDOW_OF_ANNOTATION,
     _feature_source_index_map,
     _iter_source_features,
     _SourceFeatureAnchorProfile,
     _read_coord_map,
     _source_feature_index,
+    _source_period,
 )
 from gbdraw.io.cli_tables import (
+    RecordsTableRecord,
     read_comparisons_table,
     read_conservation_table,
     read_records_table,
@@ -46,10 +49,17 @@ from gbdraw.io.genome import (
 )
 from gbdraw.io.record_select import (
     RecordSelector,
+    drawn_record_units,
     parse_record_selector,
     reverse_records,
 )
-from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
+from gbdraw.io.regions import (
+    RecordWindow,
+    RegionSpec,
+    assign_region_specs,
+    crop_record_windows,
+    parse_region_spec,
+)
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
@@ -85,6 +95,7 @@ from .prepared import (
 from .requests import (
     EXPANDED_RECORD_KEY_SEPARATOR,
     CircularBatchOutputPolicy,
+    window_unit_key,
     FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
@@ -164,8 +175,82 @@ def resolve_record_display(
 
 
 @dataclass(frozen=True)
+class ResolvedWindow:
+    """The window of its record a drawn unit shows (D-01).
+
+    ``record_key`` is the record's own key, shared by its units; ``index`` is
+    the window's place among the record's ``count`` windows; ``span`` is the
+    window. A record with one window draws one unit keyed like the record.
+    """
+
+    record_key: str
+    index: int
+    count: int
+    span: RecordWindow
+
+    @property
+    def is_one_of_several(self) -> bool:
+        """Whether the record draws more than one unit (each then has its own unit key)."""
+        return self.count > 1
+
+    @property
+    def unit_key(self) -> str:
+        """The key of the drawn unit of this window (``window_unit_key``)."""
+        return window_unit_key(self.record_key, self.index, self.count)
+
+    @property
+    def window_of(self) -> str | None:
+        """The key of the record this unit is one of several windows of; ``None`` when the record draws one unit."""
+        return self.record_key if self.is_one_of_several else None
+
+
+def record_drawn_windows(record_key: str, windows: Sequence[RecordWindow]) -> tuple[ResolvedWindow | None, ...]:
+    """The drawn units of the record ``record_key`` drawn through ``windows``, in drawing order (D-01).
+
+    One unit per window; a record without windows draws one unit, the record itself (``None``). The one owner of a
+    record's units: the record resolver draws them, and the Web plans its comparison searches over them
+    (``gbdraw.web_support.linear_units``).
+    """
+
+    return tuple(ResolvedWindow(record_key, index, len(windows), window) for index, window in enumerate(windows)) or (
+        None,
+    )
+
+
+def refuse_file_comparison_of_windows(
+    query_units: Sequence[int],
+    subject_units: Sequence[int],
+    *,
+    records: tuple[str, str],
+    where: str,
+    row: int | None = None,
+) -> None:
+    """Refuse a comparison file between records one of which is drawn in several windows: the file gives the
+    coordinates of one drawn unit, so such a pair is searched (``comparison_unit_pairs``)."""
+
+    if len(query_units) > 1 or len(subject_units) > 1:
+        windowed = records[0] if len(query_units) > 1 else records[1]
+        raise ValidationError(
+            f"{where}: record {windowed!r} is drawn in several windows, and a comparison file gives the coordinates "
+            "of one drawn record; use source=losat for it.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "WINDOWED_FILE_COMPARISON",
+                **({} if row is None else {"row": row}),
+            },
+        )
+
+
+def comparison_unit_pairs(query_units: Sequence[int], subject_units: Sequence[int]) -> tuple[tuple[int, int], ...]:
+    """The drawn-unit pairs a comparison of two records searches: every window of one against every window of the
+    other (D-01, D-37), in the order of the query's units, then the subject's."""
+
+    return tuple((query, subject) for query in query_units for subject in subject_units)
+
+
+@dataclass(frozen=True)
 class ResolvedRecordProvenance:
-    """Stable source coordinates for one displayed record."""
+    """Stable source coordinates for one displayed record (one drawn unit of a record with windows)."""
 
     resolved_index: int
     input_index: int
@@ -191,6 +276,21 @@ class ResolvedRecordProvenance:
     # GFF3 features whose type the request does not draw, left out when the record
     # was planned, by type (the GFF3 type filter); the input summary counts them.
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
+    # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
+    window: ResolvedWindow | None = field(default=None, kw_only=True)
+    # The record's place among the resolved records before its windows expand: labels and subtitles apply by it.
+    # ``None`` reads as ``resolved_index`` (``place``).
+    record_position: int | None = field(default=None, kw_only=True)
+
+    @property
+    def place(self) -> int:
+        """The record's place among the resolved records, by which collection labels and subtitles apply."""
+        return self.resolved_index if self.record_position is None else self.record_position
+
+    @property
+    def record_identity_key(self) -> str:
+        """The key of the record this unit draws: per-record edits, colours and evidence bind to it."""
+        return self.window.record_key if self.window is not None else self.record_key
 
     @property
     def source_name(self) -> str:
@@ -248,6 +348,7 @@ class ResolvedRecordCollection:
                 )
                 transform = RecordDisplayTransform(
                     cast(int, length), base, step, display.start_coordinate, display.is_circular,
+                    crosses_origin=_source_period(record) is not None,
                 )
             except ValidationError as exc:
                 raise ValidationError(
@@ -1288,7 +1389,6 @@ class RecordInputManifest:
     records: tuple[RecordInput, ...]
     record_options: RecordCollectionOptions
     source_paths: tuple[str, ...]
-    multi_record_positions: tuple[str, ...] = ()
     # Records-table ``losat_gencode`` per record input; empty without values.
     losat_gencodes: tuple[int | None, ...] = ()
 
@@ -1552,24 +1652,6 @@ def _prepared_source_cache_spec(
     )
 
 
-def _selector_from_region(region: RegionSpec | None) -> RecordSelector | None:
-    if region is None:
-        return None
-    if region.record_id is not None:
-        return RecordSelector(
-            raw=region.record_id,
-            record_id=region.record_id,
-            record_index=None,
-        )
-    if region.record_index is not None:
-        return RecordSelector(
-            raw=f"#{region.record_index + 1}",
-            record_id=None,
-            record_index=region.record_index,
-        )
-    return None
-
-
 def _selected_source_indexes(
     records: Sequence[SeqRecord],
     selector: RecordSelector | None,
@@ -1627,15 +1709,6 @@ def _cardinality_indexes(
     raise ValidationError("Unsupported record cardinality.")
 
 
-def _unqualified_region(region: RegionSpec) -> RegionSpec:
-    return replace(
-        region,
-        file_selector=None,
-        record_id=None,
-        record_index=None,
-    )
-
-
 def _apply_record_key(record: SeqRecord, *, record_key: str) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
@@ -1665,6 +1738,18 @@ def effective_record_presentation(
     )
 
 
+def unit_presentation(
+    presentation: RecordPresentation,
+    options: RecordCollectionOptions,
+    item: ResolvedRecordProvenance,
+) -> RecordPresentation:
+    """The presentation a drawn unit is drawn with: its record's, placed by its window's column (D-08)."""
+
+    effective = effective_record_presentation(presentation, options, item.place)
+    column = item.window.span.column if item.window is not None else None
+    return effective if column is None else replace(effective, grid_column=column)
+
+
 def _apply_provenance_annotations(
     record: SeqRecord,
     provenance: ResolvedRecordProvenance,
@@ -1686,6 +1771,9 @@ def _apply_provenance_annotations(
     )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
+    if provenance.window is not None and provenance.window.window_of is not None:
+        # The record this unit is a window of (D-01): per-record readers bind to it (``record_identity_key``).
+        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.window_of
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
         record.annotations["gbdraw_source_basename"] = Path(
@@ -1693,33 +1781,95 @@ def _apply_provenance_annotations(
         ).name
 
 
-def _apply_collection_options(
-    records: list[SeqRecord],
-    provenance: Sequence[ResolvedRecordProvenance],
+def _drawn_circular(display: RecordDisplayOptions, topology: str) -> bool:
+    """Whether a record is drawn as circular: its display option, else the topology its file states (D-28)."""
+
+    return display.is_circular if display.is_circular is not None else topology == "circular"
+
+
+@dataclass
+class _PendingRecord:
+    """One resolved record before its windows expand: its drawn records so far and how to finish them."""
+
+    units: tuple[SeqRecord, ...]
+    provenance: ResolvedRecordProvenance
+    windows: tuple[RecordWindow, ...]
+    pending_reverse: bool
+
+
+def _expand_record_windows(
+    pending: Sequence[_PendingRecord],
     options: RecordCollectionOptions,
-    pending_reverse: Sequence[bool],
-) -> tuple[list[SeqRecord], frozenset[int]]:
-    """Crop by collection regions, then reverse-complement each pending record.
+) -> ResolvedRecordCollection:
+    """Crop by collection regions, orient, and give each window of a record its own drawn unit (D-01).
 
     A record's presentation reverse complement applies after its crop, the
     order a region's own ``:rc`` uses, so both spellings draw one window.
+    Several collection regions that select one record are its windows. A unit
+    keeps the record's provenance with its own key (``window_unit_key``), its
+    window, and the record's place, by which labels and subtitles apply.
     """
 
     try:
-        records, cropped = crop_then_reverse_records(records, options.regions, pending_reverse, log=logger)
+        collection_specs = (
+            assign_region_specs([item.units[0] for item in pending], options.regions) if options.regions else {}
+        )
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     # Labels and subtitles apply by place through effective_record_presentation.
     for field_name in ("labels", "subtitles"):
-        if len(getattr(options, field_name)) > len(records):
+        if len(getattr(options, field_name)) > len(pending):
             logger.warning(
                 "More record %s were provided than records resolved; "
                 "extra values will be ignored.",
                 field_name,
             )
-    for record, item in zip(records, provenance, strict=True):
-        _apply_provenance_annotations(record, item)
-    return records, cropped
+    records: list[SeqRecord] = []
+    provenance: list[ResolvedRecordProvenance] = []
+    for position, item in enumerate(pending):
+        specs = collection_specs.get(position, ())
+        windows = item.windows
+        units = item.units
+        if specs:
+            if windows:
+                raise ValidationError(
+                    f"Record {item.provenance.record_key!r} has windows in its input and a collection region; "
+                    "give its windows in one place.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            windows = tuple(RecordWindow.from_region(spec) for spec in specs)
+            try:
+                units = crop_record_windows(
+                    units[0],
+                    specs,
+                    item.pending_reverse,
+                    log=logger,
+                    circular=_drawn_circular(item.provenance.display, item.provenance.detected_topology),
+                )
+            except ValueError as exc:
+                raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
+        elif item.pending_reverse:
+            units = crop_record_windows(units[0], (), True, log=logger)
+        # The crop draws one unit per window, as ``record_drawn_windows`` plans them.
+        for unit, window in zip(units, record_drawn_windows(item.provenance.record_key, windows), strict=True):
+            unit_item = replace(
+                item.provenance,
+                resolved_index=len(records),
+                record_position=position,
+                record_key=window.unit_key if window is not None else item.provenance.record_key,
+                # A unit of an input window draws that window's span as its region.
+                region=window.span.region() if window is not None and not specs else None,
+                has_collection_region=bool(specs),
+                window=window,
+            )
+            unit_item = replace(
+                unit_item, presentation=unit_presentation(item.provenance.presentation, options, unit_item)
+            )
+            _apply_record_key(unit, record_key=unit_item.record_key)
+            _apply_provenance_annotations(unit, unit_item)
+            records.append(unit)
+            provenance.append(unit_item)
+    return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
 
 def reverse_resolved_records(
@@ -1779,9 +1929,7 @@ def resolve_record_inputs(
     gff_types = _gff_feature_types(gff_candidate_features, gff_keep_all_features)
     cache = {} if parsed_sources is None else parsed_sources
     id_counts: dict[tuple[object, ...], Counter[str]] = {}
-    records: list[SeqRecord] = []
-    provenance: list[ResolvedRecordProvenance] = []
-    pending_reverse: list[bool] = []
+    pending: list[_PendingRecord] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
         parsed = cache.get(key)
@@ -1795,7 +1943,7 @@ def resolve_record_inputs(
         if key not in id_counts:
             id_counts[key] = Counter(str(record.id) for record in parsed.records)
         raw_records = parsed.records
-        selector = record_input.selector or _selector_from_region(record_input.region)
+        selector = record_input.selector
         source_indexes = _cardinality_indexes(
             _selected_source_indexes(raw_records, selector),
             cardinality=record_input.cardinality,
@@ -1815,13 +1963,15 @@ def resolve_record_inputs(
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
             reverse = record_input.presentation.reverse_complement
-            if record_input.region is not None:
-                region = _unqualified_region(record_input.region)
+            units: tuple[SeqRecord, ...] = (record,)
+            if record_input.windows:
                 try:
-                    record = crop_record_to_region(
+                    units = crop_record_windows(
                         record,
-                        replace(region, reverse_complement=region.reverse_complement or reverse),
+                        [window.region() for window in record_input.windows],
+                        reverse,
                         log=logger,
+                        circular=_drawn_circular(record_input.display, detected_topology(source_record, source_kind)),
                     )
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
@@ -1833,7 +1983,7 @@ def resolve_record_inputs(
                 else base_key
             )
             item = ResolvedRecordProvenance(
-                resolved_index=len(records),
+                resolved_index=len(pending),
                 input_index=input_index,
                 source_record_index=source_record_index,
                 source_record_count=len(raw_records),
@@ -1846,7 +1996,7 @@ def resolve_record_inputs(
                 record_key=record_key,
                 cardinality=record_input.cardinality,
                 selector=selector,
-                region=record_input.region,
+                region=None,
                 presentation=record_input.presentation,
                 display=record_input.display,
                 source_length=(source_record.annotations.get("gbdraw_source_length")
@@ -1856,26 +2006,11 @@ def resolve_record_inputs(
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
             )
-            _apply_record_key(record, record_key=record_key)
-            _apply_provenance_annotations(record, item)
-            records.append(record)
-            provenance.append(item)
-            pending_reverse.append(reverse)
-    collection_options = record_options or RecordCollectionOptions()
-    records, collection_cropped = _apply_collection_options(
-        records, provenance, collection_options, pending_reverse
-    )
-    provenance = [
-        replace(
-            item,
-            has_collection_region=index in collection_cropped,
-            presentation=effective_record_presentation(
-                item.presentation, collection_options, item.resolved_index
-            ),
-        )
-        for index, item in enumerate(provenance)
-    ]
-    return ResolvedRecordCollection(tuple(records), tuple(provenance))
+            for unit in units:
+                _apply_record_key(unit, record_key=record_key)
+                _apply_provenance_annotations(unit, item)
+            pending.append(_PendingRecord(units, item, tuple(record_input.windows), reverse))
+    return _expand_record_windows(pending, record_options or RecordCollectionOptions())
 
 
 def _normalized_cli_values(
@@ -1991,46 +2126,60 @@ def record_input_manifest_from_paths(
     )
 
 
+def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
+    """The record input of one records-table record: a row, or the rows that share a ``record_group`` (D-32)."""
+
+    first = record.first
+    source: RecordInputSource = (
+        GenBankInputSource(first.gbk) if first.gbk
+        else GffFastaInputSource(first.gff, first.fasta) if first.gff
+        else FastaInputSource(first.fasta)
+    )
+    windowed = record.is_windowed and len(record.rows) > 1
+    windows: tuple[RecordWindow, ...] = ()
+    if windowed:
+        # One table row per window, placed by its column (ties in table order).
+        ordered = sorted(record.rows, key=lambda row: (row.column is None, row.column or 0))
+        windows = tuple(
+            replace(
+                RecordWindow.from_region(spec := parse_region_spec(row.region), column=row.column),
+                reverse_complement=spec.reverse_complement or row.reverse_complement,
+            )
+            for row in ordered
+        )
+    topology = record.topology
+    return RecordInput(
+        source=source,
+        cardinality=RecordCardinality.EXACTLY_ONE,
+        selector=parse_record_selector(first.record_id),
+        display=RecordDisplayOptions(
+            is_circular=None if topology is None else topology == "circular",
+            start_coordinate=first.display_start,
+        ),
+        region=parse_region_spec(first.region) if first.region and not windowed else None,
+        windows=windows,
+        presentation=RecordPresentation(
+            label=record.record_label or None,
+            subtitle=record.record_subtitle or None,
+            reverse_complement=first.reverse_complement and not windowed,
+            grid_row=first.row,
+            grid_column=None if windowed else first.column,
+        ),
+        record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
+    )
+
+
 def record_input_manifest_from_table(path: str) -> RecordInputManifest:
-    """Translate one records table into exact-one unresolved row inputs."""
+    """Translate one records table into exact-one unresolved record inputs, one per record it draws."""
 
     table = read_records_table(path)
-    records: list[RecordInput] = []
-    source_paths: list[str] = []
-    for index, row in enumerate(table.rows):
-        source: RecordInputSource = (
-            GenBankInputSource(row.gbk) if row.gbk
-            else GffFastaInputSource(row.gff, row.fasta) if row.gff
-            else FastaInputSource(row.fasta)
-        )
-        source_paths.append(_source_details(source)[1][0])
-        records.append(
-            RecordInput(
-                source=source,
-                cardinality=RecordCardinality.EXACTLY_ONE,
-                selector=parse_record_selector(row.record_id),
-                display=RecordDisplayOptions(
-                    is_circular=None if row.topology is None else row.topology == "circular",
-                    start_coordinate=row.display_start,
-                ),
-                region=parse_region_spec(row.region) if row.region else None,
-                presentation=RecordPresentation(
-                    label=row.record_label or None,
-                    subtitle=row.record_subtitle or None,
-                    reverse_complement=row.reverse_complement,
-                    grid_row=row.row,
-                    grid_column=row.column,
-                ),
-                record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
-            )
-        )
+    records = [_records_table_input(record, index) for index, record in enumerate(table.records)]
     return RecordInputManifest(
         records=tuple(records),
         record_options=RecordCollectionOptions(),
-        source_paths=tuple(source_paths),
-        multi_record_positions=tuple(table.multi_record_positions()),
+        source_paths=tuple(_source_details(record.source)[1][0] for record in records),
         losat_gencodes=(
-            tuple(row.losat_gencode for row in table.rows)
+            tuple(record.losat_gencode for record in table.records)
             if any(row.losat_gencode is not None for row in table.rows)
             else ()
         ),
@@ -2076,7 +2225,11 @@ def _resolve_linear_comparison_selector(
     table_path: str,
     row_number: int,
     column: str,
-) -> int:
+) -> tuple[int, ...]:
+    """The drawn units of the record a comparisons-table selector names: ``#n`` counts records and a record ID
+    names the record whose units carry it (``drawn_record_units``); a record without windows is one unit."""
+
+    groups = drawn_record_units(records)
     if selector.startswith("#"):
         number = parse_ascii_integer(selector[1:].strip())
         if number is None:
@@ -2085,14 +2238,10 @@ def _resolve_linear_comparison_selector(
                 f"invalid record selector {selector!r}."
             )
         index = number - 1
-        if 0 <= index < len(records):
-            return index
+        if 0 <= index < len(groups):
+            return groups[index]
     else:
-        matches = [
-            index
-            for index, record in enumerate(records)
-            if str(record.id) == selector
-        ]
+        matches = [group for group in groups if any(str(records[index].id) == selector for index in group)]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
@@ -2232,23 +2381,24 @@ def resolve_linear_options(
     comparisons: list[LinearComparison] = []
     losat_pairs: list[tuple[int, int]] = []
     for row in table.rows:
-        query_index = _resolve_linear_comparison_selector(
+        query_units = _resolve_linear_comparison_selector(
             records,
             row.query,
             table_path=table.table_path,
             row_number=row.row_number,
             column="query",
         )
-        subject_index = _resolve_linear_comparison_selector(
+        subject_units = _resolve_linear_comparison_selector(
             records,
             row.subject,
             table_path=table.table_path,
             row_number=row.row_number,
             column="subject",
         )
+        query_index, subject_index = query_units[0], subject_units[0]
         query_row = int(rows_by_record[query_index])
         subject_row = int(rows_by_record[subject_index])
-        if query_index == subject_index:
+        if query_units == subject_units:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'subject': "
                 "query and subject resolved to the same record."
@@ -2265,8 +2415,16 @@ def resolve_linear_options(
                 f"{subject_row + 1} must be in {topology}."
             )
         if row.source == "losat":
-            losat_pairs.append((query_index, subject_index))
+            # A record drawn in windows is searched window by window against each window of the other (D-01).
+            losat_pairs.extend(comparison_unit_pairs(query_units, subject_units))
             continue
+        refuse_file_comparison_of_windows(
+            query_units,
+            subject_units,
+            records=(row.query, row.subject),
+            where=f"{table.table_path}: row {row.row_number}",
+            row=row.row_number,
+        )
         try:
             # The file's staged identity keys the stages that take its rows.
             matches = read_comparison_resource(row.blast)

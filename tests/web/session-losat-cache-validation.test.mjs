@@ -4,6 +4,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -569,7 +570,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     }
   };
   const committed = getCommittedCanonicalSession();
-  assert.equal(committed.renderRequest.schema, 9);
+  assert.equal(committed.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   const committedComparisons = committed.renderRequest.comparisons;
   assert.deepEqual(
     committedComparisons.map(({ resourceId: _id, ...comparison }) => comparison),

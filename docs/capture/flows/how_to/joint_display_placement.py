@@ -123,7 +123,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         # A drawings-layout Session keeps the request in the drawing it opens.
         (opened,) = [drawing for drawing in saved['drawings'] if drawing['id'] == saved['ui']['activeDrawingId']]
         request = opened['renderRequest']
-        assert saved['version'] == CURRENT_SESSION_VERSION and request['schema'] == 9
+        assert saved['version'] == CURRENT_SESSION_VERSION and request['schema'] == 10
         assert request['records'][0]['display']['startCoordinate'] == 5500
         assert request['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
         assert len(request['diagramOptions']['featurePlacements']) == 1

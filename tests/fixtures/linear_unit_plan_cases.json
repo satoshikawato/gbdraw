@@ -1,0 +1,358 @@
+{
+  "schema": 1,
+  "description": "The drawn units of a Linear request and the unit pairs of its record pairs, as Python plans them for the Web's comparison searches (gbdraw/web_support/linear_units.py plan_linear_units). Python checks the plan (tests/test_web_linear_units.py); the Web checks the searches and request indexes it runs from that plan (tests/web/linear-units.test.mjs).",
+  "cases": [
+    {
+      "id": "two-windows-against-a-whole-record",
+      "description": "A record drawn in two windows compared with a record drawn whole: each window is searched against the other record.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [
+            {
+              "start": 1,
+              "end": 150,
+              "reverseComplement": false,
+              "column": null
+            },
+            {
+              "start": 151,
+              "end": 300,
+              "reverseComplement": true,
+              "column": null
+            }
+          ]
+        },
+        {
+          "recordKey": "b",
+          "windows": []
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a~w1",
+            "recordKey": "a",
+            "windowOf": "a",
+            "window": {
+              "start": 1,
+              "end": 150,
+              "reverseComplement": false,
+              "searchRegion": "1-150"
+            }
+          },
+          {
+            "unitKey": "a~w2",
+            "recordKey": "a",
+            "windowOf": "a",
+            "window": {
+              "start": 151,
+              "end": 300,
+              "reverseComplement": true,
+              "searchRegion": "151-300"
+            }
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "pair": 0,
+            "queryUnit": 1,
+            "subjectUnit": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "windows-on-both-sides-and-a-cropped-record",
+      "description": "Windows on both records of a pair (every window against every window), then a record in one window, whose unit keeps the record key.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [
+            {
+              "start": 1,
+              "end": 150,
+              "reverseComplement": false,
+              "column": 1
+            },
+            {
+              "start": 151,
+              "end": 300,
+              "reverseComplement": false,
+              "column": 2
+            }
+          ]
+        },
+        {
+          "recordKey": "b",
+          "windows": [
+            {
+              "start": 10,
+              "end": 90,
+              "reverseComplement": false,
+              "column": null
+            },
+            {
+              "start": 200,
+              "end": 280,
+              "reverseComplement": false,
+              "column": null
+            }
+          ]
+        },
+        {
+          "recordKey": "c",
+          "windows": [
+            {
+              "start": 5,
+              "end": 250,
+              "reverseComplement": true,
+              "column": null
+            }
+          ]
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        },
+        {
+          "queryRecordKey": "b",
+          "subjectRecordKey": "c",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a~w1",
+            "recordKey": "a",
+            "windowOf": "a",
+            "window": {
+              "start": 1,
+              "end": 150,
+              "reverseComplement": false,
+              "searchRegion": "1-150"
+            }
+          },
+          {
+            "unitKey": "a~w2",
+            "recordKey": "a",
+            "windowOf": "a",
+            "window": {
+              "start": 151,
+              "end": 300,
+              "reverseComplement": false,
+              "searchRegion": "151-300"
+            }
+          },
+          {
+            "unitKey": "b~w1",
+            "recordKey": "b",
+            "windowOf": "b",
+            "window": {
+              "start": 10,
+              "end": 90,
+              "reverseComplement": false,
+              "searchRegion": "10-90"
+            }
+          },
+          {
+            "unitKey": "b~w2",
+            "recordKey": "b",
+            "windowOf": "b",
+            "window": {
+              "start": 200,
+              "end": 280,
+              "reverseComplement": false,
+              "searchRegion": "200-280"
+            }
+          },
+          {
+            "unitKey": "c",
+            "recordKey": "c",
+            "windowOf": null,
+            "window": {
+              "start": 5,
+              "end": 250,
+              "reverseComplement": true,
+              "searchRegion": "5-250"
+            }
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 3
+          },
+          {
+            "pair": 0,
+            "queryUnit": 1,
+            "subjectUnit": 2
+          },
+          {
+            "pair": 0,
+            "queryUnit": 1,
+            "subjectUnit": 3
+          },
+          {
+            "pair": 1,
+            "queryUnit": 2,
+            "subjectUnit": 4
+          },
+          {
+            "pair": 1,
+            "queryUnit": 3,
+            "subjectUnit": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "no-windows",
+      "description": "Records drawn whole: one unit per record, keyed like it, and one unit pair per record pair, uploads included.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": []
+        },
+        {
+          "recordKey": "b",
+          "windows": []
+        },
+        {
+          "recordKey": "c",
+          "windows": []
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        },
+        {
+          "queryRecordKey": "c",
+          "subjectRecordKey": "b",
+          "source": "upload"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a",
+            "recordKey": "a",
+            "windowOf": null,
+            "window": null
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          },
+          {
+            "unitKey": "c",
+            "recordKey": "c",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 1
+          },
+          {
+            "pair": 1,
+            "queryUnit": 2,
+            "subjectUnit": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "a-window-across-the-origin",
+      "description": "A circular record drawn in one window across its origin, reverse-complemented: the search reads the window from its start through the origin to its end (searchRegion with :origin), before the reverse complement.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [
+            {
+              "start": 250,
+              "end": 40,
+              "reverseComplement": true,
+              "column": null
+            }
+          ]
+        },
+        {
+          "recordKey": "b",
+          "windows": []
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a",
+            "recordKey": "a",
+            "windowOf": null,
+            "window": {
+              "start": 250,
+              "end": 40,
+              "reverseComplement": true,
+              "searchRegion": "250-40:origin"
+            }
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 1
+          }
+        ]
+      }
+    }
+  ]
+}

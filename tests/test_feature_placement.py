@@ -413,7 +413,7 @@ def test_request_crop_known_dormant_and_materialized_request_rebind(
         is plan.provenance[0].source_feature_catalog
     )
     restored = plan_request(
-        replace(request, records=(replace(request.records[0], region=None),))
+        replace(request, records=(replace(request.records[0], windows=()),))
     )
     assert (
         restored.inputs.record_features[0].foreground[0].biological_feature_id
@@ -717,6 +717,9 @@ def test_historical_reader_does_not_admit_placement_fields(tmp_path):
         payload = copy.deepcopy(encoded.payload)
         payload["schema"] = 6
         payload["records"][0].pop("display")
+        # Schema 6 records name their crop as one region (schema 10 writes windows).
+        payload["records"][0]["region"] = None
+        payload["records"][0].pop("windows")
         payload["diagramOptions"].pop("featurePlacements")
         payload["diagramOptions"][field] = []
         with pytest.raises(CanonicalRequestDecodingError, match="Unknown field"):
@@ -1287,6 +1290,9 @@ def test_historical_reader_does_not_admit_nondefault_tolerance(form, tmp_path):
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = 6
     payload["records"][0].pop("display")
+    # Schema 6 records name their crop as one region (schema 10 writes windows).
+    payload["records"][0]["region"] = None
+    payload["records"][0].pop("windows")
     payload["diagramOptions"].pop("featurePlacements")
     payload["diagramOptions"].pop("featureOverrides")
     payload["diagramOptions"][form] = (

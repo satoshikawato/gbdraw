@@ -13,7 +13,7 @@ const RECORDS = KEYS.map((recordKey) => ({ recordKey, cardinality: 'exactly_one'
 const committedSession = (layout = {}, starts = [null, null]) => ({
   renderRequest: { mode: 'linear', layout,
     records: KEYS.map((recordKey, index) => ({ recordKey, cardinality: 'exactly_one',
-      display: { isCircular: null, startCoordinate: starts[index] }, presentation: { reverseComplement: false } })) },
+      display: { isCircular: null, startCoordinate: starts[index] }, presentation: { reverseComplement: false }, windows: [] })) },
   resources: {}
 });
 // A linear human record moves below the rotated zebrafish record's left end.
@@ -121,7 +121,7 @@ test('validateFeatureAnchorReply admits the members of a File card that draws se
 // several records have no row of their own, so Resolve refuses such a reply with the reason.
 test('a reply for the members of a File card that draws several records is refused at Resolve with the reason', async () => {
   const committed = { renderRequest: { mode: 'linear', layout: {},
-    records: [{ recordKey: 'card', cardinality: 'all', display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false } }] }, resources: {} };
+    records: [{ recordKey: 'card', cardinality: 'all', display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false }, windows: [] }] }, resources: {} };
   const members = { selector: 'gene=COX1',
     records: [1, 2].map((k) => ({ recordKey: `card:${k}`, recordId: `R${k}`, status: 'rotated', startCoordinate: 10 * k, beforeX: 0, afterX: 0 })),
     recordTranslations: [1, 2].map((k) => ({ recordKey: `card:${k}`, x: 0, y: 0 })) };

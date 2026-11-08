@@ -372,12 +372,7 @@ def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str
 
     records = []
     for record in request.records:
-        reverse = reverse_by_key[cast(str, record.record_key)]
-        if record.region is not None:
-            records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
-                                   presentation=replace(record.presentation, reverse_complement=False)))
-        else:
-            records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
+        records.append(record.oriented(reverse_by_key[cast(str, record.record_key)]))
     return replace(request, records=tuple(records))
 
 
@@ -407,7 +402,10 @@ def _serialize_projection(context, candidates, raw_request):
         record_raw = raw["canonicalRequest"]["records"][index]
         binding_records.append({
             "record": {"recordKey": key, "source": record_raw["source"],
-                       "selector": record_raw["selector"], "region": record_raw["region"],
+                       "selector": record_raw["selector"],
+                       # Request schema 10 binds a record's windows; an older request its region, as it bound before.
+                       **({"windows": record_raw["windows"]} if "windows" in record_raw
+                          else {"region": record_raw["region"]}),
                        "display": {"isCircular": provenance.display.is_circular,
                                    "startCoordinate": provenance.display.start_coordinate},
                        "cardinality": provenance.cardinality.value},

@@ -6,7 +6,7 @@ They intentionally do not parse session documents or expose CLI argument names.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PureWindowsPath
 from typing import Literal, Sequence, TypeAlias, cast
@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.io.regions import RegionSpec
+from gbdraw.io.regions import RecordWindow, RegionSpec
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentPlan,
     SimilarityAlignmentReference,
@@ -215,19 +215,78 @@ class RecordDisplayOptions:
                 raise ValidationError("An explicit display start requires a circular record.")
 
 
-@dataclass(frozen=True)
+# The defaults of ``RecordInput``'s presentation and display: an input left at them gets a new value of its own.
+_NEW_PRESENTATION = RecordPresentation()
+_NEW_DISPLAY = RecordDisplayOptions()
+
+
+@dataclass(frozen=True, init=False)
 class RecordInput:
-    """A record source plus selection, region, and presentation metadata."""
+    """A record source plus selection, windows, and presentation metadata.
+
+    ``windows`` are the spans of the record drawn, each its own unit of a
+    Linear row (D-01); none draws the whole record. A record drawn as one unit
+    is placed by its presentation's ``grid_column``; the windows of a record
+    with several are placed by their own ``column``. ``region`` is not a
+    field: a region given at construction, with its optional record selector,
+    is read as one window (D-09); read back, ``region`` is that one window
+    named by the record's selector, ``None`` without windows, and an error
+    with several (D-20). Windows of one record may overlap (D-18).
+    ``dataclasses.replace`` copies ``windows``, never ``region``.
+    """
 
     source: RecordInputSource
     selector: RecordSelector | None = None
-    region: RegionSpec | None = None
     presentation: RecordPresentation = field(default_factory=RecordPresentation)
     record_key: str | None = None
     cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE
     display: RecordDisplayOptions = field(default_factory=RecordDisplayOptions)
+    windows: Sequence[RecordWindow] = ()
 
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        source: RecordInputSource,
+        selector: RecordSelector | None = None,
+        region: RegionSpec | None = None,
+        presentation: RecordPresentation = _NEW_PRESENTATION,
+        record_key: str | None = None,
+        cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE,
+        display: RecordDisplayOptions = _NEW_DISPLAY,
+        windows: Sequence[RecordWindow] = (),
+    ) -> None:
+        # The positional order of the fields before windows (D-09): ``region`` stays third. Each input left at its
+        # default gets its own presentation and display, as the fields' default factories give.
+        presentation = RecordPresentation() if presentation is _NEW_PRESENTATION else presentation
+        display = RecordDisplayOptions() if display is _NEW_DISPLAY else display
+        for name, value in (
+            ("source", source), ("selector", selector), ("presentation", presentation),
+            ("record_key", record_key), ("cardinality", cardinality), ("display", display), ("windows", windows),
+        ):
+            object.__setattr__(self, name, value)
+        self._validate(region)
+
+    @property
+    def region(self) -> RegionSpec | None:
+        """The one window as the region that gives it, named by the record's selector; ``None`` without windows."""
+
+        if not self.windows:
+            return None
+        if len(self.windows) > 1:
+            raise ValidationError(
+                "This record has several windows; read RecordInput.windows instead of region.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        span = self.windows[0].region()
+        if self.selector is None:
+            return span
+        return replace(
+            span,
+            raw=f"{self.selector.raw}:{span.raw}",
+            record_id=self.selector.record_id,
+            record_index=self.selector.record_index,
+        )
+
+    def _validate(self, region: RegionSpec | None) -> None:
         if not isinstance(
             self.source,
             (GenBankInputSource, GffFastaInputSource, FastaInputSource, InMemoryRecordSource),
@@ -259,19 +318,20 @@ class RecordInput:
                     "A record selector identifies one record and therefore requires "
                     "RecordCardinality.EXACTLY_ONE."
                 )
-        if self.region is not None:
-            if not isinstance(self.region, RegionSpec):
+        if region is not None:
+            if not isinstance(region, RegionSpec):
                 raise ValidationError("Record region has an unsupported type.")
-            if self.region.file_selector is not None:
+            if region.file_selector is not None:
                 raise ValidationError(
                     "A materialized RecordInput region must not contain a file selector."
                 )
-            if self.region.start < 1 or self.region.end < self.region.start:
+            # A start after the end is a span across the origin (``:origin``); the crop needs a circular record.
+            if region.start < 1 or region.end < 1:
                 raise ValidationError("Record region coordinates are invalid.")
-            if self.region.record_index is not None and self.region.record_index < 0:
+            if region.record_index is not None and region.record_index < 0:
                 raise ValidationError("Record region selector index must be non-negative.")
             region_selects_record = (
-                self.region.record_id is not None or self.region.record_index is not None
+                region.record_id is not None or region.record_index is not None
             )
             if self.selector is not None and region_selects_record:
                 raise ValidationError(
@@ -285,19 +345,65 @@ class RecordInput:
                     "A selector-qualified region identifies one record and therefore "
                     "requires RecordCardinality.EXACTLY_ONE."
                 )
-            if (
-                not region_selects_record
-                and self.cardinality is RecordCardinality.ALL
-            ):
-                raise ValidationError(
-                    "A selectorless per-input region cannot be combined with "
-                    "RecordCardinality.ALL; use request record_options for "
-                    "collection-level regions."
-                )
-            if self.region.reverse_complement and self.presentation.reverse_complement:
-                raise ValidationError(
-                    "Reverse complement is set in both the region and record presentation."
-                )
+            if self.windows:
+                raise ValidationError("Specify a record's span as a region or as windows, not both.", diagnostic={"code": "INPUT_INVALID"})
+            # The boundary adapter of D-09: a region is one window; a record
+            # selector in it selects the record.
+            if region_selects_record:
+                object.__setattr__(self, "selector", region.record_selector())
+            object.__setattr__(self, "windows", (RecordWindow.from_region(region),))
+        self._validate_windows()
+
+    @property
+    def is_reversed(self) -> bool:
+        """Whether the record is drawn reverse-complemented: by its presentation, or by its windows, all reversed."""
+
+        return self.presentation.reverse_complement or (
+            bool(self.windows) and all(window.reverse_complement for window in self.windows)
+        )
+
+    def oriented(self, reverse: bool) -> RecordInput:
+        """This input drawn in the absolute direction ``reverse``: on its windows when it has them, else on the record."""
+
+        if self.windows:
+            return replace(
+                self,
+                windows=tuple(replace(window, reverse_complement=reverse) for window in self.windows),
+                presentation=replace(self.presentation, reverse_complement=False),
+            )
+        return replace(self, presentation=replace(self.presentation, reverse_complement=reverse))
+
+    def _validate_windows(self) -> None:
+        if isinstance(self.windows, (str, bytes)) or not isinstance(self.windows, Sequence):
+            raise ValidationError("Record windows must be a sequence of RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
+        windows = tuple(self.windows)
+        if not all(isinstance(window, RecordWindow) for window in windows):
+            raise ValidationError("Record windows must contain RecordWindow values.", diagnostic={"code": "INPUT_INVALID"})
+        object.__setattr__(self, "windows", windows)
+        if not windows:
+            return
+        if self.selector is None and self.cardinality is RecordCardinality.ALL:
+            raise ValidationError(
+                "A selectorless per-input region cannot be combined with "
+                "RecordCardinality.ALL; use request record_options for "
+                "collection-level regions.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        # A record drawn as one unit is placed by its presentation; a record with several windows places each
+        # window by its own column (D-08).
+        if len(windows) == 1 and windows[0].column is not None:
+            raise ValidationError("A record with one window is placed by its presentation's grid_column.", diagnostic={"code": "INPUT_INVALID"})
+        if len(windows) > 1 and self.presentation.grid_column is not None:
+            raise ValidationError("A record with several windows places each window by its own column.", diagnostic={"code": "INPUT_INVALID"})
+        if self.presentation.reverse_complement and (
+            len(windows) > 1 or windows[0].reverse_complement
+        ):
+            raise ValidationError(
+                "Reverse complement is set in both the region and record presentation."
+                if len(windows) == 1
+                else "A record with several windows reverse-complements each window, not the record.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
 
 
 @dataclass(frozen=True)
@@ -361,6 +467,15 @@ def _contains_ascii_control(value: str) -> bool:
 # filesystems.
 # A File card (RecordCardinality.ALL) that expands names its records "<card key>:<position>".
 EXPANDED_RECORD_KEY_SEPARATOR = ":"
+# A record with several windows draws each as a unit keyed "<record key>~w<window number>" (D-01); a record with one
+# window draws one unit with the record's own key.
+WINDOW_UNIT_KEY_SEPARATOR = "~w"
+
+
+def window_unit_key(record_key: str, window_index: int, window_count: int) -> str:
+    """The key of the drawn unit of one window of the record ``record_key`` (the one owner of that key)."""
+
+    return record_key if window_count == 1 else f"{record_key}{WINDOW_UNIT_KEY_SEPARATOR}{window_index + 1}"
 _OUTPUT_PREFIX_MAX_BYTES = 200
 
 
@@ -517,6 +632,16 @@ def _request_records(records: Sequence[RecordInput]) -> tuple[RecordInput, ...]:
     return normalized
 
 
+def _circular_request_records(records: Sequence[RecordInput]) -> tuple[RecordInput, ...]:
+    normalized = _request_records(records)
+    if any(len(record.windows) > 1 for record in normalized):
+        # Windows of one record share a Linear row (D-01); a Circular record is drawn whole or as one span.
+        raise ValidationError(
+            "A Circular diagram draws one window of a record at most; several windows are Linear.", diagnostic={"code": "INPUT_INVALID"}
+        )
+    return normalized
+
+
 def _validate_circular_placements(
     records: Sequence[RecordInput],
     *,
@@ -571,21 +696,27 @@ def _validate_linear_placements(
             "expanded records inherit only the source card's grid_row."
         )
     placements = [record.presentation for record in records]
+    # The cells a record takes: one per window of a record with several (D-08), else its own.
+    cells = [
+        (record.presentation.grid_row, column)
+        for record in records
+        for column in (
+            [window.column for window in record.windows]
+            if len(record.windows) > 1
+            else [record.presentation.grid_column]
+        )
+    ]
     has_row = any(item.grid_row is not None for item in placements)
-    has_column = any(item.grid_column is not None for item in placements)
+    has_column = any(column is not None for _row, column in cells)
     if not has_row:
         return
     if layout is None:
         raise ValidationError("Grid placement requires a Linear layout.")
     if any(item.grid_row is None for item in placements):
         raise ValidationError("If one Linear record has grid_row, every record must have it.")
-    if has_column and any(item.grid_column is None for item in placements):
+    if has_column and any(column is None for _row, column in cells):
         raise ValidationError("If one Linear record has grid_column, every record must have it.")
-    occupied = [
-        (item.grid_row, item.grid_column)
-        for item in placements
-        if item.grid_column is not None
-    ]
+    occupied = [cell for cell in cells if cell[1] is not None]
     if len(set(occupied)) != len(occupied):
         raise ValidationError("Linear record grid placements must be unique.")
     if layout.multi_record_positions:
@@ -625,7 +756,7 @@ class CircularDiagramRequest:
     )
 
     def __post_init__(self) -> None:
-        records = _request_records(self.records)
+        records = _circular_request_records(self.records)
         object.__setattr__(self, "records", records)
         object.__setattr__(
             self,
@@ -690,7 +821,7 @@ class CircularBatchRequest:
     )
 
     def __post_init__(self) -> None:
-        records = _request_records(self.records)
+        records = _circular_request_records(self.records)
         object.__setattr__(self, "records", records)
         object.__setattr__(
             self,

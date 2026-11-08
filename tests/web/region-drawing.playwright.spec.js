@@ -89,9 +89,10 @@ test('OV-2489: after a Session Load without Generate the dialog offers the drawi
   }
 });
 
-test('Coordinates that start after their end are refused with the reason, Create stays disabled, and no drawing is added', async ({ browser }) => {
+test('Coordinates that start after their end are refused on a linear record with the reason, Create stays disabled, and no drawing is added', async ({ browser }) => {
   test.setTimeout(300_000);
-  const page = await load(browser, seeds.circular);
+  // Lambda (NC_001416) is a linear record: a start after the end names no span.
+  const page = await load(browser, seeds.linear);
   try {
     const ids = await drawingIds(page);
     const steps = await undoLabels(page);
@@ -99,13 +100,39 @@ test('Coordinates that start after their end are refused with the reason, Create
     await chooseCoordinates(dialog, 5000, 100);
     await expect.poll(() => regionStatus(page), { timeout: 60_000 }).toBe('refused');
     const message = dialog.locator('[data-region-drawing-message]');
-    await expect(message).toBeVisible();
-    await expect(message).not.toHaveText('');
+    await expect(message).toHaveText('Choose a start before the end.');
     await expect(dialog.locator('[data-region-drawing-create]')).toBeDisabled();
     await dialog.locator('[data-region-drawing-cancel]').click();
     await expect(dialog).toHaveCount(0);
     expect(await drawingIds(page)).toEqual(ids);
     expect(await undoLabels(page)).toEqual(steps);
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('Coordinates across the origin of a circular record make one window across it, which Generate draws', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    const [source] = await drawingIds(page);
+    const dialog = await openRegionDialog(page);
+    await chooseCoordinates(dialog, 16000, 100);
+    await expect.poll(() => regionStatus(page), { timeout: 60_000 }).toBe('derived');
+    await dialog.locator('[data-region-drawing-create]').click();
+    await expect(dialog).toHaveCount(0);
+    const [added] = (await drawingIds(page)).filter((id) => id !== source);
+    expect(await shownDrawing(page)).toEqual({ id: added, kind: 'linear' });
+    // The card holds the window in its read-only list: its Start/End fields would read 16,000-100 as reversed.
+    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100/]);
+    await generate(page);
+    // Once the record is read, the row gives the bases it draws across the origin of the 16,569 bp record.
+    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100\s*670 bp$/]);
+    const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
+    expect(drawn).toHaveLength(1);
+    // The record group carries the drawn span: it ends before it starts, across the origin.
+    expect(drawn[0]).toContain('data-gbdraw-record-source-start="16000"');
+    expect(drawn[0]).toContain('data-gbdraw-record-source-end="100"');
   } finally {
     await page.context().close();
   }

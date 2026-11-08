@@ -46,6 +46,30 @@ def _admission_problems(session: dict[str, Any]) -> list[str]:
     return violations(session, ADMISSION_TYPES[ADMISSION_ROOT[session["version"]]], ADMISSION_TYPES, "session")
 
 
+def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
+    """A Session up to 50 as the current description reads it: its schema 9 requests, one ``region`` per record, as
+    schema 10 (``two_mode_session`` stores schema 9 requests).
+
+    The description is of the current request; a Session 50 stores the request of its own time, which the readers
+    accept (``tests/test_session_request_codec.py``).
+    """
+
+    session = deepcopy(session)
+    requests = [session.get("renderRequest"), (session.get("otherModeResult") or {}).get("renderRequest")]
+    for request in requests:
+        if not isinstance(request, dict) or request["schema"] != 9:
+            continue
+        request["schema"] = 10
+        for record in request["records"]:
+            region = record.pop("region")
+            record["windows"] = (
+                []
+                if region is None
+                else [{**{key: region[key] for key in ("start", "end", "reverseComplement")}, "column": None}]
+            )
+    return session
+
+
 def _stored_sessions() -> Iterator[tuple[str, dict[str, Any]]]:
     for path in stored_json_files():
         value = load_json(path)
@@ -57,7 +81,9 @@ def test_stored_sessions_of_the_current_version_match_the_description() -> None:
     """The Web wrote the Gallery Sessions; the CLI and the Python API wrote the documentation Sessions."""
 
     current = {
-        name: _problems(session) if session["version"] == MODE_SCOPED_SESSION_MAX_VERSION else _admission_problems(session)
+        name: _problems(_with_current_request(session))
+        if session["version"] == MODE_SCOPED_SESSION_MAX_VERSION
+        else _admission_problems(session)
         for name, session in _stored_sessions()
         if session.get("version") in (MODE_SCOPED_SESSION_MAX_VERSION, CURRENT_SESSION_VERSION)
     }
@@ -99,7 +125,7 @@ def test_a_document_built_from_a_request_matches_the_description(mode: str) -> N
 
 
 def test_a_session_with_a_result_set_of_each_mode_matches_the_description() -> None:
-    session = two_mode_session()
+    session = _with_current_request(two_mode_session())
     validate_session(session)
 
     assert _problems(session) == []
@@ -134,7 +160,7 @@ def _closed_objects(value: object, shape: dict[str, Any], path: tuple[str | int,
 
 
 def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
-    edited = two_mode_session()
+    edited = _with_current_request(two_mode_session())
     edited["legacyArtifacts"] = {}
     edited["modes"]["circular"].setdefault("features", {})["featureOverrides"] = {
         '["record-1","feature-1"]': {
@@ -151,7 +177,8 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
     }
     validate_session(edited)
     sessions = [edited, *(
-        session for _name, session in _stored_sessions() if session.get("version") == MODE_SCOPED_SESSION_MAX_VERSION
+        _with_current_request(session)
+        for _name, session in _stored_sessions() if session.get("version") == MODE_SCOPED_SESSION_MAX_VERSION
     )]
     reached: set[str] = set()
     for session in sessions:
@@ -172,7 +199,7 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
 
 
 def test_an_open_object_takes_other_keys() -> None:
-    session = two_mode_session()
+    session = _with_current_request(two_mode_session())
     for field in ("ui", "editorState", "orthogroupState", "webFiles"):
         assert TYPES[ROOT["fields"][field]["name"]]["open"], field
         session[field] = {**session.get(field, {}), "keyOnlyTheWebReads": 1}

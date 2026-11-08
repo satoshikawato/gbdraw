@@ -2302,7 +2302,7 @@ def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
     one = Path("tests/test_inputs/NC_001416.gb").read_bytes()
 
     def record(index: int) -> dict[str, object]:
-        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "region": None,
+        return {"recordKey": f"record-{index}", "cardinality": "all", "selector": None, "windows": [],
                 "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
 
     session = {
@@ -2326,7 +2326,7 @@ def test_refresh_stores_the_only_record_of_a_circular_source_without_selector() 
 
     def record(index: int, value: str) -> dict[str, object]:
         return {"recordKey": f"record-{index}", "cardinality": "exactly_one",
-                "selector": {"kind": "recordId", "value": value}, "region": None,
+                "selector": {"kind": "recordId", "value": value}, "windows": [],
                 "source": {"kind": "genbank", "resourceId": f"record-{index}-genbank"}}
 
     session = {

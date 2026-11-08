@@ -114,14 +114,23 @@ export const annotationRecordValue = (catalog, annotation) => {
  * Generate) binds by a key no catalog record has (a catalog key ends in a JSON array; this one is a JSON object), so
  * its row's target is unavailable as any row's whose record is gone, and Generate refuses it until the row is deleted
  * or rebound, never binding it by selector to another record (OV-2631, D-57); the live draw still names the record.
- * @param {readonly Pick<RegionAxisRecord, 'recordKey' | 'recordId' | 'recordIndex'>[]} axisRecords The Result's records.
+ * A `#n` selector counts records, not drawn units: the windows of a record drawn in several are one record (I-6), so
+ * a record's number is its unit's index less the later windows drawn before it.
+ * @param {readonly Pick<RegionAxisRecord, 'recordKey' | 'recordId' | 'recordIndex' | 'windowIndex'>[]} axisRecords The
+ *   Result's records.
  * @param {readonly RecordSettingsOwner[]} owners The drawing's record settings owners.
  * @returns {ResultRecordBindings}
  */
 export const resultRecordBindings = (axisRecords, owners) => {
-  const drawn = [...new Map(axisRecords.map((record) => [record.recordKey, record])).values()]
-    .sort((a, b) => a.recordIndex - b.recordIndex);
-  const named = withRecordSelectors(drawn.map(({ recordKey, recordId, recordIndex }) => ({ recordKey, recordId, selector: `#${recordIndex + 1}` })));
+  // Each record once, by its first drawn unit.
+  const drawn = [...axisRecords].sort((a, b) => a.recordIndex - b.recordIndex)
+    .filter((record, index, sorted) => sorted.findIndex((other) => other.recordKey === record.recordKey) === index);
+  /** @param {number} recordIndex */
+  const recordNumber = (recordIndex) => recordIndex + 1
+    - axisRecords.filter((unit) => Boolean(unit.windowIndex) && unit.recordIndex < recordIndex).length;
+  const named = withRecordSelectors(drawn.map(({ recordKey, recordId, recordIndex }) => ({
+    recordKey, recordId, selector: `#${recordNumber(recordIndex)}`
+  })));
   /** @param {string} recordKey */
   const bindingKeyOf = (recordKey) => bindingKeyOfRequestRecord(owners, recordKey) || JSON.stringify({ resultRecord: recordKey });
   return {

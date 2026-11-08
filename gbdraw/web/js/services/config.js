@@ -105,7 +105,8 @@ import {
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
-  readStoredRenderRequest
+  readStoredRenderRequest,
+  linearWindowsPayload
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -302,6 +303,8 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
+import { drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
+/** @import { LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -4140,7 +4143,7 @@ export const assertDrawingInputs = (drawing) => {
 // `sequences`: the drawn record files, in request order. `cards`: every
 // Linear card, OFF cards included; an error names its card number among them.
 /**
- * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown }} S
+ * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: unknown }} S
  * @param {S[]} sequences
  * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
  *   records?: { sourceIndex?: unknown }[] } | null | undefined} catalog
@@ -4173,7 +4176,7 @@ export const materializeLinearRecordFiles = (
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
-    );
+    ) || (Array.isArray(source.windows) && source.windows.length > 0);
     if (hasRegion) {
       throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
@@ -4261,7 +4264,8 @@ export const serializeActiveRenderFiles = async (
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
-      region_reverse: !!seq.region_reverse
+      region_reverse: !!seq.region_reverse,
+      windows: seq.windows.map((window) => ({ ...window }))
     }))
   );
   const optionBag = comparisonPlanOrOptions
@@ -5026,7 +5030,7 @@ const applyFiles = (filesData, {
   if (canonicalCircularRecords.length > 0) {
     targetState.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
       .map((record, index) => {
-        const selector = record?.region?.selector || record?.selector;
+        const selector = record?.selector;
         const selectorValue = selector?.kind === 'recordId'
           ? String(selector.value || '')
           : selector?.kind === 'recordIndex'
@@ -6298,6 +6302,7 @@ const artifactUiState = (view) => ({
  *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
+ *   planLinearUnits: DraftRequestFacts['planLinearUnits'],
  *   recordDisplayRows?: any,
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
@@ -6364,7 +6369,7 @@ const exportSessionDocument = async (
   titleOverride = null,
   {
     askChoice = async () => 'cancel',
-    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written,
+    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written, planLinearUnits,
     activeDrawingId, projectUi, isCurrent
   }
 ) => {
@@ -6436,7 +6441,7 @@ const exportSessionDocument = async (
     // request (`exportSession` decides it once).
     if (!committed && draftRequest) {
       committed = (await projectDraftRequest(state, saved, {
-        linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys
+        linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys, planLinearUnits
       })).envelope;
     }
     // The pairs belong to the committed request; a draft request names none (D-15-124).
@@ -6900,12 +6905,23 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * @property {ReadonlyMap<string, InputFileRef>} filesByResource
  */
 /**
+ * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout),
+ * for the drawn-unit plan (`planLinearUnitSearch`) of the draft request and of the LOSAT job estimate.
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown } }} drawing
+ * @returns {LinearUnitWindowsOf}
+ */
+export const linearDrawingWindowsOf = (drawing) => (card) => linearWindowsPayload(card,
+  { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+/**
  * The facts of a drawing's draft request that the app holds: the Linear
- * record catalog, the record display rows, and the annotation records left out.
+ * record catalog, the record display rows, and the annotation records left
+ * out; and the runner of the Worker helper that plans a Linear drawing's drawn
+ * units, which the request asks when a card draws several windows.
  * @typedef {object} DraftRequestFacts
  * @property {unknown} linearRecordCatalog
  * @property {readonly unknown[]} recordDisplayRows
  * @property {string[]} omittedAnnotationRecordKeys
+ * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
  */
 /**
  * Projects a drawing's inputs and settings to its draft request, as Save
@@ -6915,8 +6931,10 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * @param {DraftRequestFacts} facts
  * @returns {Promise<ProjectedDraftRequest>}
  */
-export const projectDraftRequest = async (sourceState, drawing, { linearRecordCatalog, recordDisplayRows, omittedAnnotationRecordKeys }) => {
-  const comparisonPlanSnapshot = drawing.mode === 'linear'
+export const projectDraftRequest = async (sourceState, drawing, {
+  linearRecordCatalog, recordDisplayRows, omittedAnnotationRecordKeys, planLinearUnits
+}) => {
+  const cardPlan = drawing.mode === 'linear'
     ? resolveLinearComparisonPlan({
         plan: drawing.linearComparisonPlan,
         sequences: normalizeLinearSeqList(drawing.linearSeqs),
@@ -6939,7 +6957,12 @@ export const projectDraftRequest = async (sourceState, drawing, { linearRecordCa
     }
   };
   const activeFiles = await serializeActiveRenderFiles({ inputFiles: reading }, drawing,
-    { comparisonPlan: comparisonPlanSnapshot, linearRecordCatalog });
+    { comparisonPlan: cardPlan, linearRecordCatalog });
+  // The request writes the indexes of the drawn units, as Generate writes them (OV-2738).
+  const comparisonPlanSnapshot = cardPlan?.hasComparisonIntent === true && drawsSeveralUnits(drawing.drawnLinearSeqs.value)
+    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingWindowsOf(drawing),
+      planLinearUnits)).resolution
+    : cardPlan;
   const envelope = buildCanonicalRenderRequest({
     state: sourceState, drawing, filesData: activeFiles, recordDisplayRows, comparisonPlanSnapshot,
     omittedAnnotationRecordKeys, omitUnsourcedDepth: true
@@ -8488,6 +8511,7 @@ export const disposeSessionOperations = () => {
  * What the composition root passes to `exportSession`.
  * @typedef {object} SessionSaveOptions
  * @property {() => DrawingState} shownDrawing
+ * @property {DraftRequestFacts['planLinearUnits']} planLinearUnits Runs the Worker helper that plans drawn units.
  * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]

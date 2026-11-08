@@ -93,10 +93,16 @@ from gbdraw.features.placement import (
 )
 from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
-from gbdraw.io.regions import RegionSpec
+from gbdraw.io.regions import RecordWindow, RegionSpec, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import (
+    WINDOW_OF_ANNOTATION,
+    _read_coord_map,
+    _record_source_start,
+    _source_period,
+    _wrap_source_base,
+)
 from gbdraw.linear_comparison import (
     LinearComparison,
     reverse_endpoint_table_text,
@@ -186,11 +192,13 @@ if TYPE_CHECKING:
     from .api.options import LosatpMode
 
 
-CANONICAL_REQUEST_SCHEMA = 9
+CANONICAL_REQUEST_SCHEMA = 10
 DISPLAY_PLACEMENT_SCHEMA = 7
 FEATURE_OVERRIDE_SCHEMA = 9
+# Schema 10 writes a record's spans as ``windows`` (D-01); earlier schemas wrote one ``region``, read as one window.
+RECORD_WINDOWS_SCHEMA = 10
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
-    {1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA}
+    {1, 2, 5, 6, 7, 8, 9, CANONICAL_REQUEST_SCHEMA}
 )
 UNKNOWN_FIELD_POLICY = "reject"
 
@@ -1061,6 +1069,11 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
     base, step = _read_coord_map(record)
     length = len(record)
     source_length = annotations.get("gbdraw_source_length", length)
+    period = _source_period(record)
+    if period is not None and annotations.get("gbdraw_region_applied"):
+        # A crop across the origin (D-28): its span starts after it ends.
+        first = _record_source_start(record)
+        return (first, _wrap_source_base(first + length - 1, period)), step < 0
     first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
     if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
         return None
@@ -1078,22 +1091,28 @@ def _source_file_transforms(
 
     The planner annotates each record it reads with its source kind and its
     index among the file's records. Returns ``None`` unless each record of
-    the files is drawn at most once and each is the file's record. Only when
-    ``per_record`` allows it may some records of the files be left undrawn,
+    the files is drawn once and each is the file's record. Only when
+    ``per_record`` allows it may some records of the files be left undrawn or
+    drawn by several records (each with its own selector and window, OV-2716),
     or a record be cropped or reverse-complemented.
     """
 
     annotations = [record.annotations for record in records]
     kind = annotations[0].get("gbdraw_source_kind")
     count = annotations[0].get("gbdraw_source_record_count")
-    indexes = sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
+    # The windows of one record draw that record once (D-01).
+    indexes = sorted(
+        {
+            item.get(WINDOW_OF_ANNOTATION) or position: item.get("gbdraw_source_record_index", -1)
+            for position, item in enumerate(annotations)
+        }.values()
+    )
     if not (
         len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
         and isinstance(count, int)
         and all(Path(path).is_file() for path in paths)
         and (indexes == list(range(count)) or (
             per_record
-            and len(set(indexes)) == len(indexes)
             and 0 <= indexes[0]
             and indexes[-1] < count
         ))
@@ -1111,23 +1130,6 @@ def _source_file_transforms(
     return cast("list[tuple[tuple[int, int] | None, bool]]", found)
 
 
-def _source_region(
-    span: tuple[int, int], reverse: bool, selector: RecordSelector | None
-) -> RegionSpec:
-    """A source-coordinate crop of the selected record, reverse-complemented when drawn so."""
-
-    coordinates = f"{span[0]}-{span[1]}" + (":rc" if reverse else "")
-    return RegionSpec(
-        raw=f"{selector.raw}:{coordinates}" if selector is not None else coordinates,
-        file_selector=None,
-        record_id=selector.record_id if selector is not None else None,
-        record_index=selector.record_index if selector is not None else None,
-        start=span[0],
-        end=span[1],
-        reverse_complement=reverse,
-    )
-
-
 def _encode_records(
     records: Sequence[RecordInput],
     *,
@@ -1139,7 +1141,7 @@ def _encode_records(
     The planner projects each displayed record to an in-memory record. When
     they are records of their source file, each drawn once, that file's own
     bytes are the resource, and each record's crop (in source coordinates) and
-    orientation are its region and reverse complement, as the Web writes them:
+    orientation are its window and reverse complement, as the Web writes them:
     the CLI binds the same file for the Web draft, so Session Load sees the
     request draw from its bound inputs. ``per_record`` says whether the Web
     draft selects, crops, and orients each record (every Linear record, and a
@@ -1161,6 +1163,8 @@ def _encode_records(
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
+    # The positions after the first of a record's windows: their windows are written on the first (D-01).
+    absorbed: set[int] = set()
     for position, record in enumerate(records):
         if isinstance(record.source, InMemoryRecordSource):
             paths = record_source_paths(record.source.record)
@@ -1225,15 +1229,26 @@ def _encode_records(
             if found is not None:
                 span, reverse = found[offset]
                 record = records[position]
-                transformed[position] = replace(
-                    record,
-                    region=None if span is None else _source_region(span, reverse, selector),
-                    presentation=replace(
-                        record.presentation, reverse_complement=reverse and span is None
-                    ),
-                )
-                # A crop names its record in the region, as the Web writes it.
-                selector = selector if span is None else None
+                window_of = members_records[offset].annotations.get(WINDOW_OF_ANNOTATION)
+                if window_of is not None:
+                    # The units of a record with windows are written back as that record with its windows.
+                    if position in absorbed:
+                        continue
+                    units = [
+                        (other, found[index])
+                        for index, other in enumerate(members)
+                        if members_records[index].annotations.get(WINDOW_OF_ANNOTATION) == window_of
+                    ]
+                    absorbed.update(other for other, _found in units[1:])
+                    transformed[position] = _record_of_units(records, units, record_key=str(window_of))
+                else:
+                    transformed[position] = replace(
+                        record,
+                        windows=() if span is None else (RecordWindow(span[0], span[1], reverse),),
+                        presentation=replace(
+                            record.presentation, reverse_complement=reverse and span is None
+                        ),
+                    )
             shared[position] = (source_payload, selector)
     payloads = [
         _encode_record(
@@ -1243,6 +1258,7 @@ def _encode_records(
             shared_source=shared.get(position),
         )
         for position, record in enumerate(records)
+        if position not in absorbed
     ]
     frames = tuple(
         (len(record.source.record), True)
@@ -1253,6 +1269,27 @@ def _encode_records(
         for position, record in enumerate(records)
     )
     return payloads, frames
+
+
+def _record_of_units(
+    records: Sequence[RecordInput],
+    units: Sequence[tuple[int, tuple[tuple[int, int] | None, bool]]],
+    *,
+    record_key: str,
+) -> RecordInput:
+    """The record whose drawn units are ``units`` (position, (source span, reversed)), with one window per unit."""
+    first = records[units[0][0]]
+    return replace(
+        first,
+        record_key=record_key,
+        windows=tuple(
+            # A unit is placed by its window's column (D-08).
+            RecordWindow(span[0], span[1], reverse, records[position].presentation.grid_column)
+            for position, (span, reverse) in units
+            if span is not None
+        ),
+        presentation=replace(first.presentation, reverse_complement=False, grid_column=None),
+    )
 
 
 def _encode_record(
@@ -1288,9 +1325,34 @@ def _encode_record(
         "display": _encode_record_display(record.display),
         "source": source_payload,
         "selector": _encode_selector(selector),
-        "region": _encode_region(record.region),
+        "windows": [_encode_window(window) for window in record.windows],
         "presentation": _encode_record_presentation(record.presentation),
     }
+
+
+def _encode_window(window: RecordWindow) -> dict[str, Any]:
+    return {
+        "start": window.start,
+        "end": window.end,
+        "reverseComplement": window.reverse_complement,
+        "column": window.column,
+    }
+
+
+def _decode_windows(value: object, *, path: str) -> tuple[RecordWindow, ...]:
+    if not isinstance(value, list):
+        raise CanonicalRequestDecodingError(f"{path} must be an array.")
+    windows = []
+    for index, item in enumerate(value):
+        window_path = f"{path}[{index}]"
+        window = _object(item, path=window_path, required={"start", "end", "reverseComplement", "column"})
+        windows.append(RecordWindow(
+            _integer(window["start"], f"{window_path}.start"),
+            _integer(window["end"], f"{window_path}.end"),
+            _boolean(window["reverseComplement"], f"{window_path}.reverseComplement"),
+            _optional_integer(window["column"], f"{window_path}.column"),
+        ))
+    return tuple(windows)
 
 
 def _encode_record_display(display: RecordDisplayOptions) -> dict[str, Any]:
@@ -1329,7 +1391,7 @@ def _decode_record(
     resource_paths: Mapping[str, str | Path],
 ) -> RecordInput:
     path = f"renderRequest.records[{index - 1}]"
-    required = {"source", "selector", "region", "presentation"}
+    required = {"source", "selector", "windows" if schema >= RECORD_WINDOWS_SCHEMA else "region", "presentation"}
     if schema >= 2:
         required.add("recordKey")
     if schema >= 6:
@@ -1391,7 +1453,8 @@ def _decode_record(
             else legacy_record_cardinality(mode, item)
         ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
-        region=_decode_region(item["region"], path=f"{path}.region"),
+        region=None if schema >= RECORD_WINDOWS_SCHEMA else _decode_region(item["region"], path=f"{path}.region"),
+        windows=_decode_windows(item["windows"], path=f"{path}.windows") if schema >= RECORD_WINDOWS_SCHEMA else (),
         presentation=presentation,
         display=display,
         record_key=(
@@ -1438,22 +1501,55 @@ def _decode_selector(value: object, *, path: str) -> RecordSelector | None:
     raise CanonicalRequestDecodingError(f"Unsupported selector kind at {path}: {kind!r}.")
 
 
-def _encode_region(region: RegionSpec | None) -> dict[str, Any] | None:
-    if region is None:
-        return None
-    selector: dict[str, Any] | None
-    if region.record_id is not None:
-        selector = {"kind": "recordId", "value": region.record_id}
-    elif region.record_index is not None:
-        selector = {"kind": "recordIndex", "index": region.record_index}
-    else:
-        selector = None
-    return {
-        "selector": selector,
-        "start": region.start,
-        "end": region.end,
-        "reverseComplement": region.reverse_complement,
-    }
+class StoredRecordWindow(TypedDict):
+    """One window of a stored request record, as schema 10 writes it."""
+
+    start: object
+    end: object
+    reverseComplement: object
+    column: object
+
+
+def stored_record_windows(record: Mapping[str, Any]) -> list[StoredRecordWindow]:
+    """The windows of a stored request record of any schema, as schema 10 writes them.
+
+    The one reader of a record's spans in a stored payload that is not decoded
+    (Session hash and receipt readers): schema 10 writes ``windows``; a schema
+    <= 9 ``region`` is one window, read as :func:`_decode_record` reads it. The
+    values are as stored; the request decode validates them.
+    """
+
+    windows = record.get("windows")
+    if isinstance(windows, list):
+        return [
+            StoredRecordWindow(
+                start=item.get("start"),
+                end=item.get("end"),
+                reverseComplement=item.get("reverseComplement"),
+                column=item.get("column"),
+            )
+            for item in windows
+            if isinstance(item, Mapping)
+        ]
+    region = record.get("region")
+    if isinstance(region, Mapping):
+        return [
+            StoredRecordWindow(
+                start=region.get("start"),
+                end=region.get("end"),
+                reverseComplement=region.get("reverseComplement"),
+                column=None,
+            )
+        ]
+    return []
+
+
+def legacy_region_span(start: int, end: int, reverse: bool) -> tuple[int, int, bool]:
+    """The span a schema <= 9 ``region`` draws: one whose start is greater than its end is the reversed span, as
+    the Web read it in v0.14.5; only a schema 10 window whose start is after its end crosses the origin. The Web's
+    reader is ``promoteRecordRegionsToWindows``."""
+
+    return (end, start, True) if start > end else (start, end, reverse)
 
 
 def _decode_region(value: object, *, path: str) -> RegionSpec | None:
@@ -1468,8 +1564,9 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     start = _integer(region["start"], f"{path}.start")
     end = _integer(region["end"], f"{path}.end")
     reverse = _boolean(region["reverseComplement"], f"{path}.reverseComplement")
+    start, end, reverse = legacy_region_span(start, end, reverse)
     selector_text = selector.raw if selector is not None else ""
-    coordinate_text = f"{start}-{end}" + (":rc" if reverse else "")
+    coordinate_text = region_text(start, end, reverse)
     raw = f"{selector_text}:{coordinate_text}" if selector_text else coordinate_text
     return RegionSpec(
         raw=raw,
@@ -5844,23 +5941,22 @@ def describe_canonical_request() -> dict[str, Any]:
     data(RecordPresentation, defaults={
         _camel(item.name): getattr(RecordPresentation(), item.name) for item in fields(RecordPresentation)
     })
-    region_hints = _class_type_hints(RegionSpec)
-    region = named("RecordRegion", obj({  # _encode_region
-        "selector": nullable(selector),
-        "start": of(region_hints["start"]),
-        "end": of(region_hints["end"]),
-        "reverseComplement": of(region_hints["reverse_complement"]),
-    }))
+    # _encode_window: RecordWindow.__post_init__ checks positive coordinates and columns.
+    data(RecordWindow, replace={
+        "start": bound(RecordWindow, "start", minimum=1),
+        "end": bound(RecordWindow, "end", minimum=1),
+        "column": bound(RecordWindow, "column", minimum=1),
+    })
     # A request has a record (validate_render_request); RecordInput.__post_init__
     # refuses a blank record key.
     records = bounded(array(data(RecordInput, "Record", replace={
         "source": source,
-        "region": nullable(region),
         "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
     }, defaults={
         "display": _encode_record_display(RecordDisplayOptions()),
         "presentation": _encode_record_presentation(RecordPresentation()),
         "cardinality": RecordInput.__dataclass_fields__["cardinality"].default.value,
+        "windows": [],
     })), minItems=1)
 
     # _encode_output: output_directory is the caller's, overwrite is read and ignored.
@@ -6179,6 +6275,9 @@ def describe_canonical_request() -> dict[str, Any]:
 
 
 __all__ = [
+    "StoredRecordWindow",
+    "legacy_region_span",
+    "stored_record_windows",
     "decode_record_selector",
     "encode_annotation_set",
     "CANONICAL_REQUEST_SCHEMA",

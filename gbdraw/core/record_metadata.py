@@ -265,6 +265,29 @@ def _copy_source_feature_identity(
         _stamp_source_feature_hash(target, stamp.record_id, stamp.feature_hash)
 
 
+# A drawn unit that is one of several windows of a record carries that record's key here (D-01); the unit's own key
+# is ``gbdraw_record_key``.
+WINDOW_OF_ANNOTATION = "gbdraw_window_of"
+
+
+def record_identity_key(record: object) -> str | None:
+    """The key of the record ``record`` draws: the record's own, also for a unit that is one of its windows.
+
+    Per-record identities (feature instances, annotation and edit bindings, same-record evidence) read this key; the
+    placement of a drawn unit reads ``gbdraw_record_key``.
+    """
+
+    annotations = getattr(record, "annotations", None) or {}
+    key = annotations.get(WINDOW_OF_ANNOTATION) or annotations.get("gbdraw_record_key")
+    return None if key is None else str(key)
+
+
+def is_window_of(record: object, record_key: str) -> bool:
+    """Whether ``record`` is a drawn unit that is one of several windows of the record ``record_key``."""
+
+    return (getattr(record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION) == record_key
+
+
 def _read_coord_map(record: object) -> tuple[int, int]:
     annotations = getattr(record, "annotations", None) or {}
     try:
@@ -278,6 +301,30 @@ def _read_coord_map(record: object) -> tuple[int, int]:
     if step == 0:
         step = 1
     return base, (1 if step > 0 else -1)
+
+
+def _wrap_source_base(value: int, period: int | None) -> int:
+    """The source base ``value`` names on a circle of ``period`` bases (``value`` itself without a period)."""
+
+    return value if period is None else (value - 1) % period + 1
+
+
+def _source_period(record: object) -> int | None:
+    """The source length by which the map of a crop across the origin wraps its bases, else ``None`` (D-28).
+
+    A crop across the origin of a circular record maps its bases past the
+    source end round to its start: ``source = wrap(base + step * local)``. Any
+    other record maps every base inside 1..length, so it has no period.
+    """
+
+    annotations = getattr(record, "annotations", None) or {}
+    length = annotations.get("gbdraw_source_length")
+    sequence = getattr(record, "seq", None)
+    if not isinstance(length, int) or sequence is None or not len(sequence):
+        return None
+    base, step = _read_coord_map(record)
+    last = base + step * (len(sequence) - 1)
+    return None if 1 <= last <= length else length
 
 
 def _source_to_local_index(
@@ -298,6 +345,17 @@ def _record_source_start(record: SeqRecord) -> int:
 
     It is where the record's search frame starts (PD-OI-073): the crop start of
     a cropped record, also after a reverse complement, and 1 for a whole record.
+    """
+
+    return _wrap_source_base(_record_frame_base(record), _source_period(record))
+
+
+def _record_frame_base(record: SeqRecord) -> int:
+    """The coordinate of a record's first base on its source strand, on the axis of its coordinate map.
+
+    It is :func:`_record_source_start` before the wrap: on a crop across the
+    origin it may lie past the source end or before 1, where the map's other
+    coordinates lie, so a search-frame position ``p`` is ``base + p - 1`` there.
     """
 
     coord_base, coord_step = _read_coord_map(record)
@@ -323,6 +381,27 @@ def _absolute_display_interval(
     first_coord = coord_base + (coord_step * start)
     last_coord = coord_base + (coord_step * (end - 1))
     return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
+
+
+def _source_intervals(
+    start: int,
+    end: int,
+    coord_base: int,
+    coord_step: int,
+    period: int | None,
+) -> tuple[tuple[int, int], ...]:
+    """The source intervals (0-based start, end) of the drawn interval ``start..end`` of a unit.
+
+    One interval, or two where a unit across the origin of a circular record (``period``, :func:`_source_period`)
+    draws the interval across that origin: the part up to the source end, then the part from its start (D-28).
+    """
+
+    low, high = _absolute_display_interval(start, end, coord_base, coord_step)
+    if period is None:
+        return ((low, high),)
+    shift = (low // period) * period
+    low, high = low - shift, high - shift
+    return ((low, high),) if high <= period else ((low, period), (0, high - period))
 
 
 class RecordSourceMetadata(NamedTuple):

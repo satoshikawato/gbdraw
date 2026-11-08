@@ -488,8 +488,8 @@ const sortedValue = (value) => Array.isArray(value)
 /**
  * @typedef {{
  *   recordKey: string, source: Record<string, string>, selector?: unknown,
- *   region?: { start: number, end: number, reverseComplement?: unknown } | null,
- *   presentation?: { reverseComplement?: unknown } | null, display?: unknown
+ *   windows: { start: number, end: number, reverseComplement: boolean }[],
+ *   presentation: { reverseComplement: boolean }, display?: unknown
  * }} AlignmentResetRecord
  */
 /**
@@ -600,11 +600,18 @@ const resetBinding = async (canonical) => {
     }
     return identity;
   };
+  // One window binds as the region it was before windows (request schema 10), so stored receipts still match
+  // (Python's `region_binding` in `session_io.py`).
+  /** @param {AlignmentResetRecord['windows']} windows */
+  const regionBinding = (windows) => {
+    const spans = windows.map(({ start, end }) => ({ start, end }));
+    return spans.length === 1 ? spans[0] : spans.length ? spans : null;
+  };
   // The mode check above admits a Linear request only; the request writer gives each of its records a `recordKey` and a `source`.
   const records = await Promise.all(/** @type {AlignmentResetRecord[]} */ (request.records).map(async (record) => ({
     recordKey: record.recordKey, source: await sourceIdentity(record.source),
     selector: record.selector,
-    region: record.region ? { start: record.region.start, end: record.region.end } : null,
+    region: regionBinding(record.windows),
     display: record.display
   })));
   const plan = { ...request.layout.similarityAlignment,

@@ -21,10 +21,11 @@ from gbdraw.core.record_metadata import (
     _source_feature_anchor_profile,
     _source_feature_index,
     _stamp_source_feature_hash,
+    is_window_of,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
-from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
+from gbdraw.io.record_select import RecordSelector, drawn_record_units, parse_record_selector, select_record_units
 from .ids import (
     SourceFeatureHash,
     computed_source_feature_hash_and_parts,
@@ -180,23 +181,40 @@ class IdentityBinding:
     feature: SeqFeature | None = field(default=None, compare=False, repr=False)
 
 
+# The bindings of one identity, one per drawn unit of its record that has the feature; a record with windows draws a
+# feature inside an overlap, or one cut by a window edge, in several units, as one instance (D-01, D-18). When no
+# unit has it, the one binding of the record's first unit says why.
+IdentityBindings = tuple[IdentityBinding, ...]
+
+
 def _record_key_indexes(
     records: Sequence[SeqRecord],
     record_keys: Sequence[str],
     *aligned: Sequence[object],
-) -> dict[str, int]:
+) -> dict[str, tuple[int, ...]]:
+    """The drawn units of each record key, in order.
+
+    ``record_keys`` are the records' identity keys (``record_identity_key``):
+    the units of a record with windows share theirs; any other key names one
+    drawn record.
+    """
     if any(len(values) != len(records) for values in (record_keys, *aligned)):
         raise ValidationError(
             "Feature identity context must align with records/provenance.",
             diagnostic={"code": "FEATURE_IDENTITY"},
         )
-    indexes = {key: index for index, key in enumerate(record_keys)}
-    if len(indexes) != len(record_keys):
+    indexes: dict[str, list[int]] = defaultdict(list)
+    for index, key in enumerate(record_keys):
+        indexes[key].append(index)
+    if any(
+        len(units) > 1 and any(not is_window_of(records[index], key) for index in units)
+        for key, units in indexes.items()
+    ):
         raise ValidationError(
             "Feature identity context contains duplicate record keys.",
             diagnostic={"code": "FEATURE_IDENTITY"},
         )
-    return indexes
+    return {key: tuple(units) for key, units in indexes.items()}
 
 
 def resolve_feature_identities(
@@ -205,8 +223,11 @@ def resolve_feature_identities(
     record_keys: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
     identities: Iterable[FeatureIdentity],
-) -> Mapping[FeatureIdentity, IdentityBinding]:
+) -> Mapping[FeatureIdentity, IdentityBindings]:
     """Bind identities to the drawn records of one request, aligned with provenance.
+
+    ``record_keys`` are the records' identity keys; an identity binds in every
+    drawn unit of its record that has the feature (:data:`IdentityBindings`).
 
     Only the original-source catalog decides whether an identity exists; the
     runtime source ordinal decides whether the drawn record still has it. A record
@@ -220,9 +241,10 @@ def resolve_feature_identities(
                 f"Unknown feature identity record key {identity.record_key!r}.",
                 diagnostic={"code": "FEATURE_IDENTITY"},
             )
-        wanted[indexes[identity.record_key]].append(identity)
-    bindings: dict[FeatureIdentity, IdentityBinding] = {}
-    for record_index, items in wanted.items():
+        for record_index in indexes[identity.record_key]:
+            wanted[record_index].append(identity)
+    by_unit: dict[FeatureIdentity, list[IdentityBinding]] = defaultdict(list)
+    for record_index, items in sorted(wanted.items()):
         record = records[record_index]
         known = {
             entry.biological_feature_id: entry.source_feature_index
@@ -242,8 +264,11 @@ def resolve_feature_identities(
             status: Literal["present", "crop_excluded", "absent", "unresolved"] = (
                 "unresolved" if index is None else "present" if feature is not None else missing
             )
-            bindings[identity] = IdentityBinding(record_index, index, status, feature)
-    return bindings
+            by_unit[identity].append(IdentityBinding(record_index, index, status, feature))
+    return {
+        identity: tuple(item for item in units if item.status == "present") or (units[0],)
+        for identity, units in by_unit.items()
+    }
 
 
 def _identity_table_cell(value: object, *, verbatim: bool) -> str:
@@ -305,7 +330,7 @@ def _selects_no_record(records: Sequence[SeqRecord], selector: RecordSelector | 
     if selector is None:
         return not records
     if selector.record_index is not None:
-        return selector.record_index >= len(records)
+        return selector.record_index >= len(drawn_record_units(records))
     return all(record.id != selector.record_id for record in records)
 
 
@@ -369,10 +394,8 @@ def resolve_identity_table_rows(
                 unmatched.append(row_number)
                 identities.append(None)
                 continue
-            selected = select_record(records, record_selector)
-            if len(selected) != 1:
-                raise ValueError("Record selector must match exactly one record; use #index.")
-            index = next(i for i, record in enumerate(records) if record is selected[0])
+            # The units of a record with windows share its source catalog: the first names the record.
+            index = select_record_units(records, record_selector)[0]
             selector = parse_feature_selector(selector_cell)
             if selector.key is not None and selector.key.lower() == "hash":
                 if index not in hash_indexes:

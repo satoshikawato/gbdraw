@@ -52,7 +52,7 @@ from gbdraw.session_drawings import (  # noqa: E402
 )
 from gbdraw.session_contract import GALLERY_SESSION_DRAWN_DRAWINGS  # noqa: E402
 from gbdraw.session_resources import drawing_resource_ids  # noqa: E402
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, stored_record_windows  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -1054,7 +1054,7 @@ def _materialize_one_record_sources(session: dict[str, Any]) -> int:
             and isinstance(selector, dict)
             and selector.get("kind") == "recordId"
         )
-        if record.get("region") or source.get("kind") != "genbank":
+        if stored_record_windows(record) or source.get("kind") != "genbank":
             continue
         if not (record.get("cardinality") == "all" and not selector) and not (
             record.get("cardinality") == "exactly_one" and names_a_record

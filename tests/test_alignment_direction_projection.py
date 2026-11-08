@@ -20,7 +20,7 @@ from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, Record
 from gbdraw.diagrams.linear.assemble import _final_record_translations
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import capture_source_features
-from gbdraw.io.regions import parse_region_spec
+from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
 from gbdraw.render.composition import applied_composition_plan
@@ -97,8 +97,8 @@ def _apply(request, projected):
     records = []
     for record, result in zip(request.records, projected['records'], strict=True):
         reverse = result['afterReverseComplement']
-        records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
-                               presentation=replace(record.presentation, reverse_complement=False)) if record.region else
+        records.append(replace(record, windows=(replace(record.windows[0], reverse_complement=reverse),),
+                               presentation=replace(record.presentation, reverse_complement=False)) if record.windows else
                        replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
     translations = tuple(LinearRecordTranslation(row['recordKey'], **row['translation']) for row in projected['records'])
     return replace(request, records=tuple(records), layout=replace(request.layout, record_translations=translations))
@@ -222,8 +222,9 @@ def _refresh_fixture(request, helper, paths):
     encoded = encode_canonical_request(request)
     for fact, record in zip(helper['records'], request.records, strict=True):
         fact['presentation']['reverseComplement'] = record.presentation.reverse_complement
-        fact['region'] = None if record.region is None else dict(
-            start=record.region.start, end=record.region.end, reverseComplement=record.region.reverse_complement)
+        fact['region'] = None if not record.windows else dict(
+            start=record.windows[0].start, end=record.windows[0].end,
+            reverseComplement=record.windows[0].reverse_complement)
     context = dict(canonicalRequest=encoded.payload, orientations=None)
     resources = {item.resource_id: str(item.source_path) for item in encoded.resources}
     response = resolve_similarity_alignment_payload(helper, projection=context, resource_paths=resources)
@@ -232,7 +233,7 @@ def _refresh_fixture(request, helper, paths):
 
 def test_real_minority_reference_and_already_reversed_absolute_direction(fixture):
     request, helper, _context, _resources, _response, paths = fixture
-    target = replace(request.records[1], region=replace(request.records[1].region, reverse_complement=False))
+    target = replace(request.records[1], windows=(replace(request.records[1].windows[0], reverse_complement=False),))
     request = replace(request, records=(request.records[0], target) + request.records[2:])
     helper, _context, _resources, response = _refresh_fixture(request, helper, paths)
     right = project(response, helper, {'mode': 'right'})
@@ -251,7 +252,8 @@ def test_real_minority_reference_and_already_reversed_absolute_direction(fixture
 
 def test_cropped_compound_identity_uses_full_source_center_and_cosmetics_do_not_stale(fixture):
     request, helper, _context, _resources, _response, paths = fixture
-    reference = replace(request.records[0], region=parse_region_spec('ref:151-350'))
+    crop = parse_region_spec('ref:151-350')
+    reference = replace(request.records[0], selector=crop.record_selector(), windows=(RecordWindow.from_region(crop),))
     request = replace(request, records=(reference,) + request.records[1:])
     helper, context, resources, response = _refresh_fixture(request, helper, paths)
     record = response['projection']['records'][0]

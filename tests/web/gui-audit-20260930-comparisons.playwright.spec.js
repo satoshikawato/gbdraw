@@ -162,6 +162,55 @@ test('Rotate with Orient feature forward keeps LOSATN ribbons on the homologous 
   expect(contains(rotated[0].subjectX, shared), JSON.stringify({ ribbon: rotated[0].subjectX, shared })).toBe(true);
 });
 
+// OV-2738: a record drawn in two windows is two drawn units. A LOSAT search compares every window with the other
+// record, and the request binds each search to its window, as Python plans the units.
+test('a record drawn in two windows searches each window against the other record', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
+  await useLosat(page, {
+    task: 'blastn',
+    configure: () => {
+      // R2c 1..1000 shares nothing with R3c; R2c 2001..3000 is the block R3c 1..1000 shares.
+      window.__GBDRAW_APP__.linearSeqs[0].windows = [
+        { start: 1, end: 1000, reverseComplement: false, column: null },
+        { start: 2001, end: 3000, reverseComplement: false, column: null }
+      ];
+    }
+  });
+  await generateAndWaitForResult(page);
+  const searches = await page.evaluate(() => window.__GBDRAW_APP__.losatCacheInfo
+    .map(({ queryUid, queryIndex, subjectIndex }) => ({ window: String(queryUid).replace(/^.*~/, ''), queryIndex, subjectIndex })));
+  expect(searches).toEqual([
+    { window: 'w1', queryIndex: 0, subjectIndex: 2 },
+    { window: 'w2', queryIndex: 1, subjectIndex: 2 }
+  ]);
+  // The one ribbon joins the second window, drawn after the first, whose CDS R2_1 it does not touch.
+  const ribbons = await committedRibbons(page);
+  expect(ribbons).toHaveLength(1);
+  const firstWindowCds = await featureSpan(page, 'R2_1');
+  expect(ribbons[0].queryX[0], JSON.stringify({ ribbon: ribbons[0].queryX, firstWindowCds })).toBeGreaterThan(firstWindowCds[1]);
+  expect(contains(ribbons[0].subjectX, await featureSpan(page, 'R3_1'))).toBe(true);
+});
+
+// OV-2739: a window across the origin of a circular record is searched as Python crops it (PD-OI-122, ":origin"):
+// from its start through the origin to its end, so the block that lies after the origin is found inside the window.
+test('a window across the origin is searched from its start through the origin to its end', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
+  await useLosat(page, {
+    task: 'blastn',
+    configure: () => {
+      // R3c 2501..3000 then 1..800: the shared block R3c 1..800 (R2c 2001..2800) lies after the origin.
+      window.__GBDRAW_APP__.linearSeqs[1].windows = [{ start: 2501, end: 800, reverseComplement: false, column: null }];
+    }
+  });
+  await generateAndWaitForResult(page);
+  const ribbons = await committedRibbons(page);
+  expect(ribbons).toHaveLength(1);
+  expect(contains(ribbons[0].subjectX, await featureSpan(page, 'R3_1'))).toBe(true);
+  expect(contains(ribbons[0].queryX, await featureSpan(page, 'R2_1'))).toBe(false);
+});
+
 test('Save Raw LOSAT TSV of a reversed record re-uploads to the same ribbons', async ({ page }) => {
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
@@ -322,6 +371,41 @@ test('a current CLI Linear Session without a comparison generates without a LOSA
   await generateAndWaitForResult(page);
   expect(await committedRibbons(page)).toEqual([]);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losatCacheInfo.length)).toBe(0);
+});
+
+// OV-2716: a CLI Session whose records table draws one file record twice binds both request records to one
+// resource and selector, each with its own window. The Web loads it and Generate draws the same figure.
+test('a CLI Session that draws one file record in two windows loads and regenerates the same figure', async ({ page }, testInfo) => {
+  test.setTimeout(600_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, 'R2c.gb'), R2C);
+  writeFileSync(path.join(directory, 'records.tsv'), [
+    'gbk\trecord_label\trow\tcolumn\tregion', 'R2c.gb\tleft\t1\t1\t1-1000', 'R2c.gb\tright\t1\t2\t2001-3000', ''
+  ].join('\n'));
+  const session = path.join(directory, 'cli-twice.gbdraw-session.json.gz');
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', 'linear', '--records_table', 'records.tsv', '-o', 'cli-twice', '--session_output', session
+  ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
+  await settle(page);
+  // The drawn features and every text of the figure (definitions with their coordinates, labels).
+  const figure = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const text = String(app.currentResults()[app.selectedResultIndex]?.content || '');
+    const svg = new DOMParser().parseFromString(text, 'image/svg+xml');
+    return {
+      features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map((element) => element.getAttribute('data-gbdraw-feature-id')),
+      texts: [...svg.querySelectorAll('text')].map((element) => element.textContent)
+    };
+  });
+  const loaded = await figure();
+  expect(loaded.features.length).toBeGreaterThan(0);
+  await generateAndWaitForResult(page);
+  expect(await figure()).toEqual(loaded);
 });
 
 test('the match popup and its FASTA header report source coordinates of a cropped record', async ({ page }) => {

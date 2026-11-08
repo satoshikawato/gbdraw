@@ -313,7 +313,6 @@ def test_records_table_sorts_by_order_and_generates_positions(tmp_path: Path) ->
     assert parsed.record_labels == ["A", "B"]
     assert parsed.reverse_flags == [True, False]
     assert parsed.row_scoped_region_specs() == ["#1:100-150:rc", "#2:200-300"]
-    assert parsed.multi_record_positions() == ["#1@1", "#2@1"]
 
 
 def test_records_table_rejects_invalid_boolean(tmp_path: Path) -> None:

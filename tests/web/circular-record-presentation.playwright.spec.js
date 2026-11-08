@@ -93,7 +93,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
     kind: 'recordId',
     value: 'BGC0000709'
   });
-  expect(reverseOnly.canonicalRecord.region).toBeNull();
+  expect(reverseOnly.canonicalRecord.windows).toEqual([]);
   expect(reverseOnly.canonicalRecord.presentation.reverseComplement).toBe(true);
 
   await page.getByLabel('Circular region start').fill('1000');
@@ -101,13 +101,14 @@ test('Circular single-record presentation selects, transforms, titles, and round
   await generateAndWaitForResult(page);
   const cropReverse = await inspectCircularResult(page);
   expect(cropReverse.text).toContain('11,001 bp');
-  expect(cropReverse.canonicalRecord.selector).toBeNull();
-  expect(cropReverse.canonicalRecord.region).toEqual({
-    selector: { kind: 'recordId', value: 'BGC0000709' },
+  // Request schema 10: the record's selector names the record, and its one window is the crop.
+  expect(cropReverse.canonicalRecord.selector).toEqual({ kind: 'recordId', value: 'BGC0000709' });
+  expect(cropReverse.canonicalRecord.windows).toEqual([{
     start: 1000,
     end: 12000,
-    reverseComplement: true
-  });
+    reverseComplement: true,
+    column: null
+  }]);
   expect(cropReverse.canonicalRecord.presentation.reverseComplement).toBe(false);
   writeFileSync(testInfo.outputPath('circular-record-presentation.svg'), cropReverse.content);
   const renderedSvg = page.locator('main svg').last();
@@ -149,7 +150,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
   await generateAndWaitForResult(page);
   const regenerated = await inspectCircularResult(page);
   expect(regenerated.content).toBe(cropReverse.content);
-  expect(regenerated.canonicalRecord.region.reverseComplement).toBe(true);
+  expect(regenerated.canonicalRecord.windows.map((window) => window.reverseComplement)).toEqual([true]);
   expect(regenerated.canonicalRecord.presentation.reverseComplement).toBe(false);
   expect(new Set(regenerated.recordIds)).toEqual(new Set(['BGC0000709']));
 

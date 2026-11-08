@@ -187,7 +187,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   const file = makeFile();
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
-    selector: null })) } };
+    selector: null, windows: [], presentation: { reverseComplement: false } })) } };
   const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
@@ -200,7 +200,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
   if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
-    uid:`record-${index+1}`,gb:inputFiles.registerFile(createSessionResourceFileView(table,resourceId)),region_record_id:'',region_reverse:false
+    uid:`record-${index+1}`,gb:inputFiles.registerFile(createSessionResourceFileView(table,resourceId)),region_record_id:'',region_reverse:false,windows:[]
   }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
@@ -606,10 +606,10 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const resources = { both: descriptor('both.gb', 'LOCUS       first 100 bp DNA circular\n//\nLOCUS       second 100 bp DNA circular\n//\n') };
   const table = adoptCurrentSessionResources(resources);
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
-    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
+    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' }, windows: [], presentation: { reverseComplement: false } }] } };
   const inputFiles = createInputFileStore();
   const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
-    linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false }],
+    linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false, windows: [] }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
@@ -680,7 +680,7 @@ const sourceControls = () => {
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')],
     files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
-    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
+    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false, windows: [] })) };
   const state = withModeDrawings({ sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' },
     featureCatalog: { value: null }, inputFiles },
   { circular, linear });

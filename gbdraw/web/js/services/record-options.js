@@ -205,6 +205,36 @@ export const regionWithinRecord = (start, end, recordLength) => {
 };
 
 /**
+ * One row of the read-only window list of a record drawn in several windows (D-10): its number (1-based, in column
+ * order), its span in source coordinates, its length, and whether it is drawn reverse-complemented.
+ * @typedef {{ number: number, span: string, length: string, reverseComplement: boolean }} LinearRecordWindowRow
+ */
+/**
+ * The rows of a record card's window list, in column order (D-08; windows without a column keep the request's
+ * order after those with one, as the layout places them). A window whose start is after its end crosses the origin
+ * of a circular record (D-34): its length needs the record's, and is empty until the record is read.
+ * @param {readonly { start: number | null, end: number | null, reverseComplement: boolean, column: number | null }[]} windows
+ * @param {number | null} recordLength the length of the record the card draws, once read
+ * @returns {LinearRecordWindowRow[]}
+ */
+export const linearRecordWindowRows = (windows, recordLength) => windows
+  .map((window, index) => ({ window, index }))
+  .sort((a, b) => (a.window.column ?? Infinity) - (b.window.column ?? Infinity) || a.index - b.index)
+  .map(({ window }, order) => {
+    const { start, end } = window;
+    const stated = start !== null && end !== null;
+    const across = stated && start > end;
+    const bases = !stated || (across && recordLength === null) ? null
+      : across ? /** @type {number} */ (recordLength) - start + 1 + end : end - start + 1;
+    return {
+      number: order + 1,
+      span: stated ? `${formatGroupedNumber(start)}\u2013${formatGroupedNumber(end)}` : '',
+      length: bases === null ? '' : `${formatGroupedNumber(bases)} bp`,
+      reverseComplement: window.reverseComplement
+    };
+  });
+
+/**
  * The region a Linear record card's fields state, for what Generate draws (the
  * analysis inputs, the match sequences, the note); the request projection
  * `linearRegionPayload` parses them itself and sends them as typed. null

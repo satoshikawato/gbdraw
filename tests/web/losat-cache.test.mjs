@@ -1023,7 +1023,7 @@ const exercisePairLoop = async ({failure = null, promote = false} = {}) => {
     },
     promoteRawLosatCacheEntry() {},
     losatTiming: {totalPairs: 0, cacheHits: 0, cacheMisses: 0},
-    comparisonResolution: {edges: []}, losatPairs: [], cacheInfo: [],
+    unitResolution: {edges: []}, losatPairs: [], cacheInfo: [],
     buildCacheFilename() { return 'pair.tsv'; },
     pendingJobKeys: new Set(), losatJobs: [], losatProgram: {value: 'blastp'}, losat: {outfmt: '6'}
   };
@@ -1082,7 +1082,8 @@ await exercisePairLoop({failure: 'cancel'});
   });
   const context = {
     useProteinBlastp: false, useCollinearBlastp: true,
-    linearSeqs, comparisonResolution,
+    // Without windows, the units are the cards and the unit plan is the card plan (OV-2738).
+    linearSeqs, unitResolution: comparisonResolution,
     pairNumbers: numberLosatDisplayPairs(
       specs, comparisonResolution.edges, canonicalGridDisplayPairs(linearSeqs, linearRecordRows)
     ),

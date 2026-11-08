@@ -55,21 +55,21 @@
  * @property {number | null} gridColumn
  */
 /**
- * @typedef {object} CanonicalRecordRegion
- * @property {CanonicalRecordSelector | null} selector
+ * @typedef {object} CanonicalRecordWindow
  * @property {number} start
  * @property {number} end
  * @property {boolean} reverseComplement
+ * @property {number | null} column
  */
 /**
  * @typedef {object} CanonicalRecord
  * @property {CanonicalRecordSource} source
  * @property {CanonicalRecordSelector | null} selector
- * @property {CanonicalRecordRegion | null} region
  * @property {CanonicalRecordPresentation} presentation
  * @property {string} recordKey
  * @property {'exactly_one' | 'first' | 'all'} cardinality
  * @property {CanonicalRecordDisplayOptions} display
+ * @property {CanonicalRecordWindow[]} windows
  */
 /**
  * @typedef {object} CanonicalRequestOutput
@@ -480,7 +480,7 @@
 /** @typedef {CanonicalNucleotideBlastComparison | CanonicalPrecomputedProteinComparison | CanonicalOrthogroupResultComparison | CanonicalCollinearityResultComparison | CanonicalGeneratedProteinComparison} CanonicalComparison */
 /**
  * @typedef {object} CanonicalCircularRenderRequest
- * @property {9} schema
+ * @property {10} schema
  * @property {'circular'} mode
  * @property {'single' | 'grid' | 'batch'} grouping
  * @property {CanonicalRecord[]} records
@@ -491,7 +491,7 @@
  */
 /**
  * @typedef {object} CanonicalLinearRenderRequest
- * @property {9} schema
+ * @property {10} schema
  * @property {'linear'} mode
  * @property {'single'} grouping
  * @property {CanonicalRecord[]} records

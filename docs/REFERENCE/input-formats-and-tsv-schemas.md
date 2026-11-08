@@ -171,20 +171,27 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, both `gff` and `fasta`, or `fasta` alone | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
+| Records | One of `gbk`, both `gff` and `fasta`, or `fasta` alone | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode`, `record_group` |
 | Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
 | Circular conservation | `blast`; `comparison_sequence` with `--losat` (then `blast` is rejected) | `label`, `color`, `comparison_sequence`, `losat_gencode` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
 | Annotations | `set_id`, `id`, `mark` | Target and presentation fields listed below |
 
-One records-table row represents one displayed record. A table uses either
+One records-table row represents one displayed record, except in Linear mode
+rows that share a `record_group` value: they are the windows of one record,
+drawn side by side in their common `row` and ordered by `column`. Such rows
+name the same file, `record_id`, and `row`, each has a `region`, and they give
+the record's `record_label`, `record_subtitle`, `topology`, and `losat_gencode`
+at most once (rows that give different values are refused). A table uses either
 GenBank rows, GFF3/FASTA rows, or FASTA rows; it cannot mix these forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
 A region is always counted on the record as stored in the file:
 `region=1000-9000:rc` and `region=1000-9000` with `reverse_complement=1` both
 crop 1000..9000 and then reverse-complement the crop. `--region` and
-`--reverse_complement` follow the same order.
+`--reverse_complement` follow the same order. A `region` such as
+`65000-4000:origin` is a window across the origin of a circular record, as on
+the command line; without `:origin`, `65000-4000` is the reversed span.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values keep table order. When placement is

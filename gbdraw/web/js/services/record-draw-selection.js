@@ -227,7 +227,7 @@ export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsO
  * @typedef {{ kind?: string, index?: number, value?: string } | null | undefined} RequestRecordSelector
  * A record of a render request, as its identities are read from it.
  * @typedef {{ recordKey: string, cardinality?: string, selector?: RequestRecordSelector,
- *   region?: { selector?: RequestRecordSelector } | null }} IdentityRequestRecord
+ *   windows: readonly unknown[] }} IdentityRequestRecord
  * One drawn record of a request: the record key its features have in that
  * request, its identity, and (Circular) the other keys a 0.14.2 view switch
  * may have left its rows under, and the entry of its source list it is.
@@ -256,7 +256,7 @@ const positionsOf = (entries) => {
  * @param {readonly RecordSourceEntry[]} entries
  */
 const selectedPosition = (record, entries) => {
-  const selector = record.region?.selector || record.selector;
+  const selector = record.selector;
   if (selector?.kind === 'recordIndex' && Number.isInteger(selector.index)) {
     return Number(selector.index) < entries.length ? Number(selector.index) : null;
   }
@@ -299,7 +299,7 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
   const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({
     mode: 'linear', uid: base, sourceIndex, recordCount: entries.length
   });
-  if (record.cardinality === 'all' && !record.selector && !record.region) {
+  if (record.cardinality === 'all' && !record.selector && record.windows.length === 0) {
     return entries.map((/** @type {RecordSourceEntry} */ entry, /** @type {number} */ sourceIndex) => {
       const identity = identityOf(sourceIndex);
       return { requestKey: identity, identity, aliases: [identity], entry };
@@ -480,7 +480,8 @@ export const recordListRows = ({ records, recordsOff, query = '', sort = 'file' 
 // settings removes. The card fields return to these values (the record
 // fields Reset Settings resets, plus LOSAT Gencode).
 export const RECORD_SETTINGS_DEFAULTS = Object.freeze({
-  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, losat_gencode: 1
+  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, windows: [],
+  losat_gencode: 1
 });
 
 /**

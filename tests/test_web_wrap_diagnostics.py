@@ -279,7 +279,7 @@ def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_p
         ).to_dict()
         request = document["drawings"][0]["renderRequest"]
         # The region as a card states it: the Web sends the fields as typed (a Session writer clamps its own).
-        request["records"][0]["region"].update(start=start, end=end)
+        request["records"][0]["windows"][0].update(start=start, end=end)
         [entry] = render_embedded_canonical_web_request(
             request, resources=document["resources"], workspace=tmp_path / f"{start}-{end}",
         )["metadata"]["inputSummaries"]

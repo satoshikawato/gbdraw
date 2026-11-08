@@ -938,6 +938,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'recordIndex',
       'recordInstanceKey',
       'featureOverrides',
+      'windowOf',
       'recordSource'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
@@ -966,6 +967,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         paths.get('visibility') || null,
         // This record's canonical featureOverrides rows (design Q4, 3.3).
         payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides),
+        payload.windowOf ?? null,
         jsonArgument(staged, {}),
         jsonArgument(staged && buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]);
@@ -1172,6 +1174,13 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(payload.spans, []),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
+    )
+  },
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
+    keys: ['records', 'pairs'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide, 'plan_linear_units_json', [jsonArgument(payload.records, []), jsonArgument(payload.pairs, [])]
     )
   },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {

@@ -79,6 +79,7 @@ from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losa
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
+from gbdraw.core.record_metadata import record_identity_key
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
     FeatureOverride,
@@ -91,7 +92,7 @@ from gbdraw.features.placement import (
 )
 from gbdraw.features.source import (
     FeatureIdentity,
-    IdentityBinding,
+    IdentityBindings,
     SourceFeatureIdentity,
     capture_source_features,
 )
@@ -117,7 +118,12 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
+from gbdraw.io.record_select import parse_record_selector, select_record_units
+from gbdraw.layout.record_placement import (
+    FeatureAnchorPlacement,
+    parse_record_row_position,
+    resolve_record_row_positions,
+)
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
@@ -186,6 +192,7 @@ from .record_planning import (
     _source_details,
     _source_key,
     effective_record_presentation,
+    unit_presentation,
     resolve_anchor_feature,
     project_similarity_alignment_centers,
     comparison_record_bindings,
@@ -514,7 +521,7 @@ class PreparedDiagramInputs:
     record_features: tuple[ResolvedRecordFeatureInputs, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
     # Annotation featureIdentity targets, keyed by (record key, feature ID).
-    feature_bindings: Mapping[tuple[str, str], IdentityBinding] | None = None
+    feature_bindings: Mapping[tuple[str, str], IdentityBindings] | None = None
     # Source parses shared by the loads of one ``_load_request_records`` call.
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = field(default=None, repr=False, compare=False)
 
@@ -1380,7 +1387,7 @@ def _identity_table_context(collection: ResolvedRecordCollection) -> _IdentityTa
     """The records an identity table names: ``#index`` and record IDs select among them."""
     return {
         "records": collection.records,
-        "record_keys": tuple(item.record_key for item in collection.provenance),
+        "record_keys": tuple(item.record_identity_key for item in collection.provenance),
         "source_record_ids": tuple(item.source_record_id for item in collection.provenance),
         "source_catalogs": _source_catalogs(collection),
     }
@@ -1556,6 +1563,8 @@ def _normalize_request_records(
                 input_index,
                 provenance.source_record_index,
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
+                # Each window of a record is its own drawn record (D-01).
+                *(() if provenance.window is None else (provenance.window.index,)),
             )
             if default_collection
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
@@ -1596,11 +1605,20 @@ def _presentation_preparation_key(value: RecordPresentation) -> Hashable:
     )
 
 
+def _windows_preparation_key(value: RecordInput) -> Hashable:
+    # A record with one window keys as the region it was before windows (D-09), so its key does not change.
+    if not value.windows:
+        return None
+    if len(value.windows) == 1:
+        return _region_preparation_key(value.windows[0].region())
+    return tuple((window.start, window.end, window.reverse_complement, window.column) for window in value.windows)
+
+
 def _record_input_preparation_key(value: RecordInput) -> Hashable:
     return (
         _selector_preparation_key(value.selector),
         value.cardinality.value,
-        _region_preparation_key(value.region),
+        _windows_preparation_key(value),
         _presentation_preparation_key(value.presentation),
         value.record_key,
     )
@@ -1626,10 +1644,8 @@ def _coerce_resolved_collection(
             replace(
                 item,
                 display=request.records[item.input_index].display,
-                presentation=effective_record_presentation(
-                    request.records[item.input_index].presentation,
-                    request.record_options,
-                    item.resolved_index,
+                presentation=unit_presentation(
+                    request.records[item.input_index].presentation, request.record_options, item
                 ),
             )
             for item in value.provenance
@@ -1659,7 +1675,7 @@ def _coerce_resolved_collection(
                 record_key=record_input.record_key or f"record-{index + 1}",
                 cardinality=record_input.cardinality,
                 selector=record_input.selector,
-                region=record_input.region,
+                region=None,
                 presentation=effective_record_presentation(
                     record_input.presentation, request.record_options, index
                 ),
@@ -1722,7 +1738,7 @@ def _is_materialized_exact_one_request(request: DiagramRequest) -> bool:
             isinstance(record_input.source, InMemoryRecordSource)
             and record_input.cardinality is RecordCardinality.EXACTLY_ONE
             and record_input.selector is None
-            and record_input.region is None
+            and not record_input.windows
             and not record_input.presentation.reverse_complement
             for record_input in request.records
         )
@@ -1792,15 +1808,17 @@ def _linear_layout_with_record_placements(
     request: LinearDiagramRequest,
 ) -> LinearMultiRecordOptions | None:
     layout = request.layout
-    if layout is None or layout.multi_record_positions:
-        return layout
+    if layout is not None and layout.multi_record_positions:
+        return _unit_positions(request, layout)
     positioned = [
         (index, record_input.presentation)
         for index, record_input in enumerate(request.records)
         if record_input.presentation.grid_row is not None
     ]
     if not positioned:
-        return layout
+        return _windows_share_rows(request, layout)
+    if layout is None:  # pragma: no cover - LinearDiagramRequest refuses grid rows without a layout.
+        raise ValidationError("Grid placement requires LinearMultiRecordOptions.", diagnostic={"code": "INPUT_INVALID"})
     positioned.sort(
         key=lambda item: (
             int(item[1].grid_row or 0),
@@ -1815,6 +1833,68 @@ def _linear_layout_with_record_placements(
         for index, presentation in positioned
     )
     return replace(layout, multi_record_positions=positions)
+
+
+def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOptions) -> LinearMultiRecordOptions:
+    """Given row positions name records (``#n`` counts records, a record ID names its record, I-6); each becomes the
+    positions of the record's drawn units, in window order, at that row.
+
+    ``request`` is projected (one in-memory record per drawn unit). Without a record of several windows records and
+    units are one, and the positions stay as given.
+    """
+
+    keys = _drawn_record_identities(request)
+    if len(set(keys)) == len(keys):
+        return layout
+    records = [cast(InMemoryRecordSource, record_input.source).record for record_input in request.records]
+    positions: list[str] = []
+    for token in layout.multi_record_positions or ():
+        selector, row = parse_record_row_position(str(token))
+        try:
+            units = select_record_units(records, parse_record_selector(selector))
+        except ValueError as exc:
+            raise ValidationError(f"multi_record_position selector '{selector}': {exc}") from exc
+        positions.extend(f"#{unit + 1}@{row}" for unit in units)
+    return replace(layout, multi_record_positions=tuple(positions))
+
+
+def _drawn_record_identities(request: LinearDiagramRequest) -> list[str | None]:
+    """The record each drawn unit of a projected request draws (``record_identity_key``); windows of one share it."""
+
+    return [
+        record_identity_key(record_input.source.record)
+        if isinstance(record_input.source, InMemoryRecordSource)
+        else record_input.record_key
+        for record_input in request.records
+    ]
+
+
+def _with_window_layout(request: LinearDiagramRequest) -> LinearDiagramRequest:
+    """A projected request whose windows share rows has a Linear layout, the default one when it set none (D-01)."""
+
+    keys = _drawn_record_identities(request)
+    if request.layout is not None or len(set(keys)) == len(keys):
+        return request
+    return replace(request, layout=LinearMultiRecordOptions())
+
+
+def _windows_share_rows(
+    request: LinearDiagramRequest, layout: LinearMultiRecordOptions | None
+) -> LinearMultiRecordOptions | None:
+    """Without grid rows, each record takes a row and the windows of a record share it, in window order (D-01).
+
+    ``request`` is projected: one in-memory record per drawn unit. A request without a record of several windows
+    keeps its layout (one record per row).
+    """
+
+    keys = _drawn_record_identities(request)
+    if layout is None or len(set(keys)) == len(keys):
+        return layout
+    rows = {key: row for row, key in enumerate(dict.fromkeys(keys), start=1)}
+    return replace(
+        layout,
+        multi_record_positions=tuple(f"#{index}@{rows[key]}" for index, key in enumerate(keys, start=1)),
+    )
 
 
 def _materialize_feature_inputs(
@@ -1835,7 +1915,7 @@ def _materialize_feature_inputs(
         return inputs
     resolution = resolve_record_feature_inputs(
         records=collection.records,
-        record_keys=tuple(item.record_key for item in collection.provenance),
+        record_keys=tuple(item.record_identity_key for item in collection.provenance),
         source_catalogs=_source_catalogs(collection), placements=options.feature_placements,
         mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
         feature_overrides=options.feature_overrides,
@@ -2087,11 +2167,11 @@ def plan_linear_request(
     with _request_render_diagnostic_phase("preparation"):
         prepared_inputs = inputs
         inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
-        projected_request = replace(
+        projected_request = _with_window_layout(replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),
             record_options=RecordCollectionOptions(),
-        )
+        ))
         resolved_layout = _linear_layout_with_record_placements(projected_request)
         resolved_options = resolve_linear_options(
             decide_linear_wrap(
@@ -2651,7 +2731,7 @@ def _extract_linear_request_proteins(
             for record_input in request.records
         ),
         regions=tuple(
-            record_input.region.raw if record_input.region is not None else None
+            ";".join(window.region().raw for window in record_input.windows) or None
             for record_input in request.records
         ),
         feature_visibility_rules=inputs.features.feature_visibility_rules,
@@ -2968,7 +3048,7 @@ def _build_current_derived_entries(
     derived_records = []
     for index, instance_key in enumerate(_request_record_instance_keys(request)):
         binding = record_instances.get(instance_key, {})
-        region = request.records[index].region
+        windows = request.records[index].windows
         derived_records.append(
             DerivedLosatpRecord(
                 index=index,
@@ -2977,7 +3057,7 @@ def _build_current_derived_entries(
                 length=len(records[index].seq),
                 reverse=bool(
                     request.records[index].presentation.reverse_complement
-                    or (region is not None and region.reverse_complement)
+                    or any(window.reverse_complement for window in windows)
                 ),
             )
         )

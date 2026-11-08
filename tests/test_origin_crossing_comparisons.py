@@ -314,7 +314,7 @@ def _web_helpers() -> dict[str, object]:
 def _web_records(strand: int, reverse: bool) -> list[SeqRecord]:
     """``_records``, whose subject a reversed view draws in the order that forms a block."""
     query, subject = _records(strand)
-    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0]]
+    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0][0]]
 
 
 def _web_conversion(
@@ -386,8 +386,8 @@ def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: st
     back with x -> L + 1 - x, the rule of the planner's search-frame projection.
     """
     query, subject = _web_records(strand, reverse)
-    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0]
-    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0]
+    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0][0]
+    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0][0]
     records = [query, drawn]
     extraction = extract_cds_proteins(records)
     pairs = [(q, s) for q, s in _pairs(strand) if s in extraction.protein_map]
@@ -443,16 +443,47 @@ def test_web_rows_of_a_crop_equal_the_cli_rows(tmp_path, stage_web_losatp_transp
     assert rows and sorted(rows) == sorted(_cli_conversion(mode, 1, region="subject:1-400"))
 
 
+@pytest.mark.parametrize("mode", MODES)
+def test_web_rows_of_a_window_across_the_origin_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode) -> None:
+    """The Worker extracts a window across the origin as Python crops it (``:origin``, PD-OI-122)."""
+    region = "subject:600-250:origin"
+    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, 1, subject_region=region)
+    assert rows and sorted(rows) == sorted(_cli_conversion(mode, 1, region=region))
+    # The window is 121 + 250 bases long; the origin CDS lies inside it as one piece.
+    assert all(max(sstart, send) <= 371 for _, _, sstart, send in rows)
+
+
+def test_the_worker_nucleotide_fasta_of_a_window_across_the_origin_is_the_cli_search_frame(tmp_path: Path) -> None:
+    from gbdraw.comparisons.losat_jobs import losat_search_frame_fasta
+
+    [_query, subject] = _records(1)
+    path = tmp_path / "subject.gb"
+    SeqIO.write([subject], path, "genbank")
+    extracted = json.loads(str(_web_helpers()["extract_first_fasta"](str(path), "genbank", "600-250:origin")))
+    assert "error" not in extracted, extracted.get("error")
+    [unit] = crop_then_reverse_records([subject], parse_region_specs(["600-250:origin"]), [False])[0][0]
+    sequence = "".join(extracted["fasta"].splitlines()[1:])
+    assert sequence == str(subject.seq[599:] + subject.seq[:250])
+    assert sequence == "".join(losat_search_frame_fasta(unit).splitlines()[1:])
+
+
 # ``sequence`` travels in the FASTA, read back by _web_ordered_proteins_from_fasta,
 # so the map stays small. Every other field a comparison can read crosses in the map.
 TRANSPORT_EXEMPT = {"sequence"}
 
 
+@pytest.mark.parametrize("window_of", [None, "subject-record"], ids=["whole-record", "one-of-several-windows"])
 @pytest.mark.parametrize("strand", [1, -1])
-def test_every_cds_protein_field_crosses_the_web_transport(strand: int) -> None:
+def test_every_cds_protein_field_crosses_the_web_transport(strand: int, window_of: str | None) -> None:
+    """Every field, ``window_of`` included: Web Similarity groups read the windows of one record as one record by it."""
+    from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION
+
     helpers = _web_helpers()
     records = _records(strand)
+    if window_of is not None:
+        records[1].annotations[WINDOW_OF_ANNOTATION] = window_of
     extraction = extract_cds_proteins(records)
+    assert {protein.window_of for protein in extraction.proteins_by_record[1]} == {window_of}
     subject = records[1]
     raw_map = json.loads(json.dumps({
         protein.protein_id: helpers["_serialize_cds_protein"](protein, subject)
@@ -474,7 +505,7 @@ def test_every_cds_protein_field_crosses_the_web_transport(strand: int) -> None:
 def test_web_display_map_flips_the_arc_of_a_reversed_record(strand: int) -> None:
     helpers = _web_helpers()
     records = _records(strand)
-    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0]
+    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0][0]
     source = extract_cds_proteins([records[1]]).proteins_by_record[0]
     expected = extract_cds_proteins([flipped]).proteins_by_record[0]
     raw_map = json.loads(json.dumps({

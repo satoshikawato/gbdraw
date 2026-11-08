@@ -22,7 +22,7 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
-const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
 /**
@@ -192,7 +192,7 @@ const draftFeatures = (session) => (holdsSliceDraft(session) ? modeSlice(session
 /** @param {PublicationSession} session */
 const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
-  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
+  if (!isObject(session.renderRequest) || Number(session.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
   // A Gallery Session shows one diagram mode (E1: `otherModeResult` holds a second).
   if (has(session, 'otherModeResult')) throw new Error('Gallery publication requires a Session with one diagram mode.');
   return session;

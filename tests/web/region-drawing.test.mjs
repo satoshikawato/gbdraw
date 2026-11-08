@@ -241,8 +241,28 @@ test('(b) a derived request the Load readers would repair is refused, not instal
     (error) => error.code === 'RESULT_INVALID' && error.operation === 'deriveRegionDrawing');
 });
 
-test('(c) a region that crosses the origin is refused: no drawing, the tabs and History unchanged', async () => {
-  circularSource([recordA]);
+test('(c) a region across the origin of a circular record is one window across it, kept as such by the card', async () => {
+  // D-34: Python draws the span as one window from base 900 through the origin to base 100; the card that holds it
+  // writes the same window back (its Start/End fields would read 900-100 as a reversed span, so it is not theirs).
+  const source = withNewDrawingDefaults(state, createDrawingState('across-origin', 'linear'));
+  source.inputType.value = 'gb';
+  source.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'mito', gb: state.inputFiles.registerFile(genbankFile('a.gb', [recordA])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  const [{ recordKey }] = (await projectOf(source)).envelope.renderRequest.records;
+  const installed = await deriveAndInstall(source, [{ recordKey, start: 900, end: 100 }]);
+  assert.equal(installed.derived.mode, 'linear');
+  const [record] = installed.derived.renderRequest.records;
+  assert.deepEqual(record.windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement })),
+    [{ start: 900, end: 100, reverseComplement: false }]);
+  const [card] = installed.made.linearSeqs;
+  assert.deepEqual([card.region_start, card.region_end, card.region_reverse], [null, null, false]);
+  assert.deepEqual(card.windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement })),
+    [{ start: 900, end: 100, reverseComplement: false }]);
+  await assertRoundTrip(installed);
+});
+
+test('(c) a start after the end of a linear record is refused: no drawing, the tabs and History unchanged', async () => {
+  circularSource([genbankRecord('recL', 1200, [[101, 400, 'L1']], 'linear')]);
   const before = listView();
   const created = [];
   const regions = createRegionDrawing({
@@ -252,7 +272,7 @@ test('(c) a region that crosses the origin is refused: no drawing, the tabs and 
     newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
   });
   const offer = await regions.deriveFromShown([{ recordKey: 'record-1', start: 900, end: 100 }], true);
-  assert.deepEqual(offer, { status: 'refused', reason: 'ORIGIN_CROSSING', recordKey: 'record-1', start: 900, end: 100 });
+  assert.deepEqual(offer, { status: 'refused', reason: 'START_AFTER_END', recordKey: 'record-1', start: 900, end: 100 });
   assert.equal('create' in offer, false, 'a refusal offers no Create');
   assert.deepEqual(created, []);
   assert.deepEqual(listView(), before);
@@ -455,6 +475,38 @@ test('(a) round trip of the Linear region drawing of a Circular source', async (
     { ...at(envelope.renderRequest, '$.diagramOptions.output').value, legend: 'bottom', plotTitlePosition: 'bottom' });
 });
 
+test('the draft request of a card drawn in two windows writes the unit pairs Generate writes', async () => {
+  // OV-2738 on Save without a Result and on New drawing from a region: Python reads a request's comparison indexes
+  // as drawn units, so the draft request plans the units as Generate does (`planLinearUnitSearch`).
+  const { createLinearComparisonEdge } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+  const source = withNewDrawingDefaults(state, createDrawingState('windows-pairs', 'linear'));
+  source.inputType.value = 'gb';
+  const window = (start, end, reverseComplement = false) => ({ start, end, reverseComplement, column: null });
+  source.linearSeqs.splice(0, Infinity,
+    createLinearSeq({ uid: 'a', gb: state.inputFiles.registerFile(genbankFile('a.gb', [recordA])),
+      windows: [window(101, 400), window(601, 900, true)] }),
+    createLinearSeq({ uid: 'b', gb: state.inputFiles.registerFile(genbankFile('b.gb', [recordA])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  source.losatProgram.value = 'blastp';
+  source.losat.blastp.mode = 'pairwise';
+  Object.assign(source.linearComparisonPlan, { mode: 'selected', defaultSource: 'losat',
+    edges: [createLinearComparisonEdge({ queryUid: 'a', subjectUid: 'b', source: 'losat' })] });
+  const planned = [];
+  const planLinearUnits = async (payload) => {
+    planned.push(payload);
+    return { result: JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.linear_units import plan_linear_units
+result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
+`, payload)) };
+  };
+  const { envelope } = await projectDraftRequest(state, source, { ...(await factsOf(source)), planLinearUnits });
+  assert.equal(planned.length, 1);
+  const generated = envelope.renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.deepEqual(generated.pairs, [
+    { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
+  ]);
+});
 // A Linear drawing with one card whose file holds two records: the card draws both.
 const recordB = genbankRecord('recB', 900, [[51, 300, 'B1'], [501, 800, 'B2']], 'linear');
 test('(a) regions of two records of one file are one Linear drawing bound to that one file', async () => {

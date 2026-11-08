@@ -197,6 +197,10 @@ class RecordDisplayTransform:
     wrap_length: int | None = None
     # The bases on the display axis when a crop shows fewer than ``length``.
     display_length: int | None = None
+    # A crop of a circular record across its origin (D-28): its axis runs from
+    # ``source_base`` round the origin, so the source maps onto it modulo ``length``.
+    # A crop takes no display start (``resolve_record_display``), so the two never meet.
+    crosses_origin: bool = False
     _anchor_boundary: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -230,6 +234,18 @@ class RecordDisplayTransform:
             _integer(self.wrap_length, "Wrap length", 1, self.wrap_length)
         if self.display_length is not None:
             _integer(self.display_length, "Display length", 1, self.length)
+
+    @property
+    def _source_extent(self) -> int:
+        """The last source boundary: a crop across the origin reads the source on past its end, one turn on."""
+        return self.length * (2 if self.crosses_origin else 1)
+
+    @property
+    def _rotation(self) -> int | None:
+        """The source base at display index 0 when the axis runs round the circle, else ``None`` (affine axis)."""
+        if self.start_coordinate is not None:
+            return self.start_coordinate
+        return self.source_base if self.crosses_origin else None
 
     def with_wrap(self, wrap_length: int, display_length: int) -> RecordDisplayTransform:
         """This record drawn over rows of ``wrap_length`` bp along its ``display_length`` bases."""
@@ -265,12 +281,13 @@ class RecordDisplayTransform:
 
     def source_base_to_display_index(self, base: int) -> int:
         _integer(base, "Source base", 1, self.length)
-        if self.start_coordinate is None:
+        rotation = self._rotation
+        if rotation is None:
             return self.source_step * (base - self.source_base)
-        return self.source_step * (base - self.start_coordinate) % self.length
+        return self.source_step * (base - rotation) % self.length
 
     def source_boundary_to_display_offset(self, boundary: int) -> int:
-        _integer(boundary, "Source boundary", 0, self.length)
+        _integer(boundary, "Source boundary", 0, self._source_extent)
         return self._boundary_offset(boundary)
 
     def source_position_to_display_offset(self, position: float) -> float:
@@ -288,18 +305,21 @@ class RecordDisplayTransform:
 
     def _boundary_offset(self, boundary: _Coordinate) -> _Coordinate:
         offset = self.source_step * (boundary - self._anchor_boundary)
-        return offset if self.start_coordinate is None else offset % self.length
+        return offset if self._rotation is None else offset % self.length
 
     def display_index_to_source_base(self, index: int) -> int:
         _integer(index, "Display base index", 0, self.length - 1)
-        if self.start_coordinate is None:
+        rotation = self._rotation
+        if rotation is None:
             base = self.source_base + self.source_step * index
             _integer(base, "Source base", 1, self.length)
             return base
-        return (self.start_coordinate - 1 + self.source_step * index) % self.length + 1
+        return (rotation - 1 + self.source_step * index) % self.length + 1
 
     def _local_boundary_to_source(self, boundary: _Coordinate) -> _Coordinate:
-        return self.source_base - (self.source_step == 1) + self.source_step * boundary
+        # Across the origin the axis reads the source on past its end, one turn on: 0..2 * length.
+        lift = self.length if self.crosses_origin and self.source_step == -1 else 0
+        return self.source_base - (self.source_step == 1) + lift + self.source_step * boundary
 
     def local_boundary_to_display_offset(self, boundary: int) -> int:
         _integer(boundary, "Local boundary", 0, self.length)
@@ -312,7 +332,7 @@ class RecordDisplayTransform:
     def _validate_interval(self, interval: SourceInterval) -> None:
         if not isinstance(interval, SourceInterval):
             raise ValidationError("Expected a SourceInterval.")
-        _integer(interval.end, "Source interval end", 0, self.length)
+        _integer(interval.end, "Source interval end", 0, self._source_extent)
 
     def project_interval(self, interval: SourceInterval) -> tuple[DisplayFragment, ...]:
         """Project source coverage, preserving biological traversal order."""
@@ -321,7 +341,7 @@ class RecordDisplayTransform:
         if lo == hi:
             return ()
         cuts = [lo, hi]
-        if self.start_coordinate is not None and lo < self._anchor_boundary < hi:
+        if self._rotation is not None and lo < self._anchor_boundary < hi:
             cuts.insert(1, self._anchor_boundary)
         spans = list(zip(cuts, cuts[1:]))
         if interval.strand == -1:
@@ -335,7 +355,8 @@ class RecordDisplayTransform:
         for index, (start, end) in enumerate(spans):
             leading = start if self.source_step == 1 else end
             display_start = self.source_boundary_to_display_offset(leading)
-            local_start, local_end = sorted(
+            # Without a display start the record's own axis is its display axis (also round the origin).
+            local_start, local_end = (display_start, display_start + end - start) if self.start_coordinate is None else sorted(
                 (
                     self.source_step * (start - local_anchor),
                     self.source_step * (end - local_anchor),

@@ -698,7 +698,7 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', 'display'
+      'cardinality', 'source', 'selector', 'windows', 'presentation', 'display'
     ], ['recordKey']);
     coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
@@ -721,22 +721,10 @@ const validateCurrentSemanticCoverage = (request) => {
         record.selector.kind === 'recordIndex' ? ['kind', 'index'] : ['kind', 'value']
       );
     }
-    if (record.region) {
-      coverObject(coverage, record.region, `${path}.region`, [
-        'selector', 'start', 'end', 'reverseComplement'
-      ]);
-      if (record.region.selector) {
-        if (!['recordId', 'recordIndex'].includes(record.region.selector.kind)) {
-          throw recipeUnavailable(msg('region selector "{selector}" has no current CLI projection.'), { selector: String(record.region.selector.kind || 'unknown') });
-        }
-        coverObject(
-          coverage,
-          record.region.selector,
-          `${path}.region.selector`,
-          record.region.selector.kind === 'recordIndex' ? ['kind', 'index'] : ['kind', 'value']
-        );
-      }
-    }
+    // A record drawn in several windows is written as records-table rows that share a record_group value (D-32).
+    record.windows.forEach((window, windowIndex) => {
+      coverObject(coverage, window, `${path}.windows[${windowIndex}]`, ['start', 'end', 'reverseComplement', 'column']);
+    });
     coverObject(coverage, record.presentation, `${path}.presentation`, [
       'label', 'subtitle', 'reverseComplement', 'gridRow', 'gridColumn'
     ]);
@@ -918,7 +906,7 @@ const layoutRows = (request, records) => {
     } else {
       const matches = records
         .map((record, index) => (
-          [selectorText(record?.selector), selectorText(record?.region?.selector)].includes(selector)
+          selectorText(record?.selector) === selector
             ? index
             : -1
         ))
@@ -947,6 +935,16 @@ const layoutRows = (request, records) => {
   }
   return { rows, columns };
 };
+
+/**
+ * The region string of a request window without its record (`gbdraw/io/regions.py` `region_text`, which reads it
+ * back): a window whose start is after its end runs across the origin and says `:origin` (PD-OI-122); without it the
+ * larger number first is the reversed span.
+ * @param {{ start: number, end: number, reverseComplement: boolean }} window
+ */
+const regionText = ({ start, end, reverseComplement }) => (
+  `${Number(start)}-${Number(end)}${Number(start) > Number(end) ? ':origin' : ''}${reverseComplement ? ':rc' : ''}`
+);
 
 /**
  * @param {unknown} value
@@ -983,10 +981,11 @@ const appendInputArgs = async (args, request, files) => {
   const sourceKeys = sourcePaths.map((paths) => paths.join('\0'));
   const hasDuplicateSources = new Set(sourceKeys).size !== sourceKeys.length;
   const recordNeedsTable = records.some((record) => (
-    (record.display?.isCircular != null || record.display?.startCoordinate != null)
+    record.windows.length > 1
+    || (record.display?.isCircular != null || record.display?.startCoordinate != null)
     || gridCoordinate(record.presentation?.gridColumn) !== ''
     || (request.mode === 'circular' && (
-      Boolean(record.region)
+      record.windows.length > 0
       || Boolean(record.presentation?.label)
       || Boolean(record.presentation?.subtitle)
       || Boolean(record.presentation?.reverseComplement)
@@ -997,7 +996,7 @@ const appendInputArgs = async (args, request, files) => {
   if (request.mode === 'circular') {
     for (const [index, record] of records.entries()) {
       if (
-        (record.region?.selector || record.selector)
+        record.selector
         && await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) !== 1
       ) {
         circularSelectorNeedsTable = true;
@@ -1031,7 +1030,7 @@ const appendInputArgs = async (args, request, files) => {
       : ((options.includes('gff') || records.length > 1) && loadComparison ? 'first' : 'all');
     for (const [index, record] of records.entries()) {
       const canonicalCardinality = String(record.cardinality || '');
-      const cliCardinality = (record.region?.selector || record.selector)
+      const cliCardinality = record.selector
         ? 'exactly_one'
         : effectiveCardinality;
       if (
@@ -1045,26 +1044,37 @@ const appendInputArgs = async (args, request, files) => {
 
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
-    const columns = [...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
-    const rows = records.map((record, index) => {
-      const region = isPlainObject(record.region) ? record.region : null;
-      const selector = selectorText(region?.selector || record.selector);
+    // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
+    const grouped = records.some((record) => record.windows.length > 1);
+    const columns = [
+      ...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column',
+      'topology', 'display_start', ...(grouped ? ['record_group'] : [])
+    ];
+    const rows = records.flatMap((record, index) => {
+      const selector = selectorText(record.selector);
       const row = {
         ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
         record_label: String(record.presentation?.label || ''),
         record_subtitle: String(record.presentation?.subtitle || ''),
         record_id: selector,
-        region: region
-          ? `${Number(region.start)}-${Number(region.end)}${region.reverseComplement ? ':rc' : ''}`
-          : '',
-        reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
+        region: '',
+        reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
         row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
         column: gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
-        display_start: record.display?.startCoordinate ?? ''
+        display_start: record.display?.startCoordinate ?? '',
+        ...(grouped ? { record_group: '' } : {})
       };
-      return row;
+      if (record.windows.length <= 1) {
+        return [{ ...row, region: record.windows.length ? regionText(record.windows[0]) : '' }];
+      }
+      return record.windows.map((window) => ({
+        ...row,
+        region: regionText(window),
+        column: gridCoordinate(window.column) || row.column,
+        record_group: String(index + 1)
+      }));
     });
     const tablePath = files.generatedTextPath(
       'records.tsv',
@@ -1078,7 +1088,8 @@ const appendInputArgs = async (args, request, files) => {
   options.forEach((option, part) => args.push(`--${option}`, ...sourcePaths.map((paths) => paths[part])));
 
   if (request.mode !== 'linear') return false;
-  const selectors = records.map((record) => selectorText(record.selector));
+  // A record drawn in a window names its record in its `--region`.
+  const selectors = records.map((record) => (record.windows.length ? '' : selectorText(record.selector)));
   if (selectors.some(Boolean)) args.push(...selectors.flatMap((value) => ['--record_id', value]));
   const labels = records.map((record) => String(record.presentation?.label || ''));
   if (labels.some(Boolean)) args.push(...labels.flatMap((value) => ['--record_label', value]));
@@ -1089,13 +1100,8 @@ const appendInputArgs = async (args, request, files) => {
     args.push(...reverseFlags.flatMap((value) => ['--reverse_complement', value ? '1' : '0']));
   }
   records.forEach((record, index) => {
-    if (!isPlainObject(record.region)) return;
-    const selector = selectorText(record.region.selector) || `#${index + 1}`;
-    args.push(
-      '--region',
-      `${selector}:${Number(record.region.start)}-${Number(record.region.end)}` +
-        `${record.region.reverseComplement ? ':rc' : ''}`
-    );
+    const selector = selectorText(record.selector) || `#${index + 1}`;
+    record.windows.forEach((window) => args.push('--region', `${selector}:${regionText(window)}`));
   });
   const rows = requestedRows.length
     ? requestedRows

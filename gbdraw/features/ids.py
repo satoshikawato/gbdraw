@@ -8,6 +8,7 @@ from collections.abc import Callable
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
+    record_identity_key,
     _iter_source_features,
     _mapped_feature_location_parts,
     _read_coord_map,
@@ -369,7 +370,8 @@ def feature_instances(record: SeqRecord) -> Callable[[SeqFeature], str | None]:
     """The feature instance of each feature of ``record``.
 
     The record key is the one request planning gives the record
-    (``gbdraw_record_key``); the biological feature ID is the one
+    (``record_identity_key``: the windows of one record share it, so a feature
+    is one instance in each piece it is drawn in); the biological feature ID is the one
     ``disambiguate_feature_ids`` gives the record's source features, as the
     source feature catalog (``SourceFeatureCatalog.entries``) and the feature
     identity table name it. A record without a record key, a feature without a
@@ -380,7 +382,7 @@ def feature_instances(record: SeqRecord) -> Callable[[SeqFeature], str | None]:
     same: several render stages read them.
     """
 
-    record_key = (getattr(record, "annotations", None) or {}).get("gbdraw_record_key")
+    record_key = record_identity_key(record)
     if not record_key:
         return lambda feature: None
     key, features = str(record_key), record.features

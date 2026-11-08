@@ -9,6 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
+/** @import { LinearUnitWindow } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -71,9 +72,11 @@ import {
   readCanonicalResourceFileBytes,
   readCanonicalResourceText,
   requestLabelProjection,
-  requireLinearComparisonPlanSnapshot
+  requireLinearComparisonPlanSnapshot,
+  linearWindowsPayload
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
+/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
 import {
@@ -108,6 +111,7 @@ import {
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
+import { generateUnitSearch } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -751,7 +755,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
- *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
+ *   current schema (Load reads a stored one to the current schema; Generate and the rerender commit the one they built).
  * @param {readonly LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
@@ -788,12 +792,19 @@ const canReuseResolvedProteinArtifacts = ({
     const end = Number(seq.region_end) || null;
     const reverse = Boolean(seq.region_reverse)
       || (start !== null && end !== null && start > end);
-    const selector = record.region?.selector || record.selector;
+    const { selector, windows } = record;
+    /** @param {{ start: unknown, end: unknown, reverseComplement: unknown }} window */
+    const spanText = (window) => `${window.start}-${window.end}:${Boolean(window.reverseComplement)}`;
+    // A card whose windows its crop fields cannot hold (several, or one across the origin) holds them as the
+    // request does (`createLinearSeq`).
+    const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
       || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
-      || (record.region?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
-      || (record.region?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
-      || reverse !== Boolean(record.region?.reverseComplement || record.presentation?.reverseComplement);
+      || (seq.windows.length > 0 || windows.length > 1
+        ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
+        : (only?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
+          || (only?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
+          || reverse !== Boolean(only?.reverseComplement || record.presentation?.reverseComplement));
   })) return false;
 
   const persistedMode = inferredResolvedProteinMode(persisted);
@@ -1217,6 +1228,54 @@ const requestRecordSource = (resources, sourceKind, sourceFile, fastaFile) => {
     resources: Object.fromEntries(ids.map((id) => [id, /** @type {NonNullable<GenerationPayload['resources']>[string]} */ (resources[id])]))
   };
 };
+/**
+ * A record's LOSAT FASTA read by the diagram Worker (`extractFirstFasta`).
+ * @param {FileLike} sourceFile
+ * @param {{ fmt: string, regionSpec: string | null, recordSelector: string, reverseFlag: boolean }} read
+ * @param {number} idx
+ * @returns {Promise<LosatSeqEntry>}
+ */
+const extractFirstFastaWithWorker = async (sourceFile, { fmt, regionSpec, recordSelector, reverseFlag }, idx) => {
+  const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA, {
+    files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(sourceFile) }],
+    format: fmt,
+    regionSpec,
+    recordSelector,
+    reverseFlag
+  });
+  const res = response.result;
+  if (res.error) throw res.error;
+  return Object.freeze({
+    fasta: res.fasta,
+    recordId: res.record_id || `seq_${idx + 1}`,
+    canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
+  });
+};
+
+/**
+ * The LOSAT entry of a record's protein extraction (the `extractCdsProteinFasta` reply).
+ * @param {{ fasta: string, record_id?: string, record_length?: number, protein_map?: Record<string, unknown>,
+ *   protein_count?: number, protein_set_hash?: string, record_analysis_id?: string, record_instance_key?: string,
+ *   runtime_binding_hash?: string, display_binding_hash?: string, identity_manifest?: unknown }} res
+ * @param {number} idx
+ * @param {string} recordInstanceKey The key the request names the record by, when the reply names none.
+ * @returns {Promise<LosatSeqEntry>}
+ */
+const proteinSeqEntryOfHelperResult = async (res, idx, recordInstanceKey) => Object.freeze({
+  fasta: res.fasta,
+  recordId: res.record_id || `seq_${idx + 1}`,
+  canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
+  proteinMap: res.protein_map || {},
+  proteinCount: res.protein_count || 0,
+  proteinSetHash: String(res.protein_set_hash || ''),
+  recordAnalysisId: String(res.record_analysis_id || ''),
+  recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
+  runtimeBindingHash: String(res.runtime_binding_hash || ''),
+  displayBindingHash: String(res.display_binding_hash || ''),
+  identityManifest: res.identity_manifest || null,
+  hash: await hashText(res.fasta || '')
+});
+
 /**
  * @param {ParsedSequenceRecord} record
  * @param {unknown} regionSpec
@@ -2972,11 +3031,13 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
-      /** @type {({ file: string, displayFile: string } | null)[]} */
+      /** @type {({ file: string, acrossOrigin: boolean } | null)[]} */
       let regionSpecs = [];
       /** @type {string[]} */
       let recordSelectors = [];
       const resolvedComparisons = [];
+      // The comparison plan the request writes: over drawn units in Linear mode (OV-2738).
+      let requestComparisonPlan = activeComparisonPlanSnapshot;
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
@@ -3494,9 +3555,19 @@ export const createRunAnalysis = ({
         }
         // This branch is Linear mode, where the 'A resolved Linear comparison plan is required.' check above
         // throws when the snapshot is null.
-        const comparisonResolution = /** @type {NonNullable<typeof activeComparisonPlanSnapshot>} */ (activeComparisonPlanSnapshot);
+        const comparisonResolution = /** @type {LinearComparisonResolution} */ (activeComparisonPlanSnapshot);
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
+        // Python plans the drawn units: a record drawn in several windows draws one unit per window, and a pair of
+        // records compares every window pair. Every search below runs over the units, and every index the request
+        // writes is a unit's (OV-2738).
+        const unitSearch = await generateUnitSearch(
+          linearSeqs, comparisonResolution,
+          (card) => linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled.value) }),
+          (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
+        );
+        const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
+        requestComparisonPlan = unitResolution;
         const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
           ? requireCurrentProteinBlastpMode(drawing.losat.blastp?.mode)
@@ -3654,25 +3725,24 @@ export const createRunAnalysis = ({
 
         /** @type {{ reverse: boolean }[]} */
         const viewTransformSpecs = [];
-        /** @param {LinearSeq} seq */
-        const buildRegionSpec = (seq) => {
+        /** @param {LinearSeq} seq @param {LinearSeq} card @param {LinearUnitWindow | null} window its unit's, else its crop */
+        const buildRegionSpec = (seq, card, window) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
+          recordSelectors.push(recordIdRaw || '');
+          if (window) {
+            viewTransformSpecs.push({ reverse: window.reverseComplement });
+            return { file: window.searchRegion, acrossOrigin: window.start > window.end };
+          }
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
-          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(seq));
-
-          recordSelectors.push(recordIdRaw || '');
+          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(card));
 
           if (bounds) {
             const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
-            const coordinateReverse = start > end;
-            const displayReverse = wantsReverse || coordinateReverse;
-            const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
-            const canonicalSpecBody = `${canonicalStart}-${canonicalEnd}`;
-            viewTransformSpecs.push({ reverse: displayReverse });
-            return { file: canonicalSpecBody, displayFile: specBody };
+            viewTransformSpecs.push({ reverse: wantsReverse || start > end });
+            return { file: `${canonicalStart}-${canonicalEnd}`, acrossOrigin: false };
           }
 
           viewTransformSpecs.push({ reverse: wantsReverse });
@@ -3682,8 +3752,10 @@ export const createRunAnalysis = ({
         // LOSAT reads the drawn records, then the OFF records of the same
         // files, which stay in the searched databases (D-07); an index below
         // `losatSearch.drawnCount` is a position in the drawn list.
-        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? drawing.linearSeqs : linearSeqs);
+        const losatSearch = losatSearchSequences(unitSeqs, useLosat ? drawing.linearSeqs : linearSeqs, linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
+        // The card of each searched record: a unit's card, then the OFF cards.
+        const losatCards = [...unitSearch.cards, ...losatSeqs.slice(losatSearch.drawnCount)];
         /**
          * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).
          * @type {Map<number, { entry: LosatSeqEntry, readDigest: () => Promise<string> }>}
@@ -3823,7 +3895,12 @@ export const createRunAnalysis = ({
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
             : '';
-          const recordVisibilityRows = useProteinBlastp ? proteinVisibilityRows([recordInstanceKey]) : [];
+          // Per-feature edits bind to the record (its card's key), whichever window of it this unit draws.
+          const recordVisibilityRows = useProteinBlastp
+            ? proteinVisibilityRows([String(losatCards[idx]?.uid || recordInstanceKey)])
+            : [];
+          // The record whose window this unit is, when it is one of several: same-record evidence reads it (D-01).
+          const windowOf = idx < losatSearch.drawnCount ? unitSearch.windowOf[idx] : null;
           // What is read from the source File (or GFF3 and FASTA pair), kept per File (OV-1587): the protein
           // extraction, or the LOSAT FASTA of this record and region.
           const persistentCacheKey = useProteinBlastp
@@ -3833,6 +3910,7 @@ export const createRunAnalysis = ({
                 recordSelector,
                 recordInstanceKey,
                 recordIndex: idx,
+                ...(windowOf === null ? {} : { windowOf }),
                 featureVisibility: featureVisibilityCacheKey,
                 featureOverrides: recordVisibilityRows,
                 proteinMapSchema: 4
@@ -3883,25 +3961,13 @@ export const createRunAnalysis = ({
                   reverseFlag: reverseFlag === '1',
                   recordIndex: idx,
                   recordInstanceKey,
+                  windowOf,
                   featureOverrides: recordVisibilityRows.length ? recordVisibilityRows : null
                 }
               );
               const res = response.result;
               if (res.error) throw res.error;
-              return Object.freeze({
-                fasta: res.fasta,
-                recordId: res.record_id || `seq_${idx + 1}`,
-                canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
-                proteinMap: res.protein_map || {},
-                proteinCount: res.protein_count || 0,
-                proteinSetHash: String(res.protein_set_hash || ''),
-                recordAnalysisId: String(res.record_analysis_id || ''),
-                recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
-                runtimeBindingHash: String(res.runtime_binding_hash || ''),
-                displayBindingHash: String(res.display_binding_hash || ''),
-                identityManifest: res.identity_manifest || null,
-                hash: await hashText(res.fasta || '')
-              });
+              return proteinSeqEntryOfHelperResult(res, idx, recordInstanceKey);
             }, PROTEIN_EXTRACTIONS_PER_FILE);
             if (losatTiming) {
               if (extracted) losatTiming.fastaWorkerFallbacks += 1;
@@ -3912,35 +3978,19 @@ export const createRunAnalysis = ({
               extracted = true;
               /** @param {unknown} [reason] Why the browser reader did not serve the file (none: it has no reader for it). */
               const extractWithWorker = async (reason) => {
-                const response = await runDiagramHelperOperation(
-                  DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
-                  {
-                    files: [{
-                      role: 'source',
-                      bytes: await cloneFileBytesForTransfer(sourceFile)
-                    }],
-                    format: fmt,
-                    regionSpec,
-                    recordSelector,
-                    reverseFlag: reverseFlag === '1'
-                  }
+                const entry = await extractFirstFastaWithWorker(
+                  sourceFile, { fmt, regionSpec, recordSelector, reverseFlag: reverseFlag === '1' }, idx
                 );
-                const res = response.result;
-                if (res.error) throw res.error;
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;
                   console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', reason ? formatError(reason) : '');
                 }
-                return Object.freeze({
-                  fasta: res.fasta,
-                  recordId: res.record_id || `seq_${idx + 1}`,
-                  canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
-                });
+                return entry;
               };
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
                 const { records, parsed } = await readParsedSequenceRecords(sourceFile, fmt);
-                if (records) {
+                if (records && !regionSpecs[idx]?.acrossOrigin) { // Python crops a window across the origin (OV-2739).
                   if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
                   return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
                 }
@@ -4140,7 +4190,7 @@ export const createRunAnalysis = ({
          * @param {LosatSeqEntry} subjectEntry
          */
         const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
-          const edge = comparisonResolution.edges.find(
+          const edge = unitResolution.edges.find(
             (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
           const fallback = losatPairDefaultName(
@@ -4197,14 +4247,17 @@ export const createRunAnalysis = ({
           return args;
         };
 
-        regionSpecs = losatSeqs.map((seq) => buildRegionSpec(seq));
+        regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx], unitSearch.windows[idx] ?? null));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-            ? linearSeqs.map((_, index) => index)
-            : Array.from(new Set(comparisonResolution.edges
+            ? unitSeqs.map((_, index) => index)
+            // The plan is valid here (`requireLinearComparisonPlanSnapshot`), so every edge names two drawn units.
+            : Array.from(new Set(unitResolution.edges
                 .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
-                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex])))
+                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => /** @type {number[]} */ (
+                  [edge.queryIndex, edge.subjectIndex]
+                ))))
                 .sort((left, right) => left - right);
           const proteinEntries = [];
           for (const index of proteinRecordIndexes) {
@@ -4279,9 +4332,9 @@ export const createRunAnalysis = ({
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
           const jobSpecs = buildLosatJobSpecs(/** @type {any} */ ({
-            resolution: comparisonResolution,
-            recordCount: linearSeqs.length,
-            recordUids: linearSeqs.map((seq) => seq.uid),
+            resolution: unitResolution,
+            recordCount: unitSeqs.length,
+            recordUids: unitSeqs.map((seq) => seq.uid),
             program: drawing.losatProgram.value,
             blastpMode,
             collinearInferOrthogroups,
@@ -4313,11 +4366,11 @@ export const createRunAnalysis = ({
           // For collinearity, every pair across adjacent rows is displayed;
           // the Web comparison-plan edges alone do not represent those pairs.
           const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
-            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
+            ? canonicalGridDisplayPairs(unitSeqs, drawing.linearRecordRows)
             : null;
           const hasCanonicalGridRows = canonicalGridPair !== null;
           const pairNumbers = numberLosatDisplayPairs(
-            preparedJobs.map(({ spec }) => spec), comparisonResolution.edges, canonicalGridPair
+            preparedJobs.map(({ spec }) => spec), unitResolution.edges, canonicalGridPair
           );
           const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
           // The converter settings. The derived key and the converter read these same values.
@@ -4342,7 +4395,7 @@ export const createRunAnalysis = ({
           };
           // The records the converter reads: every record for similarity groups and Collinear.
           const converterRecordIndexes = useDerivedProteinPayloadCache
-            ? linearSeqs.map((_, index) => index)
+            ? unitSeqs.map((_, index) => index)
             : Array.from(new Set(preparedJobs.flatMap(({ spec }) => [spec.queryIndex, spec.subjectIndex])))
               .sort((left, right) => left - right);
           /** @type {readonly string[] | null} */
@@ -4436,7 +4489,7 @@ export const createRunAnalysis = ({
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
-            const resolvedEdge = comparisonResolution.edges.find(
+            const resolvedEdge = unitResolution.edges.find(
               (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
             );
             const { displayPair: isResolvedDisplayPair, pairIndex } = pairNumbers[jobIndex];
@@ -4454,7 +4507,7 @@ export const createRunAnalysis = ({
             };
             losatPairs.push(pair);
             if (
-              isResolvedDisplayPair &&
+              isResolvedDisplayPair && resolvedEdge &&
               !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
             ) {
               cacheInfo.push({
@@ -4985,7 +5038,7 @@ export const createRunAnalysis = ({
         generatedLabelProjection,
         filesData: candidateFiles,
         recordDisplayRows: recordDisplayRows?.value || [],
-        comparisonPlanSnapshot: activeComparisonPlanSnapshot,
+        comparisonPlanSnapshot: requestComparisonPlan,
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation,
         omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0
@@ -4997,7 +5050,7 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // Load read the committed request to schema 9 (`readStoredRenderRequest`).
+        // Load read the committed request to the current schema (`readStoredRenderRequest`).
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()
@@ -5019,8 +5072,8 @@ export const createRunAnalysis = ({
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.
-            records: canonical.renderRequest.records.map(({ source, selector, region, presentation }) => (
-              [source, selector, region, presentation.reverseComplement]
+            records: canonical.renderRequest.records.map(({ source, selector, windows, presentation }) => (
+              [source, selector, windows, presentation.reverseComplement]
             )),
             resources: canonical.resources
           },

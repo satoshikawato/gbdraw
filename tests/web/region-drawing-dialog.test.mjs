@@ -32,7 +32,7 @@ const derivedReply = (adaptSizes) => ({
   notCarried: [{ kind: 'OTHER_MODE_SETTINGS', count: 0, items: ['canvas.circular.track_type'] }, { kind: 'COMPARISON_TABLES', count: 1, items: [] }]
 });
 
-const harness = ({ reply = null, refusal = 'ORIGIN_CROSSING' } = {}) => {
+const harness = ({ reply = null, refusal = 'START_AFTER_END' } = {}) => {
   const calls = { derive: [], created: [] };
   /** @type {Array<() => void>} */
   const pending = [];
@@ -135,9 +135,8 @@ test('the newest request wins', async () => {
   assert.equal(owner.dialog.status, 'derived');
 });
 
-test('a refusal shows its reason alone, worded for the topology, and Create does nothing', async () => {
+test('a refusal shows its reason alone and Create does nothing', async () => {
   for (const [refusal, message] of [
-    ['ORIGIN_CROSSING', 'Choose a start before the end: a region cannot cross the origin of a circular record.'],
     ['START_AFTER_END', 'Choose a start before the end.']
   ]) {
     const { owner, calls } = harness({ refusal });

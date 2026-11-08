@@ -55,9 +55,9 @@ def test_identical_features_bind_to_their_own_source_instance():
     )
     identities = [FeatureIdentity("one", entry.biological_feature_id) for entry in (first, second)]
     bindings = _resolve(plan, *identities)
-    assert [bindings[item].status for item in identities] == ["present", "present"]
-    assert [bindings[item].source_feature_index for item in identities] == [0, 1]
-    assert [bindings[item].feature.qualifiers["locus_tag"] for item in identities] == [
+    assert [bindings[item][0].status for item in identities] == ["present", "present"]
+    assert [bindings[item][0].source_feature_index for item in identities] == [0, 1]
+    assert [bindings[item][0].feature.qualifiers["locus_tag"] for item in identities] == [
         ["first"],
         ["second"],
     ]
@@ -76,12 +76,12 @@ def test_crop_excluded_and_unresolved_identities_stay_distinct():
         FeatureIdentity("one", "stale"),
     )
     bindings = _resolve(plan, cropped, kept, stale)
-    assert [(bindings[item].status, bindings[item].source_feature_index) for item in (cropped, kept, stale)] == [
+    assert [(bindings[item][0].status, bindings[item][0].source_feature_index) for item in (cropped, kept, stale)] == [
         ("crop_excluded", 0),
         ("present", 2),
         ("unresolved", None),
     ]
-    assert bindings[cropped].feature is None and bindings[stale].feature is None
+    assert bindings[cropped][0].feature is None and bindings[stale][0].feature is None
 
 
 def test_feature_dropped_by_loading_is_absent(tmp_path):
@@ -97,7 +97,7 @@ def test_feature_dropped_by_loading_is_absent(tmp_path):
         selected_features_set=("CDS",),
     )
     gene = FeatureIdentity("one", plan.provenance[0].source_feature_catalog[0].biological_feature_id)
-    binding = _resolve(plan, gene)[gene]
+    (binding,) = _resolve(plan, gene)[gene]
     assert (binding.status, binding.source_feature_index, binding.feature) == ("absent", 0, None)
 
 

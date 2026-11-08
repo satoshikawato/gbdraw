@@ -66,7 +66,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.io.record_select import parse_record_selector
-from gbdraw.io.regions import parse_region_spec
+from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
@@ -233,7 +233,28 @@ def _payload_for_schema(
     return payload
 
 
+def _windows_as_region(payload: dict[str, Any], schema: int) -> None:
+    if schema < 10:
+        # Schemas before 10 wrote one region per record (its selector in the record's selector) and its column on
+        # the presentation.
+        for record in payload["records"]:
+            windows = record.pop("windows")
+            assert len(windows) <= 1
+            record["region"] = None
+            if windows:
+                window = windows[0]
+                record["region"] = {
+                    "selector": None,
+                    "start": window["start"],
+                    "end": window["end"],
+                    "reverseComplement": window["reverseComplement"],
+                }
+                if window["column"] is not None:
+                    record["presentation"]["gridColumn"] = window["column"]
+
+
 def _remove_schema6_record_fields(payload: dict[str, Any], schema: int) -> None:
+    _windows_as_region(payload, schema)
     if schema < 9:
         payload["diagramOptions"].pop("featureOverrides", None)
     if schema < 7:
@@ -862,7 +883,7 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
     )
     assert decoded.output.output_prefix == "canonical-circular"
     assert decoded.output.overwrite is False
-    assert decoded.records[1].region == parse_region_spec("1-100:rc")
+    assert decoded.records[1].windows == (RecordWindow(1, 100, True),)
     assert encode_canonical_request(decoded).payload == encoded.payload
 
     legacy_unsafe_payload = copy.deepcopy(encoded.payload)
@@ -3296,7 +3317,7 @@ def test_schema9_round_trips_feature_overrides_and_identity_annotation_targets(
     request = _identity_request(_source_file(tmp_path / "source.gbk"))
     encoded = encode_canonical_request(request)
 
-    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA == 9
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA == 10
     assert encoded.payload["diagramOptions"]["featureOverrides"] == [
         {"recordKey": "k", "biologicalFeatureId": "faaaaaaaa",
          "featureVisibility": "exclude_matching", "labelVisibility": None, "labelText": None},
@@ -3328,7 +3349,7 @@ def test_schema8_request_reads_without_feature_overrides_and_writes_schema9(
     )
     assert decoded.options.feature_overrides == ()
     promoted = encode_canonical_request(decoded).payload
-    assert promoted["schema"] == 9
+    assert promoted["schema"] == CANONICAL_REQUEST_SCHEMA
     assert promoted["diagramOptions"]["featureOverrides"] == []
 
 
@@ -3354,6 +3375,7 @@ def test_feature_overrides_require_schema9_and_the_current_row_shape(
     encoded = encode_canonical_request(_identity_request(_source_file(tmp_path / "source.gbk")))
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _windows_as_region(payload, schema)
     change(payload["diagramOptions"])
     with pytest.raises(CanonicalRequestDecodingError, match=message):
         decode_canonical_request(
@@ -3711,3 +3733,23 @@ def test_gallery_comparison_tables_survive_a_read_unchanged(name: str, tmp_path:
     assert tables
     for text in tables:
         assert _reencoded(text, tmp_path) == text
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_schema9_region_whose_start_is_greater_than_its_end_is_the_reversed_span(tmp_path: Path, mode: str) -> None:
+    # OV-2746: before request schema 10 a region with the larger number first was the reversed span, as the Web read
+    # it (v0.14.5); only a schema 10 window whose start is after its end crosses the origin.
+    source = _source_file(tmp_path / "record.gbk")
+    request_type = LinearDiagramRequest if mode == "linear" else CircularDiagramRequest
+    encoded = encode_canonical_request(
+        request_type(records=(RecordInput(source=GenBankInputSource(source), region=parse_region_spec("50-300")),))
+    )
+    resource_paths = _materialize_resources(encoded, tmp_path / "resources")
+    payload = _payload_for_schema(encoded, 9)
+    payload["records"][0]["region"].update(start=300, end=50, reverseComplement=False)
+    decoded = decode_canonical_request(payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert decoded.records[0].windows == (RecordWindow(50, 300, True),)
+    windowed = copy.deepcopy(encoded.payload)
+    windowed["records"][0]["windows"][0].update(start=300, end=50, reverseComplement=False)
+    decoded = decode_canonical_request(windowed, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert decoded.records[0].windows == (RecordWindow(300, 50, False),)
