@@ -142,6 +142,10 @@ def test_circular_manual_tick_interval_bypasses_the_tiers() -> None:
         (2_000_000, 500_000),
         (4_999_999, 500_000),
         (5_000_000, 1_000_000),
+        # OV-2747: above 5 Mbp the intervals coarsen where the default ruler labels start to overlap.
+        (49_968_281, 1_000_000),
+        (49_968_282, 2_000_000),
+        (112_934_049, 5_000_000),
     ],
 )
 def test_linear_tick_tiers(length: int, expected: int) -> None:

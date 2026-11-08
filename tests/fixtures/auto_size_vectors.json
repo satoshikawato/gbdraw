@@ -398,7 +398,14 @@
     {"mode": "linear", "length": 9999999, "scaleInterval": 1000000, "window": 10000, "step": 1000},
     {"mode": "linear", "length": 10000000, "scaleInterval": 1000000, "window": 100000, "step": 10000},
     {"mode": "linear", "length": 10000001, "scaleInterval": 1000000, "window": 100000, "step": 10000},
-    {"mode": "linear", "length": 20000000, "scaleInterval": 1000000, "window": 100000, "step": 10000}
+    {"mode": "linear", "length": 20000000, "scaleInterval": 1000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 49968281, "scaleInterval": 1000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 49968282, "scaleInterval": 2000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 99936563, "scaleInterval": 2000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 99936564, "scaleInterval": 5000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 112934049, "scaleInterval": 5000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 214136344, "scaleInterval": 5000000, "window": 100000, "step": 10000},
+    {"mode": "linear", "length": 214136345, "scaleInterval": 10000000, "window": 100000, "step": 10000}
   ],
   "regions": [
     {"name": "ND5 with a 600 bp margin", "recordLength": 16569, "start": 12337, "end": 14148, "margin": 600, "expected": {"start": 11737, "end": 14748, "whole": false}},
