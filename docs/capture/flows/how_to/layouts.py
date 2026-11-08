@@ -39,6 +39,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
@@ -186,11 +187,7 @@ def capture_gui_circular_layout(
         genbank.check()
         expect(genbank).to_be_checked()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(upload_path)
-        expect(
-            page.get_by_role(
-                "group", name="GenBank/DDBJ File selection", exact=True
-            )
-        ).to_contain_text(GUI_CIRCULAR_LAYOUT_COMBINED_FILENAME)
+        expect_circular_file_card(page, 1, GUI_CIRCULAR_LAYOUT_COMBINED_FILENAME)
 
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("multi_record_circular")

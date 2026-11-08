@@ -43,6 +43,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
@@ -859,11 +860,7 @@ def capture_gui_circular_rings(
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
-        expect(
-            page.get_by_role(
-                "group", name="GenBank/DDBJ File selection", exact=True
-            )
-        ).to_contain_text("HmmtDNA.gbk")
+        expect_circular_file_card(page, 1, "HmmtDNA.gbk")
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("circular_similarity_rings")
         expect(prefix).to_have_value("circular_similarity_rings")

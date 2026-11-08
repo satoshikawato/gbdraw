@@ -48,6 +48,7 @@ from flows.human_circular import (
     load_raw_human_circular,
 )
 from flows.web_capture import (
+    expect_circular_file_card,
     toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
@@ -1249,11 +1250,7 @@ def capture_gui_session_reproduction(
         expect(page.get_by_label("Output Prefix", exact=True)).to_have_value("")
         expect(page.get_by_label("Species", exact=True)).to_have_value("")
         expect(page.get_by_label("Track Preset", exact=True)).to_have_value("tuckin")
-        expect(
-            page.get_by_role(
-                "group", name="GenBank/DDBJ File selection", exact=True
-            )
-        ).to_contain_text("HmmtDNA.gbk")
+        expect_circular_file_card(page, 1, "HmmtDNA.gbk")
         expect(
             page.get_by_role("region", name="Result Preview", exact=True)
         ).to_be_visible()

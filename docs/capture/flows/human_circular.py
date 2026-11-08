@@ -20,6 +20,7 @@ from config import (
     FIRST_LINEAR_LABEL_RULE_SIZE,
 )
 from flows.web_capture import (
+    expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
     expect_circular_source_status,
@@ -78,11 +79,7 @@ def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
     page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
         FIRST_CIRCULAR_FIXTURE_PATH
     )
-    expect(
-        page.get_by_role(
-            "group", name="GenBank/DDBJ File selection", exact=True
-        )
-    ).to_contain_text(FIRST_CIRCULAR_FIXTURE_PATH.name)
+    expect_circular_file_card(page, 1, FIRST_CIRCULAR_FIXTURE_PATH.name)
     expect_circular_source_status(page, "1 source record inspected")
     apply_finished_human_settings(page, output_prefix=output_prefix)
 

@@ -34,6 +34,8 @@ from flows.how_to.nucleotide_comparisons import (
 )
 from flows.how_to.tracks import _fit_circular_preview
 from flows.web_capture import (
+    circular_file_card,
+    expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
@@ -211,11 +213,7 @@ def capture_gui_precomputed_circular_rings(
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
-        expect(
-            page.get_by_role(
-                "group", name="GenBank/DDBJ File selection", exact=True
-            )
-        ).to_contain_text("HmmtDNA.gbk")
+        expect_circular_file_card(page, 1, "HmmtDNA.gbk")
         page.get_by_label("Output Prefix", exact=True).fill(
             "precomputed_circular_rings"
         )
@@ -224,9 +222,7 @@ def capture_gui_precomputed_circular_rings(
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
         page.get_by_label("Separate Strands", exact=True).uncheck()
-        page.get_by_role(
-            "group", name="GenBank/DDBJ File selection", exact=True
-        ).scroll_into_view_if_needed()
+        circular_file_card(page, 1).scroll_into_view_if_needed()
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[0]] = (
             capture_screenshot(
                 page,
