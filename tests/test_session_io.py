@@ -1021,6 +1021,66 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
     session_io_module._validate_alignment_reset_receipt(session)
 
 
+def _receipt_session(schema: int, placement: str, binding: str) -> dict[str, object]:
+    """A Linear alignment Session whose record ``b`` is cropped 2..10, with its record selector stored where
+    ``placement`` says: in the region, as the v0.14.5 Web wrote it, or on the record."""
+
+    source = b"source bytes remain biological authority"
+
+    def anchor(key: str) -> dict[str, object]:
+        return {"recordKey": key, "biologicalFeatureId": f"gene-{key}", "sourceFeatureIndex": 1, "stableFeatureSvgId": None}
+
+    def record(key: str) -> dict[str, object]:
+        selector = {"kind": "recordId", "value": key}
+        span = {"start": 2, "end": 10, "reverseComplement": False}
+        cropped = key == "b"
+        stored: dict[str, object] = {
+            "recordKey": key, "source": {"kind": "genbank", "resourceId": "source"}, "cardinality": "exactly_one",
+            "selector": None if cropped and placement == "region" else selector,
+            "display": {"isCircular": None, "startCoordinate": None}, "presentation": {"reverseComplement": False},
+        }
+        if schema >= 10:
+            stored["windows"] = [{**span, "column": None}] if cropped else []
+        else:
+            stored["region"] = {"selector": selector if placement == "region" else None, **span} if cropped else None
+        return stored
+
+    plan = {"schema": 2, "groupId": "og-1", "reference": anchor("a"), "records": [
+        {"recordKey": "a", "status": "reference", "rationale": "reference", "anchor": anchor("a")},
+        {"recordKey": "b", "status": "aligned", "rationale": "user_selected", "anchor": anchor("b")},
+        {"recordKey": "c", "status": "skipped", "rationale": "skipped_by_user", "anchor": None},
+    ]}
+    return {
+        "renderRequest": {"schema": schema, "mode": "linear", "records": [record(key) for key in "abc"],
+                          "layout": {"recordTranslations": [], "similarityAlignment": plan}},
+        "editorState": {"featureCatalog": None,
+                        "alignmentResetReceipt": {"binding": binding, "directions": [], "referenceDeltaX": None}},
+        "resources": {"source": {"name": "record.gbk", "kind": "genbank", "encoding": "base64",
+                                 "data": base64.b64encode(source).decode(), "size": len(source)}},
+    }
+
+
+# OV-2772: a receipt binds its request as the file stored it. The bindings are those the v0.14.5 Web writes for
+# request schema 9 (the selector in the region, or on the record) and the one the Web rebinds a promoted request to
+# (tests/web/alignment-reset-receipt.test.mjs).
+_V0145_REGION_SELECTOR_BINDING = "fe2664f3a1b0107bdf2e54ec4c0636a064039fb4484a758fa8109c0648964da4"
+_RECORD_SELECTOR_BINDING = "cf9c72f1cdbb85e4b89178634a5a22c54a7a6250e5357b985a457c2b3d8317b1"
+
+
+@pytest.mark.parametrize(("schema", "placement", "binding"), [
+    (9, "region", _V0145_REGION_SELECTOR_BINDING),
+    (9, "record", _RECORD_SELECTOR_BINDING),
+    (CANONICAL_REQUEST_SCHEMA, "record", _RECORD_SELECTOR_BINDING),
+])
+def test_alignment_reset_receipt_binds_the_request_as_stored(schema: int, placement: str, binding: str) -> None:
+    session_io_module._validate_alignment_reset_receipt(_receipt_session(schema, placement, binding))
+
+
+def test_alignment_reset_receipt_of_a_region_selector_is_not_the_promoted_binding() -> None:
+    with pytest.raises(ValidationError, match="binding changed"):
+        session_io_module._validate_alignment_reset_receipt(_receipt_session(9, "region", _RECORD_SELECTOR_BINDING))
+
+
 def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
     # Design Q4: per-feature edits are identity rows. Session 46 keeps each
     # mode's rows in its own slice (PD-OI-090), so both modes keep their own

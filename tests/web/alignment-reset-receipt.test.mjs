@@ -3,7 +3,9 @@ import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit,
-  validateAlignmentResetReceiptShape: admitShape } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+  validateAlignmentResetReceiptShape: admitShape, readStoredSimilarityAlignmentResetReceipt: readStored
+} = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 // OV-130 (R6): a stale or malformed receipt is a diagnostic, not an unknown failure.
 const stale = { code: 'ALIGNMENT_RESET_EVIDENCE' };
@@ -148,4 +150,37 @@ test('Python and Web bind supplementary Unicode record keys in the same determin
   });
   if (result.error) throw result.error;
   assert.equal(result.status,0,result.stderr);
+});
+
+// OV-2772: v0.14.5 and dev (request schema 9) wrote a cropped Linear card's record selector in its region and bound
+// the record's own selector, `null`; Load promotes that selector onto the record. A receipt binds the request as the
+// file stored it, as Python's verifier reads it, and Load rebinds it to the promoted request. The bindings are the
+// ones the v0.14.5 Web writes for these requests (`buildSimilarityAlignmentResetReceipt` at tag v0.14.5).
+const storedBeforeWindows = (placement) => ({ schema: 9, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
+  recordKey, source: { kind: 'genbank', resourceId: 'source' }, cardinality: 'exactly_one',
+  selector: recordKey === 'b' && placement === 'region' ? null : { kind: 'recordId', value: recordKey },
+  region: recordKey === 'b'
+    ? { selector: placement === 'region' ? { kind: 'recordId', value: 'b' } : null, start: 2, end: 10, reverseComplement: false }
+    : null,
+  display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false }
+})), layout: { recordTranslations: ['a', 'b', 'c'].map(recordKey => ({ recordKey, x: 7, y: -3 })),
+  similarityAlignment: fixture().after.renderRequest.layout.similarityAlignment } });
+for (const [placement, binding] of [
+  ['region', 'fe2664f3a1b0107bdf2e54ec4c0636a064039fb4484a758fa8109c0648964da4'],
+  ['record', 'cf9c72f1cdbb85e4b89178634a5a22c54a7a6250e5357b985a457c2b3d8317b1']
+]) test(`a receipt stored with request schema 9 binds the selector stored on the ${placement}`, async () => {
+  const stored = storedBeforeWindows(placement);
+  const canonical = { resources: { source: resource },
+    renderRequest: promoteCanonicalRenderRequestToCurrent(structuredClone(stored)) };
+  assert.deepEqual(canonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'b' });
+  const receipt = { binding, directions: [], referenceDeltaX: null };
+  const read = await readStored(receipt, canonical, stored);
+  assert.equal(read.stale, false);
+  // Rebound to the promoted request: History, Align and Save read it as current.
+  assert.equal(await admit(read.value, canonical), read.value);
+  assert.deepEqual({ ...read.value, binding }, receipt);
+  // A crop changed after the save still makes it stale.
+  const changed = structuredClone(canonical);
+  changed.renderRequest.records[1].windows[0].end = 11;
+  assert.deepEqual(await readStored(receipt, changed, stored), { value: null, stale: true });
 });

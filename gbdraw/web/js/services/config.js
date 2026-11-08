@@ -253,7 +253,7 @@ import {
 import { getResourcePayloadIdentity, setResourcePayloadOwner } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
-  readSimilarityAlignmentResetReceipt,
+  readStoredSimilarityAlignmentResetReceipt,
   validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
@@ -2307,16 +2307,17 @@ const readResultSetFeatureCatalog = async ({ at, projected, set }, repairs) => {
  * @param {StoredResultSet} stored
  * @param {StoredSetProject} project
  * @param {LoadRepair[]} repairs
+ * @param {unknown} storedRequest The set's request as the file stored it, which the receipt bound (OV-2772).
  * @returns {Promise<SessionInput>}
  */
-const readResultSetResetReceipt = async ({ at, set }, project, repairs) => {
+const readResultSetResetReceipt = async ({ at, set }, project, repairs, storedRequest) => {
   const editorState = isPlainObject(set.editorState) ? set.editorState : {};
   const receipt = editorState.alignmentResetReceipt;
   if (receipt === null || receipt === undefined) return set;
   // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
   const canonical = /** @type {AlignmentResetCanonical} */ ({ renderRequest: set.renderRequest, resources: project.resources });
-  const { stale } = await readSimilarityAlignmentResetReceipt(receipt, canonical);
-  if (!stale) return set;
+  const { value, stale } = await readStoredSimilarityAlignmentResetReceipt(receipt, canonical, storedRequest);
+  if (!stale) return value === receipt ? set : { ...set, editorState: { ...editorState, alignmentResetReceipt: value } };
   repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
   return { ...set, editorState: { ...editorState, alignmentResetReceipt: null } };
 };
@@ -2725,7 +2726,10 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     : readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
   /** @type {StoredSetProject} */
   const project = { resources: authorityData.resources };
-  const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
+  // Each set's request as the file stored it, by where the file holds the set: a receipt bound it (OV-2772).
+  const storedRequests = new Map(storedResultSets(legendRead.session).map(({ at, set }) => [at, set.renderRequest]));
+  const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(
+    entry, project, repairs, storedRequests.get(entry.at)));
   const leafReadings = await readStoredLeaves(rawData);
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
   /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
