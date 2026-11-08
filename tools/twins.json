@@ -13,7 +13,7 @@
         "gbdraw/web/js/app/auto-value-display.js:createAutoValueDisplay"
       ],
       "vector": "tests/fixtures/auto_size_vectors.json",
-      "reason": "The Web shows the automatic value before Generate; the vector pins its size class to Python's (the Web reads the label font size) and its GC content axis tick font beside a depth axis (gcAxisTickFonts).",
+      "reason": "The Web shows the automatic value before Generate; the vector pins its size class to Python's (the Web reads the label font size) and its GC content axis tick font beside a depth axis (gcAxisTickFonts: the font of the first Depth row's series, at that row's width when Use custom stack is on).",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },

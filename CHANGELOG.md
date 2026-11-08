@@ -33,6 +33,18 @@ write-up of a release.
   Depth axis's font, so a narrow Depth track drew them smaller than shown
   (for example 5.5 px drawn, 8 px shown). The field now shows the size the
   figure draws (OV-2873).
+- Fixed: in a Circular figure whose Depth track has its own **Tick Font Size**,
+  the numbered Depth axis labels were drawn in that size, but the rings kept
+  room for the Auto size, so the labels ran into the next ring or the scale
+  labels; a Percent GC content axis was drawn in the Auto size instead of the
+  Depth labels' size. Each Depth track now keeps room for its own label size,
+  and the GC content axis takes the size of the first Depth track, in the CLI,
+  the Python API, and the Web app (OV-2875).
+- Fixed (Web app): with **Use custom stack** on, the Depth and GC content
+  **Tick Font Size** fields showed an Auto size from the Depth width setting,
+  which the custom stack does not use, instead of the width of the Depth row
+  (for example 8 px shown, 5.5 px drawn for a 25 px row). They now show the
+  size the figure draws (OV-2876).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while

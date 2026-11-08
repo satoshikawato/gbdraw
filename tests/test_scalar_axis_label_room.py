@@ -57,7 +57,11 @@ def _numbered_labels(root: ET.Element) -> list[ET.Element]:
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("gc_font", [(), ("--gc_content_tick_font_size", "11")], ids=["auto", "explicit"])
+@pytest.mark.parametrize(
+    "gc_font",
+    [(), ("--gc_content_tick_font_size", "11"), ("--depth_track_tick_font_size", "14")],
+    ids=["auto", "explicit", "depth-track-font"],
+)
 def test_numbered_labels_of_a_depth_axis_and_the_percent_gc_axis_below_it_do_not_overlap(
     tmp_path: Path, gc_font: tuple[str, ...]
 ) -> None:
@@ -70,6 +74,17 @@ def test_numbered_labels_of_a_depth_axis_and_the_percent_gc_axis_below_it_do_not
     # their centres are closer than half of each label line.
     for (text_a, y_a, size_a), (text_b, y_b, size_b) in combinations(labels, 2):
         assert abs(y_a - y_b) >= 0.5 * (size_a + size_b) - 1e-6, (text_a, text_b, labels)
+
+
+@pytest.mark.circular
+def test_the_percent_gc_axis_takes_the_tick_font_of_the_depth_track_beside_it(tmp_path: Path) -> None:
+    # OV-2875: the depth track's own tick font (per-track Tick Font Size) is the font its numbers are drawn in, and
+    # the Percent GC axis without its own size reads alike.
+    fonts = {
+        (text.text or "")[-1]: float(text.get("font-size", "nan"))
+        for text in _numbered_labels(_tutorial_figure(tmp_path, "--depth_track_tick_font_size", "14"))
+    }
+    assert fonts == {"x": 14.0, "%": 14.0}
 
 
 @pytest.mark.circular

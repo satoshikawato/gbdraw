@@ -26,7 +26,7 @@ from ...layout.circular import (
     content_outer_radius_px,
     bands_overlap,
 )
-from ...layout.circular_depth_axis import CircularScalarAxes, ScalarAxisFootprint
+from ...layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth, ScalarAxisFootprint
 from ...tracks.circular import (
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     CircularTrackSlot,
@@ -34,6 +34,7 @@ from ...tracks.circular import (
     normalize_circular_track_slots,
     tick_sides_for_tick_label_layout,
 )
+from ...tracks.parsing import depth_slot_track_index
 from ...svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_radius_bounds,
@@ -920,7 +921,11 @@ def _measure_radial_slot(
             if intent.side == "inside"
             else RadialBand(band.inner_px, band.outer_px + room)
         )
-    axis_footprint = None if scalar_axes is None else scalar_axes.footprint(renderer, resolved_width)
+    axis_footprint = (
+        None
+        if scalar_axes is None
+        else scalar_axes.footprint(renderer, resolved_width, slot_id=intent.slot_id, params=intent.params)
+    )
     if axis_footprint is not None:
         # A scalar track's axis paints past its band (its numbered labels); other rings keep clear of it.
         reserved_band = _band_with_axis_footprint(band, axis_footprint)
@@ -2529,6 +2534,16 @@ def _anchored_annotation_overlay(
     )
 
 
+def _depth_slot_widths(intents: Sequence[_RadialSlotIntent]) -> tuple[DepthSlotWidth, ...]:
+    """The depth slots in slot order, as the GC axis reads them."""
+
+    return tuple(
+        DepthSlotWidth(depth_slot_track_index(intent.slot_id, intent.params), float(intent.width_px))
+        for intent in intents
+        if intent.renderer == "depth"
+    )
+
+
 def _resolve_circular_radial_layout(
     *,
     total_length: int,
@@ -2575,9 +2590,7 @@ def _resolve_circular_radial_layout(
     )
     if scalar_axes is not None:
         # The GC axis keeps its room in the font it is drawn in (``_gc_content_axis_font_size`` in the assembly).
-        scalar_axes = scalar_axes.with_gc_font_of_depth(
-            next((float(intent.width_px) for intent in intents if intent.renderer == "depth" and intent.width_px > 0), None)
-        )
+        scalar_axes = scalar_axes.with_gc_font_of_depth(_depth_slot_widths(intents))
     if definition_pass == "move":
         circular = cfg.canvas.circular
         floor_px = float(circular.track_narrowing_min_px) if circular.track_narrowing else math.inf

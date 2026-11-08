@@ -174,9 +174,8 @@ from ...tracks import (
     ScalarSpec,
     default_linear_track_slots,
     normalize_linear_track_slots_with_axis,
-    parse_nonnegative_integer,
 )
-from ...tracks.parsing import slot_dinucleotide, slot_legend_label, slots_draw_features
+from ...tracks.parsing import depth_slot_track_index, slot_dinucleotide, slot_legend_label, slots_draw_features
 from ...annotations import (
     AnnotationOptions,
     LabelSizing,
@@ -516,11 +515,7 @@ def _apply_depth_track_heights_to_linear_slots(
 
 
 def _depth_slot_track_index(slot) -> int:
-    params = getattr(slot, "params", {}) or {}
-    return parse_nonnegative_integer(
-        params.get("track_index", 0),
-        field_name=f"depth slot '{getattr(slot, 'id', '')}' track_index",
-    )
+    return depth_slot_track_index(str(getattr(slot, "id", "")), getattr(slot, "params", {}) or {})
 
 
 def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucleotide: str) -> GcContentConfigurator:

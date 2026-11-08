@@ -13,7 +13,7 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
-from gbdraw.layout.circular_depth_axis import CircularScalarAxes, ScalarAxisStyle, scalar_axis_footprint
+from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth, ScalarAxisStyle, scalar_axis_footprint
 from gbdraw.exceptions import ValidationError
 from gbdraw.diagrams.circular.radial_layout import (
     build_circular_feature_layout,
@@ -698,6 +698,54 @@ def test_a_percent_gc_slot_reserves_half_its_numbered_label_line_in_the_font_it_
     assert ranged.reserved_band_px == ranged.draw_band_px
     # A GC axis without numbered labels is left out of the axes the layout reads.
     assert CircularScalarAxes.of(None, axis(gc_font, "range")).gc_content is None
+
+
+def test_each_depth_slot_reserves_room_for_its_own_tracks_numbered_labels_and_the_gc_axis_takes_the_first() -> None:
+    # OV-2875: a depth track with its own tick font draws its numbers in it, so its slot keeps room in that font;
+    # the Percent GC axis takes the font of the first depth slot that draws an axis.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 200.0
+
+    def axis(tick_font_size: float | None) -> ScalarAxisStyle:
+        return ScalarAxisStyle(show_axis=True, show_ticks=True, tick_font_size=tick_font_size, axis_labels="numbered")
+
+    scalar_axes = CircularScalarAxes(
+        gc_content=axis(None),
+        depth_tracks=((0, axis(6.0)), (1, axis(14.0))),
+    )
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        geometry=canvas_config.geometry(),
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="depth_2", renderer="depth", radius=ScalarSpec(0.9, "factor"), width=ScalarSpec(24.0, "px"),
+                params={"track_index": 1},
+            ),
+            CircularTrackSlot(
+                id="depth_1", renderer="depth", radius=ScalarSpec(0.65, "factor"), width=ScalarSpec(24.0, "px"),
+                params={"track_index": 0},
+            ),
+            CircularTrackSlot(
+                id="gc", renderer="dinucleotide_content", radius=ScalarSpec(0.4, "factor"),
+                width=ScalarSpec(40.0, "px"), params={"nt": "GC"},
+            ),
+        ],
+        scalar_axes=scalar_axes,
+    )
+    room = {
+        slot.id: slot.reserved_band_px.outer_px - slot.draw_band_px.outer_px
+        for slot in layout.tracks
+        if slot.draw_band_px is not None and slot.reserved_band_px is not None
+    }
+    assert room["depth_2"] == pytest.approx(7.0)
+    assert room["depth_1"] == pytest.approx(3.0)
+    assert room["gc"] == pytest.approx(7.0)
+    # A depth slot of a track that is not drawn keeps no axis room and gives the GC axis no font.
+    assert scalar_axes.depth_axis(2) is None
+    assert scalar_axes.gc_tick_font_size(
+        axis(None), [DepthSlotWidth(2, 24.0), DepthSlotWidth(0, 24.0)]
+    ) == pytest.approx(6.0)
 
 
 @pytest.mark.parametrize("side", ["inside", "outside"])

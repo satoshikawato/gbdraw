@@ -86,6 +86,12 @@ def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
     return value
 
 
+def depth_slot_track_index(slot_id: str, params: Mapping[str, object]) -> int:
+    """The logical depth track a depth slot draws: its ``track_index`` param, 0 when it has none."""
+
+    return parse_nonnegative_integer(params.get("track_index", 0), field_name=f"depth slot '{slot_id}' track_index")
+
+
 # An overlay annotation slot refers to other slots by id: parameter name, and its role in messages.
 _OVERLAY_SLOT_REFERENCES = (("anchor_slot", "anchor"), ("to_slot", "to_slot"))
 
@@ -320,6 +326,7 @@ __all__ = [
     "SHARED_SLOT_PARAM_KEYS",
     "SlotView",
     "SlotWithParams",
+    "depth_slot_track_index",
     "normalize_dinucleotide_params",
     "parse_bool",
     "parse_nonnegative_integer",

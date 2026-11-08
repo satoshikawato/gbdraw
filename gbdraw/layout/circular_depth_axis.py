@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import math
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import NamedTuple, Protocol
 
-from gbdraw.auto_sizes import TickedAxisSource, depth_axis_tick_font_size_px, gc_axis_tick_font_size_of_depth
+from gbdraw.auto_sizes import (
+    TickedAxisSource,
+    TickFontSource,
+    depth_axis_tick_font_size_px,
+    gc_axis_tick_font_size_of_depth,
+)
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 from gbdraw.core.text import calculate_svg_bbox_dimensions
+from gbdraw.tracks.parsing import depth_slot_track_index
 
 from .circular import RadialBand
 from .circular_ink import CircularInk, CircularInkPolygon, CircularInkRing
@@ -88,18 +94,37 @@ def scalar_axis_footprint(
     return ScalarAxisFootprint(extra, extra)
 
 
+class DepthSlotWidth(NamedTuple):
+    """A depth slot as the GC axis reads it: the logical depth track it draws and its width as requested, before
+    any narrowing."""
+
+    track_index: int
+    requested_width_px: float
+
+
 @dataclass(frozen=True)
 class CircularScalarAxes:
-    """The axes of a Circular record's scalar tracks that the radial layout keeps room for: the depth track's,
-    and the Percent GC content track's while it draws numbered labels (``of``)."""
+    """The axes of a Circular record's scalar tracks that the radial layout keeps room for: the depth tracks', and
+    the Percent GC content track's while it draws numbered labels (``of``).
+
+    ``depth_tracks`` holds the axis of each logical depth track by its index, each with that track's own settings
+    (its tick font among them); ``depth`` is the axis of every depth slot of a record whose tracks are not indexed.
+    """
 
     depth: ScalarAxisStyle | None = None
     gc_content: ScalarAxisStyle | None = None
+    depth_tracks: tuple[tuple[int, ScalarAxisStyle], ...] | None = None
 
     @classmethod
-    def of(cls, depth: ScalarAxisSource | None, gc_content: ScalarAxisSource | None) -> CircularScalarAxes:
-        """The axes of a drawn depth track and a Percent GC content track. A GC axis without numbered labels keeps
-        no room past its band, so it is left out: its other settings then do not replan the layout."""
+    def of(
+        cls,
+        depth: ScalarAxisSource | None,
+        gc_content: ScalarAxisSource | None,
+        depth_tracks: Mapping[int, ScalarAxisSource] | None = None,
+    ) -> CircularScalarAxes:
+        """The axes of a drawn depth track (``depth``; each of ``depth_tracks`` by index when the record has
+        them) and a Percent GC content track. A GC axis without numbered labels keeps no room past its band, so
+        it is left out: its other settings then do not replan the layout."""
 
         keeps_room = (
             gc_content is not None
@@ -107,24 +132,52 @@ class CircularScalarAxes:
             and bool(gc_content.show_ticks)
             and gc_content.axis_labels == "numbered"
         )
+        indexed = depth is not None and depth_tracks is not None
         return cls(
-            depth=None if depth is None else ScalarAxisStyle.of(depth),
+            depth=None if depth is None or indexed else ScalarAxisStyle.of(depth),
             gc_content=ScalarAxisStyle.of(gc_content) if keeps_room and gc_content is not None else None,
+            depth_tracks=(
+                tuple((index, ScalarAxisStyle.of(track)) for index, track in sorted(depth_tracks.items()))
+                if indexed and depth_tracks is not None
+                else None
+            ),
         )
 
-    def with_gc_font_of_depth(self, depth_track_width_px: float | None) -> CircularScalarAxes:
-        """These axes with the GC axis in the font it is drawn in (``gc_axis_tick_font_size_of_depth``)."""
+    def depth_axis(self, track_index: int) -> ScalarAxisStyle | None:
+        """The axis a depth slot of logical track ``track_index`` draws; none for a track that is not drawn."""
+
+        if self.depth_tracks is None:
+            return self.depth
+        return next((axis for index, axis in self.depth_tracks if index == track_index), None)
+
+    def gc_tick_font_size(self, gc: TickFontSource, depth_slots: Iterable[DepthSlotWidth]) -> float | None:
+        """The tick font a Percent GC axis ``gc`` takes from the depth axis beside it: that of the first of
+        ``depth_slots`` (in slot order) that draws an axis (``gc_axis_tick_font_size_of_depth``). The radial layout
+        keeps the GC axis's room in it and the drawing draws the GC axis in it."""
+
+        for track_index, width_px in depth_slots:
+            axis = self.depth_axis(track_index)
+            if axis is not None and width_px > 0:
+                return gc_axis_tick_font_size_of_depth(gc, axis, width_px)
+        return None
+
+    def with_gc_font_of_depth(self, depth_slots: Iterable[DepthSlotWidth]) -> CircularScalarAxes:
+        """These axes with the GC axis in the font it is drawn in (``gc_tick_font_size``)."""
 
         gc = self.gc_content
-        size = None if gc is None else gc_axis_tick_font_size_of_depth(gc, self.depth, depth_track_width_px)
+        size = None if gc is None else self.gc_tick_font_size(gc, depth_slots)
         return self if gc is None or size is None else replace(self, gc_content=replace(gc, tick_font_size=size))
 
-    def footprint(self, renderer: str, track_width_px: float) -> ScalarAxisFootprint | None:
-        """How far the axis of a ``renderer`` track paints past its band; none for a track without an axis. The
-        GC band's border and axis strokes lie on its edges and keep no room of their own (``edge_px`` 0)."""
+    def footprint(
+        self, renderer: str, track_width_px: float, *, slot_id: str, params: Mapping[str, object]
+    ) -> ScalarAxisFootprint | None:
+        """How far the axis of slot ``slot_id`` (a ``renderer`` track with ``params``) paints past its band; none
+        for a track without an axis. A depth slot paints its own track's axis. The GC band's border and axis
+        strokes lie on its edges and keep no room of their own (``edge_px`` 0)."""
 
-        if renderer == "depth" and self.depth is not None:
-            return scalar_axis_footprint(self.depth, track_width_px)
+        if renderer == "depth":
+            axis = self.depth_axis(depth_slot_track_index(slot_id, params))
+            return None if axis is None else scalar_axis_footprint(axis, track_width_px)
         if renderer == "dinucleotide_content" and self.gc_content is not None:
             return scalar_axis_footprint(self.gc_content, track_width_px, edge_px=0.0)
         return None
@@ -217,6 +270,7 @@ __all__ = [
     "CircularRangeLabel",
     "CircularScalarAxes",
     "circular_range_label",
+    "DepthSlotWidth",
     "ScalarAxisSource",
     "ScalarAxisStyle",
     "DEPTH_AXIS_SMALL_TICK_SIZE_PX",

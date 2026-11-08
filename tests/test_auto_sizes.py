@@ -34,6 +34,9 @@ from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_for_preset
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
+from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth
+from gbdraw.analysis.depth_tracks import DepthTrackStyle, depth_track_config
+from gbdraw.configurators import DepthConfigurator
 from gbdraw.mode_profiles import DiagramMode
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
 from gbdraw.web_support.mode_profile_data import mode_profiles_payload
@@ -414,6 +417,9 @@ def test_dependent_tick_fonts_follow_a_given_track_thickness(cfg: GbdrawConfig) 
 def test_a_percent_gc_axis_takes_the_tick_font_of_the_depth_axis_beside_it(case: dict[str, Any]) -> None:
     # The drawing draws the GC axis in gc_axis_tick_font_size_of_depth's font (OV-2873); its Auto value is that font.
     cfg = apply_config_overrides(None, case["config"])
+    if "depthTracks" in case or "circularDepthSlots" in case:
+        # Per-series fonts and stack rows are no settings of auto_setting_values: the drawing's owner reads them.
+        return
     values = auto_setting_values(
         DrawnExtent(case["mode"], tuple(case["recordLengths"])),
         cfg,
@@ -422,6 +428,41 @@ def test_a_percent_gc_axis_takes_the_tick_font_of_the_depth_axis_beside_it(case:
     )
     for setting, expected in case["expected"].items():
         assert values[setting] == pytest.approx(expected, abs=1e-9), setting
+
+
+@pytest.mark.parametrize("case", VECTORS["gcAxisTickFonts"], ids=lambda case: case["name"])
+def test_the_gc_axis_tick_font_vectors_are_the_fonts_the_circular_drawing_draws(case: dict[str, Any]) -> None:
+    # OV-2875/OV-2876: the radial layout and the drawing read each depth slot's own track (its font) at the slot's
+    # requested width; the Percent GC axis takes the font of the first depth slot (CircularScalarAxes).
+    cfg = apply_config_overrides(None, case["config"])
+    thickness = case["trackThicknessPx"]
+    extent = DrawnExtent(case["mode"], tuple(case["recordLengths"]))
+    auto = auto_setting_values(extent, cfg)
+    depth_width = float(thickness.get("depth", auto["circularSlot.depth.width"]))
+    slots = [
+        DepthSlotWidth(int(slot["trackIndex"]), float(slot["widthPx"]))
+        for slot in case.get("circularDepthSlots", [{"trackIndex": 0, "widthPx": depth_width}])
+    ]
+    profile = CircularRenderProfile(cfg)
+    base = DepthConfigurator(10, 10, profile)
+    tracks = {
+        index: depth_track_config(DepthTrackStyle(None, None, None, track["tickFontSize"]), base, 10, 10, None)
+        for index, track in enumerate(case.get("depthTracks", [{"tickFontSize": None}]))
+    }
+    gc = cfg.objects.gc_content
+    axes = CircularScalarAxes.of(base if case["showDepth"] else None, gc, tracks)
+    gc_font = axes.gc_tick_font_size(gc, slots) if gc.mode == "percent" else None
+    if gc_font is None:
+        gc_font = scalar_axis_tick_font_size(
+            "circular", float(thickness.get("gc_content", auto["circularSlot.gc_content.width"]))
+        )
+    expected = case["expected"]
+    assert gc_font == pytest.approx(expected["objects.gc_content.tick_font_size"], abs=1e-9)
+    # The Auto value of series 0's own font: the size of the width of its first row.
+    series_0_width = next(width for index, width in slots if index == 0)
+    assert scalar_axis_tick_font_size("circular", series_0_width) == pytest.approx(
+        expected["objects.depth.tick_font_size"], abs=1e-9
+    )
 
 
 def test_auto_values_list_only_the_settings_drawn_in_the_mode(cfg: GbdrawConfig) -> None:
