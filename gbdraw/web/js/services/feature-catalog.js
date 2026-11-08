@@ -7,6 +7,7 @@ import {
   createOrthogroupFeatureProjection
 } from './orthogroup-feature-metadata.js';
 import { locationPartBound } from './feature-utils.js';
+import { catalogUnitRecords } from './linear-units.js';
 import { toRaw } from '../utils/vue-raw.js';
 import {
   recordSessionLifecycleEvent,
@@ -408,8 +409,8 @@ const rememberRenderedResultIndex = (target, renderedId, resultIndex) => {
 };
 
 /**
- * The drawn units of each record a catalog item names, by record key, in drawing order: Python's
- * `catalog_record_units` (gbdraw/render/interactive_svg.py), read here as admission reads every catalog field.
+ * The drawn units of each record a catalog item names, by record key, in drawing order (`catalogUnitRecords`), read
+ * here as admission reads every catalog field.
  * @param {Record<string, unknown>} item
  * @param {readonly string[]} recordKeys
  * @returns {Map<string, number[]>}
@@ -421,8 +422,7 @@ const catalogRecordUnits = (item, recordKeys) => {
   ))) throw catalogError();
   /** @type {Map<string, number[]>} */
   const units = new Map();
-  recordKeys.forEach((unitKey, unitIndex) => {
-    const key = Object.hasOwn(windows, unitKey) ? String(windows[unitKey]) : unitKey;
+  catalogUnitRecords(recordKeys, windows).recordKeys.forEach((key, unitIndex) => {
     units.set(key, [...(units.get(key) ?? []), unitIndex]);
   });
   return units;

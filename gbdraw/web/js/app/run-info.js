@@ -24,9 +24,11 @@ import { parseSpecificRules, serializeSpecificRules } from '../services/file-imp
 import { FEATURE_INSTANCE_SEPARATOR, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
+import { unitRecordsOf } from '../services/linear-units.js';
 import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
@@ -1738,8 +1740,9 @@ const appendTrackOptions = (args, request) => {
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
  * @param {RecipeFiles} files
+ * @param {LinearUnitRecords | null} units The request's drawn units (`SourceRecipeOptions.drawnUnits`).
  */
-const appendComparisonOptions = (args, request, files) => {
+const appendComparisonOptions = (args, request, files, units) => {
   const options = request.diagramOptions || {};
   if (request.mode === 'circular') {
     const blasts = Array.isArray(options.conservationBlastFiles)
@@ -1790,27 +1793,29 @@ const appendComparisonOptions = (args, request, files) => {
     Array.isArray(request.comparisons) ? request.comparisons : []
   );
   if (comparisons.length === 0) return;
-  const recordCount = Array.isArray(request.records) ? request.records.length : 0;
-  if (comparisons.some((comparison) => (
-    !Number.isInteger(comparison?.queryRecordIndex)
-    || comparison.queryRecordIndex < 0
-    || comparison.queryRecordIndex >= recordCount
-    || !Number.isInteger(comparison?.subjectRecordIndex)
-    || comparison.subjectRecordIndex < 0
-    || comparison.subjectRecordIndex >= recordCount
-  ))) {
+  // A comparison names drawn units; the CLI's `#n` counts records (review S4).
+  const unitRecords = unitRecordsOf(request.records, units);
+  /** @param {unknown} unit */
+  const recordOf = (unit) => (unitRecords && Number.isInteger(unit) ? unitRecords[Number(unit)] ?? null : null);
+  const drawable = comparisons.map((comparison) => ({
+    comparison, query: recordOf(comparison?.queryRecordIndex), subject: recordOf(comparison?.subjectRecordIndex)
+  }));
+  if (drawable.some(({ query, subject }) => !query || !subject)) {
     throw recipeUnavailable(msg('a comparison cannot be bound losslessly to its source records.'));
   }
   if (comparisons.some((comparison) => comparison.kind !== 'nucleotideBlast')) {
     throw recipeUnavailable(msg('this committed protein comparison has no lossless source CLI projection.'));
   }
-  const drawable = comparisons;
-  const adjacent = drawable.every((comparison, index) => (
-    Number(comparison.queryRecordIndex) === index
-    && Number(comparison.subjectRecordIndex) === index + 1
-  ));
+  // The CLI refuses a comparison file for a record drawn in several windows (`refuse_file_comparison_of_windows`).
+  if (drawable.some(({ query, subject }) => query?.oneOfSeveral || subject?.oneOfSeveral)) {
+    throw recipeUnavailable(msg('the command line takes no comparison file for a record drawn in several windows.'));
+  }
+  const records = drawable.map(({ query, subject }) => ({
+    query: /** @type {LinearUnitRecord} */ (query).recordIndex, subject: /** @type {LinearUnitRecord} */ (subject).recordIndex
+  }));
+  const adjacent = records.every(({ query, subject }, index) => query === index && subject === index + 1);
   if (adjacent) {
-    const paths = drawable.map((comparison, index) => files.resourcePath(
+    const paths = comparisons.map((comparison, index) => files.resourcePath(
       referencedResourceId(comparison),
       {
         fallback: `comparison-${index + 1}.tsv`,
@@ -1821,17 +1826,13 @@ const appendComparisonOptions = (args, request, files) => {
     if (paths.length > 0) args.push('-b', ...paths);
     return;
   }
-  const rows = drawable.map((comparison, index) => {
+  const rows = comparisons.map((comparison, index) => {
     const path = files.resourcePath(referencedResourceId(comparison), {
       fallback: `comparison-${index + 1}.tsv`,
       slot: `generatedFiles.source_recipe.comparison_blasts[${index}]`,
       nameHintSlot: `generatedFiles.losat_blasts[${index}]`
     });
-    return {
-      blastPath: path,
-      query: `#${Number(comparison.queryRecordIndex) + 1}`,
-      subject: `#${Number(comparison.subjectRecordIndex) + 1}`
-    };
+    return { blastPath: path, query: `#${records[index].query + 1}`, subject: `#${records[index].subject + 1}` };
   });
   appendOption(
     args,
@@ -1855,8 +1856,9 @@ const appendComparisonOptions = (args, request, files) => {
  * @param {CanonicalRenderRequest} request
  * @param {RecipeFiles} files
  * @param {string | null | undefined} colorTablePath See `appendResourceOptions`.
+ * @param {LinearUnitRecords | null} units See `appendComparisonOptions`.
  */
-const appendDiagramOptions = (args, request, files, colorTablePath) => {
+const appendDiagramOptions = (args, request, files, colorTablePath, units) => {
   const options = request.diagramOptions || {};
   if (Array.isArray(request.output) && request.output.length !== 1) {
     throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
@@ -1913,7 +1915,7 @@ const appendDiagramOptions = (args, request, files, colorTablePath) => {
   appendResourceOptions(args, options, files, colorTablePath);
   appendDepthOptions(args, { ...options, mode: request.mode }, files);
   appendTrackOptions(args, request);
-  appendComparisonOptions(args, request, files);
+  appendComparisonOptions(args, request, files, units);
 };
 
 /**
@@ -2000,6 +2002,8 @@ const readGeneratedFileBytes = (generatedFiles, readResourceFileBytes) => Promis
  * @property {ResourceFileBytesReader | null} [readResourceFileBytes]
  * @property {ResourceTextReader | null} [readResourceText] The text of a resource whose
  *   bytes a File holds; without it, the text of the bytes its descriptor holds.
+ * @property {LinearUnitRecords | null} [drawnUnits] The drawn units of a Linear request, as Python's unit plan gave
+ *   them to Generate; without them, a request that draws a record in several windows names no comparison by record.
  */
 
 /**
@@ -2013,7 +2017,8 @@ export const buildSourceRecipe = async ({
   generatedFileNameHints,
   readResourceRecordCount = null,
   readResourceFileBytes = null,
-  readResourceText = null
+  readResourceText = null,
+  drawnUnits = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   /**
@@ -2061,7 +2066,7 @@ export const buildSourceRecipe = async ({
       ? await readResourceText(colorTableId)
       : descriptorText(resources, colorTableId)) : null;
     appendDiagramOptions(args, renderRequest, files, cliColorTable === null ? undefined : cliColorTable && files.generatedTextPath(
-      'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null);
+      'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null, drawnUnits);
     appendConfigOverrides(args, renderRequest, files);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);
     const generatedFiles = await readGeneratedFileBytes(files.generatedFiles, readResourceFileBytes);

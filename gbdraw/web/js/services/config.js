@@ -303,7 +303,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
+import { catalogUnitRecords, drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
 /** @import { LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
@@ -3077,7 +3077,10 @@ const restoreLoadedSetSequenceSources = async ({
   try {
     return {
       restored: await buildRestoredMatchSequenceSources({
-        mode, cInputType, lInputType, files, linearSeqs, circularConservation
+        mode, cInputType, lInputType, files, linearSeqs, circularConservation,
+        // The drawn units the catalog names key the sources it lacks (review S5).
+        units: mode === 'linear' && catalog?.items.length === 1
+          ? catalogUnitRecords(catalog.items[0].recordKeys, catalog.items[0].windowOf) : null
       }),
       error: null
     };

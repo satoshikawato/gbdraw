@@ -9,7 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
-/** @import { LinearUnitWindow } from '../services/linear-units.js' */
+/** @import { LinearUnitSearch, LinearUnitWindow } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -3035,6 +3035,9 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       // The comparison plan the request writes: over drawn units in Linear mode (OV-2738).
       let requestComparisonPlan = activeComparisonPlanSnapshot;
+      // The drawn units the request's comparison indexes count, as Python planned them (the Source recipe's records).
+      /** @type {LinearUnitSearch | null} */
+      let requestDrawnUnits = null;
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
@@ -3564,6 +3567,7 @@ export const createRunAnalysis = ({
         );
         const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
         requestComparisonPlan = unitResolution;
+        requestDrawnUnits = unitSearch;
         const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
           ? requireCurrentProteinBlastpMode(drawing.losat.blastp?.mode)
@@ -5159,7 +5163,8 @@ export const createRunAnalysis = ({
           generatedFileNameHints,
           readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
           readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
-          readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id)
+          readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
+          drawnUnits: requestDrawnUnits
         }));
         throwIfGenerationCanceled();
       }

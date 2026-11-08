@@ -16,6 +16,9 @@ const modulePaths = [
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
   'gbdraw/web/js/services/match-sequences.js',
+  // match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
+  'gbdraw/web/js/services/linear-units.js',
+  'gbdraw/web/js/services/linear-comparisons.js',
   'gbdraw/web/js/services/input-types.js',
   'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',

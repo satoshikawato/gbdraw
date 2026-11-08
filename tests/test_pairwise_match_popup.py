@@ -96,6 +96,24 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./input-types.js", "./input-types.mjs")
         .replace("./file-content-cache.js", "./file-content-cache.mjs")
         .replace("./record-options.js", "./record-options.mjs")
+        .replace("./linear-units.js", "./linear-units.mjs")
+        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
+        .replace("../utils/i18n.js", "./i18n.mjs"),
+        encoding="utf-8",
+    )
+    # match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
+    (tmp_path / "linear-units.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "linear-units.js")
+        .read_text(encoding="utf-8")
+        .replace("./linear-comparisons.js", "./linear-comparisons.mjs")
+        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "linear-comparisons.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "linear-comparisons.js")
+        .read_text(encoding="utf-8")
+        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
         encoding="utf-8",
     )
