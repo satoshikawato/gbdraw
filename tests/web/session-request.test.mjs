@@ -2405,6 +2405,30 @@ assert.equal(firstCardGenbank.match(/^LOCUS/gm)?.length, 1);
 assert.equal(secondCardGenbank.match(/^LOCUS/gm)?.length, 1);
 assert.match(firstCardGenbank, /WEBTEST/);
 assert.match(secondCardGenbank, /WEBTWO/);
+// OV-2878: cards follow the source files, not the record keys' base: keys
+// `x:1` (first file) and `x:2` (second file) make two cards, each keyed by
+// its record; two records of one file keep the base as their card's uid.
+/** @param {{ recordKey: string, resourceId: string }[]} keyed */
+const cardsOfKeys = (keyed) => projectCanonicalSessionRequest({
+  renderRequest: {
+    ...canonical.renderRequest,
+    grouping: 'grid',
+    records: keyed.map(({ recordKey, resourceId }) => ({
+      ...canonical.renderRequest.records[0], recordKey, source: { kind: 'genbank', resourceId }
+    }))
+  },
+  resources: { ...canonical.resources, 'record-2-genbank': { kind: 'genbank', ...secondGenbank } }
+}).files.circularSources.map((card) => ({ uid: card.uid, name: card.gb.name }));
+const firstResource = canonical.renderRequest.records[0].source.resourceId;
+const firstName = multiCards[0].gb.name;
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'x:1', resourceId: firstResource }, { recordKey: 'x:2', resourceId: 'record-2-genbank' }]),
+  [{ uid: 'x:1', name: firstName }, { uid: 'x:2', name: multiCards[1].gb.name }]
+);
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'x:1', resourceId: firstResource }, { recordKey: 'x:2', resourceId: firstResource }]),
+  [{ uid: 'x', name: firstName }]
+);
 
 state.mode = 'linear';
 state.inputType.value = 'gb';
