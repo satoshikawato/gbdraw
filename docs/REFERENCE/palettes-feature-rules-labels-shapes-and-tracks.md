@@ -445,7 +445,7 @@ end. A longer label keeps its start followed by `…`, centred on the same
 place, and
 each such label counts as one cut region label (`1 region label cut`). A label
 so long for its circle that not even its first letter fits before `…` is not
-drawn; its mark is drawn, and it counts as a region label left out
+drawn and takes no room between lanes; its mark is drawn, and it counts as a region label left out
 (`1 region label left out: no letter fits its circle`). This
 only warns: the Web app shows "Region labels are cut to fit their circle (N)."
 or "Region labels are left out: no letter of them fits their circle (N)."

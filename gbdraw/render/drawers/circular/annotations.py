@@ -611,7 +611,8 @@ def circular_annotation_label_extent(
     """A region label's letters as ``circular_annotation_labels`` draws them at ``place_bp`` (``_label_at``),
     beside a mark whose edge lies ``mark_offset_px`` from ``lanes_from_px``, the radius the slot's lanes stack
     from: away from the centre, or toward it when not ``outward`` (an ``inside`` slot). The bp the letters reach
-    along the circle on each side of the place, and how far they reach across the lanes: the lane packer's measure
+    along the circle on each side of the place, how far they reach across the lanes, and whether the label is drawn
+    there (not when its cut keeps no letter, ``CircularAnnotationLabel.keeps_no_letter``): the lane packer's measure
     (``LabelSizing.extent``)."""
 
     edge = lanes_from_px + mark_offset_px if outward else lanes_from_px - mark_offset_px
@@ -636,7 +637,9 @@ def circular_annotation_label_extent(
     ]
     bp_per_degree = record_length / 360.0
     near, far = label.ink_radii
-    return LabelExtent(min(turns) * bp_per_degree, max(turns) * bp_per_degree, far - near)
+    return LabelExtent(
+        min(turns) * bp_per_degree, max(turns) * bp_per_degree, far - near, drawn=not label.keeps_no_letter
+    )
 
 
 # A curved label's text path stays just short of a whole circle (one SVG arc command); the text keeps one em clear of
