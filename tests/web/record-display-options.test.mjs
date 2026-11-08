@@ -341,7 +341,7 @@ const windowedCard = (model, ...reverses) => {
 const cardOrientation = (sequence) => [sequence.region_reverse, ...sequence.windows.map((window) => window.reverseComplement)];
 
 test('Record options Reverse on a Linear card with windows writes the windows (OV-2883)', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   const sequence = windowedCard(model, true, true);
   const row = () => model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
   assert.equal(row().reverse, true, 'the row reads the orientation its windows hold');
@@ -360,7 +360,7 @@ test('Record options Reverse on a Linear card with windows writes the windows (O
 });
 
 test('an Align commit writes a windowed card\'s windows and its restore gives them back as they were (OV-2883)', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   // Windows of both orientations: the record is drawn forward (not every window is reversed).
   const sequence = windowedCard(model, false, true);
   const directions = [{ recordKey: 'record-2', reverseComplement: true }];
