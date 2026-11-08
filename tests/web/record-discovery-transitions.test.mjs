@@ -189,3 +189,40 @@ test('the region dialog offers every record of a deferred Multi-Record Canvas', 
   app.regionDrawings.close();
   circular.form.multi_record_canvas = false;
 });
+
+// OV-2868: a record-major Depth matrix keeps one row per record of the cards.
+// A card edit changes the records; the read after it moves each row with its
+// record (a card's records keep their places in its file, D-20), so a Replace
+// that changes a card's record count, a Move, and a Move made while a read
+// still runs leave every record its own row.
+test('a record-major Depth matrix follows its records through a Replace and a Move', async () => {
+  const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = false;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50])]);
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'B1']);
+  const depth = (name) => state.inputFiles.registerFile(new File(['1\t1\n'], name));
+  bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', [[depth('a.tsv')], [depth('b.tsv')]]);
+  const rows = () => circular.files.c_depth.map((row) => row.map((ref) => ref?.name ?? null));
+  const [cardA, cardB] = circular.circularSources.map((card) => card.uid);
+  await app.setCircularSourceFile(cardA, 'gb', genbank('a2.gb', ['A1', 40], ['A2', 45]));
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'A2', 'B1']);
+  assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']], 'B keeps its row; A\'s first record keeps A\'s');
+  // Three Moves, each made while the read of the one before still runs.
+  await app.moveCircularSourceCard(1, -1);
+  await app.moveCircularSourceCard(0, 1);
+  await app.moveCircularSourceCard(1, -1);
+  await settle();
+  assert.deepEqual(circular.circularSources.map((card) => card.uid), [cardB, cardA]);
+  assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  // Undo gives each Move's matrix back with the records it stood for (the
+  // test's Replace is no History step of its own: the file input makes it one).
+  for (let step = 0; step < 3; step += 1) await app.undoHistory();
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'A2', 'B1']);
+  assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']]);
+  bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', null);
+});

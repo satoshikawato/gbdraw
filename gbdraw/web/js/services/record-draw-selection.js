@@ -412,6 +412,28 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
 });
 
 /**
+ * The rows of a list that keeps one row per record of a drawing's cards (a
+ * record-major Depth matrix) after its cards change: `marked` are the cards
+ * the rows stand for, in row order, `now` the drawing's cards. A record keeps
+ * the row of its card's record at the same place in the file (`<uid>:<k>`),
+ * so a card moved or removed takes its rows along, and a Replace in the same
+ * card keeps the rows of the records the new file has at those places (D-20;
+ * the record of a one-record file is the first record of a file of several).
+ * A record new to the list gets an empty row (`resliceRecordRows`).
+ * @template R
+ * @param {readonly R[]} rows
+ * @param {readonly { uid: string, recordCount: number }[]} marked
+ * @param {readonly { uid: string, recordCount: number }[]} now
+ * @param {() => R} empty
+ * @returns {R[]}
+ */
+export const resliceCardRows = (rows, marked, now, empty) => {
+  /** @param {readonly { uid: string, recordCount: number }[]} cards */
+  const keysOf = (cards) => cards.flatMap(({ uid, recordCount }) => Array.from({ length: recordCount }, (_unused, index) => expandedRecordKey(uid, index + 1)));
+  return resliceRecordRows(rows, keysOf(marked), keysOf(now), empty);
+};
+
+/**
  * Whether a key has the shape of a record draw key: a card uid or a record
  * identity, the same shape in both modes.
  * @param {'circular' | 'linear'} _mode

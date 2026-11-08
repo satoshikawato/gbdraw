@@ -9,12 +9,13 @@
 // the settings pane's reveal, the panels' refs, and the record form defaults
 // as ports.
 import {
-  addCircularSource, bindCircularSourceFile, bindDrawingInputFileTree, createCircularSource, moveCircularSource,
+  addCircularSource, bindCircularSourceFile, createCircularSource, markCircularDepthRows, moveCircularSource,
   removeCircularSource
 } from '../services/drawing/inputs.js';
 import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { cardHoldsRecordKey, resliceRecordRows } from '../services/record-draw-selection.js';
+import { settledCircularCardMarks } from '../services/record-discovery.js';
+import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
@@ -84,25 +85,21 @@ export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords
  */
 
 /**
- * The Depth matrix of the records of `order` (card uids), each row its
- * record's (`resliceRecordRows`); a series list or no Depth stays.
- * @param {WebState['inputFiles']} store @param {DrawingState} drawing @param {readonly string[]} order
+ * Before a card edit, in its History step (OV-2868): the rows of a
+ * record-major Depth matrix stand for the cards as last read, so the read
+ * after the edit moves them with their records (`circularDepthRowsAfterRead`
+ * in the record reader). Marks a Load or an earlier edit whose read has not
+ * settled stay; a series list or no Depth needs none.
+ * @param {DrawingState} drawing
  */
-const resliceDepthMatrix = (store, drawing, order) => {
-  const matrix = drawing.files.c_depth;
-  if (!isRecordMajorDepthFileMatrix(matrix)) return;
-  /** @type {CircularListRecord[]} */
-  const listed = drawing.circularRecordList.value;
-  const previous = listed.map((record) => record.identity);
-  const next = order.flatMap((uid) => listed.filter((record) => record.uid === uid).map((record) => record.identity));
-  // The guard read every row as a list of slots.
-  const rows = resliceRecordRows(/** @type {(InputFileRef | null)[][]} */ (matrix), previous, next, () => /** @type {(InputFileRef | null)[]} */ ([]));
-  bindDrawingInputFileTree(store, drawing.slices.inputs, 'c_depth', rows);
+const markDepthRowsBeforeEdit = (drawing) => {
+  if (!isRecordMajorDepthFileMatrix(drawing.files.c_depth) || drawing.files.c_depth_rows) return;
+  markCircularDepthRows(drawing.slices.inputs, settledCircularCardMarks(drawing));
 };
 
 /**
  * The moves of a Circular drawing's source cards: one place up or down, one
- * History step, the Depth matrix following its records.
+ * History step, the Depth matrix following its records once they are read.
  * @param {Pick<CircularSourceEditsPorts, 'state' | 'discoverDrawingRecords' | 'shownAction' | 'runUndoable'>} ports
  */
 const createCircularSourceMoves = ({ state, discoverDrawingRecords, shownAction, runUndoable }) => {
@@ -126,9 +123,7 @@ const createCircularSourceMoves = ({ state, discoverDrawingRecords, shownAction,
     if (target === null) return undefined;
     const { uid } = drawing.circularSources[index];
     return runUndoable(msg('Move File'), () => {
-      const order = drawing.circularSources.map((source) => source.uid);
-      order.splice(target, 0, ...order.splice(index, 1));
-      resliceDepthMatrix(state.inputFiles, drawing, order);
+      markDepthRowsBeforeEdit(drawing);
       moveCircularSource(drawing.slices.inputs, uid, target);
       void discoverDrawingRecords(drawing);
     });
@@ -145,7 +140,7 @@ const createCircularSourceMoves = ({ state, discoverDrawingRecords, shownAction,
  * (`<uid>:<k>`) through every edit of the other cards, so their rows, OFF
  * state, Record select and Record Order stay; the edits retire only what names
  * the records of the card they replace or remove. A record-major Depth matrix
- * follows its records by identity (`resliceRecordRows`). Registers nothing.
+ * follows its records once the cards are read again (`markDepthRowsBeforeEdit`). Registers nothing.
  * @param {CircularSourceEditsPorts} ports
  */
 export const createCircularSourceEdits = ({
@@ -217,12 +212,10 @@ export const createCircularSourceEdits = ({
     if (previous === nextRef) return;
     const keepCard = Boolean(nextRef) || inputSourceFiles(drawing.inputType.value, { ...card, [field]: null }).holdsFile;
     const previousRecordCount = drawing.circularRecordList.value.filter((/** @type {CircularListRecord} */ record) => record.uid === uid).length;
+    markDepthRowsBeforeEdit(drawing);
     changeRecordSources(drawing, () => {
       if (keepCard) bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, uid, field, nextRef);
-      else {
-        resliceDepthMatrix(state.inputFiles, drawing, drawing.circularSources.map((source) => source.uid).filter((key) => key !== uid));
-        removeCircularSource(drawing.slices.inputs, uid);
-      }
+      else removeCircularSource(drawing.slices.inputs, uid);
     });
     readUpload(drawing, nextRef);
     // An upload into an empty slot starts reading another input (after an
@@ -241,6 +234,7 @@ export const createCircularSourceEdits = ({
     : runUndoable(msg('Add File'), () => {
       /** @type {InputFileRef | null} */
       let first = null;
+      markDepthRowsBeforeEdit(drawing);
       changeRecordSources(drawing, () => files.forEach((file) => {
         const card = createCircularSource();
         addCircularSource(drawing.slices.inputs, card);
@@ -257,10 +251,8 @@ export const createCircularSourceEdits = ({
    */
   const removeCircularSourceOf = (drawing, uid) => {
     if (!drawing.circularSources.some((source) => source.uid === uid)) return false;
-    changeRecordSources(drawing, () => {
-      resliceDepthMatrix(state.inputFiles, drawing, drawing.circularSources.map((source) => source.uid).filter((key) => key !== uid));
-      removeCircularSource(drawing.slices.inputs, uid);
-    });
+    markDepthRowsBeforeEdit(drawing);
+    changeRecordSources(drawing, () => removeCircularSource(drawing.slices.inputs, uid));
     retireCardRecords(drawing, uid, true);
     void discoverDrawingRecords(drawing);
     return true;

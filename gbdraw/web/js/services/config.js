@@ -35,7 +35,7 @@ import {
 } from './linear-track-slot-model.js';
 import {
   DEPTH_FILES_CHANGE, depthFileSlotsFromValue, fitDepthStateToSources, isDepthSeriesAutoLabel,
-  normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
+  isRecordMajorDepthFileMatrix, normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
 } from './depth-track-state.js';
 import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
@@ -5107,8 +5107,10 @@ const applyFiles = (filesData, {
     .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
   targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
     ? loadedCards : null;
-  // A Depth slot holds a list.
+  // A Depth slot holds a list. The rows of a record-major matrix stand for the
+  // records of the cards as loaded (OV-2868), however their read is deferred.
   targetState.files.c_depth = deserializeFile(read.c_depth);
+  targetState.files.c_depth_rows = isRecordMajorDepthFileMatrix(/** @type {DrawingInputFiles['c_depth']} */ (targetState.files.c_depth)) ? loadedCards : null;
   // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
   targetState.files.c_conservation_blasts = fileList('c_conservation_blasts');
   targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'

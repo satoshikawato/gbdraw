@@ -8,7 +8,8 @@ import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { circularInputComplete, circularSourceInputs } from './input-types.js';
-import { recordIdentity } from './record-draw-selection.js';
+import { recordIdentity, resliceCardRows } from './record-draw-selection.js';
+import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -22,6 +23,7 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
+/** @import { CircularCardMark, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
  * One Circular source card as the record catalog read it: its uid, the files
@@ -1092,6 +1094,68 @@ export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
 export const inputRecordsOperation = (spec) => INPUT_RECORD_READERS[spec.sourceKind].operation;
+
+/**
+ * The drawing's cards with the record count of each, when its read of these
+ * cards settled (`ready`, current); null while a read runs, failed or waits.
+ * A card edit marks the cards a record-major Depth matrix stands for with
+ * them (`c_depth_rows`).
+ * @template Entry
+ * @param {CircularDiscoveryDrawing<Entry & { uid: string }>} drawing
+ * @returns {CircularCardMark[] | null}
+ */
+export const settledCircularCardMarks = (drawing) => {
+  const discovery = circularDiscoveryForInput(drawing);
+  if (!discovery.current || discovery.status !== 'ready') return null;
+  return /** @type {CircularCardMark[]} */ (discovery.inputs.map(({ uid, primaryFile, pairedFile }) => ({
+    uid, primaryFile, pairedFile, recordCount: discovery.records.filter((record) => record.uid === uid).length
+  })));
+};
+
+/**
+ * OV-2868: what a settled read of a drawing's cards makes of its record-major
+ * Depth matrix. The rows stand for the records of `marks` (`c_depth_rows`, in
+ * row order); after a card edit they follow their records to the cards read
+ * now (`resliceCardRows`), and the cards read now become the marks. A mark's
+ * record count unknown (a Load) is the count read now while its card holds the
+ * same files, else the count of its own files, read again. Null: the matrix
+ * and its marks stay (no matrix, no marks, or the cards did not change); rows
+ * null: the rows cannot be placed (a file no longer readable, or a matrix
+ * whose rows are not those of its marks), and Generate reports the matrix.
+ * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,
+ *   inputs: readonly import('./input-types.js').CircularSourceInput<InputFileRef>[], counts: readonly number[],
+ *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined }} read
+ *   `counts`: the records read now of each card of `inputs`.
+ * @returns {Promise<{ rows: (InputFileRef | null)[][] | null, marks: CircularCardMark[] } | null>}
+ */
+export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, counts, fileOf }) => {
+  if (!marks || !isRecordMajorDepthFileMatrix(matrix)) return null;
+  const now = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: counts[index] }));
+  /** @param {CircularCardMark} mark */
+  const heldCount = (mark) => now.find((card) => card.uid === mark.uid && card.primaryFile === mark.primaryFile
+    && card.pairedFile === mark.pairedFile)?.recordCount ?? null;
+  const unchanged = marks.length === now.length && marks.every((mark, index) => mark.uid === now[index].uid
+    && heldCount(mark) !== null && (mark.recordCount === null || mark.recordCount === now[index].recordCount));
+  if (unchanged) return null;
+  /** @type {{ uid: string, recordCount: number }[]} */
+  const marked = [];
+  for (const mark of marks) {
+    let recordCount = mark.recordCount ?? heldCount(mark);
+    if (recordCount === null && inputs.length > 0) {
+      // The same input type reads the files a card held then.
+      const [own] = await readCircularSourceRecords([{ ...inputs[0], uid: mark.uid, primaryFile: mark.primaryFile, pairedFile: mark.pairedFile }], fileOf);
+      recordCount = own.error === null ? own.records.length : null;
+    }
+    if (recordCount === null) return { rows: null, marks: now };
+    marked.push({ uid: mark.uid, recordCount });
+  }
+  const rows = /** @type {(InputFileRef | null)[][]} */ (matrix);
+  return {
+    rows: marked.reduce((sum, card) => sum + card.recordCount, 0) === rows.length
+      ? resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])) : null,
+    marks: now
+  };
+};
 
 /**
  * The one read of a Circular drawing's records: each source card read on its

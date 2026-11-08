@@ -164,9 +164,10 @@ import {
   readComparisonSequence,
   readOncePerFile,
   readCircularSourceRecords,
-  readParsedSequenceRecords
+  readParsedSequenceRecords,
+  circularDepthRowsAfterRead
 } from '../services/record-discovery.js';
-import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
+import { bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows } from '../services/drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
 import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
@@ -2431,8 +2432,8 @@ export const createRunAnalysis = ({
               ? Math.max(1, drawing.files.c_depth.length)
               : 1
           );
-      // A record past the matrix's end has no row yet (a card added after the matrix, `resliceRecordRows`).
-      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length > recordCount) {
+      // The read after a card edit moved the rows with their records (`circularDepthRowsAfterRead`, OV-2868).
+      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length !== recordCount) {
         return `Circular Depth matrix has ${drawing.files.c_depth.length} record rows; expected ${recordCount}.`;
       }
       rows = normalizeRecordMajorDepthFileRows(drawing.files.c_depth, recordCount);
@@ -2520,6 +2521,11 @@ export const createRunAnalysis = ({
       records,
       error: error === null ? /** @type {UserFacingError | ''} */ ('') : formatError(error, inputRecordsOperation(inputs[index].spec), 'helper')
     }));
+    // A record-major Depth matrix follows its records to the cards read now (OV-2868).
+    const depthRows = reads.some((read) => read.error) ? null : await circularDepthRowsAfterRead({
+      matrix: drawing.files.c_depth, marks: drawing.files.c_depth_rows, inputs, counts: reads.map((read) => read.records.length),
+      fileOf: (file) => inputFiles.fileOf(file)
+    });
     if (
       refreshGeneration !== currentGeneration() ||
       recordDiscoverySuppressed() ||
@@ -2539,6 +2545,8 @@ export const createRunAnalysis = ({
     }));
     drawing.circularRecordDiscovery.status = failed ? 'error' : 'ready';
     drawing.circularRecordDiscovery.error = failed ? failed.error : '';
+    if (depthRows?.rows) bindDrawingInputFileTree(inputFiles, drawing.slices.inputs, 'c_depth', depthRows.rows);
+    if (depthRows) markCircularDepthRows(drawing.slices.inputs, depthRows.marks);
     unappliedCircularRecordReads.set(drawing, refreshGeneration);
     if (failed || nextRecords.length > 0) releaseSourceInputFailure(drawing);
     onCircularRecordsDiscovered?.({ drawingId: drawing.id, sources: inputs.map(({ uid, primaryFile, pairedFile }, index) => ({

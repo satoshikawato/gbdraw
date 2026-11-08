@@ -862,6 +862,18 @@ export const bindDrawingInputFileTree = (store, slice, slot, value) => {
 };
 
 /**
+ * Mark the cards whose records the rows of the drawing's record-major Depth
+ * matrix stand for (`c_depth_rows`, OV-2868): a card edit marks the cards as
+ * last read, and a settled read marks the cards it read once the rows follow
+ * them. The one writer of the field besides Load and a History restore.
+ * @param {InputsSlice} slice
+ * @param {readonly CircularCardMark[] | null} marks
+ */
+export const markCircularDepthRows = (slice, marks) => {
+  membersOf(slice).files.c_depth_rows = marks;
+};
+
+/**
  * Whether the drawing's conservation BLAST files were derived from the LOSAT
  * cache (`'losat-cache'`) or uploaded (null).
  * @param {InputsSlice} slice
