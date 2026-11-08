@@ -68,7 +68,8 @@ const stubs = {
     'export const getFeatureCaption = (feature) => feature?.label || feature?.id || "Feature";',
     'export const normalizeStringArray = (value) => Array.isArray(value) ? value : (value ? [String(value)] : []);',
     'export const resolveDisplayProteinId = () => "";',
-    'export const resolveFeatureProteinId = () => "";'
+    'export const resolveFeatureProteinId = () => "";',
+    "export const getQualifierFirstValue = (feature, key) => { const first = (v) => (Array.isArray(v) ? v : [v]).map((x) => String(x ?? '').trim()).find(Boolean) || ''; const d = feature?.[key]; if (d !== null && d !== undefined && d !== '') return first(d); return first(feature?.qualifiers?.[key]); };"
   ],
   // The hover summary of a band: its builder is counted.
   'app/pairwise-match-popup.js': [

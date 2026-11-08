@@ -8,6 +8,7 @@ import {
   formatFeatureLength,
   formatFeatureLocation,
   getFeatureCaption,
+  getQualifierFirstValue,
   normalizeStringArray,
   resolveFeatureProteinId
 } from './feature-utils.js';
@@ -104,21 +105,6 @@ const normalizeQualifierRows = (qualifiers) => {
     })
     .filter((row) => row.key && row.values.length > 0)
     .sort((left, right) => left.key.localeCompare(right.key));
-};
-
-/** @param {FeatureLike | null | undefined} feat @param {unknown} key */
-export const getQualifierFirstValue = (feat, key) => {
-  const normalizedKey = String(key || '').trim().toLowerCase();
-  if (!normalizedKey) return '';
-  const directValue = feat?.[normalizedKey];
-  // A non-null object (checked): the qualifier table is read by a fixed key.
-  const qualifierValue = feat?.qualifiers && typeof feat.qualifiers === 'object'
-    ? /** @type {Record<string, unknown>} */ (feat.qualifiers)[normalizedKey]
-    : null;
-  const values = normalizeStringArray(directValue || qualifierValue)
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-  return values[0] || '';
 };
 
 // Details lists what the popup header and the Edit tab do not show:

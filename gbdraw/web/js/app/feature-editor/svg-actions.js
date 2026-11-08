@@ -13,9 +13,10 @@ import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
   formatFeatureLocation,
-  getFeatureCaption
+  getFeatureCaption,
+  getQualifierFirstValue
 } from '../../services/feature-utils.js';
-import { buildFeaturePopup, getQualifierFirstValue } from '../../services/feature-popup.js';
+import { buildFeaturePopup } from '../../services/feature-popup.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
