@@ -97,12 +97,36 @@ write-up of a release.
   are unchanged, and a window or step you set is kept. The Auto Depth window and
   step follow from these as before, and the Web app's Auto hints show the same
   values (OV-2864).
+- Added: feature density tracks show, window by window along each record, how
+  many features of a kind lie there or what percentage of the window they
+  cover, as a band of colored cells or as a histogram, with a Legend row that
+  states which features it reads (`gene per 20 kbp`). A track reads one feature
+  type (or every type), optionally a qualifier whose values match a regular
+  expression, and a length range, so it can show how densely genes lie along a
+  eukaryotic chromosome or the share of each window in long terminal repeats.
+  Give tracks with `--feature_density_track` or `--feature_density_table` in
+  `gbdraw circular` and `gbdraw linear`, or as `FeatureDensityTrack` options in
+  the Python API; a saved Session keeps them and replays them in the CLI. The
+  Web app draws a loaded Session's tracks again at Generate and saves them; its
+  editor for them comes later.
 - Changed: records of 100 Mbp or longer get an Auto GC content and GC skew
   window of 1 Mb and step of 100 kb (before: 100 kb and 10 kb), so a human
   chromosome draws about 2,500 samples per track instead of about 25,000.
   Records shorter than 100 Mbp are unchanged, and a window or step you set is
   kept. The Auto Depth window and step follow (100 kb and 10 kb at 100 Mbp and
   longer), and the Web app's Auto hints show the same values.
+- Fixed: in the Web app, drawing a large record again in the same page (human
+  chromosome 1, 249 Mbp, with a changed Species) ran out of the browser
+  engine's memory and failed with "The diagram engine failed while drawing
+  this diagram." The second figure now draws: the engine's memory after the
+  first chromosome 1 figure falls from 3.53 GiB to 2.68 GiB. CLI and Python
+  output is unchanged (OV-3027).
+- Fixed: in the Web app, when the diagram engine runs out of memory during
+  Generate, the page now replaces the engine at once and says so, with Retry
+  Generate and Save Session, instead of saying that generating again with the
+  same inputs fails the same way. Retry Generate draws on a new engine; if
+  memory runs out again, the text suggests a smaller region, fewer tracks or
+  labels, or the command line (OV-3027).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web
