@@ -107,7 +107,8 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readStoredRenderRequest,
-  linearDrawingWindowsOf
+  linearDrawingWindowsOf,
+  linearCardWindowPlanRecords
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -173,6 +174,9 @@ import {
 } from './session-file.js';
 // The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
 export { encodeSessionResources };
+// The windows a Linear card writes in its request and the records its window plan reads, for the shown-drawing
+// readers (services/session-request.js owns both).
+export { linearCardWindowPlanRecords, linearDrawingWindowsOf };
 import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources

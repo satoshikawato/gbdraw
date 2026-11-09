@@ -10,24 +10,27 @@ import test from 'node:test';
 globalThis.window = {
   Vue: {
     ref: (value) => ({ value }), reactive: (value) => value,
-    computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}, watch: () => {}
+    computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {},
+    // The stub runs an immediate watcher once, at creation: the readers ask Python for the plan of the state they see.
+    watch: (source, callback, options) => { if (options?.immediate) callback(source()); }
   }
 };
 
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  addCardWindow, cardWindowGaps, cardWindowList, editCardWindow, originWindowLength,
+  addCardWindow, cardWindowList, editCardWindow, originWindowLength,
   removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
-  linearCardRequestedCircular, linearDrawingWindowsOf, linearWindowsPayload
+  linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
   layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
-const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
+const { pythonCardWindowPlan, pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
+const { createLinearCardWindowReaders } = await import('../../gbdraw/web/js/app/linear-card-window-readers.js');
 const { linearUnitPlanPayload } = await import('../../gbdraw/web/js/services/linear-units.js');
 
 const span = (start, end, reverseComplement = false, column = null) => ({ start, end, reverseComplement, column, acrossOrigin: false });
@@ -117,18 +120,55 @@ test('the extraction reads the topology with an empty window as the request writ
   assert.equal(linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows: [], windows }), null);
 });
 
-test('the bases between two windows next to each other in the same direction are counted', () => {
-  const linear = { recordLength: 10000, circular: false };
-  assert.deepEqual(cardWindowGaps([span(1, 100), span(301, 400)], linear), [{ after: 0, bp: 200 }]);
-  // Reversed windows read in record order from the later one back.
-  assert.deepEqual(cardWindowGaps([span(301, 400, true), span(1, 100, true)], linear), [{ after: 0, bp: 200 }]);
-  // Different directions, overlapping windows, or another window between them: no count.
-  assert.deepEqual(cardWindowGaps([span(1, 100), span(301, 400, true)], linear), []);
-  assert.deepEqual(cardWindowGaps([span(1, 100), span(50, 400)], linear), []);
-  assert.deepEqual(cardWindowGaps([span(1, 100), span(501, 600), span(201, 300)], linear), []);
-  assert.deepEqual(cardWindowGaps([span(1, 100), span(301, 400)], { recordLength: null, circular: false }), []);
-  // A circular record's interval may run through the origin.
-  assert.deepEqual(cardWindowGaps([span(9901, 10000), span(51, 100)], { recordLength: 10000, circular: true }), [{ after: 0, bp: 50 }]);
+/**
+ * The card views and Record Layout cells of a Linear drawing of `cards`, each record `length` bp and `topology`, as
+ * the readers show them once Python (the real `plan_card_windows_json`) has answered.
+ */
+const shownWindows = async (cards, { length, topology = 'linear', entries = null }) => {
+  const drawing = {
+    mode: 'linear', linearSeqs: cards, drawnLinearSeqs: { value: cards }, recordDisplayDrafts: [],
+    linearRecordLayoutEnabled: { value: entries !== null }, linearRecordRows: entries || []
+  };
+  let asked = Promise.resolve();
+  const readers = createLinearCardWindowReaders({
+    state: { activeDrawing: () => drawing }, shownDrawingOfMode: () => drawing,
+    linearSeqRecord: () => ({ recordLength: length, detectedTopology: topology, recordId: 'NC_1' }),
+    planCardWindows: (payload) => { asked = pythonCardWindowPlan(payload); return asked; },
+    cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => []
+  });
+  await asked;
+  await new Promise((resolve) => setImmediate(resolve));
+  return {
+    cards: cards.map((card) => readers.linearCardWindowView(card).windows.map(({ number, gapText }) => [number, gapText])),
+    cells: readers.linearLayoutCellRows().map(({ uid, window, number }) => [uid, window, number])
+  };
+};
+
+test('the card shows the drawing\'s window numbers and omitted lengths, from Python (OV-2992)', async () => {
+  const between = (bp, first, second) => `${bp} bp of the record lie between windows ${first} and ${second} and are left out.`;
+  // Two windows of a linear record with 200 bp between them.
+  assert.deepEqual((await shownWindows([createLinearSeq({ uid: 'a', windows: [span(1, 100), span(301, 400)] })],
+    { length: 10000 })).cards, [[[1, between(200, 1, 2)], [2, '']]]);
+  // Overlapping windows of a circular record: the drawing writes no length, nor does the card.
+  assert.deepEqual((await shownWindows([createLinearSeq({ uid: 'a', windows: [span(1, 600), span(500, 900)] })],
+    { length: 1000, topology: 'circular' })).cards, [[[1, ''], [2, '']]]);
+  // A third window covers the interval between windows 1 and 2.
+  assert.deepEqual((await shownWindows([createLinearSeq({ uid: 'a', windows: [span(1, 100), span(301, 400), span(50, 350)] })],
+    { length: 10000 })).cards, [[[1, ''], [2, ''], [3, '']]]);
+  // Up on the third window puts it second in the row: the numbers follow the row and no window pair is next to its
+  // record neighbour, so the drawing writes no length.
+  const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 100), span(201, 300), span(401, 500)] })];
+  const entries = moveLinearLayoutCell(cards, [{ uid: 'a', row: 1 }], { uid: 'a', window: 2 }, -1);
+  assert.ok(entries);
+  const moved = await shownWindows(cards, { length: 10000, entries });
+  assert.deepEqual(moved.cards, [[[1, ''], [3, ''], [2, '']]]);
+  assert.deepEqual(moved.cells, [['a', 0, 1], ['a', 2, 2], ['a', 1, 3]]);
+});
+
+test('until Python can plan the windows the card shows no number and no omitted length', async () => {
+  // An End without a Start is a window Generate refuses: no plan is asked for.
+  const card = createLinearSeq({ uid: 'a', windows: [span(1, 100), span(null, 400)] });
+  assert.deepEqual((await shownWindows([card], { length: 10000 })).cards, [[[null, ''], [null, '']]]);
 });
 
 /** The cards and Record Layout of an arranged drawing: a in row 1 drawn in two windows, b in row 1, c in row 2. */

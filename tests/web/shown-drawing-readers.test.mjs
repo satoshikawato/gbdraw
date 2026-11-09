@@ -6,12 +6,18 @@ import test from 'node:test';
 
 globalThis.window = {
   Vue: {
-    computed: (definition) => ({ get value() { return definition(); } })
+    computed: (definition) => ({ get value() { return definition(); } }), ref: (value) => ({ value }), watch: () => {}
   }
 };
 
 const { createShownDrawingReaders } = await import('../../gbdraw/web/js/app/shown-drawing-readers.js');
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { linearCardWindowPlanRecords, linearDrawingWindowsOf } = await import('../../gbdraw/web/js/services/session-request.js');
+/** The request ports of the readers; no card here has several windows, so the window plan is never asked for. */
+const requestPorts = {
+  windowsOf: linearDrawingWindowsOf, cardWindowPlanRecords: linearCardWindowPlanRecords,
+  planCardWindows: async () => ({ result: null }), recordDisplayRows: () => []
+};
 
 /** A shown Linear drawing of one card with a wrapped Result, its input summary naming `summaryRegion`. */
 const readersFor = (seq, summaryRegion) => {
@@ -35,7 +41,7 @@ const readersFor = (seq, summaryRegion) => {
     state, shownDrawingOfMode: () => drawing,
     linearRecordsFor: () => [{ recordLength: 16569 }], linearRecordStatusFor: () => 'ready',
     refreshLinearRecords: () => ({ busy: true }), committedLinearRecordCards: () => null,
-    getCommittedCanonicalRenderRequest: () => request
+    getCommittedCanonicalRenderRequest: () => request, ...requestPorts
   });
 };
 
@@ -70,7 +76,7 @@ test('the shown Result names its records by the record IDs it drew them with, el
     const { shownRecordIds } = createShownDrawingReaders({
       state, shownDrawingOfMode: () => drawing, linearRecordsFor: () => [], linearRecordStatusFor: () => 'ready',
       refreshLinearRecords: () => ({ busy: true }), committedLinearRecordCards: () => null,
-      getCommittedCanonicalRenderRequest: () => ({ mode: 'circular', records }), windowsOf: () => () => []
+      getCommittedCanonicalRenderRequest: () => ({ mode: 'circular', records }), ...requestPorts
     });
     return Object.fromEntries(shownRecordIds(drawing));
   };

@@ -143,6 +143,8 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { UNKNOWN_CARD_RECORD, wholeRecordWindow } from './linear-card-windows.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { LayoutEntry } from './linear-record-layout.js' */
+/** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
@@ -1647,6 +1649,77 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 };
 
 /**
+ * Where a drawn Linear card stands and what it draws, as the request writes it: its windows
+ * (`linearWindowsPayload`, each placed by the Record Layout's cell places when the Web owns them), its row and
+ * column, and its record-wide reverse complement. The one owner for the request (`buildRecords`) and for the plan of
+ * a card's window numbers and omitted lengths (`linearCardWindowPlanRecords`). A refused window throws.
+ * @template {RequestLinearSeq} C
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[], linearSeqs?: readonly { uid?: unknown }[] }} drawing
+ * @param {readonly C[]} seqs The drawn cards, in request order.
+ * @param {(seq: C) => CardRecordFacts} recordOf
+ * @returns {{ windows: CanonicalRecord['windows'], gridRow: number | null, gridColumn: number | null, reverseComplement: boolean }[]}
+ */
+const linearRecordPlacements = (drawing, seqs, recordOf) => {
+  const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
+  const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
+    seqs, drawing.linearRecordRows, { enabled: arranged }
+  ));
+  // The places of the Record Layout's cells, when the Web owns them (a card drawn in several windows, PD-OI-124).
+  const places = arranged ? linearLayoutPlaces(linearLayoutCells(
+    seqs.map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
+  )) : null;
+  return seqs.map((seq, index) => {
+    const written = linearWindowsPayload(seq, {
+      arranged, ordinal: (drawing.linearSeqs || []).findIndex((card) => card.uid === seq.uid) + 1 || index + 1,
+      record: recordOf(seq)
+    });
+    const windows = places && written.length > 1
+      ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
+      : written;
+    return {
+      windows,
+      gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
+      // A record drawn in several windows places each by its own column (D-14).
+      gridColumn: !arranged || windows.length > 1 ? null
+        : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
+          : (resolvedRows[index]?.canonicalColumn ?? null),
+      reverseComplement: linearPresentationReverse(seq, windows)
+    };
+  });
+};
+
+/**
+ * The records the Worker helper `planCardWindows` reads for the drawn cards of a Linear drawing: each card (keyed by
+ * its uid) as the request writes it (`linearRecordPlacements`), with the length of its record and whether the request
+ * draws it circular (its display topology, else the record's own). Null while a record is not read yet or a window is
+ * one Generate refuses: the card then shows no number and no omitted length.
+ * @template {RequestLinearSeq} C
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
+ * @param {readonly C[]} seqs The drawn cards, in request order.
+ * @param {(seq: C) => CardRecordFacts & { circular: boolean }} recordOf
+ * @param {RequestRecordDisplayRow[]} recordDisplayRows
+ * @returns {CardWindowRecordInput[] | null}
+ */
+export const linearCardWindowPlanRecords = (drawing, seqs, recordOf, recordDisplayRows) => {
+  const records = seqs.map(recordOf);
+  if (records.some((record) => record.length === null)) return null;
+  let placements;
+  try {
+    placements = linearRecordPlacements(drawing, seqs, (seq) => records[seqs.indexOf(seq)]);
+  } catch {
+    return null;
+  }
+  return seqs.map((seq, index) => {
+    const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
+    const requested = linearCardRequestedCircular({ drawing, card: seq, index, recordDisplayRows, windows });
+    return {
+      recordKey: seq.uid, windows, gridRow, gridColumn, reverseComplement,
+      sourceLength: /** @type {number} */ (records[index].length), circular: requested ?? records[index].circular
+    };
+  });
+};
+
+/**
  * The draft records of a request: each with the uid of the card it reads
  * (`recordSources`). Circular also names the identities of its drawn and read
  * records and how many records its presentation offers (`presentedCount`, which
@@ -1661,32 +1734,17 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 const buildRecords = ({ drawing, filesData, resources }) => {
   const mode = requestDrawingMode(drawing);
   if (mode === 'linear') {
-    const resolvedRows = /** @type {Record<string, any>[]} */ (resolveEffectiveLinearRecordRows(
-      filesData.linearSeqs,
-      drawing.linearRecordRows,
-      { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
-    ));
+    const seqs = filesData.linearSeqs || [];
     const canonicalCardinalityByUid = new Map(
       (drawing.linearRecordRows || []).map(
         (/** @type {{ uid?: unknown, canonicalCardinality?: string }} */ entry) => [entry.uid, entry.canonicalCardinality]
       )
     );
-    const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
-    // The places of the Record Layout's cells, when the Web owns them (a card drawn in several windows, PD-OI-124).
-    const places = arranged ? linearLayoutPlaces(linearLayoutCells(
-      (filesData.linearSeqs || []).map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
-    )) : null;
+    const placements = linearRecordPlacements(drawing, seqs, (seq) => seq.cardRecord ?? UNKNOWN_CARD_RECORD);
     /** @type {RequestDraftRecord[]} */
-    const records = (filesData.linearSeqs || []).map((seq, index) => {
+    const records = seqs.map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
-      const written = linearWindowsPayload(seq, {
-        arranged, ordinal: (drawing.linearSeqs || []).findIndex((/** @type {{ uid?: unknown }} */ card) => card.uid === seq.uid) + 1
-          || index + 1,
-        record: seq.cardRecord ?? UNKNOWN_CARD_RECORD
-      });
-      const windows = places && written.length > 1
-        ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
-        : written;
+      const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
       const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
@@ -1699,18 +1757,15 @@ const buildRecords = ({ drawing, filesData, resources }) => {
           ...presentationPayload({
             label: linearRecordLabel(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
-            // A record drawn in several windows places each by its own column (D-14).
-            gridColumn: !arranged || windows.length > 1 ? null
-              : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
-                : (resolvedRows[index]?.canonicalColumn ?? null)
+            gridRow,
+            gridColumn
           }),
-          reverseComplement: linearPresentationReverse(seq, windows)
+          reverseComplement
         }
       };
     });
     return {
-      records, recordSources: (filesData.linearSeqs || []).map((seq, index) => linearSeqRecordKey(seq, index)),
+      records, recordSources: seqs.map((seq, index) => linearSeqRecordKey(seq, index)),
       drawnIdentities: null, listedIdentities: null, presentedCount: null
     };
   }

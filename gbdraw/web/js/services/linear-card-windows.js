@@ -127,31 +127,6 @@ export const originWindowLength = (window, recordLength) => (
 );
 
 /**
- * The bases of the record between two windows of the list that are next to each other and run in the same direction
- * (PD-OI-124): the interval from the earlier window's end to the later one's start in the record's own order, when
- * no other window of the record lies in it. A circular record's interval may run through the origin. `after` is the
- * index of the first window of the pair.
- * @param {readonly LinearSeqWindow[]} windows
- * @param {{ recordLength: number | null, circular: boolean }} record
- * @returns {{ after: number, bp: number }[]}
- */
-export const cardWindowGaps = (windows, { recordLength, circular }) => windows.slice(1).flatMap((right, index) => {
-  const left = windows[index];
-  const spanned = [left, right].every((window) => window.start !== null && window.end !== null);
-  if (!spanned || left.reverseComplement !== right.reverseComplement || recordLength === null) return [];
-  const [earlier, later] = left.reverseComplement ? [right, left] : [left, right];
-  const from = /** @type {number} */ (earlier.end) + 1;
-  const to = /** @type {number} */ (later.start) - 1;
-  const bp = circular ? (((to - from + 1) % recordLength) + recordLength) % recordLength : to - from + 1;
-  if (bp <= 0 || (!circular && to > recordLength)) return [];
-  /** @param {number} base */
-  const inGap = (base) => (circular ? ((base - from) % recordLength + recordLength) % recordLength < bp : base >= from && base <= to);
-  const others = windows.filter((window) => window !== left && window !== right);
-  if (others.some((window) => [window.start, window.end].some((base) => base !== null && inGap(base)))) return [];
-  return [{ after: index, bp }];
-});
-
-/**
  * A listed window as Generate draws it: with Start and End both empty it spans the whole record, 1 to `recordLength`,
  * as the card says until they are set (PD-OI-124); any other window, or an empty one whose record length is not known
  * yet, is returned as it is (the request then refuses it, naming the card). The one owner of that fill: every reader

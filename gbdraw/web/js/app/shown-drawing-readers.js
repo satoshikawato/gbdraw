@@ -17,12 +17,13 @@ import {
 } from '../services/record-options.js';
 import { createLinearCardWindowReaders } from './linear-card-window-readers.js';
 import { sequenceCardRecord } from '../services/linear-card-windows.js';
-import { linearDrawingWindowsOf } from '../services/session-request.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RecordSelectorStatus, RefreshOutcome } from './linear-record-selector.js' */
+/** @import { LinearCardWindowReaderPorts } from './linear-card-window-readers.js' */
+/** @import { linearDrawingWindowsOf } from '../services/session-request.js' */
 
 const { computed } = window.Vue;
 
@@ -38,6 +39,12 @@ const { computed } = window.Vue;
  * @property {(drawing: DrawingState) => { record: CanonicalRenderRequest['records'][number], seq: LinearSeq }[] | null} committedLinearRecordCards
  *   Each record of the committed Linear request with the card of the drawing that still draws it.
  * @property {() => CanonicalRenderRequest | null} getCommittedCanonicalRenderRequest
+ * @property {typeof linearDrawingWindowsOf} windowsOf The windows a Linear card writes in its request
+ *   (`linearDrawingWindowsOf` of services/session-request.js).
+ * @property {LinearCardWindowReaderPorts['cardWindowPlanRecords']} cardWindowPlanRecords
+ * @property {LinearCardWindowReaderPorts['planCardWindows']} planCardWindows
+ *   The Worker helper that plans the numbers and omitted lengths of a Linear card's windows.
+ * @property {LinearCardWindowReaderPorts['recordDisplayRows']} recordDisplayRows The record display rows the request reads.
  */
 
 /**
@@ -91,7 +98,7 @@ const recordIdsOfResult = (request, trackSlotGeometry, resultCount) => {
  */
 export const createShownDrawingReaders = ({
   state, shownDrawingOfMode, linearRecordsFor, linearRecordStatusFor, refreshLinearRecords, committedLinearRecordCards,
-  getCommittedCanonicalRenderRequest
+  getCommittedCanonicalRenderRequest, windowsOf, planCardWindows, cardWindowPlanRecords, recordDisplayRows
 }) => {
   const { inputSummaries, selectedResultIndex, results } = state;
   /**
@@ -115,9 +122,11 @@ export const createShownDrawingReaders = ({
   // The windows a card of the drawing writes in its request, its record as the record selector read it
   // (`linearDrawingWindowsOf`): the LOSAT job estimate and the wrap estimate read them here.
   /** @param {DrawingState} drawing */
-  const linearCardWindowsOf = (drawing) => linearDrawingWindowsOf(drawing,
+  const linearCardWindowsOf = (drawing) => windowsOf(drawing,
     (card) => sequenceCardRecord(linearSeqRecord(drawing, card)));
-  const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({ state, shownDrawingOfMode, linearSeqRecord });
+  const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({
+    state, shownDrawingOfMode, linearSeqRecord, planCardWindows, cardWindowPlanRecords, recordDisplayRows
+  });
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
     return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';

@@ -2790,10 +2790,8 @@ export const createRunAnalysis = ({
               })
         )
       : null;
-    /** @type {LinearRecordCatalogRecords} */
-    let linearRecordCatalog = null;
-    // The record a drawn card reads, from this Generate's record catalog (unknown until it is read).
-    /** @param {LinearSeq} card */
+    let linearRecordCatalog = /** @type {LinearRecordCatalogRecords} */ (null);
+    /** The record a drawn card reads, from this Generate's record catalog (unknown until it is read). @param {LinearSeq} card */
     const catalogRecordOf = (card) => catalogCardRecord(linearRecordCatalog, linearSeqs.indexOf(card));
 
     const generationToken = ++latestGenerationToken;
@@ -3026,10 +3024,7 @@ export const createRunAnalysis = ({
       const nextRecordPlan = identitySources ? requestRecordPlan({
         drawing: requestDrawing,
         // Each card with its record from the catalog, so an empty window draws the whole record here too (PD-OI-124).
-        filesData: {
-          linearSeqs: drawing.linearSeqs.map((card) => ({ ...card, cardRecord: catalogRecordOf(card) })),
-          circularSources: [...drawing.circularSources]
-        }
+        filesData: { linearSeqs: drawing.linearSeqs.map((card) => ({ ...card, cardRecord: catalogRecordOf(card) })), circularSources: [...drawing.circularSources] }
       }) : null;
       if (identitySources && nextRecordPlan) {
         // A committed request without kept identities reads them again from the current files.
@@ -3763,10 +3758,8 @@ export const createRunAnalysis = ({
           recordSelectors.push(recordIdRaw || '');
           if (window) {
             viewTransformSpecs.push({ reverse: window.reverseComplement });
-            const isCircular = linearCardRequestedCircular({
-              drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card),
-              recordDisplayRows: recordDisplayRows?.value || [], windows: linearDrawingWindowsOf(drawing, catalogRecordOf)(card)
-            });
+            const isCircular = linearCardRequestedCircular({ drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card),
+              recordDisplayRows: recordDisplayRows?.value || [], windows: linearDrawingWindowsOf(drawing, catalogRecordOf)(card) });
             return { file: window.searchRegion, acrossOrigin: window.start > window.end, isCircular };
           }
           const wantsReverse = Boolean(seq.region_reverse);
