@@ -1177,6 +1177,51 @@ def _feature_labels_making_way(
     return moved, places
 
 
+@dataclass(eq=False)
+class _RecordRegionLabels:
+    """The annotation labels of one record, placed off its feature labels and leaders, and the places along their
+    regions that the feature labels made way for (CIR-RGN-YIELD): the one owner of those places across the record's
+    label passes, so every later placement draws those labels where the feature labels made way."""
+
+    radial_layout: CircularRadialLayout
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None
+    record_index: int
+    record_length: int
+    font_family: str
+    canvas_config: CircularCanvasConfigurator
+    made_way: _RegionLabelsMadeWay = field(default_factory=dict)
+
+    def place(self, feature_labels: Sequence[CircularLabel]) -> tuple[_SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
+        """The drawn labels of each slot, their ink bounds on the canvas (a legend or title avoids them), and what
+        they could not draw clear (``_circular_annotation_labels_by_slot``)."""
+
+        labels_by_slot, not_clear = _circular_annotation_labels_by_slot(
+            self.radial_layout,
+            self.annotation_track_layouts,
+            record_index=self.record_index,
+            record_length=self.record_length,
+            font_family=self.font_family,
+            obstacles=_feature_label_obstacles(feature_labels, self.record_length, self.canvas_config),
+            made_way=self.made_way,
+        )
+        offset_x, offset_y = float(self.canvas_config.offset_x), float(self.canvas_config.offset_y)
+        return labels_by_slot, tuple(
+            label.ink_bounds.translated(offset_x, offset_y) for labels in labels_by_slot.values() for label in labels
+        ), not_clear
+
+    def make_way(
+        self, feature_labels: Sequence[CircularLabel], not_clear: _RegionLabelsNotClear, definition_text: Sequence[Aabb]
+    ) -> list[CircularLabel] | None:
+        """The feature labels moved off the region labels still over their letters, keeping the places they made way
+        for; None when they clear none (``_feature_labels_making_way``)."""
+
+        made_way = _feature_labels_making_way(feature_labels, not_clear, self.record_length, definition_text)
+        if made_way is None:
+            return None
+        moved, self.made_way = made_way
+        return moved
+
+
 def _region_label_warnings(
     radial_layout: CircularRadialLayout,
     tracks: Mapping[str, ResolvedAnnotationTrack],
@@ -3754,23 +3799,14 @@ def add_record_on_circular_canvas(
 
     # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
     # They move off the feature labels and leaders, which make way for one still over their letters (CIR-RGN-YIELD).
-    region_labels_made_way: _RegionLabelsMadeWay = {}
-
-    def place_annotation_labels() -> tuple[_SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
-        labels_by_slot, not_clear = _circular_annotation_labels_by_slot(
-            radial_layout,
-            annotation_track_layouts,
-            record_index=planned.annotation_record_index,
-            record_length=len(record.gb_record.seq),
-            font_family=str(cfg.objects.text.font_family),
-            obstacles=_feature_label_obstacles(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
-            made_way=region_labels_made_way,
-        )
-        return labels_by_slot, tuple(
-            label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
-            for labels in labels_by_slot.values()
-            for label in labels
-        ), not_clear
+    region_labels = _RecordRegionLabels(
+        radial_layout,
+        annotation_track_layouts,
+        planned.annotation_record_index,
+        len(record.gb_record.seq),
+        str(cfg.objects.text.font_family),
+        canvas_config,
+    )
 
     # A corner legend must also clear the record and its tracks, even when
     # every label has moved outside and the interior has no label obstacles.
@@ -3790,12 +3826,10 @@ def add_record_on_circular_canvas(
             definition_target=definition,
         )
 
-    annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
-    if made_way := _feature_labels_making_way(
-        precalculated_labels or (), region_labels_not_clear, len(record.gb_record.seq), definition_text
-    ):
-        precalculated_labels, region_labels_made_way = made_way
-        annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
+    annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.place(precalculated_labels or ())
+    if (moved := region_labels.make_way(precalculated_labels or (), region_labels_not_clear, definition_text)) is not None:
+        precalculated_labels = moved
+        annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.place(moved)
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
         *annotation_label_obstacles,
@@ -3843,7 +3877,9 @@ def add_record_on_circular_canvas(
                     ],
                     len(record.gb_record.seq),
                 )
-            annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
+            annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.place(
+                precalculated_labels
+            )
             overlay_obstacles = (
                 *_external_label_obstacles_on_canvas(precalculated_labels, len(record.gb_record.seq), canvas_config),
                 *annotation_label_obstacles,
