@@ -82,7 +82,10 @@ def _track_paths(mode: str, record: SeqRecord, region: RegionSpec | None) -> dic
     root = ET.fromstring((result.drawing if hasattr(result, "drawing") else result).tostring())
     paths: dict[str, str] = {}
     for group in root.iter():
-        track = {"gc_content": "GC content", "skew": "GC skew", "gc_skew": "GC skew"}.get(group.get("id") or "")
+        # Linear tags its slot groups; Circular's default groups keep their preset ids.
+        track = {"dinucleotide_content": "GC content", "dinucleotide_skew": "GC skew"}.get(
+            group.get("data-gbdraw-slot-renderer") or ""
+        ) or {"gc_content": "GC content", "skew": "GC skew"}.get(group.get("id") or "")
         if track is None:
             continue
         # The data line is the longest path of the group (a clip or a background rectangle is a few points).

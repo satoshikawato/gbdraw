@@ -1376,7 +1376,7 @@ def _assert_linear_rows(chapter: dict[str, object], *, output_path: Path) -> Non
     for element in root.iter():
         if (
             element.tag.rsplit("}", 1)[-1] != "g"
-            or not element.attrib.get("id", "").startswith("record_group_")
+            or element.attrib.get("data-gbdraw-slot-renderer") != "features"
         ):
             continue
         index = int(element.attrib["data-gbdraw-record-index"])

@@ -420,7 +420,7 @@ def _assert_linear_layout_download(path: Path) -> dict[str, Any]:
         element.attrib.get("data-gbdraw-record-id", ""): element
         for element in elements
         if element.tag.rsplit("}", 1)[-1] == "g"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
         and element.attrib.get("data-gbdraw-record-id")
     }
     translations = {}

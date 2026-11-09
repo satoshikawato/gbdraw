@@ -75,7 +75,9 @@ def _xy(path):
 
 
 def _group(root, name):
-    return next(node for node in root.iter() if node.get("id") == name)
+    """A group by its id, or a Linear slot group by its slot id (OV-3012)."""
+
+    return next(node for node in root.iter() if name in (node.get("id"), node.get("data-gbdraw-slot-id")))
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

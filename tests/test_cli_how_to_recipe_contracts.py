@@ -372,7 +372,7 @@ def test_linear_layout_svg_keeps_rulers_ascending_and_reverses_features() -> Non
         element.attrib["data-gbdraw-record-id"]: element
         for element in root
         if element.tag.rsplit("}", 1)[-1] == "g"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
         and "data-gbdraw-record-id" in element.attrib
     }
     expected_ticks = [
