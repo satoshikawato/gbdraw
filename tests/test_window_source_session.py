@@ -310,3 +310,43 @@ def test_a_session_redraws_a_planned_record_given_again_with_a_new_window_or_ori
     )
     live, replay = _replayed(request, tmp_path)
     assert replay == live
+
+
+def test_a_session_redraws_a_crop_of_a_reverse_complemented_record(tmp_path: Path) -> None:
+    """A crop of a planned, reverse-complemented record is saved as the record's forward form and the crop's window."""
+
+    resolved = resolve_request(LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(_record("src", "linear")), record_key="w",
+                             presentation=RecordPresentation(reverse_complement=True)),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), layout=LinearMultiRecordOptions(),
+        output=_output(tmp_path),
+    ))
+    crop = apply_region_specs([resolved.records[0].source.record], parse_region_specs(["src:5001-15000"]))[0]  # type: ignore[union-attr]
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(crop), record_key="c"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), layout=LinearMultiRecordOptions(),
+        output=_output(tmp_path),
+    )
+    live, replay = _replayed(request, tmp_path)
+    assert _saved_windows(tmp_path) == [("c", 1)]
+    assert replay == live
+
+
+def test_an_edited_window_unit_is_no_longer_a_window(tmp_path: Path) -> None:
+    """Of two planned windows of one record given again, the edited one is drawn and saved as a record of its own,
+    so live and replay agree that no gap mark joins them."""
+
+    import copy
+
+    resolved = resolve_request(_two_windows(InMemoryRecordSource(_record("src", "linear")), tmp_path, "src:40001-52000"))
+    first, second = (copy.deepcopy(record.source.record) for record in resolved.records)  # type: ignore[union-attr]
+    second.features.append(SeqFeature(FeatureLocation(100, 400, 1), type="CDS", qualifiers={"product": ["EDIT"]}))
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(first), record_key="a"),
+                 RecordInput(InMemoryRecordSource(second), record_key="b")),
+        options=LinearDiagramOptions(), layout=LinearMultiRecordOptions(), output=_output(tmp_path),
+    )
+    replanned = resolve_request(request)
+    assert [record.source.record.annotations.get("gbdraw_window_of") for record in replanned.records] == ["w", None]  # type: ignore[union-attr]
+    live, replay = _replayed(request, tmp_path)
+    assert live.count('data-gbdraw-row-mark="gap"') == replay.count('data-gbdraw-row-mark="gap"') == 0

@@ -104,10 +104,16 @@ def _drawn(topology: str, regions: tuple[tuple[int, int, bool], ...]) -> tuple[s
     return source, record
 
 
+def _step(kind: str, window: int) -> int:
+    """A fine step, or one wider than half the window, so the samples leave bases of the record unread."""
+    return 50 if kind == "fine" else window + 37
+
+
+@pytest.mark.parametrize("step_kind", ["fine", "wide"])
 @pytest.mark.parametrize("case", _CASES, ids=_IDS)
-def test_gc_windows_read_the_bases_next_to_them_on_the_molecule(case) -> None:
+def test_gc_windows_read_the_bases_next_to_them_on_the_molecule(case, step_kind: str) -> None:
     _id, topology, regions, first, reverse, window = case
-    step = 50
+    step = _step(step_kind, window)
     source, record = _drawn(topology, regions)
     frame = skew_df(record, window, step, "GC", circular=topology == "circular")
     expected = _expected_gc(
@@ -150,7 +156,7 @@ def _depth_table(depths: np.ndarray, rows: range | None = None) -> pd.DataFrame:
     )
 
 
-def _expected_depths(depths, rows: range, drawn: set[int], case) -> dict[int, float]:
+def _expected_depths(depths, rows: range, drawn: set[int], case, step: int) -> dict[int, float]:
     """Each window's mean over the bases it reads: a drawn base, or a flank base within ``rows`` (the source
     indexes from the first to the last row); a base inside both with no row adds 0 (D-64)."""
 
@@ -159,15 +165,16 @@ def _expected_depths(depths, rows: range, drawn: set[int], case) -> dict[int, fl
     held[list(rows)] = depths[list(rows)]
     expected = {}
     length = len(drawn)
-    for p, indices in _window_indices(first, length, reverse, topology == "circular", LENGTH, window, 50):
+    for p, indices in _window_indices(first, length, reverse, topology == "circular", LENGTH, window, step):
         read = [i for i in indices if i in drawn or rows.start <= i < rows.stop]
         expected[p] = float(held[read].sum()) / len(read)
     return expected
 
 
+@pytest.mark.parametrize("step_kind", ["fine", "wide"])
 @pytest.mark.parametrize("rows", [range(0, LENGTH), range(0, 3_200), range(1_200, 3_300)], ids=["all", "to-3200", "1200-3300"])
 @pytest.mark.parametrize("case", _CASES, ids=_IDS)
-def test_depth_windows_follow_the_same_rule(case, rows: range) -> None:
+def test_depth_windows_follow_the_same_rule(case, rows: range, step_kind: str) -> None:
     """Depth reads the same windows; past the drawn record it reads only where the rows of the file reach, so the
     rows of the drawn region alone draw no fall at its ends (D-64)."""
 
@@ -175,10 +182,21 @@ def test_depth_windows_follow_the_same_rule(case, rows: range) -> None:
     depths = _depths()
     _source, record = _drawn(topology, regions)
     drawn = {(first - x if reverse else first + x) % LENGTH for x in range(len(record.seq))}
-    frame = depth_df(record, _depth_table(depths, rows), window, 50, circular=topology == "circular")
-    expected = _expected_depths(depths, rows, drawn, case)
+    step = _step(step_kind, window)
+    frame = depth_df(record, _depth_table(depths, rows), window, step, circular=topology == "circular")
+    expected = _expected_depths(depths, rows, drawn, case, step)
     assert frame["position"].tolist() == list(expected)
     assert frame["depth"].tolist() == pytest.approx(list(expected.values()), rel=1e-12)
+
+
+def test_a_wide_step_still_counts_the_end_of_a_circular_record() -> None:
+    """A step wider than half the window leaves the end of the record unread by any sample; the first window still
+    reads it across the origin, and its positions without a row count 0."""
+
+    record = SeqRecord(Seq("ACGT" * 2_500), id="c", annotations={"topology": "circular", "molecule_type": "DNA"})
+    table = pd.DataFrame({"reference_name": ["c"] * 9_000, "position": range(1, 9_001), "depth": [50.0] * 9_000})
+    frame = depth_df(record, table, 100, 5_000, circular=True)
+    assert frame["depth"].tolist()[0] == 25.0
 
 
 def test_rows_of_the_drawn_region_alone_draw_a_flat_line() -> None:

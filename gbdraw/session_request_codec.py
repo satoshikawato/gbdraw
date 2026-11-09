@@ -95,7 +95,7 @@ from gbdraw.features.placement import (
     FeaturePlacementTarget,
 )
 from gbdraw.io.colors import color_table_path
-from gbdraw.io.record_select import RecordSelector, parse_record_selector
+from gbdraw.io.record_select import RecordSelector, parse_record_selector, reverse_records
 from gbdraw.io.regions import RecordWindow, RegionSpec, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
@@ -1107,7 +1107,13 @@ def _crop_in_source(record: SeqRecord) -> tuple[SeqRecord, RecordWindow] | None:
     ):
         return None
     source = stored.record
-    if (stored.base, stored.step) != (1, 1) or source.annotations.get("gbdraw_region_applied"):
+    if source.annotations.get("gbdraw_region_applied"):
+        return None
+    if (stored.base, stored.step) == (len(source), -1):
+        # A crop of a reverse-complemented whole record: the record's forward form is the record as read, and the
+        # crop's window (in those coordinates) crops and orients it again.
+        source = reverse_records((source,), True)[0]
+    elif (stored.base, stored.step) != (1, 1):
         return None
     found = _source_file_transform(record)
     if found is None:

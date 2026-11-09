@@ -115,7 +115,8 @@ class SlidingWindows:
 
     ``samples`` are 0, ``step``, ... below the record length: where each value is drawn. The window of
     ``samples[k]`` reads local positions ``starts[k] .. ends[k] - 1``; ``pieces`` map the local positions
-    ``starts.min() .. ends.max() - 1`` to the source, in local order.
+    ``min(starts.min(), 0) .. max(ends.max(), length) - 1`` (the windows and the drawn record) to the source, in
+    local order.
     """
 
     samples: NDArray[np.int64]
@@ -153,7 +154,9 @@ def sliding_windows(record: SeqRecord, window: int, step: int, *, circular: bool
         starts = np.clip(starts, low, high)
         ends = np.clip(ends, low, high)
     pieces: list[SourcePiece] = []
-    local, stop = int(starts.min()), int(ends.max())
+    # The pieces cover the windows and the whole drawn record: a step wider than half the window leaves bases of
+    # the record in no window, and a reader of the drawn bases (Depth's count) still maps them.
+    local, stop = min(int(starts.min()), 0), max(int(ends.max()), length)
     while local < stop:
         index = (first + direction * local) % size
         run = min(stop - local, size - index if direction > 0 else index + 1)

@@ -1834,16 +1834,23 @@ def _apply_provenance_annotations(
     )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
+    # The window this unit draws and the record it is a window of (D-01): this plan's window, or an earlier plan's
+    # while the record is unchanged since (``origin_window_of``). An edited unit given again is no window, so
+    # per-record readers (``record_identity_key``, Linear rows) and the Session writer agree.
     if provenance.window is not None:
         record.annotations[WINDOW_SPAN_ANNOTATION] = (provenance.window.span.start, provenance.window.span.end)
-    if provenance.window is not None and provenance.window.window_of is not None:
-        # The record this unit is a window of (D-01): per-record readers bind to it (``record_identity_key``).
-        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.window_of
+    elif provenance.origin_window_of is None:
+        record.annotations.pop(WINDOW_SPAN_ANNOTATION, None)
+    if provenance.window_of is not None:
+        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window_of
+    else:
+        record.annotations.pop(WINDOW_OF_ANNOTATION, None)
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
-        record.annotations["gbdraw_source_basename"] = Path(
-            provenance.source_paths[0]
-        ).name
+        record.annotations["gbdraw_source_basename"] = Path(provenance.source_paths[0]).name
+    else:
+        record.annotations.pop("gbdraw_source_file", None)
+        record.annotations.pop("gbdraw_source_basename", None)
 
 
 @dataclass

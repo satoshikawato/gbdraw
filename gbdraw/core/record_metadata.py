@@ -34,7 +34,7 @@ RECORD_ORIGIN_ANNOTATION = "gbdraw_record_origin"
 class RecordOrigin:
     """Where the request planner read a planned record from, kept on the record (``RECORD_ORIGIN_ANNOTATION``).
 
-    Only the planner writes it, when it projects a planned record (``request_render._projected_source``).
+    Only the planner writes it, on each record it finishes (``record_planning._keep_record_origin``).
     ``content_digest`` is the record's :func:`record_content_digest` then: the origin holds only while the record
     still has that digest (:func:`held_record_origin`), so a copy of the record keeps it and an edit ends it.
     ``window_of`` is the key of the record whose window the record draws (D-01).
