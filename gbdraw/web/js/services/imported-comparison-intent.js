@@ -4,10 +4,19 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { drawsSeveralUnits, unitRecordsOf } from './linear-units.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 /**
- * Whether and how a Session's saved comparison can be edited, as the Imported comparison state holds it.
- * @typedef {{ disposition: string, action: string | null, message: string, hasCommittedComparison: boolean }} ImportedComparisonIntent
+ * Whether and how a drawing's saved comparison can be edited, as the Imported comparison state of the drawing holds
+ * it. `source` is what Inherit copies (`savedComparisonSource` of the request the comparison was classified on); a
+ * comparison that is not preserved has none.
+ * @typedef {{
+ *   disposition: string,
+ *   action: string | null,
+ *   message: string,
+ *   hasCommittedComparison: boolean,
+ *   source: SavedComparisonSource | null
+ * }} ImportedComparisonIntent
  */
 /** @typedef {{ queryRecordIndex?: unknown, subjectRecordIndex?: unknown }} SavedEndpoint */
 /**
@@ -52,6 +61,18 @@ import { msg } from '../utils/i18n.js';
  * }} SavedRenderRequest
  */
 /** @typedef {{ [resourceId: string]: { kind?: unknown } }} SavedResources */
+/** @typedef {{ recordKey: string, windows: unknown[] }} SavedUnitInput A record as Python plans its drawn units. */
+/**
+ * What Inherit copies into a Generate's request, read from the request a drawing's comparison was classified on: its
+ * comparisons, the records (keys and windows) whose drawn units their indexes count, the score thresholds it sets
+ * (a field it leaves out is left out), and the resources its comparisons read, by ID.
+ * @typedef {{
+ *   comparisons: SavedComparison[],
+ *   records: SavedUnitInput[],
+ *   thresholds: { [field: string]: unknown },
+ *   resources: { [resourceId: string]: unknown }
+ * }} SavedComparisonSource
+ */
 /** @typedef {{ valid?: boolean, hasComparisonIntent?: boolean, error?: string }} ComparisonDraftResolution The current controls' comparison, validated. */
 
 export const IMPORTED_COMPARISON_DISPOSITIONS = Object.freeze({
@@ -80,6 +101,8 @@ const ENDPOINT_KINDS = new Set([
   'nucleotideBlast',
   'precomputedProteinComparison'
 ]);
+// The score thresholds of a comparison, which the saved request's diagram options hold.
+const THRESHOLD_FIELDS = /** @type {const} */ (['evalue', 'bitscore', 'identity', 'alignmentLength']);
 const CURRENT_PIPELINE_SETTING_FIELDS = new Set([
   'collinearityParams',
   'collinearityUnitMode',
@@ -137,7 +160,8 @@ export const createImportedComparisonIntentState = () => ({
   disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
   action: null,
   message: '',
-  hasCommittedComparison: false
+  hasCommittedComparison: false,
+  source: null
 });
 
 /** @param {{ action?: unknown } | null | undefined} intent */
@@ -271,7 +295,7 @@ const endpointKeys = (records, pairs) => pairs.map(({ query, subject }) => (
 /**
  * The request's records as Python plans their drawn units (`planLinearUnits`): each record's key and windows.
  * @param {readonly SavedRecord[]} records
- * @returns {{ recordKey: string, windows: unknown[] }[]}
+ * @returns {SavedUnitInput[]}
  */
 const unitInputsOf = (records) => records.map((record, index) => ({
   recordKey: recordKey(record, index), windows: Array.isArray(record?.windows) ? record.windows : []
@@ -333,21 +357,25 @@ export const classifyImportedComparisonIntent = ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
     action: null,
     message,
-    hasCommittedComparison
+    hasCommittedComparison,
+    source: null
   });
+  // Only a preserved comparison can be inherited: it holds what Inherit copies.
   /** @param {string} message */
   const preserved = (message) => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY,
     action: null,
     message,
-    hasCommittedComparison
+    hasCommittedComparison,
+    source: savedComparisonSource({ renderRequest, resources })
   });
   /** @param {string} message */
   const decision = (message) => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED,
     action: null,
     message,
-    hasCommittedComparison
+    hasCommittedComparison,
+    source: null
   });
 
   if (!hasCommittedComparison) return editable();
@@ -577,25 +605,47 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
 };
 
 /**
+ * What Inherit copies from a saved request (`SavedComparisonSource`): the classifier keeps it with a preserved
+ * comparison, and Load replaces it with the same of the request as Load read it (the current schema).
+ * @param {{ renderRequest?: SavedRenderRequest, resources?: Readonly<Record<string, unknown>> | null }} saved
+ * @returns {SavedComparisonSource}
+ */
+export const savedComparisonSource = ({ renderRequest, resources }) => {
+  const comparisons = Array.isArray(renderRequest?.comparisons) ? renderRequest.comparisons : [];
+  const options = renderRequest?.diagramOptions ?? {};
+  /** @type {{ [resourceId: string]: unknown }} */
+  const read = {};
+  collectComparisonResourceIds(comparisons).forEach((resourceId) => {
+    if (resources && Object.hasOwn(resources, resourceId)) read[resourceId] = resources[resourceId];
+  });
+  return {
+    comparisons,
+    records: unitInputsOf(Array.isArray(renderRequest?.records) ? renderRequest.records : []),
+    thresholds: Object.fromEntries(THRESHOLD_FIELDS.filter((field) => Object.hasOwn(options, field))
+      .map((field) => [field, options[field]])),
+    resources: read
+  };
+};
+
+/**
+ * Generate's Inherit: puts the saved comparison of a drawing (`source`, its Imported comparison state's) into the
+ * request Generate built without one. A comparison it cannot carry into this request (its drawn windows or records
+ * changed) asks for the choice in the Comparison panel (`COMPARISON_CHOICE_REQUIRED`).
  * @template {{ renderRequest?: SavedRenderRequest, resources: SavedResources }} C
- * @param {{
- *   candidate: C,
- *   committed: { renderRequest?: SavedRenderRequest, resources?: Readonly<Record<string, unknown>> } | null | undefined
- * }} drafts The committed Session's resources are read by id, and each entry read is checked.
+ * @param {{ candidate: C, source: SavedComparisonSource | null }} inherit
  * @returns {C}
  */
-export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
+export const inheritSavedComparison = ({ candidate, source: held }) => {
   // A comparison Inherit cannot carry into this request asks for the choice in the Comparison panel, with the reason
   // the user can act on when there is one.
   /** @param {string} [reason] */
   const choiceRequired = (reason) => diagnosticError('COMPARISON_CHOICE_REQUIRED', reason ? { reason } : {},
     { operation: 'generate' });
-  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) throw choiceRequired('INHERIT_SOURCE_MISSING');
-  const comparisons = committed.renderRequest.comparisons;
-  if (!Array.isArray(comparisons) || comparisons.length === 0) throw choiceRequired('INHERIT_SOURCE_MISSING');
-  const committedRecords = Array.isArray(committed.renderRequest.records)
-    ? committed.renderRequest.records
-    : [];
+  // The drawing state holds the source behind a Vue proxy; a resource descriptor goes into the request as it is.
+  const source = toRaw(held);
+  if (!isObject(candidate?.renderRequest)) throw choiceRequired();
+  if (source === null || source.comparisons.length === 0) throw choiceRequired('INHERIT_SOURCE_MISSING');
+  const committedRecords = source.records;
   const candidateRecords = Array.isArray(candidate.renderRequest.records)
     ? candidate.renderRequest.records
     : [];
@@ -609,24 +659,23 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   // The saved indexes count drawn units (OV-2995). Python plans the units from the records' keys and windows
   // (`planLinearUnits`), so a draft that draws the same records in the same windows draws the same units, and the
   // indexes carry over as saved; a draft whose windows differ draws other units.
-  const committedUnits = unitInputsOf(committedRecords);
   const candidateUnits = unitInputsOf(candidateRecords);
-  const windowed = drawsSeveralUnits(committedUnits) || drawsSeveralUnits(candidateUnits);
+  const windowed = drawsSeveralUnits(committedRecords) || drawsSeveralUnits(candidateUnits);
   /** @param {unknown} window */
   const span = (window) => (isObject(window) ? [window.start, window.end, window.reverseComplement] : window);
-  /** @param {{ recordKey: string, windows: unknown[] }[]} unitInputs */
+  /** @param {SavedUnitInput[]} unitInputs */
   const drawnUnits = (unitInputs) => JSON.stringify(unitInputs.map(({ recordKey: key, windows }) => [key, windows.map(span)]));
-  if (windowed && drawnUnits(committedUnits) !== drawnUnits(candidateUnits)) throw choiceRequired('INHERIT_UNITS_CHANGED');
+  if (windowed && drawnUnits(committedRecords) !== drawnUnits(candidateUnits)) throw choiceRequired('INHERIT_UNITS_CHANGED');
   /** @param {unknown} value */
   const remapIndex = (value) => {
     const sourceIndex = Number(value);
     if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0) return sourceIndex;
     if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw choiceRequired('INHERIT_UNITS_CHANGED');
-    const candidateIndex = candidateIndexByKey.get(recordKey(committedRecords[sourceIndex], sourceIndex));
+    const candidateIndex = candidateIndexByKey.get(committedRecords[sourceIndex].recordKey);
     if (candidateIndex === undefined) throw choiceRequired('INHERIT_UNITS_CHANGED');
     return candidateIndex;
   };
-  const inheritedComparisons = structuredClone(comparisons);
+  const inheritedComparisons = /** @type {SavedComparison[]} */ (structuredClone(source.comparisons));
   inheritedComparisons.forEach((comparison) => {
     if (ENDPOINT_KINDS.has(comparison?.kind)) {
       comparison.queryRecordIndex = remapIndex(comparison.queryRecordIndex);
@@ -641,11 +690,10 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
     }
   });
   candidate.renderRequest.comparisons = inheritedComparisons;
-  const committedOptions = committed.renderRequest.diagramOptions || {};
   const candidateOptions = candidate.renderRequest.diagramOptions || {};
-  ['evalue', 'bitscore', 'identity', 'alignmentLength'].forEach((field) => {
-    if (Object.prototype.hasOwnProperty.call(committedOptions, field)) {
-      candidateOptions[field] = committedOptions[field];
+  THRESHOLD_FIELDS.forEach((field) => {
+    if (Object.hasOwn(source.thresholds, field)) {
+      candidateOptions[field] = source.thresholds[field];
     } else {
       delete candidateOptions[field];
     }
@@ -653,7 +701,7 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   candidate.renderRequest.diagramOptions = candidateOptions;
 
   collectComparisonResourceIds(inheritedComparisons).forEach((resourceId) => {
-    const descriptor = committed.resources?.[resourceId];
+    const descriptor = source.resources[resourceId];
     if (!isObject(descriptor)) throw choiceRequired();
     const existing = candidate.resources[resourceId];
     if (existing && existing !== descriptor) throw choiceRequired();

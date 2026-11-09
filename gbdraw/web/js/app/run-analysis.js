@@ -222,7 +222,7 @@ import { ANNOTATION_SETS_SLICE } from '../services/drawing/annotation-sets.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
-  inheritCommittedComparisonIntent
+  inheritSavedComparison
 } from '../services/imported-comparison-intent.js';
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
@@ -2752,8 +2752,8 @@ export const createRunAnalysis = ({
     recordSessionLifecycleEvent('generation-input-resolution-start');
     // The records this Generate draws; every Linear index below is a position in it.
     const linearSeqs = drawing.drawnLinearSeqs.value;
-    const useCommittedComparison = comparisonExecution?.mode === 'inherit';
-    const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
+    const useSavedComparison = comparisonExecution?.mode === 'inherit';
+    const forceEmptyComparison = useSavedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
           forceEmptyComparison
@@ -5059,15 +5059,10 @@ export const createRunAnalysis = ({
           : [],
         keepTrackParts: true
       });
-      if (useCommittedComparison) {
-        if (typeof getCommittedCanonicalSession !== 'function') {
-          throw new Error('The preserved comparison owner is unavailable.');
-        }
-        // Load read the committed request to the current schema (`readStoredRenderRequest`).
-        inheritCommittedComparisonIntent({
-          candidate: canonical,
-          committed: getCommittedCanonicalSession()
-        });
+      // Inherit copies the drawing's own saved comparison, which its Imported comparison state holds: a drawing
+      // without a Result has no committed Session (OV-3001).
+      if (useSavedComparison) {
+        inheritSavedComparison({ candidate: canonical, source: drawing.importedComparisonIntent.source });
       }
       // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
       // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request
@@ -5495,7 +5490,7 @@ export const createRunAnalysis = ({
         committedRecordIdentities.set(canonical.resources, drawnRecordIdentities(canonical.renderRequest.records, identitySources));
       }
       settlePendingLiveSettings(drawing);
-      if (!useCommittedComparison && drawing.importedComparisonIntent) {
+      if (!useSavedComparison && drawing.importedComparisonIntent) {
         Object.assign(
           drawing.importedComparisonIntent,
           createImportedComparisonIntentState(),

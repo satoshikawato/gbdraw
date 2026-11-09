@@ -6,7 +6,8 @@ import {
   classifyImportedComparisonIntent,
   createImportedComparisonIntentState,
   importedComparisonExecution,
-  inheritCommittedComparisonIntent,
+  inheritSavedComparison,
+  savedComparisonSource,
   resolveImportedComparisonAction,
   restoreImportedComparisonIntent,
   serializeImportedComparisonResolution
@@ -292,7 +293,7 @@ const candidate = {
   }),
   resources: {}
 };
-inheritCommittedComparisonIntent({ candidate, committed });
+inheritSavedComparison({ candidate, source: savedComparisonSource(committed) });
 assert.deepEqual(candidate.renderRequest.comparisons, [{
   kind: 'precomputedProteinComparison',
   resourceId: 'protein',
@@ -359,6 +360,10 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   const intent = classify(unitPipeline([[0, 2], [1, 2]]));
   assert.equal(intent.disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY, JSON.stringify(intent));
   assert.equal(intent.hasCommittedComparison, true);
+  // The preserved comparison holds what Inherit copies (OV-3001): Generate reads it from the drawing, not from a Result.
+  assert.deepEqual(intent.source, savedComparisonSource({ renderRequest: unitPipeline([[0, 2], [1, 2]]), resources }));
+  assert.deepEqual(intent.source.records.map(({ recordKey }) => recordKey), ['record-a', 'record-b']);
+  assert.equal(classify(unitPipeline([[0, -1]])).source, null, 'a comparison that is not preserved holds no source');
   // An index that is no unit index, or a unit against itself, identifies no two records.
   assert.equal(classify(unitPipeline([[0, -1]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
   assert.equal(classify(unitPipeline([[2, 2]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
@@ -370,9 +375,9 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   ]);
   assert.equal(classify(cliRequest).disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
   // Inherit carries unit indexes into a request that draws the same units (the same records and windows), as saved.
-  const committedWindowed = { renderRequest: cliRequest, resources };
+  const committedWindowed = classify(cliRequest).source;
   const sameUnits = { renderRequest: request([], { schema: 10, records: structuredClone(windowedRecords) }), resources: {} };
-  inheritCommittedComparisonIntent({ candidate: sameUnits, committed: committedWindowed });
+  inheritSavedComparison({ candidate: sameUnits, source: committedWindowed });
   assert.deepEqual(sameUnits.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
     [[0, 2], [1, 2], [undefined, undefined]]);
   // A draft whose windows changed draws other units: the saved indexes name none of them.
@@ -387,12 +392,12 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
     }
     assert.fail('Inherit did not refuse');
   };
-  const changed = shownFailure(() => inheritCommittedComparisonIntent({ candidate: otherUnits, committed: committedWindowed }));
+  const changed = shownFailure(() => inheritSavedComparison({ candidate: otherUnits, source: committedWindowed }));
   assert.equal(changed.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(changed.summary, /The drawn records or windows changed since the comparison was saved\. Choose Replace or Clear\./);
   assert.deepEqual(changed.actions, ['edit-comparison']);
-  // A drawing whose comparison Inherit cannot read (no committed request) gets the same choice.
-  const missing = shownFailure(() => inheritCommittedComparisonIntent({ candidate: structuredClone(sameUnits), committed: null }));
+  // A drawing that holds no saved comparison gets the same choice.
+  const missing = shownFailure(() => inheritSavedComparison({ candidate: structuredClone(sameUnits), source: null }));
   assert.equal(missing.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(missing.summary, /This drawing holds no saved comparison to inherit\./);
 }

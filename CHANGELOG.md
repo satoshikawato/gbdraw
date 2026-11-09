@@ -217,6 +217,13 @@ write-up of a release.
   Its comparisons name the drawn windows, and the Web read them as records. It
   now offers **Inherit saved comparison**, and Generate draws the saved
   comparison of each window (OV-2995).
+- Fixed: in the Web, **Inherit saved comparison** on a drawing that has no
+  Result yet (for example one made by New drawing from a region or Find in
+  other files) stopped Generate with an unknown error.
+  Inherit now reads the saved comparison the drawing itself holds. The drawing
+  that **Find in other files** creates draws its LOSAT comparison of the
+  windows at the first Generate, with no choice in the Comparison panel, also
+  when a File has several windows of one record (OV-3001).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per

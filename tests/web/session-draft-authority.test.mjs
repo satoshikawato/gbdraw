@@ -468,7 +468,9 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'EDITABLE',
   action: null,
   message: 'The saved comparison is represented by the current controls.',
-  hasCommittedComparison: true
+  hasCommittedComparison: true,
+  // An editable comparison has nothing for Inherit to copy.
+  source: null
 });
 assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
 assert.deepEqual(state.activeDrawing().linearComparisonPlan.edges, []);
@@ -590,7 +592,8 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'DECISION_REQUIRED',
   action: null,
   message: 'The saved comparison is missing a required resource.',
-  hasCommittedComparison: true
+  hasCommittedComparison: true,
+  source: null
 });
 assert.equal(state.results.value.length, divergentSession.drawings[0].results.length);
 assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);

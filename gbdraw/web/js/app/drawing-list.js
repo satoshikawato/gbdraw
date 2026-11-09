@@ -32,8 +32,9 @@ import { msg, t, tm } from '../utils/i18n.js';
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
  * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot }} CopyDrawing
  * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
- * @typedef {(derivation: RegionDerivation) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
- *   Reads a derived region drawing; the result makes its state under the new drawing's ID.
+ * @typedef {(derivation: RegionDerivation, create: { runSavedComparison: boolean }) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
+ *   Reads a derived region drawing; the result makes its state under the new drawing's ID. Find in other files' Create
+ *   runs its saved comparison at Generate (PD-OI-123); New drawing from a region leaves the choice to the user.
  *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
  * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
@@ -235,7 +236,7 @@ export const createDrawingList = ({
    */
   const newDrawingFromRegion = async (sourceId, derivation, kind = 'region') => {
     tabIndexOf('newDrawingFromRegion', sourceId);
-    const make = await regionDrawing(derivation);
+    const make = await regionDrawing(derivation, { runSavedComparison: kind === 'search' });
     return addNewDrawing(kind === 'region' ? 'New drawing from a region' : 'Find in other files', derivation.derived.mode, make, kind === 'region' ? null : sourceId);
   };
 

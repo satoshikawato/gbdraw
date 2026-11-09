@@ -268,9 +268,11 @@ import {
   createDefaultForm
 } from './session-active-config-contract.js';
 import {
+  IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
   restoreImportedComparisonIntent,
+  savedComparisonSource,
   serializeImportedComparisonResolution
 } from './imported-comparison-intent.js';
 
@@ -2349,7 +2351,7 @@ const readResultSetResetReceipt = async ({ at, set }, project, repairs, storedRe
  * @returns {{ read: ReturnType<typeof readStoredRenderRequest>, classification: ImportedComparisonIntent }}
  */
 const readResultSetRequest = ({ at, set }, project) => {
-  const classification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
+  const classified = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
     renderRequest: set.renderRequest, resources: project.resources
   }));
   const read = readStoredRenderRequest(set.renderRequest, {
@@ -2357,8 +2359,15 @@ const readResultSetRequest = ({ at, set }, project) => {
     legacyOrthogroupState: project.orthogroupState ?? null,
     resourceIds: new Set(isPlainObject(project.resources) ? Object.keys(/** @type {object} */ (project.resources)) : []),
     path: `${at}renderRequest`,
-    holdComparisons: classification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+    holdComparisons: classified.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
   });
+  // Inherit copies a preserved comparison as Load read it, in the current schema: the request the drawing commits.
+  const classification = classified.source && !('kind' in read)
+    ? { ...classified, source: savedComparisonSource({
+        renderRequest: /** @type {Parameters<typeof savedComparisonSource>[0]['renderRequest']} */ (read.value),
+        resources: /** @type {Readonly<Record<string, unknown>> | null} */ (project.resources)
+      }) }
+    : classified;
   return { read, classification };
 };
 
@@ -7157,12 +7166,17 @@ export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }
 /**
  * The drawing list's region port: reads a derived region drawing now
  * (`prepareRegionDrawing`), and makes it under the ID the list gives
- * (`installPreparedDrawing`).
+ * (`installPreparedDrawing`). When Create runs the drawing's saved comparison
+ * (Find in other files: "The figure is drawn by Generate", PD-OI-123), a
+ * comparison the controls cannot hold is installed with Inherit chosen;
+ * otherwise it waits for the user's choice in the Comparison panel.
  * @param {RegionDerivation} derivation
+ * @param {{ runSavedComparison: boolean }} create
  * @returns {Promise<(drawingId: DrawingId) => DrawingState>}
  */
-export const makeRegionDrawing = async (derivation) => {
+export const makeRegionDrawing = async (derivation, { runSavedComparison }) => {
   const prepared = await prepareRegionDrawing(derivation);
+  if (runSavedComparison) prepared.settle.importedComparisonResolution = { action: IMPORTED_COMPARISON_ACTIONS.INHERIT };
   return (drawingId) => {
     const drawing = createDrawingState(drawingId, prepared.mode);
     installPreparedDrawing(drawing, prepared);
