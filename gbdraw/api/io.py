@@ -15,7 +15,7 @@ from gbdraw.io.genome import (
     load_gbks as _load_gbks,
     load_gff_fasta as _load_gff_fasta,
 )
-from gbdraw.io.record_sequences import detach_record_sequences
+from gbdraw.io.record_sequences import detached_records
 from gbdraw.io.cli_tables import (
     CircularTrackTable,
     ConservationTable,
@@ -76,9 +76,7 @@ def load_gbks(
 ) -> list[SeqRecord]:
     """Load GenBank files without applying diagram-mode policy; each record holds its sequence."""
 
-    records = load_render_gbks(gbk_list, record_selectors, reverse_flags)
-    detach_record_sequences(records)
-    return records
+    return detached_records(load_render_gbks(gbk_list, record_selectors, reverse_flags))
 
 
 def load_gff_fasta(
@@ -115,8 +113,7 @@ def load_gff_fasta(
             reverse_flags=reverse_flags,
             source_feature_catalogs=source_feature_catalogs,
         )
-        detach_record_sequences(records)
-        return records
+        return detached_records(records)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
 

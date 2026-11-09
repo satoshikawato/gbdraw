@@ -27,6 +27,7 @@ many decoded bases stay in memory, never what a read returns.
 from __future__ import annotations
 
 import bisect
+import copy
 import itertools
 import os
 import re
@@ -915,16 +916,22 @@ def _prepend(first: str, rest: Iterator[str]) -> Iterator[str]:
     yield from rest
 
 
-def detach_record_sequences(records: Iterable[SeqRecord]) -> None:
-    """Give each record its sequence in memory, so it no longer reads its input file.
+def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
+    """The records, each holding its sequence in memory instead of reading it from its input file.
 
     Records handed to a caller (the public readers) are detached: the caller may
     rewrite or delete the file, which a record sequence would then refuse to read.
+    A record that reads its file is copied (a shallow copy, with its own
+    sequence), so records a cache owns stay as they are.
     """
 
+    detached: list[SeqRecord] = []
     for record in records:
         if isinstance(getattr(record.seq, "_data", None), RecordSequence):
+            record = copy.copy(record)
             record.seq = Seq(bytes(record.seq))
+        detached.append(record)
+    return detached
 
 
 def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _Read]) -> _Read:
@@ -940,7 +947,7 @@ def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _R
 __all__ = [
     "RecordSequence",
     "SequenceFormat",
-    "detach_record_sequences",
+    "detached_records",
     "read_fasta_records",
     "read_flat_records",
     "read_gff3_text",
