@@ -175,18 +175,6 @@ class RegionLabelPlace(NamedTuple):
     place_bp: float
 
 
-class RegionLabelOverLetters(NamedTuple):
-    """A drawn annotation label whose letters meet a feature label's letters at the place along its region with the
-    fewest conflicts (``_along_region``; with no place clear of the letters, every place meets them, OV-3017): its
-    place, and its letters grown by the obstacles' clearance, each with its box, which the feature labels make way
-    for (CIR-RGN-YIELD; ``boxed_parts_meet`` tests them).
-
-    """
-
-    place: RegionLabelPlace
-    parts: tuple[BoxedPart, ...]
-
-
 @dataclass(frozen=True)
 class CircularAnnotationLabels:
     """The labels of one record's annotation track (``circular_annotation_labels``): those drawn, and those left
@@ -194,15 +182,24 @@ class CircularAnnotationLabels:
     labels whose cut keeps no letter, and those the track leaves out because their cut would keep none where their
     text would put their mark (``ResolvedAnnotationTrack.without_letters``, OV-2805), each at its midpoint. A label
     left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts it,
-    with its font size. ``overlaps`` counts what the drawn labels still overlap where they are drawn: each label or
-    leader line of the obstacles, and each label of the track placed before it, that a label's letters meet counts
-    once (REGION-WARN, OV-3015); 0 when the labels were placed without obstacles. ``over_feature_letters`` are the
-    drawn labels whose letters meet a feature label's letters (OV-3017)."""
+    with its font size. With obstacles, each drawn label also has what it still overlaps where it is drawn
+    (``overlapped``): the labels or leader lines of the obstacles, then the labels of the track placed before it, by
+    their index, that its letters meet with no clearance kept (REGION-WARN, OV-3015); and its letters grown by the
+    obstacles' clearance, each part with its box (``letters``, ``boxed_parts_meet``), which the feature labels keep
+    clear when they make way (CIR-RGN-YIELD). ``over_feature_letters`` are the places of the drawn labels whose
+    letters meet a feature label's letters (OV-3017)."""
 
     drawn: tuple[CircularAnnotationLabel, ...]
     without_letters: tuple[CircularAnnotationLabel, ...]
-    overlaps: int = 0
-    over_feature_letters: tuple[RegionLabelOverLetters, ...] = ()
+    overlapped: tuple[frozenset[int], ...] = ()
+    letters: tuple[tuple[BoxedPart, ...], ...] = ()
+    over_feature_letters: tuple[RegionLabelPlace, ...] = ()
+
+    @property
+    def overlaps(self) -> int:
+        """What the region label warning counts: each obstacle or earlier label a drawn label overlaps, once."""
+
+        return sum(len(met) for met in self.overlapped)
 
 
 def _record_lanes(
@@ -398,25 +395,10 @@ def _box(points: Sequence[Point]) -> Aabb:
     return Aabb(min(x for x, _ in points), min(y for _, y in points), max(x for x, _ in points), max(y for _, y in points))
 
 
-def grown_label_parts(parts: Sequence[Sequence[Point]], by: float) -> list[BoxedPart]:
+def _grown_label_parts(parts: Sequence[Sequence[Point]], by: float) -> list[BoxedPart]:
     """A label's convex parts grown by ``by``, each with its box (``boxed_parts_meet``)."""
 
     return [(_box(part), part) for part in (grown_convex_polygon(part, by) for part in parts)]
-
-
-def circular_region_label_overlaps(
-    labels: Sequence[CircularAnnotationLabel], obstacles: CircularLabelObstacles
-) -> tuple[frozenset[int], ...]:
-    """What each of one track's drawn ``labels`` overlaps, in order, as ``circular_annotation_labels`` counts it: the
-    obstacle labels, then the labels drawn before it, by their index, whose parts or leaders its letters meet with no
-    clearance. When the feature labels make way, none of these sets may gain a label (CIR-RGN-YIELD)."""
-
-    index = _ObstacleIndex(obstacles)
-    met: list[frozenset[int]] = []
-    for label in labels:
-        met.append(index.overlaps(label).met)
-        index.add(label)
-    return tuple(met)
 
 
 class _IndexedLabel(NamedTuple):
@@ -493,13 +475,13 @@ class _ObstacleIndex:
 
         # An obstacle whose box misses the box around all the grown letters misses each part's box: it is skipped
         # before the parts are paired with it.
-        near = grown_label_parts(label.parts, kept)
+        near = _grown_label_parts(label.parts, kept)
         reach = union_aabbs(box for box, _ in near)
         if reach is None:
             return []
         # The letters grown by each distinct segment clearance (one per leader width), made once per call.
         line_near = {
-            distance: grown_label_parts(label.parts, distance)
+            distance: _grown_label_parts(label.parts, distance)
             for distance in {kept + half_width for half_width in self._half_widths}
         }
         line_reach = {distance: union_aabbs(box for box, _ in parts) for distance, parts in line_near.items()}
@@ -666,8 +648,8 @@ def circular_annotation_labels(
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for _entry, label in kept), default=0.0)
     placed: list[CircularAnnotationLabel] = []
     index = _ObstacleIndex(obstacles)
-    overlaps = 0
-    over_letters: list[RegionLabelOverLetters] = []
+    overlapped: list[frozenset[int]] = []
+    over_letters: list[RegionLabelPlace] = []
     made_way = {place.annotation_id: place.place_bp for place in obstacles.made_way}
     for (annotation, label_at), default in kept:
         # A place the feature labels made way at is kept while its letters still meet neither theirs nor an earlier
@@ -689,13 +671,18 @@ def circular_annotation_labels(
                 join_origin=track.join_origin,
             )
             met = index.overlaps(label)
-        overlaps += len(met.met)
+        overlapped.append(met.met)
         if met.feature_letters:
-            parts = tuple(grown_label_parts(label.parts, obstacles.clearance))
-            over_letters.append(RegionLabelOverLetters(RegionLabelPlace(annotation.id, place), parts))
+            over_letters.append(RegionLabelPlace(annotation.id, place))
         placed.append(label)
         index.add(label)
-    return CircularAnnotationLabels(tuple(placed), without_letters, overlaps, tuple(over_letters))
+    return CircularAnnotationLabels(
+        tuple(placed),
+        without_letters,
+        tuple(overlapped),
+        tuple(tuple(_grown_label_parts(label.parts, obstacles.clearance)) for label in placed),
+        tuple(over_letters),
+    )
 
 
 def circular_annotation_lanes_meeting(
@@ -1504,9 +1491,6 @@ __all__ = [
     "CircularAnnotationLabels",
     "CircularLabelArc",
     "CircularLabelObstacles",
-    "RegionLabelOverLetters",
-    "circular_region_label_overlaps",
-    "grown_label_parts",
     "RegionLabelPlace",
     "CircularObstacleLabel",
     "CircularLabelRoom",

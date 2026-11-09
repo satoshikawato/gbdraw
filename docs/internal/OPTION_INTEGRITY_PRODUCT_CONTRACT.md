@@ -5195,13 +5195,15 @@ Status: active Product authority
     the Review is `REQUIRED`.
 - Revision 138 changes: `PD-OI-097` gains scenario revision `25` (concern
   `product.circular-outer-label-fit`). It keeps every outcome of scenario
-  revision `24` and corrects two numbers of its Accepted residual risk for
-  the code that keeps the feature labels that make way for a region label
-  within one shift limit, off every region label of the record, and from
-  adding any overlap, crossing or region label overlap they did not have
-  (review fixes of `CIR-RGN-YIELD` and bug `OV-3080`): the lambda
-  `--labels out` height (911 px to 918 px, was 916 px) and the CPU times
-  (`--labels out` about 0.4 s to 1.2 s, `--labels both` about 7 s to 10 s).
+  revision `24` and changes five numbers in two sentences of its Accepted
+  residual risk for the code that keeps the feature labels that make way for
+  a region label within one shift limit, off every region label of the
+  record, and from adding any overlap, crossing or region label overlap they
+  did not have (review fixes of `CIR-RGN-YIELD` and bug `OV-3080`): in the
+  lambda `--labels out` height, 916 px becomes 918 px (911 px to 918 px); in
+  the CPU times, 0.6 s becomes 0.4 s and 1.7 s becomes 1.2 s
+  (`--labels out`), and 10 s becomes 7 s and 12.5 s becomes 10 s
+  (`--labels both`).
   It comes from the Product Decision Owner `satoshikawato`'s reply of
   `2026-11-10` in the Claude Code session `a95badd3` of the campaign
   `gallery-rings-depth-20261108` (`DECISIONS.md` `D-54`).
@@ -10354,7 +10356,7 @@ Decision date: 2026-11-04
 - Scenario revision: `25`
 - Supersedes: `PD-OI-097`, scenario revision `24`. Scenario revision `25`
   keeps every outcome of scenario revision `24`; D-54 of the Revision 138
-  entry approves the numbers it corrects in the Accepted residual risk.
+  entry approves the numbers it changes in the Accepted residual risk.
   Scenario revision `24`
   keeps every outcome of scenario revision `23` and adds `CIR-RGN-YIELD`;
   D-48 and D-52 of the Revision 137 entry approve its additions to the
