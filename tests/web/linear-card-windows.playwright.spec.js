@@ -4,6 +4,7 @@
 // one History step. The Record Layout and the request rules are pinned in linear-card-windows.test.mjs.
 const { test, expect } = require('@playwright/test');
 const { generate, load, seeds } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -71,7 +72,7 @@ test('a Linear card edits its windows: End before Start, Add window, the bases b
     await expect(start).toHaveValue('9001');
     await expect(end).toHaveValue('12000');
     // Undo brings the window back.
-    await page.evaluate(async () => { await window.__GBDRAW_HISTORY__.undo(); });
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     await expect(page.locator('[data-record-windows] [data-record-window]')).toHaveCount(2);
   } finally {
     await page.context().close();
