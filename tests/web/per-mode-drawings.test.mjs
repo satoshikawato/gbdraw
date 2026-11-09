@@ -228,7 +228,8 @@ const SLICE_DIRECTORY = new URL('../../gbdraw/web/js/services/drawing/', import.
 const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')));
 // Exports of the inputs module that are no call on a slice handle: builders, the
 // project-level binders and readers (they take the store or its bindings, not a
-// handle; `sessionFilesOfKind` lists the files of a kind for the picker, and
+// handle; `sessionFilesOfKind` lists the files of a kind for the picker,
+// `circularSlotFileKind` names the kind of a Circular card slot, and
 // `projectInputReplacement` the places a Replace writes), and the writers
 // of members the slice does not hold yet (`files` joins with the five cards,
 // B2b-1b-5c; until then the handle has no `files` to write).
@@ -237,7 +238,7 @@ const INPUTS_NO_HANDLE_CALLS = new Set([
   'registerInputFiles', 'boundInputFileIds', 'retainHistoryAndBoundFiles', 'registerInputFileTree',
   'bindCanonicalComparisons', 'bindLoadedInputs',
   'createCircularSource', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',
-  'bindDrawingCanonicalComparisons', 'sessionFilesOfKind', 'projectInputReplacement'
+  'bindDrawingCanonicalComparisons', 'sessionFilesOfKind', 'circularSlotFileKind', 'projectInputReplacement'
 ]);
 const isHandleCall = (name, key) => !NOT_WRITERS.has(key) && !(name === 'inputs' && INPUTS_NO_HANDLE_CALLS.has(key));
 const inputStore = { registerFile: (file) => (file ? { id: 'file-1', name: file.name } : null) };
