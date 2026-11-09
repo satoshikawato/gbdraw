@@ -26,6 +26,9 @@ const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
 delete replayEnv.PYTHONHOME;
 
+// A ring on TESTA from TESTB (TESTA is the subject, so Auto takes it as the reference).
+const RING_BLAST = ['TESTB\tTESTA\t100.0\t600\t0\t0\t301\t900\t301\t900\t1e-80\t900',
+  'TESTB\tTESTA\t85.0\t400\t20\t0\t2001\t2400\t2001\t2400\t1e-60\t500'].join('\n') + '\n';
 // A long page promise awaited inside page.evaluate can be collected by the inspector (OV-327).
 const setApp = (page, body) => evaluateWithRetainedPromise(page, body);
 const slotLabel = async (page, slot, text) => {
@@ -33,6 +36,13 @@ const slotLabel = async (page, slot, text) => {
     .getByRole('textbox', { name: 'Track legend label', includeHidden: true }));
   await field.fill(text);
   await field.press('Tab');
+};
+
+const useCustomStack = async (page) => {
+  const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+  await reveal(button);
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+  await page.getByText('Use custom stack', { exact: true }).locator('input').check();
 };
 
 // [name, change, { lossy }]. A lossy probe must yield an unavailable recipe.
@@ -53,11 +63,20 @@ const CIRCULAR = [
     Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: 'gtg start', color: '#c83366', cap: 'GTG start' });
     await app.addSpecificRule();
   })],
+  // OV-3009: the custom stack's comparison ring row carries the Web's bookkeeping, which the recipe leaves out.
+  ['comparison ring in a custom stack', async (page, testInfo) => {
+    const table = testInfo.outputPath('testb-ring.tsv');
+    writeFileSync(table, RING_BLAST);
+    await setApp(page, () => { window.__GBDRAW_APP__.circularConservation.source = 'upload'; });
+    await page.getByLabel('BLAST outfmt 6/7 files', { exact: true }).setInputFiles(table);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularConservation.enabled)).toBe(true);
+    await useCustomStack(page);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots
+      .some((slot) => slot.renderer === 'sequence_conservation' && slot.params?.managed))).toBe(true);
+    return [table];
+  }],
   ['track legend label with "," and " #"', async (page) => {
-    const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
-    await reveal(button);
-    if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
-    await page.getByText('Use custom stack', { exact: true }).locator('input').check();
+    await useCustomStack(page);
     await slotLabel(page, 'gc_skew', 'GC skew (1 kb, AT-rich)');
     await slotLabel(page, 'gc_content', 'GC content #1');
   }, { lossy: true }]

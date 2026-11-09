@@ -13,6 +13,7 @@ from .parsing import (
     parse_track_slot_text,
     reject_unread_slot_params,
     split_kv_list,
+    unread_slot_param_keys,
     validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
 )
@@ -84,6 +85,8 @@ _LINEAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
     **SHARED_SLOT_PARAM_KEYS,
     "features": frozenset(),
 })
+# The keys each of them takes without reading them (the Web's Source recipe leaves them out).
+LINEAR_SLOT_UNREAD_PARAM_KEYS = unread_slot_param_keys(_LINEAR_SLOT_PARAM_KEYS)
 
 
 @dataclass

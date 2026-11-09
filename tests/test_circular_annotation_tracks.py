@@ -2090,9 +2090,7 @@ def _islands_with_rings(record_count: int) -> tuple[list[SeqRecord], CircularDia
 
 
 @pytest.mark.parametrize("record_count", [1, 2])
-def test_circular_region_sets_are_drawn_with_comparison_rings_and_no_stack(
-    record_count: int, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_circular_region_sets_are_drawn_with_comparison_rings_and_no_stack(record_count: int) -> None:
     """Rings make the engine build the track list; the sets still get their slots, as without rings (OV-2820)."""
 
     records, options = _islands_with_rings(record_count)
@@ -2105,14 +2103,13 @@ def test_circular_region_sets_are_drawn_with_comparison_rings_and_no_stack(
     drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
     expected = {f"{set_id}{index}" for set_id in ("tint", "islands") for index in range(1, record_count + 1)}
     assert expected <= drawn
-    assert "not referenced by a circular track slot" not in caplog.text
     ring_ids = {
         slot["slotId"] for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
     }
     assert "conservation_1" in ring_ids
 
 
-def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack(caplog: pytest.LogCaptureFixture) -> None:
+def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack() -> None:
     """Two depth tracks also make the engine build the track list; the sets keep their slots (OV-2820)."""
 
     from gbdraw.api.options import DepthTrackInput
@@ -2132,4 +2129,3 @@ def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack(caplo
     root = ElementTree.fromstring(drawing.tostring())
     drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
     assert {"tint1", "islands1"} <= drawn
-    assert "not referenced by a circular track slot" not in caplog.text

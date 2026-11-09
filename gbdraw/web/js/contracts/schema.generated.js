@@ -192,6 +192,28 @@ export const DEFAULT_PNG_DPI = 300;
 // gbdraw/session_legacy_values.py: LEGACY_SCALAR_AXIS_LABELS
 export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
 
+// gbdraw/tracks/circular.py: CIRCULAR_SLOT_UNREAD_PARAM_KEYS
+/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'spacer' | 'features' | 'ticks' | 'sequence_conservation', readonly string[]>>} */
+export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
+  dinucleotide_content: Object.freeze(['color', 'fileName']),
+  dinucleotide_skew: Object.freeze(['color', 'fileName']),
+  depth: Object.freeze(['color', 'fileName']),
+  spacer: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
+  features: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
+  ticks: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
+  sequence_conservation: Object.freeze(['color', 'fileName', 'label', 'legend_label', 'managed', 'series_key'])
+});
+
+// gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
+/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'spacer' | 'features', readonly string[]>>} */
+export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
+  dinucleotide_content: Object.freeze(['color', 'fileName']),
+  dinucleotide_skew: Object.freeze(['color', 'fileName']),
+  depth: Object.freeze(['color', 'fileName']),
+  spacer: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
+  features: Object.freeze(['color', 'fileName', 'label', 'legend_label'])
+});
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

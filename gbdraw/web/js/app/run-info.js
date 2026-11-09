@@ -21,7 +21,12 @@ import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
-import { FEATURE_INSTANCE_SEPARATOR, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
+import {
+  CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
+  FEATURE_INSTANCE_SEPARATOR,
+  LINEAR_SLOT_UNREAD_PARAM_KEYS,
+  RECORD_SOURCE_FILES
+} from '../contracts/schema.generated.js';
 import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 import { unitRecordsOf } from '../services/linear-units.js';
@@ -681,7 +686,8 @@ const coverTrackSlots = (coverage, tracks, mode) => {
     scalarFields.forEach((field) => coverTrackScalar(coverage, /** @type {Record<string, unknown>} */ (slot)[field], `${path}.${field}`));
     const params = slot.params;
     if (!isPlainObject(params)) return;
-    coverObject(coverage, params, `${path}.params`, TRACK_PARAM_KEY_NAMES);
+    coverObject(coverage, params, `${path}.params`, TRACK_PARAM_KEY_NAMES,
+      unprojectedUnreadTrackParamKeys(mode, String(slot.renderer), params));
   });
 };
 
@@ -1559,6 +1565,44 @@ const TRACK_PARAM_KEYS = Object.freeze({
 const TRACK_PARAM_KEY_NAMES = [...new Set(Object.values(TRACK_PARAM_KEYS)
   .flatMap((byRenderer) => Object.values(byRenderer).flatMap((keys) => [...keys])))];
 
+// The params keys each renderer takes without reading them (gbdraw/tracks/circular.py and linear.py, generated): they
+// do not change the drawing. The recipe leaves out those it does not project, such as the Web's bookkeeping on a
+// comparison ring row (managed, series_key, label, color, fileName; OV-3009).
+/** @type {Readonly<Record<'circular' | 'linear', Readonly<Record<string, readonly string[]>>>>} */
+const UNREAD_TRACK_PARAM_KEYS = Object.freeze({
+  circular: CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
+  linear: LINEAR_SLOT_UNREAD_PARAM_KEYS
+});
+
+/**
+ * The keys of a slot's params that the recipe leaves out: its renderer does not read them, and the recipe does not
+ * project them.
+ * @param {CanonicalRenderRequest['mode']} mode
+ * @param {string} renderer
+ * @param {Record<string, unknown>} params
+ * @returns {string[]}
+ */
+const unprojectedUnreadTrackParamKeys = (mode, renderer, params) => {
+  const unread = new Set(Object.hasOwn(UNREAD_TRACK_PARAM_KEYS[mode], renderer)
+    ? UNREAD_TRACK_PARAM_KEYS[mode][renderer]
+    : []);
+  const projected = TRACK_PARAM_KEYS[mode]?.[renderer];
+  return Object.keys(params).filter((key) => unread.has(key) && !projected?.has(key));
+};
+
+/**
+ * A slot's params as the recipe writes them: without the keys it leaves out (`unprojectedUnreadTrackParamKeys`).
+ * @param {CanonicalRenderRequest['mode']} mode
+ * @param {string} renderer
+ * @param {unknown} params
+ * @returns {unknown}
+ */
+const recipeTrackParams = (mode, renderer, params) => {
+  if (!isPlainObject(params)) return params;
+  const left = new Set(unprojectedUnreadTrackParamKeys(mode, renderer, params));
+  return Object.fromEntries(Object.entries(params).filter(([key]) => !left.has(key)));
+};
+
 /**
  * @param {CanonicalRenderRequest['mode']} mode
  * @param {string} renderer
@@ -1579,8 +1623,11 @@ const validateTrackParams = (mode, renderer, params) => {
 };
 
 /**
- * @param {CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} slot
+ * The slot as the recipe writes it (`recipeTrackParams`), after its identity fields and params are checked.
+ * @template {CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} T
+ * @param {T} slot
  * @param {CanonicalRenderRequest['mode']} mode
+ * @returns {T}
  */
 const validateStructuredTrackSlot = (slot, mode) => {
   if (!isPlainObject(slot)) {
@@ -1600,8 +1647,9 @@ const validateStructuredTrackSlot = (slot, mode) => {
   ) {
     throw recipeUnavailable(msg('a canonical track slot has invalid identity fields.'));
   }
-  validateTrackParams(mode, renderer, slot.params);
-  return slot;
+  const recipeSlot = { ...slot, params: recipeTrackParams(mode, renderer, slot.params) };
+  validateTrackParams(mode, renderer, recipeSlot.params);
+  return recipeSlot;
 };
 
 // Read a slot token back with the CLI split rules (gbdraw/tracks/parsing.py:
@@ -1664,20 +1712,20 @@ const trackSlotForRecipe = (slot, mode, options) => {
     return text;
   }
 
-  validateStructuredTrackSlot(slot, mode);
+  const recipeSlot = validateStructuredTrackSlot(slot, mode);
   let token;
   try {
     if (mode === 'circular') {
       token = buildCircularTrackSlotSpec(
         // validateStructuredTrackSlot above required `slot.kind` to be `${mode}TrackSlot`.
-        circularTrackSlotForRecipe(/** @type {CanonicalCircularTrackSlot} */ (slot)),
+        circularTrackSlotForRecipe(/** @type {CanonicalCircularTrackSlot} */ (recipeSlot)),
         options.dinucleotide,
         // The codec reads this key as the circular track type text.
         /** @type {string | undefined} */ (options.configOverrides?.['canvas.circular.track_type'])
       );
     } else {
       // A slot that names no dinucleotide states the request's, as Python read it (OV-490).
-      const parsed = parseLinearTrackSlotSpec(slot, options.dinucleotide || 'GC');
+      const parsed = parseLinearTrackSlotSpec(recipeSlot, options.dinucleotide || 'GC');
       validateTrackParams('linear', parsed.renderer, parsed.params || {});
       token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
     }

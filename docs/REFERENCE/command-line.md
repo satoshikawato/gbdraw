@@ -450,10 +450,12 @@ reciprocal best-hit pairs, by mode) and no threshold, because the protein
 analysis applies the thresholds itself.
 
 A `WARNING:` line follows when a record has no feature to draw, naming its
-feature types when it has some, and when the thresholds leave out every row of a
-comparison table or the table has no rows. These runs still write the figure and
-exit with status 0. A file with no record stops the run with an `ERROR:` line and
-status 1, and nothing is written.
+feature types when it has some, when the thresholds leave out every row of a
+comparison table or the table has no rows, and when an explicit track stack
+(`--circular_track_slot`, `--linear_track_slot`) has no `annotations` slot for a
+region annotation set; that line names the set and the `set_id` to add. These
+runs still write the figure and exit with status 0. A file with no record stops
+the run with an `ERROR:` line and status 1, and nothing is written.
 
 These lines, and every other progress message, warning, and error, go to
 standard error; a drawing run writes nothing to standard output. To keep the

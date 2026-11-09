@@ -182,6 +182,20 @@ SHARED_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
 CARRIED_SLOT_PARAM_KEYS = frozenset({*LEGEND_LABEL_PARAM_KEYS, "color", "fileName"})
 
 
+def unread_slot_param_keys(
+    read: Mapping[str, frozenset[str]],
+    carried: Mapping[str, frozenset[str]] | None = None,
+) -> Mapping[str, tuple[str, ...]]:
+    """The params keys each renderer of ``read`` takes without reading them: the keys every slot carries
+    (``CARRIED_SLOT_PARAM_KEYS``) and the renderer's own ``carried`` ones, less the keys it reads. They do not change
+    the drawing, so a Source recipe may leave them out (OV-3009)."""
+
+    return MappingProxyType({
+        renderer: tuple(sorted((CARRIED_SLOT_PARAM_KEYS | (carried or {}).get(renderer, frozenset())) - keys))
+        for renderer, keys in read.items()
+    })
+
+
 def reject_unread_slot_params(
     params: Mapping[str, object],
     *,
@@ -335,6 +349,7 @@ __all__ = [
     "slot_skew_colors",
     "slots_draw_features",
     "parse_track_slot_text",
+    "unread_slot_param_keys",
     "slot_dinucleotide",
     "split_kv_list",
     "validate_annotation_slot_side",

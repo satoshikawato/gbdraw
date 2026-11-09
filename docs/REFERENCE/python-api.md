@@ -213,7 +213,7 @@ PNG, PDF, EPS, and PS require CairoSVG. `save()` infers a known format from the 
 
 ## Errors
 
-Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `ValidationError` for invalid records, paths, options, or mode combinations. Pin a gbdraw version and compare representative outputs after upgrading; stable Python calls do not imply byte-identical SVG geometry.
+Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `ValidationError` for invalid records, paths, options, or mode combinations. `draw_circular()` and `draw_linear()` still return a `Diagram` when part of the input is not drawn (a record with no feature to draw, a comparison table whose rows the thresholds all leave out, or a Region Annotation set that the track slots leave out); they log the reason as a warning on the `gbdraw.api.input_summary` logger, with the words of the command line's `WARNING:` lines ([Input summary](command-line.md#input-summary)). Pin a gbdraw version and compare representative outputs after upgrading; stable Python calls do not imply byte-identical SVG geometry.
 
 ## Related
 
