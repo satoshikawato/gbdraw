@@ -160,14 +160,18 @@ export const createCircularSourceEdits = ({
   // defaults (the one list a style copy leaves out too). Each field is written
   // by name, so the track-layout writer guard reads no whole-form write; a
   // node case pins that every field of the list is written.
-  /** @param {DrawingState} drawing */
-  const retireCircularRecordPresentation = (drawing) => {
-    const { form } = drawing;
-    retireCircularRecordSelector(drawing);
+  /** The single-record crop fields. @param {DrawingState} drawing */
+  const retireCircularCropFields = ({ form }) => {
     form.circular_region_start = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_start;
     form.circular_region_end = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_end;
     form.circular_reverse = CIRCULAR_RECORD_FORM_DEFAULTS.circular_reverse;
     form.circular_windows = [...CIRCULAR_RECORD_FORM_DEFAULTS.circular_windows];
+  };
+  /** @param {DrawingState} drawing */
+  const retireCircularRecordPresentation = (drawing) => {
+    const { form } = drawing;
+    retireCircularRecordSelector(drawing);
+    retireCircularCropFields(drawing);
     form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
     form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };
@@ -191,7 +195,9 @@ export const createCircularSourceEdits = ({
     if (retirePresentation && ranges.length !== drawing.form.circular_record_ranges.length) {
       drawing.form.circular_record_ranges = ranges;
     }
+    // The crop fields filled from one of those crops go with it (OV-3140), so no other record draws it.
     if (retirePresentation && cardHoldsRecordKey(uid, drawing.form.circular_range_fields_record)) {
+      retireCircularCropFields(drawing);
       drawing.form.circular_range_fields_record = '';
     }
     if (!cardHoldsRecordKey(uid, String(drawing.form.circular_record_selector || '').trim())) return;
