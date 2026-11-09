@@ -503,6 +503,31 @@ await test('a request without an Axis index loads each slot on the side Python d
     { axis: 1, slots: [['c', 'outside'], ['features', 'overlay'], ['s', 'inside']] });
 });
 
+// OV-3079: a set's row without a side loads outside, as the CLI draws it, and an Overlay set row keeps its place
+// before the row after it.
+await test('a Circular CLI stack with blank sides and an Overlay set row loads on the sides the CLI drew (OV-3079)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    const output = path.join(directory, 'stack');
+    await writeFile(path.join(directory, 'regions.tsv'), ['set_id\tid\tmark\tstart\tend\tlabel',
+      'regions\thead\tline\t1\t9500\tHead genes', 'hl\th1\thighlight\t20000\t26000\t'].join('\n') + '\n');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', lambda, '--annotation_table', 'regions.tsv',
+      '--circular_track_slot', 'hl:annotations@set_id=hl,side=overlay,anchor_slot=features,layer=underlay,z=-1',
+      '--circular_track_slot', 'features:features', '--circular_track_slot', 'regions:annotations@set_id=regions',
+      '-f', 'svg', '-o', output, '--session_output', `${output}.gbdraw-session.json.gz`], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const result = await load(gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`)));
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual({
+      axis: drawing.adv.circular_track_slots_axis_index, slots: drawing.adv.circular_track_slots.map(({ id, side }) => [id, side])
+    }, { axis: 2, slots: [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // OV-3155: the Linear stack of a CLI Session without an Axis index loads the same way: each row on the side the CLI
 // drew it (a features row without a side below, as Python reads it), the rows above the Axis first.
 await test('a Linear CLI stack without an Axis index loads each slot on the side the CLI drew it (OV-3155)', async () => {

@@ -8,9 +8,7 @@ import { parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import {
-  canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel, stackTrackSlotsBySide
-} from './track-slot-validation.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 
@@ -359,9 +357,7 @@ export const inferLinearTrackAxisIndexFromSlots = (slots) => {
     if (featurePlacement === 'overlay') return featureIndex;
     return featureIndex;
   }
-  // Without a features row the Axis follows the rows above it, as a request without an Axis index stacks them.
-  const rows = normalizedSlots.filter((slot) => slot !== null && slot !== undefined);
-  return stackTrackSlotsBySide(rows, effectiveLinearSlotPlacement, 'above').axisIndex;
+  return normalizedSlots.filter((slot) => effectiveLinearSlotPlacement(slot) === 'above').length;
 };
 
 /**

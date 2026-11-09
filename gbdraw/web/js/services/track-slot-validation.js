@@ -391,21 +391,40 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
 };
 
 /**
+ * A stack of rows and the Axis index their sides follow.
+ * @template T
+ * @typedef {{ slots: T[], axisIndex: number }} SideOrderedStack
+ */
+/**
  * The Web stack of a request that names no Axis index (the CLI's and the Python API's). Python draws each row of
  * such a request on its own side, in the stack's order on each side; the Web stack holds a side as a place before or
- * after the Axis. So the rows on the outer side (outside, above) come first, then the row on the Axis, then the
- * others, each in its order, and the Axis index is the place of the row on the Axis (OV-3079, OV-3155).
+ * after the Axis. So the rows on the outer side (outside, above) come first, then the rows on the Axis, then the
+ * others, each in its order. An Overlay set row draws over its anchor on any side: it keeps its place before the row
+ * after it (after the row before it at the end), so Python paints the rows in the order the request drew them where
+ * it can. A stack whose sides follow its order comes back unchanged. The Axis index is the place of the first row on
+ * the Axis or past it (OV-3079, OV-3155).
  * @template {{ readonly renderer?: unknown }} T
  * @param {readonly T[]} rows
  * @param {(row: T) => string} placementOf The mode's reading of the side a row draws on.
  * @param {'outside' | 'above'} outerSide
- * @returns {{ slots: T[], axisIndex: number }}
+ * @returns {SideOrderedStack<T>}
  */
 export const stackTrackSlotsBySide = (rows, placementOf, outerSide) => {
-  const outer = rows.filter((row) => placementOf(row) === outerSide);
-  const onAxis = rows.filter((row) => row.renderer !== 'annotations' && placementOf(row) === 'overlay').slice(0, 1);
-  const rest = rows.filter((row) => !outer.includes(row) && !onAxis.includes(row));
-  return { slots: [...outer, ...onAxis, ...rest], axisIndex: outer.length };
+  // 0 the outer side, 1 on the Axis, 2 past it; null an Overlay set row.
+  const ranks = rows.map((row) => {
+    const placement = placementOf(row);
+    if (placement === outerSide) return 0;
+    if (placement === 'overlay') return row.renderer === 'annotations' ? null : 1;
+    return 2;
+  });
+  const placed = rows.map((row, index) => ({
+    row,
+    index,
+    rank: ranks[index],
+    key: ranks[index] ?? ranks.slice(index).find((rank) => rank !== null) ?? ranks.slice(0, index).findLast((rank) => rank !== null) ?? 0
+  })).sort((a, b) => a.key - b.key || a.index - b.index);
+  const axisIndex = placed.findIndex(({ rank }) => rank === 1 || rank === 2);
+  return { slots: placed.map(({ row }) => row), axisIndex: axisIndex < 0 ? placed.length : axisIndex };
 };
 
 /**
@@ -1142,15 +1161,15 @@ const customTrackModeLabel = (mode) => (
  */
 const defaultSideForSlot = (slot, mode, trackType) => {
   const renderer = normalizedString(slot?.renderer);
+  // A set's row without a side sits where the set's automatic row sits, as Python reads it.
+  if (renderer === 'annotations') return AUTOMATIC_ANNOTATION_LANE_SIDES[mode === 'linear' ? 'linear' : 'circular'];
   if (mode === 'linear') {
-    if (renderer === 'annotations') return 'above';
     if (renderer !== 'features') return 'below';
     const layout = normalizedString(trackType);
     if (layout === 'above') return 'above';
     if (layout === 'below') return 'below';
     return 'overlay';
   }
-  if (renderer === 'annotations') return 'outside';
   if (renderer !== 'features') return 'inside';
   // A params value that is no object (a params_not_object issue) reads both keys as undefined.
   const lane = normalizedOptionalString(

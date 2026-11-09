@@ -217,6 +217,12 @@ write-up of a release.
   figure. An Annotations row with no `side=` is read as outside (above), and a
   Linear features row with no `side=` as below, as the CLI draws them
   (OV-3079, OV-3155).
+- Fixed (Web app): the Source recipe in Run Info for a Linear drawing whose
+  track slots name an Axis index wrote `side=below` (`side=overlay` for the
+  features slot) for each slot without a side, also for slots placed above the
+  Axis, so the command failed with
+  "conflicts with --linear_track_axis_index". The recipe now writes the side
+  each slot is drawn on (OV-3157).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

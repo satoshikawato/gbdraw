@@ -465,19 +465,24 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
   }
 });
 
-// OV-3079, OV-3155: a CLI stack that names no Axis index draws each slot on its own side (a Linear features slot
-// without a side below). The Session it saves, loaded and generated in the Web, draws the CLI's figure: the region set
-// stays outside (above) the Axis.
-for (const [mode, side, stack] of [
-  ['circular', 'outside', [['regions', 'outside'], ['features', 'inside']]],
-  ['linear', 'above', [['regions', 'above'], ['features', 'below']]]
-]) test(`Session CLI ${mode} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
+// OV-3079, OV-3155: a CLI stack that names no Axis index draws each slot on its own side (a set's row without a side
+// outside or above, a Linear features slot without a side below). The Session it saves, loaded and generated in the
+// Web, draws the CLI's figure: the region set stays outside (above) the Axis, and an Overlay set row keeps its place.
+for (const [name, mode, slots, axis, stack] of [
+  ['circular', 'circular', ['features:features', 'regions:annotations@set_id=regions,side=outside'],
+    1, [['regions', 'outside'], ['features', 'inside']]],
+  ['linear', 'linear', ['features:features', 'regions:annotations@set_id=regions,side=above'],
+    1, [['regions', 'above'], ['features', 'below']]],
+  ['circular blank-side', 'circular', ['hl:annotations@set_id=hl,side=overlay,anchor_slot=features,layer=underlay,z=-1',
+    'features:features', 'regions:annotations@set_id=regions'], 2, [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']]]
+]) test(`Session CLI ${name} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
   await fs.writeFile(testInfo.outputPath('regions.tsv'), [
-    'set_id\tid\tmark\tstart\tend\tlabel', 'regions\thead\tline\t1\t9500\tHead genes', 'regions\ttail\tline\t9600\t19000\tTail genes'
+    'set_id\tid\tmark\tstart\tend\tlabel', 'regions\thead\tline\t1\t9500\tHead genes', 'regions\ttail\tline\t9600\t19000\tTail genes',
+    ...(slots.some((slot) => slot.includes('set_id=hl')) ? ['hl\th1\thighlight\t20000\t26000\t'] : [])
   ].join('\n') + '\n');
-  const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv', `--${mode}_track_slot`, 'features:features',
-    `--${mode}_track_slot`, `regions:annotations@set_id=regions,side=${side}`, '-f', 'svg'], testInfo, 'no-axis');
+  const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv',
+    ...slots.flatMap((slot) => [`--${mode}_track_slot`, slot]), '-f', 'svg'], testInfo, 'no-axis');
   const stored = shownSavedDrawing(await readSession(file));
   const [slotsKey, axisKey] = [`${mode}TrackSlots`, `${mode}TrackAxisIndex`];
   expect(stored.renderRequest.diagramOptions.tracks[axisKey]).toBe(null);
@@ -509,7 +514,7 @@ for (const [mode, side, stack] of [
     expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
     const tracks = after.request.diagramOptions.tracks;
     expect({ axis: tracks[axisKey], slots: tracks[slotsKey].map(({ id, side: drawnSide }) => [id, drawnSide]) })
-      .toEqual({ axis: 1, slots: stack });
+      .toEqual({ axis, slots: stack });
     expect(run.errors).toEqual([]);
   } finally {
     await run.context.close();

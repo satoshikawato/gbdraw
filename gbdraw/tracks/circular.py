@@ -689,10 +689,7 @@ def _normalize_circular_track_slots(
         if not slot.enabled:
             continue
         params = dict(raw_params)
-        # A set's row without a side sits where the set's automatic row sits; the Web reads the same constant.
-        side = _normalize_side_value(slot.side) if slot.side is not None else (
-            AUTOMATIC_ANNOTATION_LANE_SIDES["circular"] if renderer == "annotations" else "inside"
-        )
+        side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         reserve = side == "overlay"
         annotation_params: AnnotationTrackParams | None = None
 
@@ -728,7 +725,10 @@ def _normalize_circular_track_slots(
         elif renderer == "spacer":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         elif renderer == "annotations":
-            side = _normalize_side_value(slot.side) if slot.side is not None else "outside"
+            # A set's row without a side sits where the set's automatic row sits; the Web reads the same constant.
+            side = (
+                _normalize_side_value(slot.side) if slot.side is not None else AUTOMATIC_ANNOTATION_LANE_SIDES["circular"]
+            )
             annotation_params = annotation_track_params_from_mapping(params)
             reserve = side != "overlay"
             validate_annotation_slot_side(str(slot.id), side, annotation_params)

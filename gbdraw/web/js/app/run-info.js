@@ -10,7 +10,8 @@ import {
   buildLinearTrackSlotSpec
 } from './linear-track-slots.js';
 import {
-  parseLinearTrackSlotSpec
+  parseLinearTrackSlotSpec,
+  syncLinearSlotsFromAxisIndex
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
@@ -1691,8 +1692,10 @@ const assertCliSlotTokenLossless = (token, { id, renderer, exact = false }) => {
  * @param {string | CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} slot
  * @param {CanonicalRenderRequest['mode']} mode
  * @param {CanonicalRenderRequest['diagramOptions']} options
+ * @param {string | null} placedSide The side the slot's place beside the Axis index gives a Linear slot that names
+ *   none (`placedLinearSides`); null without an Axis index.
  */
-const trackSlotForRecipe = (slot, mode, options) => {
+const trackSlotForRecipe = (slot, mode, options, placedSide) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
     if (!text) {
@@ -1726,7 +1729,8 @@ const trackSlotForRecipe = (slot, mode, options) => {
       // A slot that names no dinucleotide states the request's, as Python read it (OV-490).
       const parsed = parseLinearTrackSlotSpec(recipeSlot, options.dinucleotide || 'GC');
       validateTrackParams('linear', parsed.renderer, parsed.params || {});
-      token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
+      const side = recipeSlot.side === null && placedSide !== null ? placedSide : parsed.side;
+      token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe({ ...parsed, side }), { includeEnabled: true });
     }
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) throw error;
@@ -1749,6 +1753,26 @@ const linearTrackSlotForRecipe = (slot) => ({
   height: formatCanonicalTrackScalar(slot?.height),
   spacing: formatCanonicalTrackScalar(slot?.spacing)
 });
+
+/**
+ * The sides Python reads for the slots of a Linear request with an Axis index: each slot that names no side takes the
+ * side of its place, as the Web reads a stack with an index (`syncLinearSlotsFromAxisIndex`; OV-3157). Null without
+ * an index, or when a slot cannot be read (its own token then says why).
+ * @param {readonly unknown[]} slots
+ * @param {unknown} axisIndex
+ * @param {string} nt
+ * @returns {(string | null)[] | null}
+ */
+const placedLinearSides = (slots, axisIndex, nt) => {
+  if (!Number.isInteger(axisIndex)) return null;
+  try {
+    const placed = slots.map((slot) => parseLinearTrackSlotSpec(slot, nt));
+    syncLinearSlotsFromAxisIndex(placed, /** @type {number} */ (axisIndex));
+    return placed.map((slot) => slot?.side ?? null);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * @param {string[]} args
@@ -1775,7 +1799,8 @@ const appendTrackOptions = (args, request) => {
     throw recipeUnavailable(msg('an explicit empty track list means no tracks, which the current CLI cannot express.'));
   }
   const option = request.mode === 'circular' ? '--circular_track_slot' : '--linear_track_slot';
-  slots.forEach((slot) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options)));
+  const placedSides = request.mode === 'linear' ? placedLinearSides(slots, tracks[axisField], options.dinucleotide || 'GC') : null;
+  slots.forEach((slot, index) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options, placedSides?.[index] ?? null)));
   appendOption(
     args,
     request.mode === 'circular' ? '--circular_track_axis_index' : '--linear_track_axis_index',

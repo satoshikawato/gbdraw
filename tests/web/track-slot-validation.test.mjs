@@ -988,9 +988,6 @@ test('invalid depth height remains editable without overwriting its last valid c
   assert.deepEqual(buildLinearTrackSlotPayload(slot).height, { value: 10, unit: 'px' });
 });
 
-// OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay
-// Annotations row neither moves the Axis under the other rows nor leaves a row between it and
-// the split Features row in conflict with the index.
 // OV-3079, OV-3155: a request without an Axis index draws each row on its own side (a set's row without a side
 // outside or above, as Python reads it), in the stack's order on each side; the Web stack places the rows of the outer
 // side before the Axis.
@@ -1008,11 +1005,19 @@ test('a stack without an Axis index places each row on its own side in both mode
     { axisIndex: 0, ids: ['features', 'gc', 'skew'] });
   assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content')], 'spreadout'),
     { axisIndex: 1, ids: ['features', 'gc'] });
-  // The row on the Axis follows the rows outside; an Overlay set row stays with the rest.
+  // The row on the Axis follows the rows outside; an Overlay set row keeps its place before the row after it.
   assert.deepEqual(circular([
     row('gc', 'dinucleotide_content'), row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' }),
     row('features', 'features'), row('regions', 'annotations', 'outside', { set_id: 'r' })
-  ], 'middle'), { axisIndex: 1, ids: ['regions', 'features', 'gc', 'hl'] });
+  ], 'middle'), { axisIndex: 2, ids: ['regions', 'hl', 'features', 'gc'] });
+  // A stack whose sides follow its order, Overlay set rows included, comes back unchanged.
+  const highlight = row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' });
+  assert.deepEqual(circular([highlight, row('features', 'features'), row('gc', 'dinucleotide_content')], 'middle'),
+    { axisIndex: 1, ids: ['hl', 'features', 'gc'] });
+  assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content'), highlight], 'tuckin'),
+    { axisIndex: 0, ids: ['features', 'gc', 'hl'] });
+  assert.deepEqual(circular([row('regions', 'annotations', null, { set_id: 'r' }), highlight, row('features', 'features')], 'tuckin'),
+    { axisIndex: 2, ids: ['regions', 'hl', 'features'] });
   // Linear, read as a request is (`parseLinearTrackSlotSpec`): a features row without a side draws below.
   const linear = (specs) => ids(stackTrackSlotsBySide(specs.map((spec) => parseLinearTrackSlotSpec(spec)), effectiveLinearSlotPlacement, 'above'));
   assert.deepEqual(linear(['features:features', 'regions:annotations@set_id=regions', 'gc:content', 'up:skew@side=above']),
@@ -1021,6 +1026,9 @@ test('a stack without an Axis index places each row on its own side in both mode
     { axisIndex: 1, ids: ['regions', 'features', 'gc'] });
 });
 
+// OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay
+// Annotations row neither moves the Axis under the other rows nor leaves a row between it and
+// the split Features row in conflict with the index.
 test('Generate places a Circular stack and keeps the Axis index its sides follow (OV-1263)', () => {
   const annotations = (anchor) => ({
     id: 'annotations', renderer: 'annotations', enabled: true, side: 'overlay', z: 1, params: { set_id: 'r', anchor_slot: anchor }
