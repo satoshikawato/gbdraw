@@ -1610,8 +1610,8 @@ def test_circular_region_label_over_a_feature_label_and_its_leader_counts_one_ov
     index = _ObstacleIndex(CircularLabelObstacles(labels=(feature,), clearance=0.0))
     over_both = SimpleNamespace(parts=(((8.0, 0.0), (15.0, 0.0), (15.0, 20.0), (8.0, 20.0)),))
     over_leader = SimpleNamespace(parts=(((8.0, 15.0), (15.0, 15.0), (15.0, 20.0), (8.0, 20.0)),))
-    assert (index.conflicts(over_both), index.overlaps(over_both).obstacles) == (2, 1)
-    assert (index.conflicts(over_leader), index.overlaps(over_leader).obstacles) == (1, 1)
+    assert (index.conflicts(over_both), len(index.overlaps(over_both).met)) == (2, 1)
+    assert (index.conflicts(over_leader), len(index.overlaps(over_leader).met)) == (1, 1)
 
 
 _LAMBDA_REGIONS = (
@@ -1625,32 +1625,27 @@ _LAMBDA_REGIONS = (
 )
 
 
-@pytest.mark.parametrize(
-    ("labels", "font_size", "overlaps"),
-    [("out", 14, 7), pytest.param("both", 20, 4, marks=pytest.mark.slow)],
-)
-def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int
-) -> None:
-    """OV-3017, CIR-RGN-YIELD: on lambda with outside regions, "Integration" was drawn over "integrase" and
-    "Replication" over other feature labels, with no letter-free place along their regions. The feature labels make
-    way (side and order kept): no drawn region label's letters meet a feature label's letters; the leader lines behind
-    region letters stay warned (lambda --labels out 10 -> 7, --labels both 8 -> 4)."""
+def _lambda_region_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, rows: tuple[tuple[str, int, int, str, int, str], ...]
+) -> tuple[list[tuple], list]:
+    """Each placement of the region labels when lambda is drawn with ``rows`` (id, start, end, label, font size,
+    orientation) as outside region labels: the feature labels as obstacles, the drawn region labels by slot, and what
+    they could not draw clear (``_RecordRegionLabels.place``); and the warnings."""
 
     import gbdraw.api.diagram as api_diagram
     import gbdraw.diagrams.circular.assemble as circular_assemble
     from gbdraw.circular import _get_args, run_circular_from_namespace
-    from gbdraw.layout.text_geometry import convex_polygons_intersect
 
-    passes: list[tuple[object, object]] = []
-    original_labels = circular_assemble.circular_annotation_labels
+    passes: list[tuple] = []
+    original_place = circular_assemble._RecordRegionLabels.place
     original_fit_check = api_diagram.check_circular_label_fit
     searching = [False]
 
-    def labels_spy(*args, **kwargs):
-        placed = original_labels(*args, **kwargs)
+    def place_spy(self, feature_labels):
+        placed = original_place(self, feature_labels)
         if not searching[0]:
-            passes.append((kwargs["obstacles"], placed))
+            obstacles = circular_assemble._feature_label_obstacles(feature_labels, self.record_length, self.canvas_config)
+            passes.append((obstacles, placed[0], placed[2]))
         return placed
 
     def fit_check_spy(*args, **kwargs):
@@ -1662,12 +1657,15 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
         finally:
             searching[0] = False
 
-    monkeypatch.setattr(circular_assemble, "circular_annotation_labels", labels_spy)
+    monkeypatch.setattr(circular_assemble._RecordRegionLabels, "place", place_spy)
     monkeypatch.setattr(api_diagram, "check_circular_label_fit", fit_check_spy)
     table = tmp_path / "regions.tsv"
     table.write_text(
         "set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size\n"
-        + "".join(f"regions\t{id_}\tline\t{start}\t{end}\t{label}\thorizontal\t{font_size}\n" for id_, start, end, label in _LAMBDA_REGIONS)
+        + "".join(
+            f"regions\t{id_}\tline\t{start}\t{end}\t{label}\t{orientation}\t{size}\n"
+            for id_, start, end, label, size, orientation in rows
+        )
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -1683,19 +1681,151 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
                 ]
             )
         )
+    return passes, caught
+
+
+def _region_label_overlaps(pass_: tuple) -> dict[str, frozenset[int]]:
+    """What each region label of one placement overlaps, as its warning counts it (its letters, or leader lines
+    behind them), by annotation id."""
+
+    return {annotation_id: met for (_slot_id, annotation_id), met in pass_[2].overlapped.items()}
+
+
+@pytest.mark.parametrize(
+    ("labels", "font_size", "overlaps"),
+    [("out", 14, 7), pytest.param("both", 20, 4, marks=pytest.mark.slow)],
+)
+def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int
+) -> None:
+    """OV-3017, CIR-RGN-YIELD: on lambda with outside regions, "Integration" was drawn over "integrase" and
+    "Replication" over other feature labels, with no letter-free place along their regions. The feature labels make
+    way (side and order kept): no drawn region label's letters meet a feature label's letters; the leader lines behind
+    region letters stay warned (lambda --labels out 10 -> 7, --labels both 8 -> 4), and no region label overlaps a
+    label it did not overlap before the feature labels made way. The receipt of CIR-RGN-YIELD quotes these figures."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    rows = tuple((id_, start, end, label, font_size, "horizontal") for id_, start, end, label in _LAMBDA_REGIONS)
+    passes, caught = _lambda_region_passes(tmp_path, monkeypatch, labels, rows)
+    assert len(passes) >= 2
     # The one annotation slot keeps off the feature labels only: every obstacle is a feature label.
-    obstacles, placed = passes[-1]
+    obstacles, drawn_by_slot, not_clear = passes[-1]
     letters = [part for label in obstacles.labels for part in label.parts]
-    drawn = {label.annotation_id: label for label in placed.drawn}
+    (slot_labels,) = drawn_by_slot.values()
+    drawn = {label.annotation_id: label for label in slot_labels}
     assert drawn.keys() == {id_ for id_, *_rest in _LAMBDA_REGIONS}
     covering = sorted(
         id_ for id_, label in drawn.items() if any(convex_polygons_intersect(a, b) for a in label.parts for b in letters)
     )
     assert covering == []
-    assert placed.over_feature_letters == ()
+    assert not not_clear.over_feature_letters
+    # Making way adds no label to what a region label overlaps, the region labels not drawn over feature letters
+    # included. (With --labels out, "Replication" still meets the two labels whose letters left its letters, by
+    # their leader lines.)
+    first, drawn_counts = _region_label_overlaps(passes[0]), _region_label_overlaps(passes[-1])
+    assert all(drawn_counts[id_] <= first[id_] for id_ in first), (first, drawn_counts)
     assert any(f"({overlaps} region label overlaps)" in str(warning.message) for warning in caught), [
         str(warning.message) for warning in caught
     ]
+
+
+# Region labels on lambda (found by a seeded search) where clearing "cos" (r12) and "Head genes" (r10) of feature
+# letters lets "Recombination" (r11), over no feature letters, take another place along its region when the region
+# labels are placed again, over "cos".
+_LAMBDA_CROWDED_REGIONS = (
+    ("r0", 784, 3403, "Integration", 10, "horizontal"),
+    ("r1", 3549, 3943, "cos", 20, "horizontal"),
+    ("r2", 4443, 6254, "Recombination", 10, "horizontal"),
+    ("r3", 7200, 8479, "Late", 16, "horizontal"),
+    ("r4", 9279, 10080, "Replication", 24, "horizontal"),
+    ("r5", 10215, 12884, "Recombination", 20, "horizontal"),
+    ("r6", 12648, 14866, "Late", 20, "horizontal"),
+    ("r7", 24522, 26347, "Ori", 16, "horizontal"),
+    ("r8", 25405, 26303, "cos", 12, "horizontal"),
+    ("r9", 25768, 26875, "Recombination", 12, "horizontal"),
+    ("r10", 31461, 33725, "Head genes", 24, "horizontal"),
+    ("r11", 32781, 35253, "Recombination", 10, "horizontal"),
+    ("r12", 33338, 33820, "cos", 24, "horizontal"),
+    ("r13", 43019, 45806, "Ori", 24, "horizontal"),
+)
+
+
+def test_circular_feature_labels_keep_no_way_that_moves_another_region_label_over_a_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CIR-RGN-YIELD: a way is judged where the region labels are drawn after it, not where they were drawn before
+    it. Region labels the feature labels did not make way for are placed again, along their regions, off the moved
+    feature labels; a way that lets one of them take a place over a label it did not overlap is not kept, so no
+    region label overlaps a label it did not overlap before."""
+
+    passes, _caught = _lambda_region_passes(tmp_path, monkeypatch, "out", _LAMBDA_CROWDED_REGIONS)
+    assert len(passes) >= 2
+    first, drawn_counts = _region_label_overlaps(passes[0]), _region_label_overlaps(passes[-1])
+    assert all(drawn_counts[id_] <= first[id_] for id_ in first), (first, drawn_counts)
+
+
+# Curved region labels on lambda (found by a seeded search): "Early left" (r6, arc) is drawn over feature letters on
+# the left of the circle, where one part of its letters reaches 24 px up and down, though the letters stand 13 px
+# tall across their baseline with the spacing.
+_LAMBDA_CURVED_REGIONS = (
+    ("r0", 10263, 10599, "b2 region", 20, "arc"),
+    ("r1", 10944, 11551, "Replication", 20, "arc"),
+    ("r2", 11771, 12524, "Tail genes", 10, "arc"),
+    ("r3", 17082, 19853, "Early left", 16, "arc"),
+    ("r4", 19145, 19701, "Late", 10, "auto"),
+    ("r5", 32106, 33297, "Early left", 10, "arc"),
+    ("r6", 33103, 35509, "Early left", 16, "arc"),
+    ("r7", 44568, 46341, "Lysis", 24, "arc"),
+)
+
+
+def test_circular_feature_labels_make_way_for_a_curved_region_label_by_its_height(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CIR-RGN-YIELD: a feature label moves at most 24 px plus the height of the region labels it makes way for,
+    their letters' height across their baseline with the spacing, for curved labels too (not the reach of one part
+    of their letters along the screen's vertical)."""
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble
+    import gbdraw.labels.circular_repair as repair_module
+
+    made_way: list[tuple] = []
+    repairs: list[tuple[list[dict], object]] = []
+    original_make_way = circular_assemble.make_way_for_region_labels
+    original_repair = repair_module._Repair
+
+    def make_way_spy(labels, total_length, regions, blocked, **kwargs):
+        repairs.clear()
+        result = original_make_way(labels, total_length, regions, blocked, **kwargs)
+        made_way.append((list(labels), list(regions), result, list(repairs)))
+        return result
+
+    class Recorded(original_repair):
+        def __init__(self, labels, *args, **kwargs) -> None:
+            super().__init__(labels, *args, **kwargs)
+            repairs.append(([label.copy() for label in labels], kwargs.get("target")))
+
+    monkeypatch.setattr(circular_assemble, "make_way_for_region_labels", make_way_spy)
+    monkeypatch.setattr(repair_module, "_Repair", Recorded)
+    _lambda_region_passes(tmp_path, monkeypatch, "out", _LAMBDA_CURVED_REGIONS)
+
+    labels, regions, result, steps = made_way[0]
+    assert result is not None
+    moved, _cleared = result
+    # The region label each repair cleared, and the labels it moved: those that differ from the next repair's start.
+    starts = [start for start, _target in steps] + [moved]
+    tallest = [0.0] * len(labels)
+    for (start, target), after in zip(steps, starts[1:]):
+        height = next(region.height for region in regions if region.parts is target)
+        for at, (old, new) in enumerate(zip(start, after)):
+            if old != new:
+                tallest[at] = max(tallest[at], height)
+    for old, new, height in zip(labels, moved, tallest):
+        if old.get("is_embedded"):
+            continue
+        shift = math.hypot(float(new["start_x"]) - float(old["start_x"]), float(new["start_y"]) - float(old["start_y"]))
+        assert shift <= 24.0 + height + 1e-6, (old["label_text"], shift, height)
 
 
 def _draw_span_regions(
@@ -2314,3 +2444,57 @@ def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack() -> 
     root = ElementTree.fromstring(drawing.tostring())
     drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
     assert {"tint1", "islands1"} <= drawn
+
+
+def _pinned_region_labels(made_way: tuple, obstacle_parts: tuple = (), *, start: int = 2000, end: int = 5000):
+    """One horizontal region label outside a 10 kbp record, placed with feature label letters ``obstacle_parts``
+    and the places the feature labels made way at (``made_way``)."""
+
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, CircularObstacleLabel, circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, start, end), label="Region", style=RegionAnnotationStyle(label_orientation="horizontal"))
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+    )
+    obstacles = CircularLabelObstacles(
+        labels=tuple(CircularObstacleLabel((part,), feature=True) for part in obstacle_parts), clearance=2.0, made_way=made_way
+    )
+    (label,) = circular_annotation_labels(
+        track, record_index=0, record_length=10000, inner_radius_px=200.0, outer_radius_px=210.0,
+        side="outside", font_family="Liberation Sans", params=params, obstacles=obstacles,
+    ).drawn
+    return label
+
+
+def test_circular_region_label_is_drawn_where_the_feature_labels_made_way() -> None:
+    """CIR-RGN-YIELD: a region label is drawn at the place the feature labels made way at (``made_way``), not at
+    the place its own search would take, while its letters there meet no feature label's letters."""
+
+    from gbdraw.render.drawers.circular.annotations import RegionLabelPlace
+
+    def apart(first, second) -> float:
+        return math.dist(first.parts[0][0], second.parts[0][0])
+
+    at_4500 = _pinned_region_labels((), start=4000, end=5000)
+    searched = _pinned_region_labels(())
+    pinned = _pinned_region_labels((RegionLabelPlace("r0", 4500.0),))
+    assert apart(searched, at_4500) > 20.0
+    assert apart(pinned, at_4500) < 1.0
+
+
+def test_circular_region_label_leaves_a_made_way_place_that_meets_feature_letters_again() -> None:
+    """A place the feature labels made way at is checked again when the labels are placed (a legend may move
+    feature labels after they made way): where its letters meet a feature label's letters there, the region label
+    moves along its region as it would without the place."""
+
+    from gbdraw.render.drawers.circular.annotations import RegionLabelPlace
+
+    at_4500 = _pinned_region_labels((), start=4000, end=5000)
+    over = _pinned_region_labels((RegionLabelPlace("r0", 4500.0),), at_4500.parts)
+    assert over.parts != at_4500.parts
+    assert over.parts == _pinned_region_labels((), at_4500.parts).parts

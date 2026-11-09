@@ -10,9 +10,9 @@ import math
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import product
-from typing import Sequence, TypeAlias, cast
+from typing import NamedTuple, Sequence, TypeAlias, cast
 
-from .text_geometry import Point
+from .text_geometry import Point, convex_polygons_intersect
 
 # A uniform-grid bucket: (column, row) of ``floor(coordinate / bucket_size)``.
 GridCell: TypeAlias = tuple[int, int]
@@ -192,6 +192,30 @@ def finite_aabb(min_x: float, min_y: float, max_x: float, max_y: float) -> Aabb 
     if max_y < min_y:
         min_y, max_y = max_y, min_y
     return _ordered_aabb(min_x, min_y, max_x, max_y)
+
+
+BoxedPart: TypeAlias = tuple["Aabb", Sequence[Point]]
+
+
+class BoxedLetters(NamedTuple):
+    """A label's letters as convex parts, each with its box (``boxed_parts_meet``), and how tall they stand across
+    their baseline, both grown by the same clearance."""
+
+    parts: tuple[BoxedPart, ...]
+    height: float
+
+
+def boxed_parts_meet(first: Sequence[BoxedPart], second: Sequence[BoxedPart]) -> bool:
+    """Whether two labels' letters meet: a convex part of one intersects a part of the other, each given with its box
+    (boxes that only touch do not meet). The one test of whether a region label's letters meet a feature label's
+    (CIR-RGN-YIELD): the Circular region label placer asks it of what it draws, and the feature label repair of the
+    places it tries."""
+
+    return any(
+        first_box.intersects(second_box) and convex_polygons_intersect(first_part, second_part)
+        for first_box, first_part in first
+        for second_box, second_part in second
+    )
 
 
 def aabbs_touch(first: Aabb | None, second: Aabb | None) -> bool:
@@ -513,7 +537,10 @@ def candidate_aabb_partners(
 __all__ = [
     "Aabb",
     "AabbIndex",
+    "BoxedLetters",
+    "BoxedPart",
     "Interval",
+    "boxed_parts_meet",
     "IntervalIndex",
     "GridCell",
     "aabb_cells",
