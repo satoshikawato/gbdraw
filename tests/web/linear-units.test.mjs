@@ -8,12 +8,17 @@ import test from 'node:test';
 import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js';
 import { buildLosatJobSpecs, linearComparisonEdgeKey } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-sources.js';
-import { linearWindowsPayload } from '../../gbdraw/web/js/services/session-request.js';
+import { linearWindowsPayload, requireLinearComparisonPlanSnapshot } from '../../gbdraw/web/js/services/session-request.js';
 import {
   linearUnitPlanPayload,
   planLinearUnitSearch,
   readLinearUnitPlan
 } from '../../gbdraw/web/js/services/linear-units.js';
+import {
+  inheritSavedComparison,
+  inheritedPipelineSearch,
+  savedComparisonSource
+} from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
 
 const pythonPlan = pythonLinearUnitPlan;
@@ -130,4 +135,90 @@ test('a reply that does not plan the records and pairs asked is refused', () => 
   refused({ ...plan, pairs: [{ pair: 0, queryUnit: 2, subjectUnit: 0 }] });
   refused({ ...plan, pairs: [{ pair: 1, queryUnit: 0, subjectUnit: 2 }] });
   assert.equal(readLinearUnitPlan(plan, asked), plan);
+});
+
+// OV-3003: Inherit of a saved LOSATP pipeline that names unit pairs (Find in other files keeps only the window pairs
+// that share a reference gene) runs exactly those pairs, with the planner and runner the draft path uses; the draft
+// plan of the same record pair compares every window pair.
+test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline', async () => {
+  const cards = [
+    createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }),
+    createLinearSeq({ uid: 'b', windows: [window(10, 90), window(200, 280)] })
+  ];
+  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
+  const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
+  const saved = (pairs, records = cards, mode = 'pairwise') => savedComparisonSource({
+    renderRequest: {
+      schema: 10, mode: 'linear', diagramOptions: { bitscore: 40 },
+      records: records.map((card) => ({ recordKey: card.uid, windows: windowsOf(card) })),
+      comparisons: [{
+        kind: 'generatedProteinComparison', mode, settings,
+        pairs: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ queryRecordIndex, subjectRecordIndex }))
+      }]
+    },
+    resources: {}
+  });
+  /** @type {unknown[]} */
+  const asked = [];
+  const search = (source, layout = []) => inheritedPipelineSearch({
+    source, cards, windowsOf,
+    runHelper: async (payload) => {
+      asked.push(payload);
+      return { result: pythonPlan(payload) };
+    },
+    requirePlan: requireLinearComparisonPlanSnapshot,
+    plan: { sequences: cards, recordsOff: [], layout }
+  });
+  // Units 0 and 1 are a's windows, 2 and 3 b's: the pipeline keeps window 1 against window 1, window 2 against 2.
+  const inherited = await search(saved([[0, 2], [1, 3]]));
+  assert.ok(inherited);
+  assert.deepEqual(inherited.pipeline.settings, settings);
+  // Python plans the units of the drawn cards; the Web derives no unit itself.
+  assert.deepEqual(asked, [{ records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card) })), pairs: [] }]);
+  const { resolution, sequences } = inherited.unitSearch;
+  assert.equal(resolution.valid, true, resolution.error);
+  assert.equal(resolution.hasLosatIntent, true);
+  assert.deepEqual(resolution.edges.map((edge) => [edge.queryIndex, edge.subjectIndex]), [[0, 2], [1, 3]]);
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: sequences.length, recordUids: sequences.map((seq) => seq.uid),
+    program: 'blastp', blastpMode: 'pairwise', collinearInferOrthogroups: false
+  });
+  assert.deepEqual(specs.map((spec) => [spec.queryIndex, spec.subjectIndex]), [[0, 2], [1, 3]]);
+  assert.deepEqual(specs.map((spec) => spec.edgeKey), resolution.edges.map((edge) => edge.edgeKey));
+  // Generate writes what it searched, the tables and the marker, in place of the saved pipeline.
+  const searched = [{ kind: 'precomputedProteinComparison', resourceId: 'searched', queryRecordIndex: 0, subjectRecordIndex: 2 }];
+  const candidate = {
+    renderRequest: {
+      records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card) })), diagramOptions: {},
+      comparisons: structuredClone(searched)
+    },
+    resources: { searched: { kind: 'canonical-tsv' } }
+  };
+  inheritSavedComparison({ candidate, source: saved([[0, 2], [1, 3]]), searched: true });
+  assert.deepEqual(candidate.renderRequest.comparisons, searched);
+  assert.deepEqual(candidate.renderRequest.diagramOptions, { bitscore: 40 });
+  // A pipeline that names no pairs (a CLI Session before 0.15.0) searches what Python's Pairwise searches without
+  // pairs: every unit pair of the records of adjacent rows, as Python plans them for the adjacent record pair.
+  asked.length = 0;
+  const adjacent = await search(saved([]));
+  assert.ok(adjacent);
+  assert.deepEqual(asked.map((payload) => payload.pairs), [[{ queryRecordKey: 'a', subjectRecordKey: 'b', source: 'losat' }]]);
+  const adjacentSpecs = buildLosatJobSpecs({
+    resolution: adjacent.unitSearch.resolution, recordCount: adjacent.unitSearch.sequences.length,
+    recordUids: adjacent.unitSearch.sequences.map((seq) => seq.uid),
+    program: 'blastp', blastpMode: 'pairwise', collinearInferOrthogroups: false
+  });
+  assert.deepEqual(adjacentSpecs.map((spec) => [spec.queryIndex, spec.subjectIndex]), [[0, 2], [0, 3], [1, 2], [1, 3]]);
+  // A saved comparison without a Pairwise pipeline is copied as saved; changed windows ask for the choice before a
+  // search.
+  assert.equal(await search(saved([], cards, 'none')), null);
+  // Saved pairs whose records now share one row (moved in Record Layout) stop as the draft's would, with the pair
+  // named, before any LOSAT job: Generate builds no job from a plan it refuses.
+  await assert.rejects(search(saved([[0, 2], [1, 3]]), [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }]),
+    (error) => error.code === 'COMPARISON_INPUT' && error.context?.reason === 'PAIR_TOPOLOGY'
+      && error.context?.queryRecordIndex === 0 && error.context?.subjectRecordIndex === 1);
+  asked.length = 0;
+  await assert.rejects(search(saved([[0, 2]], [cards[0], createLinearSeq({ uid: 'b', windows: [window(10, 90)] })])),
+    (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
+  assert.deepEqual(asked, []);
 });

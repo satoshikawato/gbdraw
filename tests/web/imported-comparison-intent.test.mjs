@@ -5,11 +5,14 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
   createImportedComparisonIntentState,
+  followCommittedComparison,
   importedComparisonExecution,
-  inheritCommittedComparisonIntent,
+  inheritSavedComparison,
+  savedComparisonSource,
   resolveImportedComparisonAction,
   restoreImportedComparisonIntent,
-  serializeImportedComparisonResolution
+  serializeImportedComparisonResolution,
+  withComparisonSourceCheckpoint
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 import { normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
@@ -292,7 +295,7 @@ const candidate = {
   }),
   resources: {}
 };
-inheritCommittedComparisonIntent({ candidate, committed });
+inheritSavedComparison({ candidate, source: savedComparisonSource(committed) });
 assert.deepEqual(candidate.renderRequest.comparisons, [{
   kind: 'precomputedProteinComparison',
   resourceId: 'protein',
@@ -359,6 +362,10 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   const intent = classify(unitPipeline([[0, 2], [1, 2]]));
   assert.equal(intent.disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY, JSON.stringify(intent));
   assert.equal(intent.hasCommittedComparison, true);
+  // The preserved comparison holds what Inherit copies (OV-3001): Generate reads it from the drawing, not from a Result.
+  assert.deepEqual(intent.source, savedComparisonSource({ renderRequest: unitPipeline([[0, 2], [1, 2]]), resources }));
+  assert.deepEqual(intent.source.records.map(({ recordKey }) => recordKey), ['record-a', 'record-b']);
+  assert.equal(classify(unitPipeline([[0, -1]])).source, null, 'a comparison that is not preserved holds no source');
   // An index that is no unit index, or a unit against itself, identifies no two records.
   assert.equal(classify(unitPipeline([[0, -1]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
   assert.equal(classify(unitPipeline([[2, 2]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
@@ -370,9 +377,9 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   ]);
   assert.equal(classify(cliRequest).disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
   // Inherit carries unit indexes into a request that draws the same units (the same records and windows), as saved.
-  const committedWindowed = { renderRequest: cliRequest, resources };
+  const committedWindowed = classify(cliRequest).source;
   const sameUnits = { renderRequest: request([], { schema: 10, records: structuredClone(windowedRecords) }), resources: {} };
-  inheritCommittedComparisonIntent({ candidate: sameUnits, committed: committedWindowed });
+  inheritSavedComparison({ candidate: sameUnits, source: committedWindowed });
   assert.deepEqual(sameUnits.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
     [[0, 2], [1, 2], [undefined, undefined]]);
   // A draft whose windows changed draws other units: the saved indexes name none of them.
@@ -387,14 +394,74 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
     }
     assert.fail('Inherit did not refuse');
   };
-  const changed = shownFailure(() => inheritCommittedComparisonIntent({ candidate: otherUnits, committed: committedWindowed }));
+  const changed = shownFailure(() => inheritSavedComparison({ candidate: otherUnits, source: committedWindowed }));
   assert.equal(changed.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(changed.summary, /The drawn records or windows changed since the comparison was saved\. Choose Replace or Clear\./);
   assert.deepEqual(changed.actions, ['edit-comparison']);
-  // A drawing whose comparison Inherit cannot read (no committed request) gets the same choice.
-  const missing = shownFailure(() => inheritCommittedComparisonIntent({ candidate: structuredClone(sameUnits), committed: null }));
+  // A drawing that holds no saved comparison gets the same choice.
+  const missing = shownFailure(() => inheritSavedComparison({ candidate: structuredClone(sameUnits), source: null }));
   assert.equal(missing.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(missing.summary, /This drawing holds no saved comparison to inherit\./);
+  // Align flips record-a's windows and commits a candidate of the committed request, which keeps the comparison
+  // (`runCommittedCanonicalCandidate`); the File card's windows are flipped too. The next Inherit draws the comparison
+  // in those windows: what Inherit copies follows the commit, as a Save of it would write it.
+  const flippedRecords = [{ ...windowedRecords[0], windows: windowedRecords[0].windows.map((span) => ({ ...span, reverseComplement: true })) },
+    windowedRecords[1]];
+  const flippedDraft = () => ({ renderRequest: request([], { schema: 10, records: structuredClone(flippedRecords) }), resources: {} });
+  const aligned = { ...classify(cliRequest), source: committedWindowed };
+  assert.equal(shownFailure(() => inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source })).code,
+    'COMPARISON_CHOICE_REQUIRED');
+  followCommittedComparison(aligned, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  assert.deepEqual(aligned.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  const inherited = inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source });
+  assert.deepEqual(inherited.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
+    [[0, 2], [1, 2], [undefined, undefined]]);
+  // A drawing whose comparison is editable holds no source, and a commit gives it none.
+  const editable = createImportedComparisonIntentState();
+  followCommittedComparison(editable, { renderRequest: cliRequest, resources });
+  assert.equal(editable.source, null);
+  // Undo and Redo of the commit give back what Inherit copies with the caller's checkpoint (the cards' windows).
+  const undone = { ...classify(cliRequest), source: committedWindowed };
+  /** @type {unknown[]} */
+  const restored = [];
+  const hooks = withComparisonSourceCheckpoint(undone, {
+    captureIntentCheckpoint: ({ phase }) => `cards ${phase}`, restoreIntentCheckpoint: (checkpoint) => restored.push(checkpoint)
+  });
+  const before = await hooks.captureIntentCheckpoint({ phase: 'before' });
+  followCommittedComparison(undone, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  const after = await hooks.captureIntentCheckpoint({ phase: 'after' });
+  hooks.restoreIntentCheckpoint(before);
+  assert.equal(undone.source, committedWindowed);
+  assert.deepEqual(restored, ['cards before']);
+  hooks.restoreIntentCheckpoint(after);
+  assert.deepEqual(undone.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  // A later Generate that replaced the comparison leaves the drawing editable: an Undo of the commit gives it no source.
+  Object.assign(undone, createImportedComparisonIntentState());
+  hooks.restoreIntentCheckpoint(before);
+  assert.equal(undone.source, null);
+  assert.deepEqual(restored, ['cards before', 'cards after', 'cards before']);
+
+  // History stringifies both checkpoints and counts their size against its shared limit, so a checkpoint names the
+  // source's drawn units and holds the source itself apart: never the stored tables' bytes. With a 16 MiB protein
+  // table, the checkpoint is a few hundred bytes, and Undo and Redo still give the source back.
+  const large = { ...classify(cliRequest), source: savedComparisonSource({
+    renderRequest: cliRequest, resources: { ...resources, protein: { ...resources.protein, data: 'QUFB'.repeat(1 << 22) } }
+  }) };
+  const largeHooks = withComparisonSourceCheckpoint(large, {
+    captureIntentCheckpoint: ({ phase }) => phase, restoreIntentCheckpoint: () => undefined
+  });
+  const largeBefore = await largeHooks.captureIntentCheckpoint({ phase: 'before' });
+  const heldSource = large.source;
+  followCommittedComparison(large, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  const largeAfter = await largeHooks.captureIntentCheckpoint({ phase: 'after' });
+  const measured = JSON.stringify([largeBefore, largeAfter]);
+  assert.ok(!measured.includes('QUFBQUFB') && !measured.includes('"data"'), 'a checkpoint holds no resource data');
+  assert.ok(measured.length < 2048, `checkpoint JSON is ${measured.length} characters`);
+  assert.deepEqual(JSON.parse(measured)[0].records, heldSource.records.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  largeHooks.restoreIntentCheckpoint(largeBefore);
+  assert.equal(large.source, heldSource);
+  largeHooks.restoreIntentCheckpoint(largeAfter);
+  assert.deepEqual(large.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
 }
 
 console.log('imported comparison intent tests passed');

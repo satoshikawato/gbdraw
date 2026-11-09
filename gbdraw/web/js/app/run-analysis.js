@@ -9,7 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
-/** @import { LinearUnitSearch, LinearUnitWindow } from '../services/linear-units.js' */
+/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow, LinearUnitWindowsOf } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession, RequestRecordDisplayRow } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -77,7 +77,8 @@ import {
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot,
-  linearWindowsPayload
+  linearWindowsPayload,
+  savedPipelineSearchDrawing
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
@@ -200,7 +201,7 @@ import {
   PROTEIN_LOSAT_CACHE_SCHEMA,
   WRITTEN_RESOURCE_MEDIA_TYPES
 } from '../contracts/schema.generated.js';
-import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
+import { comparisonFiltersForMode, resolveComparisonThresholds, savedComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { cloneFileBytesForTransfer, holdReadBytes } from '../services/file-content-cache.js';
 import {
@@ -222,8 +223,13 @@ import { ANNOTATION_SETS_SLICE } from '../services/drawing/annotation-sets.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
-  inheritCommittedComparisonIntent
+  inheritSavedComparison,
+  followCommittedComparison,
+  inheritedPipelineSearch,
+  storedProteinResultMode,
+  withComparisonSourceCheckpoint
 } from '../services/imported-comparison-intent.js';
+/** @import { InheritedPipelineSearch } from '../services/imported-comparison-intent.js' */
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -726,21 +732,6 @@ export const resolveProteinBlastpCandidateLimit = (candidateLimit) => (
   requireCurrentProteinBlastpCandidateLimit(candidateLimit)
 );
 
-/** @param {unknown} comparisons */
-const inferredResolvedProteinMode = (comparisons) => {
-  const values = Array.isArray(comparisons) ? comparisons : [];
-  if (values.some((comparison) => comparison?.kind === 'collinearityResult')) {
-    return 'collinear';
-  }
-  if (values.some((comparison) => comparison?.kind === 'orthogroupResult')) {
-    return 'orthogroup';
-  }
-  if (values.some((comparison) => comparison?.kind === 'precomputedProteinComparison')) {
-    return 'pairwise';
-  }
-  return '';
-};
-
 /**
  * @param {unknown} left
  * @param {unknown} right
@@ -831,8 +822,8 @@ const canReuseResolvedProteinArtifacts = ({
           || reverse !== Boolean(only?.reverseComplement || record.presentation?.reverseComplement));
   })) return false;
 
-  const persistedMode = inferredResolvedProteinMode(persisted);
-  const committedMode = inferredResolvedProteinMode(committed);
+  const persistedMode = storedProteinResultMode(persisted);
+  const committedMode = storedProteinResultMode(committed);
   if (!persistedMode || persistedMode !== committedMode || committedMode !== active.mode) {
     return false;
   }
@@ -1018,6 +1009,29 @@ const buildLosatSuffix = (drawing) => {
 const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
   losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
 );
+
+/**
+ * What a Linear Generate searches. Python plans the drawn units: a record drawn in several windows draws one unit per
+ * window, and a pair of records compares every window pair of the draft plan (`generateUnitSearch`, OV-2738). Inherit
+ * of a saved LOSATP Pairwise pipeline searches its pairs (`inherited`, with the pipeline and its thresholds), through the
+ * same planner and runner (OV-3003); its plan is checked as the draft's is, before any search.
+ * @param {DrawingState} drawing
+ * @param {readonly LinearSeq[]} cards The cards this Generate draws (`drawnLinearSeqs`), in request order.
+ * @param {LinearComparisonResolution} draftPlan
+ * @param {boolean} inherit Whether Generate's Inherit runs the drawing's saved comparison.
+ * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
+ * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs `planLinearUnits`.
+ * @returns {Promise<{ unitSearch: LinearUnitSearch, inherited: InheritedPipelineSearch | null }>}
+ */
+const linearSearchOf = async (drawing, cards, draftPlan, inherit, windowsOf, runHelper) => {
+  const inherited = inherit ? await inheritedPipelineSearch({
+    source: drawing.importedComparisonIntent.source, cards, windowsOf, runHelper,
+    requirePlan: requireLinearComparisonPlanSnapshot,
+    plan: { sequences: drawing.linearSeqs, recordsOff: drawing.recordsOff,
+      layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [] }
+  }) : null;
+  return { unitSearch: inherited?.unitSearch ?? await generateUnitSearch(cards, draftPlan, windowsOf, runHelper), inherited };
+};
 
 // Every LOSAT run's executor: the parallel runner, or the one a browser test installs.
 /**
@@ -2752,8 +2766,8 @@ export const createRunAnalysis = ({
     recordSessionLifecycleEvent('generation-input-resolution-start');
     // The records this Generate draws; every Linear index below is a position in it.
     const linearSeqs = drawing.drawnLinearSeqs.value;
-    const useCommittedComparison = comparisonExecution?.mode === 'inherit';
-    const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
+    const useSavedComparison = comparisonExecution?.mode === 'inherit';
+    const forceEmptyComparison = useSavedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
           forceEmptyComparison
@@ -3048,6 +3062,7 @@ export const createRunAnalysis = ({
       // The comparison plan the request writes: over drawn units in Linear mode (OV-2738).
       let requestComparisonPlan = activeComparisonPlanSnapshot;
       let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
+      let searchedSavedPipeline = false; // Whether it searched the saved pipeline Inherit runs (OV-3003).
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
@@ -3563,28 +3578,27 @@ export const createRunAnalysis = ({
           drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...linearTrackSlots);
         }
         // This branch is Linear mode, where the 'A resolved Linear comparison plan is required.' check above
-        // throws when the snapshot is null.
-        const comparisonResolution = /** @type {LinearComparisonResolution} */ (activeComparisonPlanSnapshot);
-        const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
-        const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
-        // Python plans the drawn units: a record drawn in several windows draws one unit per window, and a pair of
-        // records compares every window pair. Every search below runs over the units, and every index the request
-        // writes is a unit's (OV-2738).
-        const unitSearch = await generateUnitSearch(
-          linearSeqs, comparisonResolution,
-          (card) => linearWindowsPayload(
-            resolveWholeRecordWindows(card, catalogRecordLength(linearRecordCatalog, linearSeqs.indexOf(card))),
-            { arranged: Boolean(drawing.linearRecordLayoutEnabled.value), ordinal: drawing.linearSeqs.indexOf(card) + 1 }
-          ),
-          (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
-        );
+        // throws when the snapshot is null. Every search below runs over the drawn units, and every index the request
+        // writes is a unit's (OV-2738); an inherited pipeline searches with its own settings (OV-3003).
+        const { unitSearch, inherited } = await linearSearchOf(drawing, linearSeqs, /** @type {LinearComparisonResolution} */ (
+          activeComparisonPlanSnapshot), useSavedComparison,
+        (card) => linearWindowsPayload(
+          resolveWholeRecordWindows(card, catalogRecordLength(linearRecordCatalog, linearSeqs.indexOf(card))),
+          { arranged: Boolean(drawing.linearRecordLayoutEnabled.value), ordinal: drawing.linearSeqs.indexOf(card) + 1 }
+        ),
+        (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload));
+        const searchDrawing = inherited ? savedPipelineSearchDrawing(drawing, inherited.pipeline) : drawing;
+        if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
+        searchedSavedPipeline = inherited !== null;
         const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
+        const hasComparisonIntent = unitResolution.hasComparisonIntent === true;
+        const hasLosatIntent = unitResolution.hasLosatIntent === true;
         requestComparisonPlan = unitResolution;
         requestDrawnUnits = unitSearch;
-        const useProteinBlastp = hasLosatIntent && drawing.losatProgram.value === 'blastp';
+        const useProteinBlastp = hasLosatIntent && searchDrawing.losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
-          ? requireCurrentProteinBlastpMode(drawing.losat.blastp?.mode)
-          : String(drawing.losat.blastp?.mode ?? '');
+          ? requireCurrentProteinBlastpMode(searchDrawing.losat.blastp?.mode)
+          : String(searchDrawing.losat.blastp?.mode ?? '');
         const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
@@ -3596,63 +3610,62 @@ export const createRunAnalysis = ({
           );
         }
         // One resolution per Generate feeds LOSAT post-processing and caches.
-        const comparisonThresholds = hasComparisonIntent
-          ? resolveComparisonThresholds(drawing.adv, 'linear')
-          : null;
+        const comparisonThresholds = !hasComparisonIntent ? null
+          : inherited ? savedComparisonThresholds(inherited.thresholds, 'linear') : resolveComparisonThresholds(drawing.adv, 'linear');
 
         const blastpMaxHits = usePairwiseBlastp
-          ? requireCurrentProteinBlastpMaxHits(drawing.losat.blastp?.maxHits)
+          ? requireCurrentProteinBlastpMaxHits(searchDrawing.losat.blastp?.maxHits)
           : 5;
         const blastpCandidateLimit = useProteinBlastp
-          ? resolveProteinBlastpCandidateLimit(drawing.losat.blastp?.candidateLimit)
+          ? resolveProteinBlastpCandidateLimit(searchDrawing.losat.blastp?.candidateLimit)
           : null;
         const orthogroupMembershipMode = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMembershipMode(
-              drawing.losat.blastp?.orthogroupMembershipMode
+              searchDrawing.losat.blastp?.orthogroupMembershipMode
             )
           : ORTHOGROUP_INFERENCE_VERSION;
         const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMemberMaxHits(
-              drawing.losat.blastp?.orthogroupMemberMaxHits
+              searchDrawing.losat.blastp?.orthogroupMemberMaxHits
             )
           : null;
         const collinearMinAnchors = useCollinearBlastp
-          ? requireCurrentCollinearMinAnchors(drawing.losat.blastp?.collinearMinAnchors)
+          ? requireCurrentCollinearMinAnchors(searchDrawing.losat.blastp?.collinearMinAnchors)
           : 1;
         const collinearMaxUnitGap = useCollinearBlastp
-          ? requireCurrentCollinearMaxUnitGap(drawing.losat.blastp?.collinearMaxUnitGap)
+          ? requireCurrentCollinearMaxUnitGap(searchDrawing.losat.blastp?.collinearMaxUnitGap)
           : 0;
         const collinearMaxDiagonalDrift = useCollinearBlastp
           ? requireCurrentCollinearMaxDiagonalDrift(
-              drawing.losat.blastp?.collinearMaxDiagonalDrift
+              searchDrawing.losat.blastp?.collinearMaxDiagonalDrift
             )
           : 0;
         const collinearMaxConflictsInMergeGap = useCollinearBlastp
           ? requireCurrentCollinearMaxConflicts(
-              drawing.losat.blastp?.collinearMaxConflictsInMergeGap
+              searchDrawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
         const collinearMaxParalogLinksPerOrthogroup = paralogLinksFor(
           useProteinBlastp ? blastpMode : '',
-          drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
+          searchDrawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
         );
         const collinearColorMode = useCollinearBlastp
-          ? requireCurrentCollinearColorMode(drawing.losat.blastp?.collinearColorMode)
+          ? requireCurrentCollinearColorMode(searchDrawing.losat.blastp?.collinearColorMode)
           : 'orientation';
         const collinearUnitMode = useCollinearBlastp
-          ? requireCurrentCollinearUnitMode(drawing.losat.blastp?.collinearUnitMode)
+          ? requireCurrentCollinearUnitMode(searchDrawing.losat.blastp?.collinearUnitMode)
           : 'auto';
         const collinearAnchorMode = useCollinearBlastp
-          ? requireCurrentCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode)
+          ? requireCurrentCollinearAnchorMode(searchDrawing.losat.blastp?.collinearAnchorMode)
           : DEFAULT_COLLINEAR_ANCHOR_MODE;
         const collinearMergeOrientation = useCollinearBlastp
           ? requireCurrentCollinearMergeOrientation(
-              drawing.losat.blastp?.collinearMergeOrientation
+              searchDrawing.losat.blastp?.collinearMergeOrientation
             )
           : DEFAULT_MERGE_ORIENTATION;
-        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(drawing.losat.blastp?.collinearInferOrthogroups);
+        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(searchDrawing.losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
-          ? requireCurrentCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
+          ? requireCurrentCollinearSearchScope(searchDrawing.losat.blastp?.collinearSearchScope)
           : 'adjacent';
 
         const reuseResolvedProteinArtifacts = useProteinBlastp
@@ -3689,28 +3702,28 @@ export const createRunAnalysis = ({
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
 
         if (useProteinBlastp) {
-          drawing.losat.blastp.mode = blastpMode;
-          drawing.losat.blastp.candidateLimit = blastpCandidateLimit;
+          searchDrawing.losat.blastp.mode = blastpMode;
+          searchDrawing.losat.blastp.candidateLimit = blastpCandidateLimit;
         }
         if (usePairwiseBlastp) {
-          drawing.losat.blastp.maxHits = blastpMaxHits;
+          searchDrawing.losat.blastp.maxHits = blastpMaxHits;
         } else if (useOrthogroupBlastp) {
-          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          searchDrawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          searchDrawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
         } else if (useCollinearBlastp) {
-          drawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          drawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
-          drawing.losat.blastp.collinearMinAnchors = collinearMinAnchors;
-          drawing.losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
-          drawing.losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
-          drawing.losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
-          drawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup =
+          searchDrawing.losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          searchDrawing.losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+          searchDrawing.losat.blastp.collinearMinAnchors = collinearMinAnchors;
+          searchDrawing.losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
+          searchDrawing.losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
+          searchDrawing.losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
+          searchDrawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup =
             collinearMaxParalogLinksPerOrthogroup;
-          drawing.losat.blastp.collinearColorMode = collinearColorMode;
-          drawing.losat.blastp.collinearUnitMode = collinearUnitMode;
-          drawing.losat.blastp.collinearAnchorMode = collinearAnchorMode;
-          drawing.losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
-          drawing.losat.blastp.collinearSearchScope = collinearSearchScope;
+          searchDrawing.losat.blastp.collinearColorMode = collinearColorMode;
+          searchDrawing.losat.blastp.collinearUnitMode = collinearUnitMode;
+          searchDrawing.losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          searchDrawing.losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
+          searchDrawing.losat.blastp.collinearSearchScope = collinearSearchScope;
         }
 
         const normalizedPlotTitle = String(drawing.form.plot_title || '').trim();
@@ -3827,7 +3840,7 @@ export const createRunAnalysis = ({
             }
           : null;
         const losatExecutionMode = useLosat ? requestedLosatExecutionMode(state.losatExecution) : 'serial';
-        const losatRequestedThreadsPerJob = useLosat ? requestedLosatThreadsPerJob(state.losatExecution, drawing.losatProgram.value) : undefined;
+        const losatRequestedThreadsPerJob = useLosat ? requestedLosatThreadsPerJob(state.losatExecution, searchDrawing.losatProgram.value) : undefined;
         const losatRequestedTotalThreadBudget = useLosat ? requestedLosatTotalThreadBudget(state.losatExecution) : undefined;
         const losatRuntimeWarmup = useLosat
           ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
@@ -4081,7 +4094,7 @@ export const createRunAnalysis = ({
             return {
               identityKind: 'protein',
               program: 'blastp',
-              outfmt: String(drawing.losat.outfmt || '6'),
+              outfmt: String(searchDrawing.losat.outfmt || '6'),
               args: argsKey,
               queryProteinSetHash: queryEntry.proteinSetHash,
               subjectProteinSetHash: subjectEntry.proteinSetHash,
@@ -4095,8 +4108,8 @@ export const createRunAnalysis = ({
           const subjectHash = await getSeqHash(subjectIdx);
           return {
             identityKind: 'nucleotide',
-            program: drawing.losatProgram.value,
-            outfmt: String(drawing.losat.outfmt || '6'),
+            program: searchDrawing.losatProgram.value,
+            outfmt: String(searchDrawing.losat.outfmt || '6'),
             args: argsKey,
             queryCanonicalHash: queryHash,
             subjectCanonicalHash: subjectHash
@@ -4210,7 +4223,7 @@ export const createRunAnalysis = ({
             (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
           // Named by its edge's units' cards: a window pair by the cards whose windows it compares (OV-2742).
-          const fallback = losatCardPairName(drawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
+          const fallback = losatCardPairName(searchDrawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
             queryEntry.recordId, subjectEntry.recordId);
           return normalizeLosatFilename(
             edge?.losatFilenameActive ? edge.losatFilename : '',
@@ -4246,9 +4259,9 @@ export const createRunAnalysis = ({
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           /** @type {string[]} */
           const args = [];
-          if (drawing.losatProgram.value === 'blastn') {
-            pushArg(args, '--task', drawing.losat.blastn.task);
-          } else if (drawing.losatProgram.value === 'tblastx') {
+          if (searchDrawing.losatProgram.value === 'blastn') {
+            pushArg(args, '--task', searchDrawing.losat.blastn.task);
+          } else if (searchDrawing.losatProgram.value === 'tblastx') {
             pushArg(args, '--query-gencode', losatRecordGencode(losatSeqs[queryIdx]));
             pushArg(args, '--db-gencode', losatRecordGencode(losatSeqs[subjectIdx]));
           } else {
@@ -4265,7 +4278,8 @@ export const createRunAnalysis = ({
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? unitSeqs.map((_, index) => index)
-            // The plan is valid here (`requireLinearComparisonPlanSnapshot`), so every edge names two drawn units.
+            // The plan is valid here (`requireLinearComparisonPlanSnapshot` checked the draft's, or Inherit's in
+            // `inheritedPipelineSearch`), so every edge names two drawn units.
             : Array.from(new Set(unitResolution.edges
                 .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
                 .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => /** @type {number[]} */ (
@@ -4348,7 +4362,7 @@ export const createRunAnalysis = ({
             resolution: unitResolution,
             recordCount: unitSeqs.length,
             recordUids: unitSeqs.map((seq) => seq.uid),
-            program: drawing.losatProgram.value,
+            program: searchDrawing.losatProgram.value,
             blastpMode,
             collinearInferOrthogroups,
             collinearSearchScope
@@ -4547,12 +4561,12 @@ export const createRunAnalysis = ({
                 queryIndex: spec.queryIndex,
                 subjectIndex: spec.subjectIndex,
                 cacheKey,
-                program: drawing.losatProgram.value,
+                program: searchDrawing.losatProgram.value,
                 querySequenceKey,
                 subjectSequenceKey,
                 queryCanonicalHash,
                 subjectCanonicalHash,
-                outfmt: drawing.losat.outfmt || '6',
+                outfmt: searchDrawing.losat.outfmt || '6',
                 extraArgs: losatArgs,
                 cacheMetadata,
                 batch
@@ -4569,7 +4583,7 @@ export const createRunAnalysis = ({
             sourceJobs.push({
               ...members[0],
               cacheKey: await hashText(JSON.stringify([
-                drawing.losatProgram.value, drawing.losat.outfmt || '6', batch.args,
+                searchDrawing.losatProgram.value, searchDrawing.losat.outfmt || '6', batch.args,
                 batch.query.hash, batch.subject.hash
               ])),
               querySequenceKey: batch.query.sequenceKey,
@@ -4641,8 +4655,8 @@ export const createRunAnalysis = ({
                 identityKind: isProteinEntry ? 'protein' : 'nucleotide',
                 ...(isProteinEntry ? { idEncoding: 'runtime-handle-v1' } : {}),
                 text: result.text,
-                program: drawing.losatProgram.value,
-                outfmt: String(drawing.losat.outfmt || '6'),
+                program: searchDrawing.losatProgram.value,
+                outfmt: String(searchDrawing.losat.outfmt || '6'),
                 args: job?.extraArgs || [],
                 ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {}),
                 ...(isProteinEntry
@@ -4660,7 +4674,7 @@ export const createRunAnalysis = ({
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
                     }),
-                runtime: webLosatRuntimeRecord(drawing.losatProgram.value)
+                runtime: webLosatRuntimeRecord(searchDrawing.losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -4940,8 +4954,8 @@ export const createRunAnalysis = ({
             candidateLimitRequested: useProteinBlastp ? blastpCandidateLimit : null,
             candidateLimitEffective: useProteinBlastp ? blastpCandidateLimit : null,
             collinearSearchScope: useCollinearBlastp ? collinearSearchScope : null,
-            program: useProteinBlastp ? 'blastp' : drawing.losatProgram.value,
-            outfmt: String(drawing.losat.outfmt || '6'),
+            program: useProteinBlastp ? 'blastp' : searchDrawing.losatProgram.value,
+            outfmt: String(searchDrawing.losat.outfmt || '6'),
             rawTsvEntryCount: losatTiming.rawTsvEntryCount,
             rawTsvBytes: losatTiming.rawTsvBytes,
             rawTsvLargestEntryBytes: losatTiming.rawTsvLargestEntryBytes,
@@ -5059,15 +5073,10 @@ export const createRunAnalysis = ({
           : [],
         keepTrackParts: true
       });
-      if (useCommittedComparison) {
-        if (typeof getCommittedCanonicalSession !== 'function') {
-          throw new Error('The preserved comparison owner is unavailable.');
-        }
-        // Load read the committed request to the current schema (`readStoredRenderRequest`).
-        inheritCommittedComparisonIntent({
-          candidate: canonical,
-          committed: getCommittedCanonicalSession()
-        });
+      // Inherit copies the drawing's own saved comparison, which its Imported comparison state holds: a drawing
+      // without a Result has no committed Session (OV-3001).
+      if (useSavedComparison) {
+        inheritSavedComparison({ candidate: canonical, source: drawing.importedComparisonIntent.source, searched: searchedSavedPipeline });
       }
       // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
       // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request
@@ -5260,7 +5269,7 @@ export const createRunAnalysis = ({
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso,
-          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true,
+          losatComparisons: mode.value === 'linear' && requestComparisonPlan?.hasLosatIntent === true,
           losatRuntimes: summarizeLosatRuntimes(
             pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
             pendingLosatCacheCommit?.cacheMap || losatCache.value
@@ -5495,7 +5504,7 @@ export const createRunAnalysis = ({
         committedRecordIdentities.set(canonical.resources, drawnRecordIdentities(canonical.renderRequest.records, identitySources));
       }
       settlePendingLiveSettings(drawing);
-      if (!useCommittedComparison && drawing.importedComparisonIntent) {
+      if (!useSavedComparison && drawing.importedComparisonIntent) {
         Object.assign(
           drawing.importedComparisonIntent,
           createImportedComparisonIntentState(),
@@ -5929,14 +5938,13 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (typeof setGeneratedArtifactIdentity === 'function') {
-        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, {
-          results: candidateCommit.results
-        });
+        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, { results: candidateCommit.results });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // A candidate of the committed request runs no conservation search: the request's pairs stay.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' });
       }
+      followCommittedComparison(drawing.importedComparisonIntent, canonical);
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;
       failedGeneratePreservedResult.value = false;
@@ -5979,6 +5987,10 @@ export const createRunAnalysis = ({
     // A target-record transform and a label reflow draw the committed Results
     // again, with the settings and edits of the drawing they belong to.
     const drawing = displayedArtifactDrawing();
+    // Undo and Redo give back what Inherit copies with the caller's checkpoint (`followCommittedComparison`).
+    const checkpointHooks = captureIntentCheckpoint && restoreIntentCheckpoint
+      ? withComparisonSourceCheckpoint(drawing.importedComparisonIntent, { captureIntentCheckpoint, restoreIntentCheckpoint })
+      : { captureIntentCheckpoint, restoreIntentCheckpoint };
     // A run started while a Generate runs would replace the Result that Generate adopts (OV-2446).
     const sessionBusy = state.sessionOperationAvailability?.('not-during-run');
     if (sessionBusy) return sessionBusy;
@@ -6019,8 +6031,7 @@ export const createRunAnalysis = ({
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(label, execute, {
             shouldCommit: (result) => result?.status === 'ok',
-            captureIntentCheckpoint,
-            restoreIntentCheckpoint,
+            ...checkpointHooks,
             onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
             restoreAppliedArtifact: async (beforeHandle) => {
               historyRecovery = 'restore-failed';

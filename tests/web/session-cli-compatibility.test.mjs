@@ -56,7 +56,7 @@ const {
 const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
-const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { inheritSavedComparison } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -257,7 +257,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
         sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup'
       })
     });
-    inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+    inheritSavedComparison({ candidate, source: state.activeDrawing().importedComparisonIntent.source });
     const records = candidate.renderRequest.records;
     const [comparison] = candidate.renderRequest.comparisons.filter(item => item.kind === 'nucleotideBlast');
     assert.deepEqual([records[comparison.queryRecordIndex].recordKey, records[comparison.subjectRecordIndex].recordKey],
@@ -402,7 +402,7 @@ save_session_document(Path(${JSON.stringify(file)}), request)
         plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
         losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
       }) });
-    inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+    inheritSavedComparison({ candidate, source: state.activeDrawing().importedComparisonIntent.source });
     assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
       [['generatedProteinComparison', 'pairwise', pairs]]);
   } finally {
@@ -702,7 +702,7 @@ const nextGenerate = async () => {
       plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
     }) : null });
-  if (inherit) inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+  if (inherit) inheritSavedComparison({ candidate, source: drawing.importedComparisonIntent.source });
   return candidate;
 };
 

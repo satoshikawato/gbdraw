@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { gunzipSync } = require('node:zlib');
+const { gunzipSync, gzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings, settleLive } = require('./helpers/app-lifecycle.cjs');
@@ -226,14 +226,21 @@ for (const entry of cases) {
   });
 }
 
+// The CLI arguments of one record (BGC0000708) drawn in two windows against BGC0000709, with a LOSATP comparison.
+const windowedLosatpArgs = (mode) => {
+  const bgc = id => path.join(root, `tests/test_inputs/${id}.gbk`);
+  return ['--gbk', bgc('BGC0000708'), bgc('BGC0000709'), '--region', 'BGC0000708:1-15000', '--region',
+    'BGC0000708:25000-40000', '--region', 'BGC0000709:1-30000', '--losat', 'losatp',
+    ...(mode ? ['--losatp_mode', mode] : []), '-f', 'svg'];
+};
+
 // OV-2995: a CLI Session that draws one record in two windows (`--region` twice) with a LOSAT comparison names
 // drawn units, one per window, in its comparisons. The Web offers Inherit for it (its record indexes cannot hold
-// window pairs), and Generate draws the saved figure with the saved unit pairs.
-test('Session CLI windowed record with LOSAT regenerates through Inherit', async ({ browser }, testInfo) => {
+// window pairs), and Generate draws the saved figure with the saved unit pairs. A Pairwise run stores the tables it
+// drew as Similarity groups does, so Inherit draws them without LOSAT (OV-3037).
+for (const mode of [null, 'pairwise']) test(`Session CLI windowed record with LOSAT${mode ? ` ${mode}` : ''} regenerates through Inherit`, async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
-  const bgc = id => path.join(root, `tests/test_inputs/${id}.gbk`);
-  const file = await cli('linear', ['--gbk', bgc('BGC0000708'), bgc('BGC0000709'), '--region', 'BGC0000708:1-15000',
-    '--region', 'BGC0000708:25000-40000', '--region', 'BGC0000709:1-30000', '--losat', 'losatp', '-f', 'svg'], testInfo, 'windowed');
+  const file = await cli('linear', windowedLosatpArgs(mode), testInfo, 'windowed');
   const saved = shownSavedDrawing(await readSession(file)).renderRequest;
   const unitPairs = request => request.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison')
     .map(comparison => [comparison.queryRecordIndex, comparison.subjectRecordIndex]);
@@ -243,6 +250,10 @@ test('Session CLI windowed record with LOSAT regenerates through Inherit', async
   try {
     const before = await snapshot(run.page);
     const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);
+    // The stored tables draw: no LOSAT search runs.
+    await run.page.evaluate(() => {
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => { throw new Error('LOSAT ran'); };
+    });
     const resolution = run.page.locator('[data-imported-comparison-resolution]');
     await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
     await expect(resolution).toContainText('INHERIT');
@@ -250,6 +261,76 @@ test('Session CLI windowed record with LOSAT regenerates through Inherit', async
     const after = await snapshot(run.page);
     expect(unitPairs(after.request)).toEqual([[0, 2], [1, 2]]);
     expect(after.request.records.map(record => record.windows)).toEqual(saved.records.map(record => record.windows));
+    expect(await run.page.evaluate(svgSemantics, after.selected)).toEqual(expectedSvg);
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
+// OV-3047: a CLI Session of whole records stores the LOSATP results it drew and no Web controls. It loads with the
+// LOSATP mode the CLI drew, and the first Generate draws the stored results, with no LOSAT run, as the CLI drew them.
+for (const mode of ['pairwise', 'collinear']) test(`Session CLI LOSATP ${mode} loads in its mode and draws its stored results`, async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const bgc = id => path.join(root, `tests/test_inputs/${id}.gbk`);
+  const file = await cli('linear', ['--gbk', bgc('BGC0000708'), bgc('BGC0000709'), '--losat', 'losatp',
+    '--losatp_mode', mode, '-f', 'svg'], testInfo, `whole-${mode}`);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const expectedSvg = await run.page.evaluate(svgSemantics, (await snapshot(run.page)).selected);
+    expect(await run.page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.mode)).toBe(mode);
+    await run.page.evaluate(() => {
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => { throw new Error('LOSAT ran'); };
+    });
+    await generateAndWaitForResult(run.page);
+    expect(await run.page.evaluate(svgSemantics, (await snapshot(run.page)).selected)).toEqual(expectedSvg);
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
+// OV-3003, OV-3037: a Session whose LOSATP Pairwise pipeline holds no table and no LOSAT cache: one that names the
+// window pairs (as Python's locate writes it), and one that names none (as the CLI wrote a Pairwise run before it
+// stored its tables). Inherit runs it in the browser, for the named pairs or else the records of adjacent rows, and
+// draws what the CLI drew from its own search.
+for (const [name, pairs] of [['names its pairs', [[0, 2], [1, 2]]], ['names no pairs', []]]) test(`Session with a windowed LOSATP pipeline that ${name} and no results runs it through Inherit`, async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const file = await cli('linear', windowedLosatpArgs('pairwise'), testInfo, 'windowed-pairwise');
+  const session = await readSession(file);
+  const drawing = shownSavedDrawing(session);
+  const tables = drawing.renderRequest.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison');
+  const [marker] = drawing.renderRequest.comparisons.filter(comparison => comparison.kind === 'generatedProteinComparison');
+  // The CLI searched each window of BGC0000708 against BGC0000709: units 0 and 1 against unit 2.
+  expect(tables.map(table => [table.queryRecordIndex, table.subjectRecordIndex])).toEqual([[0, 2], [1, 2]]);
+  expect(marker.mode).toBe('none');
+  tables.forEach(table => { delete session.resources[table.resourceId]; });
+  drawing.renderRequest.comparisons = [{
+    ...marker, mode: 'pairwise',
+    pairs: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ queryRecordIndex, subjectRecordIndex }))
+  }];
+  drawing.losatCache = { entries: [] };
+  drawing.losatDerivedCache = { entries: [] };
+  const unrendered = testInfo.outputPath('windowed-pipeline.gbdraw-session.json.gz');
+  await fs.writeFile(unrendered, gzipSync(JSON.stringify(session)));
+  const cliRun = await load(browser, file, { width: 1600, height: 1000 });
+  const expectedSvg = await cliRun.page.evaluate(svgSemantics, (await snapshot(cliRun.page)).selected);
+  await cliRun.context.close();
+  const run = await load(browser, unrendered, { width: 1600, height: 1000 });
+  try {
+    const resolution = run.page.locator('[data-imported-comparison-resolution]');
+    await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+    await expect(resolution).toContainText('INHERIT');
+    // This spec's pages route every request, so they are not cross-origin isolated: LOSAT runs serially.
+    await run.page.evaluate(async () => {
+      (await import('./js/state.js')).state.losatExecution.executionMode = 'serial';
+    });
+    await generateAndWaitForResult(run.page);
+    const after = await snapshot(run.page);
+    expect(after.request.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison')
+      .map(comparison => [comparison.queryRecordIndex, comparison.subjectRecordIndex])).toEqual([[0, 2], [1, 2]]);
     expect(await run.page.evaluate(svgSemantics, after.selected)).toEqual(expectedSvg);
     expect(run.external).toEqual([]);
     expect(run.errors).toEqual([]);

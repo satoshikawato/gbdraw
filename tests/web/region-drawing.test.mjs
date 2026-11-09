@@ -508,6 +508,52 @@ result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
     { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
   ]);
 });
+test('OV-3001: the drawing Find in other files creates runs its LOSAT window pairs at Generate, without a Result', async () => {
+  // PD-OI-123: "The figure is drawn by Generate." The created drawing's LOSAT pairs join drawn units (one per window),
+  // which the Comparison controls cannot hold, so its comparison is preserved; Create chose to run it (Inherit), and
+  // Inherit reads the comparison of the drawing's own request: the drawing has no Result and no committed Session.
+  const { createLinearComparisonEdge } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+  const intents = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+  const { getCommittedCanonicalSession } = await import('../../gbdraw/web/js/services/config.js');
+  const source = withNewDrawingDefaults(state, createDrawingState('find-source', 'linear'));
+  state.addDrawing(source, 'Find source', state.drawingTabs.value.length);
+  installShownDrawing(source.id);
+  source.inputType.value = 'gb';
+  const window = (start, end) => ({ start, end, reverseComplement: false, column: null });
+  source.linearSeqs.splice(0, Infinity,
+    createLinearSeq({ uid: 'a', gb: state.inputFiles.registerFile(genbankFile('a.gb', [recordA])),
+      windows: [window(101, 400), window(601, 900)] }),
+    createLinearSeq({ uid: 'b', gb: state.inputFiles.registerFile(genbankFile('b.gb', [recordA])) }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  source.losatProgram.value = 'blastp';
+  source.losat.blastp.mode = 'pairwise';
+  Object.assign(source.linearComparisonPlan, { mode: 'selected', defaultSource: 'losat',
+    edges: [createLinearComparisonEdge({ queryUid: 'a', subjectUid: 'b', source: 'losat' })] });
+  const planLinearUnits = async (payload) => ({ result: JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.linear_units import plan_linear_units
+result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
+`, payload)) });
+  const sent = await projectDraftRequest(state, source, { ...(await factsOf(source)), planLinearUnits });
+  const derived = { mode: 'linear', renderRequest: sent.envelope.renderRequest, returnedToAuto: [], notCarried: [],
+    resourceSources: Object.fromEntries(Object.keys(sent.envelope.resources).map((id) => [id, id])) };
+  const outcome = await drawingList.newDrawingFromRegion(source.id, { derived, sent }, 'search');
+  assert.equal(outcome.status, 'ok');
+  const made = state.drawingOf(outcome.drawingId);
+  assert.equal(getCommittedCanonicalSession(), null, 'the created drawing has no Result');
+  assert.equal(made.importedComparisonIntent.disposition, intents.IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
+  assert.equal(made.importedComparisonIntent.action, intents.IMPORTED_COMPARISON_ACTIONS.INHERIT, 'Create chose Inherit');
+  assert.deepEqual(intents.importedComparisonExecution({ intent: made.importedComparisonIntent, draftResolution: null }),
+    { ok: true, mode: 'inherit' });
+  // Generate's request after Inherit: the draft request without a comparison of its own, then the inherited one.
+  const candidate = structuredClone((await projectOf(made)).envelope);
+  candidate.renderRequest.comparisons = [];
+  intents.inheritSavedComparison({ candidate, source: made.importedComparisonIntent.source });
+  const inherited = candidate.renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.deepEqual(inherited.pairs, [
+    { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
+  ]);
+});
 // A Linear drawing with one card whose file holds two records: the card draws both.
 const recordB = genbankRecord('recB', 900, [[51, 300, 'B1'], [501, 800, 'B2']], 'linear');
 test('(a) regions of two records of one file are one Linear drawing bound to that one file', async () => {

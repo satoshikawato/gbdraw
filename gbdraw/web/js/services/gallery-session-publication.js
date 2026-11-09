@@ -27,7 +27,7 @@ import { readCircularSourceRecords } from './record-discovery.js';
 import { circularSourceInputs } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
-  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
+  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritSavedComparison
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
 const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
@@ -375,8 +375,8 @@ const rebuildIntent = async (session, owners) => {
   // as Generate's Inherit builds it (D-04, OV-268): Load projects the request
   // without it, the request draws no comparison of its own, and the committed
   // comparisons are inherited.
-  const inherit = classifyImportedComparisonIntent({ renderRequest, resources: session.resources })
-    .disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY;
+  const classification = classifyImportedComparisonIntent({ renderRequest, resources: session.resources });
+  const inherit = classification.disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY;
   const projection = owners.projectRequest({ renderRequest: inherit ? { ...renderRequest, comparisons: [] } : renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: draftConfig(session),
     initializeCliInputs: isCliWritten(session),
@@ -403,7 +403,7 @@ const rebuildIntent = async (session, owners) => {
     losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat?.blastp?.mode }) : null;
   const rebuilt = owners.buildRequest({ state, drawing, filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
     comparisonPlanSnapshot: plan });
-  if (inherit) inheritCommittedComparisonIntent({ candidate: rebuilt, committed: { renderRequest, resources: session.resources } });
+  if (inherit) inheritSavedComparison({ candidate: rebuilt, source: classification.source });
   // A batch request holds one output per record (OV-267); each keeps its committed policy.
   const committedOutputs = outputEntries(session.renderRequest.output), rebuiltOutputs = outputEntries(rebuilt.renderRequest.output);
   if (!committedOutputs || !rebuiltOutputs || committedOutputs.length !== rebuiltOutputs.length) throw new Error('Gallery publication cannot preserve committed output metadata policy.');

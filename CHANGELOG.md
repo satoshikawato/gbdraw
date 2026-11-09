@@ -234,6 +234,29 @@ write-up of a release.
   Its comparisons name the drawn windows, and the Web read them as records. It
   now offers **Inherit saved comparison**, and Generate draws the saved
   comparison of each window (OV-2995).
+- Fixed: in the Web, **Inherit saved comparison** on a drawing that has no
+  Result yet (for example one made by New drawing from a region or Find in
+  other files) stopped Generate with an unknown error.
+  Inherit now reads the saved comparison the drawing itself holds. The drawing
+  that **Find in other files** creates draws its LOSAT comparison of the
+  windows at the first Generate, with no choice in the Comparison panel, also
+  when a File has several windows of one record (OV-3001).
+- Fixed: in the Web, Generate with **Inherit saved comparison** stopped with
+  "Install LOSAT or NCBI BLAST+" when the saved LOSATP comparison named its
+  window pairs but held no results, as the drawing **Find in other files**
+  creates does. Generate now runs LOSAT in the browser for exactly the saved
+  pairs, with the saved settings, and reuses earlier search results as a draft
+  comparison does (OV-3003).
+- Fixed: a Session of `gbdraw linear --losat losatp --losatp_mode pairwise`
+  stored no comparison tables, so the Web stopped Generate with "Install LOSAT
+  or NCBI BLAST+" after **Inherit saved comparison**. The Session now stores
+  the tables the CLI drew, as Similarity groups does, and draws them without
+  LOSAT. A Pairwise Session written before still loads; Inherit runs LOSAT in
+  the browser for the records of adjacent rows (OV-3037).
+- Fixed: in the Web, a CLI Session of `--losatp_mode collinear` loaded with the
+  LOSATP mode Similarity groups, so its first Generate searched again and drew
+  Similarity groups. A CLI Session now loads with the mode the CLI drew, and
+  its first Generate draws the stored results without LOSAT (OV-3047).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per

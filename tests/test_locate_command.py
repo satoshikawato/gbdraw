@@ -509,14 +509,10 @@ def test_the_receipts_command_draws_the_plan_with_only_the_listed_window_pairs(
     assert (tmp_path / "FIG.svg").is_file()
     assert not [record.getMessage() for record in caplog.records if "no protein match" in record.getMessage()]
 
-    # The Session stores the four window pairs, and replays them.
+    # The Session stores the tables of the four window pairs, and replays them.
     assert _run([*command[:-1], "FIG2", "--save_session"], monkeypatch, "linear") == 0
     session = drawing_view(json.loads((tmp_path / "FIG2.gbdraw-session.json").read_text(encoding="utf-8")))
-    [protein] = [item for item in session["renderRequest"]["comparisons"] if item["kind"] == "generatedProteinComparison"]
-    assert protein["mode"] == "pairwise"
-    assert [(pair["queryRecordIndex"], pair["subjectRecordIndex"]) for pair in protein["pairs"]] == [
-        (0, 2), (1, 3), (2, 4), (3, 4)
-    ]
+    assert _stored_pairs(session) == [(0, 2), (1, 3), (2, 4), (3, 4)]
     assert _run(["--session", "FIG2.gbdraw-session.json", "-o", "FIG3"], monkeypatch, "linear") == 0
     assert (tmp_path / "FIG3.svg").read_bytes() == (tmp_path / "FIG2.svg").read_bytes()
 
@@ -576,6 +572,18 @@ def _write_genbank(path: Path, record: SeqRecord, record_id: str) -> Path:
     return path
 
 
+def _stored_pairs(session: dict) -> list[tuple[int, int]]:
+    """The unit pairs whose tables a Pairwise Session stores; its pipeline marker searches nothing (OV-3037)."""
+
+    comparisons = session["renderRequest"]["comparisons"]
+    [protein] = [item for item in comparisons if item["kind"] == "generatedProteinComparison"]
+    assert (protein["mode"], protein["pairs"]) == ("none", [])
+    return [
+        (item["queryRecordIndex"], item["subjectRecordIndex"])
+        for item in comparisons if item["kind"] == "precomputedProteinComparison"
+    ]
+
+
 @pytest.mark.parametrize("case", ["id-with-colon", "id-of-another-window"])
 def test_a_window_whose_record_id_would_not_read_back_is_named_by_its_number(
     case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -609,9 +617,8 @@ def test_a_window_whose_record_id_would_not_read_back_is_named_by_its_number(
     command = "--records_table P.records.tsv --comparisons_table P.comparisons.tsv --losat losatp -o FIG --save_session"
     assert _run(command.split(), monkeypatch, "linear") == 0
     session = drawing_view(json.loads((tmp_path / "FIG.gbdraw-session.json").read_text(encoding="utf-8")))
-    [protein] = [item for item in session["renderRequest"]["comparisons"] if item["kind"] == "generatedProteinComparison"]
     expected = [(0, 1), (0, 2)] + ([(1, 3), (2, 3)] if case == "id-of-another-window" else [])
-    assert [(pair["queryRecordIndex"], pair["subjectRecordIndex"]) for pair in protein["pairs"]] == expected
+    assert _stored_pairs(session) == expected
 
 
 def _interleaved(tmp_path: Path) -> dict[str, Path]:
