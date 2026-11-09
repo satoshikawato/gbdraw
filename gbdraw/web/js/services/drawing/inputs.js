@@ -14,7 +14,6 @@
 /** @import { SliceHandle } from './slice-handle.js' */
 import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
-import { circularSourceUid } from '../record-draw-selection.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
@@ -183,9 +182,20 @@ export const collapseEmptyLinearSeqList = (items) => {
 // or `uid` for a file of one record, as a Linear card's (D-08).
 let circularSourceUidCounter = 0;
 
+/**
+ * The uid of a Circular File card made in the Web, which keys its records:
+ * `circular-source-<random UUID>`, or `circular-source-<time>-<n>` where no
+ * random UUID is available.
+ */
+const CIRCULAR_SOURCE_UID_PREFIX = 'circular-source-';
+/** Matches each uid `generateCircularSourceUid` composes. */
+export const CIRCULAR_SOURCE_UID = Object.freeze(new RegExp(
+  `^${CIRCULAR_SOURCE_UID_PREFIX}(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9]+-[0-9]+)$`));
+
 const generateCircularSourceUid = () => {
   circularSourceUidCounter += 1;
-  return circularSourceUid(circularSourceUidCounter);
+  return `${CIRCULAR_SOURCE_UID_PREFIX}${globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID() : `${Date.now()}-${circularSourceUidCounter}`}`;
 };
 
 /**

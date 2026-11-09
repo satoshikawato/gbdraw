@@ -26,9 +26,10 @@ import {
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
 import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
+import { CIRCULAR_SOURCE_UID } from './drawing/inputs.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
-import { flatRecordSelectorNumber, isCircularSourceUid, isCliRecordKey } from './record-draw-selection.js';
+import { flatRecordSelectorNumber, isCliRecordKey } from './record-draw-selection.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
@@ -671,7 +672,7 @@ const cardRecordCounts = (cards, records) => {
  * `_card_uids`: the uid of each card (D-12), the one rule of a Session move's
  * cards and of the cards a Load makes of a request without bindings (OV-2904). The key base of the committed
  * request's records of each card's own file, when every card's file is read by
- * records of one key base of the CLI's form (`record-<n>`) or of a Web card's uid (`circularSourceUid`) and
+ * records of one key base of the CLI's form (`record-<n>`) or of a Web card's uid (`CIRCULAR_SOURCE_UID`) and
  * the bases differ; else `record-1` for one card and `source-<n>` for several, which no key of a
  * Session 50 has (a composite drawn as one concatenated source keyed its
  * records `record-<k>` over all of them). A Web card's uid keys only the records of a Session 51 (a Gallery
@@ -687,7 +688,7 @@ export const cardUids = (files, records) => {
     const keys = new Set(records.filter((record) => resourceId && requestRecordFile(record) === resourceId)
       .map((record) => String(mapping(record).recordKey || '').split(EXPANDED_RECORD_KEY_SEPARATOR)[0]));
     const base = keys.size === 1 ? [...keys][0] : '';
-    return isCliRecordKey(base) || isCircularSourceUid(base) ? base : '';
+    return isCliRecordKey(base) || CIRCULAR_SOURCE_UID.test(base) ? base : '';
   });
   if (bases.every(Boolean) && new Set(bases).size === bases.length) return bases;
   return files.map((_file, index) => (files.length === 1 ? 'record-1' : `source-${index + 1}`));

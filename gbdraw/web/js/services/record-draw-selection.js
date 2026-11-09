@@ -91,20 +91,6 @@ const CLI_RECORD_KEY = new RegExp(`^${CLI_RECORD_KEY_PREFIX}[1-9][0-9]*$`);
 export const isCliRecordKey = (key) => CLI_RECORD_KEY.test(key);
 
 /**
- * The uid of a Circular File card made in the Web, which keys its records:
- * `circular-source-<random UUID>`, or `circular-source-<time>-<n>` where no
- * random UUID is available.
- */
-const CIRCULAR_SOURCE_UID_PREFIX = 'circular-source-';
-/** @param {number} counter The card's number in this page, for the form without a random UUID. */
-export const circularSourceUid = (counter) => `${CIRCULAR_SOURCE_UID_PREFIX}${globalThis.crypto?.randomUUID
-  ? globalThis.crypto.randomUUID() : `${Date.now()}-${counter}`}`;
-const CIRCULAR_SOURCE_UID = new RegExp(
-  `^${CIRCULAR_SOURCE_UID_PREFIX}(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9]+-[0-9]+)$`);
-/** Whether a key is one `circularSourceUid` composes. @param {string} key */
-export const isCircularSourceUid = (key) => CIRCULAR_SOURCE_UID.test(key);
-
-/**
  * The record key of the `k`-th record (1-based) of a record input keyed
  * `baseKey` that expands to several records, as Python names it
  * (`resolve_record_inputs` in gbdraw/api/record_planning.py): `<baseKey>:<k>`;
