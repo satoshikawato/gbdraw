@@ -485,7 +485,7 @@ for (const width of [1280, 390]) {
     }
     // The badge is a word of its own, also for a screen reader.
     expect(rows.map((row) => row.text)).toEqual([
-      'dup.gbk: BGC0000708', 'dup.gbk: BGC0000708 OFF', 'b.gbk: BGC0000709',
+      'dup.gbk: BGC0000708 [#1]', 'dup.gbk: BGC0000708 [#2] OFF', 'b.gbk: BGC0000709',
       `${longName}: BGC0000709`, `${longName}: BGC0000708 OFF`
     ]);
     if (width === 390) {
