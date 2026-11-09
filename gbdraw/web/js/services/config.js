@@ -4606,17 +4606,21 @@ const deserializeCanonicalComparisons = (
 /**
  * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
  *   the request it built or projected, its resources and Web file bindings.
- * @param {{ adoptOwnedRequest?: boolean, drawing: DrawingState, conservationPairs: AdoptedConservationPairs }} options
+ * @param {{
+ *   adoptOwnedRequest?: boolean, drawing: DrawingState, conservationPairs: AdoptedConservationPairs, installRings?: boolean
+ * }} options
  *   `drawing`: the drawing Generate drew, whose comparison and ring files the request's resources replace;
  *   `conservationPairs`: the hash pairs of the request's conservation rings (`conservationHashPairs`), or
- *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay).
- *   Such a candidate (a rotation, an alignment, a placement) replaces only the committed Session: the draft's rings,
- *   their files, series and stack rows stay as the draft has them (R1 (c)); a Generate's own result installs them.
+ *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay);
+ *   `installRings`: the candidate is a Circular Generate that searched rings (`adoptCircularRingResult` decides it
+ *   from the rings that Generate searched). Only such a candidate installs the rings' tables, genomes and series into
+ *   the draft; any other (a Linear Generate, a Generate that searched no ring, a rotation, an alignment, a placement)
+ *   replaces only the committed Session and leaves the draft's rings as the draft has them (R1 (c)).
  * @returns {boolean} Whether it installed the Circular drawing's ring files (a Generate's LOSAT-cache result).
  */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
-  { adoptOwnedRequest = false, drawing, conservationPairs }
+  { adoptOwnedRequest = false, drawing, conservationPairs, installRings = false }
 ) => {
   const ownedCanonical = adoptOwnedRequest
     ? adoptRuntimeCanonicalSession(canonical)
@@ -4646,7 +4650,7 @@ export const adoptCanonicalRenderArtifacts = (
       projection.files.linearCanonicalComparisons,
       { adoptCanonicalPayloads: preserveAdoptedResources }
     );
-  } else if (conservationPairs !== 'committed' && projection.files.c_conservation_blasts_source === 'losat-cache') {
+  } else if (installRings && projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
     // Each adopted ring is the request's ring at its table's place. The rings' adoption transition gives each ring the
     // LOSAT genetic code Generate searched it with, which the request does not carry (`adoptCircularRingResult`), and

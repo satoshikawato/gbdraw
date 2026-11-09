@@ -539,8 +539,8 @@ const generateRings = async (drawing) => {
     state, drawing, filesData,
     resolvedCircularConservation: losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
   });
-  stackSources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-    adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS
+  stackSources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+    adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS, installRings
   }), { searched, builtFromDraft: true });
   assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
   return canonical;
@@ -551,8 +551,8 @@ const generateRings = async (drawing) => {
  * @param {Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0]} canonical
  */
 const rerenderCommitted = (drawing, canonical) => {
-  stackSources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-    adoptOwnedRequest: true, drawing, conservationPairs: 'committed'
+  stackSources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+    adoptOwnedRequest: true, drawing, conservationPairs: 'committed', installRings
   }), null);
 };
 const ringLooks = () => circular().circularConservation.series.map((entry) => [entry.label, entry.color]);

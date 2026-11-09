@@ -157,17 +157,17 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
  * key. Every other ring row of the draft goes, so no row lands on another ring.
  * @param {DrawingState} drawing
  * @param {readonly ConservationSourceDescriptor[]} draftSources The draft's ring sources before the adoption.
- * @param {SearchedRingAdoption | null} ringAdoption
+ * @param {SearchedRingAdoption} ringAdoption
  * @returns {RingKeyChanges}
  */
 const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption) => {
-  const searched = ringAdoption ? ringAdoption.searched : [];
+  const { searched, builtFromDraft } = ringAdoption;
   drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
     entry.losat_gencode = searched[index] ? searched[index].losat_gencode : entry.losat_gencode;
   });
   const { matched } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
   return new Map(draftSources.map((source) => {
-    const index = ringAdoption?.builtFromDraft ? searched.findIndex((ring) => ring.placeIndex === source.placeIndex) : -1;
+    const index = builtFromDraft ? searched.findIndex((ring) => ring.placeIndex === source.placeIndex) : -1;
     return /** @type {[string, string]} */ ([source.sourceKey, index >= 0 ? String(matched[index]?.sourceKey || '') : '']);
   }));
 };
@@ -344,16 +344,18 @@ export const createCircularConservationSources = ({
     reconcileCircularConservation(drawing, keepRingsAtPlaces(drawing, () => clearDerivedCircularConservationBlasts(drawing)));
   };
   /**
-   * The adoption of a candidate's request (`adopt`, which says whether it installed the rings' tables: only a
-   * Generate's LOSAT result does), then, when it did, the rings' reconcile with Generate's own rings
-   * (`adoptedRingKeyChanges`): each adopted ring takes its searched ring's genetic code and stack row. Only a Generate
-   * that searched rings (`ringAdoption`) reads the draft's rings; any other adoption (a Linear Generate, a candidate of
-   * the committed request) leaves them unread.
-   * @param {DrawingState} drawing @param {() => boolean} adopt @param {SearchedRingAdoption | null} ringAdoption
+   * The one gate of the rings' adoption. Only a Generate that searched rings of this drawing (`ringAdoption` with
+   * searched rings) asks `adopt` to install them (`adopt` says whether a LOSAT result did), then reconciles the rings
+   * with Generate's own rings (`adoptedRingKeyChanges`): each takes its searched ring's genetic code and stack row. Any
+   * other adoption (a Linear Generate, a Generate that searched no ring, a candidate of the committed request) leaves
+   * the draft's rings unread and as they are.
+   * @param {DrawingState} drawing @param {(installRings: boolean) => boolean} adopt
+   * @param {SearchedRingAdoption | null} ringAdoption
    */
   const adoptCircularRingResult = (drawing, adopt, ringAdoption) => {
-    const draftSources = ringAdoption ? conservationSourceDescriptors(circularRingSources(drawing)) : [];
-    if (adopt()) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption));
+    if (!ringAdoption || ringAdoption.searched.length === 0) return void adopt(false);
+    const draftSources = conservationSourceDescriptors(circularRingSources(drawing));
+    if (adopt(true)) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption));
   };
   // Session Load (`afterImport`): a Session whose Show Comparison Rings is not
   // a setting (`ringSettingStored` false: before Session 51, the drawings

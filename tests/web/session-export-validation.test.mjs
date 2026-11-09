@@ -163,7 +163,8 @@ failedAdoption.webFiles = {
   conservationBlastSource: 'losat-cache'
 };
 assert.throws(
-  () => adoptCanonicalRenderArtifacts(failedAdoption, { drawing: modeDrawing(state, 'circular') }),
+  // A Generate that searched rings installs them; a failed install leaves the draft's ring inputs.
+  () => adoptCanonicalRenderArtifacts(failedAdoption, { drawing: modeDrawing(state, 'circular'), installRings: true }),
   /Invalid character/
 );
 assert.equal(circularFiles.c_conservation_blasts, retainedCircularFiles.blasts);

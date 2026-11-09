@@ -4,6 +4,7 @@
 //   Session; the draft's ring inputs, series, label list and stack rows stay as each kind of ring edit left them.
 // - OV-3195: a Generate after a replay Load that lost ring 0's genome gives each ring the genetic code, label and row
 //   it searched it with, and the next Generate and Add Seq read the same rings.
+// - OV-3199: a Generate that searched no ring, after a replay Load that lost every ring's genome, leaves the rings.
 // - OV-3193: a ring label with a comma names no later ring.
 // - OV-3196: a ring edit clears only its drawing's LOSAT cache-info rows.
 // Generate runs as production builds it: the rings its ring keys read (`searchedRingSources`), the request's rings
@@ -108,9 +109,12 @@ const generate = async (drawing) => {
     state, drawing, filesData,
     resolvedCircularConservation: ringKeys.losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
   });
-  sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-    adoptOwnedRequest: true, drawing, conservationPairs: ringKeys.NO_CONSERVATION_PAIRS
-  }), { searched, builtFromDraft: before === JSON.stringify(ringKeys.searchedRingSources(drawing).map((ring) => ring.sourceKey)) });
+  // Like production, a Generate with no ring genome searches no ring and adopts no ring result.
+  const ringAdoption = searched.length === 0 ? null
+    : { searched, builtFromDraft: before === JSON.stringify(ringKeys.searchedRingSources(drawing).map((ring) => ring.sourceKey)) };
+  sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+    adoptOwnedRequest: true, drawing, conservationPairs: ringKeys.NO_CONSERVATION_PAIRS, installRings
+  }), ringAdoption);
   assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
   return canonical;
 };
@@ -120,8 +124,8 @@ const generate = async (drawing) => {
  * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
  * @param {Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0]} canonical
  */
-const rerender = (drawing, canonical) => sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(
-  canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }
+const rerender = (drawing, canonical) => sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(
+  canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed', installRings }
 ), null);
 
 /** Everything of the draft's rings a rerender of the committed request must leave as it is. */
@@ -237,6 +241,32 @@ test('a Generate after a replay Load that lost ring 0\'s genome gives each ring 
   const added = await rings();
   assert.deepEqual(added.drawn.slice(0, 2), afterGenerate.drawn, 'Add Seq keeps the rings before it');
   assert.deepEqual(added.searched, [...afterGenerate.searched, ['g_TTTTT', 'TTTTT', 1]], 'then Add Seq');
+  assert.deepEqual(ringIdentityDefects(drawing), []);
+  clearRings(drawing);
+});
+
+test('a Generate after a replay Load that lost every ring\'s genome leaves each ring\'s code, label and row (#1777 review 8, OV-3199)', async () => {
+  let drawing = await threeRings(false);
+  await generate(drawing);
+  const result = await exportSession('every ring lost', { askChoice: async () => 'download' });
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  saved.drawings.find((candidate) => candidate.mode === 'circular').webFiles.bindings.c_conservation_fastas
+    .forEach((list, place) => list.forEach((file, index) => { file.resourceId = `missing-${place}-${index}`; }));
+  const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'lost.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok');
+  drawing = circular();
+  sources.reconcileLoadedCircularConservation(drawing, true);
+  assert.deepEqual(ringKeys.searchedRingSources(drawing), [], 'the Load lost every ring\'s genome');
+  const view = () => ({
+    series: drawing.circularConservation.series.map((entry) => [entry.label, entry.losat_gencode]),
+    rows: ringRows(drawing).map((slot) => [slot.id, slot.width, slot.params.label])
+  });
+  const loadedRings = view();
+  assert.deepEqual(loadedRings.series, [['GA', 11], ['GB', 4], ['GC', 2]]);
+  assert.deepEqual(loadedRings.rows.map(([, width]) => width), ['10px', '11px', '12px']);
+  await generate(drawing);
+  assert.deepEqual(view(), loadedRings, 'a Generate that searched no ring');
   assert.deepEqual(ringIdentityDefects(drawing), []);
   clearRings(drawing);
 });

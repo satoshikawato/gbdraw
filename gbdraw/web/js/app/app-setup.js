@@ -1790,12 +1790,12 @@ export const createAppSetup = () => {
     moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
-    // A Generate that adopts a Circular LOSAT result reconciles its drawing's
-    // rings with the rings it searched (`adoptCircularRingResult`); a Linear
-    // Generate, a Circular one without such a result and a candidate of the
-    // committed request leave them.
+    // Only a Generate that searched its drawing's rings installs them, and the
+    // rings' reconcile pairs them with the rings it searched
+    // (`adoptCircularRingResult`); a Linear Generate, a Generate that searched no
+    // ring and a candidate of the committed request leave them.
     adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
-      options.drawing, () => adoptCanonicalRenderArtifacts(canonical, options), ringAdoption
+      options.drawing, (installRings) => adoptCanonicalRenderArtifacts(canonical, { ...options, installRings }), ringAdoption
     ),
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,

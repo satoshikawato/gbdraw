@@ -1030,7 +1030,7 @@ ORIGIN
       conservationBlastSource: 'losat-cache',
       conservationLosatFastaSources: [null, 'fasta']
     }
-  }, { drawing: modeDrawing(state, 'circular') });
+  }, { drawing: modeDrawing(state, 'circular'), conservationPairs: new Set(), installRings: true });
 
   assert.equal(state.activeDrawing().circularConservation.enabled, false);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts_source, 'losat-cache');
@@ -1101,8 +1101,8 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
       resolvedCircularConservation: [{ sourceIndex: 0, name: 'comparison.tsv', text: '', label: 'comparison',
         color: '#4e79a7', fastas: filesData.c_conservation_fastas[0] }]
     });
-    // A Generate's adoption names the pairs it searched; a candidate of the committed request (`'committed'`) installs no rings.
-    assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: new Set() }), true);
+    // A Generate that searched the rings installs them (`installRings`, which the rings' adoption transition decides).
+    assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: new Set(), installRings: true }), true);
     state.inputFiles.collectIds(drawing.files, fileIds);
     return canonical;
   };

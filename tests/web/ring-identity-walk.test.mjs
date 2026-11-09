@@ -309,7 +309,8 @@ const runWalk = async (seed, steps) => {
       }
     },
     'generate': {
-      weight: 3, can: () => model.some((ring) => !ring.lost),
+      // Also when a Load lost every ring's genome: such a Generate searches no ring (OV-3199).
+      weight: 3, can: () => model.length > 0,
       run: async () => {
         // As production runs it: the rings its ring keys read, their tables, the request's rings, the request builder,
         // and the adoption with the rings it searched.
@@ -323,12 +324,21 @@ const runWalk = async (seed, steps) => {
           state, drawing, filesData,
           resolvedCircularConservation: losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
         });
-        sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-          adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS
-        }), { searched, builtFromDraft: true });
-        assert.ok(replayed(), 'the Generate adopted its LOSAT-cache result');
-        // The rings it did not search (a genome a Load lost) go: the Result draws the rings it searched.
-        model = model.filter((ring) => !ring.lost);
+        // Production searches only when a ring has genome files (run-analysis.js), and hands the adoption the rings it
+        // searched; a Generate that searched none hands none, and the draft's rings stay as they are (OV-3199).
+        const ringAdoption = searched.length > 0 ? { searched, builtFromDraft: true } : null;
+        const before = draftRings(drawing);
+        sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+          adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS, installRings
+        }), ringAdoption);
+        if (ringAdoption) {
+          assert.ok(replayed(), 'the Generate adopted its LOSAT-cache result');
+          // The rings it did not search (a genome a Load lost) go: the Result draws the rings it searched.
+          model = model.filter((ring) => !ring.lost);
+        } else {
+          assert.deepEqual(draftRings(drawing), before, `the draft's rings after a Generate that searched none (seed ${seed}: ${trail.join(' > ')})`);
+          kinds.set('a Generate that searched no ring', (kinds.get('a Generate that searched no ring') || 0) + 1);
+        }
         committed = canonical;
       }
     },
@@ -338,8 +348,8 @@ const runWalk = async (seed, steps) => {
       weight: 3, can: () => committed !== null,
       run: () => {
         const before = draftRings(drawing);
-        sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(
-          /** @type {NonNullable<typeof committed>} */ (committed), { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }
+        sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(
+          /** @type {NonNullable<typeof committed>} */ (committed), { adoptOwnedRequest: true, drawing, conservationPairs: 'committed', installRings }
         ), null);
         assert.deepEqual(draftRings(drawing), before, `the draft's rings after a rerender (seed ${seed}: ${trail.join(' > ')})`);
       }
@@ -370,18 +380,23 @@ const runWalk = async (seed, steps) => {
         const result = await exportSession('ring walk', { askChoice: async () => 'download' });
         const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
         const withGenome = model.map((ring, index) => (ring.lost ? -1 : index)).filter((index) => index >= 0);
-        const lost = withGenome.length > 0 && random() < 0.34 ? withGenome[pick(withGenome.length)] : -1;
-        if (lost >= 0) {
+        // In a replay, half the Loads that lose a genome loses every ring's genome, so the next Generate
+        // searches no ring (OV-3199).
+        const roll = withGenome.length > 0 ? random() : 1;
+        const lostRings = roll < 0.17 && replayed() ? withGenome : roll < 0.34 ? [withGenome[pick(withGenome.length)]] : [];
+        const savedDrawing = saved.drawings.find((candidate) => candidate.mode === 'circular');
+        for (const lost of lostRings) {
           const place = drawing.circularConservation.series[lost].sourceIndex;
-          const savedDrawing = saved.drawings.find((candidate) => candidate.mode === 'circular');
           savedDrawing.webFiles.bindings.c_conservation_fastas[place].forEach((file, index) => { file.resourceId = `missing-${place}-${index}`; });
+          if (replayed()) model[lost].lost = true;
+        }
+        if (lostRings.length > 0) {
           if (replayed()) {
-            model[lost].lost = true;
             kinds.set('a replay Load that lost a genome', (kinds.get('a replay Load that lost a genome') || 0) + 1);
           } else {
-            model = model.filter((_, ring) => ring !== lost);
+            model = model.filter((_, ring) => !lostRings.includes(ring));
           }
-          trail[trail.length - 1] += ` (lost ring ${lost})`;
+          trail[trail.length - 1] += ` (lost ring ${lostRings.join(', ')})`;
           kinds.set('a Load that lost a genome', (kinds.get('a Load that lost a genome') || 0) + 1);
         }
         const before = drawing;
@@ -433,7 +448,8 @@ test('each ring keeps one identity, its label, colour, genetic code and stack ro
   console.log(`ring walk steps: ${JSON.stringify(Object.fromEntries(drawnKinds))}`);
   for (const kind of ['add seq', 'remove series', 'row add file', 'row remove file', 'move series', 'edit label and colour',
     'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed request', 'replace a replayed table', 'source radio round trip',
-    'save and load', 'a Load that lost a genome', 'a replay Load that lost a genome', 'stack off and on']) {
+    'save and load', 'a Load that lost a genome', 'a replay Load that lost a genome', 'a Generate that searched no ring',
+    'stack off and on']) {
     assert.ok((drawnKinds.get(kind) || 0) >= 3, `the walk draws ${kind} (${drawnKinds.get(kind) || 0} times)`);
   }
 });
