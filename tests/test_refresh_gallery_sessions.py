@@ -77,8 +77,8 @@ BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 12
-    assert len(_public_gallery_session_files()) == 11
+    assert len(paths) == 13
+    assert len(_public_gallery_session_files()) == 12
     assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
@@ -559,7 +559,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
         )
     )
 
-    assert len(paths) == 12
+    assert len(paths) == 13
     for path in paths:
         session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path

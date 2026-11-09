@@ -4509,6 +4509,41 @@ def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
     ]
 
 
+def test_a_cli_resave_keeps_a_circular_drawing_without_web_file_bindings(tmp_path: Path) -> None:
+    # OV-3011: a Gallery publication writes a Circular drawing without
+    # `webFiles.bindings`; its comparison FASTAs are the resource IDs in
+    # `conservationLosatFastaSources`. The CLI writer made bindings from those
+    # IDs alone, with no Circular File cards, and refused its own Session
+    # ("requires circularSources"). The re-save keeps the drawing as it was.
+    from gbdraw.session import upgrade_session_document
+    from gbdraw.session_resources import drawing_resource_ids
+
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = upgrade_session_document(source, temporary_directory=tmp_path).document.to_dict()
+    drawing = next(drawing for drawing in session["drawings"] if drawing["mode"] == "circular")
+    web_files = drawing["webFiles"]
+    del web_files["bindings"]
+    fasta_ids = web_files["conservationLosatFastaSources"]
+    assert fasta_ids
+    # The publication keeps only the resources that its drawings name.
+    named = set().union(*(drawing_resource_ids(each) for each in session["drawings"]))
+    session["resources"] = {key: value for key, value in session["resources"].items() if key in named}
+    edited = tmp_path / "published.gbdraw-session.json"
+    edited.write_text(json.dumps(session), encoding="utf-8")
+
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
+                   "--format", "svg", "--session_output", str(sidecar)])
+
+    saved = load_session(sidecar)
+    saved_drawing = next(saved_drawing for saved_drawing in saved["drawings"] if saved_drawing["id"] == drawing["id"])
+    assert "bindings" not in saved_drawing["webFiles"]
+    assert saved_drawing["webFiles"]["conservationLosatFastaSources"] == fasta_ids
+    assert [saved["resources"][resource_id]["data"] for resource_id in fasta_ids] == [
+        session["resources"][resource_id]["data"] for resource_id in fasta_ids
+    ]
+
+
 def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does() -> None:
     # OV-1013: a hidden (`display: false`) raw entry is cache only. The Web Load
     # gives it no Raw LOSAT row (config.js applyLosatCache) and its Save writes

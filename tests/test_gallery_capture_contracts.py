@@ -161,6 +161,16 @@ LAYOUT_RESULT_CAPTURES = {
         },
         "visible_text": {"AP027133.1", "DRR394922 mean depth"},
     },
+    "ecoli_o157_sakai_rings": {
+        "src": "./media/ecoli_o157_sakai_rings/manual-06-03-final-preview.webp",
+        "selector": "svg[data-capture-rings-preview='true']",
+        "viewport": {"width": 1400, "height": 1400},
+        "state": {
+            "mode": "circular",
+            "adv.circular_track_slots_enabled": True,
+        },
+        "visible_text": {"O157:H7 EDL933", "K-12 MG1655", "CFT073 (UPEC)", "Stx2 phage", "LEE island"},
+    },
     "HmmtDNA_ATskew": {
         "src": "./media/HmmtDNA_ATskew/manual-09-02-atskew-preview.webp",
         "selector": "svg[data-capture-hmmt-preview='true']",
@@ -504,6 +514,18 @@ PROGRESSIVE_TUTORIALS = {
             "role=checkbox[name='Show Depth'] >> visible=true",
             "input[aria-label='Depth Window'] >> visible=true",
             "input[aria-label='Depth large tick']",
+        },
+    },
+    "ecoli_o157_sakai_rings": {
+        "generate_steps": [3, 4, 5, 6],
+        "selector": "svg[data-capture-rings-preview='true']",
+        # Reset keeps the comparison files with Show Comparison Rings off and the ring names back to
+        # the accessions; it removes the imported region sets and turns the custom stack off.
+        "required_selectors": {
+            "role=checkbox[name='Show Comparison Rings'] >> visible=true",
+            "input[aria-label='Comparison ring label 1']",
+            "button:has-text('Import TSV')",
+            "[aria-label='Circular track slot annotations Extend to']",
         },
     },
     "tobacco-chloroplast": {

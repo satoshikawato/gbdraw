@@ -81,23 +81,16 @@ def _project_web_file_inventory(
     resources = session.get("resources")
     if not isinstance(web_files, Mapping) or not isinstance(resources, Mapping):
         return None
-    bindings_value = web_files.get("bindings")
-    has_current_bindings = (
-        isinstance(bindings_value, Mapping) and bindings_value.get("schema") in (1, 2)
-    )
-    # has_current_bindings is true only when bindings_value is a Mapping.
-    bindings = cast(
-        "Mapping[str, Any]", bindings_value if has_current_bindings else {}
-    )
+    bindings = web_files.get("bindings")
+    # A drawing without bindings (a Gallery publication) is saved as it is:
+    # its conservation resource IDs name the resources the writer keeps
+    # (OV-3011; bindings made from those IDs alone had no Circular File cards).
+    if not isinstance(bindings, Mapping) or bindings.get("schema") not in (1, 2):
+        return None
     direct_source_fields = {
         "conservationLosatFastaSources": "c_conservation_fastas",
         "conservationSequenceSources": "c_conservation_sequence_sources",
     }
-    has_direct_sources = any(
-        isinstance(web_files.get(field), list) for field in direct_source_fields
-    )
-    if not has_current_bindings and not has_direct_sources:
-        return None
 
     original_names_value = web_files.get("resourceOriginalNames")
     original_names = (

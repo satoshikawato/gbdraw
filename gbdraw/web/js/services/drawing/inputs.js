@@ -14,6 +14,7 @@
 /** @import { SliceHandle } from './slice-handle.js' */
 import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
+import { circularSourceUid } from '../record-draw-selection.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
@@ -184,10 +185,7 @@ let circularSourceUidCounter = 0;
 
 const generateCircularSourceUid = () => {
   circularSourceUidCounter += 1;
-  if (globalThis.crypto?.randomUUID) {
-    return `circular-source-${globalThis.crypto.randomUUID()}`;
-  }
-  return `circular-source-${Date.now()}-${circularSourceUidCounter}`;
+  return circularSourceUid(circularSourceUidCounter);
 };
 
 /**

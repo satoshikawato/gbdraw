@@ -144,6 +144,25 @@ HEPATOPLASMA_SCABRUM_DEPTH_COMMAND = (
     "-l left --separate_strands"
 )
 
+ECOLI_O157_SAKAI_RINGS_COMMAND = (
+    "gbdraw circular --gbk NC_002695.2.gbk -o ecoli_o157_sakai_rings -f interactive_svg -l left --separate_strands "
+    "--losat losatn --conservation_sequence NZ_CP008957.1.fna NC_000913.3.fna NC_004431.1.fna "
+    "--conservation_labels 'O157:H7 EDL933' 'K-12 MG1655' 'CFT073 (UPEC)' "
+    "--conservation_colors '#6e91b7' '#f4a251' '#77b26f' "
+    "--annotation_table ecoli_o157_sakai_islands.tsv "
+    "--circular_track_axis_index 1 "
+    "--circular_track_slot 'islands:annotations@set_id=islands,side=outside' "
+    "--circular_track_slot 'features:features@lane_direction=inside' "
+    "--circular_track_slot 'conservation_1:sequence_conservation@track_index=1,source_index=0' "
+    "--circular_track_slot 'conservation_2:sequence_conservation@track_index=2,source_index=1' "
+    "--circular_track_slot 'conservation_3:sequence_conservation@track_index=3,source_index=2' "
+    "--circular_track_slot 'ticks:ticks@tick_label_layout=label_in_tick_out' "
+    "--circular_track_slot 'gc_content:dinucleotide_content' "
+    "--circular_track_slot 'gc_skew:dinucleotide_skew' "
+    "--circular_track_slot 'islands_tint:annotations@set_id=islands_tint,side=overlay,anchor_slot=features,"
+    "to_slot=conservation_3,layer=foreground,z=1'"
+)
+
 HMMTDNA_BASIC_COMMAND = (
     "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular "
     "-f interactive_svg --separate_strands --track_type middle --labels out "
@@ -353,6 +372,35 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=HEPATOPLASMA_SCABRUM_DEPTH_COMMAND,
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="ecoli_o157_sakai_rings",
+        title="Strain-specific islands in whole-genome comparison rings (<i>Escherichia coli</i> O157:H7 Sakai)",
+        tags=("Circular", "Comparison rings", "Region annotations", "LOSAT", "Interactive SVG"),
+        description=(
+            "The 5,498,578-bp chromosome of <i>Escherichia coli</i> O157:H7 Sakai with three nucleotide identity "
+            "rings from one LOSATN search in the browser: O157:H7 EDL933, K-12 MG1655, and the uropathogenic "
+            "strain CFT073. EDL933 covers almost the whole chromosome, while K-12 and CFT073 leave many gaps, "
+            "several at the same places. Six of them are tinted across the rings and named: the Stx1 and Stx2 "
+            "phages, which carry the Shiga toxin genes, the tellurite resistance island, the LEE island, a phage "
+            "with effector genes, and a prophage that EDL933 also lacks."
+        ),
+        workflow="Add comparison rings and mark islands",
+        input_summary="1 GenBank + 3 FASTA + 1 region TSV",
+        display_order=47,
+        command_kind="runnable",
+        command_note=(
+            "Download the four genomes and ecoli_o157_sakai_islands.tsv from Files, then run this command in "
+            "the same directory."
+        ),
+        command=ECOLI_O157_SAKAI_RINGS_COMMAND,
+        # The feature popups of a 5.5-Mbp chromosome hold about 37 MB of metadata.
+        compressed_metadata=True,
+        compressed_session=True,
+        source_note=(
+            "The interactive SVG with gzip-compressed metadata and the complete gzip-compressed "
+            "Session JSON are stored with the gallery assets."
+        ),
     ),
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",

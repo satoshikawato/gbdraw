@@ -74,6 +74,7 @@ GALLERY_SESSION_FILES = [
     "HmmtDNA_ATskew.gbdraw-session.json",
     "tobacco-chloroplast.gbdraw-session.json",
     "hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
+    "ecoli_o157_sakai_rings.gbdraw-session.json.gz",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
@@ -93,6 +94,7 @@ GALLERY_EDITOR_STATE_SESSION_FILES = {
     "HmmtDNA_ATskew.gbdraw-session.json",
 }
 GALLERY_LOSAT_CACHE_SESSION_FILES = {
+    "ecoli_o157_sakai_rings.gbdraw-session.json.gz",
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
@@ -676,6 +678,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "HmmtDNA_ATskew",
         "tobacco-chloroplast",
         "hepatoplasma_scabrum_depth",
+        "ecoli_o157_sakai_rings",
         "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
         "vibrio-harveyi-group-collinear",
@@ -690,6 +693,13 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "HmmtDNA_ATskew": ["Circular", "Interactive SVG"],
         "tobacco-chloroplast": ["Circular", "Interactive SVG"],
         "hepatoplasma_scabrum_depth": ["Circular", "Read depth", "Interactive SVG"],
+        "ecoli_o157_sakai_rings": [
+            "Circular",
+            "Comparison rings",
+            "Region annotations",
+            "LOSAT",
+            "Interactive SVG",
+        ],
         "Vnig_TUMSAT-TG-2018": ["Circular", "Multi-record", "Interactive SVG"],
         "hepatoplasmataceae_collinear": [
             "Linear",
@@ -734,6 +744,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "Strand composition of the human mitochondrial genome (AT skew)",
         "Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)",
         "Read depth around a bacterial genome (<i>Ca.</i> Hepatoplasma scabrum)",
+        "Strain-specific islands in whole-genome comparison rings "
+        "(<i>Escherichia coli</i> O157:H7 Sakai)",
         "Every replicon of a multi-replicon bacterial genome on one canvas "
         "(<i>Vibrio nigripulchritudo</i>)",
         "Shared gene order between neighboring genomes (Hepatoplasmataceae)",
@@ -881,6 +893,7 @@ def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
         "hepatoplasma_scabrum_depth": {"./files/AP027133.DRR394922.depth-1kb.tsv"},
+        "ecoli_o157_sakai_rings": {"./files/ecoli_o157_sakai_islands.tsv"},
         "tobacco-chloroplast": {
             "./files/qualifier_priority.tsv",
             "./files/nicotiana-tabacum-regions-span.tsv",

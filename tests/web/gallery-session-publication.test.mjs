@@ -63,8 +63,8 @@ const examples = JSON.parse(
 );
 const sessionNames = examples.map((example) => String(example.session).split('/').pop());
 
-assert.equal(sessionNames.length, 11);
-assert.equal(new Set(sessionNames).size, 11);
+assert.equal(sessionNames.length, 12);
+assert.equal(new Set(sessionNames).size, 12);
 
 // A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 51's one
 // drawn drawing as its one-drawing view, an older Session as it is.
@@ -601,6 +601,21 @@ assert.rejects(
       assert.equal(tableText(session, colors[field] || colors[alias]), tableText(saved, committed[field] || committed[alias]), `${name} ${field}`);
     }
   }
+}
+
+// A Session the Web app saves binds its Circular input as File cards. A card's uid keys the request's records and
+// names them in the slice's record rows (Record Order). The published Session holds no bindings, so its Load makes
+// the cards from the request: they keep the uids the records are keyed by, and the published Session rebuilds its
+// own request. Before, Load named the card `record-1` and the publication refused the Session (OV-3022).
+{
+  const saved = await loadSession('ecoli_o157_sakai_rings.gbdraw-session.json.gz');
+  const [card] = saved.webFiles.bindings?.circularSources ?? [{ uid: saved.renderRequest.records[0].recordKey }];
+  assert.match(card.uid, /^circular-source-/);
+  assert.deepEqual(saved.modes.circular.config.adv.multi_record_positions, [{ selector: card.uid, row: 1 }]);
+  const { session } = await prepareGallerySessionForPublication(saved);
+  assert.equal(Object.hasOwn(session.webFiles, 'bindings'), false);
+  const { projection } = await validateGalleryPublicationReadiness(session);
+  assert.deepEqual(projection.files.circularSources.map(({ uid }) => uid), [card.uid]);
 }
 
 // A Session the Web app saves keeps each File card's own state in
