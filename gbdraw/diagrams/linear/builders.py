@@ -238,15 +238,13 @@ def add_feature_density_heatmap_group(
     *,
     track_offset_y: float,
     group_key: GroupKey,
-    slot_id: str | None,
-    slot_renderer: str | None,
+    slot_id: str,
+    slot_renderer: str,
 ) -> Drawing:
     """Adds a feature density heatmap band to the linear canvas."""
     heatmap_group = place_content(canvas, GroupContent.of(heatmap.get_group()), group_key)
-    if slot_id:
-        heatmap_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        heatmap_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    heatmap_group.attribs["data-gbdraw-slot-id"] = slot_id
+    heatmap_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(heatmap_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(heatmap_group)
     return canvas

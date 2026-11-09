@@ -2575,7 +2575,6 @@ def _draw_circular_feature_density_slot(
     canvas_config: CircularCanvasConfigurator,
     render_context: CircularRecordRenderContext,
     norm_factor_override: float,
-    use_slot_group_id: bool,
     record_key: str,
     record_transform: RecordDisplayTransform | None,
 ) -> Drawing:
@@ -2585,14 +2584,9 @@ def _draw_circular_feature_density_slot(
     if layer is None:
         return canvas
     renderer = "feature_density"
-    slot_group_id = (
-        track_slot_svg_id(resolved_slot.id, renderer=renderer, slot_index=int(resolved_slot.slot_index))
-        if use_slot_group_id
-        else None
-    )
+    slot_group_id = track_slot_svg_id(resolved_slot.id, renderer=renderer)
     slot_key = GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id))
-    slot_id = str(resolved_slot.id) if use_slot_group_id else None
-    slot_renderer = renderer if use_slot_group_id else None
+    slot_id = str(resolved_slot.id)
     if layer.track.style == "histogram":
         frame, histogram_config = feature_density_histogram_source(layer, render_context.profile)
         return add_depth_group_on_canvas(
@@ -2607,7 +2601,7 @@ def _draw_circular_feature_density_slot(
             group_id=str(resolved_slot.id),
             slot_group_id=slot_group_id,
             slot_id=slot_id,
-            slot_renderer=slot_renderer,
+            slot_renderer=renderer,
             record_transform=record_transform,
         )
     heatmap = FeatureDensityHeatmapGroup(
@@ -2616,11 +2610,11 @@ def _draw_circular_feature_density_slot(
         float(resolved_slot.draw_inner_radius_px),
         float(resolved_slot.draw_outer_radius_px),
         feature_density_color(layer, render_context.profile),
-        group_id=slot_group_id or str(resolved_slot.id),
+        group_id=slot_group_id,
         record_transform=record_transform,
     )
     return add_feature_density_heatmap_on_canvas(
-        canvas, heatmap, canvas_config, group_key=slot_key, slot_id=slot_id, slot_renderer=slot_renderer
+        canvas, heatmap, canvas_config, group_key=slot_key, slot_id=slot_id, slot_renderer=renderer
     )
 
 
@@ -2782,7 +2776,7 @@ def _draw_resolved_circular_slot(
         return _draw_circular_feature_density_slot(
             canvas, resolved_slot, feature_density, gb_record=gb_record, canvas_config=canvas_config,
             render_context=render_context, norm_factor_override=norm_factor_override,
-            use_slot_group_id=use_slot_group_id, record_key=record_key, record_transform=record_transform,
+            record_key=record_key, record_transform=record_transform,
         )
 
     if renderer == "sequence_conservation":
@@ -3882,7 +3876,6 @@ def add_record_on_circular_canvas(
         slot for slot in resolved_track_slots
         if str(slot.renderer) != "feature_labels"
     ]
-    several_feature_slots = sum(str(slot.renderer) == "features" for slot in drawable_slots) > 1
     for resolved_slot in sorted(drawable_slots, key=lambda item: (int(item.z), int(item.slot_index))):
         canvas = _draw_resolved_circular_slot(
             canvas,
@@ -3906,7 +3899,7 @@ def add_record_on_circular_canvas(
             precalculated_labels=precalculated_labels,
             use_slot_tick_options=user_slot_mode,
             use_feature_anchor_override=user_slot_mode,
-            several_feature_slots=several_feature_slots,
+            several_feature_slots=sum(str(slot.renderer) == "features" for slot in drawable_slots) > 1,
             annotation_track_layouts=annotation_track_layouts,
             annotation_labels=annotation_labels,
             annotation_record_index=planned.annotation_record_index,

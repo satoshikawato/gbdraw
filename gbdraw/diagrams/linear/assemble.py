@@ -3975,12 +3975,9 @@ def _draw_linear_feature_density_slot(
     if layer is None:
         return canvas
     profile = drawing.canvas_config.profile
-    group_id = make_linear_dom_id(
-        slot.slot.id, record_index=drawing.record_index, record_count=drawing.record_count
-    )
     group_key = GroupKey(drawing.record_key, GroupKind.DEPTH, str(slot.slot.id))
-    slot_id = str(slot.slot.id) if slot.group_id is not None else None
-    slot_renderer = str(slot.slot.renderer) if slot.group_id is not None else None
+    slot_id = str(slot.slot.id)
+    slot_renderer = str(slot.slot.renderer)
     if layer.track.style == "histogram":
         frame, histogram_config = feature_density_histogram_source(layer, profile)
         return add_depth_group(
@@ -3991,9 +3988,7 @@ def _draw_linear_feature_density_slot(
             drawing.canvas_config,
             histogram_config,
             depth_df=frame,
-            group_id=group_id,
-            axis_group_id=f"{group_id}_axis",
-            dom_group_id=slot.group_id,
+            group_id=slot.group_id,
             slot_id=slot_id,
             slot_renderer=slot_renderer,
             track_height=slot.slot.height,
@@ -4009,7 +4004,7 @@ def _draw_linear_feature_density_slot(
         float(slot.slot.height),
         feature_density_color(layer, profile),
         sequence_width=drawing.placement.sequence_width,
-        group_id=slot.group_id or group_id,
+        group_id=slot.group_id,
         record_transform=drawing.record_transform,
         row_shifts=slot.row_shifts,
     )

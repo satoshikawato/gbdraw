@@ -192,8 +192,8 @@ def add_feature_density_heatmap_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     *,
     group_key: GroupKey,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    slot_id: str,
+    slot_renderer: str,
 ) -> Drawing:
     """Adds a feature density heatmap band (built between two radii) to the circular canvas."""
 
