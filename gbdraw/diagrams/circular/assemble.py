@@ -174,6 +174,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_lanes_meeting,
     circular_annotation_mark_past_lane,
     circular_annotation_labels,
+    circular_annotation_labels_across_centre,
     circular_annotation_track_content,
     circular_annotation_track_ink,
 )
@@ -527,6 +528,15 @@ class _CircularAnnotationPacking:
                     clearance_px=self.label_clearance_px,
                 )
                 if drawn
+                else None,
+                across_centre=partial(
+                    circular_annotation_labels_across_centre,
+                    font_family=self.font_family,
+                    record_length=self.record_length,
+                    lanes_from_px=lanes_from_px,
+                    clearance_px=self.label_clearance_px,
+                )
+                if drawn and inside
                 else None,
             ),
             join_origin=True,

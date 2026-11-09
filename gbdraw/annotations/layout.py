@@ -197,6 +197,11 @@ LettersInLane = Callable[[ResolvedRegionAnnotation, float, int], "LabelExtent | 
 # its parameters and the extent its lanes and rooms take where the drawer draws them (``_LaneBand.drawn_extent_px``).
 LanesMeeting = Callable[["ResolvedAnnotationTrack", AnnotationTrackParams, float], frozenset[tuple[int, int, int]]]
 
+# The labels (record index, annotation id) of an inside Circular track whose letters the drawer draws over the centre of
+# the circle onto a mark, from the track, its parameters and the extent its lanes and rooms take where the drawer
+# draws them (``_LaneBand.drawn_extent_px``).
+LabelsAcrossCentre = Callable[["ResolvedAnnotationTrack", AnnotationTrackParams, float], frozenset[tuple[int, str]]]
+
 
 @dataclass(frozen=True)
 class LabelSizing:
@@ -209,6 +214,8 @@ class LabelSizing:
     toward lane - 1 (Linear labels above their marks); else they stand toward lane + 1 (Linear labels below, and
     Circular, away from the axis on either side). ``meet`` is the drawer's own placement of a track's labels
     (``LanesMeeting``) where a label's letters depend on where its lane is drawn (Circular); None where they do not.
+    ``across_centre`` is the drawer's own measure of the labels whose letters it draws over the centre of the circle
+    onto a mark (``LabelsAcrossCentre``, an inside Circular slot where it is drawn); None where letters cannot pass it.
     """
 
     font_size: float
@@ -217,6 +224,7 @@ class LabelSizing:
     bp_per_px: Mapping[int, float] = field(default_factory=dict)
     labels_above: bool = False
     meet: LanesMeeting | None = None
+    across_centre: LabelsAcrossCentre | None = None
 
 
 @dataclass(frozen=True)
@@ -798,6 +806,24 @@ def _cut_by_clip(
     return replace(track, without_room=tuple(sorted({*track.without_room, *cut}))) if cut else track
 
 
+def _across_centre(
+    track: ResolvedAnnotationTrack, band: _LaneBand, labels: LabelSizing, params: AnnotationTrackParams, *, labelled: bool
+) -> ResolvedAnnotationTrack:
+    """``track``, leaving out (``ResolvedAnnotationTrack.without_room``) the labels whose letters the drawer draws over
+    the centre of the circle onto a mark (``LabelSizing.across_centre``; OV-2991): no room keeps such letters clear of
+    the marks they meet there, so they are left out as a label whose room would carry its lanes past the centre is
+    (LBL-ROOM-STOP-AT-CENTRE-OMIT; in a clipped slot of set size, LBL-ROOM-CLIP-FIT-OMIT), and counted where the
+    track's rooms stop (``rooms_stop``; at the centre where a set size with overflow error or compress stops none).
+    Unchanged where the slot draws no labels of its own (not ``labelled``) or its letters cannot pass the centre."""
+
+    if not labelled or labels.across_centre is None:
+        return track
+    met = labels.across_centre(track, params, band.drawn_extent_px(lane_count_of(track.placements), track.lane_room_px))
+    if not met:
+        return track
+    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=track.rooms_stop or "centre")
+
+
 class _LanePlace(NamedTuple):
     """Where the drawer puts one lane of a record's row: the width of the record's lanes (``_LaneBand.width_px``
     with the track's label room) and the rooms of the gaps before the lane (``ResolvedAnnotationTrack.room_before``)."""
@@ -1276,6 +1302,7 @@ def layout_annotation_track(
     )
     track = replace(track, required_extent_px=float(fit.required_px), clipped=clipped, lane_gap_px=fit.lane_gap_px)
     track = _cut_by_clip(track, band, labelled=packing.labelled, measures=measures)
+    track = _across_centre(track, band, labels, track_params, labelled=packing.labelled)
     return replace(track, without_room_font_sizes=measures.left_out_font_sizes(track))
 
 
@@ -1284,6 +1311,7 @@ __all__ = [
     "LabelExtent",
     "LabelMeasure",
     "LabelSizing",
+    "LabelsAcrossCentre",
     "LaneRoom",
     "LettersInLane",
     "MarkReachMeasure",

@@ -617,6 +617,80 @@ def circular_annotation_lanes_meeting(
     return frozenset(met)
 
 
+def circular_annotation_labels_across_centre(
+    track: ResolvedAnnotationTrack,
+    params: AnnotationTrackParams,
+    extent_px: float,
+    *,
+    font_family: str,
+    record_length: int,
+    lanes_from_px: float,
+    clearance_px: float,
+) -> frozenset[tuple[int, str]]:
+    """The labels (record index, annotation id) of an inside track whose letters ``circular_annotation_labels`` draws
+    over the centre of the circle and within their ``label_offset`` of another annotation's painted mark
+    (``_mark_ink``), its lanes taking ``extent_px`` toward the centre from ``lanes_from_px`` and its labels placed as
+    ``circular_annotation_lanes_meeting`` places them. Letters too wide for the circle their mark leaves them are
+    centred on the centre of the circle and come back across it, where no room keeps them clear of the marks they meet
+    (OV-2991). The lane packer's measure (``LabelSizing.across_centre``)."""
+
+    ring = AnnotationRing(max(0.0, lanes_from_px - extent_px), lanes_from_px, "inside")
+    met: set[tuple[int, str]] = set()
+    for record_index in sorted({item.annotation.record_index for item in track.placements}):
+        across = [
+            label
+            for label in circular_annotation_labels(
+                track, record_index=record_index, record_length=record_length, inner_radius_px=ring.inner_radius_px,
+                outer_radius_px=ring.outer_radius_px, side="inside", font_family=font_family, params=params,
+                obstacles=CircularLabelObstacles(clearance=clearance_px),
+            ).drawn
+            if label.ink_radii[0] <= 0.0
+        ]
+        if not across:
+            continue
+        placements, lane_width = _record_lanes(
+            track, record_index=record_index, inner_radius_px=ring.inner_radius_px,
+            outer_radius_px=ring.outer_radius_px, params=params,
+        )
+        strand_lanes = _strand_lanes(track, record_index=record_index, strand_bands_px=ring.strand_bands_px, params=params)
+        marks = {
+            placement.annotation.id: [
+                part
+                for ink in _mark_ink(
+                    track, placement, lane_width, strand_lanes, record_length=record_length, ring=ring, params=params
+                )
+                for part in _ink_parts(ink)
+            ]
+            for placement in placements
+        }
+        met.update(
+            (record_index, label.annotation_id)
+            for label in across
+            if any(
+                convex_polygons_intersect(grown_convex_polygon(part, label.label_offset), mark)
+                for part in label.parts
+                for identity, parts in marks.items()
+                if identity != label.annotation_id
+                for mark in parts
+            )
+        )
+    return frozenset(met)
+
+
+def _ink_parts(ink: CircularInk) -> tuple[Sequence[Point], ...]:
+    """A mark's paint (``circular_annotation_track_ink``) as convex parts: a ring's arc cut into sector parts
+    (``annular_sector_parts``), a polygon as it is."""
+
+    if isinstance(ink, CircularInkPolygon):
+        return (ink.points,)
+    if not isinstance(ink, CircularInkRing):
+        return ()
+    span = 1.0 if ink.end_turn - ink.start_turn >= 1.0 else (ink.end_turn - ink.start_turn) % 1.0
+    return annular_sector_parts(
+        ink.band.inner_px, ink.band.outer_px, 360.0 * (ink.start_turn + 0.5 * span) - 90.0, 180.0 * span
+    )
+
+
 def _label_ink(font_family: str, font_size: float, orientation: str) -> LabelInk:
     """How a label's ink box is measured around its anchor (``_label_at``)."""
 
@@ -1040,6 +1114,67 @@ def _turn(position: float, record_length: int) -> float:
     return turn - 1.0 if turn > 1.0 else turn
 
 
+def _mark_ink(
+    track: ResolvedAnnotationTrack,
+    placement: PlacedRegionAnnotation,
+    slot_lane_width: float,
+    strand_lanes: Mapping[Literal["+", "-"], tuple[RadialBand, float]],
+    *,
+    record_length: int,
+    ring: AnnotationRing,
+    params: AnnotationTrackParams,
+) -> list[CircularInk]:
+    """What ``circular_annotation_track_content`` paints for one placement's mark: its band or highlight (its area
+    when filled, else its outline), or its line with its end caps."""
+
+    annotation = placement.annotation
+    inks: list[CircularInk] = []
+    auto_feature_underlay = is_auto_feature_underlay(annotation)
+    style = effective_annotation_style(annotation, params)
+    lane_inner, lane_outer, lane_width = _mark_lane(track, placement, slot_lane_width, strand_lanes, ring=ring, params=params)
+    radius = 0.5 * (lane_inner + lane_outer)
+    pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
+    for part in mark_parts(annotation, join_origin=track.join_origin):
+        for start, end in _safe_segments(part.start, part.end, record_length):
+            start_turn, end_turn = _turn(start, record_length), _turn(end, record_length)
+            ends = _piece_ends(start, end, part)
+            if annotation.mark in {"band", "highlight"}:
+                if _band_fill(annotation.mark, style) != "none":
+                    inks.append(CircularInkRing(RadialBand(lane_inner - pad, lane_outer + pad), start_turn, end_turn))
+                elif pad > 0:
+                    inks.extend(
+                        CircularInkRing(RadialBand(edge - pad, edge + pad), start_turn, end_turn)
+                        for edge in (lane_inner, lane_outer)
+                    )
+                    inks.extend(
+                        CircularInkPolygon.segment(
+                            _point(position, record_length, lane_inner),
+                            _point(position, record_length, lane_outer),
+                            pad,
+                        )
+                        for position, capped in ends
+                        if capped
+                    )
+                continue
+            if pad <= 0:
+                continue
+            # A round cap reaches half the stroke past each end.
+            reach = pad / max(radius, 1e-9) / (2.0 * math.pi)
+            inks.append(CircularInkRing(RadialBand(radius - pad, radius + pad), start_turn - reach, end_turn + reach))
+            if annotation.mark == "bracket" and style.line_cap != "none":
+                cap = cap_size(lane_width)
+                inks.extend(
+                    CircularInkPolygon.segment(
+                        _point(position, record_length, radius - cap),
+                        _point(position, record_length, radius + cap),
+                        pad,
+                    )
+                    for position, capped in ends
+                    if capped
+                )
+    return inks
+
+
 def circular_annotation_track_ink(
     track: ResolvedAnnotationTrack,
     *,
@@ -1063,49 +1198,9 @@ def circular_annotation_track_ink(
     inks: list[CircularInk] = []
     for placement in placements:
         annotation = placement.annotation
-        auto_feature_underlay = is_auto_feature_underlay(annotation)
-        style = effective_annotation_style(annotation, params)
-        lane_inner, lane_outer, lane_width = _mark_lane(track, placement, slot_lane_width, strand_lanes, ring=ring, params=params)
-        radius = 0.5 * (lane_inner + lane_outer)
-        pad = 0.0 if auto_feature_underlay else stroke_pad_px(style.stroke, style.stroke_width)
-        for part in mark_parts(annotation, join_origin=track.join_origin):
-            for start, end in _safe_segments(part.start, part.end, record_length):
-                start_turn, end_turn = _turn(start, record_length), _turn(end, record_length)
-                ends = _piece_ends(start, end, part)
-                if annotation.mark in {"band", "highlight"}:
-                    if _band_fill(annotation.mark, style) != "none":
-                        inks.append(CircularInkRing(RadialBand(lane_inner - pad, lane_outer + pad), start_turn, end_turn))
-                    elif pad > 0:
-                        inks.extend(
-                            CircularInkRing(RadialBand(edge - pad, edge + pad), start_turn, end_turn)
-                            for edge in (lane_inner, lane_outer)
-                        )
-                        inks.extend(
-                            CircularInkPolygon.segment(
-                                _point(position, record_length, lane_inner),
-                                _point(position, record_length, lane_outer),
-                                pad,
-                            )
-                            for position, capped in ends
-                            if capped
-                        )
-                    continue
-                if pad <= 0:
-                    continue
-                # A round cap reaches half the stroke past each end.
-                reach = pad / max(radius, 1e-9) / (2.0 * math.pi)
-                inks.append(CircularInkRing(RadialBand(radius - pad, radius + pad), start_turn - reach, end_turn + reach))
-                if annotation.mark == "bracket" and style.line_cap != "none":
-                    cap = cap_size(lane_width)
-                    inks.extend(
-                        CircularInkPolygon.segment(
-                            _point(position, record_length, radius - cap),
-                            _point(position, record_length, radius + cap),
-                            pad,
-                        )
-                        for position, capped in ends
-                        if capped
-                    )
+        inks.extend(
+            _mark_ink(track, placement, slot_lane_width, strand_lanes, record_length=record_length, ring=ring, params=params)
+        )
         label = labels_by_id.get(annotation.id)
         if label is not None:
             inks.extend(CircularInkPolygon(tuple(part)) for part in label.parts if len(part) >= 3)
@@ -1275,6 +1370,7 @@ __all__ = [
     "circular_annotation_mark_reach",
     "circular_annotation_label_room",
     "circular_annotation_labels",
+    "circular_annotation_labels_across_centre",
     "circular_annotation_track_content",
     "circular_annotation_track_ink",
 ]

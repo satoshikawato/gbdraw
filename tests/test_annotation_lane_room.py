@@ -1079,14 +1079,15 @@ def _nested_inside(
 
 
 @pytest.mark.parametrize(
-    ("count", "without_room", "slot"), ((4, 1, ""), (5, 2, ""), (5, 2, ",w=1000px,overflow=clip"))
+    ("count", "without_room", "slot"), ((4, 2, ""), (5, 3, ""), (5, 3, ",w=1000px,overflow=clip"))
 )
 def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, without_room: int, slot: str) -> None:
     # LBL-ROOM-STOP-AT-CENTRE-OMIT (OV-2665, OV-2666, Q13 X): the rooms of four or five crossing labels would carry
     # the lanes past the centre. The rooms that fit from the slot's outer edge are kept; the others are not added,
     # every band keeps its width on its own side of the centre, and every mark is drawn. The labels without room are
-    # not drawn, and the warning counts them. A clipped slot whose set width reaches past the centre stops there
-    # too: the centre is the nearer bound.
+    # not drawn, nor the innermost label, whose letters, too wide for the circle its mark leaves them, are centred on
+    # the centre and come back over the next band out (OV-2991: drawn 15.5 px into it before), and the warning counts
+    # them. A clipped slot whose set width reaches past the centre stops there too: the centre is the nearer bound.
     from gbdraw.api.diagram import label_fit_report
     from gbdraw.labels.fit import label_fit_notice
     from gbdraw.web_support.label_fit import label_fit_report_payload
@@ -1495,6 +1496,61 @@ def test_a_label_without_letters_puts_no_ink_on_the_definition() -> None:
 
     assert any("1 region label left out: no letter fits its circle" in message for message in messages), messages
     assert not any("overlap" in message and "definition line" in message for message in messages), messages
+
+
+def _marks_met(drawn: _LeftOut, regions: tuple[tuple[str, int, int, str], ...]) -> list[tuple[str, str]]:
+    """The labels drawn whose letters come within their label offset of another region's painted band, where the
+    band's span lies: each label's ink box sampled over its area (``_ink_polar``)."""
+
+    spans = {identity: (start, end) for identity, start, end, _label in regions}
+    return [
+        (identity, other)
+        for identity, item in drawn.items.items()
+        if _labelled(item)
+        for other, (inner, outer) in drawn.bands.items()
+        if other != identity
+        and any(
+            spans[other][0] - 1 <= bp <= spans[other][1] and inner - _EDGE + 0.002 < radius < outer + _EDGE - 0.002
+            for radius, bp in _ink_polar(item)
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("count", "size", "slot", "left_out", "counts"),
+    (
+        # Seven nested bands, no set width: r6's letters, which no place before the centre holds, come back over r5
+        # and r4 across the centre (four labels are already left out for want of room before it).
+        (7, 12, "", "r6", "5 region labels left out for want of room before the centre"),
+        # Three nested bands in a clipped slot 300 px wide whose lanes fit: r2's letters pass the centre and come back
+        # 18 px into r1's band (r1 is already left out: its room does not fit the set size).
+        (3, 24, ",w=300px,overflow=clip", "r2", "2 region labels left out in clipped slots"),
+    ),
+)
+def test_an_inside_label_whose_letters_pass_the_centre_onto_other_marks_is_left_out(
+    count: int, size: float, slot: str, left_out: str, counts: str
+) -> None:
+    # OV-2991, LBL-ROOM-STOP-AT-CENTRE-OMIT and LBL-ROOM-CLIP-FIT-OMIT: the innermost lane's horizontal label is
+    # wider than the circle its mark leaves it, so the drawer centres it on the centre of the circle, and its letters
+    # meet the marks of the lanes before it. No room keeps it clear of them: it is not drawn, its mark is, and the
+    # warning counts it. Every label drawn keeps its label offset from every other band.
+    regions = _SEVEN_NESTED[:count]
+    drawn = _bands_and_left_out(regions, slot, "horizontal", size=size)
+
+    assert left_out not in {label.annotation_id for label in drawn.drawn}
+    assert all(_marked(drawn.items[identity]) for identity, *_rest in regions)
+    assert any(counts in message for message in drawn.messages), drawn.messages
+    assert not _marks_met(drawn, regions), _marks_met(drawn, regions)
+
+
+def test_an_inside_label_whose_letters_pass_the_centre_onto_no_other_mark_is_drawn() -> None:
+    # OV-2991: a label whose letters pass the centre but meet no other annotation's mark is drawn, as before (over
+    # the centre definition it is drawn and warned, Q21=A). Its letters come within their label offset of its own
+    # mark; whether that leaves it out is a question for the Owner, not this fix.
+    drawn = _bands_and_left_out(_SEVEN_NESTED[:1], "", "horizontal", size=60)
+
+    (label,) = drawn.drawn
+    assert label.annotation_id == "r0" and label.ink_radii[0] == 0.0, label.ink_radii
 
 
 def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:
