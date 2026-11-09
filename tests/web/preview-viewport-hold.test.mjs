@@ -125,8 +125,9 @@ test('the held view refits the shown figure when its room changes, but not in th
     assert.equal(fits, 1, 'the room of the last Fit is no change');
     resize(600);
     assert.equal(fits, 2, 'a new room is fitted');
+    canvas.offsetWidth = 650;
     owner.fitPreviewToViewport();
-    resize(600);
+    resize(650);
     assert.equal(fits, 3, 'the room of a Fit made under the hold is no change either');
     resize(0);
     assert.equal(fits, 3, 'a hidden canvas has no room');
