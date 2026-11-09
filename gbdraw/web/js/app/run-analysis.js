@@ -42,7 +42,9 @@ import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFA
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
-import { drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves } from '../services/record-draw-selection.js';
+import {
+  drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordSelectorNumber
+} from '../services/record-draw-selection.js';
 /** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
 import { moveInstanceRuleRecords } from '../services/feature-selector.js';
 import {
@@ -1147,8 +1149,8 @@ const selectParsedRecord = (records, selectorRaw) => {
   const selector = normalizeRecordSelectorText(selectorRaw);
   if (!selector) return records[0];
   if (selector.startsWith('#')) {
-    const idx = Number(selector.slice(1).trim()) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= records.length) {
+    const idx = (recordSelectorNumber(selector) ?? 0) - 1;
+    if (idx < 0 || idx >= records.length) {
       throw new Error(`Record selector ${selector} is out of range (loaded ${records.length} record(s)).`);
     }
     return records[idx];

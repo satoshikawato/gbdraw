@@ -23,7 +23,7 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
-/** @import { CircularCardMark, DrawingInputFiles } from './drawing/inputs.js' */
+/** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
  * One Circular source card as the record catalog read it: its uid, the files
@@ -108,7 +108,7 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  * @template Entry
  * @typedef {{
  *   inputType: { value: string },
- *   circularSources: readonly { uid: string, gb: InputFileRef | null, gff: InputFileRef | null, fasta: InputFileRef | null }[],
+ *   circularSources: readonly Readonly<CircularSource>[],
  *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
  * }} CircularDiscoveryDrawing

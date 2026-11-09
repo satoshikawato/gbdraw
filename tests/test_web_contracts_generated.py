@@ -661,3 +661,38 @@ def test_the_derived_result_shape_accepts_what_python_decodes() -> None:
         ("orthogroup", "written"), ("orthogroup", "empty"), ("collinear", "written"), ("collinear", "empty"),
         ("collinear", "no orthogroups"), ("collinear", "an older schema without orthogroups"),
     }
+
+
+_RECORD_SELECTOR_TEXTS = (
+    # text, the record the renderer draws, N with 0 (tests/web/record-draw-selection.test.mjs reads the same texts).
+    ("#1", 1, 1), ("#01", 1, 1), (" # 2 ", 2, 2), ("#0", None, 0), ("#00", None, 0),
+    ("#x", None, None), ("#", None, None), ("#1e1", None, None), ("#+1", None, None), ("#0x2", None, None),
+    ("#1.0", None, None), ("BGC0000708", None, None), ("#\u00853", 3, 3), ("#\u001c3", 3, 3), ("#﻿3", None, None),
+)
+
+
+def test_the_web_reads_a_record_selector_number_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-2960: the Web's `#N` reader matches the pattern Python's renderer reads a record selector with, spelled
+    # for ECMA-262 (Python's `\s` is not JavaScript's); the generated pattern matches what Python's matches.
+    import re
+
+    from gbdraw.io import record_select
+
+    for text, record, number in _RECORD_SELECTOR_TEXTS:
+        assert record_select.record_selector_number(text) == record, text
+        assert record_select.record_index_number(text) == number, text
+        parsed = record_select.parse_record_selector(text) if record is not None else None
+        assert parsed is None or parsed.record_index == record - 1
+    generator = _generator()
+    module = generator.render_web_contracts_module()
+    spelled = re.search(r"export const RECORD_INDEX_SELECTOR_PATTERN = '(.*)';\n", module)
+    assert spelled is not None
+    portable = re.compile(spelled.group(1).replace("\\\\", "\\"))
+    own = re.compile(record_select.RECORD_INDEX_SELECTOR_PATTERN)
+    for code in range(0x10000):
+        text = f"{chr(code)}#{chr(code)}1{chr(code)}"
+        assert bool(portable.fullmatch(text)) == bool(own.fullmatch(text)), hex(code)
+
+    monkeypatch.setattr(record_select, "RECORD_INDEX_SELECTOR_PATTERN", r"#([0-9]+)")
+
+    assert "export const RECORD_INDEX_SELECTOR_PATTERN = '#([0-9]+)';\n" in generator.render_web_contracts_module()

@@ -13,7 +13,9 @@ import {
   offRecordRequestRecords,
   omittedLinearUids,
   pruneRecordsOff,
-  recordListRows
+  recordIndexNumber,
+  recordListRows,
+  recordSelectorNumber
 } from '../../gbdraw/web/js/services/record-draw-selection.js';
 
 const cards = ['a', 'b', 'c', 'd'].map((uid) => ({ uid }));
@@ -93,4 +95,21 @@ test('record IDs compare numbers as numbers', () => {
   assert.ok(compareRecordIdsNaturally('seq9b', 'seq10a') < 0);
   assert.ok(compareRecordIdsNaturally('a', 'B') < 0);
   assert.equal(compareRecordIdsNaturally('x1', 'x1'), 0);
+});
+
+// OV-2960: a `#N` record selector reads as Python's renderer reads it (`record_selector_number` and
+// `record_index_number` in gbdraw/io/record_select.py, whose pattern the generated contracts carry;
+// tests/test_web_contracts_generated.py checks the same texts in Python).
+test('a #N record selector names the record the renderer draws', () => {
+  /** @type {[string, number | null, number | null][]} text, record, N with 0 */
+  const cases = [
+    ['#1', 1, 1], ['#01', 1, 1], [' # 2 ', 2, 2], ['#0', null, 0], ['#00', null, 0],
+    ['#x', null, null], ['#', null, null], ['#1e1', null, null], ['#+1', null, null], ['#0x2', null, null],
+    ['#1.0', null, null], ['BGC0000708', null, null], ['#\u00853', 3, 3], ['#\u001c3', 3, 3], ['#\ufeff3', null, null]
+  ];
+  for (const [text, record, number] of cases) {
+    assert.equal(recordSelectorNumber(text), record, JSON.stringify(text));
+    assert.equal(recordIndexNumber(text), number, JSON.stringify(text));
+  }
+  assert.equal(recordSelectorNumber(1), null);
 });

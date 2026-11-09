@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,8 +30,8 @@ from gbdraw.session import (
     materialize_session,
     session_to_request,
 )
-from gbdraw.session_request_codec import encode_canonical_request
-from gbdraw.session_resources import SessionResourceTable, canonical_resource_ids
+from gbdraw.session_request_codec import CanonicalRequestResource, encode_canonical_request
+from gbdraw.session_resources import SessionResourceTable, _resource_descriptor, canonical_resource_ids
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
 GENBANK = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
@@ -217,12 +218,13 @@ def test_a_request_reference_must_resolve() -> None:
 # the italic gene label leaves; the identity colour scale leaves; the figure size leaves, #1427;
 # the unused Linear leaf canvas.linear.canvas_padding, removed; the scalar axis label
 # style leaves, which a stored full config or configOverrides without them reads as
-# numbered; request schema 10 writing record windows).
+# numbered; request schema 10 writing record windows; the file metadata gbdraw writes,
+# a media type by resource kind and lastModified 0, OV-2964).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "c2df544b1ee3116a204ed306025a3ada65e0388ecf17960b5d1c24ee5f954912",
+        "bfb40b381adb4548e024d0dc08b668202819dde8f984b5520c8a2cd9307218de",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "cba4557b663adde43ffd2b9b86b1fcf4ddf8dbd9dc234bcde29718e1aef41224",
+        "b359ca523356fa2de78495c140f8dfbc512641b78c391f1d3a9470592dd5f50d",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
         "49f804c719e50914ca66c84f41ee76e2b332495564a3bb12f3f3ed003da6fab8",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
@@ -235,9 +237,6 @@ _SINGLE_REQUEST_DIGESTS = {
 @pytest.mark.parametrize("fixture", sorted(_SINGLE_REQUEST_DIGESTS))
 def test_a_single_request_session_is_byte_identical(fixture: str, tmp_path: Path) -> None:
     with materialize_session(FIXTURES / fixture, output_directory=tmp_path) as materialized:
-        for path in materialized.resource_paths.values():
-            # A file resource stores its modification time.
-            os.utime(path, (1_700_000_000, 1_700_000_000))
         request = session_to_request(materialized)
         # The checked mode-scoped Session 48, before the move to drawings.
         document = _mode_scoped_document_of_request(
@@ -248,3 +247,80 @@ def test_a_single_request_session_is_byte_identical(fixture: str, tmp_path: Path
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
 
     assert hashlib.sha256(text.encode("utf-8")).hexdigest() == _SINGLE_REQUEST_DIGESTS[fixture]
+
+
+class _FixedNow(datetime):
+    @classmethod
+    def now(cls, tz: Any = None) -> "_FixedNow":
+        return cls(2026, 1, 2, tzinfo=timezone.utc)
+
+
+def _file_leaves(value: object) -> list[dict[str, Any]]:
+    """Every ordinary file binding (a leaf with a ``resourceId``) under ``value``."""
+
+    if isinstance(value, list):
+        return [leaf for item in value for leaf in _file_leaves(item)]
+    if not isinstance(value, dict):
+        return []
+    if "resourceId" in value:
+        return [value]
+    return [leaf for item in value.values() for leaf in _file_leaves(item)]
+
+
+def test_a_cli_session_does_not_depend_on_its_inputs_file_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-2964: the CLI writes the same Session bytes whatever its inputs' modification times and the
+    machine's media type guesses; each file binding says of its file what its resource says."""
+
+    from gbdraw.circular import circular_main
+    import gbdraw.cli_utils.session as cli_session
+
+    monkeypatch.setattr(cli_session, "datetime", _FixedNow)
+    genbank = tmp_path / "inputs" / "record.gb"
+    genbank.parent.mkdir()
+    genbank.write_bytes(GENBANK.read_bytes())
+    written = []
+    for index, modified in enumerate((1_700_000_000, 1_800_000_000)):
+        os.utime(genbank, (modified, modified))
+        shutil.rmtree(tmp_path / "out", ignore_errors=True)
+        session = tmp_path / f"run-{index}.gbdraw-session.json"
+        circular_main([
+            "--gbk", str(genbank), "-o", str(tmp_path / "out" / "fig"),
+            "--session_output", str(session),
+        ])
+        written.append(session.read_bytes())
+
+    assert written[0] == written[1]
+    document = json.loads(written[0])
+    resources = document["resources"]
+    assert {(resource["type"], resource["lastModified"]) for resource in resources.values()} == {
+        ("application/octet-stream", 0)
+    }
+    leaves = [leaf for drawing in document["drawings"] for leaf in _file_leaves(drawing.get("webFiles", {}))]
+    assert leaves
+    for leaf in leaves:
+        assert (leaf["type"], leaf["lastModified"]) == (
+            resources[leaf["resourceId"]]["type"], resources[leaf["resourceId"]]["lastModified"]
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "media_type"),
+    [
+        ("genbank", "application/octet-stream"),
+        ("nucleotide-blast", "application/octet-stream"),
+        ("canonical-tsv", "text/tab-separated-values"),
+        ("collinearity-result", "application/json"),
+        ("orthogroup-result", "application/json"),
+    ],
+)
+def test_a_resource_gbdraw_writes_has_the_media_type_of_its_kind(kind: str, media_type: str) -> None:
+    """OV-2964: a resource of a kind gbdraw makes itself has the media type the Web writers write for it,
+    any input file ``application/octet-stream``, and no modification time."""
+
+    resource = CanonicalRequestResource("resource-1", kind, "resource-1.json", content=b"{}")
+
+    descriptor = _resource_descriptor(resource)
+
+    assert (descriptor["type"], descriptor["lastModified"]) == (media_type, 0)

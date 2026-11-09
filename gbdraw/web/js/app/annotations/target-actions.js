@@ -1,6 +1,7 @@
 // @ts-check
 import { isUnspecifiedRecordSelectorValue } from '../../services/record-options.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
+import { recordIndexNumber } from '../../services/record-draw-selection.js';
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
@@ -26,14 +27,15 @@ export const parseAnnotationRecordSelectorValue = (value) => {
   if (!text.startsWith('#')) {
     return { selector: { kind: 'recordId', value: text }, error: '' };
   }
-  const indexText = text.slice(1).trim();
-  if (!/^[0-9]+$/.test(indexText)) {
+  // The number as Python's `parse_record_selector` reads it (`recordIndexNumber`).
+  const number = recordIndexNumber(text);
+  if (number === null) {
     return {
       selector: null,
       error: `Invalid record selector ${JSON.stringify(text)}. Use #<number> or record_id.`
     };
   }
-  const index = Number(indexText) - 1;
+  const index = number - 1;
   if (!Number.isSafeInteger(index) || index < 0) {
     return {
       selector: null,

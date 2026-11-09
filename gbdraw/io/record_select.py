@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import re
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -23,9 +24,27 @@ from ..core.record_metadata import (
 
 logger = logging.getLogger(__name__)
 
+# A ``#N`` record selector, as ``parse_record_selector`` reads it: spaces (``str.strip``'s, which are ``\s``'s)
+# around it and after ``#``, and N in ASCII digits, leading zeros allowed (``#01`` is record 1). The Web reads
+# the same pattern from the generated contracts (``RECORD_INDEX_SELECTOR_PATTERN``).
+RECORD_INDEX_SELECTOR_PATTERN = r"\s*#\s*([0-9]+)\s*"
+_RECORD_INDEX_SELECTOR = re.compile(RECORD_INDEX_SELECTOR_PATTERN)
 
 
+def record_index_number(text: str) -> int | None:
+    """The N of a ``#N`` record selector text, 0 included (a reader refuses it); None for any other text."""
 
+    match = _RECORD_INDEX_SELECTOR.fullmatch(text)
+    return parse_ascii_nonnegative_integer(match.group(1)) if match else None
+
+
+def record_selector_number(text: object) -> int | None:
+    """The record, from 1, that a ``#N`` record selector names as the renderer reads it
+    (:func:`parse_record_selector`): ``#01`` and ``# 1`` are record 1. None for a record ID
+    or any other value, and for ``#0``, which the renderer refuses."""
+
+    number = record_index_number(text) if isinstance(text, str) else None
+    return number if number else None
 
 
 @dataclass(frozen=True)
@@ -49,8 +68,7 @@ def parse_record_selector(text: str | None) -> RecordSelector | None:
     if not raw or raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
         return None
     if raw.startswith("#"):
-        idx_text = raw[1:].strip()
-        number = parse_ascii_nonnegative_integer(idx_text)
+        number = record_index_number(raw)
         if number is None:
             raise ValueError(f"Invalid record selector '{raw}'. Use #<number> or record_id.")
         idx = number - 1

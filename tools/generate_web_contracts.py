@@ -149,6 +149,14 @@ _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
     # How a depth or GC Percent axis is labelled (Web: the Numbered Ticks checkboxes).
     ("SCALAR_AXIS_LABELS", "gbdraw.config.models.objects", "ObjectsDepthConfig", "axis_labels"),
 )
+# (Web name, Python module, name): the regular expression a Python reader reads
+# a text with, as an ECMA-262 pattern that matches the same texts
+# (``_portable_pattern``), written last. The Web matches it against the whole
+# text, as Python's ``fullmatch`` does.
+_PATTERNS: tuple[tuple[str, str, str], ...] = (
+    # A `#N` record selector, as the renderer reads it (OV-2960).
+    ("RECORD_INDEX_SELECTOR_PATTERN", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PATTERN"),
+)
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 
 
@@ -262,6 +270,9 @@ def render_web_contracts_module() -> str:
         parts.append(
             _owner(module, f"{class_name}.{field_name}") + _literal_field_declaration(web_name, owner, field_name)
         )
+    for web_name, module, name in _PATTERNS:
+        pattern = getattr(importlib.import_module(module), name)
+        parts.append(_owner(module, name) + f"export const {web_name} = {_scalar(_portable_pattern(pattern))};\n")
     return "\n".join(parts)
 
 

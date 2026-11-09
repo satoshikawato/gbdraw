@@ -93,7 +93,7 @@ import {
   isSingleCircularJourney
 } from './record-options.js';
 import {
-  cardHoldsRecordKey, expandedRecordKey, flatRecordSelectorNumber, linearSeqRecordKey, recordKeyExpansion
+  cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion, recordSelectorNumber
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
@@ -1361,12 +1361,8 @@ const publicationFileRef = (resources, files, key, fallbackId) => {
 const selectorPayload = (rawValue) => {
   const raw = String(rawValue || '').trim();
   if (!raw) return null;
-  const indexMatch = raw.match(/^#(\d+)$/);
-  if (indexMatch) {
-    const index = Number(indexMatch[1]) - 1;
-    return Number.isInteger(index) && index >= 0 ? { kind: 'recordIndex', index } : null;
-  }
-  return { kind: 'recordId', value: raw };
+  const number = recordSelectorNumber(raw);
+  return number === null ? { kind: 'recordId', value: raw } : { kind: 'recordIndex', index: number - 1 };
 };
 /**
  * The record a Linear card's Generate selects (`buildRecords`), also when it
@@ -1973,7 +1969,7 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
  * @param {string} token
  */
 const positionRecordIdentity = (records, token) => {
-  const number = flatRecordSelectorNumber(token);
+  const number = recordSelectorNumber(token);
   const record = number !== null
     ? records[number - 1]
     : records.find(({ selector }) => {

@@ -52,22 +52,35 @@ export const createCircularRecordPresentation = ({
     const names = new Map(cards.length > 1 ? cards.map((card) => [card.uid, String(card.primaryFile?.name || '')]) : []);
     return (uid) => names.get(uid) || '';
   };
+  // A record's name, read or not (D-98): its card's file name when the drawing has
+  // several cards (`cardFileNames`), its record ID, and its `#k` when that ID
+  // repeats in its file or is unsafe (`circularRecordEntries`); the Record select
+  // writes the record's length between the ID and the `#k`.
+  /** @param {string} fileName @param {string} recordId */
+  const recordName = (fileName, recordId) => `${fileName ? `${fileName}: ` : ''}${recordId}`;
+  /** @param {{ usesIndex: boolean, selector: string }} entry */
+  const recordIndexSuffix = (entry) => (entry.usesIndex ? ` [${entry.selector}]` : '');
   /**
    * The name shown for a Record select or Record Order value whose record is not
-   * in the read list (OV-2949, OV-2959): a record identity (`<uid>`,
-   * `<uid>:<k>`) by the record ID that the Result this drawing shows names the
-   * record keyed by that identity by (`shownRecordIds`), else by its card's
-   * file name, with `#k` for the k-th record of a file; any other value (a
-   * kept `#N`, a record ID) as it is. The one owner of an unread record's name
-   * in the panel.
+   * in the read list (OV-2949, OV-2959, D-98): a record identity (`<uid>`,
+   * `<uid>:<k>`) that the Result this drawing shows names (`shownRecordIds`) is
+   * named as a read record is (`recordName`, with the `#k` that the records the
+   * Result names of its card call for); one the Result does not name by its
+   * card's file name, with `#k` for the k-th record of a file; any other value
+   * (a kept `#N`, a record ID) as it is. The one owner of an unread record's
+   * name in the panel.
    * @param {DrawingState} drawing
    * @param {string} value
    */
   const unreadRecordName = (drawing, value) => {
     const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
     if (!card) return value;
-    const recordId = shownRecordIds(drawing).get(value);
-    if (recordId) return recordId;
+    const named = [...shownRecordIds(drawing)].filter(([key]) => cardHoldsRecordKey(card.uid, key)).map(([identity, recordId]) => {
+      const k = recordKeyExpansion(identity, card.uid) ?? 1;
+      return { uid: card.uid, identity, k, selector: `#${k}`, record_id: recordId };
+    });
+    const entry = circularRecordEntries(named).find((record) => record.value === value);
+    if (entry) return `${recordName(cardFileNames(drawing)(card.uid), entry.recordId)}${recordIndexSuffix(entry)}`;
     const [input] = circularSourceInputs(drawing.inputType.value, [card]);
     const fileName = String(input.primaryFile?.name || '') || card.uid;
     const k = recordKeyExpansion(value, card.uid);
@@ -85,7 +98,7 @@ export const createCircularRecordPresentation = ({
     if (!matched) return unreadRecordName(drawing, normalized);
     const recordId = matched.record_id.trim() || t('Unknown');
     const fileName = cardFileNames(drawing)(matched.uid);
-    return fileName ? `${fileName}: ${recordId}` : `${matched.selector} (${recordId})`;
+    return fileName ? recordName(fileName, recordId) : `${matched.selector} (${recordId})`;
   };
 
   const circularRecordDiscoveryState = computed(() => circularDiscoveryForInput(state.activeDrawing()));
@@ -135,7 +148,7 @@ export const createCircularRecordPresentation = ({
         : []),
       ...entries.map((record) => ({
         value: record.value,
-        label: `${fileNameOf(String(record.uid)) ? `${fileNameOf(String(record.uid))}: ` : ''}${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
+        label: `${recordName(fileNameOf(String(record.uid)), record.recordId)} (${formatRecordLength(record.recordLength)})${recordIndexSuffix(record)}`,
         synthetic: false
       }))
     ];
