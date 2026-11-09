@@ -123,13 +123,12 @@ class AlignmentHelperPresentation(TypedDict):
 class AlignmentHelperRecord(TypedDict):
     """One displayed record of a helper request, as the Web's ``buildHelperRequest`` sends it.
 
-    ``recordLength`` is the complete source length, ``None`` when the Web does
-    not know it; ``windows`` are the record's windows as request schema 10
-    stores them (``StoredRecordWindow``), empty for a whole record.
+    ``windows`` are the record's windows as request schema 10 stores them
+    (``StoredRecordWindow``), empty for a whole record. The record's complete
+    source length is read here, from the committed request's records (D5).
     """
 
     recordKey: str
-    recordLength: int | None
     windows: list[StoredRecordWindow]
     presentation: AlignmentHelperPresentation
 
@@ -191,16 +190,16 @@ class _RecordFact:
         return offset if 0.0 <= offset <= span else None
 
 
-def _record_fact(value: object, path: str) -> _RecordFact:
+def _record_fact(value: object, path: str, source_lengths: Mapping[str, int | None]) -> _RecordFact:
+    """A helper request record, with its complete source length from ``source_lengths`` (``None`` when unknown)."""
+
     raw = cast(AlignmentHelperRecord, _object(
         value,
-        {"recordKey", "recordLength", "windows", "presentation"},
+        {"recordKey", "windows", "presentation"},
         path,
     ))
     record_key = _text(raw["recordKey"], f"{path}.recordKey")
-    record_length = _integer(
-        raw["recordLength"], f"{path}.recordLength", minimum=1, nullable=True
-    )
+    record_length = source_lengths.get(record_key)
     presentation = _object(
         raw["presentation"], {"reverseComplement"}, f"{path}.presentation"
     )
@@ -568,8 +567,15 @@ def resolve_similarity_alignment_payload(
     if type(raw["schema"]) is not int or raw["schema"] != SIMILARITY_ALIGNMENT_PLAN_SCHEMA:
         raise ValidationError(f"request.schema must be {SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.")
     group_id = _text(raw["groupId"], "request.groupId")
+    context = None
+    source_lengths: dict[str, int | None] = {}
+    if projection is not None:
+        context = _projection_context(projection, resource_paths or {}, output_directory)
+        # Each record's complete source length, as the committed request resolves it (D5: Python owns it).
+        for provenance in context[2].provenance:
+            source_lengths.setdefault(provenance.record_identity_key, provenance.source_length)
     records = [
-        _record_fact(value, f"request.records[{index}]")
+        _record_fact(value, f"request.records[{index}]", source_lengths)
         for index, value in enumerate(_list(raw["records"], "request.records"))
     ]
     record_keys = [record.record_key for record in records]
@@ -586,9 +592,7 @@ def resolve_similarity_alignment_payload(
         )
         for index, value in enumerate(_list(raw["members"], "request.members"))
     ]
-    context = None
-    if projection is not None:
-        context = _projection_context(projection, resource_paths or {}, output_directory)
+    if context is not None:
         collection = context[2]
         if alignment_record_keys(collection) != tuple(record_keys):
             raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})

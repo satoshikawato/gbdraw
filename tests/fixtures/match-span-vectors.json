@@ -1,0 +1,91 @@
+{
+  "source": "gbdraw/web/js/services/match-sequences.js extractMatchedSpan at c75daa1de",
+  "vectors": [
+    {
+      "name": "forward",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 1,
+      "end": 8,
+      "orientation": "+",
+      "bases": "ACGTURYS"
+    },
+    {
+      "name": "reverse",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 8,
+      "end": 1,
+      "orientation": "-",
+      "bases": "SRYAACGT"
+    },
+    {
+      "name": "IUPAC forward",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 5,
+      "end": 16,
+      "orientation": "+",
+      "bases": "URYSWKMBDHVN"
+    },
+    {
+      "name": "IUPAC reverse",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 16,
+      "end": 5,
+      "orientation": "-",
+      "bases": "NBDHVKMWSRYA"
+    },
+    {
+      "name": "lowercase and unknown letters",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 18,
+      "end": 26,
+      "orientation": "+",
+      "bases": "ACGTNXZ*A"
+    },
+    {
+      "name": "lowercase and unknown letters reverse",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 26,
+      "end": 18,
+      "orientation": "-",
+      "bases": "TNNNNACGT"
+    },
+    {
+      "name": "one base",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 3,
+      "end": 3,
+      "orientation": "+",
+      "bases": "G"
+    },
+    {
+      "name": "whole record",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 1,
+      "end": 29,
+      "orientation": "+",
+      "bases": "ACGTURYSWKMBDHVN-ACGTNXZ*ACGT"
+    },
+    {
+      "name": "whole record reverse",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 29,
+      "end": 1,
+      "orientation": "-",
+      "bases": "ACGTNNNNACGT-NBDHVKMWSRYAACGT"
+    },
+    {
+      "name": "end after the record",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 20,
+      "end": 30,
+      "bases": null
+    },
+    {
+      "name": "start before the record",
+      "sequence": "ACGTURYSWKMBDHVN-acgtnXZ*ACGT",
+      "start": 0,
+      "end": 4,
+      "bases": null
+    }
+  ]
+}

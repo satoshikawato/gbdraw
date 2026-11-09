@@ -31,6 +31,7 @@ from gbdraw.api import (
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.cli_utils import session as cli_session
 from gbdraw.exceptions import ValidationError
+from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
 from gbdraw.session_io import validate_session
 from tests.utils.session_files import read_session_payload, write_session_file
 from gbdraw.session_resources import canonical_resource_ids
@@ -152,7 +153,10 @@ def test_cli_session_resave_keeps_the_other_mode_result_set(tmp_path: Path) -> N
     circular = session_drawing_artifacts(document, "circular").fields
     assert circular["renderRequest"] == session["renderRequest"]
     assert circular["results"] == session["results"]
-    assert circular["editorState"]["featureCatalog"] == session["editorState"]["featureCatalog"]
+    # The kept catalog is the source's, promoted to the current schema, which holds no sequence (D5).
+    assert circular["editorState"]["featureCatalog"] == promote_legacy_feature_catalog(
+        session["editorState"]["featureCatalog"]
+    )
     # The kept Circular set is unchanged, and every resource it names keeps
     # its ID and bytes in the rebuilt table.
     for resource_id in canonical_resource_ids(session["renderRequest"]):

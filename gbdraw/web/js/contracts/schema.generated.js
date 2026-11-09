@@ -63,7 +63,7 @@ export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7,
 export const SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2;
 
 // gbdraw/session_io.py: CURRENT_FEATURE_CATALOG_SCHEMA
-export const FEATURE_CATALOG_SCHEMA = 5;
+export const FEATURE_CATALOG_SCHEMA = 6;
 
 // gbdraw/web_support/feature_catalog.py: ANCHOR_FEATURE_CATALOG_SCHEMA
 export const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
@@ -80,7 +80,7 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   48: 5,
   49: 5,
   50: 5,
-  51: 5
+  51: 6
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA

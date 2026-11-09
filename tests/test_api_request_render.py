@@ -1823,15 +1823,17 @@ def test_render_request_circular_batch_loads_needed_comparison_fasta_once(
         include_feature_catalog=include_feature_catalog,
     )
 
+    from gbdraw.web_support.feature_catalog import match_sequence_sources
+
     assert isinstance(result, CircularBatchRenderResult)
     assert parse_calls == [str(comparison_fasta)]
     assert all(
         any(
             source["origin"] == "homology-comparison"
-            for source in context.sequence_sources
+            for source in match_sequence_sources(context.sequence_records)
         )
         for context in result.interactive_contexts
-        if context is not None
+        if context is not None and context.sequence_records is not None
     )
 
 

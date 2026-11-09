@@ -11,7 +11,7 @@ import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
-from typing import Any, Iterable, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Iterable, TypeVar, cast
 
 from svgwrite import Drawing
 
@@ -23,6 +23,7 @@ from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
 from gbdraw.render.interactive_svg import (
+    CatalogSequenceRecords,
     InteractiveSvgContext,
     catalog_record_units,
     _RenderedFeatureEntry,
@@ -41,7 +42,15 @@ from gbdraw.render.interactive_svg import (
     _resolve_rendered_features,
     _validate_match_fragments,
 )
-from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA as FEATURE_CATALOG_SCHEMA
+from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA as FEATURE_CATALOG_SCHEMA,
+    SEQUENCE_FEATURE_CATALOG_SCHEMA,
+)
+
+if TYPE_CHECKING:
+    from Bio.SeqFeature import SeqFeature
+
+    from gbdraw.web_support.feature_metadata import FeatureSequences
 
 # Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
 # drawn selector values (``drawnSelector``) for live rule matching.
@@ -217,10 +226,41 @@ def _drawn_selector(feature: Mapping[str, object] | None) -> dict[str, str | Non
     return {field: (_text(raw.get(field)) or None) for field in ("hash", "location", "recordLocation")}
 
 
+# What a catalog of schema 5 or older stored of the sequences (D5): a schema 6 row or item holds none of it.
+STORED_SEQUENCE_KEYS = frozenset({
+    "nucleotide_sequence", "nucleotideSequence", "amino_acid_sequence", "aminoAcidSequence",
+    "sequence_warnings", "sequenceWarnings", "sequenceSourceIndex", "translationFromAminoAcidSequence",
+})
+
+
+def _without_stored_sequences(item: dict[str, object]) -> None:
+    """Drop what an older catalog item stored of the sequences, giving back the ``/translation`` qualifier that a
+    ``translationFromAminoAcidSequence`` mark stood for (Python reads every sequence again, D5)."""
+
+    item.pop("sequenceSources", None)
+    features = item.get("biologicalFeatures")
+    for feature in features if isinstance(features, list) else ():
+        if not isinstance(feature, dict):
+            continue
+        amino_acid_sequence = _text(feature.get("amino_acid_sequence") or feature.get("aminoAcidSequence"))
+        if feature.get("translationFromAminoAcidSequence") is True and amino_acid_sequence:
+            qualifiers = feature.get("qualifiers")
+            feature["qualifiers"] = {
+                **(qualifiers if isinstance(qualifiers, Mapping) else {}), "translation": [amino_acid_sequence],
+            }
+        for key in STORED_SEQUENCE_KEYS:
+            feature.pop(key, None)
+
+
 def promote_legacy_feature_catalog(
     catalog: Mapping[str, object],
+    *,
+    schema: int = FEATURE_CATALOG_SCHEMA,
 ) -> dict[str, object]:
-    """Promote schema 3 or 4 without inventing values.
+    """Promote schema 3, 4 or 5 without inventing values, to ``schema``: the current one, or 5 for the Session 46-50
+    an older Session moves through (its move to drawings promotes it again).
+
+    Every older schema stored the sequences; the current one holds none (``_without_stored_sequences``).
 
     Schema 3 gains only safely inferred source-anchor metadata and source
     feature indexes: its writer named a duplicated stable identity
@@ -231,20 +271,28 @@ def promote_legacy_feature_catalog(
     """
 
     source_schema = catalog.get("schema")
-    if source_schema not in (LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA):
+    if source_schema not in (
+        LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA, SEQUENCE_FEATURE_CATALOG_SCHEMA,
+    ):
         raise GbdrawError(
-            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA} "
-            f"or {ANCHOR_FEATURE_CATALOG_SCHEMA}."
+            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA}, "
+            f"{ANCHOR_FEATURE_CATALOG_SCHEMA} or {SEQUENCE_FEATURE_CATALOG_SCHEMA}."
         )
     migrated = copy.deepcopy(dict(catalog))
     items = migrated.get("items")
     if not isinstance(items, list):
         raise GbdrawError("Feature catalog items must be an array.")
-    migrated["schema"] = FEATURE_CATALOG_SCHEMA
+    if schema not in (SEQUENCE_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA) or source_schema > schema:
+        raise GbdrawError(f"Feature catalog schema {source_schema} does not promote to schema {schema}.")
+    migrated["schema"] = schema
     for item in items:
         if not isinstance(item, dict):
             raise GbdrawError("Feature catalog items must contain objects.")
         # Item validation stays with select_feature_catalog_item.
+        if schema == FEATURE_CATALOG_SCHEMA:
+            _without_stored_sequences(item)
+        if source_schema == SEQUENCE_FEATURE_CATALOG_SCHEMA:
+            continue
         rendered = item.get("features")
         for feature in rendered if isinstance(rendered, list) else ():
             if isinstance(feature, dict):
@@ -1182,19 +1230,6 @@ def _normalized_biological_features(
                     )
                     else value
                 )
-            amino_acid_sequence = _text(
-                payload.get("amino_acid_sequence")
-                or payload.get("aminoAcidSequence")
-            )
-            translation = normalized_qualifiers.get("translation")
-            if (
-                amino_acid_sequence
-                and isinstance(translation, list)
-                and len(translation) == 1
-                and translation[0] == amino_acid_sequence
-            ):
-                normalized_qualifiers.pop("translation", None)
-                payload["translationFromAminoAcidSequence"] = True
             payload["qualifiers"] = normalized_qualifiers
             for field in (
                 "protein_id",
@@ -2047,9 +2082,9 @@ def _normalized_annotations(
 
 def _deduplicated_sequence_sources(
     matches: Sequence[Mapping[str, object]],
-    context: InteractiveSvgContext,
+    sources: Sequence[Mapping[str, object]],
 ) -> list[dict[str, object]]:
-    selected = _sequence_sources_for_matches(matches, context.sequence_sources)
+    selected = _sequence_sources_for_matches(matches, sources)
     normalized: list[dict[str, object]] = []
     by_key: dict[str, dict[str, object]] = {}
     for source in selected:
@@ -2260,6 +2295,169 @@ def _reference_reconstructible_nucleotide_sequences(
             break
 
 
+def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, object]]:
+    """The whole-record sequences that match spans are read from (D5): each drawn unit (``linear:record:N`` or
+    ``circular:record:N``, N its place in ``records``) and every comparison FASTA record
+    (``homology:comparison:S:ID``). The one producer of a record's bases for a match: the Worker reads spans from
+    it, and an exported Interactive SVG embeds the sources its matches read."""
+
+    from gbdraw.api.prepared import cancel_checkpoint
+
+    sources: list[dict[str, object]] = []
+    for record_index, record in enumerate(records.records):
+        cancel_checkpoint()
+        aliases = {str(record.id or "").strip(), str(record.name or "").strip()}
+        accessions = (getattr(record, "annotations", {}) or {}).get("accessions", [])
+        if isinstance(accessions, str):
+            aliases.add(accessions.strip())
+        else:
+            aliases.update(str(value or "").strip() for value in accessions)
+        sources.append({
+            "key": f"{records.mode}:record:{record_index}",
+            "recordId": str(record.id),
+            "aliases": sorted(value for value in aliases if value),
+            "sequence": str(record.seq).upper(),
+            "origin": "linear-record" if records.mode == "linear" else "circular-reference",
+            "recordIndex": record_index,
+        })
+    for source_index, source_records in enumerate(records.comparison_records):
+        for record in source_records:
+            sources.append({
+                "key": f"homology:comparison:{source_index}:{record.id}",
+                "recordId": str(record.id),
+                "aliases": [str(record.id), str(record.name)],
+                "sequence": str(record.seq).upper(),
+                "origin": "homology-comparison",
+                "sourceIndex": source_index,
+            })
+    return sources
+
+
+def read_match_span(sequence: str, start: int, end: int) -> str | None:
+    """The bases of a match span, 1-based and inclusive on the displayed record; a start after the end reads the
+    reverse strand (reverse complement, IUPAC letters kept). None when the span leaves the record."""
+
+    length = len(sequence)
+    if not (1 <= start <= length and 1 <= end <= length):
+        return None
+    low, high = min(start, end), max(start, end)
+    bases = sequence[low - 1:high]
+    return _reverse_complement_sequence(bases) if start > end else bases
+
+
+# The export profile of the catalog (D5-02): an exported Interactive SVG embeds the catalog with its sequences, in
+# this schema and its compact encoding; the stored catalog (``FEATURE_CATALOG_SCHEMA``) holds no sequence.
+INTERACTIVE_EMBED_SCHEMA = SEQUENCE_FEATURE_CATALOG_SCHEMA
+# The keys a biological row reads from its feature before its sequences, in order (``feature_metadata``): the
+# embedded sequences follow the last of them, where the catalog wrote them before D5.
+_KEYS_BEFORE_SEQUENCES = (
+    "record_id", "record_idx", "feature_index", "organism", "type", "start", "end", "strand", "protein_id",
+    "source_protein_id", "locus_tag", "gene_id", "old_locus_tag", "gene", "product", "note", "qualifiers",
+    "selector", "location_parts", "anchorProfile",
+)
+
+
+def _row_with_sequences(row: Mapping[str, object], sequences: FeatureSequences | None) -> dict[str, object]:
+    """A stored biological row with its sequences in the export encoding: the three keys after the keys read from
+    the feature, and, when its ``/translation`` qualifier is its amino-acid sequence, the qualifier dropped for the
+    ``translationFromAminoAcidSequence`` mark."""
+
+    if sequences is None:
+        return dict(row)
+    fields = {
+        key: value
+        for key, value in (
+            ("nucleotide_sequence", sequences["nucleotideSequence"] or None),
+            ("amino_acid_sequence", sequences["aminoAcidSequence"] or None),
+            ("sequence_warnings", _compact_wire_value(list(sequences["sequenceWarnings"]))),
+        )
+        if value is not None
+    }
+    last = max((index for index, key in enumerate(row) if key in _KEYS_BEFORE_SEQUENCES), default=-1)
+    embedded: dict[str, object] = {}
+    for index, (key, value) in enumerate(row.items()):
+        if index == 0 and last < 0:
+            embedded.update(fields)
+        embedded[key] = value
+        if index == last:
+            embedded.update(fields)
+    amino_acid_sequence = sequences["aminoAcidSequence"]
+    qualifiers = embedded.get("qualifiers")
+    translation = qualifiers.get("translation") if isinstance(qualifiers, Mapping) else None
+    if (
+        amino_acid_sequence
+        and isinstance(qualifiers, Mapping)
+        and isinstance(translation, list)
+        and len(translation) == 1
+        and translation[0] == amino_acid_sequence
+    ):
+        kept = {key: value for key, value in qualifiers.items() if key != "translation"}
+        if kept:
+            embedded["qualifiers"] = kept
+        else:
+            embedded.pop("qualifiers")
+        embedded["translationFromAminoAcidSequence"] = True
+    return embedded
+
+
+def embed_catalog_item(item: Mapping[str, object], records: CatalogSequenceRecords) -> dict[str, object]:
+    """The export encoder (D5-02): a stored catalog item with every sequence an exported Interactive SVG embeds.
+
+    Each biological row gets its feature's sequences from ``feature_sequence_payload`` (the one producer), found
+    by its record key and source feature index in the drawn records; a nucleotide sequence that a whole-record
+    source of the item's matches reconstructs is written as ``sequenceSourceIndex``; the item gets the sources its
+    matches read (``sequenceSources``). The CLI and Python export and the Web export (through the Worker) write
+    this, in ``INTERACTIVE_EMBED_SCHEMA``.
+    """
+
+    from gbdraw.features.source import drawn_source_features
+    from gbdraw.web_support.feature_metadata import feature_sequence_payload
+
+    record_keys = [str(key) for key in cast("Sequence[object]", item["recordKeys"])]
+    if list(records.unit_keys) != record_keys:
+        raise GbdrawError("Interactive SVG export records must be the catalog item's drawn records.")
+    windows = item.get("windowOf", {})
+    identity_keys = [str(windows.get(key, key)) if isinstance(windows, Mapping) else key for key in record_keys]
+    first_unit: dict[str, int] = {}
+    for unit_index, key in enumerate(identity_keys):
+        first_unit.setdefault(key, unit_index)
+    drawn: dict[int, dict[int, SeqFeature]] = {}
+
+    def sequences_of(row: Mapping[str, object]) -> FeatureSequences | None:
+        unit = first_unit.get(_text(row.get("recordKey")))
+        source_index = row.get("sourceFeatureIndex")
+        if unit is None or type(source_index) is not int:
+            return None
+        if unit not in drawn:
+            drawn[unit] = drawn_source_features(records.records[unit])
+        feature = drawn[unit].get(source_index)
+        return None if feature is None else feature_sequence_payload(feature, records.records[unit])
+
+    biological = [
+        _row_with_sequences(row, sequences_of(row))
+        for row in cast("Sequence[Mapping[str, object]]", item["biologicalFeatures"])
+    ]
+    matches = cast("Sequence[Mapping[str, object]]", item.get("comparisonMatches") or ())
+    sequence_sources = _deduplicated_sequence_sources(matches, match_sequence_sources(records))
+    _reference_reconstructible_nucleotide_sequences(biological, identity_keys, sequence_sources)
+    embedded: dict[str, object] = {**item, "biologicalFeatures": biological}
+    if sequence_sources:
+        embedded["sequenceSources"] = sequence_sources
+    return embedded
+
+
+def interactive_embed_catalog(
+    item: Mapping[str, object], records: CatalogSequenceRecords | None
+) -> dict[str, object]:
+    """The catalog an exported Interactive SVG embeds (D5-02): the file has no Python, so its one item carries every
+    sequence its popups, search and match FASTA read, from ``records`` (none when the caller holds no records)."""
+
+    return {
+        "schema": INTERACTIVE_EMBED_SCHEMA,
+        "items": [dict(item) if records is None else embed_catalog_item(item, records)],
+    }
+
+
 # The group kinds whose elements the catalog reads: features (record and axis
 # groups, with the record source span), comparison ribbons and annotations.
 # The Circular axis circle (AXIS_CIRCLE) holds neither.
@@ -2424,9 +2622,7 @@ def _feature_catalog_item(
         tuple(record_keys),
         tuple(identity_keys),
     )
-    # Per-request copies (M11): this request changes the feature dicts
-    # (``_reference_reconstructible_nucleotide_sequences``); the stored ones
-    # stay as built.
+    # Per-request copies (M11): the stored ones stay as built.
     biological_features = [dict(feature) for feature in stored_features]
     indexed_features = [
         replace(item, normalized=feature)
@@ -2483,13 +2679,6 @@ def _feature_catalog_item(
             known_group_ids.add(normalized_group_id)
     cancel_checkpoint()
     presentation_by_id = _orthogroup_presentation_by_id(raw_matches)
-    sequence_sources = _deduplicated_sequence_sources(raw_matches, context)
-    cancel_checkpoint()
-    _reference_reconstructible_nucleotide_sequences(
-        biological_features,
-        identity_keys,
-        sequence_sources,
-    )
     cancel_checkpoint()
     normalized_orthogroups = _normalized_orthogroups(
         orthogroups,
@@ -2525,8 +2714,6 @@ def _feature_catalog_item(
         ),
         "comparisonMatches": normalized_matches,
     }
-    if sequence_sources:
-        item["sequenceSources"] = sequence_sources
     return item
 
 
@@ -2574,6 +2761,7 @@ def select_feature_catalog_item(
         else {
             LEGACY_FEATURE_CATALOG_SCHEMA,
             ANCHOR_FEATURE_CATALOG_SCHEMA,
+            SEQUENCE_FEATURE_CATALOG_SCHEMA,
             FEATURE_CATALOG_SCHEMA,
         }
     )
@@ -2584,7 +2772,7 @@ def select_feature_catalog_item(
         required = (
             str(expected_schema)
             if expected_schema is not None
-            else f"3, 4 or {FEATURE_CATALOG_SCHEMA}"
+            else f"3, 4, 5 or {FEATURE_CATALOG_SCHEMA}"
         )
         raise GbdrawError(
             f"Feature catalog must use schema {required}."
@@ -2628,6 +2816,16 @@ def select_feature_catalog_item(
         )
     ):
         raise GbdrawError("Feature catalog sequenceSources must be an array.")
+    if catalog_schema == FEATURE_CATALOG_SCHEMA and (
+        "sequenceSources" in item
+        or any(
+            isinstance(feature, Mapping) and not STORED_SEQUENCE_KEYS.isdisjoint(feature)
+            for feature in item["biologicalFeatures"]
+        )
+    ):
+        raise GbdrawError(
+            f"Feature catalog schema {FEATURE_CATALOG_SCHEMA} stores no sequences: Python reads them on demand."
+        )
 
     record_keys = [_text(value) for value in item["recordKeys"]]
     if any(not key for key in record_keys) or len(set(record_keys)) != len(
@@ -2787,7 +2985,7 @@ def select_feature_catalog_item(
                 "Feature catalog contains an invalid rendered feature "
                 "reference."
             )
-        if catalog_schema >= FEATURE_CATALOG_SCHEMA and not _valid_drawn_selector(
+        if catalog_schema >= SEQUENCE_FEATURE_CATALOG_SCHEMA and not _valid_drawn_selector(
             feature.get("drawnSelector", _MISSING)
         ):
             raise GbdrawError(
@@ -2944,9 +3142,15 @@ def select_feature_catalog_item(
 __all__ = [
     "FEATURE_CATALOG_SCHEMA",
     "build_feature_catalog",
+    "interactive_embed_catalog",
     "build_feature_catalog_item",
     "canonical_catalog_sequence_sources",
     "materialize_catalog_nucleotide_sequence",
+    "STORED_SEQUENCE_KEYS",
+    "INTERACTIVE_EMBED_SCHEMA",
+    "embed_catalog_item",
+    "match_sequence_sources",
     "promote_legacy_feature_catalog",
+    "read_match_span",
     "select_feature_catalog_item",
 ]

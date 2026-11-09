@@ -22,7 +22,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
-from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
+from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor, _record_fact
 from gbdraw.render.composition import applied_composition_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +66,7 @@ def build_fixture(tmp_path):
             parse_region_spec('unusable:401-700') if key == 'unusable' else None)
         presentation = RecordPresentation(reverse_complement=key == 'skip')
         records.append(RecordInput(GenBankInputSource(path), record_key=key, region=region, presentation=presentation))
-        helpers.append(dict(recordKey=key, recordLength=length, windows=[] if region is None else
+        helpers.append(dict(recordKey=key, windows=[] if region is None else
                             [dict(start=region.start, end=region.end, reverseComplement=region.reverse_complement,
                                   column=None)],
                             presentation=dict(reverseComplement=presentation.reverse_complement)))
@@ -336,7 +336,7 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
     encoded = encode_canonical_request(request)
     paths = {item.resource_id: str(item.source_path) for item in encoded.resources}
     helper = dict(schema=2, groupId='group', reference=members[0]['anchor'], members=members, directEdges=[],
-                  choices=[], records=[dict(recordKey=stored['recordKey'], recordLength=1000,
+                  choices=[], records=[dict(recordKey=stored['recordKey'],
                                             windows=copy.deepcopy(stored['windows']),
                                             presentation=dict(reverseComplement=stored['presentation']['reverseComplement']))
                                        for stored in encoded.payload['records']])
@@ -369,14 +369,18 @@ def _circular_fixture(tmp_path, *, windows, reverse=False):
 def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center):
     helper, context, paths = _circular_fixture(tmp_path, windows=windows, reverse=reverse)
     rendered = resolve_similarity_alignment_payload(helper, projection=context, resource_paths=paths)
-    alone = resolve_similarity_alignment_payload(helper)
 
     def circ_center(response):
         (row,) = [row for row in response['records'] if row['recordKey'] == 'circ']
         (candidate,) = row['candidates']
         return candidate['displayCenter'], candidate['displayedStrand'], candidate['usable']
 
-    assert circ_center(alone) == circ_center(rendered)
+    # The helper's own placement, with the 1000-bp length Python reads from the committed request (D5), is the
+    # renderer's.
+    (record,) = [record for record in helper['records'] if record['recordKey'] == 'circ']
+    (member,) = [member for member in helper['members'] if member['anchor']['recordKey'] == 'circ']
+    placed, _reverse = _record_fact(record, 'circ', {'circ': 1000}).placed((member['sourceStart'] + member['sourceEnd']) / 2)
+    assert placed == circ_center(rendered)[0]
     assert circ_center(rendered)[0] == center
     assert rendered['plan']['records'][1]['status'] == ('aligned' if center is not None else 'skipped')
     # The flip variant turns the record round from the direction it is drawn in: reversed by its presentation, or when

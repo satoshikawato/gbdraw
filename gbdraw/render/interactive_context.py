@@ -14,7 +14,7 @@ from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.api.prepared import cancel_checkpoint, record_prepared_input_metric
 from gbdraw.core.record_metadata import record_identity_key
-from gbdraw.render.interactive_svg import InteractiveSvgContext
+from gbdraw.render.interactive_svg import CatalogSequenceRecords, InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -243,42 +243,6 @@ def interactive_svg_context(
 
     annotation_payload = [row.payload() for row in annotation_rows]
 
-    resolved_mode = mode or ("linear" if linear_rendered_feature_ids else "circular")
-    sequence_sources: list[dict[str, object]] = []
-    for record_index, record in enumerate(record_list):
-        cancel_checkpoint()
-        aliases = {
-            str(record.id or "").strip(),
-            str(record.name or "").strip(),
-        }
-        accessions = (getattr(record, "annotations", {}) or {}).get("accessions", [])
-        if isinstance(accessions, str):
-            aliases.add(accessions.strip())
-        else:
-            aliases.update(str(value or "").strip() for value in accessions)
-        sequence_sources.append(
-            {
-                "key": f"linear:record:{record_index}" if resolved_mode == "linear" else f"circular:record:{record_index}",
-                "recordId": str(record.id),
-                "aliases": sorted(value for value in aliases if value),
-                "sequence": str(record.seq).upper(),
-                "origin": "linear-record" if resolved_mode == "linear" else "circular-reference",
-                "recordIndex": record_index,
-            }
-        )
-    for source_index, source_records in enumerate(comparison_sequence_records or ()):
-        for record in source_records:
-            sequence_sources.append(
-                {
-                    "key": f"homology:comparison:{source_index}:{record.id}",
-                    "recordId": str(record.id),
-                    "aliases": [str(record.id), str(record.name)],
-                    "sequence": str(record.seq).upper(),
-                    "origin": "homology-comparison",
-                    "sourceIndex": source_index,
-                }
-            )
-
     record_keys = tuple(
         str((getattr(record, "annotations", {}) or {}).get("gbdraw_record_key", f"record-{record_index + 1}"))
         for record_index, record in enumerate(record_list)
@@ -288,7 +252,13 @@ def interactive_svg_context(
         biological_features=biological_features,
         orthogroups=orthogroup_payload,
         annotations=annotation_payload,
-        sequence_sources=sequence_sources,
+        # The bases stay in the records: an export reads them (``embed_catalog_item``), the catalog stores none (D5).
+        sequence_records=CatalogSequenceRecords(
+            mode=cast("Literal['linear', 'circular']", mode or ("linear" if linear_rendered_feature_ids else "circular")),
+            records=tuple(record_list),
+            unit_keys=record_keys,
+            comparison_records=tuple(tuple(items) for items in comparison_sequence_records or ()),
+        ),
         record_keys=record_keys,
         record_identity_keys=tuple(
             record_identity_key(record) or unit_key for record, unit_key in zip(record_list, record_keys, strict=True)

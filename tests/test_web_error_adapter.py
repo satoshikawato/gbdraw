@@ -191,8 +191,8 @@ def test_native_comparison_choice_corrections(validator, field, reason):
 def test_native_alignment_region_correction(window):
     from gbdraw.web_support.similarity_alignment import _record_fact
     with pytest.raises(ValidationError) as caught:
-        _record_fact({'recordKey': 'PRIVATE_RECORD', 'recordLength': 10, 'windows': [window],
-                      'presentation': {'reverseComplement': False}}, 'records[0]')
+        _record_fact({'recordKey': 'PRIVATE_RECORD', 'windows': [window],
+                      'presentation': {'reverseComplement': False}}, 'records[0]', {'PRIVATE_RECORD': 10})
     result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
     assert result['code'] == 'REGION_INVALID'
     assert result['context'] == {'field': 'region', 'reason': 'RECORD_BOUNDS'}

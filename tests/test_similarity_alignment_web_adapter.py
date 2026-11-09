@@ -9,6 +9,7 @@ from tests.utils.session_drawing_view import drawing_view
 from tests.utils.session_files import read_session_payload
 from gbdraw.exceptions import ValidationError
 from gbdraw.web_support.similarity_alignment import (
+    _record_fact,
     resolve_similarity_alignment_json,
     resolve_similarity_alignment_payload,
 )
@@ -53,13 +54,11 @@ def _request() -> dict[str, object]:
         "records": [
             {
                 "recordKey": "record-a",
-                "recordLength": 1000,
                 "windows": [],
                 "presentation": {"reverseComplement": False},
             },
             {
                 "recordKey": "record-b",
-                "recordLength": 400,
                 "windows": [{"start": 101, "end": 300, "reverseComplement": True, "column": None}],
                 "presentation": {"reverseComplement": False},
             },
@@ -146,14 +145,18 @@ def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
 
 def test_web_adapter_reads_a_window_across_the_origin_and_places_a_record_of_several_windows() -> None:
     request = _request()
-    # record-b (400 bp) drawn from 301 across the origin to 160: the target 140..170 centres at 155,
-    # which the window holds at 100 + 155 = 255, reversed at 160 - 155 = 5 (OV-2771).
+    # record-b (400 bp, the length Python reads from the committed request) drawn from 301 across the origin to
+    # 160: the target 140..170 centres at 155, which the window holds at 100 + 155 = 255, reversed at
+    # 160 - 155 = 5 (OV-2771).
     window = {"start": 301, "end": 160, "reverseComplement": False, "column": None}
-    request["records"][1]["windows"] = [window]  # type: ignore[index]
-    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 255.0  # type: ignore[index]
+    record_b = request["records"][1]  # type: ignore[index]
+    record_b["windows"] = [window]
+    assert _record_fact(record_b, "record", {"record-b": 400}).placed(155) == (255.0, False)
     window["reverseComplement"] = True
-    assert resolve_similarity_alignment_payload(request)["records"][1]["candidates"][0]["displayCenter"] == 5.0  # type: ignore[index]
+    assert _record_fact(record_b, "record", {"record-b": 400}).placed(155) == (5.0, True)
     window["end"] = 150
+    assert _record_fact(record_b, "record", {"record-b": 400}).placed(155)[0] is None
+    # Without the committed request the length is unknown, and a window across the origin places nothing.
     outside = resolve_similarity_alignment_payload(request)["records"][1]  # type: ignore[index]
     assert outside["candidates"][0]["displayCenter"] is None  # type: ignore[index]
     assert outside["status"] == "skipped"  # type: ignore[index]
@@ -225,18 +228,20 @@ def test_web_rejects_removed_choice_field_and_invalid_crop() -> None:
     with pytest.raises(ValidationError, match="invalid fields"):
         resolve_similarity_alignment_payload(request)
 
+    # The page no longer sends a record length: Python reads it from the committed request (D5).
+    with_length = _request()
+    with_length["records"][1]["recordLength"] = 400  # type: ignore[index]
+    with pytest.raises(ValidationError, match="invalid fields"):
+        resolve_similarity_alignment_payload(with_length)
+
     # A window whose End runs past the record end is drawn clamped to the record end (the crop's
     # `region_slice`), so record-b's window 101..300 of a 200-bp record draws 101..200, reversed: the
     # target centre 155 is at 200 - 155 = 45, not at 300 - 155.
-    cropped = _request()
-    cropped["records"][1]["recordLength"] = 200  # type: ignore[index]
-    row = resolve_similarity_alignment_payload(cropped)["records"][1]  # type: ignore[index]
-    assert row["candidates"][0]["displayCenter"] == 45.0  # type: ignore[index]
-    assert row["status"] == "aligned"  # type: ignore[index]
+    record_b = _request()["records"][1]  # type: ignore[index]
+    assert _record_fact(record_b, "record", {"record-b": 200}).placed(155) == (45.0, True)
     # A window that starts past the record end is refused, as the crop refuses it.
-    cropped["records"][1]["recordLength"] = 100  # type: ignore[index]
     with pytest.raises(ValidationError, match="starts after the end of record") as refused:
-        resolve_similarity_alignment_payload(cropped)
+        _record_fact(record_b, "record", {"record-b": 100})
     assert refused.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"}
 
 
@@ -248,11 +253,11 @@ def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
     request["members"][1]["sourceStrand"] = 1
     result = resolve_similarity_alignment_payload(request)
     candidate = result["records"][1]["candidates"][0]
-    # Source center 155 maps to 245 after the 400-bp presentation reversal,
-    # then to 145 in the 101..300 crop.
-    assert candidate["displayCenter"] == 145.0
     assert candidate["displayedStrand"] == -1
     assert candidate["strandRelation"] == "opposite"
+    # Source center 155 maps to 245 after the 400-bp presentation reversal,
+    # then to 145 in the 101..300 crop.
+    assert _record_fact(target_record, "record", {"record-b": 400}).placed(155) == (145.0, True)
 
     target_record["windows"][0]["reverseComplement"] = True
     with pytest.raises(ValidationError, match="both window and presentation"):
@@ -289,7 +294,6 @@ def bgc_og18(tmp_path_factory):
     item = rendered["featureCatalog"]["items"][0]
     group = next(entry for entry in item["orthogroups"] if entry["id"] == "og_18")
     features = {(f["recordKey"], f["biologicalFeatureId"]): f for f in item["biologicalFeatures"]}
-    lengths = dict(zip(item["recordKeys"], (len(s["sequence"]) for s in item["sequenceSources"])))
     members, anchors = [], {}
     for member in group["members"]:
         feature = features[(member["recordKey"], member["biologicalFeatureId"])]
@@ -311,7 +315,7 @@ def bgc_og18(tmp_path_factory):
         for rid, entry in session["resources"].items()
     }
     records = [{
-        "recordKey": record["recordKey"], "recordLength": lengths[record["recordKey"]],
+        "recordKey": record["recordKey"],
         "windows": record["windows"],
         "presentation": {"reverseComplement": bool(record["presentation"]["reverseComplement"])},
     } for record in session["renderRequest"]["records"]]

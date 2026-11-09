@@ -12,7 +12,7 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from tests.utils.session_drawing_view import drawing_view, view_at
+from tests.utils.session_drawing_view import catalogs_at, drawing_view, view_at
 from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -61,4 +61,4 @@ def two_mode_session(linear: dict[str, Any] | None = None) -> dict[str, Any]:
         "ui": {"selectedResultIndex": 0, "generatedLegendPosition": "bottom"},
         **({"runMetadata": linear["runMetadata"]} if "runMetadata" in linear else {}),
     }
-    return session
+    return catalogs_at(session, 48)

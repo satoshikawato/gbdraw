@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence, cast
+from typing import TYPE_CHECKING, Any, Sequence, TypedDict, cast
 
 from gbdraw.io.genome import read_flat_file_records
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
@@ -285,6 +286,27 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
+class FeatureSequences(TypedDict):
+    """The sequences of one feature, read from the record it is drawn in: the bases of its location, its amino-acid
+    sequence (its ``/translation`` qualifier, else the translation of a CDS) and why either is missing."""
+
+    nucleotideSequence: str
+    aminoAcidSequence: str
+    sequenceWarnings: list[str]
+
+
+def feature_sequence_payload(feature: SeqFeature, record: SeqRecord) -> FeatureSequences:
+    """The one producer of a feature's sequences (D5): the catalog stores none of them, every reader asks here."""
+
+    nucleotide_sequence, warnings = _extract_nucleotide_sequence(feature, record)
+    amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(feature, nucleotide_sequence)
+    return {
+        "nucleotideSequence": nucleotide_sequence,
+        "aminoAcidSequence": amino_acid_sequence,
+        "sequenceWarnings": [*warnings, *translation_warnings],
+    }
+
+
 def extract_features_from_records_payload(
     records: Any,
     *,
@@ -390,13 +412,6 @@ def extract_features_from_records_payload(
                 coord_step,
                 period,
             )
-            nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
-            amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(
-                feat,
-                nucleotide_sequence,
-            )
-            sequence_warnings.extend(translation_warnings)
-
             selector, stable_svg_id, drawn_selector = selector_values
 
             # The same qualifier map rule matching reads: keys stripped and
@@ -440,9 +455,6 @@ def extract_features_from_records_payload(
                     feat,
                     coord_step=coord_step,
                 ),
-                "nucleotide_sequence": nucleotide_sequence,
-                "amino_acid_sequence": amino_acid_sequence,
-                "sequence_warnings": sequence_warnings,
             }
             if include_biological_features:
                 biological_features.append(feature_payload)

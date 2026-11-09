@@ -9,7 +9,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
+from gbdraw.web_support.feature_catalog import INTERACTIVE_EMBED_SCHEMA
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
@@ -247,7 +247,7 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
         ),
     )
     payload = _metadata_payload(enriched)
-    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
+    assert payload["schema"] == INTERACTIVE_EMBED_SCHEMA
     item = payload["items"][0]
     feature_ids = {feature["svgId"] for feature in item["features"]}
     biological_by_key = {

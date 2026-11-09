@@ -17,6 +17,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
 from gbdraw.session_request_codec import StoredRecordWindow, stored_record_windows
 from gbdraw.session_io import (
+    SEQUENCE_FEATURE_CATALOG_SCHEMA,
     CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -586,7 +587,8 @@ def project_session_adjunct_for_current_write(
                 promote_legacy_feature_catalog,
             )
 
-            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
+            # To the Session 46-50 schema the adjunct moves through (D5).
+            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog, schema=SEQUENCE_FEATURE_CATALOG_SCHEMA)
             adjunct["editorState"] = editor_state
     web_file_inventory = _project_web_file_inventory(session, resources)
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:

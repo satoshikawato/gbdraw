@@ -219,6 +219,13 @@ def _record_key_indexes(
     return {key: tuple(units) for key, units in indexes.items()}
 
 
+def drawn_source_features(record: SeqRecord) -> dict[int, SeqFeature]:
+    """The features a drawn record still has, by their source feature index (the ordinal of the input file)."""
+
+    source_indexes = _feature_source_index_map(record.features)
+    return {source_indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
+
+
 def resolve_feature_identities(
     *,
     records: Sequence[SeqRecord],
@@ -252,8 +259,7 @@ def resolve_feature_identities(
             entry.biological_feature_id: entry.source_feature_index
             for entry in source_catalogs[record_index]
         }
-        source_indexes = _feature_source_index_map(record.features)
-        drawn = {source_indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
+        drawn = drawn_source_features(record)
         missing: Literal["crop_excluded", "absent"] = (
             "crop_excluded" if record.annotations.get("gbdraw_region_applied") else "absent"
         )

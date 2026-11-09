@@ -2673,12 +2673,11 @@ def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_
 
 
 def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> None:
-    from gbdraw.session_drawings import drawings_document_from_mode_scoped
-    from gbdraw.session_io import WEB_BINDING_CARD_SLOTS, WEB_BINDING_MODE_SLOTS
+    from gbdraw.session_io import WEB_BINDING_CARD_SLOTS, WEB_BINDING_MODE_SLOTS, drawings_document_of_mode_scoped
 
     with gzip.open(_TWO_MODE_V48_SESSION, "rt", encoding="utf-8") as handle:
         source = json.load(handle)
-    document, facts = drawings_document_from_mode_scoped(source)
+    document, facts = drawings_document_of_mode_scoped(source)
     load_session_mapping(document)
 
     linear, circular = document["drawings"]
