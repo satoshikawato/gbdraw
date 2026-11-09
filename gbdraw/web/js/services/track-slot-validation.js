@@ -398,22 +398,35 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
 /**
  * The gap of each Overlay set row among the side-ordered rows: gap g puts it before `fixed[g]`, gap `fixed.length` at
  * the end. Python paints the rows of one z as underlay overlays, then the other rows, then foreground overlays, and
- * keeps the request's order only within each of those (`slots_in_paint_order`), so an overlay's place against the
- * other rows changes nothing on the figure. Each overlay takes its place before the row that followed it in the
- * request (the end when none did), and never before an earlier overlay, so the overlays keep their order.
+ * keeps the request's order only within each of those (`slots_in_paint_order`), so the overlays keep their order.
+ * Python also lists the Legend entries of Annotations rows in the order of the stack, overlays included. So each
+ * overlay takes, never before an earlier overlay, the gap that leaves the fewest other Annotations rows on the other
+ * side of it than in the request, and of those the one nearest its place before the row that followed it in the
+ * request (the end when none did).
+ * @param {readonly { readonly renderer?: unknown }[]} rows
  * @param {readonly number[]} fixed The request places of the side-ordered rows, in their new order.
  * @param {readonly number[]} overlays The request places of the Overlay set rows, in order.
  * @returns {Map<number, number>} The gap of each overlay, by its request place.
  */
-const overlayGaps = (fixed, overlays) => {
+const overlayGaps = (rows, fixed, overlays) => {
   const placeOf = new Map(fixed.map((index, place) => [index, place]));
+  const listed = fixed.filter((index) => rows[index].renderer === 'annotations');
   /** @type {Map<number, number>} */
   const gaps = new Map();
   let floor = 0;
   overlays.forEach((overlay) => {
     const next = Math.min(...fixed.filter((index) => index > overlay));
-    floor = Math.max(floor, placeOf.get(next) ?? fixed.length);
-    gaps.set(overlay, floor);
+    const home = placeOf.get(next) ?? fixed.length;
+    const moved = (/** @type {number} */ gap) => listed
+      .filter((index) => (index < overlay) !== (Number(placeOf.get(index)) < gap)).length;
+    const cost = (/** @type {number} */ gap) => [moved(gap), Math.abs(gap - home)];
+    let best = floor;
+    for (let gap = floor + 1; gap <= fixed.length; gap += 1) {
+      const [a, b] = [cost(gap), cost(best)];
+      if (a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])) best = gap;
+    }
+    floor = best;
+    gaps.set(overlay, best);
   });
   return gaps;
 };
@@ -442,7 +455,7 @@ export const stackTrackSlotsBySide = (rows, placementOf, outerSide) => {
   const fixed = rows.map((_row, index) => index).filter((index) => ranks[index] !== null)
     .sort((a, b) => Number(ranks[a]) - Number(ranks[b]) || a - b);
   const overlays = rows.map((_row, index) => index).filter((index) => ranks[index] === null);
-  const gaps = overlayGaps(fixed, overlays);
+  const gaps = overlayGaps(rows, fixed, overlays);
   const order = [...fixed, fixed.length].flatMap((index, place) => [
     ...overlays.filter((overlay) => gaps.get(overlay) === place),
     ...(place < fixed.length ? [index] : [])
