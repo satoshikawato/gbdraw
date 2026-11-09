@@ -76,7 +76,7 @@ const baseState = (mode, adv = {}) => ({
   unmanagedConfigOverrides: {}
 });
 const filesFor = (mode) => (mode === 'circular'
-  ? { c_gb: genbank, circularSources: [{ uid: 'record-1', gb: genbank, gff: null, fasta: null }], linearSeqs: [] }
+  ? { circularSources: [{ uid: 'record-1', gb: genbank, gff: null, fasta: null }], linearSeqs: [] }
   : { linearSeqs: [{ uid: 'first', gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false }] });
 const comparisonPlanSnapshot = { hasComparisonIntent: true, hasLosatIntent: false, edges: [] };
 // The drawing states its own mode, as `createDrawingState` gives it.
@@ -208,7 +208,7 @@ test('Generate keeps the numeric draft: no Generate-path draft assignments are a
   // Generate-path draft assignments in run-analysis.js may not exceed the
   // baseline (69 on dev before X-02). Lowering it is optional; raising it is
   // an authority-only change.
-  const BASELINE = 42;
+  const BASELINE = 38;
   const source = readFileSync(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   const assignments = source.split('\n').filter((line) => (
     /^\s*(drawing\.)?(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
