@@ -248,7 +248,7 @@ class RowWindowMarksGroup:
                 Line(
                     start=(_px(cx + offset - style.slash_slant), _px(axis_y + style.slash_half)),
                     end=(_px(cx + offset + style.slash_slant), _px(axis_y - style.slash_half)),
-                    stroke=style.text_fill,
+                    stroke=style.slash_color,
                     stroke_width=_px(style.slash_stroke),
                     stroke_linecap="round",
                 )

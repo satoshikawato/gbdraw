@@ -29,6 +29,7 @@ from gbdraw.api.requests import (
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.linear_row_windows import (
+    LIST_TEXT_FILL,
     RowWindowUnit,
     omitted_length_text,
     plan_row_windows,
@@ -228,6 +229,11 @@ def test_a_windowed_row_draws_window_numbers_edge_marks_and_gap_marks(tmp_path: 
     assert [_texts(g) for g in marks[0] if g.get("data-gbdraw-row-mark") == "gap"] == [["3.0 kb"]]
     assert [_texts(g) for g in marks[1] if g.get("data-gbdraw-row-mark") == "gap"] == [[]]
     assert [len([n for n in g if n.get("data-gbdraw-row-mark") == "number"]) for g in marks] == [2, 2]
+    # "//" is a mark on the axis: drawn in the list's grey, never in the black of the row text (Owner 2026-11-09).
+    slashes = [
+        line for g in marks for gap in g if gap.get("data-gbdraw-row-mark") == "gap" for line in gap.iter(f"{SVG}line")
+    ]
+    assert len(slashes) == 4 and {line.get("stroke") for line in slashes} == {LIST_TEXT_FILL}
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:

@@ -346,6 +346,11 @@ class RowWindowStyle:
         return max(1.0, 0.075 * self.block_height)
 
     @property
+    def slash_color(self) -> str:
+        """The list's grey: "//" is a mark on the axis and stays quieter than the row text."""
+        return LIST_TEXT_FILL
+
+    @property
     def slash_width(self) -> float:
         return 2.0 * (self.slash_spacing + self.slash_slant) + self.slash_stroke
 
