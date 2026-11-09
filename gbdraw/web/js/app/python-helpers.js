@@ -1765,6 +1765,17 @@ def _with_prepared_input_lookup(helper, paths_argument=None, publish_inputs=Fals
     return run
 
 
+def _replied_in_utf8(helper):
+    """A helper whose reply can hold megabases replies in UTF-8 through a reply
+    buffer (gbdraw.web_support.reply_buffers), not as a str: Pyodide makes a
+    JavaScript string of a long str with many times its size of Worker heap.
+    The Worker passes its factory of reply buffers first; an error still
+    returns as a str (call_web_json_helper)."""
+    def run(new_reply_buffer, *arguments):
+        return write_reply_buffer(new_reply_buffer, text_utf8_chunks(helper(*arguments)))
+    return run
+
+
 _WEB_JSON_HELPERS = {
     "compute_label_fit_row_json": (compute_label_fit_row_json, "computeLabelFitRow"),
     "resolve_similarity_alignment_json": (
@@ -1834,15 +1845,18 @@ _WEB_JSON_HELPERS = {
         _with_prepared_input_lookup(plan_genome_scales_json, 1, publish_inputs=True), "planGenomeScales"
     ),
     # The sequences the catalog no longer stores (D5): the first read after a Session Load publishes the parsed
-    # inputs, so the next read and the next Generate parse nothing again.
+    # inputs, so the next read and the next Generate parse nothing again. Their replies cross in UTF-8.
     "read_feature_sequences_json": (
-        _with_prepared_input_lookup(read_feature_sequences_json, 1, publish_inputs=True), "readFeatureSequences"
+        _replied_in_utf8(_with_prepared_input_lookup(read_feature_sequences_json, 1, publish_inputs=True)),
+        "readFeatureSequences",
     ),
     "read_match_sequences_json": (
-        _with_prepared_input_lookup(read_match_sequences_json, 1, publish_inputs=True), "readMatchSequences"
+        _replied_in_utf8(_with_prepared_input_lookup(read_match_sequences_json, 1, publish_inputs=True)),
+        "readMatchSequences",
     ),
     "read_embed_sequences_json": (
-        _with_prepared_input_lookup(read_embed_sequences_json, 1, publish_inputs=True), "readEmbedSequences"
+        _replied_in_utf8(_with_prepared_input_lookup(read_embed_sequences_json, 1, publish_inputs=True)),
+        "readEmbedSequences",
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),

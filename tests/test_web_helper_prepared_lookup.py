@@ -309,6 +309,54 @@ def test_feature_edits_table_after_a_generate_parses_no_source(
     assert _cache_snapshot(cache) == before
 
 
+class _ReplyBuffer:
+    """The Worker's reply buffer (diagram-generation-worker.js ``ReplyBuffer``) over a real file."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = str(path)
+        self.chunks: list[bytes] = []
+
+    def take(self) -> None:
+        file = Path(self.path)
+        self.chunks.append(file.read_bytes())
+        file.unlink()
+
+
+def test_a_sequence_read_replies_in_utf8_through_a_reply_buffer(
+    helpers: dict[str, object], tmp_path: Path,
+) -> None:
+    """A sequence read's reply can hold megabases: it crosses as UTF-8 chunks in a reply buffer, not as a str
+    (Pyodide makes a JavaScript string of a long str in many times its size of Worker heap)."""
+
+    texts = [f"{chunk.strip()}\n//\n" for chunk in OVERRIDE_FIXTURE.read_text().split("\n//") if chunk.strip()]
+    source = tmp_path / "testa.gb"
+    source.write_text(texts[0])
+    request = LinearDiagramRequest(
+        records=(RecordInput(GenBankInputSource(source), record_key="r0"),),
+        options=LinearDiagramOptions(output=LinearOutputOptions(legend="none")),
+    )
+    encoded = encode_canonical_request(request)
+    stage = _Stage(tmp_path / "worker", _encoded_resources(encoded))
+    workspace, paths = stage.workspace("helper")
+    spans = [{"kind": "record", "recordKey": "r0", "start": 1, "end": 12}]
+    buffers: list[_ReplyBuffer] = []
+
+    def new_reply_buffer() -> _ReplyBuffer:
+        buffers.append(_ReplyBuffer(tmp_path / "reply-chunk"))
+        return buffers[-1]
+
+    call = helpers["call_web_json_helper"]
+    assert callable(call)
+    reply = call(
+        "read_match_sequences_json", new_reply_buffer, json.dumps(encoded.payload), json.dumps(paths),
+        str(workspace / "output"), json.dumps(spans), json.dumps(stage.identities),
+    )
+
+    assert buffers and reply is buffers[0]
+    [span] = json.loads(b"".join(buffers[0].chunks).decode("utf-8"))["spans"]
+    assert len(span["sequence"]) == 12
+
+
 def test_stored_protein_frames_after_a_generate_parse_no_source(
     helpers: dict[str, object], alignment: dict[str, object], monkeypatch: pytest.MonkeyPatch,
 ) -> None:

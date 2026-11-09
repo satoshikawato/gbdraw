@@ -187,6 +187,9 @@ export class ReplyBuffer {
  * @param {ReplyBufferFiles} files
  */
 export const createReplyBuffer = (files) => new ReplyBuffer(files);
+/** @param {{ FS: ReplyBufferFiles }} pyodide The factory of reply buffers Python is handed. */
+const replyBuffersOf = (pyodide) => () => createReplyBuffer(pyodide.FS);
+const UTF8_DECODER = new TextDecoder();
 
 /**
  * Join the reply buffers of a converted Generate result in place: its
@@ -844,7 +847,9 @@ export const callJsonHelper = (pyodide, helperName, args) => {
   try {
     if (typeof helper !== 'function') throw { code: 'HELPER_PROTOCOL', stage: 'helper' };
     try {
-      result = JSON.parse(String(helper(helperName, ...args) || 'null'));
+      const reply = helper(helperName, ...args);
+      // A helper that replies in UTF-8 (`_replied_in_utf8` in python-helpers.js) returns its reply buffer.
+      result = JSON.parse(reply instanceof ReplyBuffer ? UTF8_DECODER.decode(reply.finish()) : String(reply || 'null'));
     } catch (error) {
       throw normalizeUserFacingError(error, { code: 'RESULT_INVALID', stage: 'helper' });
     }
@@ -1309,6 +1314,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'read_feature_sequences_json', [
+        replyBuffersOf(pyodide),
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
@@ -1342,6 +1348,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'read_match_sequences_json', [
+        replyBuffersOf(pyodide),
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
@@ -1357,6 +1364,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'read_embed_sequences_json', [
+        replyBuffersOf(pyodide),
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
@@ -1606,7 +1614,7 @@ const runGeneration = async ({
       (/** @type {unknown} */ notice) => {
         self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
       },
-      () => createReplyBuffer(pyodide.FS)
+      replyBuffersOf(pyodide)
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
