@@ -74,8 +74,7 @@ export const losatEntryDrawingKind = ({ flow }) => (flow === CIRCULAR_CONSERVATI
 /**
  * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome,
  * two drawings that hold one entry) name one LOSAT result, with the first row's file name, as the CLI raw cache keeps
- * one file per key. Save writes one entry for each, **Clear N LOSAT results** counts the project's (every drawing's)
- * rows this way, and a drawing's results show each once (`losatResultRowsOfDrawing`).
+ * one file per key. Save writes one entry for each, and a drawing's results show each once (`losatResultRowsOfDrawing`).
  * @template {{ key: unknown }} Row
  * @param {readonly Row[]} rows
  * @returns {Row[]}
@@ -128,6 +127,42 @@ export const losatRowsWithDrawing = (rows, drawingId, drawingRows) => ({
   rows: [...losatRowsOfOtherDrawings(rows, drawingId), ...drawingRows.map((row) => ({ ...row, drawingId }))],
   held: losatRowsOfDrawing(rows, drawingId)
 });
+
+/**
+ * The project's rows after a Generate or a History step of `drawingId` installs the rows it holds (`stepRows`, the
+ * project's rows when it was captured): the drawing's rows are the step's, the other drawings' stay (OV-3207, OV-3212).
+ * The step's array itself when it is the whole result, so an unchanged owner set keeps its array (OV-2210).
+ * @template {{ key: unknown, drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} stepRows
+ * @returns {readonly Row[]}
+ */
+export const losatRowsAfterStep = (rows, drawingId, stepRows) => {
+  const others = losatRowsOfOtherDrawings(rows, drawingId);
+  const own = losatRowsOfDrawing(stepRows, drawingId);
+  return others.length === 0 && own.length === stepRows.length ? stepRows : [...others, ...own];
+};
+
+/**
+ * The cached searches after a Generate or a History step installs its cache (`stepCache`): the step's, and each search
+ * of the current cache that a row of the project still names (`namingRows`), so a step takes away no search another
+ * drawing uses (OV-3207, OV-3212) and adds none that no row names (PD-OI-022: no History replacement revives
+ * unrelated retry data). A row that a Delete or an undone New or Duplicate holds names a search the step has: History
+ * takes that list step back before any older step, and drops its Redo with any newer one. The step's Map itself when
+ * nothing is added, so a rolled-back Generate keeps its retry (`completedLosatSearch` names the cache it was kept for).
+ * @template Entry
+ * @param {ReadonlyMap<unknown, Entry>} stepCache @param {ReadonlyMap<unknown, Entry>} cache
+ * @param {readonly { key: unknown }[]} namingRows
+ * @returns {ReadonlyMap<unknown, Entry>}
+ */
+export const losatSearchesAfterStep = (stepCache, cache, namingRows) => {
+  /** @type {[unknown, Entry][]} */
+  const added = [];
+  new Set(namingRows.map(({ key }) => key)).forEach((key) => {
+    const entry = stepCache.has(key) ? undefined : cache.get(key);
+    if (entry !== undefined) added.push([key, entry]);
+  });
+  return added.length === 0 ? stepCache : new Map([...stepCache, ...added]);
+};
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw

@@ -1066,7 +1066,7 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
     const { drawingId: copyId } = app.drawingList.duplicateDrawing(source);
     assert.equal(state.activeDrawingId.value, copyId);
     assert.deepEqual(await saved(), files, 'the copy saves the tables its rings draw');
-    assert.equal(app.clearableLosatResults.value.length, 3, 'Clear still counts 3 searches');
+    assert.equal(app.clearableLosatResultCount.value, 3, 'Clear still counts 3 searches');
     assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys], 'one row per drawing that holds a search');
     assert.equal(state.losatCache.value.size, 3, 'the searches are shared, never copied');
 

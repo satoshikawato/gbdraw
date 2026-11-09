@@ -457,11 +457,11 @@ into the `[Unreleased]` list below.
   example after removing a ring above it or loading a Session whose ring
   genome file was missing. Each ring now keeps its own (OV-3089, OV-3091,
   OV-3152, OV-3166, OV-3167, OV-3195, OV-3197, OV-3200).
-- Fixed (Web app): editing a Circular drawing's similarity rings, or a
-  Generate of that drawing, removed another drawing's results from its LOSAT
-  results list and from **Save Raw LOSAT TSV**, and a Session saved afterwards
-  lost their file names. Those results now stay listed with their names
-  (OV-3196, OV-3201).
+- Fixed (Web app): editing a Circular drawing's similarity rings, a Generate
+  of a drawing, or the Undo or Redo of a drawing's Generate removed another
+  drawing's results from its LOSAT results list and from **Save Raw LOSAT
+  TSV**, and a Session saved afterwards lost their file names. Those results
+  now stay listed with their names (OV-3196, OV-3201, OV-3207).
 - Fixed (Web app): **Save Raw LOSAT TSV** of a drawing also saved the LOSAT
   results of the project's other drawings, and **Clear N LOSAT results** and
   **Save Raw LOSAT TSV** counted and saved twice a table that two similarity

@@ -24,6 +24,7 @@ import {
   ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { losatRowsAfterStep, losatSearchesAfterStep } from './losat-cache.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -1126,9 +1127,12 @@ export const createHistorySnapshotService = ({
       state.legacyProteinDerivedEvidence,
       ownerSet.legacyProteinDerivedEvidence
     );
-    setGeneratedArtifactRef(state.losatCache, ownerSet.losatCache || new Map());
+    // The project's LOSAT rows and searches stay; `drawing`'s rows are the owner set's (OV-3207, OV-3212).
+    const losatRows = losatRowsAfterStep(getGeneratedArtifactRef(state.losatCacheInfo, []), drawing.id, ownerSet.losatCacheInfo || []);
+    const losatSearches = getGeneratedArtifactRef(state.losatCache, new Map());
+    setGeneratedArtifactRef(state.losatCache, losatSearchesAfterStep(ownerSet.losatCache || new Map(), losatSearches, losatRows));
     setGeneratedArtifactRef(state.losatDerivedCache, ownerSet.losatDerivedCache || new Map());
-    setGeneratedArtifactRef(state.losatCacheInfo, ownerSet.losatCacheInfo || []);
+    setGeneratedArtifactRef(state.losatCacheInfo, losatRows);
     if (ownerSet.matchSequenceOwner) {
       state.matchSequenceRegistry?.replaceTrustedOwner?.(ownerSet.matchSequenceOwner);
     }

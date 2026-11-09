@@ -1910,7 +1910,8 @@ const createLayoutPreferences = () => ({
   };
   const rawCacheValueA = { text: 'raw-a\n' };
   const derivedCacheValueA = { payload: { id: 'derived-a' } };
-  const losatCacheInfoA = [{ key: 'raw-a' }];
+  // A row names its drawing (`LosatCacheInfoEntry.drawingId`): a step installs its drawing's rows (OV-3207).
+  const losatCacheInfoA = [{ key: 'raw-a', drawingId: 'circular' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
   const pendingPaletteColorsA = {};
   const noticesA = [{
@@ -2246,7 +2247,7 @@ const createLayoutPreferences = () => ({
   };
   const rawCacheValueB = { text: 'raw-b\n' };
   const derivedCacheValueB = { payload: { id: 'derived-b' } };
-  const losatCacheInfoB = [{ key: 'raw-b' }];
+  const losatCacheInfoB = [{ key: 'raw-b', drawingId: 'circular' }];
   state.proteinIdentityManifest.value = proteinIdentityManifestB;
   state.legacyProteinRawCandidates.value = legacyProteinRawCandidatesB;
   state.legacyProteinDerivedEvidence.value = legacyProteinDerivedEvidenceB;
@@ -2285,7 +2286,7 @@ const createLayoutPreferences = () => ({
   state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
   state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
-  state.losatCacheInfo.value = [{ key: 'replacement' }];
+  state.losatCacheInfo.value = [{ key: 'replacement', drawingId: 'circular' }];
   const clearsBeforeUndo = copyFeedbackClears;
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   // Undo of a Generate step clears the copy feedback.
@@ -2455,7 +2456,7 @@ const createLayoutPreferences = () => ({
     state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [{ id: status }] };
     state.losatCache.value = new Map([[status, { text: `${status}\n` }]]);
     state.losatDerivedCache.value = new Map([[status, { payload: { id: status } }]]);
-    state.losatCacheInfo.value = [{ key: status }];
+    state.losatCacheInfo.value = [{ key: status, drawingId: 'circular' }];
   };
   const undoCountBeforeDiscardedRuns = ownerHistory.getUndoCount();
   await assert.rejects(

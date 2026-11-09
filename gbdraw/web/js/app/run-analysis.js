@@ -200,7 +200,6 @@ import {
   losatResultRowsOfDrawing,
   losatRowsOfDrawing,
   losatRowsOfOtherDrawings,
-  losatRowsOnePerKey,
   losatRowsWithDrawing,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
@@ -6428,9 +6427,9 @@ export const createRunAnalysis = ({
     }
   };
 
-  /** The searches **Clear LOSAT results** removes: every drawing's rows, one per cache key (OV-3203), as Clear clears
-   * the whole project (PD-OI-022: Clear Cache invalidates retained evidence). @returns {LosatCacheInfoEntry[]} */
-  const clearableLosatResultRows = () => losatRowsOnePerKey(cacheInfoRows());
+  /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
+   * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
+  const clearableLosatResultCount = () => losatCache.value.size;
   /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
   const swapLosatResultRows = (drawingId, drawingRows) => {
     const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
@@ -6527,7 +6526,7 @@ export const createRunAnalysis = ({
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     losatResultRowsOf,
-    clearableLosatResultRows, swapLosatResultRows, losatRowsOf,
+    clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,
