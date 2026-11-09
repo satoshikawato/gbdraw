@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from pandas import DataFrame
@@ -14,15 +13,6 @@ from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, stroke_pad_px
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
 from ....layout.record_coordinates import RecordDisplayTransform, SourceInterval
-
-
-_SAFE_ID_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
-
-
-def _safe_id_fragment(value: object) -> str:
-    text = str(value or "").strip()
-    text = _SAFE_ID_PATTERN.sub("_", text).strip("_")
-    return text
 
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
@@ -186,4 +176,4 @@ class ConservationDrawer:
         return tuple(inks)
 
 
-__all__ = ["ConservationDrawer", "_safe_id_fragment"]
+__all__ = ["ConservationDrawer"]

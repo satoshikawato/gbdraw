@@ -850,7 +850,7 @@ def _assert_linear_regions_orientation_layout(
         element
         for element in root
         if element.tag.rsplit("}", 1)[-1] == "g"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
         and "data-gbdraw-record-id" in element.attrib
     ]
     record_groups.sort(key=lambda element: int(element.attrib["data-gbdraw-record-index"]))
@@ -1391,7 +1391,7 @@ def _assert_similarity_groups(
 
     record_x = {}
     for element in root.iter():
-        if not element.attrib.get("id", "").startswith("record_group_"):
+        if element.attrib.get("data-gbdraw-slot-renderer") != "features" or "data-gbdraw-record-id" not in element.attrib:
             continue
         translation = parse_translate_chain(element.attrib.get("transform", ""))
         if translation is not None:

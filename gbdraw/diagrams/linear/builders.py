@@ -22,7 +22,12 @@ from ...layout.linear_multi_record import (
     LinearRecordPlacement,
     linear_comparison_frame,
 )
-from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
+from ...layout.linear import (
+    LinearFeatureLaneGeometry,
+    LinearRecordRenderContext,
+    LinearResolvedTrack,
+    place_linear_definition,
+)
 from ...linear_comparison import LinearComparison
 from ...configurators import (
     BlastMatchConfigurator,
@@ -73,16 +78,11 @@ def add_record_group(
     render_context: LinearRecordRenderContext,
     feature_dom_index: LinearFeatureDomIndex,
     precalculated_labels: list[LinearLabel] | None,
-    draw_features: bool = True,
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str | int] | None = None,
     orthogroup_label_top_member_ids: set[str | int] | None = None,
     record_index: int = 0,
     record_count: int = 1,
-    group_id: str | None = None,
-    dom_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
     record_local_ruler: bool = False,
     multi_record_layout: bool = False,
     feature_offset_y: float = 0.0,
@@ -95,8 +95,15 @@ def add_record_group(
     *,
     placement: LinearRecordPlacement,
     group_key: GroupKey,
+    group_id: str,
+    feature_slot: LinearResolvedTrack | None,
 ) -> Drawing:
-    """Adds a record group to the linear canvas."""
+    """Adds a record group to the linear canvas.
+
+    ``feature_slot`` is the features slot the group draws the record's features in, and the
+    group carries its slot tags; ``None`` draws the record's axis alone, for a figure whose
+    slots hold no feature track.
+    """
     content = render_stage(
         "record_content",
         build_group_content,
@@ -110,13 +117,13 @@ def add_record_group(
         axis_ruler_enabled=render_context.axis_ruler_enabled,
         feature_dom_index=feature_dom_index,
         precalculated_labels=precalculated_labels,
-        draw_features=draw_features,
+        draw_features=feature_slot is not None,
         label_font_size=label_font_size,
         orthogroup_label_member_ids=orthogroup_label_member_ids,
         orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
         record_index=record_index,
         record_count=record_count,
-        group_id=dom_group_id or group_id,
+        group_id=group_id,
         sequence_width=placement.sequence_width,
         record_local_ruler=record_local_ruler,
         feature_offset_y=feature_offset_y,
@@ -126,10 +133,9 @@ def add_record_group(
         feature_row_shifts=feature_row_shifts,
     )
     record_group = place_content(canvas, content, group_key)
-    if slot_id:
-        record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        record_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    if feature_slot is not None:
+        record_group.attribs["data-gbdraw-slot-id"] = str(feature_slot.id)
+        record_group.attribs["data-gbdraw-slot-renderer"] = str(feature_slot.renderer)
     if record_count > 1:
         record_group.attribs["data-record-key"] = str(placement.record_key)
         record_group.attribs["data-record-translation-x"] = str(
@@ -157,13 +163,12 @@ def add_gc_content_group(
     track_offset_y: float,
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
-    group_id: str = "gc_content",
-    dom_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    *,
+    group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     record_transform: RecordDisplayTransform | None = None,
     row_shifts: tuple[float, ...] = (),
-    *,
     sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
@@ -176,16 +181,14 @@ def add_gc_content_group(
         track_height=canvas_config.gc_height if track_height is None else float(track_height),
         gc_config=gc_config,
         gc_df=gc_df,
-        group_id=dom_group_id or group_id,
+        group_id=group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
         row_shifts=row_shifts,
     )
     gc_content_group = place_content(canvas, content, group_key)
-    if slot_id:
-        gc_content_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        gc_content_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    gc_content_group.attribs["data-gbdraw-slot-id"] = slot_id
+    gc_content_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_content_group)
     return canvas
@@ -200,16 +203,13 @@ def add_depth_group(
     depth_config: DepthConfigurator,
     track_offset_y: float,
     depth_df: DataFrame | None = None,
-    group_id: str = "depth",
-    axis_group_id: str = "depth_axis",
-    dom_group_id: str | None = None,
-    dom_axis_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    *,
+    group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     track_height: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
     row_shifts: tuple[float, ...] = (),
-    *,
     sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
@@ -222,17 +222,15 @@ def add_depth_group(
         track_height=canvas_config.depth_height if track_height is None else float(track_height),
         depth_config=depth_config,
         depth_df=depth_df,
-        group_id=dom_group_id or group_id,
-        axis_group_id=dom_axis_group_id or axis_group_id,
+        group_id=group_id,
+        axis_group_id=f"{group_id}_axis",
         sequence_width=sequence_width,
         record_transform=record_transform,
         row_shifts=row_shifts,
     )
     depth_group = place_content(canvas, content, group_key)
-    if slot_id:
-        depth_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        depth_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    depth_group.attribs["data-gbdraw-slot-id"] = slot_id
+    depth_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(depth_group)
     return canvas
@@ -247,15 +245,13 @@ def add_feature_density_heatmap_group(
     *,
     track_offset_y: float,
     group_key: GroupKey,
-    slot_id: str | None,
-    slot_renderer: str | None,
+    slot_id: str,
+    slot_renderer: str,
 ) -> Drawing:
     """Adds a feature density heatmap band to the linear canvas."""
     heatmap_group = place_content(canvas, GroupContent.of(heatmap.get_group()), group_key)
-    if slot_id:
-        heatmap_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        heatmap_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    heatmap_group.attribs["data-gbdraw-slot-id"] = slot_id
+    heatmap_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(heatmap_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(heatmap_group)
     return canvas
@@ -271,13 +267,12 @@ def add_gc_skew_group(
     track_offset_y: float,
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
-    group_id: str = "gc_skew",
-    dom_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    *,
+    group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     record_transform: RecordDisplayTransform | None = None,
     row_shifts: tuple[float, ...] = (),
-    *,
     sequence_width: float,
     group_key: GroupKey,
 ) -> Drawing:
@@ -290,16 +285,14 @@ def add_gc_skew_group(
         track_height=canvas_config.skew_height if track_height is None else float(track_height),
         skew_config=skew_config,
         gc_df=gc_df,
-        group_id=dom_group_id or group_id,
+        group_id=group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
         row_shifts=row_shifts,
     )
     gc_skew_group = place_content(canvas, content, group_key)
-    if slot_id:
-        gc_skew_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        gc_skew_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    gc_skew_group.attribs["data-gbdraw-slot-id"] = slot_id
+    gc_skew_group.attribs["data-gbdraw-slot-renderer"] = slot_renderer
     position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_skew_group)
     return canvas

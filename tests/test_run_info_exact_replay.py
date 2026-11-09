@@ -38,7 +38,9 @@ SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
 # moved it again: only the GC content and skew paths and the skew clip id changed (91d361e5... before).
 # OV-2799 (GC over A/C/G/T only) moved it again: only the GC content path changed, from the windows over the N at
 # 3,107 (7d9560a3... before).
-OUTPUT_SHA = "16305735dae07cc86cfc79b1f8446e296337b7171600e72bbec8fe3ad8aee4ff"
+# OV-3084 (every track group named from its slot) moved it again: only the slot group ids, the ids hashed from them,
+# the references that follow them, and the features group's added slot tags changed (16305735... before).
+OUTPUT_SHA = "cb9037a6761ae9f38c5b69d860757d5ce996223a4aa9759785b2f7e520ccb3fe"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
@@ -47,9 +49,10 @@ OUTPUT_SHA = "16305735dae07cc86cfc79b1f8446e296337b7171600e72bbec8fe3ad8aee4ff"
 # Since V-D03 the hash is of that replay with the Legend box at the drawn width,
 # and since D-13 D2 with 3-decimal path numbers (9a34cf0d... before), and since OV-1840 with split Circular arcs
 # (bcdd87d3... before), and since OV-2863 and OV-2870 with the new GC content and skew paths (8d5f0207... before),
-# and since OV-2799 with the GC content path over A/C/G/T only (428cb45b... before).
+# and since OV-2799 with the GC content path over A/C/G/T only (428cb45b... before), and since OV-3084 with the slot
+# group ids (123694e1... before).
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "123694e1a0b236099402465b8990d80697512ee6fc13e6cd0cf8585358355a21"
+    "d93a6549f007b4573d8078dee274e80d6167d0feaa5fa814f0b5cbcc1420777c"
 )
 
 

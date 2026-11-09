@@ -196,15 +196,20 @@ def test_duplicate_record_id_linear_svg_ids_are_instance_safe() -> None:
     } == {"0", "1"}
     assert len({element.attrib["id"] for element in record_groups}) == 2
     assert all(
-        element.attrib["id"].startswith("record_group_")
+        element.attrib["data-gbdraw-slot-renderer"] == "features"
         for element in record_groups
     )
     assert "duplicate_definition_record_1" in ids
     assert "duplicate_definition_record_2" in ids
-    assert "gc_content_record_1" in ids
-    assert "gc_skew_record_2" in ids
-    assert "depth_record_1" in ids
-    assert "depth_record_2_axis" in ids
+    # Each record draws its own slot groups, each with an id of its own (OV-3012: found by slot tag).
+    for slot_id in ("gc_content", "gc_skew", "depth"):
+        slot_group_ids = [
+            element.attrib["id"] for element in root.iter() if element.attrib.get("data-gbdraw-slot-id") == slot_id
+        ]
+        assert len(slot_group_ids) == 2
+        assert len(set(slot_group_ids)) == 2
+        if slot_id == "depth":
+            assert all(f"{group_id}_axis" in ids for group_id in slot_group_ids)
     assert svg.count(">duplicate<") == 2
 
 

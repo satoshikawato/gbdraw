@@ -199,7 +199,9 @@ def _drawn_tracks(mode: str, record: SeqRecord) -> dict[str, list[str]]:
     root = ET.fromstring((result.drawing if hasattr(result, "drawing") else result).tostring())
     tracks: dict[str, list[str]] = {}
     for group in root.iter():
-        track = {"gc_content": "GC content", "skew": "GC skew", "gc_skew": "GC skew"}.get(group.get("id") or "")
+        # Found by the slot tag both modes write on every GC group (OV-3012, OV-3084).
+        renderer = group.get("data-gbdraw-slot-renderer") or ""
+        track = {"dinucleotide_content": "GC content", "dinucleotide_skew": "GC skew"}.get(renderer)
         if track is not None:
             tracks[track] = [node.get("d", "") for node in group.iter() if node.tag.endswith("path")]
     return tracks
@@ -221,4 +223,5 @@ def test_a_circular_diagram_draws_the_gap_on_the_baseline_circle() -> None:
 
 def test_a_linear_diagram_of_unknown_bases_only_draws_no_gc_track() -> None:
     tracks = _drawn_tracks("linear", _record("N" * 5_000, "linear"))
+    assert set(tracks) == {"GC content", "GC skew"}
     assert all(not any(_POINT.findall(d) for d in descs) for descs in tracks.values()), tracks

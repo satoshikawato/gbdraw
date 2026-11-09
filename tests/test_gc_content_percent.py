@@ -38,6 +38,8 @@ from gbdraw.svg.circular_tracks import (
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
+SVG_NAMESPACE = "http://www.w3.org/2000/svg"
+
 
 def _make_record(record_id: str = "rec1", length: int = 160) -> SeqRecord:
     record = SeqRecord(Seq("ATGC" * (length // 4)), id=record_id, name=record_id)
@@ -66,6 +68,44 @@ def _axis_font_sizes(svg: str, axis_id: str) -> set[str]:
     match = re.search(rf'<g id="{re.escape(axis_id)}".*?</g>', svg, re.S)
     assert match is not None
     return set(re.findall(r'font-size="([^"]+)"', match.group(0)))
+
+
+def _circular_slot_parts(svg: str, slot_id: str) -> dict[str, list[ET.Element]]:
+    """The direct children of one Circular slot group, found by its slot id (OV-3084).
+
+    A Circular slot group renames its children's ids, so a test finds the
+    percent band by its shape: ``background`` is the band circle, ``axis`` the
+    group that carries tick labels, and ``border`` the group of edge circles.
+    """
+
+    (group,) = [
+        element
+        for element in ET.fromstring(svg).iter(f"{{{SVG_NAMESPACE}}}g")
+        if element.get("data-gbdraw-slot-id") == slot_id
+    ]
+    children = list(group)
+    groups = [child for child in children if child.tag == f"{{{SVG_NAMESPACE}}}g"]
+    return {
+        "background": [child for child in children if child.tag == f"{{{SVG_NAMESPACE}}}circle"],
+        "axis": [child for child in groups if child.find(f".//{{{SVG_NAMESPACE}}}text") is not None],
+        "border": [child for child in groups if child.find(f".//{{{SVG_NAMESPACE}}}text") is None],
+    }
+
+
+def _circular_axis_font_sizes(svg: str, slot_id: str) -> set[str]:
+    (axis,) = _circular_slot_parts(svg, slot_id)["axis"]
+    return {str(element.get("font-size")) for element in axis.iter() if element.get("font-size") is not None}
+
+
+def _slot_group_id(svg: str, renderer: str) -> str:
+    """The id of the one group that draws ``renderer``, found by its slot tag."""
+
+    (group_id,) = [
+        str(element.get("id"))
+        for element in ET.fromstring(svg).iter()
+        if element.get("data-gbdraw-slot-renderer") == renderer
+    ]
+    return group_id
 
 
 def _svg_slot_translate_y(svg: str, renderer: str) -> float:
@@ -195,10 +235,9 @@ def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis()
         ),
     ).tostring()
 
-    assert 'id="gc_content_axis"' in svg
-    assert 'id="gc_content_percent_background"' in svg
-    assert 'id="gc_content_percent_border"' in svg
-    assert 'id="depth_axis"' not in svg
+    parts = _circular_slot_parts(svg, "gc_content")
+    assert [len(parts[name]) for name in ("background", "axis", "border")] == [1, 1, 1]
+    assert 'data-gbdraw-slot-renderer="depth"' not in svg
     assert ">0%<" in svg
     assert ">50%<" in svg
     assert ">100%<" in svg
@@ -224,10 +263,11 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
         ),
     ).tostring()
 
-    assert 'id="gc_content_axis"' in svg
-    assert 'id="gc_content_percent_background"' in svg
-    assert 'id="gc_content_percent_border"' in svg
-    assert 'id="depth_axis"' not in svg
+    gc_id = _slot_group_id(svg, "dinucleotide_content")
+    assert f'id="{gc_id}_axis"' in svg
+    assert f'id="{gc_id}_percent_background"' in svg
+    assert f'id="{gc_id}_percent_border"' in svg
+    assert 'data-gbdraw-slot-renderer="depth"' not in svg
     assert ">0%<" in svg
     assert ">50%<" in svg
     assert ">100%<" in svg
@@ -308,8 +348,8 @@ def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
         ),
     ).tostring()
 
-    assert 'id="gc_content_axis"' not in circular_svg
-    assert 'id="gc_content_axis"' not in linear_svg
+    assert _circular_slot_parts(circular_svg, "gc_content") == {"background": [], "axis": [], "border": []}
+    assert f'id="{_slot_group_id(linear_svg, "dinucleotide_content")}_axis"' not in linear_svg
     assert "percent_background" not in circular_svg
     assert "percent_border" not in circular_svg
     assert "percent_background" not in linear_svg
@@ -414,8 +454,8 @@ def test_circular_gc_content_percent_axis_inherits_depth_tick_font_size() -> Non
         ),
     ).tostring()
 
-    assert _axis_font_sizes(svg, "depth_axis") == {"11.0"}
-    assert _axis_font_sizes(svg, "gc_content_axis") == {"11.0"}
+    assert _circular_axis_font_sizes(svg, "depth") == {"11.0"}
+    assert _circular_axis_font_sizes(svg, "gc_content") == {"11.0"}
 
 
 @pytest.mark.linear
@@ -440,8 +480,8 @@ def test_linear_gc_content_percent_axis_inherits_depth_tick_font_size() -> None:
         ),
     ).tostring()
 
-    assert _axis_font_sizes(svg, "depth_axis") == {"11.0"}
-    assert _axis_font_sizes(svg, "gc_content_axis") == {"11.0"}
+    assert _axis_font_sizes(svg, f"{_slot_group_id(svg, 'depth')}_axis") == {"11.0"}
+    assert _axis_font_sizes(svg, f"{_slot_group_id(svg, 'dinucleotide_content')}_axis") == {"11.0"}
 
 
 def test_circular_cli_gc_percent_options_forward_to_api(
@@ -601,22 +641,32 @@ def _circular_transform(length: int) -> RecordDisplayTransform:
 def _tick_label_path_radii(svg: str) -> list[float]:
     """The radii of the circles the scale's tick labels are written along (in the scale's group)."""
 
-    ticks = re.search(r'<g [^>]*id="tick" .*?</g>', svg, re.S)
-    assert ticks is not None
+    ticks = _slot_group(svg, "ticks")
     return [
-        float(radius)
-        for radius in re.findall(
-            r'<path d="M [^"]* A ([0-9.]+),[0-9.]+ [^"]*" fill="none" id="circular_tick_label_path_', ticks.group(0)
-        )
+        float(match.group(1))
+        for path in ticks.iter()
+        if path.tag.endswith("path") and str(path.get("id", "")).startswith("circular_tick_label_path_")
+        if (match := re.search(r" A ([0-9.]+),", str(path.get("d", "")))) is not None
     ]
+
+
+def _slot_group(svg: str, slot_id: str) -> ET.Element:
+    """The group a track slot draws into, found by its slot id."""
+
+    group = next(
+        (element for element in ET.fromstring(svg).iter() if element.get("data-gbdraw-slot-id") == slot_id), None
+    )
+    assert group is not None
+    return group
 
 
 def _percent_outer_edge_px(svg: str) -> float:
     """Where the Percent GC band's paint ends outward: its background ring's outer edge."""
 
-    background = re.search(r'<circle [^>]*id="gc_content_percent_background" r="([0-9.]+)" [^>]*stroke-width="([0-9.]+)"', svg)
-    assert background is not None
-    return float(background.group(1)) + 0.5 * float(background.group(2))
+    # The band's background ring is the first child of the gc_content slot's group.
+    background = _slot_group(svg, "gc_content")[0]
+    assert background.tag.endswith("circle")
+    return float(background.get("r", "nan")) + 0.5 * float(background.get("stroke-width", "nan"))
 
 
 @pytest.mark.circular

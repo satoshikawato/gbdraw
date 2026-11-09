@@ -173,10 +173,12 @@ def test_the_percent_band_is_light_gray_by_default() -> None:
             step=100,
         ),
     ).tostring()
-    background = next(
-        element for element in ET.fromstring(svg).iter(f"{SVG}circle")
-        if element.get("id") == "gc_content_percent_background"
-    )
+    # The band is the GC content slot's own circle; the slot renames its id (OV-3084).
+    (gc_content,) = [
+        element for element in ET.fromstring(svg).iter(f"{SVG}g")
+        if element.get("data-gbdraw-slot-id") == "gc_content"
+    ]
+    (background,) = gc_content.findall(f"{SVG}circle")
     assert background.get("stroke") == "#e5e5e5"
 
 

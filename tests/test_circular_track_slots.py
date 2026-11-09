@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -115,6 +116,42 @@ def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps()
     assert gc_slot["radiusFactor"] == pytest.approx(0.75)
     assert gc_slot["innerGapPx"] == pytest.approx(4.0)
     assert gc_slot["outerGapPx"] == pytest.approx(6.0)
+
+
+@pytest.mark.parametrize("with_depth", [False, True])
+def test_default_slots_draw_the_same_svg_as_the_same_explicit_stack(with_depth: bool) -> None:
+    """A Circular figure without a stack names and tags its slot groups as the same stack written out does
+    (OV-3084), as Linear does (OV-3012): the Web keeps the Result when Use custom stack is turned on, and the next
+    Generate sends the stack."""
+
+    record = _load_record()
+    depth_table = _depth_table(str(record.id)) if with_depth else None
+    window = 100 if with_depth else None
+
+    def draw(slots: list[CircularTrackSlot] | None) -> str:
+        return assemble_circular_diagram_from_record(
+            record,
+            CircularAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(_base_config()),
+                default_colors=load_default_colors("", palette="default"),
+                selected_features_set=SELECTED_FEATURES,
+                legend="none",
+                circular_track_slots=slots,
+                depth_table=depth_table,
+                window=window,
+                step=window,
+            ),
+        ).tostring()
+
+    default_svg = draw(None)
+    tagged = {
+        match.group(2): match.group(1)
+        for match in re.finditer(r'data-gbdraw-slot-id="([^"]+)" data-gbdraw-slot-renderer="([^"]+)"', default_svg)
+    }
+    assert set(tagged) == {"features", "ticks", "dinucleotide_content", "dinucleotide_skew"} | (
+        {"depth"} if with_depth else set()
+    )
+    assert default_svg == draw(default_circular_track_slots(show_depth=with_depth))
 
 
 def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() -> None:
@@ -1958,8 +1995,8 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
     )
     svg_text = canvas.tostring()
 
-    assert 'id="gc_skew"' in svg_text
-    assert 'id="at_skew"' in svg_text
+    assert 'data-gbdraw-slot-id="gc_skew"' in svg_text
+    assert 'data-gbdraw-slot-id="at_skew"' in svg_text
     assert "GC skew" in svg_text
     assert "AT skew" in svg_text
 
@@ -2313,8 +2350,15 @@ def test_hidden_implicit_scale_omits_tick_slot_but_keeps_axis_and_numeric_tracks
     }
 
     assert 'id="Axis"' in svg
-    assert 'id="tick"' not in svg
-    assert 'id="gc_content_axis"' in svg
+    assert 'data-gbdraw-slot-renderer="ticks"' not in svg
+    # The GC content slot group keeps its axis group.
+    gc_content_groups = [
+        element
+        for element in ET.fromstring(svg).iter()
+        if element.attrib.get("data-gbdraw-slot-renderer") == "dinucleotide_content"
+    ]
+    assert len(gc_content_groups) == 1
+    assert any(child.tag.rsplit("}", 1)[-1] == "g" for child in gc_content_groups[0])
     assert "ticks" not in renderers
     assert {"dinucleotide_content", "dinucleotide_skew"} <= renderers
 

@@ -111,7 +111,7 @@ class DepthDrawer:
         radius: float,
         track_width: float,
         norm_factor: float,
-        axis_group_id: str = "depth_axis",
+        axis_group_id: str,
     ) -> Group:
         if not self.show_axis:
             return group
@@ -178,7 +178,7 @@ class DepthDrawer:
         record_len: int,
         track_width: float,
         norm_factor: float,
-        axis_group_id: str = "depth_axis",
+        axis_group_id: str,
         *,
         record_transform: RecordDisplayTransform,
     ) -> Group:

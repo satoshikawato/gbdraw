@@ -479,9 +479,9 @@ test('Circular, the default layout with a plot title: an edit in the popup is on
   // The title is a Layout edit target too: its help cursor and frame stay, and the hint reads both.
   expect(await hover(page, '#plot_title text')).toEqual({ cursor: 'help', outline: 'dashed' });
   await expect(hint(page)).toHaveText(BOTH_HINTS, { useInnerText: true });
-  // The groups of the default layout, by their own ids.
-  for (const [selector, key, title] of [['#tick text', 'circular-axis', AXIS], ['#gc_content path', 'dinucleotide', DINUCLEOTIDE],
-    ['#skew path', 'dinucleotide', DINUCLEOTIDE], ['#plot_title text', 'titles', TITLES]]) {
+  // The groups of the default layout, by their slot renderers (each slot group's id is its slot's, OV-3084).
+  for (const [selector, key, title] of [[TICKS, 'circular-axis', AXIS], [GC_CONTENT, 'dinucleotide', DINUCLEOTIDE],
+    ['g[data-gbdraw-slot-id="gc_skew"] path', 'dinucleotide', DINUCLEOTIDE], ['#plot_title text', 'titles', TITLES]]) {
     await clickInk(page, selector);
     await expectPopup(page, key, title, selector);
   }
@@ -612,10 +612,18 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   })).toBe('ok');
   await frames(page);
   await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
-  const tracks = await page.locator(`.gbdraw-preview-surface ${MARKER}`).evaluateAll((elements) => elements.map((element) => element.id));
-  expect(tracks.filter((id) => /^gc_(content|skew)_record_\d+$/.test(id))).toHaveLength(10);
-  for (const id of ['gc_content_record_2', 'gc_skew_record_4']) {
-    const point = await inkPoint(page, `[id="${id}"] *`);
+  // A track is a slot group, found by its slot tags; the groups of one slot come in record order.
+  const tracks = await page.locator(`.gbdraw-preview-surface ${MARKER}`).evaluateAll((elements) => elements.map((element) => ({
+    id: element.id, renderer: element.getAttribute('data-gbdraw-slot-renderer')
+  })));
+  const trackIds = (renderer) => tracks.filter((track) => track.renderer === renderer).map((track) => track.id);
+  expect(trackIds('dinucleotide_content')).toHaveLength(5);
+  expect(trackIds('dinucleotide_skew')).toHaveLength(5);
+  expect(new Set(tracks.map((track) => track.id).filter(Boolean)).size).toBe(tracks.length);
+  const GC_CONTENT_TRACK = `[id="${trackIds('dinucleotide_content')[1]}"] *`;
+  const SKEW_TRACK = `[id="${trackIds('dinucleotide_skew')[3]}"] *`;
+  for (const [id, selector] of [['GC content of record 2', GC_CONTENT_TRACK], ['GC skew of record 4', SKEW_TRACK]]) {
+    const point = await inkPoint(page, selector);
     const track = await inkBox(page, point);
     await page.mouse.click(point.x, point.y);
     const { box: [left, top, width, height] } = await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, id);
@@ -630,13 +638,13 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   await expectNoPopup(page, 'Close section');
   await clickInk(page, '[data-gbdraw-feature-id="f94b7f30b_record_2"]');
   await page.locator('.feature-popup').getByRole('button', { name: 'Show in editor' }).click();
-  await clickInk(page, '[id="gc_content_record_2"] *');
+  await clickInk(page, GC_CONTENT_TRACK);
   await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, 'beside the drawer');
   // Escape closes the top layer alone: the popup goes, and the drawer stays open.
   await page.keyboard.press('Escape');
   await expectNoPopup(page, 'Escape beside the drawer');
   await expect(page.locator('.right-drawer')).toBeVisible();
-  await clickInk(page, '[id="gc_content_record_2"] *');
+  await clickInk(page, GC_CONTENT_TRACK);
   await expectPopup(page, 'dinucleotide', DINUCLEOTIDE, 'beside the drawer again');
   await page.locator('[data-similarity-alignment-drawer-review]').click();
   const review = page.getByRole('dialog', { name: 'Review alignment' });
@@ -644,7 +652,6 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   await expectNoPopup(page, 'Review alignment opened');
   await expect(page.locator('.feature-popup')).toHaveCount(0);
   // While it is open, a track shows the canvas's cursor and no hint, and a click on a drawn element opens nothing.
-  const SKEW_TRACK = '[id="gc_skew_record_4"] *';
   expect(await hover(page, SKEW_TRACK)).toEqual({ cursor: 'grab', outline: 'none' });
   await expect(hint(page)).toBeHidden();
   // What the review leaves as it is: the Layout edit sentence of the title, the pointer of a Legend row.

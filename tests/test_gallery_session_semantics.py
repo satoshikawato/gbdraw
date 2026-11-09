@@ -187,14 +187,19 @@ def _plain_label(value: object) -> str:
     return _TAG_RE.sub("", str(value or "")).strip()
 
 
-def _group_translate_y(root: ET.Element, group_id: str) -> float:
-    group = next(
-        (element for element in root.iter() if element.get("id") == group_id),
-        None,
-    )
-    assert group is not None, group_id
-    transform = str(group.get("transform") or "")
-    return _translate_chain_y(transform)
+def _slot_group_translate_y(root: ET.Element, *, slot_id: str, record_index: int) -> float:
+    """The y offset of one record's group of a Linear slot, found by its slot tag (OV-3012).
+
+    Records draw in order, so the record's group is the slot's ``record_index``-th group.
+    """
+
+    groups = [
+        element
+        for element in root.iter()
+        if element.tag.endswith("g") and element.get("data-gbdraw-slot-id") == slot_id
+    ]
+    assert len(groups) > record_index, (slot_id, record_index)
+    return _translate_chain_y(str(groups[record_index].get("transform") or ""))
 
 
 def _record_group_translate_y(
@@ -203,30 +208,17 @@ def _record_group_translate_y(
     record_id: str,
     record_index: int,
 ) -> float:
-    group = next(
-        (
-            element
-            for element in root.iter()
-            if element.tag.endswith("g")
-            and str(element.get("id") or "").startswith("record_group_")
-            and element.get("data-gbdraw-record-id") == record_id
-            and element.get("data-gbdraw-record-index") == str(record_index)
-        ),
-        None,
-    )
-    if group is None:
-        legacy_group_id = f"{record_id}_record_{record_index + 1}"
-        group = next(
-            (
-                element
-                for element in root.iter()
-                if element.get("id") == legacy_group_id
-            ),
-            None,
-        )
-    assert group is not None, (record_id, record_index)
-    transform = str(group.get("transform") or "")
-    return _translate_chain_y(transform)
+    """The y offset of a record's features group, found by its slot tag and record identity (OV-3012)."""
+
+    (group,) = [
+        element
+        for element in root.iter()
+        if element.tag.endswith("g")
+        and element.get("data-gbdraw-slot-renderer") == "features"
+        and element.get("data-gbdraw-record-id") == record_id
+        and element.get("data-gbdraw-record-index") == str(record_index)
+    ]
+    return _translate_chain_y(str(group.get("transform") or ""))
 
 
 def _circular_axis_and_feature_band(
@@ -725,18 +717,12 @@ def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
                 location,
                 record_id,
             )
-            expected_group_y = {
-                f"gc_content_record_{record_number}": float(
-                    slots["gc_content"]["finalYOffsetPx"]
-                ),
-                f"gc_skew_record_{record_number}": float(
-                    slots["gc_skew"]["finalYOffsetPx"]
-                ),
-            }
-            for group_id, expected_y in expected_group_y.items():
-                assert _group_translate_y(root, group_id) == pytest.approx(
-                    expected_y
-                ), (location, group_id)
+            for slot_id in ("gc_content", "gc_skew"):
+                assert _slot_group_translate_y(
+                    root, slot_id=slot_id, record_index=record_index
+                ) == pytest.approx(
+                    float(slots[slot_id]["finalYOffsetPx"])
+                ), (location, slot_id, record_number)
 
 
 def test_hepatoplasmataceae_comparison_modes_share_record_local_track_geometry() -> None:

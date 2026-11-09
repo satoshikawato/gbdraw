@@ -405,10 +405,9 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
 
 // OV-3007 option A (Owner D-35, 2026-11-09): turning Use custom stack on gives each Region Annotation set the rows
 // Python's automatic placement draws it in, so the live Result and the next Generate draw the set as before.
-// The drawn figure: the Result SVG without the group IDs and slot tags that only name its groups (OV-3012).
-const figure = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML
-  .replace(/ data-gbdraw-slot-(?:id|renderer)="[^"]*"/g, '')
-  .replace(/ id="(?:track_slot_|gbdraw-annotation-track-|record_group_)[^"]*"/g, ''));
+// The drawn figure: the whole Result SVG. Both modes name and tag every slot group from its slot, with or without a
+// written stack (OV-3012, OV-3084), so the figure compares with its group ids and slot tags.
+const figure = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML);
 for (const mode of ['circular', 'linear']) {
   test(`Use custom stack turned on draws the Region Annotation sets where Generate drew them (${mode})`, async ({ page }) => {
     test.setTimeout(240_000);
@@ -434,10 +433,7 @@ for (const mode of ['circular', 'linear']) {
     expect(rows).toEqual(['annotations_1', 'annotations_1_highlight']);
     await settleLive(page);
     expect(await figure(page), 'live, stack on').toBe(drawn);
-    // OV-3012: a Linear Generate tags its slot groups only with a stack, so the live Result keeps the untagged groups
-    // until Generate; `figure` leaves those tags out, and the live check runs where the tags agree.
-    if (mode === 'circular') await expectLiveEqualsGenerate(page, { label: `${mode}: stack on` });
-    else await generate(page);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: stack on` });
     expect(await figure(page), 'Generate, stack on').toBe(drawn);
   });
 }
@@ -1058,24 +1054,22 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
 // Result, committed SVG and drawn tracks included.
 const TRACK_TOGGLES = {
   circular: {
-    'GC content': { form: 'suppress_gc', toggled: true, group: 'content' },
-    'GC skew': { form: 'suppress_skew', toggled: true, group: 'skew' }
+    'GC content': { form: 'suppress_gc', toggled: true, group: 'DINUCLEOTIDE_CONTENT_GROUPS' },
+    'GC skew': { form: 'suppress_skew', toggled: true, group: 'DINUCLEOTIDE_SKEW_GROUPS' }
   },
   linear: {
-    'GC content': { form: 'show_gc', toggled: false, group: 'content' },
-    'GC skew': { form: 'show_skew', toggled: false, group: 'skew' }
+    'GC content': { form: 'show_gc', toggled: false, group: 'DINUCLEOTIDE_CONTENT_GROUPS' },
+    'GC skew': { form: 'show_skew', toggled: false, group: 'DINUCLEOTIDE_SKEW_GROUPS' }
   }
 };
 
-// The track group `group` is drawn in the committed Result: present and not
-// hidden by display none.
-const trackDrawn = (page, group) => page.evaluate((base) => {
+// The track groups of kind `group` (drawn-groups.js) are drawn in the committed
+// Result: present and not hidden by display none.
+const trackDrawn = (page, group) => page.evaluate(async (name) => {
+  const drawnGroups = await import('./js/services/drawn-groups.js');
   const app = window.__GBDRAW_APP__;
   const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
-  // Circular names the groups gc_content_N and skew_N, Linear gc_content and gc_skew.
-  const groups = [...root.querySelectorAll('g[id]')].filter((element) => (
-    new RegExp(`^(gc_)?${base}(_\\d+)?$`).test(element.id)
-  ));
+  const groups = drawnGroups.findTrackGroups(root, drawnGroups[name]);
   return groups.length > 0 && groups.every((element) => element.getAttribute('display') !== 'none');
 }, group);
 

@@ -39,7 +39,11 @@ for (const mode of ['circular', 'linear']) {
         await agree(page, info, `depth-${enabled}`);
         // PD-OI-104 rev 5: Show Depth redraws the Result without or with the
         // Depth track (no hidden group is left in it).
-        const displays = await page.locator('.origin-top svg g[id="depth"]').evaluateAll(groups => groups.map(group => group.getAttribute('display')));
+        // The slot groups are found by their slot tags: the features slot is drawn either way, so the
+        // Depth-off check reads a drawn Result.
+        const renderers = await page.locator('.origin-top svg g[data-gbdraw-slot-renderer]').evaluateAll(groups => groups.map(group => group.getAttribute('data-gbdraw-slot-renderer')));
+        expect(renderers).toContain('features');
+        const displays = await page.locator('.origin-top svg g[data-gbdraw-slot-renderer="depth"]').evaluateAll(groups => groups.map(group => group.getAttribute('display')));
         if (enabled) {
           expect(displays.length).toBeGreaterThan(0);
           expect(displays.every(display => display !== 'none')).toBe(true);

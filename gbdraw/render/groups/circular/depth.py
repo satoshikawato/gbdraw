@@ -24,20 +24,19 @@ class DepthGroup:
         depth_config: DepthConfigurator,
         *,
         norm_factor_override: float,
-        group_id: str | None = None,
-        axis_group_id: str | None = None,
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
         self.record_transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
-        self.depth_group = Group(id=group_id or "depth")
+        self.depth_group = Group(id=group_id)
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record
         self.record_len = len(self.gb_record.seq)
         self.depth_df = depth_df
         self.track_width = float(track_width)
-        self.axis_group_id = str(axis_group_id or f"{group_id or 'depth'}_axis")
+        self.axis_group_id = f"{group_id}_axis"
         self.norm_factor = float(norm_factor_override)
         self.add_elements_to_group()
 

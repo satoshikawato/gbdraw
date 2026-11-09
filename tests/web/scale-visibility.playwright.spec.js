@@ -21,15 +21,12 @@ const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () =>
 const inspectResultSvg = async (page) => page.evaluate(() => {
   const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  // A Linear record's group is its features slot group, or a record group when no slot draws features.
   const recordGroups = [...svg.querySelectorAll('g[data-gbdraw-record-index]')]
-    .filter((group) => String(group.id || '').startsWith('record_group_'));
+    .filter((group) => group.getAttribute('data-gbdraw-slot-renderer') === 'features' || String(group.id || '').startsWith('record_group_'));
   return {
     axis: Boolean(svg.querySelector('[id="Axis"], [id^="Axis_"]')),
-    ticks: Boolean(
-      svg.getElementById('tick') ||
-      svg.getElementById('ticks') ||
-      svg.querySelector('[data-gbdraw-slot-renderer="ticks"]')
-    ),
+    ticks: Boolean(svg.querySelector('[data-gbdraw-slot-renderer="ticks"]')),
     lengthBar: Boolean(svg.getElementById('length_bar')),
     recordAxisCount: recordGroups.filter(
       (group) => Boolean(group.querySelector(':scope > line'))
