@@ -10,6 +10,7 @@ const {
   applyComparisonSequenceRecordLabel,
   defaultConservationSeriesLabel,
   normalizeConservationSeriesColor,
+  orderedConservationSources,
   reconcileConservationSeries,
   withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
@@ -17,6 +18,8 @@ const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawi
 
 const file = (name, size = 10) => ({ name, size, lastModified: 0 });
 
+const orderedConservationSourcesOf = (sourceFiles, series) => orderedConservationSources(sourceFiles, { series })
+  .map((source) => [source.label, source.files.reduce((total, member) => total + member.size, 0)]);
 const rowsFor = (sourceFiles) => reconcileConservationSeries({
   sourceFiles,
   previousSeries: [],
@@ -184,4 +187,37 @@ test('a re-picked set of tables does not keep the old rows\' labels by place', (
   first[0].label = 'Alpha';
   const next = reconcileConservationSeries({ sourceFiles: [file('c.tsv', 7), file('d.tsv', 8)], previousSeries: first, legacyLabels: [] });
   assert.deepEqual(next.map((entry) => [entry.fileName, entry.label]), [['c.tsv', 'c'], ['d.tsv', 'd']]);
+});
+
+// #1777 review 3, finding 1: the name pass claims a source only when its name is unambiguous among the unclaimed
+// sources and the entries left; two rings whose tables (a LOSAT-cache replay: `<first FASTA stem>.circular_conservation.
+// <suffix>.tsv`) or first files share a name are told apart by their stored places, which a move keeps.
+test('two rings of one table name keep their own tables and genomes after a move', async () => {
+  const { orderedConservationSources, ringGenomeFilesInRingOrder, ringGenomePlaces, moveConservationSeriesEntry } =
+    await import('../../gbdraw/web/js/services/conservation-series.js');
+  const shared = 'sequence.circular_conservation.losatn.tsv';
+  const tables = [file(shared, 60), file(shared, 63), file('d.circular_conservation.losatn.tsv', 64)];
+  const genomes = [[file('b.fasta', 1)], [file('c.fasta', 2)], [file('d.fasta', 3)]];
+  // The entries name the tables and keep the keys of the genomes they searched.
+  const series = rowsFor(genomes).map((entry, index) => ({ ...entry, fileName: tables[index].name, label: `Genome ${'BCD'[index]}` }));
+  const drawing = {
+    files: { c_conservation_blasts: tables, c_conservation_blasts_source: 'losat-cache', c_conservation_fastas: genomes, c_conservation_sequence_sources: [] },
+    circularConservation: { source: 'losat', series }
+  };
+  moveConservationSeriesEntry(series, 0, 1);
+  assert.deepEqual(orderedConservationSources(tables, drawing.circularConservation).map((source) => [source.label, source.file.size]),
+    [['Genome C', 63], ['Genome B', 60], ['Genome D', 64]], 'Generate draws each ring on its own table');
+  assert.deepEqual(ringGenomePlaces(drawing).places, [1, 0, 2]);
+  assert.deepEqual(ringGenomeFilesInRingOrder(drawing), [genomes[1], genomes[0], genomes[2]], 'Save writes each ring\'s own genome');
+});
+
+test('two LOSAT rings whose first files share a name keep their own genomes when their keys no longer match', () => {
+  const genomes = [[file('sequence.fasta', 8)], [file('sequence.fasta', 16)], [file('sequence.fasta', 24)]];
+  // Keys of other dates (a Session whose bindings lacked them): only the names and the stored places are left.
+  const series = rowsFor(genomes).map((entry, index) => ({ ...entry, sourceKey: `stale-${index}`, label: `Genome ${'ABC'[index]}` }));
+  const moved = [series[1], series[0], series[2]];
+  assert.deepEqual(orderedConservationSourcesOf(genomes, moved), [['Genome B', 16], ['Genome A', 8], ['Genome C', 24]]);
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: genomes, previousSeries: moved, legacyLabels: [] })
+    .map((entry) => [entry.label, entry.color, entry.sourceIndex]), moved.map((entry) => [entry.label, entry.color, entry.sourceIndex]),
+  'the reconcile keeps each row on the place of its own name');
 });

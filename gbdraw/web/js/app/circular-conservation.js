@@ -556,10 +556,13 @@ export const createCircularConservationComparisonFiles = ({
     if (!source) return;
     const { sourceIndex } = source;
     const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
-    // The removed row's entry leaves before the reconcile, so it takes no other ring's files.
+    // The removed row's entry leaves before the reconcile, so it takes no other ring's files; the rings after its
+    // place move up one place with their files, so their stored places still name them.
     const keptSeries = drawing.circularConservation.series.filter(
       (/** @type {RawConservationSeriesEntry} */ _, /** @type {number} */ entryIndex) => entryIndex !== idx
-    );
+    ).map((/** @type {RawConservationSeriesEntry} */ entry) => (
+      Number(entry.sourceIndex) > sourceIndex ? { ...entry, sourceIndex: Number(entry.sourceIndex) - 1 } : entry
+    ));
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
       drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...keptSeries);

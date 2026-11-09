@@ -398,6 +398,42 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   ]);
 });
 
+// #1777 review 3, finding 2: Load's repair of a lost table matches the series to the tables as Generate does
+// (`conservationSourcesOfSeries`), so two tables of one name (two rings whose FASTA files are both NCBI's
+// `sequence.fasta`) are told apart by their stored places: the ring whose table was lost is the one listed, in a
+// Session 40 and in a Session 51, and each other ring keeps its own table and genome.
+test('a lost table of two of one name drops its own series; the other rings keep their tables and genomes', async () => {
+  const shared = 'sequence.circular_conservation.losatn.tsv';
+  /** @param {{ c_conservation_blasts: { name: string, resourceId: string }[] }} bindings @param {{ fileName: string }[]} series */
+  const loseFirstOfTwoOfOneName = (bindings, series) => {
+    [0, 1].forEach((index) => { bindings.c_conservation_blasts[index].name = shared; series[index].fileName = shared; });
+    bindings.c_conservation_blasts[0].resourceId = 'zz';
+  };
+  const drawn = () => {
+    const drawing = modeDrawing(state, 'circular');
+    return orderedConservationSources(drawing.files.c_conservation_blasts, drawing.circularConservation)
+      .map(({ label, color, file, placeIndex }) => [label, color, file.name, drawing.files.c_conservation_fastas[placeIndex].map(({ name }) => name)]);
+  };
+  const kept = [
+    ['comparison-c', '#e15759', shared, ['comparison-c.fasta']],
+    ['comparison-d', '#59a14f', 'comparison-d.circular_conservation.losatn.tsv', ['comparison-d.fasta']]
+  ];
+  const droppedSeries = (result) => result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]);
+  const legacy = fixture('synthetic_conservation.gbdraw-session.json.gz');
+  loseFirstOfTwoOfOneName(legacy.webFiles.bindings, legacy.config.circularConservation.series);
+  assert.deepEqual(droppedSeries(await importSession(input(legacy), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+    [['config.circularConservation.series[0]', 'comparison-b']], 'Session 40');
+  assert.deepEqual(drawn(), kept, 'Session 40');
+
+  await load(fixture('synthetic_conservation.gbdraw-session.json.gz'));
+  const current = await saved();
+  const at = current.drawings.findIndex((drawing) => drawing.mode === 'circular');
+  loseFirstOfTwoOfOneName(current.drawings[at].webFiles.bindings, current.drawings[at].config.circularConservation.series);
+  assert.deepEqual(droppedSeries(await importSession(input(current), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+    [[`drawings[${at}].config.circularConservation.series[0]`, 'comparison-b']], 'Session 51');
+  assert.deepEqual(drawn(), kept, 'Session 51');
+});
+
 // An older Session (27-30) keeps its comparison files in `files` lists: an
 // entry that holds a file Load cannot read is listed, as a binding is; an
 // empty place is no row.

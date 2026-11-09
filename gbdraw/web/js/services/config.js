@@ -22,7 +22,7 @@ import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
-import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
+import { conservationSourcesOfSeries, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
@@ -4968,11 +4968,12 @@ const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, sto
   if (!placed(files.c_conservation_blasts).some((file) => !file)) return config;
   const conservation = isPlainObject(config.circularConservation) ? config.circularConservation : {};
   const series = /** @type {RawConservationSeriesEntry[]} */ (Array.isArray(conservation.series) ? conservation.series : []);
-  /** @template {ConservationSourcePlace<ConservationFile>} T @param {T[]} list */
-  const inSeriesOrder = (list) => orderedOptionalConservationFiles(list, { series });
-  // Where each table, in series order, is in the stored list.
-  const storedPlaces = inSeriesOrder(placed(files.c_conservation_blasts).map((file, place) => ({ name: file?.name, place })))
-    .map((entry) => entry?.place ?? null);
+  // Where each table, in series order, is in the stored list: each entry's table as Generate matches it, an entry
+  // whose table Load could not read at the empty place it names; then the places no entry takes (`labels` name them).
+  const { places, unplaced } = conservationSourcesOfSeries(placed(files.c_conservation_blasts), { series }, { emptyPlaces: true });
+  const storedPlaces = [...places, ...unplaced];
+  /** @template T @param {T[]} list @returns {(T | null)[]} */
+  const inSeriesOrder = (list) => storedPlaces.map((place) => (place === null ? null : list[place] ?? null));
   const storedTables = placed(stored);
   let kept = {
     blasts: inSeriesOrder(placed(files.c_conservation_blasts)),

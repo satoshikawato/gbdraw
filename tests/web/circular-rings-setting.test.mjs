@@ -25,7 +25,7 @@ const {
   createCircularConservationSources, createCircularConservationSeriesPanel, createCircularConservationComparisonFiles
 } = await import('../../gbdraw/web/js/app/circular-conservation.js');
 const { createDrawingReset } = await import('../../gbdraw/web/js/app/reset-settings.js');
-const { bindDrawingInputFileList, bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { sessionSourceFactsOf } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
 const { circularRingSources, orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
@@ -233,6 +233,54 @@ test('Remove series leaves the other ring of the same file name with its own nam
   assert.deepEqual(drawing.circularConservation.series.map((entry) => [entry.label, entry.color]), [['Genome B', colorB]]);
   assert.deepEqual(orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
     .map((source) => [source.label, source.files.map((file) => file.size)]), [['Genome B', [16]]]);
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(ringNames(), []);
+});
+
+// #1777 review 3, finding 1: two rings of one table name (a LOSAT-cache replay names each table after its first FASTA
+// file, and NCBI names every download `sequence.fasta`) keep their own tables and genomes through a move and Remove
+// series; their stored places tell them apart.
+test('a moved replay ring of a shared table name keeps its table and genome, also after Remove series', () => {
+  const drawing = circular();
+  const shared = 'sequence.circular_conservation.losatn.tsv';
+  const tables = [textFile(shared, 'b'.repeat(60)), textFile(shared, 'c'.repeat(63)), textFile('d.circular_conservation.losatn.tsv', 'd'.repeat(64))];
+  const genomes = ['b', 'c', 'd'].map((name) => [textFile(`${name}.fasta`)]);
+  bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', genomes);
+  bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', tables);
+  setConservationBlastsSource(drawing.slices.inputs, 'losat-cache');
+  drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...['b', 'c', 'd'].map((name, index) => ({
+    sourceKey: `${name}.fasta|10|0|0`, fileName: tables[index].name, sourceIndex: index, label: `Genome ${name}`, color: `#00000${index}`, losat_gencode: 1
+  })));
+  const drawn = () => orderedConservationSources(drawing.files.c_conservation_blasts, drawing.circularConservation)
+    .map((source) => [source.label, source.file.size]);
+  const shown = () => panel.circularConservationSeriesRows.value.map((row) => [drawing.circularConservation.series[row.index].label, row.files]);
+  panel.moveCircularConservationSeries(0, 1);
+  assert.deepEqual(drawn(), [['Genome c', 63], ['Genome b', 60], ['Genome d', 64]]);
+  assert.deepEqual(shown(), [['Genome c', ['c.fasta']], ['Genome b', ['b.fasta']], ['Genome d', ['d.fasta']]]);
+  comparisonFiles.removeCircularConservationSource(1);
+  assert.deepEqual(drawn(), [['Genome c', 63], ['Genome d', 64]]);
+  assert.deepEqual(shown(), [['Genome c', ['c.fasta']], ['Genome d', ['d.fasta']]]);
+  comparisonFiles.removeCircularConservationSource(1);
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(ringNames(), []);
+});
+
+// The same for LOSAT rings whose first files share a name and whose source keys no longer match (keys of other dates):
+// a move and Remove series leave each kept ring its own genome, name and colour.
+test('moved LOSAT rings of one first file name keep their genomes through Remove series when their keys are stale', async () => {
+  const drawing = circular();
+  const add = (file) => comparisonFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
+  for (const bases of ['ACGT', 'ACGTACGT', 'ACGTACGTACGT']) await add(textFile('sequence.fasta', `>r\n${bases}\n`));
+  drawing.circularConservation.series.forEach((entry, index) => {
+    Object.assign(entry, { sourceKey: `stale-${index}`, label: `Genome ${'ABC'[index]}`, color: `#11111${index}` });
+  });
+  const generated = () => orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map((source) => [source.label, source.color, source.files.map((file) => file.size)]);
+  panel.moveCircularConservationSeries(0, 1);
+  assert.deepEqual(generated(), [['Genome B', '#111111', [12]], ['Genome A', '#111110', [8]], ['Genome C', '#111112', [16]]]);
+  comparisonFiles.removeCircularConservationSource(1);
+  assert.deepEqual(generated(), [['Genome B', '#111111', [12]], ['Genome C', '#111112', [16]]]);
+  comparisonFiles.removeCircularConservationSource(1);
   comparisonFiles.removeCircularConservationSource(0);
   assert.deepEqual(ringNames(), []);
 });

@@ -103,53 +103,6 @@ const filesOfPlace = (place) => {
 };
 
 /**
- * The name that matches a place to a series entry's `fileName`: its first file's.
- * @param {ConservationSourcePlace<ConservationFile>} place
- */
-const placeName = (place) => String(filesOfPlace(place)[0]?.name || '').trim();
-
-/**
- * @template {ConservationSourcePlace<ConservationFile>} T
- * @param {T[] | null | undefined} files An empty place is kept as one.
- * @param {CircularConservationLike | null | undefined} circularConservation
- * @returns {(T | null)[]}
- */
-export const orderedOptionalConservationFiles = (files, circularConservation) => {
-  const sourceFiles = Array.isArray(files) ? files : [];
-  const series = Array.isArray(circularConservation?.series)
-    ? circularConservation.series
-    : [];
-  if (series.length === 0) return [...sourceFiles];
-
-  /** @type {Set<number>} */
-  const used = new Set();
-  /** @type {(T | null)[]} */
-  const ordered = [];
-  series.forEach((entry, seriesIndex) => {
-    const fileName = String(entry?.fileName || '').trim();
-    let index = fileName
-      ? sourceFiles.findIndex(
-          (file, candidateIndex) => !used.has(candidateIndex) && placeName(file) === fileName
-        )
-      : -1;
-    if (index < 0) {
-      const sourceIndex = Number(entry?.sourceIndex);
-      index = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
-    }
-    if (index >= 0 && index < sourceFiles.length && !used.has(index)) {
-      used.add(index);
-      ordered.push(sourceFiles[index]);
-      return;
-    }
-    ordered.push(null);
-  });
-  sourceFiles.forEach((file, index) => {
-    if (!used.has(index)) ordered.push(file);
-  });
-  return ordered;
-};
-
-/**
  * The one removal of a comparison series with its files: Remove in the
  * Circular comparison panel, and Load for a series whose BLAST table it could
  * not read (OV-893, E-OD30). Each list holds one place per series, in series
@@ -302,8 +255,8 @@ export const reconcileConservationSeries = ({
   legacyLabels
 }) => {
   const previous = Array.isArray(previousSeries) ? previousSeries : [];
-  // A change of the files drops an entry whose files went: no stored place lends it other files.
-  const { matched, unclaimed } = conservationSourcesOfSeries(sourceFiles, { series: previous }, { byStoredPlace: false });
+  // A change of the files drops an entry whose files went: a stored place lends it no file of another name.
+  const { matched, unclaimed } = conservationSourcesOfSeries(sourceFiles, { series: previous }, { storedPlace: 'same name' });
   const fallbackLabels = Array.isArray(legacyLabels) ? legacyLabels : [];
   /** @type {ConservationSeriesEntry[]} */
   const nextSeries = [];
@@ -342,60 +295,100 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
 };
 
 /**
+ * How the matcher reads a stored place (`conservationSourcesOfSeries`). Generate, the rows, Save and the span export
+ * take the source at an entry's stored place (`storedPlace: 'any'`): a Session writes one place per ring, and a
+ * LOSAT-cache replay's tables sit at their rings' places under names of other files. The series reconcile, which
+ * follows a change of the files, takes it only when its first file still has the entry's file name
+ * (`'same name'`), so an entry whose files went leaves with them. Load's repair of the tables it could not read lets
+ * an entry left without a source take the empty place it names (`emptyPlaces`), so that entry is the one reported.
+ * @typedef {{ readonly storedPlace?: 'any' | 'same name', readonly emptyPlaces?: boolean }} ConservationMatchPasses
+ */
+/**
+ * @template {ConservationFile} F
+ * @typedef {{ descriptors: ConservationSourceDescriptor<F>[], matched: (ConservationSourceDescriptor<F> | null)[],
+ *   unclaimed: ConservationSourceDescriptor<F>[], places: (number | null)[], unplaced: number[] }} ConservationSeriesMatch
+ */
+
+/**
  * The source of each series entry, in series order: the one matching of a ring
  * or a BLAST row to its files, which Generate, the track slots, the ring rows,
- * Save, the span export catalog and the series reconcile read. It works in
- * passes over every entry, so that no entry takes a source a later entry names
- * more closely: each entry first takes the source of its source key; then an
- * entry left takes the first source of its file name that no entry has
- * claimed; then the source at the place its source index names (a Session
- * writes one place per ring, so a place left empty on Load keeps the later
- * rings at theirs, and a LOSAT-cache replay's tables sit at their rings'
- * places). The series reconcile, which follows a change of the files, leaves
- * the last pass out (`byStoredPlace: false`): an entry whose files went leaves
- * with them. `matched[i]` is entry i's source, `null` when none is left;
- * `unclaimed` are the sources no entry takes, in order.
+ * Save, the span export catalog, the series reconcile and Load's repair of
+ * unread tables read. It works in passes over every entry, so that no entry
+ * takes a source a later entry names more closely: each entry first takes the
+ * source of its source key; then an entry left takes the source of its file
+ * name when that name is unambiguous, carried by one source no entry claimed
+ * and by one entry left (two rings whose first files are both NCBI's
+ * `sequence.fasta`, or whose replayed tables are named after them, are not);
+ * then the source at the place its source index names, which a move keeps
+ * (`passes`). `matched[i]` is entry i's source, `null` when none is left, and
+ * `places[i]` its place; `unclaimed` are the sources no entry takes and
+ * `unplaced` the places no entry takes, in order.
  * @template {ConservationFile} F
  * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
- * @param {{ readonly byStoredPlace?: boolean }} [passes]
- * @returns {{ descriptors: ConservationSourceDescriptor<F>[], matched: (ConservationSourceDescriptor<F> | null)[],
- *   unclaimed: ConservationSourceDescriptor<F>[] }}
+ * @param {ConservationMatchPasses} [passes]
+ * @returns {ConservationSeriesMatch<F>}
  */
-export const conservationSourcesOfSeries = (sourceFiles, circularConservation, { byStoredPlace = true } = {}) => {
+export const conservationSourcesOfSeries = (sourceFiles, circularConservation, { storedPlace = 'any', emptyPlaces = false } = {}) => {
   // The places' union hides F from the call's inference; the descriptors hold the given files.
   const descriptors = /** @type {ConservationSourceDescriptor<F>[]} */ (conservationSourceDescriptors(sourceFiles));
+  /** @type {readonly ConservationSourcePlace<F>[]} */
+  const allPlaces = Array.isArray(sourceFiles) ? sourceFiles : [sourceFiles];
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
   /** @type {Set<string>} */
   const claimed = new Set();
   /** @type {(ConservationSourceDescriptor<F> | null)[]} */
   const matched = series.map(() => null);
+  /** @param {unknown} entry @returns {entry is RawConservationSeriesEntry} */
+  const isEntry = (entry) => Boolean(entry) && typeof entry === 'object';
+  /** @param {RawConservationSeriesEntry} entry */
+  const nameOf = (entry) => String(entry.fileName || '').trim();
+  /** @param {RawConservationSeriesEntry} entry @param {number} seriesIndex */
+  const storedPlaceOf = (entry, seriesIndex) => {
+    const sourceIndex = Number(entry.sourceIndex);
+    return Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
+  };
   /**
    * One pass: each entry without a source yet takes the unclaimed source `fits` names.
    * @param {(entry: RawConservationSeriesEntry, seriesIndex: number) => (source: ConservationSourceDescriptor<F>) => boolean} fits
    */
   const claim = (fits) => series.forEach((entry, seriesIndex) => {
-    if (matched[seriesIndex] || !entry || typeof entry !== 'object') return;
+    if (matched[seriesIndex] || !isEntry(entry)) return;
     const fitsEntry = fits(entry, seriesIndex);
     const source = descriptors.find((candidate) => !claimed.has(candidate.sourceKey) && fitsEntry(candidate)) || null;
     if (!source) return;
     claimed.add(source.sourceKey);
     matched[seriesIndex] = source;
   });
+  /** @param {string[]} names @returns {Map<string, number>} */
+  const tally = (names) => names.reduce((counts, name) => counts.set(name, (counts.get(name) || 0) + 1), new Map());
   claim((entry) => {
     const sourceKey = String(entry.sourceKey || '').trim();
     return (source) => sourceKey !== '' && source.sourceKey === sourceKey;
   });
+  const sourcesOfName = tally(descriptors.filter((source) => !claimed.has(source.sourceKey)).map((source) => source.fileName));
+  const entriesOfName = tally(series.filter((entry, seriesIndex) => !matched[seriesIndex] && isEntry(entry)).map(nameOf));
   claim((entry) => {
-    const fileName = String(entry.fileName || '').trim();
-    return (source) => fileName !== '' && source.fileName === fileName;
+    const fileName = nameOf(entry);
+    const unambiguous = fileName !== '' && sourcesOfName.get(fileName) === 1 && entriesOfName.get(fileName) === 1;
+    return (source) => unambiguous && source.fileName === fileName;
   });
-  if (byStoredPlace) claim((entry, seriesIndex) => {
-    const sourceIndex = Number(entry.sourceIndex);
-    const place = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
-    return (source) => source.placeIndex === place;
+  claim((entry, seriesIndex) => {
+    const place = storedPlaceOf(entry, seriesIndex);
+    return (source) => source.placeIndex === place && (storedPlace === 'any' || source.fileName === nameOf(entry));
   });
-  return { descriptors, matched, unclaimed: descriptors.filter((source) => !claimed.has(source.sourceKey)) };
+  const places = matched.map((source) => (source ? source.placeIndex : null));
+  const placeHoldsNothing = (/** @type {number} */ place) => place >= 0 && place < allPlaces.length && filesOfPlace(allPlaces[place]).length === 0;
+  if (emptyPlaces) series.forEach((entry, seriesIndex) => {
+    if (matched[seriesIndex] || !isEntry(entry)) return;
+    const place = storedPlaceOf(entry, seriesIndex);
+    if (placeHoldsNothing(place) && !places.includes(place)) places[seriesIndex] = place;
+  });
+  const unclaimed = descriptors.filter((source) => !claimed.has(source.sourceKey));
+  const unplaced = emptyPlaces
+    ? allPlaces.map((_, place) => place).filter((place) => !places.includes(place))
+    : unclaimed.map((source) => source.placeIndex);
+  return { descriptors, matched, unclaimed, places, unplaced };
 };
 
 /**
@@ -406,9 +399,7 @@ export const conservationSourcesOfSeries = (sourceFiles, circularConservation, {
  */
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
   // The places' union hides F from the call's inference, as in `conservationSourcesOfSeries`.
-  const { matched, unclaimed } = /** @type {{ descriptors: ConservationSourceDescriptor<F>[],
-    matched: (ConservationSourceDescriptor<F> | null)[], unclaimed: ConservationSourceDescriptor<F>[] }} */ (
-    conservationSourcesOfSeries(sourceFiles, circularConservation));
+  const { matched, unclaimed } = /** @type {ConservationSeriesMatch<F>} */ (conservationSourcesOfSeries(sourceFiles, circularConservation));
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
   /** @type {OrderedConservationSource<F>[]} */
@@ -452,7 +443,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
  * beside an uploaded or replayed BLAST table) and each series entry's place in
  * it, or `null` for an entry without a source. Entries are matched to sources
  * as Generate matches them (`conservationSourcesOfSeries`, in passes over every
- * entry: source keys, then file names, then the place a Session wrote), so a
+ * entry: source keys, then unambiguous file names, then the place a Session wrote), so a
  * place left empty on Load keeps the later rings at theirs. `unplaced` are the places of LOSAT rings
  * that no entry names, which Generate draws after the others.
  * @template {ConservationFile} F
@@ -466,12 +457,10 @@ export const ringGenomePlaces = (drawing) => {
   /** @type {F[][]} */
   const lists = ringGenomeFileLists(drawing.files[key]);
   // A table's place is its genome files' place, beside it.
-  const { matched, unclaimed } = conservationSourcesOfSeries(
+  const { places, unplaced } = conservationSourcesOfSeries(
     tables ? normalizeFileList([...drawing.files.c_conservation_blasts]) : lists, drawing.circularConservation
   );
-  const places = matched.map((source) => (source ? source.placeIndex : null));
-  const unplaced = tables ? [] : unclaimed.map((source) => source.placeIndex);
-  return { key, lists, places, unplaced };
+  return { key, lists, places, unplaced: tables ? [] : unplaced };
 };
 
 /**
