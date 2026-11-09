@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import Literal, NamedTuple, TypeAlias
+from typing import Literal, NamedTuple, TypeAlias, TypeVar
 
 from svgwrite.base import BaseElement
 
@@ -41,9 +41,9 @@ from gbdraw.layout.text_geometry import (
     Point,
     annular_sector_parts,
     convex_polygons_intersect,
+    GlyphsAlongCircle,
     glyphs_across_circle,
-    glyphs_half_turn_on_circle,
-    glyphs_meet_on_circle,
+    glyphs_along_circle,
     grown_convex_polygon,
     segment_intersects_polygon,
 )
@@ -817,6 +817,21 @@ _CUT_ONLY: tuple[TextRun, ...] = ((_CUT_MARK, "normal"),)
 
 LabelInk: TypeAlias = Callable[[Sequence[TextRun]], tuple[float, float, float, float]]
 
+_Measured = TypeVar("_Measured")
+
+
+def _once_per_text(measure: Callable[[tuple[TextRun, ...]], _Measured]) -> Callable[[tuple[TextRun, ...]], _Measured]:
+    """``measure``, run once for each text one curved label tries (``_curved_label``)."""
+
+    kept: dict[tuple[TextRun, ...], _Measured] = {}
+
+    def measured(shown: tuple[TextRun, ...]) -> _Measured:
+        if shown not in kept:
+            kept[shown] = measure(shown)
+        return kept[shown]
+
+    return measured
+
 
 def _cleared_radius(
     extent: Callable[[float], tuple[float, float]],
@@ -826,14 +841,16 @@ def _cleared_radius(
     outward: bool,
     gap: float,
     rings: Sequence[RadialBand],
-) -> float:
+) -> tuple[float, tuple[float, float]]:
     """The anchor radius whose letters keep ``gap`` beyond ``mark_edge``, and beyond the paint of any ring of
-    ``rings`` they would otherwise meet or come within ``gap`` of."""
+    ``rings`` they would otherwise meet or come within ``gap`` of; and how near the centre and how far from it the
+    letters come there (``extent``, measured once for each radius tried)."""
 
     edge = mark_edge
     radius = radius_for(edge + gap if outward else edge - gap)
+    reach: tuple[float, float] | None = None
     for ring in sorted(rings, key=lambda band: band.inner_px if outward else -band.outer_px):
-        near, far = extent(radius)
+        near, far = reach = extent(radius) if reach is None else reach
         if outward and edge < ring.outer_px and ring.inner_px < far + gap:
             edge = ring.outer_px
         elif not outward and ring.inner_px < edge and near - gap < ring.outer_px:
@@ -841,7 +858,8 @@ def _cleared_radius(
         else:
             continue
         radius = radius_for(edge + gap if outward else edge - gap)
-    return radius
+        reach = None
+    return radius, extent(radius) if reach is None else reach
 
 
 def _label_at(
@@ -882,7 +900,7 @@ def _label_at(
     turn = math.radians(rotation)
     # The ray's direction in the text's frame: the screen direction turned back by the label's rotation.
     direction = (math.cos(theta - turn), math.sin(theta - turn))
-    radius = clear(
+    radius, ink_radii = clear(
         partial(_ink_extent, direction=direction, offsets=offsets),
         partial(_label_radius, outward=outward, direction=direction, offsets=offsets),
     )
@@ -894,7 +912,7 @@ def _label_at(
         x=x,
         y=y,
         rotation=rotation,
-        ink_radii=_ink_extent(radius, direction, offsets),
+        ink_radii=ink_radii,
         parts=(
             tuple(
                 (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
@@ -910,7 +928,7 @@ def _curved_label(
     angle: float,
     ink: LabelInk,
     glyphs: Callable[[tuple[TextRun, ...]], GlyphOutlines],
-    clear: Callable[[Callable[[float], tuple[float, float]], Callable[[float], float]], float],
+    clear: Callable[[Callable[[float], tuple[float, float]], Callable[[float], float]], tuple[float, tuple[float, float]]],
     *,
     outward: bool,
     font_size: float,
@@ -926,10 +944,12 @@ def _curved_label(
 
     # Text in the lower half reads anticlockwise with its tops toward the centre; elsewhere its tops face out.
     flipped = 0.0 < angle % 360.0 < 180.0
+    glyphs = _once_per_text(glyphs)
 
+    @_once_per_text
     def placed(shown: tuple[TextRun, ...]) -> tuple[float, float, float, float, float]:
         """The ink of ``shown`` along its baseline (left, right), how near the centre and how far from it its
-        letters come, and its baseline radius, cleared of its mark (and rings)."""
+        letters come, and its baseline radius, cleared of its mark (and rings): measured once for each text tried."""
 
         left, right, top, bottom = ink(shown)
         low, high = (top, bottom) if flipped else (-bottom, -top)
@@ -950,18 +970,22 @@ def _curved_label(
             # The nearest ink stays off the centre.
             return max(reach, 1e-6 - low)
 
-        radius = clear(extent, radius_for)
-        return left, right, *extent(radius), radius
+        radius, (near, far) = clear(extent, radius_for)
+        return left, right, near, far, radius
+
+    @_once_per_text
+    def standing(shown: tuple[TextRun, ...]) -> GlyphsAlongCircle:
+        """The glyphs of ``shown`` standing along their baseline circle (``placed``)."""
+
+        return glyphs_along_circle(glyphs(shown), placed(shown)[4], tops_in=flipped)
 
     def fits(shown: tuple[TextRun, ...]) -> bool:
         # The ink reaches at most this far each way from the label's middle along the circle its letters come
         # nearest the centre on, where they stand closest together (OV-2806): a circle about as small as the
         # letters, or letters pressed against the centre past their mark, leave no room for one. And no two letters'
         # ink overlaps: letters that stand apart on a line close up at their tops on the inner side of a circle.
-        left, right, near, _far, radius = placed(shown)
-        return max(-left, right) <= math.radians(_MAX_HALF_PATH_DEG) * near - font_size and not glyphs_meet_on_circle(
-            glyphs(shown), radius, tops_in=flipped
-        )
+        left, right, near, _far, _radius = placed(shown)
+        return max(-left, right) <= math.radians(_MAX_HALF_PATH_DEG) * near - font_size and not standing(shown).meet()
 
     shown = runs if fits(runs) else _cut_to(runs, fits)
     left, right, near, far, radius = placed(shown)
@@ -970,7 +994,7 @@ def _curved_label(
     # it spans a wider turn than its arc on the baseline (OV-2851). Where no glyph is known, the ink box is measured
     # at the circle the letters come nearest the centre on.
     half_turn = 0.5 * (right - left) / radius
-    ink_turn = glyphs_half_turn_on_circle(glyphs(shown), radius, tops_in=flipped)
+    ink_turn = standing(shown).half_turn()
     inner_turn = 0.5 * (right - left) / near if ink_turn is None else ink_turn
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0

@@ -253,3 +253,30 @@ def test_ov682_a_face_without_the_bmp_cmap_is_measured_with_its_best_cmap(tmp_pa
     text = "Hypothetical protein"
 
     assert _box(str(target), text, 14) == _box(_path("LiberationSans-Regular"), text, 14)
+
+
+def test_ov3103_a_family_registered_after_it_was_measured_is_measured_with_its_file(tmp_path: Path) -> None:
+    # A text measured in a family that falls back to a bundled face, then measured again once a font file registers
+    # that family: its glyph outlines and ink box are the new face's, not the ones kept from the fallback; and the
+    # fallback's again once the file is forgotten.
+    from gbdraw.core import fonts
+    from gbdraw.core.text import text_runs_glyph_outlines, text_runs_ink_offsets
+
+    family = f"Gbdraw OV3103 {uuid.uuid4().hex[:8]}"
+    runs = (("Wg", "normal"),)
+
+    def measured(in_family: str) -> tuple[list[list[float]], tuple[float, float, float, float] | None]:
+        outlines = text_runs_glyph_outlines(runs, in_family, 20.0)
+        ink = text_runs_ink_offsets(runs, in_family, 20.0, dominant_baseline="alphabetic", text_anchor="middle")
+        return outlines.points.tolist(), ink
+
+    sans, serif = measured("Liberation Sans"), measured("Liberation Serif")
+    assert sans != serif
+    assert measured(family) == sans
+    fonts.register_font_file(_renamed_face("LiberationSerif-Regular", family, tmp_path / "ov3103.ttf"))
+    try:
+        assert measured(family) == serif
+        fonts.clear_registered_fonts()
+        assert measured(family) == sans
+    finally:
+        fonts.clear_registered_fonts()

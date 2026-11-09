@@ -453,6 +453,52 @@ def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> No
     assert len(label.parts) <= math.ceil(360.0 / SECTOR_PART_DEG)
 
 
+@pytest.mark.parametrize("ring_px", (None, 40.0, 95.0))
+def test_a_curved_label_measures_its_text_once_where_it_stands(monkeypatch: pytest.MonkeyPatch, ring_px) -> None:
+    # OV-2981: a label room measures every curved label of its slot at each band it is asked for. A label that fits
+    # its circle measures its ink box, its letters' reach across the circle, and its glyphs standing on the circle
+    # (whether two meet, how far they turn) once for its text where it stands: the fit check and the label share the
+    # one placement, and the reach the axis ring check measured is not measured again. With a ring it meets (95 px),
+    # the letters move past it and are measured at that radius once more.
+    import gbdraw.render.drawers.circular.annotations as drawer
+    from gbdraw.layout.circular import RadialBand
+    from gbdraw.layout.text_geometry import GlyphsAcrossCircle, GlyphsAlongCircle
+
+    calls: dict[str, int] = {}
+
+    def counted(name, function):
+        def call(*args, **kwargs):
+            calls[name] = calls.get(name, 0) + 1
+            return function(*args, **kwargs)
+
+        return call
+
+    monkeypatch.setattr(GlyphsAcrossCircle, "radii", counted("reach", GlyphsAcrossCircle.radii))
+    monkeypatch.setattr(GlyphsAcrossCircle, "radius_reaching", counted("radius", GlyphsAcrossCircle.radius_reaching))
+    monkeypatch.setattr(GlyphsAlongCircle, "meet", counted("meet", GlyphsAlongCircle.meet))
+    monkeypatch.setattr(drawer, "glyphs_along_circle", counted("along", drawer.glyphs_along_circle))
+    monkeypatch.setattr(drawer, "label_ink_offsets", counted("ink", drawer.label_ink_offsets))
+    style = RegionAnnotationStyle()
+    label = _label_at(
+        2_500.0,
+        annotation_id="",
+        runs=(("Region 7", "normal"),),
+        record_length=10_000,
+        mark_edge=100.0,
+        outward=False,
+        gap=float(style.label_offset),
+        font_size=12.0,
+        color="",
+        orientation="arc",
+        font_family="Arial",
+        rings=() if ring_px is None else (RadialBand(ring_px - 1.0, ring_px + 1.0),),
+    )
+
+    assert label.arc is not None and not label.cut
+    moved = 1 if ring_px == 95.0 else 0
+    assert calls == {"ink": 1, "radius": 1 + moved, "reach": 1 + moved, "along": 1, "meet": 1}
+
+
 def test_a_wide_linear_label_gets_room_where_its_letters_cross_the_next_lane() -> None:
     # b (lane 1) labels above at bp 3350; its wide letters reach over c (to 3050) and a (from 3720) in lane 0.
     regions = (_region("c", 2000, 3050, ""), _region("b", 3000, 3700, "WWWWWWWW"), _region("a", 3720, 5000, ""))

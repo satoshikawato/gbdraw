@@ -657,22 +657,38 @@ def text_runs_ink_offsets(
     Each run is measured in its own face and starts at the end of the previous
     run's advance, white space collapsed across runs (``collapse_runs_white_space``);
     ``text_anchor`` aligns the runs' total advance. A run that paints nothing
-    only advances.
+    only advances. Kept for each text in the faces its family resolves to now (``text_runs_glyph_outlines``).
     """
 
-    metrics = get_font_vertical_metrics(font_family, font_weight)
+    return _faces_ink_offsets(
+        tuple((text, resolve_font_face(font_family, font_weight, font_style)) for text, font_style in runs),
+        resolve_font_face(font_family, font_weight, "normal"),
+        float(font_size),
+        dominant_baseline,
+        text_anchor,
+    )
+
+
+@functools.lru_cache(maxsize=8192)
+def _faces_ink_offsets(
+    runs: tuple[tuple[str, FontFace | None], ...],
+    metrics_face: FontFace | None,
+    size: float,
+    dominant_baseline: str,
+    text_anchor: str,
+) -> Optional[tuple[float, float, float, float]]:
+    metrics = None if metrics_face is None else _face_vertical_metrics(metrics_face)
     shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
     if shift is None:
         return None
-    size = float(font_size)
     advance = 0.0
     left = right = top = bottom = math.nan
-    for text, font_style in collapse_runs_white_space(runs):
-        ink = text_ink(text, font_family, font_weight, font_style)
+    for text, face in collapse_runs_white_space(runs):
+        ink = None if face is None else _face_text_ink(face, collapse_svg_white_space(str(text)))
         if ink is None:
-            if resolve_font_face(font_family, font_weight, font_style) is None:
+            if face is None:
                 return None
-            advance += float(calculate_svg_bbox_dimensions(text, font_family, size, font_weight, font_style)[0]) / size
+            advance += float(_face_text_box(face, text, size)[0]) / size
             continue
         run_left, run_right = advance + ink.left, advance + ink.right
         left = run_left if math.isnan(left) else min(left, run_left)
@@ -791,7 +807,6 @@ def _face_glyph_contours(face: FontFace, glyph_name: str) -> tuple[tuple[tuple[f
     return tuple(tuple(contour) for contour in pen.contours if len(contour) > 2)
 
 
-@functools.lru_cache(maxsize=2048)
 def text_runs_glyph_outlines(
     runs: tuple[tuple[str, str | None], ...],
     font_family: str,
@@ -800,13 +815,20 @@ def text_runs_glyph_outlines(
 ) -> GlyphOutlines:
     """The painted glyphs of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``, laid
     out as ``text_runs_ink_offsets`` measures them: each run in its own face, kerned within it, white space collapsed
-    across runs. No glyph when a face cannot be read."""
+    across runs. No glyph when a face cannot be read. Kept for each text in the faces its family resolves to now, so
+    a font file registered for the family later is measured (OV-3103)."""
 
-    size = float(font_size)
+    return _faces_glyph_outlines(
+        tuple((text, resolve_font_face(font_family, font_weight, font_style)) for text, font_style in runs),
+        float(font_size),
+    )
+
+
+@functools.lru_cache(maxsize=2048)
+def _faces_glyph_outlines(runs: tuple[tuple[str, FontFace | None], ...], size: float) -> GlyphOutlines:
     glyphs: list[GlyphOutline] = []
     origin = 0.0
-    for text, font_style in collapse_runs_white_space(runs):
-        face = resolve_font_face(font_family, font_weight, font_style)
+    for text, face in collapse_runs_white_space(runs):
         font = None if face is None else load_font(face)
         if face is None or font is None:
             return glyph_outlines(())
