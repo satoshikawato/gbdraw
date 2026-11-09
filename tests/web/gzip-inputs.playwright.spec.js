@@ -54,7 +54,7 @@ test('a gzip GenBank upload lists its record, generates, and saves the gzip file
 });
 
 // A gzip upload that expands past the cap (Python's MAX_EXPANDED_INPUT_BYTES; a
-// test hook stands in for 512 MiB) is refused with its name and the cap, and
+// test hook stands in for 2 GiB) is refused with its name and the cap, and
 // no record is listed (PD-OI-116 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md).
 test('a gzip upload past the expanded cap is refused with its name and the cap', async ({ page }, info) => {
   test.setTimeout(240000);
@@ -109,11 +109,15 @@ test('a gzip Depth TSV and BLAST TSV past the expanded cap are refused right aft
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
 });
 
+// The expanded cap Python applies to a gzip input (gbdraw/io/input_text.py
+// MAX_EXPANDED_INPUT_BYTES), as its refusal names it.
+const PYTHON_CAP_MIB = 2048;
+
 // A Linear Session the CLI wrote with a gzip BLAST TSV, whose table is then
-// replaced by one that expands past Python's cap (512 MiB of zeros, about
-// 0.5 MB as gzip). argv: the directory to write in, the Session file.
+// replaced by one that expands past Python's cap (2 GiB of zeros, about 2 MB
+// as gzip, compressed in parts). argv: the directory to write in, the Session file.
 const OVER_CAP_BLAST_SESSION = `
-import gzip, sys
+import gzip, sys, zlib
 from pathlib import Path
 from gbdraw import cli
 from gbdraw.io.input_text import MAX_EXPANDED_INPUT_BYTES
@@ -133,7 +137,12 @@ except SystemExit as exit_:
 container = read_session_container(written)
 document = container.document
 [blast] = [item["resourceId"] for item in document["drawings"][0]["renderRequest"]["comparisons"] if item["kind"] == "nucleotideBlast"]
-big = gzip.compress(bytes(MAX_EXPANDED_INPUT_BYTES + 1), 6)
+compressor, zeros, left, parts = zlib.compressobj(6, zlib.DEFLATED, 31), bytes(8 * 1024 * 1024), MAX_EXPANDED_INPUT_BYTES + 1, []
+while left > 0:
+    parts.append(compressor.compress(zeros[:left]))
+    left -= len(zeros)
+parts.append(compressor.flush())
+big = b"".join(parts)
 document["resources"][blast]["size"] = len(big)
 sources = {rid: container.resource(rid) for rid in container.resource_ids()}
 sources[blast] = BytesResourceSource(big)
@@ -142,8 +151,8 @@ print(document["resources"][blast]["name"])
 `;
 
 // PD-OI-116: a Session's inputs keep their path. A loaded gzip input that no
-// page reader reads is refused by Python at Generate, with its name and 512 MiB.
-test('a loaded Session whose gzip BLAST TSV expands past the cap is refused at Generate with its name and 512 MiB', async ({ page }, info) => {
+// page reader reads is refused by Python at Generate, with its name and the cap.
+test('a loaded Session whose gzip BLAST TSV expands past the cap is refused at Generate with its name and the cap', async ({ page }, info) => {
   test.setTimeout(600_000);
   const directory = info.outputPath('over-cap-session');
   fs.mkdirSync(directory, { recursive: true });
@@ -169,7 +178,7 @@ test('a loaded Session whose gzip BLAST TSV expands past the cap is refused at G
   await expect(resolution).toContainText('INHERIT');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   await expect(page.getByText(`An input could not be read. Replace or reselect it. File: ${name}. `
-    + 'gbdraw reads gzip files that expand to at most 512 MiB. Decompress the gzip file and choose the plain file.'))
+    + `gbdraw reads gzip files that expand to at most ${PYTHON_CAP_MIB} MiB. Decompress the gzip file and choose the plain file.`))
     .toBeVisible({ timeout: 300_000 });
   expect(await page.evaluate(() => window.__GBDRAW_EXPANSIONS__), 'the page expanded nothing: Python refused it').toBe(0);
 });
@@ -212,7 +221,7 @@ test('an auxiliary table gzip past the expanded cap is refused once, keeps the p
 // file fields do. Add Seq reads the file at once (the ring reader names the row),
 // so its read is the one owner of the refusal, with or without a copy store; any
 // other read failure keeps the file-name default and Generate reports it (D12).
-// The ring reader is Python's, whose cap (512 MiB) no test hook lowers.
+// The ring reader is Python's, whose cap (2 GiB) no test hook lowers.
 const writeZerosGzip = async (file, size) => {
   const { pipeline } = require('node:stream/promises');
   const { Readable } = require('node:stream');
@@ -227,7 +236,7 @@ const writeZerosGzip = async (file, size) => {
 test('an Add Seq gzip past the expanded cap is refused right after it is chosen', async ({ page }, info) => {
   test.setTimeout(300_000);
   const big = info.outputPath('big ring.fasta.gz');
-  await writeZerosGzip(big, 512 * 1024 * 1024 + 1);
+  await writeZerosGzip(big, PYTHON_CAP_MIB * 1024 * 1024 + 1);
   await openFresh(page);
   const losat = page.locator('input[type="radio"][value="losat"]');
   await reveal(losat);
@@ -235,14 +244,14 @@ test('an Add Seq gzip past the expanded cap is refused right after it is chosen'
   await reveal(page.locator('button', { hasText: 'Add comparison sequence' }));
   await page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]').setInputFiles(big);
   await expect(page.getByText('An input could not be read. Replace or reselect it. File: big ring.fasta.gz. '
-    + 'gbdraw reads gzip files that expand to at most 512 MiB. Decompress the gzip file and choose the plain file.'))
+    + `gbdraw reads gzip files that expand to at most ${PYTHON_CAP_MIB} MiB. Decompress the gzip file and choose the plain file.`))
     .toBeVisible({ timeout: 240_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
 });
 
 // The Comparison sequence beside an uploaded ring BLAST file: the copy the input
 // store makes when it is chosen counts its expanded size (a test hook stands in
-// for 512 MiB), and the field shows that refusal.
+// for the 2 GiB cap), and the field shows that refusal.
 test('a ring Comparison sequence gzip past the expanded cap is refused right after it is chosen', async ({ page }, info) => {
   test.setTimeout(240000);
   const cap = 1024 * 1024;

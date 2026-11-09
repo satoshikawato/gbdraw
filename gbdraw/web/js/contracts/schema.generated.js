@@ -165,7 +165,7 @@ export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
 
 // gbdraw/io/input_text.py: MAX_EXPANDED_INPUT_BYTES
-export const MAX_EXPANDED_INPUT_BYTES = 536870912;
+export const MAX_EXPANDED_INPUT_BYTES = 2147483648;
 
 // gbdraw/web_support/error_adapter.py: INPUT_NAME_CHARACTERS
 export const INPUT_NAME_CHARACTERS = 200;
