@@ -216,7 +216,8 @@ write-up of a release.
   places each row on the side the CLI drew it, and Generate draws the CLI's
   figure. An Annotations row with no `side=` is read as outside (above), and a
   Linear features row with no `side=` as below, as the CLI draws them.
-  Overlay Annotations rows of one `z` keep the order the CLI paints them in
+  An Overlay Annotations row keeps the order the CLI paints it in against
+  the rows of its `z` it covers and the overlays of its `z` it meets
   (OV-3079, OV-3155).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
