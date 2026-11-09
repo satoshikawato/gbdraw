@@ -293,7 +293,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
   const asked = [];
   const windowsSettings = createLosatSettings({
     state: withDrawings(windowsState),
-    windowsOf: () => (card) => linearWindowsPayload(card, { arranged: false }),
+    shownWindowsOf: () => (card) => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: { length: null, id: '' } }),
     planLinearUnits: async (payload) => {
       asked.push(payload);
       return { result: pythonLinearUnitPlan(payload) };

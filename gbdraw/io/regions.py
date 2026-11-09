@@ -623,6 +623,13 @@ def apply_region_specs(
     return [unit for units in windows for unit in units]
 
 
+def window_drawn_reverse(window_reverse: bool, record_reverse: bool) -> bool:
+    """Whether a window is drawn reverse-complemented: by its own flag or its record's, both asking for one reverse
+    (the rule :func:`crop_record_windows` draws by)."""
+
+    return window_reverse or record_reverse
+
+
 def crop_record_windows(
     record: SeqRecord,
     specs: Sequence[RegionSpec],
@@ -653,7 +660,8 @@ def crop_record_windows(
             )
     return tuple(
         crop_record_to_region(
-            record, replace(spec, reverse_complement=spec.reverse_complement or reverse), log=log, circular=circular
+            record, replace(spec, reverse_complement=window_drawn_reverse(spec.reverse_complement, reverse)), log=log,
+            circular=circular,
         )
         for spec in specs
     )
@@ -702,4 +710,5 @@ __all__ = [
     "parse_region_spec",
     "parse_region_specs",
     "region_text",
+    "window_drawn_reverse",
 ]

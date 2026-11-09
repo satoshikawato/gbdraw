@@ -199,3 +199,68 @@ def test_the_cli_and_the_web_write_one_record_analysis_and_display_binding(tmp_p
             web["identity_manifest"]["recordAnalyses"][web_binding["recordAnalysisId"]]
         ), unit_key
         assert cli_binding == web_binding, unit_key
+
+
+def _card(key, windows, length, circular, row=None, column=None, reverse=False, drawn=1):
+    return {
+        "recordKey": key, "windows": [
+            {"start": start, "end": end, "reverseComplement": rc, "column": col} for start, end, rc, col in windows
+        ],
+        "gridRow": row, "gridColumn": column, "reverseComplement": reverse, "sourceLength": length, "circular": circular,
+        "drawnRecords": drawn,
+    }
+
+
+def test_card_window_plan_numbers_and_omitted_lengths_follow_the_drawing() -> None:
+    """The card's circled numbers and "bp left out" come from the row owners the drawing uses (PD-OI-124, OV-2992):
+    two windows of a circular record that overlap leave nothing out; a third window covering the interval leaves
+    nothing out; after Up/Down the row order (not the list order) pairs the neighbours."""
+    from gbdraw.web_support.linear_units import plan_card_windows, plan_card_windows_json
+
+    plain = plan_card_windows([_card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False),
+                               _card("b", [], 5_000, False)])
+    assert plain == {
+        "windows": [{"recordKey": "a", "window": 0, "number": 1}, {"recordKey": "a", "window": 1, "number": 2}],
+        "gaps": [{"recordKey": "a", "leftWindow": 0, "rightWindow": 1, "omittedBp": 200}],
+    }
+    overlap = plan_card_windows([_card("a", [(1, 600, False, None), (500, 900, False, None)], 1_000, True)])
+    assert overlap["gaps"] == []
+    covered = plan_card_windows([_card("a", [(1, 100, False, None), (301, 400, False, None), (50, 350, False, None)],
+                                       10_000, False)])
+    assert covered["gaps"] == []
+    # Arranged in rows, Up on the third window: the row draws windows 1, 3, 2, and numbers them so.
+    moved = plan_card_windows([_card("a", [(1, 100, False, 1), (201, 300, False, 3), (401, 500, False, 2)],
+                                     10_000, False, row=1)])
+    assert [(entry["window"], entry["number"]) for entry in moved["windows"]] == [(0, 1), (2, 2), (1, 3)]
+    assert moved["gaps"] == []
+    # A whole record placed first in the row numbers the windows after it, as the drawing does.
+    shared = plan_card_windows([_card("w", [], 5_000, False, row=1, column=1),
+                                _card("a", [(1, 100, False, 2), (301, 400, False, 3)], 10_000, False, row=1)])
+    assert [entry["number"] for entry in shared["windows"]] == [2, 3]
+    assert json.loads(plan_card_windows_json(json.dumps([_card("a", [(1, 100, False, None)], 500, False)]))) == {
+        "windows": [], "gaps": []
+    }
+
+
+def test_card_window_plan_refuses_a_record_without_its_length() -> None:
+    from gbdraw.web_support.linear_units import plan_card_windows
+
+    record = _card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False)
+    record["sourceLength"] = None
+    with pytest.raises(ValidationError):
+        plan_card_windows([record])
+    # A record with windows draws one record.
+    with pytest.raises(ValidationError):
+        plan_card_windows([_card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False, drawn=2)])
+
+
+def test_card_window_plan_counts_each_record_a_file_card_draws_whole() -> None:
+    """A file card of two records drawn whole, no length known, before a windowed card in one row: the drawing draws
+    both records first, so it numbers the windows 3 and 4; in rows of their own the windows are 1 and 2."""
+    from gbdraw.web_support.linear_units import plan_card_windows
+
+    windowed = _card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False, row=1)
+    shared = plan_card_windows([_card("m", [], None, False, row=1, drawn=2), windowed])
+    assert [entry["number"] for entry in shared["windows"]] == [3, 4]
+    apart = plan_card_windows([_card("m", [], None, False, drawn=2), {**windowed, "gridRow": None}])
+    assert [entry["number"] for entry in apart["windows"]] == [1, 2]

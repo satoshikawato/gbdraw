@@ -633,12 +633,19 @@ export const recordListRows = ({ records, recordsOff, query = '', sort = 'file' 
   return rows.sort((left, right) => compare(left, right) || left.position - right.position);
 };
 
+/**
+ * A Linear card's window fields when it draws its whole record: no window, forward. The one owner of that value for
+ * every write that clears a card's windows (Reset Settings, Delete settings, a replaced source file); the edits of a
+ * card's windows are services/linear-card-windows.js. Each call returns new objects.
+ * @returns {{ region_start: null, region_end: null, region_reverse: false, windows: never[] }}
+ */
+export const wholeRecordCardWindows = () => ({ region_start: null, region_end: null, region_reverse: false, windows: [] });
+
 // D-08 Delete settings: what a record keeps while it is OFF and what Delete
 // settings removes. The card fields return to these values (the record
 // fields Reset Settings resets, plus LOSAT Gencode).
 export const RECORD_SETTINGS_DEFAULTS = Object.freeze({
-  definition: '', record_subtitle: '', region_start: null, region_end: null, region_reverse: false, windows: [],
-  losat_gencode: 1
+  definition: '', record_subtitle: '', ...wholeRecordCardWindows(), losat_gencode: 1
 });
 
 /**
@@ -646,7 +653,11 @@ export const RECORD_SETTINGS_DEFAULTS = Object.freeze({
  * @param {Record<string, unknown> | null | undefined} card
  */
 export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DEFAULTS)
-  .some(([field, fallback]) => (card?.[field] ?? fallback) !== fallback);
+  .some(([field, fallback]) => {
+    const value = card?.[field] ?? fallback;
+    // A window list holds a setting when it lists a window (OV-2993: `[] !== []` held for every card).
+    return Array.isArray(fallback) ? Array.isArray(value) && value.length > 0 : value !== fallback;
+  });
 
 /**
  * One record whose edits Delete settings finds or removes.

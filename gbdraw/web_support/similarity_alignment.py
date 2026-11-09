@@ -16,7 +16,7 @@ from gbdraw.api.record_planning import (
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
-from gbdraw.io.regions import RecordWindow, region_slice
+from gbdraw.io.regions import RecordWindow, region_slice, window_drawn_reverse
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.session_request_codec import StoredRecordWindow, _decode_windows, decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
@@ -156,7 +156,7 @@ class _RecordFact:
         units: tuple[RecordWindow | None, ...] = self.windows or (None,)
         position, offset = first_unit_holding(self._unit_offset(window, source_center) for window in units)
         window = units[position]
-        return offset, self.presentation_reverse or (window is not None and window.reverse_complement)
+        return offset, window_drawn_reverse(window is not None and window.reverse_complement, self.presentation_reverse)
 
     def _unit_offset(self, window: RecordWindow | None, source_center: float) -> float | None:
         """The display offset at which the unit of ``window`` (the whole record for ``None``) draws ``source_center``.
@@ -176,7 +176,7 @@ class _RecordFact:
                 return None
             transform = RecordDisplayTransform(length, length, -1, None, False)
             return transform.source_position_to_display_offset(source_center)
-        reverse = self.presentation_reverse or window.reverse_complement
+        reverse = window_drawn_reverse(window.reverse_complement, self.presentation_reverse)
         if window.crosses_origin and length is None:
             return None
         bound = length if length is not None else window.end

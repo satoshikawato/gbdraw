@@ -29,7 +29,7 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
-from gbdraw.web_support.linear_units import plan_linear_units_json
+from gbdraw.web_support.linear_units import plan_card_windows_json, plan_linear_units_json
 from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
@@ -1844,6 +1844,8 @@ _WEB_JSON_HELPERS = {
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),
+    # The numbers and omitted lengths a Linear card shows beside its windows, as the drawing writes them (PD-OI-124).
+    "plan_card_windows_json": (plan_card_windows_json, "planCardWindows"),
     # Sequence search: the queries, and one search's rows as an annotation set (PD-OI-117).
     "read_search_queries_json": (read_search_queries_json, "readSearchQueries"),
     "sequence_search_annotation_set_json": (sequence_search_annotation_set_json, "searchHitAnnotationSet"),

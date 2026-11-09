@@ -78,3 +78,52 @@ test('a Linear card edits its windows: End before Start, Add window, the bases b
     await page.context().close();
   }
 });
+
+test('Record Layout has one cell per window with the drawing\'s circled number; Up on a window moves it in the drawing', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, seeds.linear);
+  try {
+    await generate(page);
+    const uid = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].uid);
+    await page.locator(`[data-record-selector-uid="${uid}"]`).evaluate((select) => {
+      for (let node = select; node; node = node.parentElement) if (node.tagName === 'DETAILS') node.open = true;
+    });
+    const region = page.locator('[data-record-region-fields]');
+    await type(region.getByLabel('Region start for sequence 1', { exact: true }), '1001');
+    await type(region.getByLabel('Region end for sequence 1', { exact: true }), '5000');
+    await page.getByRole('button', { name: 'Add window to sequence 1' }).click();
+    const windows = page.locator('[data-record-windows]');
+    await type(windows.getByLabel('Window 2 start for sequence 1', { exact: true }), '9001');
+    await type(windows.getByLabel('Window 2 end for sequence 1', { exact: true }), '12000');
+
+    await page.getByLabel('Advanced comparison and layout', { exact: true }).click();
+    await page.getByLabel('Arrange linear records in rows', { exact: true }).check();
+    const cells = page.locator('[data-linear-record-layout-cell]');
+    await expect(cells).toHaveCount(2);
+    // Each cell shows the record's "#1" and the window's circled number in the drawing, from Python's plan.
+    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['1', '2']);
+    await expect(page.getByLabel('Linear record row for sequence 1, window 2', { exact: true })).toHaveValue('1');
+
+    // Up on the second window puts it first in the row: the drawing draws it first and numbers it 1.
+    await cells.nth(1).getByRole('button', { name: 'Up' }).click();
+    await expect(cells.nth(0)).toHaveAttribute('data-layout-window', '1');
+    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['1', '2']);
+    await expect(windows.locator('[data-record-window]').nth(1)).toHaveAttribute('data-window-number', '1');
+    await generate(page);
+    // The record groups follow the card's window order in the SVG; their places in the row follow the cells.
+    const leftToRight = await page.evaluate(() => {
+      const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.currentResults()[0].content || ''), 'image/svg+xml');
+      return [...svg.querySelectorAll('[data-gbdraw-record-source-start]')]
+        .map((node) => ({
+          // A record group's transform is the canvas offset, then its place in the row.
+          x: [...(node.getAttribute('transform') || '').matchAll(/translate\(\s*([-\d.e]+)/g)].reduce((sum, [, x]) => sum + Number(x), 0),
+          span: [Number(node.getAttribute('data-gbdraw-record-source-start')), Number(node.getAttribute('data-gbdraw-record-source-end'))]
+        }))
+        .sort((a, b) => a.x - b.x)
+        .map((group) => group.span);
+    });
+    expect(leftToRight).toEqual([[9001, 12000], [1001, 5000]]);
+  } finally {
+    await page.context().close();
+  }
+});

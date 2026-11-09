@@ -6,7 +6,8 @@
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
-import { captureLinearCardOrientation, restoreLinearCardOrientation } from './record-display-model.js';
+import { captureLinearCardOrientation } from './record-display-model.js';
+import { restoreLinearCardOrientation } from './linear-card-windows.js';
 /** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';

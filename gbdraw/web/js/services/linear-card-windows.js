@@ -5,7 +5,10 @@
 // it back in that form, so the card never holds a window in both. An End typed before the Start without "Across the
 // origin" is stored in order with Reverse complement ticked (OV-2884): the figure stays the reversed span it was.
 import { cardCropWindow } from './drawing/inputs.js';
+import { cropFormReverseComplement, linearCardCropForm, orientedCropForm } from './record-display-model.js';
+import { cloneJsonData } from './json-clone.js';
 /** @import { LinearSeq, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { LinearCardOrientation } from './record-display-model.js' */
 
 /** The crop fields of a card that this module reads and writes. @typedef {Pick<LinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} CardCrop */
 /** The fields of a window an edit may set. @typedef {Partial<Pick<LinearSeqWindow, 'start' | 'end' | 'reverseComplement' | 'acrossOrigin'>>} CardWindowEdit */
@@ -44,16 +47,28 @@ const storeCardWindows = (card, windows) => {
 };
 
 /**
+ * The span a window's Start, End and "Across the origin" give (PD-OI-124): with the box, a Start greater than the End
+ * runs from the Start through the origin to the End, and a Start not greater than the End is no window (null: Generate
+ * and Find in other files refuse it); without it, an End before the Start reverses the span. The one owner of that
+ * rule for the card, the request and the Find in other files reference rows.
+ * @param {number} start @param {number} end @param {boolean} acrossOrigin
+ * @returns {{ start: number, end: number, reverseComplement: boolean } | null}
+ */
+export const windowSpanOf = (start, end, acrossOrigin) => (acrossOrigin
+  ? (start > end ? { start, end, reverseComplement: false } : null)
+  : { start: Math.min(start, end), end: Math.max(start, end), reverseComplement: start > end });
+
+/**
  * A window as the card stores it: without "Across the origin", an End before the Start is the reversed span, stored
- * in order with Reverse complement ticked (OV-2884, D-55); with it, the span is kept as typed.
+ * in order with Reverse complement ticked (OV-2884, D-55, `windowSpanOf`); with it, the span is kept as typed.
  * @param {LinearSeqWindow} window
  * @returns {LinearSeqWindow}
  */
-export const normalizedCardWindow = (window) => (
-  !window.acrossOrigin && window.start !== null && window.end !== null && window.start > window.end
-    ? { ...window, start: window.end, end: window.start, reverseComplement: true }
-    : window
-);
+export const normalizedCardWindow = (window) => {
+  if (window.acrossOrigin || window.start === null || window.end === null) return window;
+  const span = /** @type {{ start: number, end: number, reverseComplement: boolean }} */ (windowSpanOf(window.start, window.end, false));
+  return span.reverseComplement ? { ...window, start: span.start, end: span.end, reverseComplement: true } : window;
+};
 
 /**
  * What an edit of the card's window `index` changes: 'crop' when the window's span changes (Start, End, Across the
@@ -114,71 +129,86 @@ export const removeCardWindow = (card, index) => {
 };
 
 /**
- * The bases a window across the origin of a record of `recordLength` draws (Start through the origin to End), or
- * null when it does not cross or the length is unknown.
- * @param {LinearSeqWindow} window
- * @param {number | null} recordLength
+ * Puts back the orientation fields `captureLinearCardOrientation` (services/record-display-model.js) kept, as they
+ * were.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {LinearCardOrientation<W>} saved
  */
-export const originWindowLength = (window, recordLength) => (
-  window.acrossOrigin && window.start !== null && window.end !== null && window.start > window.end
-    && recordLength !== null && window.start <= recordLength
-    ? recordLength - window.start + 1 + window.end
-    : null
+export const restoreLinearCardOrientation = (card, saved) => {
+  card.windows = cloneJsonData(saved.windows);
+  card.region_reverse = saved.region_reverse;
+};
+
+/**
+ * Draws a Linear File card's record in the absolute direction `reverseComplement` where the card holds its
+ * orientation (`orientedCropForm`): on the windows it lists, else on its Reverse complement (Record options Reverse,
+ * Align's flip, the record popup's Reverse complement). A card drawn so already is left as it is; false then.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {boolean} reverseComplement
+ */
+export const orientLinearCard = (card, reverseComplement) => {
+  const form = linearCardCropForm(card);
+  if (cropFormReverseComplement(form) === reverseComplement) return false;
+  const oriented = orientedCropForm(form, reverseComplement);
+  card.windows = oriented.windows;
+  card.region_reverse = oriented.reverse;
+  return true;
+};
+
+/**
+ * A listed window as Generate draws it: with Start and End both empty it spans the whole record, 1 to `recordLength`,
+ * as the card says until they are set (PD-OI-124); any other window, or an empty one whose record length is not known
+ * yet, is returned as it is (the request then refuses it, naming the card). The one owner of that fill: every reader
+ * of a card's windows reads them through `linearWindowsPayload` (services/session-request.js), which calls it.
+ * @template {Pick<LinearSeqWindow, 'start' | 'end'> & { acrossOrigin?: boolean }} W
+ * @param {W} window
+ * @param {number | null} recordLength
+ * @returns {W}
+ */
+export const wholeRecordWindow = (window, recordLength) => (
+  window.start === null && window.end === null && recordLength !== null
+    ? { ...window, start: 1, end: recordLength, acrossOrigin: false }
+    : window
 );
 
 /**
- * The bases of the record between two windows of the list that are next to each other and run in the same direction
- * (PD-OI-124): the interval from the earlier window's end to the later one's start in the record's own order, when
- * no other window of the record lies in it. A circular record's interval may run through the origin. `after` is the
- * index of the first window of the pair.
- * @param {readonly LinearSeqWindow[]} windows
- * @param {{ recordLength: number | null, circular: boolean }} record
- * @returns {{ after: number, bp: number }[]}
+ * What the page knows of the records a card draws: `count`, how many (one for a chosen record or a file of one
+ * record, every record of the file otherwise; null until read), and the `length` and `id` of the one record it draws
+ * (null and '' until read, or while it draws several).
+ * @typedef {{ length: number | null, id: string, count: number | null }} CardRecordFacts
  */
-export const cardWindowGaps = (windows, { recordLength, circular }) => windows.slice(1).flatMap((right, index) => {
-  const left = windows[index];
-  const spanned = [left, right].every((window) => window.start !== null && window.end !== null);
-  if (!spanned || left.reverseComplement !== right.reverseComplement || recordLength === null) return [];
-  const [earlier, later] = left.reverseComplement ? [right, left] : [left, right];
-  const from = /** @type {number} */ (earlier.end) + 1;
-  const to = /** @type {number} */ (later.start) - 1;
-  const bp = circular ? (((to - from + 1) % recordLength) + recordLength) % recordLength : to - from + 1;
-  if (bp <= 0 || (!circular && to > recordLength)) return [];
-  /** @param {number} base */
-  const inGap = (base) => (circular ? ((base - from) % recordLength + recordLength) % recordLength < bp : base >= from && base <= to);
-  const others = windows.filter((window) => window !== left && window !== right);
-  if (others.some((window) => [window.start, window.end].some((base) => base !== null && inGap(base)))) return [];
-  return [{ after: index, bp }];
-});
+/**
+ * The records of Generate's Linear record catalog, as this module reads them.
+ * @typedef {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown, recordId?: unknown }[] } | null | undefined} LinearRecordCatalogRecords
+ */
+/** A record not read yet. @type {CardRecordFacts} */
+export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '', count: null });
 
 /**
- * The card copy Generate draws: each listed window with both ends empty spans the whole record (1 to
- * `recordLength`), as the card says until its Start and End are set (PD-OI-124). A card without such a window is
- * returned as it is; without a length the empty window stays, and the request refuses it.
- * @template {{ windows?: readonly LinearSeqWindow[] }} C
- * @param {C} card
- * @param {number | null} recordLength
- * @returns {C}
+ * The facts of the records a card draws, as a record list or the catalog holds them: the one owner for Generate
+ * (`catalogCardRecord`) and the card while editing (the record selector's records).
+ * @param {readonly ({ recordLength?: unknown, recordId?: unknown } | null | undefined)[]} records
+ * @returns {CardRecordFacts}
  */
-export const resolveWholeRecordWindows = (card, recordLength) => {
-  const windows = card.windows || [];
-  const empty = (/** @type {LinearSeqWindow} */ window) => window.start === null && window.end === null;
-  if (recordLength === null || !windows.some(empty)) return card;
+export const cardRecordFacts = (records) => {
+  if (records.length !== 1) return { ...UNKNOWN_CARD_RECORD, count: records.length || null };
+  const length = Number(records[0]?.recordLength);
   return {
-    ...card,
-    windows: windows.map((window) => (empty(window) ? { ...window, start: 1, end: recordLength, acrossOrigin: false } : window))
+    length: Number.isSafeInteger(length) && length > 0 ? length : null,
+    id: typeof records[0]?.recordId === 'string' ? records[0].recordId : '',
+    count: 1
   };
 };
 
 /**
- * The length of the record a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place
- * among the drawn cards), or null when the catalog does not give one.
- * @param {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown }[] } | null | undefined} catalog
+ * The records a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the
+ * drawn cards; the catalog holds the records its selector chose).
+ * @param {LinearRecordCatalogRecords} catalog
  * @param {number} sourceIndex
- * @returns {number | null}
+ * @returns {CardRecordFacts}
  */
-export const catalogRecordLength = (catalog, sourceIndex) => {
-  const record = (catalog?.records || []).find((entry) => Number(entry?.sourceIndex) === sourceIndex);
-  const length = Number(record?.recordLength);
-  return Number.isSafeInteger(length) && length > 0 ? length : null;
-};
+export const catalogCardRecord = (catalog, sourceIndex) => cardRecordFacts(
+  (catalog?.records || []).filter((entry) => Number(entry?.sourceIndex) === sourceIndex)
+);

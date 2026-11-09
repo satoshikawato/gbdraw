@@ -79,7 +79,7 @@ for (const testCase of cases) {
   test(`the Web asks for and searches Python's unit plan: ${testCase.id}`, async () => {
     const { cards } = testCase;
     const resolution = resolutionOf(testCase, cards);
-    const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
+    const windowsOf = (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } });
     const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
     assert.deepEqual(payload.pairs, testCase.pairs);
     const plan = pythonPlan(payload);
@@ -126,7 +126,7 @@ for (const testCase of cases) {
 test('a reply that does not plan the records and pairs asked is refused', () => {
   const [testCase] = cases;
   const asked = linearUnitPlanPayload(testCase.cards, resolutionOf(testCase, testCase.cards),
-    (card) => linearWindowsPayload(card, { arranged: true }));
+    (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } }));
   const plan = pythonPlan(asked);
   const refused = (result) => assert.throws(() => readLinearUnitPlan(result, asked),
     (error) => error.code === 'RESULT_INVALID' && error.operation === 'planLinearUnits');
@@ -145,7 +145,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
     createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }),
     createLinearSeq({ uid: 'b', windows: [window(10, 90), window(200, 280)] })
   ];
-  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
+  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } });
   const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
   const saved = (pairs, records = cards, mode = 'pairwise') => savedComparisonSource({
     renderRequest: {

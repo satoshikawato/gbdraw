@@ -329,9 +329,10 @@ const placeRowCells = (cards, entries, rowCells) => rowCells.forEach((cell, inde
 
 /**
  * Moves one cell a place up or down within its row (Up and Down of a drawing that has a card drawn in several
- * windows; PD-OI-124): every cell of that row gets its place. Returns the reconciled entries, or null when the cell
- * is at the end of its row.
- * @param {readonly { uid?: unknown, windows: { column: number | null }[] }[]} cards
+ * windows; PD-OI-124): every cell of that row gets its place. A whole card's cell also swaps the card with the card of
+ * the cell it passes in `cards`, so their "#n" swap as Up and Down of a whole card always did (PD-OI-018); a window's
+ * cell changes only places. Returns the reconciled entries, or null when the cell is at the end of its row.
+ * @param {{ uid?: unknown, windows: { column: number | null }[] }[]} cards
  * @param {LayoutEntry[] | null | undefined} entries
  * @param {{ uid: string, window: number | null }} target
  * @param {number} direction
@@ -346,8 +347,31 @@ export const moveLinearLayoutCell = (cards, entries, target, direction) => {
   const from = rowCells.indexOf(at);
   const to = from + (direction < 0 ? -1 : 1);
   if (to < 0 || to >= rowCells.length) return null;
+  const passed = rowCells[to];
   [rowCells[from], rowCells[to]] = [rowCells[to], rowCells[from]];
   placeRowCells(cards, layout, rowCells);
+  if (at.window !== null || passed.uid === at.uid) return layout;
+  [cards[at.cardIndex], cards[passed.cardIndex]] = [cards[passed.cardIndex], cards[at.cardIndex]];
+  return reconcileLinearRecordLayout(cards, layout);
+};
+
+/**
+ * Puts the windows of card `uid`, a card drawn in several windows, at the end of its row in their order, after a Row
+ * change moved the record there (PD-OI-124): the row's other cells keep their order and get their places. Returns the
+ * reconciled entries, or null for a card drawn whole or in one window (its place goes with its row, as before).
+ * @param {readonly { uid?: unknown, windows: { column: number | null }[] }[]} cards
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @param {string} uid
+ * @returns {LinearRecordRow[] | null}
+ */
+export const placeRecordAtRowEnd = (cards, entries, uid) => {
+  const card = cards.find((candidate) => candidate.uid === uid);
+  if (!card || card.windows.length < 2) return null;
+  const layout = reconcileLinearRecordLayout(cards, entries);
+  const cells = linearLayoutCells(cards, layout);
+  const row = cells.find((cell) => cell.uid === uid)?.row;
+  const rowCells = cells.filter((cell) => cell.row === row);
+  placeRowCells(cards, layout, [...rowCells.filter((cell) => cell.uid !== uid), ...rowCells.filter((cell) => cell.uid === uid)]);
   return layout;
 };
 

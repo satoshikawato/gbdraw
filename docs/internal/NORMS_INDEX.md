@@ -181,7 +181,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-015](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-015-advanced-gui-exposure-policy) | Advanced GUI exposure policy | ACCEPTED | diagram-generation.gui-exposure-policy | 1 | — | 0 |
 | [PD-OI-016](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation) | Generation failure, cancellation, and stale-result isolation | ACCEPTED | diagram-generation.failure-isolation | 1 | — | 0 |
 | [PD-OI-017](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-017-active-comparison-appearance-controls-remain-reachable) | Active comparison appearance controls remain reachable | ACCEPTED | diagram-generation.comparison-appearance-reachability | 1 | — | 0 |
-| [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope) | Complete Linear records, placement, and comparison scope | ACCEPTED | diagram-generation.linear-record-universe-and-search-scope | 5 | scenario revision 4 | 7 |
+| [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope) | Complete Linear records, placement, and comparison scope | ACCEPTED | diagram-generation.linear-record-universe-and-search-scope | 5 | scenario revision 4 | 8 |
 | [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults) | Fresh Web multi-record layout defaults | ACCEPTED | diagram-generation.web-multi-record-layout-defaults | 1 | — | 0 |
 | [PD-OI-020](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-020-losat-total-thread-allocation-and-control-agreement) | LOSAT total-thread allocation and control agreement | ACCEPTED | diagram-generation.losat-total-thread-allocation | 1 | — | 0 |
 | [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference) | Optional Collinear self-search and orthogroup inference | ACCEPTED | diagram-generation.collinear-optional-orthogroup-inference | 2 | scenario revision 1 | 0 |
@@ -286,7 +286,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
 | [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 2 | scenario revision 1 | 14 |
 | [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 7 |
-| [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 4 |
+| [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 6 |
 | [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory) | Diagram engine out of memory | ACCEPTED | diagram-generation.engine-out-of-memory | 1 | — | 5 |
 
 ### Test files that cite each record
@@ -308,6 +308,7 @@ are listed under "Cited ids without a record".
 - [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope)
   - `tests/web/contracts/vibrio-full-generation.serial.spec.js`
   - `tests/web/gallery-tutorial.playwright.spec.js`
+  - `tests/web/linear-card-windows.test.mjs`
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/linear-sources.test.mjs`
   - `tests/web/losat-settings.test.mjs`
@@ -806,9 +807,11 @@ are listed under "Cited ids without a record".
   - `tests/web/losat-overlay-run.test.mjs`
   - `tests/web/region-drawing.test.mjs`
 - [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout)
+  - `tests/test_web_linear_units.py`
+  - `tests/web/linear-card-windows-request.test.mjs`
+  - `tests/web/linear-card-windows-state.test.mjs`
   - `tests/web/linear-card-windows.playwright.spec.js`
   - `tests/web/linear-card-windows.test.mjs`
-  - `tests/web/preview-item-popup.test.mjs`
   - `tests/web/region-drawing.playwright.spec.js`
 - [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory)
   - `tests/test_web_error_adapter.py`

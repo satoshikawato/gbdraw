@@ -43,7 +43,7 @@ const resolutionOf = (cards, pairs) => {
  */
 const generated = async (cards, pairs) => {
   const resolution = resolutionOf(cards, pairs);
-  const search = await planLinearUnitSearch(cards, resolution, (card) => linearWindowsPayload(card, { arranged: false }),
+  const search = await planLinearUnitSearch(cards, resolution, (card) => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: { length: null, id: '' } }),
     async (payload) => ({ result: pythonLinearUnitPlan(payload) }));
   const unitKeys = search.sequences.map((sequence) => sequence.uid);
   const windowOf = Object.fromEntries(unitKeys.flatMap((unitKey, unit) => (

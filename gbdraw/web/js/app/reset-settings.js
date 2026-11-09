@@ -17,6 +17,7 @@ import { ensureDepthTrackConfigCount, nameDepthSeriesAfterFiles } from './depth-
 import { paletteColorsEqual } from './svg-styles.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from '../services/reset.js';
 import { msg, t } from '../utils/i18n.js';
+import { wholeRecordCardWindows } from '../services/record-draw-selection.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { CheckpointHold } from '../services/history.js' */
@@ -68,10 +69,7 @@ export const createDrawingReset = ({
         ...sequence,
         definition: '',
         record_subtitle: '',
-        region_start: null,
-        region_end: null,
-        region_reverse: false,
-        windows: []
+        ...wholeRecordCardWindows()
       })), { alignmentMutation: msg('settings reset.') });
       invalidateLinearComparisonArtifacts(drawing);
     }

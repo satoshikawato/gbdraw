@@ -144,6 +144,10 @@ import {
 } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { UNKNOWN_CARD_RECORD, wholeRecordWindow, windowSpanOf } from './linear-card-windows.js';
+/** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { LayoutEntry } from './linear-record-layout.js' */
+/** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
@@ -356,6 +360,8 @@ const requestDrawingMode = (drawing) => {
  * @property {unknown} [region_end]
  * @property {boolean} [region_reverse]
  * @property {readonly LinearSeqWindow[]} [windows] The windows of a record drawn in several (`LinearSeq`).
+ * @property {CardRecordFacts} [cardRecord] The length and ID of the record, as far as Generate's record catalog gives
+ *   them (`materializeLinearRecordFiles`): a listed window with both ends empty draws 1 to its length.
  * @property {CanonicalRecord['cardinality']} [cardinality]
  */
 /**
@@ -1474,18 +1480,18 @@ const circularWindowsPayload = (form, record) => {
 };
 
 /**
- * One window's endpoints, validated (R7): a window names both or neither.
- * @param {unknown} rawStart @param {unknown} rawEnd
+ * One window's endpoints, validated (R7): a window names both or neither. A refusal names the card (`context`).
+ * @param {unknown} rawStart @param {unknown} rawEnd @param {{ inputOrdinal?: number, recordName?: string }} context
  * @returns {{ start: number, end: number } | null}
  */
-const windowEndpoints = (rawStart, rawEnd) => {
+const windowEndpoints = (rawStart, rawEnd, context) => {
   // projectOptionalNumber yields null or a finite number: the only arm without
   // a number-or-null value is 'invalid', which it throws on.
   const start = /** @type {number | null} */ (projectOptionalNumber(rawStart, { field: 'region' }));
   const end = /** @type {number | null} */ (projectOptionalNumber(rawEnd, { field: 'region' }));
   if (start === null && end === null) return null;
   if (start === null || end === null) {
-    throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
+    throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return { start, end };
 };
@@ -1498,33 +1504,37 @@ const windowEndpoints = (rawStart, rawEnd) => {
  * placed by the record's column (D-14). A listed window with "Across the
  * origin" ticked runs from its Start across the origin to its End, and
  * Generate refuses one whose Start is not after its End, naming the card
- * (`ordinal`, PD-OI-124). A listed window with both ends empty draws the whole
- * record: Generate's card copies fill it in from the record's length
- * (`resolveWholeRecordWindows`), so here it is still a missing endpoint.
+ * (`ordinal`, the card's number among all cards, OFF cards counted, as the card
+ * list shows it; PD-OI-124). A listed window with both ends empty draws the
+ * whole record, 1 to the length of `record` (`wholeRecordWindow`): every
+ * reader of a card's windows (the request, the drawn-unit plan, the LOSAT
+ * estimate, the search extraction) reads them here, so none sees an empty
+ * window. Without a known length such a window is refused. A refusal of a
+ * listed window names the card and, once known, its record (`record.id`).
  * @param {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} seq
- * @param {{ arranged: boolean, ordinal?: number }} options
+ * @param {{ arranged: boolean, ordinal: number, record: CardRecordFacts }} options
  * @returns {CanonicalRecord['windows']}
  */
-export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
-  const context = ordinal === undefined ? {} : { inputOrdinal: ordinal };
+export const linearWindowsPayload = (seq, { arranged, ordinal, record }) => {
+  const context = { inputOrdinal: ordinal, ...(record.id ? { recordName: record.id } : {}) };
   if (seq.windows && seq.windows.length) {
     const placed = arranged && seq.windows.length > 1;
-    return seq.windows.map((window) => {
-      const span = windowEndpoints(window.start, window.end);
+    return seq.windows.map((listed) => {
+      const window = wholeRecordWindow(listed, record.length);
+      const span = windowEndpoints(window.start, window.end, context);
       if (span === null) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
-      const crosses = typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end;
-      if (crosses && span.start <= span.end) {
-        throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'ORIGIN_ORDER' });
-      }
-      const ordered = crosses ? span : { start: Math.min(span.start, span.end), end: Math.max(span.start, span.end) };
+      const spanned = windowSpanOf(span.start, span.end,
+        typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end);
+      if (!spanned) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'ORIGIN_ORDER' });
       return {
-        ...ordered,
-        reverseComplement: Boolean(window.reverseComplement) || (!crosses && span.start > span.end),
+        start: spanned.start, end: spanned.end,
+        reverseComplement: Boolean(window.reverseComplement) || spanned.reverseComplement,
         column: placed ? window.column : null
       };
     });
   }
-  const span = windowEndpoints(seq.region_start, seq.region_end);
+  // The crop fields refuse as before PD-OI-124 (their card is named where the crop is read).
+  const span = windowEndpoints(seq.region_start, seq.region_end, {});
   if (span === null) return [];
   return [{
     start: Math.min(span.start, span.end),
@@ -1533,6 +1543,21 @@ export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
     column: null
   }];
 };
+
+/**
+ * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout,
+ * the card's number among all its cards, and the record the card draws, `recordOf`), for every reader of a card's
+ * windows outside the request build: the drawn-unit plan of Generate, of the draft request and of the LOSAT job
+ * estimate, and the wrap estimate.
+ * @template {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} C
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearSeqs: readonly C[] }} drawing
+ * @param {(card: C) => CardRecordFacts} recordOf
+ * @returns {(card: C) => CanonicalRecord['windows']}
+ */
+export const linearDrawingWindowsOf = (drawing, recordOf) => (card) => linearWindowsPayload(card, {
+  arranged: Boolean(drawing.linearRecordLayoutEnabled?.value), ordinal: drawing.linearSeqs.indexOf(card) + 1,
+  record: recordOf(card)
+});
 
 /**
  * The record-wide reverse complement a Linear card's request record writes beside `windows`, its windows as
@@ -1625,6 +1650,82 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 };
 
 /**
+ * Where a drawn Linear card stands and what it draws, as the request writes it: its windows
+ * (`linearWindowsPayload`, each placed by the Record Layout's cell places when the Web owns them), its row and
+ * column, and its record-wide reverse complement. The one owner for the request (`buildRecords`) and for the plan of
+ * a card's window numbers and omitted lengths (`linearCardWindowPlanRecords`). A refused window throws.
+ * @template {RequestLinearSeq} C
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[], linearSeqs?: readonly { uid?: unknown }[] }} drawing
+ * @param {readonly C[]} seqs The drawn cards, in request order.
+ * @param {(seq: C) => CardRecordFacts} recordOf
+ * @returns {{ windows: CanonicalRecord['windows'], gridRow: number | null, gridColumn: number | null, reverseComplement: boolean }[]}
+ */
+const linearRecordPlacements = (drawing, seqs, recordOf) => {
+  const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
+  const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
+    seqs, drawing.linearRecordRows, { enabled: arranged }
+  ));
+  // The places of the Record Layout's cells, when the stored ones cannot be written as they are: Python reads a place
+  // for every record or for none, each its own (OV-3071). Stored places Python reads as they are stay as they are.
+  const places = arranged ? linearLayoutPlaces(linearLayoutCells(
+    seqs.map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
+  )) : null;
+  return seqs.map((seq, index) => {
+    const written = linearWindowsPayload(seq, {
+      arranged, ordinal: (drawing.linearSeqs || []).findIndex((card) => card.uid === seq.uid) + 1 || index + 1,
+      record: recordOf(seq)
+    });
+    const windows = places && written.length > 1
+      ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
+      : written;
+    return {
+      windows,
+      gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
+      // A record drawn in several windows places each by its own column (D-14).
+      gridColumn: !arranged || windows.length > 1 ? null
+        : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
+          : (resolvedRows[index]?.canonicalColumn ?? null),
+      reverseComplement: linearPresentationReverse(seq, windows)
+    };
+  });
+};
+
+/**
+ * The records the Worker helper `planCardWindows` reads for the drawn cards of a Linear drawing: each card (keyed by
+ * its uid) as the request writes it (`linearRecordPlacements`), how many records it draws (`drawnRecords`: a card of
+ * a file of several records drawn whole draws each of them in its row), the length of its record when it lists
+ * windows, and whether the request draws it circular (its display topology, else the record's own). A record drawn
+ * whole needs no length: no number or omitted length reads its span. Null while a card's records are not read yet,
+ * a card that lists windows has no one record of known length, or a window is one Generate refuses: the cards then
+ * show no number and no omitted length.
+ * @template {RequestLinearSeq} C
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
+ * @param {readonly C[]} seqs The drawn cards, in request order.
+ * @param {(seq: C) => CardRecordFacts & { circular: boolean }} recordOf
+ * @param {RequestRecordDisplayRow[]} recordDisplayRows
+ * @returns {CardWindowRecordInput[] | null}
+ */
+export const linearCardWindowPlanRecords = (drawing, seqs, recordOf, recordDisplayRows) => {
+  const records = seqs.map(recordOf);
+  if (records.some((record, index) => record.count === null || ((seqs[index].windows || []).length > 0 && record.length === null))) return null;
+  let placements;
+  try {
+    placements = linearRecordPlacements(drawing, seqs, (seq) => records[seqs.indexOf(seq)]);
+  } catch {
+    return null;
+  }
+  return seqs.map((seq, index) => {
+    const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
+    const requested = linearCardRequestedCircular({ drawing, card: seq, index, recordDisplayRows, windows });
+    return {
+      recordKey: seq.uid, windows, gridRow, gridColumn, reverseComplement, sourceLength: records[index].length,
+      drawnRecords: windows.length ? 1 : /** @type {number} */ (records[index].count),
+      circular: requested ?? records[index].circular
+    };
+  });
+};
+
+/**
  * The draft records of a request: each with the uid of the card it reads
  * (`recordSources`). Circular also names the identities of its drawn and read
  * records and how many records its presentation offers (`presentedCount`, which
@@ -1639,33 +1740,25 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 const buildRecords = ({ drawing, filesData, resources }) => {
   const mode = requestDrawingMode(drawing);
   if (mode === 'linear') {
-    const resolvedRows = /** @type {Record<string, any>[]} */ (resolveEffectiveLinearRecordRows(
-      filesData.linearSeqs,
-      drawing.linearRecordRows,
-      { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
-    ));
+    const seqs = filesData.linearSeqs || [];
     const canonicalCardinalityByUid = new Map(
       (drawing.linearRecordRows || []).map(
         (/** @type {{ uid?: unknown, canonicalCardinality?: string }} */ entry) => [entry.uid, entry.canonicalCardinality]
       )
     );
-    const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
-    // The places of the Record Layout's cells, when the Web owns them (a card drawn in several windows, PD-OI-124).
-    const places = arranged ? linearLayoutPlaces(linearLayoutCells(
-      (filesData.linearSeqs || []).map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
-    )) : null;
+    const recordOf = (/** @type {RequestLinearSeq} */ seq) => seq.cardRecord ?? UNKNOWN_CARD_RECORD;
+    const placements = linearRecordPlacements(drawing, seqs, recordOf);
     /** @type {RequestDraftRecord[]} */
-    const records = (filesData.linearSeqs || []).map((seq, index) => {
+    const records = seqs.map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
-      const written = linearWindowsPayload(seq, { arranged, ordinal: index + 1 });
-      const windows = places && written.length > 1
-        ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
-        : written;
+      const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
       const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
-        cardinality: canonicalCardinalityByUid.get(seq.uid)
-          || seq.cardinality || (selector || windows.length ? 'exactly_one' : 'all'),
+        // A card that draws the only record of its file and takes a place is that one record: Python places no
+        // file card drawn whole (OV-3072); without a place it stays the file, as before.
+        cardinality: canonicalCardinalityByUid.get(seq.uid) || seq.cardinality
+          || (selector || windows.length || (gridColumn !== null && recordOf(seq).count === 1) ? 'exactly_one' : 'all'),
         source,
         selector,
         windows,
@@ -1673,18 +1766,15 @@ const buildRecords = ({ drawing, filesData, resources }) => {
           ...presentationPayload({
             label: linearRecordLabel(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
-            // A record drawn in several windows places each by its own column (D-14).
-            gridColumn: !arranged || windows.length > 1 ? null
-              : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
-                : (resolvedRows[index]?.canonicalColumn ?? null)
+            gridRow,
+            gridColumn
           }),
-          reverseComplement: linearPresentationReverse(seq, windows)
+          reverseComplement
         }
       };
     });
     return {
-      records, recordSources: (filesData.linearSeqs || []).map((seq, index) => linearSeqRecordKey(seq, index)),
+      records, recordSources: seqs.map((seq, index) => linearSeqRecordKey(seq, index)),
       drawnIdentities: null, listedIdentities: null, presentedCount: null
     };
   }
@@ -4589,13 +4679,13 @@ const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, d
  * The record's display option `display.isCircular` the request writes for the record a Linear card draws (true,
  * false, or null for the topology its file states), read from the request writer (`requestRecordTransforms`). A
  * comparison search's extraction sends it with the card's window, so Python crops a window across the origin as the
- * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py).
- * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[], linearRecordLayoutEnabled?: { value: unknown } },
- *   card: RequestLinearSeq, index: number, recordDisplayRows: RequestRecordDisplayRow[] }} input
+ * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py). `windows` are the card's windows as the request
+ * writes them (`linearDrawingWindowsOf`).
+ * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
+ *   recordDisplayRows: RequestRecordDisplayRow[], windows: CanonicalRecord['windows'] }} input
  * @returns {boolean | null}
  */
-export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows }) => {
-  const windows = linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows, windows }) => {
   return requestRecordTransforms({
     mode: 'linear',
     sourceUid: linearSeqRecordKey(card, index),

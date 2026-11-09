@@ -135,7 +135,6 @@ const FUNCTION_LINES = {
   'services/session-feature-recovery.js::buildSessionFeatureRecoveryPlan': 188,
   'services/session-request.js::buildComparisons': 273,
   'services/session-request.js::buildConfigOverrides': 187,
-  'services/session-request.js::buildRecords': 151,
   'services/session-request.js::projectCanonicalRenderInput': 399,
   'services/session-request.js::projectCanonicalSessionRequest': 1106,
   'services/session-request.js::trackPlanProjection': 201,

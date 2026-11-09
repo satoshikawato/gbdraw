@@ -107,7 +107,8 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readStoredRenderRequest,
-  linearWindowsPayload
+  linearDrawingWindowsOf,
+  linearCardWindowPlanRecords
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -173,6 +174,9 @@ import {
 } from './session-file.js';
 // The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
 export { encodeSessionResources };
+// The windows a Linear card writes in its request and the records its window plan reads, for the shown-drawing
+// readers (services/session-request.js owns both).
+export { linearCardWindowPlanRecords, linearDrawingWindowsOf };
 import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources
@@ -308,8 +312,9 @@ import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } fr
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { catalogUnitPlaces, drawsSeveralUnits, isDrawnWindowPairRow, planLinearUnitSearch } from './linear-units.js';
-import { catalogRecordLength, resolveWholeRecordWindows } from './linear-card-windows.js';
-/** @import { LinearUnitPlace, LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
+import { UNKNOWN_CARD_RECORD, catalogCardRecord } from './linear-card-windows.js';
+/** @import { CardRecordFacts, LinearRecordCatalogRecords } from './linear-card-windows.js' */
+/** @import { LinearUnitPlace, LinearUnitPlanPayload } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -4233,7 +4238,7 @@ export const assertDrawingInputs = (drawing) => {
  * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
  *   records?: { sourceIndex?: unknown, recordLength?: unknown }[] } | null | undefined} catalog
  * @param {{ cards?: { uid: string }[] }} [options]
- * @returns {S[]}
+ * @returns {(S & { cardRecord: CardRecordFacts })[]} each with the facts of its record that the catalog gives
  */
 export const materializeLinearRecordFiles = (
   sequences,
@@ -4241,7 +4246,7 @@ export const materializeLinearRecordFiles = (
   { cards = /** @type {{ uid: string }[]} */ ([]) } = {}
 ) => {
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
-  if (catalog == null) return sourceSequences;
+  if (catalog == null) return sourceSequences.map((source) => ({ ...source, cardRecord: UNKNOWN_CARD_RECORD }));
   if (catalog?.mode !== 'linear' || catalog?.status !== 'ready') {
     const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : null;
     throw issue ? diagnosticError(issue.code, issue.context)
@@ -4266,8 +4271,8 @@ export const materializeLinearRecordFiles = (
       throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
-  // A listed window with Start and End empty draws its card's whole record (PD-OI-124).
-  return sourceSequences.map((source, sourceIndex) => resolveWholeRecordWindows(source, catalogRecordLength(catalog, sourceIndex)));
+  // The length of each record, by which a listed window with Start and End empty draws its whole record (PD-OI-124).
+  return sourceSequences.map((source, sourceIndex) => ({ ...source, cardRecord: catalogCardRecord(catalog, sourceIndex) }));
 };
 
 /**
@@ -7038,14 +7043,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * @property {CanonicalRenderEnvelope} envelope
  * @property {ReadonlyMap<string, InputFileRef>} filesByResource
  */
-/**
- * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout),
- * for the drawn-unit plan (`planLinearUnitSearch`) of the draft request and of the LOSAT job estimate.
- * @param {{ linearRecordLayoutEnabled?: { value: unknown } }} drawing
- * @returns {LinearUnitWindowsOf}
- */
-export const linearDrawingWindowsOf = (drawing) => (card) => linearWindowsPayload(card,
-  { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+
 /**
  * The facts of a drawing's draft request that the app holds: the Linear
  * record catalog, the record display rows, and the annotation records left
@@ -7094,7 +7092,9 @@ export const projectDraftRequest = async (sourceState, drawing, {
     { comparisonPlan: cardPlan, linearRecordCatalog });
   // The request writes the indexes of the drawn units, as Generate writes them (OV-2738).
   const comparisonPlanSnapshot = cardPlan?.hasComparisonIntent === true && drawsSeveralUnits(drawing.drawnLinearSeqs.value)
-    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingWindowsOf(drawing),
+    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingWindowsOf(drawing,
+      (card) => catalogCardRecord(/** @type {LinearRecordCatalogRecords} */ (linearRecordCatalog),
+        drawing.drawnLinearSeqs.value.indexOf(card))),
       planLinearUnits)).resolution
     : cardPlan;
   const envelope = buildCanonicalRenderRequest({

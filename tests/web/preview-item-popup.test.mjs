@@ -153,13 +153,14 @@ test('the Reverse complement of a record drawn through its window list reads and
   assert.equal(circular.popup.view.value.draft.reverse, true);
   assert.deepEqual(circular.steps, ['Change Reverse complement']);
 
-  const several = [across, { start: 5, end: 90, reverseComplement: true, column: 2 }];
+  // A card's windows carry their "Across the origin" box (`createLinearSeq` marks a window that starts after it ends).
+  const several = [across, { start: 5, end: 90, reverseComplement: true, column: 2 }]
+    .map((window) => ({ ...window, acrossOrigin: window.start > window.end }));
   const linear = createPopup({ sequenceWindows: several });
   linear.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   assert.equal(linear.popup.view.value.draft.reverse, false);
   linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
-  // The slot marks a window that starts after it ends as across the origin (PD-OI-124).
-  assert.deepEqual(linear.sequence.windows, several.map((window) => ({ ...window, reverseComplement: true, acrossOrigin: window.start > window.end })));
+  assert.deepEqual(linear.sequence.windows, several.map((window) => ({ ...window, reverseComplement: true })));
   assert.equal(linear.sequence.region_reverse, false);
   linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
   assert.deepEqual(linear.steps, ['Change Reverse complement']);

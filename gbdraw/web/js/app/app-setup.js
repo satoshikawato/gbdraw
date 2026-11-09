@@ -4,6 +4,7 @@
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
+/** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
@@ -120,6 +121,7 @@ import {
   applyDrawingStyle,
   writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
+  linearCardWindowPlanRecords,
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
@@ -407,6 +409,9 @@ const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? 
 // The Worker helper that plans a Linear request's drawn units (`planLinearUnitSearch`).
 /** @param {LinearUnitPlanPayload} payload */
 const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
+// The Worker helper that plans a Linear card's window numbers and omitted lengths (PD-OI-124).
+/** @param {{ records: CardWindowRecordInput[] }} payload */
+const planCardWindows = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_CARD_WINDOWS, payload);
 /** The records of every Result of the shown drawing whose axis Python wrote (the subjects of Sequence search). */
 const shownResultsAxisRecords = () => Array.from({ length: state.results.value.length },
   (_result, index) => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, index)).flat();
@@ -1397,16 +1402,16 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
-    shownLinearWrapLeaf, shownLinearWrapReading
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearCardWindowsOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
+    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf, planCardWindows,
+    cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value || []
   });
+  const losatSettings = createLosatSettings({ state, planLinearUnits, shownWindowsOf: () => linearCardWindowsOf(state.activeDrawing()) });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
