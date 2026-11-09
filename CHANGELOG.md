@@ -207,6 +207,15 @@ write-up of a release.
   **Use custom stack** had already given a row, so the set got a second row:
   the figure drew it twice, or Generate stopped on the first row's lane
   overflow. They now edit the row the stack starts with (OV-3151, OV-3081).
+- Changed: every track group in an SVG is now named from its track slot
+  (`track_slot_<hash>_<slot id>`) and carries `data-gbdraw-slot-id` and
+  `data-gbdraw-slot-renderer`, in both modes and with or without a custom
+  track stack. Before, a figure drawn without a written stack used other group
+  ids (`tick`, `gc_content`, `skew`, `record_group_...`, and a Linear id that
+  changed with the slot's place in the stack), so turning **Use custom stack**
+  on in the Web app changed the group ids of an unchanged figure. Scripts and
+  styles that select the old ids select the slot tags instead; the drawing is
+  unchanged (OV-3012, OV-3083, OV-3084).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

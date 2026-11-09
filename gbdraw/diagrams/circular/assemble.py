@@ -1427,6 +1427,8 @@ def _record_track_ink(
                         profile=sources.profile,
                         radius=float(slot.anchor_radius_px or 0.0),
                         record_transform=record_transform,
+                        group_id=track_slot_svg_id(slot.id, renderer="ticks"),
+                        slot_id=str(slot.id),
                         **tick_options,
                     ).ink()
                 )

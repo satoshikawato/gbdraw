@@ -11,7 +11,6 @@ from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
 from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularFeatureRenderContext
-from ....svg.ids import record_group_svg_id
 from ...drawers.circular.labels import LabelDrawer
 from ...drawers.circular.features import FeatureDrawer
 from ....configurators import FeatureDrawingConfigurator
@@ -33,8 +32,9 @@ class SeqRecordGroup:
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,
         record_index: int = 0,
-        group_id: str | None = None,
-        slot_id: str | None = None,
+        *,
+        group_id: str,
+        slot_id: str,
         feature_dom_namespace: str | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
@@ -57,16 +57,8 @@ class SeqRecordGroup:
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
         self.record_index = int(record_index)
-        self.record_group_id = (
-            str(group_id)
-            if group_id
-            else record_group_svg_id(
-                gb_record.id,
-                mode="circular",
-                record_index=self.record_index,
-            )
-        )
-        self.slot_id = str(slot_id) if slot_id else None
+        self.record_group_id = group_id
+        self.slot_id = slot_id
         self.feature_dom_namespace = (
             str(feature_dom_namespace) if feature_dom_namespace else None
         )
@@ -123,9 +115,8 @@ class SeqRecordGroup:
         record_group = Group(id=self.record_group_id)
         record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
-        if self.slot_id:
-            record_group.attribs["data-gbdraw-slot-id"] = self.slot_id
-            record_group.attribs["data-gbdraw-slot-renderer"] = "features"
+        record_group.attribs["data-gbdraw-slot-id"] = self.slot_id
+        record_group.attribs["data-gbdraw-slot-renderer"] = "features"
         record_length: int = len(self.gb_record.seq)
 
         record_group = self.draw_record(feature_dict, record_length, record_group)

@@ -61,18 +61,17 @@ class TickGroup:
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
         track_preset: str | None = None,
-        group_id: str | None = None,
-        slot_id: str | None = None,
+        group_id: str,
+        slot_id: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         self.record_transform = record_transform
         self.gb_record: SeqRecord = gb_record
         self.geometry = geometry
         self.radius: float = float(radius) if radius is not None else geometry.radius
-        self.tick_group = Group(id=str(group_id or "tick"))
-        if slot_id:
-            self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-            self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
+        self.tick_group = Group(id=group_id)
+        self.tick_group.attribs["data-gbdraw-slot-id"] = slot_id
+        self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
         self.total_len: int = len(self.gb_record.seq)
         cfg = profile.config
         ticks_config = cfg.objects.ticks
@@ -166,7 +165,7 @@ class TickGroup:
             tick_length_px=self.tick_length_px,
             tick_width=float(self.tick_width),
             length_reference_radius_px=float(self.geometry.radius),
-            group_identifier=str(self.tick_group.attribs.get("id", "tick")),
+            group_identifier=str(self.tick_group.attribs["id"]),
             record_identifier=str(self.gb_record.id),
             record_transform=self.record_transform,
             tick_interval=self.tick_large,
