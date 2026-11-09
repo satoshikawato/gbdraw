@@ -63,6 +63,7 @@ import { t } from '../utils/i18n.js';
  * @property {string} appliedLegendName The Legend name the drawing applies.
  * @property {string} strokeColor
  * @property {number} strokeWidth
+ * @property {string | null} strokeWidthDraft The stroke width typed or stepped into the popup's field and not committed yet; null: none, the field shows `strokeWidth`.
  * @property {string} labelKey
  * @property {string} labelText
  * @property {string} labelSourceText
@@ -172,6 +173,7 @@ export const buildFeaturePopup = (feat, view) => {
     appliedLegendName: view.legendName,
     strokeColor: view.strokeColor,
     strokeWidth: view.strokeWidth,
+    strokeWidthDraft: null,
     labelKey: '',
     labelText: '',
     labelSourceText: '',

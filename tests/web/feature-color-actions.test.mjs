@@ -748,7 +748,10 @@ legendEntries.value = [{
 }];
 
 featureStyleScopeDialog.show = false;
+// A commit ends the field's draft, also when it changes nothing (OV-3068).
+clickedFeature.value.strokeWidthDraft = '1';
 assert.equal(await actions.setClickedFeatureStrokeWidthValue(1), false);
+assert.equal(clickedFeature.value.strokeWidthDraft, null);
 assert.equal(featureStyleScopeDialog.show, false);
 assert.equal(await actions.setClickedFeatureStrokeWidthValue(''), false);
 assert.equal(featureStyleScopeDialog.show, false);

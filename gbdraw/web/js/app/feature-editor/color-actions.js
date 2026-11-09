@@ -1555,12 +1555,12 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {unknown} value */
   const setClickedFeatureStrokeWidthValue = (drawing, value) => {
+    if (clickedFeature.value) clickedFeature.value.strokeWidthDraft = null; // The field shows the stored width again.
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const normalizedStrokeWidth = normalizeStrokeWidthValue(value);
-    const currentStrokeWidth = normalizeStrokeWidthValue(clickedFeature.value.strokeWidth);
-    if (normalizedStrokeWidth === null || normalizedStrokeWidth === currentStrokeWidth) return false;
+    if (normalizedStrokeWidth === null || normalizedStrokeWidth === normalizeStrokeWidthValue(clickedFeature.value.strokeWidth)) return false;
     return requestClickedFeatureStrokeChange(drawing, clickedFeature.value.strokeColor, normalizedStrokeWidth);
   };
 

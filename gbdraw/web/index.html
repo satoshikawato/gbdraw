@@ -7226,7 +7226,8 @@
                                     class="w-36">
                                 </color-value-control>
                                 <input type="number"
-                                       v-committed-value="clickedFeature.strokeWidth"
+                                       v-committed-value="clickedFeature.strokeWidthDraft ?? clickedFeature.strokeWidth"
+                                       @input="clickedFeature.strokeWidthDraft = $event.target.value"
                                        @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
                                        @keydown.enter.prevent="$event.target.blur()"
                                        data-history-managed

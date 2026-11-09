@@ -30,6 +30,10 @@ const BINDS_VALUE = /(?:^|\s)(?::|v-bind:|\.)value(?:\.[a-z]+)*=/;
 // An object binding (`v-bind="{ value: x }"`, `v-bind="attrs"`) may set the value, and the guard cannot read it.
 const BINDS_OBJECT = /(?:^|\s)v-bind="/;
 const DIRECTIVE = /(?:^|\s)v-committed-value=/;
+// The directive shows the model's value when `change` ends a commit, so a field must commit on `change` or store
+// each keystroke on `input` (a draft the directive shows): a field that commits only on blur would read the old value
+// the directive wrote at its `change` (OV-3068, Feature stroke width).
+const COMMITS_OR_DRAFTS = /(?:^|\s)(?:@|v-on:)(?:change|input)(?:\.[a-z]+)*=/;
 // A field with a static `readonly` takes no typing, so no text of the user's can be lost (the Copy diagnostics boxes).
 const READONLY = /\sreadonly(?:[\s>=/]|$)/;
 
@@ -56,7 +60,10 @@ const isTyped = ({ tag, text }) => tag === 'textarea' || !NOT_TYPED.has(/\stype=
 const committedValueProblems = (sources) => sources.flatMap(([path, source]) => fieldTags(source).flatMap((field) => {
   const where = `${path}:${field.line}`;
   if (DIRECTIVE.test(field.text)) {
-    return BINDS_VALUE.test(field.text) || BINDS_OBJECT.test(field.text) ? [`${where} binds a value besides v-committed-value`] : [];
+    return [
+      ...(BINDS_VALUE.test(field.text) || BINDS_OBJECT.test(field.text) ? [`${where} binds a value besides v-committed-value`] : []),
+      ...(COMMITS_OR_DRAFTS.test(field.text) ? [] : [`${where} neither commits on change nor stores a draft on input`])
+    ];
   }
   if (!isTyped(field) || READONLY.test(field.text)) return [];
   if (BINDS_VALUE.test(field.text)) return [`${where} shows a bound value; use v-committed-value`];
@@ -85,10 +92,14 @@ test('the guard finds every form of a value binding on a typed field, and only t
     '<input v-bind="{ value: a }" @keydown="commitOnEnter">',
     '<input v-bind="attrs">',
     '<input :value="a" v-committed-value="a" @change="commit()">',
-    '<input v-committed-value="a" v-bind="{ value: a }">'
+    '<input v-committed-value="a" v-bind="{ value: a }" @change="commit()">',
+    // A field that commits only on blur reads the value the directive showed at `change`.
+    '<input type="number" v-committed-value="width" @blur="setWidth($event.target.value)">'
   ]) assert.equal(problems(source).length, 1, source);
   for (const source of [
     '<input v-committed-value="item.id" @change="rename($event.target.value)">',
+    '<input v-committed-value="draft ?? width" @input="draft = $event.target.value" @blur="commit()">',
+    '<input v-committed-value="a" v-on:change.trim="commit()">',
     '<input type="radio" :value="choice" :checked="on" @change="pick(choice)">',
     '<input type="checkbox" :value="choice" v-model="picked">',
     '<select :value="mode" @change="setMode($event.target.value)"></select>',
