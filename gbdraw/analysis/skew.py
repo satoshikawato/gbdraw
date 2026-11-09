@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.analysis.windows import SlidingWindows, sliding_windows
 from gbdraw.mode_profiles import validate_dinucleotide
 
 
@@ -18,59 +21,36 @@ from gbdraw.mode_profiles import validate_dinucleotide
 _COUNT_CHUNK = 1 << 20
 
 
-def _prefix_counts_at(seq_bytes: bytes, base: int, positions: np.ndarray) -> np.ndarray:
-    """``seq_bytes[:p].count(base)`` for each position ``p`` (0 to n).
+def _prefix_counts_at(segments: Sequence[bytes], base: int, positions: np.ndarray) -> np.ndarray:
+    """``b"".join(segments)[:p].count(base)`` for each position ``p`` (0 to the joined length).
 
-    The sequence is read once, a chunk at a time: the positions are sorted
-    once, each chunk takes the positions that fall in it, reads their counts
-    from the chunk's own occurrences, and adds the total of the chunks before
-    it. The extra memory is the positions plus one chunk, never an array as
-    long as the sequence.
+    The segments are read once, a chunk at a time and never joined: the
+    positions are sorted once, each chunk takes the positions that fall in it,
+    reads their counts from the chunk's own occurrences, and adds the total of
+    the chunks before it. The extra memory is the positions plus one chunk,
+    never an array as long as the sequence.
     """
-    sequence = np.frombuffer(seq_bytes, dtype=np.uint8)
-    length = len(sequence)
+    length = sum(len(segment) for segment in segments)
     order = np.argsort(positions, kind="stable")
     wanted = np.clip(positions[order], 0, length)
     counts = np.empty(len(wanted), dtype=np.int64)
     running = 0
-    for start in range(0, length, _COUNT_CHUNK):
-        lo, hi = np.searchsorted(wanted, (start, min(start + _COUNT_CHUNK, length)), side="left")
-        chunk_hits = np.flatnonzero(sequence[start : start + _COUNT_CHUNK] == base)
-        local = (wanted[lo:hi] - start).astype(np.intp)
-        counts[lo:hi] = running + np.searchsorted(chunk_hits, local, side="left")
-        running += len(chunk_hits)
+    offset = 0
+    for segment in segments:
+        sequence = np.frombuffer(segment, dtype=np.uint8)
+        for start in range(0, len(sequence), _COUNT_CHUNK):
+            chunk = sequence[start : start + _COUNT_CHUNK]
+            first = offset + start
+            lo, hi = np.searchsorted(wanted, (first, first + len(chunk)), side="left")
+            chunk_hits = np.flatnonzero(chunk == base)
+            local = (wanted[lo:hi] - first).astype(np.intp)
+            counts[lo:hi] = running + np.searchsorted(chunk_hits, local, side="left")
+            running += len(chunk_hits)
+        offset += len(sequence)
     counts[np.searchsorted(wanted, length, side="left") :] = running
     prefix = np.empty(len(positions), dtype=np.int64)
     prefix[order] = counts
     return prefix
-
-
-def window_base_counts(
-    seq_bytes: bytes,
-    base: int,
-    *,
-    starts: np.ndarray,
-    window: int,
-) -> np.ndarray:
-    """Count ``base`` in the circular windows of ``window`` bases beginning at
-    ``starts``: the one window count of the GC content and skew tracks.
-
-    A window longer than the sequence counts it once per full cycle; the
-    counts are read at the window bounds only (``_prefix_counts_at``).
-    """
-    seq_length = len(seq_bytes)
-    full_cycles, remainder = divmod(window, seq_length)
-    end = starts + remainder
-    wrapped = end > seq_length
-    stops = np.where(wrapped, end - seq_length, end)
-    prefix = _prefix_counts_at(seq_bytes, base, np.concatenate([starts, stops, [seq_length]]))
-    total_count = int(prefix[-1])
-    counts = np.full(len(starts), full_cycles * total_count, dtype=np.int64)
-    if remainder == 0:
-        return counts
-    counts += prefix[len(starts) : 2 * len(starts)] - prefix[: len(starts)]
-    counts[wrapped] += total_count
-    return counts
 
 
 _COUNTED_BASES = bytes.maketrans(b"abcdefghijklmnopqrstuvwxyzUu", b"ABCDEFGHIJKLMNOPQRSTUVWXYZTT")
@@ -88,40 +68,47 @@ def counted_sequence(seq: object) -> bytes:
     return raw.translate(_COUNTED_BASES)
 
 
-def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, bytes]:
-    """Return the display pair, the two counted bases, and the counted sequence.
+def _counted_bases(windows: SlidingWindows) -> list[bytes]:
+    """The counted bases the windows read, one segment per source piece, in local order.
 
-    U is the same base as T (D-26): it is counted as T in both the pair and the
-    sequence, while the display name keeps the requested letters.
+    A piece read against the source (a reverse complement) is read as its reverse complement, as the record's own
+    bases are. A piece that is the whole source is counted without a slice copy.
     """
 
-    pair = validate_dinucleotide(nt)
-    counted = pair.replace("U", "T")
-    return pair, counted[0], counted[1], counted_sequence(record.seq)
+    sequence = windows.source.sequence
+    segments: list[bytes] = []
+    for piece in windows.pieces:
+        bases = sequence if piece.length == len(sequence) else sequence[piece.low : piece.low + piece.length]
+        segments.append(counted_sequence(bases if piece.direction > 0 else bases.reverse_complement()))
+    return segments
 
 
-def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
+def skew_df(record: SeqRecord, window: int, step: int, nt: str, *, circular: bool) -> DataFrame:
     """The dinucleotide content and skew of every GC track, Circular and Linear: one row per sample.
 
-    The samples are 0, ``step``, ... below the record length (the index), and each sample's values are those of
-    the ``window`` bases centred on it, ``[p - window // 2, p - window // 2 + window)``; the windows wrap around
-    the record's ends (``window_base_counts``).
+    The samples and their windows are those of :func:`gbdraw.analysis.windows.sliding_windows` (the index holds
+    the samples); ``circular`` says whether the molecule is circular. Content is the share of the two bases among
+    the bases a window reads (``window``, or fewer at the ends of a linear record). U is counted as T (D-26).
     """
-    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
-    seq_length = len(seq_bytes)
+    nt = validate_dinucleotide(nt)
+    counted = nt.replace("U", "T")
     content_legend = f"{nt} content"
     skew_legend = f"{nt} skew"
     cumulative_skew_legend = f"Cumulative {nt} skew, normalized"
 
-    if seq_length == 0 or window <= 0 or step <= 0:
+    if len(record.seq) == 0 or window <= 0 or step <= 0:
         return pd.DataFrame(
             columns=[content_legend, skew_legend, cumulative_skew_legend],
         )
 
-    samples = np.arange(0, seq_length, step, dtype=np.int64)
-    starts = (samples - int(window) // 2) % seq_length
-    base1_counts = window_base_counts(seq_bytes, ord(nt_1), starts=starts, window=window)
-    base2_counts = window_base_counts(seq_bytes, ord(nt_2), starts=starts, window=window)
+    windows = sliding_windows(record, window, step, circular=circular)
+    segments = _counted_bases(windows)
+    bounds = np.concatenate([windows.starts, windows.ends]) - windows.pieces[0].local
+    samples = windows.samples
+    base1_prefix = _prefix_counts_at(segments, ord(counted[0]), bounds)
+    base2_prefix = _prefix_counts_at(segments, ord(counted[1]), bounds)
+    base1_counts = base1_prefix[len(samples) :] - base1_prefix[: len(samples)]
+    base2_counts = base2_prefix[len(samples) :] - base2_prefix[: len(samples)]
     total_counts = base1_counts + base2_counts
     skew_values = np.divide(
         base1_counts - base2_counts,
@@ -129,7 +116,7 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
         out=np.zeros(len(samples), dtype=np.float64),
         where=total_counts != 0,
     )
-    content_values = total_counts / float(window)
+    content_values = total_counts / windows.bases
     skew_cumulative_values = np.cumsum(skew_values)
 
     max_skew_abs = float(np.abs(skew_values).max())
@@ -148,10 +135,8 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
 
 
 __all__ = [
-    "counted_dinucleotide",
     "counted_sequence",
     "skew_df",
-    "window_base_counts",
 ]
 
 

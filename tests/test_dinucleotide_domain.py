@@ -62,12 +62,12 @@ def test_validator_rejects_other_values_with_one_reason(value):
 
 
 def test_u_is_the_same_base_as_t_for_skew_and_content():
-    at = skew_df(_record(DNA), 50, 10, "AT")
-    au = skew_df(_record(DNA), 50, 10, "AU")
+    at = skew_df(_record(DNA), 50, 10, "AT", circular=True)
+    au = skew_df(_record(DNA), 50, 10, "AU", circular=True)
     # The display name keeps the typed letters; the values are the AT values.
     assert list(au.columns) == ["AU content", "AU skew", "Cumulative AU skew, normalized"]
     assert_frame_equal(at.set_axis(au.columns, axis=1), au)
-    rna = skew_df(_record(DNA.replace("T", "U")), 50, 10, "AT")
+    rna = skew_df(_record(DNA.replace("T", "U")), 50, 10, "AT", circular=True)
     assert_frame_equal(at, rna)
 
 

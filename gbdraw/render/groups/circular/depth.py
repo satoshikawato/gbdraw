@@ -10,6 +10,7 @@ from ...drawers.circular.depth import DepthDrawer
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import unset_record_transform
 
 class DepthGroup:
     """Creates a depth coverage group for a circular canvas."""
@@ -27,7 +28,8 @@ class DepthGroup:
         axis_group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
-        self.record_transform = record_transform
+        # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
+        self.record_transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
         self.depth_group = Group(id=group_id or "depth")
         self.radius = float(radius)
         self.depth_config = depth_config

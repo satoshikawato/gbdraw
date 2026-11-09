@@ -30,7 +30,7 @@ HEIGHT = 20.0
 def _gc_df() -> pd.DataFrame:
     rng = np.random.default_rng(2865)
     sequence = "".join(rng.choice(list("ACGT"), RECORD_LENGTH))
-    return skew_df(SeqRecord(Seq(sequence)), window=1000, step=100, nt="GC")
+    return skew_df(SeqRecord(Seq(sequence)), window=1000, step=100, nt="GC", circular=True)
 
 
 def _depth_df() -> pd.DataFrame:

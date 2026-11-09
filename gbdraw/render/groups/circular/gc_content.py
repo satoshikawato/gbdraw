@@ -10,6 +10,7 @@ from ....configurators import GcContentConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import unset_record_transform
 
 class GcContentGroup:
     """
@@ -28,7 +29,8 @@ class GcContentGroup:
         group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
-        self.record_transform = record_transform
+        # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
+        self.record_transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
         self.group_id = group_id or "gc_content"
         self.gc_group: Group = Group(id=self.group_id)
         self.radius: float = radius

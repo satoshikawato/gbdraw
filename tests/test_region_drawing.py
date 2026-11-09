@@ -155,14 +155,18 @@ def test_region_of_a_circular_drawing_is_linear_with_adapted_sizes(materialize, 
     [record] = request.records
     assert (record.record_key, record.windows[0].start, record.windows[0].end) == ("mito", 11737, 14748)
     assert record.windows[0].reverse_complement is False
-    assert {item.setting for item in region.adaptation.reset} == {"labels.font_size", "objects.depth.tick_font_size"}
-    assert region.adaptation.kept == {"objects.legends.font_size": 18, "window": 500, "step": 50}
+    # The Auto GC window of the 3,012 bp region is a tenth of its length, not the mitogenome's 1 kb: the hand-set
+    # window and step return to Auto, as every size whose Auto differs does.
+    assert {item.setting for item in region.adaptation.reset} == {
+        "labels.font_size", "objects.depth.tick_font_size", "window", "step"
+    }
+    assert region.adaptation.kept == {"objects.legends.font_size": 18}
     overrides = request.options.config_overrides
     assert overrides["objects.legends.font_size.short"] == 18
     assert not any(path.startswith(("labels.font_size.s", "labels.font_size.l", "canvas.circular")) for path in overrides)
     assert "objects.depth.tick_font_size" not in overrides
     assert region.dropped == ("Circular-only settings: canvas.circular.track_type.",)
-    assert (request.options.window, request.options.step) == (500, 50)
+    assert (request.options.window, request.options.step) == (None, None)
     # Comparison thresholds start from the Linear defaults.
     assert request.options.evalue == pytest.approx(1e-2)
 

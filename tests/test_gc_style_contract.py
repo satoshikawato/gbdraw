@@ -15,6 +15,7 @@ from gbdraw.render.drawers.linear.gc_content import (
     GcContentDrawer as LinearGcContentDrawer,
 )
 from gbdraw.render.drawers.linear.gc_skew import SkewDrawer as LinearSkewDrawer
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 
 def _gc_content_config(*, stroke_color: str, stroke_width: float) -> SimpleNamespace:
@@ -67,7 +68,7 @@ def test_gc_content_outline_contract_matches_in_both_modes(
     frame = _gc_frame()
     circular_group = CircularGcContentDrawer(
         _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC")
+    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC", record_transform=RecordDisplayTransform(120, 1, 1, None, True))
     linear_group = LinearGcContentDrawer(
         _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
     ).draw(Group(), frame, 120, 600.0, 24.0, 0.0, 0.0, "GC")
@@ -86,7 +87,7 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
     frame = _gc_frame()
     circular_group = CircularSkewDrawer(
         _gc_skew_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC")
+    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC", record_transform=RecordDisplayTransform(120, 1, 1, None, True))
     linear_group = LinearSkewDrawer(
         _gc_skew_config(stroke_color=stroke_color, stroke_width=stroke_width)
     ).draw(
@@ -114,9 +115,10 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
     ],
 )
 def test_none_stroke_remains_invisible_with_positive_width(drawer, args) -> None:
+    circular = {"record_transform": RecordDisplayTransform(120, 1, 1, None, True)} if drawer is CircularGcContentDrawer else {}
     group = drawer(
         _gc_content_config(stroke_color="none", stroke_width=3.0)
-    ).draw(*args)
+    ).draw(*args, **circular)
 
     paths = _main_paths(group, stroke_color="none")
     assert paths

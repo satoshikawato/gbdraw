@@ -47,6 +47,27 @@ write-up of a release.
   rings were offset from each other. Every GC content and GC skew track now
   draws a window's value at its centre, in the CLI, the Python API, and the
   Web app (OV-2870).
+- Fixed: GC content and GC skew windows within half a window of the ends of a
+  region (`--region`, a Web region) or of a record with linear topology counted
+  bases from the record's other end. A region now reads the bases beside it from
+  the record it was cut from, a linear record's windows stop at its ends (the
+  value is the mean of the bases inside), and a circular record's windows still
+  run round its origin. Depth tracks follow the same rule, and now draw a
+  window's mean at the window's centre instead of its start (half a Depth window,
+  2.5 kb at `--depth_window 5000`, earlier). A record whose file states no
+  topology (GFF3 + FASTA, FASTA) counts as linear unless it is marked circular
+  (`--record_topology circular`, or Circular record in the Web app), also in a
+  Circular figure. There, the GC content, GC skew and Depth lines of a record
+  that is not circular hold their last value up to 12 o'clock and step back to
+  the first value there, instead of a ramp across the origin that described no
+  bases (OV-2890, OV-2919, OV-2920).
+- Changed: the Auto GC content and GC skew window is now at most a tenth of the
+  drawn length, and the Auto step at most a tenth of the window, so figures
+  shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
+  window and a 6 bp step instead of 1 kb and 100 bp. Figures of 10 kb and longer
+  are unchanged, and a window or step you set is kept. The Auto Depth window and
+  step follow from these as before, and the Web app's Auto hints show the same
+  values (OV-2864).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web

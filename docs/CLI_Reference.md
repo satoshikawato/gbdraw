@@ -258,9 +258,11 @@ options:
   -n, --nt NT           dinucleotide: two letters from A, C, G, T, and U;
                         case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
-                        10kb for genomes <10Mb, 100kb for genomes >=10Mb)
+                        10kb for genomes <10Mb, 100kb for genomes >=10Mb, and
+                        at most a tenth of the drawn length)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
-                        1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)
+                        1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb,
+                        and at most a tenth of the window)
   --species SPECIES     Species name (optional; e.g. "<i>Escherichia
                         coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")
   --strain STRAIN       Strain/isolate name (optional; e.g. "K-12", "Av")
@@ -1446,9 +1448,11 @@ options:
   -n, --nt NT           dinucleotide skew: two letters from A, C, G, T, and U;
                         case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
-                        10kb for genomes <10Mb, 100kb for genomes >=10Mb)
+                        10kb for genomes <10Mb, 100kb for genomes >=10Mb, and
+                        at most a tenth of the drawn length)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
-                        1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)
+                        1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb,
+                        and at most a tenth of the window)
   --separate_strands    separate forward and reverse strands (default: False).
                         Features of undefined strands are shown on the forward
                         strand.

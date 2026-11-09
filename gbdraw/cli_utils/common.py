@@ -144,12 +144,18 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '-w',
         '--window',
-        help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
+        help=(
+            'window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb, '
+            'and at most a tenth of the drawn length)'
+        ),
         type=argparse_integer)
     parser.add_argument(
         '-s',
         '--step',
-        help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
+        help=(
+            'step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb, '
+            'and at most a tenth of the window)'
+        ),
         type=argparse_integer)
 
 
@@ -797,16 +803,7 @@ def add_analysis_args(parser: argparse.ArgumentParser) -> None:
         help='dinucleotide: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
         type=str,
         default="GC")
-    parser.add_argument(
-        '-w',
-        '--window',
-        help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=argparse_integer)
-    parser.add_argument(
-        '-s',
-        '--step',
-        help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=argparse_integer)
+    _add_window_step_args(parser)
 
 
 def add_feature_args(parser: argparse.ArgumentParser) -> None:

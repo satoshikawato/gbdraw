@@ -2044,16 +2044,22 @@ def _collect_linear_primary_bounds(
 
 def _precalculate_gc_dataframes(
     records: list[SeqRecord],
+    record_transforms: Sequence[RecordDisplayTransform] | None,
     *,
     window: int,
     step: int,
     dinucleotide: str,
     enabled: bool,
 ) -> list[DataFrame | None]:
-    """Build GC/skew data once per record and share it across linear groups."""
+    """Build GC/skew data once per record and share it across linear groups.
+
+    A record's windows wrap round its ends when it is drawn as circular (its transform)."""
     if not enabled:
         return [None for _ in records]
-    return [render_stage("gc_skew_data", skew_df, record, window, step, dinucleotide) for record in records]
+    return [
+        render_stage("gc_skew_data", skew_df, record, window, step, dinucleotide, circular=transform.is_circular)
+        for record, transform in zip(records, bind_record_transforms(records, record_transforms), strict=True)
+    ]
 
 
 
@@ -2801,6 +2807,7 @@ def _linear_depth_data(
         build_depth_track_dataframes(
             records,
             track_inputs.record_depth_tracks,
+            record_inputs.record_transforms,
             base_config=depth_config,
             depth_df_builder=build_depth_df,
         )
@@ -3120,6 +3127,7 @@ def _linear_gc_frames(
     record_gc_dfs_by_nt = {
         nt: _precalculate_gc_dataframes(
             records,
+            record_inputs.record_transforms,
             window=int(gc_config.window),
             step=int(gc_config.step),
             dinucleotide=nt,

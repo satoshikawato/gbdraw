@@ -7,7 +7,6 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
-from ....analysis.depth import depth_df as build_depth_df
 from ....configurators import DepthConfigurator
 from ...drawers.linear.depth import DepthDrawer
 from ...drawers.linear.wrap_rows import draw_track_rows
@@ -25,7 +24,6 @@ class DepthGroup:
         depth_config: DepthConfigurator,
         *,
         sequence_width: float,
-        depth_table: DataFrame | None = None,
         start_x: float = 0,
         start_y: float = 0,
         depth_df: DataFrame | None = None,
@@ -48,16 +46,6 @@ class DepthGroup:
         self.axis_group_id = str(axis_group_id)
         if depth_df is not None:
             self.depth_df = depth_df
-        elif depth_table is not None:
-            self.depth_df = build_depth_df(
-                self.gb_record,
-                depth_table,
-                self.depth_config.window,
-                self.depth_config.step,
-                normalize=self.depth_config.normalize,
-                min_depth=self.depth_config.min_depth,
-                max_depth=self.depth_config.max_depth,
-            )
         else:
             self.depth_df = DataFrame(columns=["position", "depth", "depth_normalized"])
         self.add_elements_to_group()

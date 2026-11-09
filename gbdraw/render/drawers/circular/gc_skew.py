@@ -37,7 +37,7 @@ class SkewDrawer:
         track_width: float,
         norm_factor: float,
         dinucleotide: str,
-        record_transform: RecordDisplayTransform | None = None,
+        record_transform: RecordDisplayTransform,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the areas between the baseline circle and the skew line,
         with half the stroke."""
@@ -61,7 +61,8 @@ class SkewDrawer:
         dinucleotide: str,
         record_identifier: str | None = None,
         group_identifier: str | None = None,
-        record_transform: RecordDisplayTransform | None = None,
+        *,
+        record_transform: RecordDisplayTransform,
     ) -> Group:
         skew_desc: str = generate_circular_gc_skew_path_desc(
             radius, gc_df, record_len, track_width, norm_factor, dinucleotide,

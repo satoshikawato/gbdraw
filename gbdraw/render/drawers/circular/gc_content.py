@@ -198,7 +198,7 @@ class GcContentDrawer:
         track_width: float,
         norm_factor: float,
         dinucleotide: str,
-        record_transform: RecordDisplayTransform | None = None,
+        record_transform: RecordDisplayTransform,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the area between the baseline circle and the content line
         with half its stroke; in percent mode the area, the background ring when it shows, the border circles and
@@ -258,7 +258,8 @@ class GcContentDrawer:
         norm_factor: float,
         dinucleotide: str,
         group_id: str = "gc_content",
-        record_transform: RecordDisplayTransform | None = None,
+        *,
+        record_transform: RecordDisplayTransform,
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(

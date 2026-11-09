@@ -17,6 +17,8 @@ from gbdraw.configurators import DepthConfigurator
 from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import bind_record_transforms
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
@@ -715,6 +717,7 @@ def _shared_max_depths(
 def build_depth_track_dataframes(
     records: Sequence[SeqRecord],
     record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+    record_transforms: Sequence[RecordDisplayTransform] | None,
     *,
     base_config: DepthConfigurator | None,
     depth_df_builder: DepthDfBuilder = depth_df,
@@ -724,7 +727,8 @@ def build_depth_track_dataframes(
 
     Two render stages per record and track: ``depth_frame`` (the binned
     dataframe) and ``depth_track_config`` (its drawing config, taking the
-    shared axis maximum as an argument).
+    shared axis maximum as an argument). A record's windows wrap round its
+    ends when it is drawn as circular (its transform, ``record_transforms``).
     """
 
     if base_config is None or not record_depth_tracks:
@@ -736,6 +740,7 @@ def build_depth_track_dataframes(
 
     record_window_steps: list[tuple[int, int]] = []
     frames: list[list[tuple[DepthTrackSpec, DataFrame]]] = []
+    transforms = bind_record_transforms(records, record_transforms)
     for record_index, (record, track_specs) in enumerate(zip(records, record_depth_tracks)):
         index_depth_track_row(track_specs, record_index=record_index)
         if window_steps is not None and record_index < len(window_steps):
@@ -754,6 +759,7 @@ def build_depth_track_dataframes(
                         spec.table,
                         int(window),
                         int(step),
+                        circular=transforms[record_index].is_circular,
                         normalize=bool(base_config.normalize),
                         min_depth=base_config.min_depth,
                         max_depth=base_config.max_depth,

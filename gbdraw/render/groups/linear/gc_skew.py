@@ -14,6 +14,7 @@ from ....configurators import GcSkewConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import unset_record_transform
 
 class GcSkewGroup:
     """
@@ -60,7 +61,12 @@ class GcSkewGroup:
         if gc_df is not None:
             self.skew_df = gc_df
             return
-        self.skew_df = skew_df(self.gb_record, self.window, self.step, self.dinucleotide)
+        transform = (
+            unset_record_transform(self.gb_record) if self.record_transform is None else self.record_transform
+        )
+        self.skew_df = skew_df(
+            self.gb_record, self.window, self.step, self.dinucleotide, circular=transform.is_circular
+        )
 
     def add_elements_to_group(self) -> None:
         """

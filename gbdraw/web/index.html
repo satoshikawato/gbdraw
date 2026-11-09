@@ -6364,13 +6364,13 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div data-setting="dinucleotide-window">
-                                    <span class="input-label text-[10px]">{{ t('Window') }} <setting-note id="gc-window-timing" setting="dinucleotide-window"></setting-note> <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (>=10 Mb).')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Window') }} <setting-note id="gc-window-timing" setting="dinucleotide-window"></setting-note> <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (>=10 Mb), and at most a tenth of the drawn length.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
                                         <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window gc-window-timing" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (>=10 Mb).')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (>=10 Mb), and at most a tenth of the window.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
                                         <input type="number" min="1" step="1" v-model.number="adv.step_size" :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
