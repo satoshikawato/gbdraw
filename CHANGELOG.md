@@ -227,7 +227,8 @@ write-up of a release.
   whatever order the slots are written in, in the CLI, the Python API, and the
   Web app. Such a CLI stack saved as a Session now draws the same figure on Web
   Generate, and its overlay rows keep their place in the Legend against the
-  other Annotations rows. Other figures are unchanged (OV-3184, OV-3185).
+  other Annotations rows wherever the stack's sides allow it. Other figures are
+  unchanged (OV-3184, OV-3185).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split
