@@ -583,9 +583,9 @@ const legendStrokeOptionsOpen = reactive(new Set());
 const originalSvgStroke = ref({ color: null, width: null });
 
 // Legend Drag state
-const legendDragging = ref(false);
-const legendDragStart = reactive({ x: 0, y: 0 });
-const legendOriginalTransform = ref({ x: 0, y: 0 });
+const legendDragging = typedRef(false);
+const legendDragStart = typedReactive({ x: 0, y: 0 });
+const legendOriginalTransform = typedRef({ x: 0, y: 0 });
 const legendInitialTransform = typedRef({ x: 0, y: 0 }); // Store SVG's original legend position
 const legendCurrentOffset = typedReactive({ x: 0, y: 0 });
 

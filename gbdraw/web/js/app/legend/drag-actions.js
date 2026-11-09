@@ -9,10 +9,13 @@ import {
 } from '../legend-layout/composition-actions.js';
 import { releasePressedTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 import { msg } from '../../utils/i18n.js';
+/** @import { WebState } from '../../state.js' */
 
 /**
  * @typedef {object} LegendDragActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'legendDragging'
+ *   | 'legendDragStart' | 'legendOriginalTransform' | 'legendInitialTransform' | 'legendCurrentOffset'
+ *   | 'layoutRepositionMode' | 'zoom'>} state
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
  *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
  * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
