@@ -15,7 +15,7 @@ globalThis.window = {
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
-const { catalogUnitPlaces, linearWindowPairsByCardEdge, planLinearUnitSearch } = await import('../../gbdraw/web/js/services/linear-units.js');
+const { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge, planLinearUnitSearch } = await import('../../gbdraw/web/js/services/linear-units.js');
 const { createLinearComparisonView, createLinearLayoutReaders } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
 const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
 const { createSliceHandle } = await import('../../gbdraw/web/js/services/drawing/slice-handle.js');
@@ -133,4 +133,22 @@ test('a reorder keeps a card pair\'s own row as before (cards drawn whole)', asy
   assert.deepEqual(losatCacheInfo.value, [{ ...cacheInfo[0], queryIndex: 1, subjectIndex: 0 }]);
   assert.deepEqual(Object.keys(readers.linearLosatCacheInfoByEdgeKey.value), [linearComparisonEdgeKey('a', 'b')]);
   assert.deepEqual(readers.linearLosatWindowPairs.value, {});
+});
+
+// OV-2918: a Session Load restores a window pair's row with its saved identity when the shown Result's catalog names
+// its two units and their records are drawn (the rule a reorder applies too); a card pair's own row and a row of a
+// record no longer drawn are not window pairs.
+test('a window pair\'s row is kept while the shown Result names its units and their records are drawn', async () => {
+  const cards = [
+    createLinearSeq({ uid: 'a', windows: [span(1, 150), span(151, 300)] }),
+    createLinearSeq({ uid: 'b' }),
+    createLinearSeq({ uid: 'c' })
+  ];
+  const { cacheInfo, catalog } = await generated(cards, [['a', 'b'], ['b', 'c']]);
+  const places = catalogUnitPlaces(catalog);
+  const drawn = (uids) => (uid) => uids.includes(uid);
+  assert.deepEqual(cacheInfo.map((entry) => isDrawnWindowPairRow(entry, places, drawn(['a', 'b', 'c']))), [true, true, false]);
+  // Without b drawn, the window pairs of a and b are not reachable; without the catalog (no Result), none is.
+  assert.deepEqual(cacheInfo.map((entry) => isDrawnWindowPairRow(entry, places, drawn(['a', 'c']))), [false, false, false]);
+  assert.deepEqual(cacheInfo.map((entry) => isDrawnWindowPairRow(entry, new Map(), drawn(['a', 'b', 'c']))), [false, false, false]);
 });

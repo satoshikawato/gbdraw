@@ -16,7 +16,7 @@ import {
 } from '../services/linear-comparisons.js';
 import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
 import { linearRecordNames } from '../services/linear-sources.js';
-import { catalogUnitPlaces, linearWindowPairsByCardEdge } from '../services/linear-units.js';
+import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
@@ -91,18 +91,10 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
     // A window pair's row names the drawn units of the last Generate, whose indexes only that request counts: it
     // stays while the records of its units are drawn (the drawn Result's units, OV-2742).
     const places = catalogUnitPlaces(state.featureCatalog.value);
-    /** @param {string | undefined} uid */
-    const drawnWindowOf = (uid) => {
-      const place = places.get(String(uid ?? ''));
-      return place !== undefined && place.window !== null && indexByUid.has(place.recordKey);
-    };
-    /** @param {string | undefined} uid */
-    const drawnUnit = (uid) => drawnWindowOf(uid) || indexByUid.has(String(uid ?? ''));
     writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
-      if ((drawnWindowOf(entry.queryUid) || drawnWindowOf(entry.subjectUid))
-        && drawnUnit(entry.queryUid) && drawnUnit(entry.subjectUid)) return [entry];
+      if (isDrawnWindowPairRow(entry, places, (uid) => indexByUid.has(uid))) return [entry];
       const resolved = resolvedByEdgeKey.get(edgeKey);
       const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
       const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');

@@ -207,6 +207,28 @@ test('a record drawn in two windows searches each window against the other recor
   expect(download.suggestedFilename()).toBe('second-window.tsv');
   expect(readFileSync(await download.path(), 'utf8').trim()).not.toBe('');
   await page.locator('fieldset[data-linear-comparison-pair-row]').screenshot({ path: test.info().outputPath('window-pairs.png') });
+
+  // OV-2918: after Save Session and Load, the window pairs are listed again and their raw results download, before
+  // any Generate.
+  const file = test.info().outputPath('window-pairs.gbdraw-session.json.gz');
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'window-pairs'; });
+  const saved = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await saved).saveAs(file);
+  await openFresh(page);
+  await loadSessionFile(page, file);
+  await showDrawing(page, { kind: 'linear' });
+  const generations = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  const loadedPairs = page.locator('details[data-linear-comparison-disclosure="selected-pairs"]');
+  if (!await loadedPairs.evaluate((element) => element.open)) await loadedPairs.locator(':scope > summary').click();
+  await expect(windowPairs).toHaveCount(2);
+  await expect(windowPairs.nth(1)).toContainText('#1 window 2 → #2');
+  const reloaded = page.waitForEvent('download', { timeout: 60_000 });
+  await windowPairs.nth(1).getByRole('button', { name: 'Save Raw LOSAT TSV for #1 window 2 to #2', exact: true }).click();
+  const loadedDownload = await reloaded;
+  expect(loadedDownload.suggestedFilename()).toBe('second-window.tsv');
+  expect(readFileSync(await loadedDownload.path(), 'utf8').trim()).not.toBe('');
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value)).toBe(generations);
 });
 
 // OV-2739: a window across the origin of a circular record is searched as Python crops it (PD-OI-122, ":origin"):

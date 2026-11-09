@@ -148,6 +148,26 @@ export const catalogUnitPlaces = (catalog) => {
 };
 
 /**
+ * Whether a LOSAT cache-info row is a window pair of the drawn Result (OV-2742, OV-2918): one of its two units is a
+ * window of a record drawn in several (`places`, the Result's units), and each unit is such a window or a record drawn
+ * whole, of a record `drawn` names. Its indexes count that Result's units, so a reorder or a Load keeps it as saved.
+ * @param {{ queryUid?: unknown, subjectUid?: unknown }} entry
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places
+ * @param {(recordKey: string) => boolean} drawn
+ */
+export const isDrawnWindowPairRow = (entry, places, drawn) => {
+  /** @param {unknown} uid */
+  const drawnWindow = (uid) => {
+    const place = places.get(String(uid ?? ''));
+    return place !== undefined && place.window !== null && drawn(place.recordKey);
+  };
+  /** @param {unknown} uid */
+  const drawnUnit = (uid) => drawnWindow(uid) || drawn(String(uid ?? ''));
+  return (drawnWindow(entry.queryUid) || drawnWindow(entry.subjectUid))
+    && drawnUnit(entry.queryUid) && drawnUnit(entry.subjectUid);
+};
+
+/**
  * One window pair of a card pair (`LinearWindowPair`): the edge key of its LOSAT cache-info row (the pair of drawn
  * units Generate searched), the row's file name, and each side's window number (null for a card drawn whole).
  * @typedef {{ edgeKey: string, filename: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
