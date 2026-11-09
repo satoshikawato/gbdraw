@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import tempfile
 import tracemalloc
+from pathlib import Path
 
 import pytest
 
@@ -17,13 +20,17 @@ from gbdraw.web_support.reply_buffers import (
 
 
 class _Buffer:
-    """A reply buffer as the Worker's: it keeps a copy of each chunk."""
+    """A reply buffer as the Worker's: it takes each chunk out of its file."""
 
     def __init__(self) -> None:
         self.chunks: list[bytes] = []
+        descriptor, self.path = tempfile.mkstemp(prefix="gbdraw-reply-")
+        os.close(descriptor)
 
-    def write(self, chunk: bytes) -> None:
-        self.chunks.append(bytes(chunk))
+    def take(self) -> None:
+        file = Path(self.path)
+        self.chunks.append(file.read_bytes())
+        file.unlink()
 
 
 def _dumped(value: object) -> bytes:
@@ -79,6 +86,7 @@ def test_a_large_catalog_is_written_in_chunks_of_about_one_mebibyte() -> None:
     assert write_reply_buffer(lambda: buffer, json_utf8_chunks(catalog)) is buffer
 
     assert b"".join(buffer.chunks) == _dumped(catalog)
+    assert not os.path.exists(buffer.path)
     assert len(buffer.chunks) > 4
     # A chunk closes once it passes the size; one slice of features is the overshoot.
     assert max(len(chunk) for chunk in buffer.chunks) < 2 * REPLY_CHUNK_CHARACTERS
@@ -89,7 +97,9 @@ def test_writing_a_catalog_never_holds_its_whole_text_in_the_python_heap() -> No
     size = len(_dumped(catalog))
 
     class _Discard:
-        def write(self, chunk: bytes) -> None:
+        path = os.devnull
+
+        def take(self) -> None:
             pass
 
     tracemalloc.start()

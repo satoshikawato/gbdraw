@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -73,16 +75,20 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
 
 
 class _ReplyBuffer:
-    """The Worker's reply buffer (createReplyBuffer) in Python: the chunks it was written."""
+    """The Worker's reply buffer (createReplyBuffer) in Python: the chunks it took from its file."""
 
     made: list[_ReplyBuffer] = []
 
     def __init__(self) -> None:
         self.chunks: list[bytes] = []
+        descriptor, self.path = tempfile.mkstemp(prefix="gbdraw-reply-")
+        os.close(descriptor)
         _ReplyBuffer.made.append(self)
 
-    def write(self, chunk: bytes) -> None:
-        self.chunks.append(bytes(chunk))
+    def take(self) -> None:
+        file = Path(self.path)
+        self.chunks.append(file.read_bytes())
+        file.unlink()
 
     # As finishReplyBuffers joins it: equal to the bytes of its chunks in order.
     def __eq__(self, other: object) -> bool:

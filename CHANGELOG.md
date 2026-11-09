@@ -251,6 +251,12 @@ write-up of a release.
   (`gbdraw circular --session`, `gbdraw linear --session`). It offers Save
   Session and no longer offers Retry, which failed the same way. Every other
   "could not be accepted" error keeps its text and Retry.
+- Fixed: the Web app could not draw some large genomes that the command line
+  draws, such as human chromosome 1: after a few minutes it said the diagram
+  engine failed, with "Python exception: Exception". Once the browser's Python
+  memory passed 2 GiB, the drawn diagram could not be passed from Python to the
+  page. It is now passed whatever the memory size, and human chromosome 1 draws
+  with the default settings (OV-2800).
 - Added: **Sequence search** in the Web app searches the records of the shown
   drawing for one or more query sequences, with LOSAT blastn for a nucleotide
   query and tblastn for a protein query (one search may hold both), and draws
