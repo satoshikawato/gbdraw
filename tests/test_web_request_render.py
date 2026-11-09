@@ -771,6 +771,8 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when a one-gradient Legend block left a gap between its title and bar (OV-2982): only that block, the Legend bounds and the canvas height moved.
     # Updated again when each Result dropped `content`, its joined SVG text (OV-3027): with `content` put back as
     # the prolog and the joined pieces, the reply has the earlier digest.
+    # Updated again when every Linear slot group took its slot id and slot tags (OV-3012, OV-3083): only those
+    # group ids and tags moved, in the SVG and in the document pieces' start tags.
     "similarity_groups": "9e322511a6d66e434242c09cde9b66c4f085c0b2a9dcebec539d8d03470bd88e",
     "collinear": "20703996666abbe21fd53e18f153a515bbac86412c9ea56023ba8865323f0725",
 }
