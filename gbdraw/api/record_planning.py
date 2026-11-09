@@ -1845,12 +1845,11 @@ def _apply_provenance_annotations(
         record.annotations[WINDOW_OF_ANNOTATION] = provenance.window_of
     else:
         record.annotations.pop(WINDOW_OF_ANNOTATION, None)
+    # The file stamps stay when this plan has no paths: the file loader writes them on records it reads
+    # (gbdraw/io/genome.py), and file-qualified region selectors of an in-memory record read them.
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
         record.annotations["gbdraw_source_basename"] = Path(provenance.source_paths[0]).name
-    else:
-        record.annotations.pop("gbdraw_source_file", None)
-        record.annotations.pop("gbdraw_source_basename", None)
 
 
 @dataclass

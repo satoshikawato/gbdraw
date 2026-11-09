@@ -34,7 +34,7 @@ from gbdraw.api import (
 )
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions, LinearMultiRecordOptions
 from gbdraw.api.request_render import _materialized_record_inputs, resolve_request_records
-from gbdraw.api.requests import GenBankInputSource, RecordPresentation, RecordSelector
+from gbdraw.api.requests import GenBankInputSource, RecordCollectionOptions, RecordPresentation, RecordSelector
 from gbdraw.io.regions import RecordWindow
 from gbdraw.core.record_metadata import held_record_origin
 
@@ -350,3 +350,22 @@ def test_an_edited_window_unit_is_no_longer_a_window(tmp_path: Path) -> None:
     assert [record.source.record.annotations.get("gbdraw_window_of") for record in replanned.records] == ["w", None]  # type: ignore[union-attr]
     live, replay = _replayed(request, tmp_path)
     assert live.count('data-gbdraw-row-mark="gap"') == replay.count('data-gbdraw-row-mark="gap"') == 0
+
+
+def test_a_file_qualified_region_selects_an_in_memory_record_read_from_that_file(tmp_path: Path) -> None:
+    """A record read with ``read_genbank`` keeps the file stamps the loader wrote, so a region named by its file
+    still selects it when the record is given in memory (as on dev)."""
+
+    import gbdraw
+
+    source = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = gbdraw.read_genbank(str(source))[0]
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(record)),),
+        options=LinearDiagramOptions(), layout=LinearMultiRecordOptions(), output=_output(tmp_path),
+        record_options=RecordCollectionOptions(regions=tuple(parse_region_specs(["HmmtDNA.gbk:NC_012920.1:1000-5000"]))),
+    )
+    resolved = resolve_request(request)
+    drawn = resolved.records[0].source.record  # type: ignore[union-attr]
+    assert len(drawn.seq) == 4001
+    assert drawn.annotations.get("gbdraw_source_basename") == "HmmtDNA.gbk"
