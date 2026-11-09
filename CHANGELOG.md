@@ -396,6 +396,16 @@ write-up of a release.
   lane inside the axis, now warns as in Linear (`N region label overlaps`; the
   Web app shows "Region labels overlap other labels or lines (N)."). The
   figure is drawn as before.
+- Fixed: a Circular region label drawn along its circle was placed by the
+  height of its letters along the ray through its middle, but each letter
+  stands upright on the circle, so its corners reach farther from the centre.
+  On small circles a label's corners came closer than `label_offset` to its
+  own mark and to the next ring. Labels are now placed by where their letters'
+  outlines reach, in the CLI, the Python API, and the Web app. A label that
+  cannot keep that gap anywhere in its slot is left out and counted in
+  `N region labels left out: no letter fits their circles`. On larger circles
+  labels move by a fraction of a pixel (in the tobacco chloroplast Gallery
+  figure by at most 0.03 px) (OV-2979).
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest

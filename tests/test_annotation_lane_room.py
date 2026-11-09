@@ -1273,9 +1273,10 @@ def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gi
 
 
 def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() -> None:
-    # OV-2848: four nested bands at 60 pt in an inside slot without a set width. Further in, where the letters of the
+    # OV-2848: four nested bands at 56 pt in an inside slot without a set width. Further in, where the letters of the
     # other labels find more room, the innermost label keeps no letter; the slot does not move there, so every label
-    # is drawn, and the lanes settle before the assembler's last pass.
+    # is drawn, and the lanes settle before the assembler's last pass. At 60 pt the innermost label keeps no letter
+    # wherever the slot stands: its corners come within its label offset of its mark (OV-2979). It alone is left out.
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     # Whether each packing where the layout draws the slots changed it, for each layout of the drawing.
@@ -1294,11 +1295,15 @@ def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(assemble_module, "_place_annotation_tracks_where_drawn", placing)
         patch.setattr(assemble_module, "_annotation_tracks_packed_where_drawn", repacking)
-        drawn = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto")
+        drawn = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto", size=56)
 
     assert not drawn.without_letters, drawn.messages
     assert all(_labelled(drawn.items[identity]) for identity, *_rest in _SEVEN_NESTED[:4])
     assert layouts and all(changed[-1:] == [False] for changed in layouts), layouts
+
+    larger = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto")
+    assert larger.without_letters == {"r3"}, larger.messages
+    assert all(_labelled(larger.items[identity]) for identity, *_rest in _SEVEN_NESTED[:3])
 
 
 def test_a_label_left_out_for_want_of_a_letter_keeps_its_band_where_it_stands_without_text() -> None:
