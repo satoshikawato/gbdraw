@@ -582,6 +582,35 @@ def _lane_letters(
     return letters
 
 
+def _label_room(
+    label: _Letters,
+    annotation: ResolvedRegionAnnotation,
+    crossed: Sequence[ResolvedRegionAnnotation],
+    *,
+    widths: Sequence[float],
+    paint_of: Callable[[ResolvedRegionAnnotation, float], float],
+    offset: float,
+    lanes_between: int,
+    rooms_between: float,
+) -> float:
+    """The room ``annotation``'s label (its ``label`` letters) needs before a lane whose marks or letters it would
+    cross (those of ``crossed``), as ``_lane_rooms`` reckons it: at each of its record's lane ``widths`` where its
+    letters are drawn, their depth there, ``offset`` on each side of them, its own mark's paint and the furthest
+    painting crossed mark's at that width, less ``lanes_between`` lanes of that width and ``rooms_between``. The label
+    takes the largest."""
+
+    return max(
+        at.depth_px
+        + 2.0 * offset
+        + paint_of(annotation, width)
+        + max(paint_of(other, width) for other in crossed)
+        - lanes_between * width
+        - rooms_between
+        for width, at in zip(widths, label.at_widths)
+        if at.drawn
+    )
+
+
 def _lane_rooms(
     placements: Sequence[PlacedRegionAnnotation],
     *,
@@ -693,24 +722,15 @@ def _lane_rooms(
             ]
             if not (crossed and label.extent.drawn):  # one the drawer leaves out (``LabelExtent.drawn``) claims none
                 continue
-            offset = float(style_of(annotation).label_offset)
             own_gap = gap_before(placement.lane + step)
             between = sum(
                 rooms.get((annotation.record_index, row, between_gap), 0.0)
                 for between_gap in range(min(own_gap, gap), max(own_gap, gap) + 1)
                 if between_gap != gap
             )
-            # At each lane width where the label is drawn: its depth there, and the paint and the lanes between at
-            # that width. It takes the largest.
-            room = max(
-                at.depth_px
-                + 2.0 * offset
-                + paint_of(annotation, width)
-                + max(paint_of(other, width) for other in crossed)
-                - (lanes_on - 1) * width
-                - between
-                for width, at in zip(widths[annotation.record_index], label.at_widths)
-                if at.drawn
+            room = _label_room(
+                label, annotation, crossed, widths=widths[annotation.record_index], paint_of=paint_of,
+                offset=float(style_of(annotation).label_offset), lanes_between=lanes_on - 1, rooms_between=between,
             )
             if room > 0.0:
                 needs.setdefault((annotation.record_index, row, gap), {})[annotation.id] = room
