@@ -155,3 +155,33 @@ test('a ring keeps its own genome files when an earlier ring\'s files are missin
   assert.deepEqual(ringGenomeFilesInRingOrder(moved), [[b, plasmid], [a]]);
   assert.deepEqual(ringGenomePlaces(moved).places, [1, 0]);
 });
+
+// PR-B review 2, HIGH 1 (b): the one matcher works in passes over every entry (source keys first, then file names
+// among the sources no entry claimed, then the stored place), so an entry whose files are missing does not take a
+// later ring's genome whose first file has the same name.
+test('a ring whose files are missing does not take a later ring of the same file name', async () => {
+  const { orderedConservationSources, ringGenomeFilesInRingOrder, ringGenomePlaces } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const [a, b] = [file('sequence.fasta', 8), file('sequence.fasta', 16)];
+  const [entryA, entryB] = rowsFor([[a], [b]]).map((entry, index) => ({ ...entry, label: `Genome ${'AB'[index]}` }));
+  const drawing = {
+    files: { c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [[], [b]], c_conservation_sequence_sources: [] },
+    circularConservation: { source: 'losat', series: [entryA, entryB] }
+  };
+  assert.deepEqual(ringGenomePlaces(drawing).places, [null, 1]);
+  assert.deepEqual(ringGenomeFilesInRingOrder(drawing), [[], [b]], 'Save keeps the missing ring\'s place empty');
+  assert.deepEqual(orderedConservationSources(drawing.files.c_conservation_fastas, drawing.circularConservation)
+    .map((source) => [source.label, source.color, source.placeIndex, source.files]), [['Genome B', entryB.color, 1, [b]]],
+  'Generate draws Genome B on its own genome');
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[b]], previousSeries: [entryA, entryB], legacyLabels: [] })
+    .map((entry) => [entry.label, entry.color]), [['Genome B', entryB.color]], 'the reconcile keeps Genome B, not A on B\'s file');
+});
+
+// The series reconcile follows a change of the files: an entry whose files went leaves with them, so a re-picked set
+// of uploaded tables starts with rows of their own, not the old rows' labels by place (as on dev). Generate, Save and
+// the span export also read an entry by the place a Session or a LOSAT-cache replay stored (the last pass).
+test('a re-picked set of tables does not keep the old rows\' labels by place', () => {
+  const first = rowsFor([file('a.tsv', 5), file('b.tsv', 6)]);
+  first[0].label = 'Alpha';
+  const next = reconcileConservationSeries({ sourceFiles: [file('c.tsv', 7), file('d.tsv', 8)], previousSeries: first, legacyLabels: [] });
+  assert.deepEqual(next.map((entry) => [entry.fileName, entry.label]), [['c.tsv', 'c'], ['d.tsv', 'd']]);
+});

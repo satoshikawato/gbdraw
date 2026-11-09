@@ -127,10 +127,11 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 /**
  * The series a change of the ring files leaves (`reconcileCircularConservation`).
  * @param {DrawingState} drawing @param {readonly ConservationSourcePlace<ConservationFile>[]} sourceFiles
+ * @param {RawConservationSeriesEntry[]} [series] The series the change starts from: the drawing's, or without a removed row.
  */
-const seriesOfRingFiles = (drawing, sourceFiles) => reconcileConservationSeries({
+const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConservation.series) => reconcileConservationSeries({
   sourceFiles,
-  previousSeries: drawing.circularConservation.series,
+  previousSeries: series,
   legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
 });
 
@@ -555,8 +556,13 @@ export const createCircularConservationComparisonFiles = ({
     if (!source) return;
     const { sourceIndex } = source;
     const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
+    // The removed row's entry leaves before the reconcile, so it takes no other ring's files.
+    const keptSeries = drawing.circularConservation.series.filter(
+      (/** @type {RawConservationSeriesEntry} */ _, /** @type {number} */ entryIndex) => entryIndex !== idx
+    );
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
+      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...keptSeries);
       if (isCircularConservationUploadSource(drawing)) {
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources',
           drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== sourceIndex));
@@ -564,7 +570,7 @@ export const createCircularConservationComparisonFiles = ({
       setCircularConservationSourceFiles(drawing, keptFiles, RING_FILE_REMOVED);
       turnOffReaching?.();
     };
-    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();
+    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles, keptSeries), msg('Remove series'), apply) ?? apply();
   });
   return {
     settleComparisonRecordLabels, addCircularConservationComparisonFile, removeCircularConservationSource,

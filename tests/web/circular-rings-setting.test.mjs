@@ -217,6 +217,26 @@ test('a ring row reads and writes its files by the identity Generate uses, also 
   assert.deepEqual(ringNames(), []);
 });
 
+// PR-B review 2, HIGH 1 (a): Remove series on the first of two rings whose first files share a name leaves the
+// second ring with its own name, colour and genome.
+test('Remove series leaves the other ring of the same file name with its own name, colour and genome', async () => {
+  const drawing = circular();
+  const add = (file) => comparisonFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
+  await add(textFile('sequence.fasta', '>A\nACGT\n'));
+  await add(textFile('sequence.fasta', '>B\nACGTACGTACGT\n'));
+  const [first, second] = drawing.circularConservation.series;
+  first.label = 'Genome A';
+  first.color = '#111111';
+  second.label = 'Genome B';
+  const colorB = second.color;
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => [entry.label, entry.color]), [['Genome B', colorB]]);
+  assert.deepEqual(orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map((source) => [source.label, source.files.map((file) => file.size)]), [['Genome B', [16]]]);
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(ringNames(), []);
+});
+
 // An uploaded BLAST table's ring takes its comparison genome's files the same way; they are optional.
 test('an uploaded table ring row takes the files of its comparison genome, and may have none', () => {
   const drawing = circular();

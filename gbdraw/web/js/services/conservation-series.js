@@ -301,53 +301,19 @@ export const reconcileConservationSeries = ({
   previousSeries,
   legacyLabels
 }) => {
-  const descriptors = conservationSourceDescriptors(sourceFiles);
-  const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
-  /** @type {Map<string, ConservationSourceDescriptor[]>} */
-  const descriptorsByFileName = new Map();
-  descriptors.forEach((descriptor) => {
-    if (!descriptorsByFileName.has(descriptor.fileName)) descriptorsByFileName.set(descriptor.fileName, []);
-    // Set just above when absent.
-    /** @type {ConservationSourceDescriptor[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
-  });
-
-  /** @type {Set<string>} */
-  const usedKeys = new Set();
+  const previous = Array.isArray(previousSeries) ? previousSeries : [];
+  // A change of the files drops an entry whose files went: no stored place lends it other files.
+  const { matched, unclaimed } = conservationSourcesOfSeries(sourceFiles, { series: previous }, { byStoredPlace: false });
+  const fallbackLabels = Array.isArray(legacyLabels) ? legacyLabels : [];
   /** @type {ConservationSeriesEntry[]} */
   const nextSeries = [];
-  const previous = Array.isArray(previousSeries) ? previousSeries : [];
-  const fallbackLabels = Array.isArray(legacyLabels) ? legacyLabels : [];
-
-  previous.forEach((entry) => {
-    if (!entry || typeof entry !== 'object') return;
-    const sourceKey = String(entry.sourceKey || '').trim();
-    let descriptor = sourceKey ? descriptorByKey.get(sourceKey) : null;
-    if (!descriptor) {
-      const fileName = String(entry.fileName || '').trim();
-      const candidates = descriptorsByFileName.get(fileName) || [];
-      descriptor = candidates.find((candidate) => !usedKeys.has(candidate.sourceKey)) || null;
-    }
-    if (!descriptor || usedKeys.has(descriptor.sourceKey)) return;
-    usedKeys.add(descriptor.sourceKey);
-    nextSeries.push(mergeSeriesEntry(
-      descriptor,
-      entry,
-      nextSeries.length,
-      fallbackLabels[descriptor.sourceIndex]
-    ));
+  matched.forEach((descriptor, seriesIndex) => {
+    if (!descriptor) return;
+    nextSeries.push(mergeSeriesEntry(descriptor, previous[seriesIndex], nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
   });
-
-  descriptors.forEach((descriptor) => {
-    if (usedKeys.has(descriptor.sourceKey)) return;
-    usedKeys.add(descriptor.sourceKey);
-    nextSeries.push(mergeSeriesEntry(
-      descriptor,
-      null,
-      nextSeries.length,
-      fallbackLabels[descriptor.sourceIndex]
-    ));
+  unclaimed.forEach((descriptor) => {
+    nextSeries.push(mergeSeriesEntry(descriptor, null, nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
   });
-
   return nextSeries;
 };
 
@@ -377,50 +343,59 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
 
 /**
  * The source of each series entry, in series order: the one matching of a ring
- * or a BLAST row to its files, which Generate, the track slots, the ring rows
- * and Save read. An entry takes the source of its source key, else the first
- * unused source of its file name, else the source at the place its source
- * index names; `null` when none is left.
+ * or a BLAST row to its files, which Generate, the track slots, the ring rows,
+ * Save, the span export catalog and the series reconcile read. It works in
+ * passes over every entry, so that no entry takes a source a later entry names
+ * more closely: each entry first takes the source of its source key; then an
+ * entry left takes the first source of its file name that no entry has
+ * claimed; then the source at the place its source index names (a Session
+ * writes one place per ring, so a place left empty on Load keeps the later
+ * rings at theirs, and a LOSAT-cache replay's tables sit at their rings'
+ * places). The series reconcile, which follows a change of the files, leaves
+ * the last pass out (`byStoredPlace: false`): an entry whose files went leaves
+ * with them. `matched[i]` is entry i's source, `null` when none is left;
+ * `unclaimed` are the sources no entry takes, in order.
  * @template {ConservationFile} F
  * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
- * @returns {{ descriptors: ConservationSourceDescriptor<F>[], matched: (ConservationSourceDescriptor<F> | null)[] }}
+ * @param {{ readonly byStoredPlace?: boolean }} [passes]
+ * @returns {{ descriptors: ConservationSourceDescriptor<F>[], matched: (ConservationSourceDescriptor<F> | null)[],
+ *   unclaimed: ConservationSourceDescriptor<F>[] }}
  */
-export const conservationSourcesOfSeries = (sourceFiles, circularConservation) => {
+export const conservationSourcesOfSeries = (sourceFiles, circularConservation, { byStoredPlace = true } = {}) => {
   // The places' union hides F from the call's inference; the descriptors hold the given files.
   const descriptors = /** @type {ConservationSourceDescriptor<F>[]} */ (conservationSourceDescriptors(sourceFiles));
-  const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
-  /** @type {Map<string, ConservationSourceDescriptor<F>[]>} */
-  const descriptorsByFileName = new Map();
-  descriptors.forEach((descriptor) => {
-    if (!descriptorsByFileName.has(descriptor.fileName)) descriptorsByFileName.set(descriptor.fileName, []);
-    // Set just above when absent.
-    /** @type {ConservationSourceDescriptor<F>[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
-  });
-  /** @type {Set<string>} */
-  const usedKeys = new Set();
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
-  const matched = series.map((entry, seriesIndex) => {
-    if (!entry || typeof entry !== 'object') return null;
-    const sourceKey = String(entry.sourceKey || '').trim();
-    let descriptor = sourceKey ? descriptorByKey.get(sourceKey) : null;
-    if (!descriptor) {
-      const fileName = String(entry.fileName || '').trim();
-      const candidates = descriptorsByFileName.get(fileName) || [];
-      descriptor = candidates.find((candidate) => !usedKeys.has(candidate.sourceKey)) || null;
-    }
-    if (!descriptor) {
-      const sourceIndex = Number(entry.sourceIndex);
-      const fallbackIndex = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
-      // A Session writes one place per ring, so a place left empty on Load keeps the later rings at theirs.
-      const indexed = descriptors.find((candidate) => candidate.placeIndex === fallbackIndex);
-      descriptor = indexed && !usedKeys.has(indexed.sourceKey) ? indexed : null;
-    }
-    if (!descriptor || usedKeys.has(descriptor.sourceKey)) return null;
-    usedKeys.add(descriptor.sourceKey);
-    return descriptor;
+  /** @type {Set<string>} */
+  const claimed = new Set();
+  /** @type {(ConservationSourceDescriptor<F> | null)[]} */
+  const matched = series.map(() => null);
+  /**
+   * One pass: each entry without a source yet takes the unclaimed source `fits` names.
+   * @param {(entry: RawConservationSeriesEntry, seriesIndex: number) => (source: ConservationSourceDescriptor<F>) => boolean} fits
+   */
+  const claim = (fits) => series.forEach((entry, seriesIndex) => {
+    if (matched[seriesIndex] || !entry || typeof entry !== 'object') return;
+    const fitsEntry = fits(entry, seriesIndex);
+    const source = descriptors.find((candidate) => !claimed.has(candidate.sourceKey) && fitsEntry(candidate)) || null;
+    if (!source) return;
+    claimed.add(source.sourceKey);
+    matched[seriesIndex] = source;
   });
-  return { descriptors, matched };
+  claim((entry) => {
+    const sourceKey = String(entry.sourceKey || '').trim();
+    return (source) => sourceKey !== '' && source.sourceKey === sourceKey;
+  });
+  claim((entry) => {
+    const fileName = String(entry.fileName || '').trim();
+    return (source) => fileName !== '' && source.fileName === fileName;
+  });
+  if (byStoredPlace) claim((entry, seriesIndex) => {
+    const sourceIndex = Number(entry.sourceIndex);
+    const place = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
+    return (source) => source.placeIndex === place;
+  });
+  return { descriptors, matched, unclaimed: descriptors.filter((source) => !claimed.has(source.sourceKey)) };
 };
 
 /**
@@ -431,18 +406,16 @@ export const conservationSourcesOfSeries = (sourceFiles, circularConservation) =
  */
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
   // The places' union hides F from the call's inference, as in `conservationSourcesOfSeries`.
-  const { descriptors, matched } = /** @type {{ descriptors: ConservationSourceDescriptor<F>[],
-    matched: (ConservationSourceDescriptor<F> | null)[] }} */ (conservationSourcesOfSeries(sourceFiles, circularConservation));
+  const { matched, unclaimed } = /** @type {{ descriptors: ConservationSourceDescriptor<F>[],
+    matched: (ConservationSourceDescriptor<F> | null)[], unclaimed: ConservationSourceDescriptor<F>[] }} */ (
+    conservationSourcesOfSeries(sourceFiles, circularConservation));
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
-  /** @type {Set<string>} */
-  const usedKeys = new Set();
   /** @type {OrderedConservationSource<F>[]} */
   const entries = [];
   matched.forEach((descriptor, seriesIndex) => {
     if (!descriptor) return;
     const entry = series[seriesIndex];
-    usedKeys.add(descriptor.sourceKey);
     entries.push({
       ...descriptor,
       label: String(entry.label || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
@@ -451,10 +424,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
       orderIndex: entries.length
     });
   });
-
-  descriptors.forEach((descriptor) => {
-    if (usedKeys.has(descriptor.sourceKey)) return;
-    usedKeys.add(descriptor.sourceKey);
+  unclaimed.forEach((descriptor) => {
     const fallbackLabel = legacyLabels[descriptor.sourceIndex] || descriptor.defaultLabel;
     entries.push({
       ...descriptor,
@@ -464,7 +434,6 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
       orderIndex: entries.length
     });
   });
-
   return entries;
 };
 
@@ -482,9 +451,9 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
  * that holds them (a LOSAT ring's own files, or the comparison sequence files
  * beside an uploaded or replayed BLAST table) and each series entry's place in
  * it, or `null` for an entry without a source. Entries are matched to sources
- * as Generate matches them (`conservationSourcesOfSeries`): by source key, then
- * file name, then the place a Session wrote, so a place left empty on Load
- * keeps the later rings at theirs. `unplaced` are the places of LOSAT rings
+ * as Generate matches them (`conservationSourcesOfSeries`, in passes over every
+ * entry: source keys, then file names, then the place a Session wrote), so a
+ * place left empty on Load keeps the later rings at theirs. `unplaced` are the places of LOSAT rings
  * that no entry names, which Generate draws after the others.
  * @template {ConservationFile} F
  * @param {RingGenomeDrawing<F>} drawing
@@ -497,11 +466,11 @@ export const ringGenomePlaces = (drawing) => {
   /** @type {F[][]} */
   const lists = ringGenomeFileLists(drawing.files[key]);
   // A table's place is its genome files' place, beside it.
-  const { descriptors, matched } = conservationSourcesOfSeries(
+  const { matched, unclaimed } = conservationSourcesOfSeries(
     tables ? normalizeFileList([...drawing.files.c_conservation_blasts]) : lists, drawing.circularConservation
   );
   const places = matched.map((source) => (source ? source.placeIndex : null));
-  const unplaced = tables ? [] : descriptors.map((source) => source.placeIndex).filter((place) => !places.includes(place));
+  const unplaced = tables ? [] : unclaimed.map((source) => source.placeIndex);
   return { key, lists, places, unplaced };
 };
 

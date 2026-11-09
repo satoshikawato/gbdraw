@@ -601,6 +601,28 @@ test('keeps missing LOSAT comparison FASTA placeholders aligned with displayed s
   );
 });
 
+// PR-B review 2, HIGH 1 (b): a ring whose file is missing does not lend its records to a later ring whose first
+// file has the same name; that ring keeps its own records.
+test('gives a ring its own records when an earlier ring of the same file name is missing', async () => {
+  const { reconcileConservationSeries } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const genomeA = namedTextFile('sequence.fasta', '>comparison_a\nAAAA\n');
+  const genomeB = namedTextFile('sequence.fasta', '>comparison_b\nGGGGTTTTCC\n');
+  const series = reconcileConservationSeries({ sourceFiles: [[genomeA], [genomeB]], previousSeries: [], legacyLabels: [] });
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'circular',
+    cInputType: 'gb',
+    circularSources: [{ gb: textFile(REFERENCE_GB) }],
+    files: { c_conservation_fastas: [[], [genomeB]] },
+    circularConservation: { source: 'losat', series }
+  });
+  assert.deepEqual(
+    sources
+      .filter((source) => source.origin === 'homology-comparison')
+      .map(({ recordId, sourceIndex }) => ({ recordId, sourceIndex })),
+    [{ recordId: 'comparison_b', sourceIndex: 1 }]
+  );
+});
+
 test('uses BLAST identity rather than stale source indexes for upload companions', async () => {
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',
