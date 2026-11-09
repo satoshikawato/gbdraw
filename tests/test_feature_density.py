@@ -156,6 +156,53 @@ def test_coverage_is_the_percentage_of_the_window_in_the_union_of_parts() -> Non
     assert _values("coverage", wraps=False) == [80.0, 100.0, 100.0, 100.0, 100.0, 50.0, 50.0, 20.0, 0.0, 30.0]
 
 
+def _reference_values(record: SeqRecord, metric: str, *, wraps: bool, window: int, step: int) -> list[float]:
+    """The window values base by base: the windows the GC track reads, each feature as the set of its bases."""
+
+    from gbdraw.analysis.windows import sliding_windows
+
+    length = len(record.seq)
+    window = min(window, length) if wraps else window
+    windows = sliding_windows(record, window, step, circular=wraps)
+    features = [
+        {base for part in feature.location.parts for base in range(int(part.start), int(part.end))}
+        for feature in record.features
+        if feature.type != "source"
+    ]
+    covered = set().union(*features)
+    values = []
+    for start, end in zip(windows.starts.tolist(), windows.ends.tolist()):
+        if wraps:
+            bases = {base % length for base in range(start, end)}
+        else:
+            start, end = max(0, start), min(length, end)
+            bases = set(range(start, end))
+        if metric == "count":
+            values.append(float(sum(1 for feature in features if feature & bases)))
+        else:
+            values.append(100.0 * len(bases & covered) / max(end - start, 1))
+    return values
+
+
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("wraps", [True, False])
+@pytest.mark.parametrize("metric", ["count", "coverage"])
+def test_window_values_equal_a_base_by_base_reference(seed: int, wraps: bool, metric: str) -> None:
+    rng = np.random.default_rng(seed)
+    length = 240
+    features = []
+    for _ in range(25):
+        parts = sorted({(int(start), int(min(length, start + rng.integers(1, 40)))) for start in rng.integers(0, length, rng.integers(1, 4))})
+        features.append(_join(parts) if len(parts) > 1 else _feature(*parts[0]))
+    # A feature across the origin and one of the whole record.
+    features += [_join([(length - 7, length), (0, 5)]), _feature(0, length)]
+    record = _record(features, length=length)
+    track = FeatureDensityTrack("t", FeatureQuery("gene"), metric=metric)  # type: ignore[arg-type]
+    for window, step in ((20, 10), (35, 15), (240, 60), (500, 100)):
+        values = feature_density_values(record, track, window=window, step=step, wraps=wraps).values.tolist()
+        assert values == pytest.approx(_reference_values(record, metric, wraps=wraps, window=window, step=step))
+
+
 def test_a_track_window_and_step_override_the_default() -> None:
     track = FeatureDensityTrack("t", FeatureQuery("gene"), window=50, step=25)
     values = feature_density_values(_record(_FEATURES), track, window=10, step=10, wraps=True)
@@ -261,6 +308,38 @@ def test_linear_draws_a_heatmap_band_and_a_histogram(cfg: GbdrawConfig) -> None:
     assert _slot_group(svg, "density_genes").count("<path") + _slot_group(svg, "density_genes").count("<rect") >= 1
     assert "density_long" in svg
     assert "gene per" in svg and "Long genes" in svg
+
+
+def _slot_y_extent(svg: str, slot_id: str) -> tuple[float, float]:
+    """The top and bottom of a Linear slot's path ink on the canvas: the slot's own vertical translate plus the
+    y of every path point."""
+
+    match = re.search(rf'<g[^>]*data-gbdraw-slot-id="{slot_id}"[^>]*transform="([^"]*)"[^>]*>(.*?)</g>', svg, re.S)
+    assert match is not None, f"no group for {slot_id}"
+    origin = sum(float(y) for y in re.findall(r"translate\([^,)]+,\s*([-\d.]+)\)", match.group(1)))
+    ys = [float(y) for y in re.findall(r"[ML ,]\s*-?[\d.]+[ ,](-?[\d.]+)", " ".join(re.findall(r' d="([^"]*)"', match.group(2))))]
+    assert ys, f"no path in {slot_id}"
+    return origin + min(ys), origin + max(ys)
+
+
+def test_a_linear_histogram_keeps_its_height_in_the_slot_stack(cfg: GbdrawConfig) -> None:
+    # The GC content slot below a histogram starts below it, as below a Depth slot.
+    record = _record(_FEATURES, length=1000, topology="linear")
+    # GC that swings between AT-rich and GC-rich stretches, so the GC content track reaches its full height.
+    record.seq = Seq("".join(("AT" if (position // 100) % 2 else "GC") * 25 for position in range(0, 1000, 50)))
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        LinearAssemblyInputs(
+            cfg=cfg,
+            feature_density_tracks=_TRACKS,
+            linear_track_slots=["features:features", "long:feature_density@track=long", "gc:dinucleotide_content"],
+        ),
+    )
+    svg = getattr(drawing, "drawing", drawing).tostring()
+    histogram_top, histogram_bottom = _slot_y_extent(svg, "long")
+    gc_top, _ = _slot_y_extent(svg, "gc")
+    assert histogram_bottom > histogram_top
+    assert gc_top >= histogram_bottom
 
 
 def test_an_explicit_slot_names_its_track_and_an_unknown_track_is_refused(cfg: GbdrawConfig) -> None:

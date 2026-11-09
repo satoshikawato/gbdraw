@@ -18,6 +18,7 @@ ends, so a window there reads fewer bases (a crop does not hold the features bey
 from __future__ import annotations
 
 import math
+from array import array
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, cast, get_args
@@ -229,44 +230,36 @@ def _feature_parts(
 ) -> tuple[NDArray[np.int64], NDArray[np.int64], NDArray[np.int64]]:
     """The merged parts of each matching feature: starts, ends, and the index of the feature each part is of,
     sorted by feature and then by start. A wrapping record's parts appear once more a record length before
-    and after (its windows reach past the origin)."""
+    and after (its windows reach past the origin), so a feature across the origin merges into one interval."""
 
     length = len(record.seq)
     record_id = str(record.id)
-    starts: list[int] = []
-    ends: list[int] = []
-    owners: list[int] = []
-    shifts = (-length, 0, length) if wrap else (0,)
-    owner = 0
+    part_starts, part_ends = array("q"), array("q")
+    part_counts: list[int] = []
     for feature in record.features:
-        if feature.type == "source" or not query.matches(feature, record_id=record_id):
+        if feature.type == "source" or feature.location is None or not query.matches(feature, record_id=record_id):
             continue
-        location = feature.location
-        if location is None:
-            continue
-        parts = sorted(
-            (max(0, int(part.start)) + shift, min(length, int(part.end)) + shift)
-            for part in location.parts
-            for shift in shifts
-        )
-        merged: list[list[int]] = []
-        for start, end in parts:
-            if end <= start:
-                continue
-            if merged and start <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], end)
-            else:
-                merged.append([start, end])
-        for start, end in merged:
-            starts.append(start)
-            ends.append(end)
-            owners.append(owner)
-        owner += 1
-    return (
-        np.asarray(starts, dtype=np.int64),
-        np.asarray(ends, dtype=np.int64),
-        np.asarray(owners, dtype=np.int64),
-    )
+        parts = feature.location.parts
+        for part in parts:
+            part_starts.append(int(part.start))
+            part_ends.append(int(part.end))
+        part_counts.append(len(parts))
+    owners = np.repeat(np.arange(len(part_counts), dtype=np.int64), part_counts)
+    starts = np.maximum(np.frombuffer(part_starts, dtype=np.int64), 0)
+    ends = np.minimum(np.frombuffer(part_ends, dtype=np.int64), length)
+    kept = ends > starts
+    owners, starts, ends = owners[kept], starts[kept], ends[kept]
+    if wrap:
+        shifts = np.repeat(np.array([-length, 0, length], dtype=np.int64), len(starts))
+        owners, starts, ends = np.tile(owners, 3), np.tile(starts, 3) + shifts, np.tile(ends, 3) + shifts
+    # One union per feature: each feature's parts are moved to a band of their own, so the union of every part
+    # never joins two features, then moved back.
+    band = 4 * (length + 1)
+    offsets = owners * band + length
+    merged_starts, merged_ends = _union(starts + offsets, ends + offsets)
+    merged_owners = merged_starts // band
+    shift = merged_owners * band + length
+    return merged_starts - shift, merged_ends - shift, merged_owners
 
 
 def _window_counts(

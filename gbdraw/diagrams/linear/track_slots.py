@@ -227,7 +227,7 @@ def _track_extents_for_slot(
         return 0.5 * float(height), 0.5 * float(height)
     if slot.renderer == "dinucleotide_skew":
         return 0.5 * float(height), 0.5 * float(height)
-    if slot.renderer in {"depth", "annotations", "spacer"}:
+    if slot.renderer in {"depth", "feature_density", "annotations", "spacer"}:
         return 0.0, float(height)
     return 0.0, 0.0
 

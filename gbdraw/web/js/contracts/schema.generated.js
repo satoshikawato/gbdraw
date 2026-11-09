@@ -197,11 +197,12 @@ export const DEFAULT_PNG_DPI = 300;
 export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
 
 // gbdraw/tracks/circular.py: CIRCULAR_SLOT_UNREAD_PARAM_KEYS
-/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'spacer' | 'features' | 'ticks' | 'sequence_conservation', readonly string[]>>} */
+/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features' | 'ticks' | 'sequence_conservation', readonly string[]>>} */
 export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   dinucleotide_content: Object.freeze(['color', 'fileName']),
   dinucleotide_skew: Object.freeze(['color', 'fileName']),
   depth: Object.freeze(['color', 'fileName']),
+  feature_density: Object.freeze(['color', 'fileName']),
   spacer: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
   features: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
   ticks: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
@@ -209,11 +210,12 @@ export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
 });
 
 // gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
-/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'spacer' | 'features', readonly string[]>>} */
+/** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features', readonly string[]>>} */
 export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   dinucleotide_content: Object.freeze(['color', 'fileName']),
   dinucleotide_skew: Object.freeze(['color', 'fileName']),
   depth: Object.freeze(['color', 'fileName']),
+  feature_density: Object.freeze(['color', 'fileName']),
   spacer: Object.freeze(['color', 'fileName', 'label', 'legend_label']),
   features: Object.freeze(['color', 'fileName', 'label', 'legend_label'])
 });
