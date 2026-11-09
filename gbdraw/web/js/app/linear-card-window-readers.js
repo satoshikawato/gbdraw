@@ -7,6 +7,7 @@
 // record a card draws, the helper and the record display rows as ports; the edits are services/linear-card-windows.js.
 import { cardWindowList, sequenceCardRecord } from '../services/linear-card-windows.js';
 import { windowBases } from '../services/record-options.js';
+import { circledNumber } from '../services/find-in-other-files.js';
 import { linearLayoutCells } from '../services/linear-record-layout.js';
 import { t } from '../utils/i18n.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
@@ -23,14 +24,14 @@ const { computed, ref, watch } = window.Vue;
  * does not number it), `label`, the number its controls are named by (its circled number, else its place in the
  * list), the length text of a window across the origin, and the text of the bases left out before the window drawn
  * after it ('' when none).
- * @typedef {LinearSeqWindow & { index: number, number: number | null, label: number, originText: string, gapText: string }} LinearCardWindowRow
+ * @typedef {LinearSeqWindow & { index: number, number: number | null, circled: string, label: number, originText: string, gapText: string }} LinearCardWindowRow
  */
 /** @typedef {{ circular: boolean, windows: LinearCardWindowRow[] }} LinearCardWindowView */
 /**
  * One cell of the Record Layout panel: the card (`uid`, `cardIndex`), its window (null for a whole card), a stable
  * `key`, the window's circled number (null for a whole card, or until Python answers) and `label`, the number its
  * Row field is named by.
- * @typedef {{ uid: string, cardIndex: number, window: number | null, key: string, number: number | null, label: number | null }} LinearLayoutCellRow
+ * @typedef {{ uid: string, cardIndex: number, window: number | null, key: string, number: number | null, circled: string, label: number | null }} LinearLayoutCellRow
  */
 
 /**
@@ -117,7 +118,7 @@ export const createLinearCardWindowReaders = ({
         const gap = plan?.gaps.find((entry) => entry.recordKey === seq.uid && entry.leftWindow === index);
         const second = gap ? numberOf(plan, seq.uid, gap.rightWindow) : null;
         return {
-          ...window, index, number, label: number ?? index + 1,
+          ...window, index, number, circled: number === null ? '' : circledNumber(number), label: number ?? index + 1,
           originText: length === null || window.start === null || window.end === null || recordLength === null ? ''
             : t('{start} → {recordEnd} → 1 → {end}: {length} bp across the origin.', {
                 start: bp(window.start), recordEnd: bp(recordLength), end: bp(window.end), length: bp(length)
@@ -146,7 +147,10 @@ export const createLinearCardWindowReaders = ({
       : cards.map((card, cardIndex) => ({ uid: card.uid, cardIndex, window: null }));
     return cells.map(({ uid, cardIndex, window }) => {
       const number = window === null ? null : numberOf(plan, uid, window);
-      return { uid, cardIndex, window, key: `${uid}:${window ?? ''}`, number, label: window === null ? null : number ?? window + 1 };
+      return {
+        uid, cardIndex, window, key: `${uid}:${window ?? ''}`, number, circled: number === null ? '' : circledNumber(number),
+        label: window === null ? null : number ?? window + 1
+      };
     });
   };
   return { linearCardWindowView, linearLayoutCellRows };

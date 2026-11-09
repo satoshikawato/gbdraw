@@ -18,7 +18,7 @@ globalThis.window = {
 
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  addCardWindow, cardWindowList, editCardWindow, orientLinearCard,
+  addCardWindow, cardWindowList, editCardWindow, orientLinearCard, windowSpanOf,
   removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
@@ -66,6 +66,23 @@ test('with "Across the origin" ticked a Start after the End stays a window acros
   // Clearing the box keeps the fields as they are, now the reversed span.
   editCardWindow(card, 0, { acrossOrigin: false });
   assert.deepEqual(crop(card), [100, 16000, true, 0]);
+});
+
+test('one rule reads Start, End and "Across the origin" for the card, the request and Find in other files', async () => {
+  const { referenceWindowOf } = await import('../../gbdraw/web/js/services/find-in-other-files.js');
+  const cases = [[8100, 1501, false], [8100, 1501, true], [100, 1501, true], [1501, 8100, false]];
+  for (const [start, end, acrossOrigin] of cases) {
+    const spanned = windowSpanOf(start, end, acrossOrigin);
+    const row = referenceWindowOf({ start: String(start), end: String(end), acrossOrigin });
+    assert.deepEqual('window' in row ? row.window : null, spanned);
+    const card = createLinearSeq({ uid: 'a', windows: [{ start, end, reverseComplement: false, column: null, acrossOrigin }, span(1, 10)] });
+    if (spanned === null) {
+      assert.throws(() => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: UNKNOWN_CARD_RECORD }));
+    } else {
+      assert.deepEqual(linearWindowsPayload(card, { arranged: false, ordinal: 1, record: UNKNOWN_CARD_RECORD })[0],
+        { ...spanned, column: null });
+    }
+  }
 });
 
 test('Generate refuses a window across the origin whose Start is not after its End, naming the card and the record', () => {

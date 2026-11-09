@@ -7,6 +7,7 @@ import { LOCATE_DESCRIPTION } from '../contracts/locate.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { formatGroupedNumber } from './record-options.js';
+import { windowSpanOf } from './linear-card-windows.js';
 
 /** @import { LosatJob, LosatJobResult } from './losat.js' */
 /** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -115,8 +116,9 @@ export const locateOutcomes = (jobs, results) => jobs.map((job) => {
 export const wholeNumber = (text) => (/^\s*[1-9][\d,]*\s*$/.test(text) ? Number(text.replace(/[\s,]/g, '')) : null);
 
 /**
- * The window a reference row gives, read as the record card reads its Region fields (PD-OI-124): with "Across the
- * origin" a Start greater than the End crosses the origin; without it, an End before the Start reverses the span.
+ * The window a reference row gives, read as the record card reads its Region fields (`windowSpanOf`, PD-OI-124): with
+ * "Across the origin" a Start greater than the End crosses the origin; without it, an End before the Start reverses
+ * the span.
  * Null with the reason when the row is not a window yet.
  * @param {ReferenceRowDraft} row
  * @returns {{ window: LocateWindowInput } | { reason: 'EMPTY' | 'NOT_WHOLE' | 'ORIGIN_NEEDS_START_AFTER_END' }}
@@ -126,10 +128,8 @@ export const referenceWindowOf = (row) => {
   const start = wholeNumber(row.start);
   const end = wholeNumber(row.end);
   if (start === null || end === null) return { reason: 'NOT_WHOLE' };
-  if (row.acrossOrigin) {
-    return start > end ? { window: { start, end, reverseComplement: false } } : { reason: 'ORIGIN_NEEDS_START_AFTER_END' };
-  }
-  return { window: { start: Math.min(start, end), end: Math.max(start, end), reverseComplement: start > end } };
+  const window = windowSpanOf(start, end, row.acrossOrigin);
+  return window ? { window } : { reason: 'ORIGIN_NEEDS_START_AFTER_END' };
 };
 
 /**

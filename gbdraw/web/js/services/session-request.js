@@ -141,7 +141,7 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readScalarAxisLabels } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { UNKNOWN_CARD_RECORD, wholeRecordWindow } from './linear-card-windows.js';
+import { UNKNOWN_CARD_RECORD, wholeRecordWindow, windowSpanOf } from './linear-card-windows.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
 /** @import { LayoutEntry } from './linear-record-layout.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
@@ -1520,14 +1520,12 @@ export const linearWindowsPayload = (seq, { arranged, ordinal, record }) => {
       const window = wholeRecordWindow(listed, record.length);
       const span = windowEndpoints(window.start, window.end, context);
       if (span === null) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
-      const crosses = typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end;
-      if (crosses && span.start <= span.end) {
-        throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'ORIGIN_ORDER' });
-      }
-      const ordered = crosses ? span : { start: Math.min(span.start, span.end), end: Math.max(span.start, span.end) };
+      const spanned = windowSpanOf(span.start, span.end,
+        typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end);
+      if (!spanned) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'ORIGIN_ORDER' });
       return {
-        ...ordered,
-        reverseComplement: Boolean(window.reverseComplement) || (!crosses && span.start > span.end),
+        start: spanned.start, end: spanned.end,
+        reverseComplement: Boolean(window.reverseComplement) || spanned.reverseComplement,
         column: placed ? window.column : null
       };
     });

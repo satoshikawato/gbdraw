@@ -47,16 +47,28 @@ const storeCardWindows = (card, windows) => {
 };
 
 /**
+ * The span a window's Start, End and "Across the origin" give (PD-OI-124): with the box, a Start greater than the End
+ * runs from the Start through the origin to the End, and a Start not greater than the End is no window (null: Generate
+ * and Find in other files refuse it); without it, an End before the Start reverses the span. The one owner of that
+ * rule for the card, the request and the Find in other files reference rows.
+ * @param {number} start @param {number} end @param {boolean} acrossOrigin
+ * @returns {{ start: number, end: number, reverseComplement: boolean } | null}
+ */
+export const windowSpanOf = (start, end, acrossOrigin) => (acrossOrigin
+  ? (start > end ? { start, end, reverseComplement: false } : null)
+  : { start: Math.min(start, end), end: Math.max(start, end), reverseComplement: start > end });
+
+/**
  * A window as the card stores it: without "Across the origin", an End before the Start is the reversed span, stored
- * in order with Reverse complement ticked (OV-2884, D-55); with it, the span is kept as typed.
+ * in order with Reverse complement ticked (OV-2884, D-55, `windowSpanOf`); with it, the span is kept as typed.
  * @param {LinearSeqWindow} window
  * @returns {LinearSeqWindow}
  */
-export const normalizedCardWindow = (window) => (
-  !window.acrossOrigin && window.start !== null && window.end !== null && window.start > window.end
-    ? { ...window, start: window.end, end: window.start, reverseComplement: true }
-    : window
-);
+export const normalizedCardWindow = (window) => {
+  if (window.acrossOrigin || window.start === null || window.end === null) return window;
+  const span = /** @type {{ start: number, end: number, reverseComplement: boolean }} */ (windowSpanOf(window.start, window.end, false));
+  return span.reverseComplement ? { ...window, start: span.start, end: span.end, reverseComplement: true } : window;
+};
 
 /**
  * What an edit of the card's window `index` changes: 'crop' when the window's span changes (Start, End, Across the
