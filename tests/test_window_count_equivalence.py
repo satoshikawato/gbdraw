@@ -1,7 +1,9 @@
-"""The vectorized window counts of a circular record must equal the former per-base Python loops."""
+"""The vectorized window counts of a circular record must equal per-base Python loops: the former loops, which
+count the known bases A, C, G and T as the denominator and give a window without one no value (OV-2799)."""
 
 from __future__ import annotations
 
+import math
 import random
 
 import pandas as pd
@@ -48,6 +50,7 @@ def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
     if seq_length == 0 or window <= 0 or step <= 0:
         return pd.DataFrame(columns=[content_legend, skew_legend, cumulative_legend])
     p1, p2 = _old_prefix(seq_bytes, ord(nt_1)), _old_prefix(seq_bytes, ord(nt_2))
+    pn = _old_prefix(seq_bytes, ord("N"))
     starts, content, skews, cumulative = [], [], [], []
     skew_sum = 0.0
     for position in range(0, seq_length, step):
@@ -55,15 +58,21 @@ def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
         start = (position - int(window) // 2) % seq_length
         c1 = _old_window_count(p1, seq_length, start=start, window=window, total_count=p1[-1])
         c2 = _old_window_count(p2, seq_length, start=start, window=window, total_count=p2[-1])
+        known = window - _old_window_count(pn, seq_length, start=start, window=window, total_count=pn[-1])
         total = c1 + c2
-        skew = 0.0 if total == 0 else (c1 - c2) / total
         starts.append(position)
-        content.append(total / float(window))
+        if known == 0:
+            content.append(math.nan)
+            skews.append(math.nan)
+            cumulative.append(math.nan)
+            continue
+        skew = 0.0 if total == 0 else (c1 - c2) / total
+        content.append(total / float(known))
         skews.append(skew)
         skew_sum += skew
         cumulative.append(skew_sum)
-    max_skew = max((abs(v) for v in skews), default=0.0)
-    max_cumulative = max((abs(v) for v in cumulative), default=0.0)
+    max_skew = max((abs(v) for v in skews if not math.isnan(v)), default=0.0)
+    max_cumulative = max((abs(v) for v in cumulative if not math.isnan(v)), default=0.0)
     factor = 0.0 if max_cumulative == 0 else max_skew / max_cumulative
     return pd.DataFrame(
         {
@@ -92,7 +101,7 @@ _CASES = [
 
 
 @pytest.mark.parametrize("length,window,step", _CASES)
-@pytest.mark.parametrize("alphabet", ["ACGT", "ACGTNRYKMacgtn-", "GGCCa"])
+@pytest.mark.parametrize("alphabet", ["ACGT", "ACGTNRYKMacgtn-", "GGCCa", "ATNNNNNNNNNNNNNNNNNN"])
 @pytest.mark.parametrize("nt", ["GC", "AT", "AU", "CG", "TA"])
 def test_vectorized_window_counts_match_the_python_loops(
     length: int, window: int, step: int, alphabet: str, nt: str

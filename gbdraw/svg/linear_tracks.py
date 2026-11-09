@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from pandas import DataFrame, Series
 
+from ..analysis.skew import DeviationScale, deviation_scale
 from ..layout.linear_coords import normalize_position_to_linear_track
 
 
@@ -35,22 +36,26 @@ def _deviation_path_desc(
     start_x: float,
     start_y: float,
     series: Series,
-    max_diff: float,
+    scale: DeviationScale,
     record_len: int,
     alignment_width: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None,
     row: ScalarRow | None,
 ) -> str:
-    """A GC content (deviation) or skew path: the line of each sample's deviation from the whole series'
-    mean, closed to the baseline at ``start_y``."""
+    """A GC content (deviation) or skew path: the line of each sample's deviation from the mean of the series'
+    windows with a value, closed to the baseline at ``start_y``; a window without a value lies on the baseline,
+    so the area breaks there (OV-2799)."""
 
-    positions, values, segment_starts = _samples(series.index, series, record_len, record_transform, row)
+    positions, values, segment_starts = _samples(
+        series.index, series.fillna(scale.mean), record_len, record_transform, row
+    )
     if not len(positions):
         return ""
     xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
+    max_diff = scale.max_diff
     # A completely flat series draws a flat line (no division by zero).
-    ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - float(series.mean())) / max_diff))
+    ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - scale.mean) / max_diff))
     return (
         f"M{path_number(start_x)} {path_number(start_y)}"
         + track_line_to(xs, ys, segment_starts)
@@ -73,9 +78,11 @@ def calculate_gc_content_path_desc(
     if gc_df.empty:
         return ""
     series = gc_df[f"{dinucleotide} content"]
-    max_diff = float((series - float(series.mean())).abs().max())
+    scale = deviation_scale(series)
+    if scale is None:
+        return ""
     return _deviation_path_desc(
-        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform, row
+        start_x, start_y, series, scale, record_len, alignment_width, track_height, record_transform, row
     )
 
 
@@ -93,9 +100,11 @@ def calculate_gc_skew_path_desc(
         return ""
     column = [col for col in skew_df.columns if "skew" in col and "cumulative" not in col.lower()][0]
     series = skew_df[column]
-    max_diff = float((series - float(series.mean())).abs().max()) or 1.0
+    scale = deviation_scale(series)
+    if scale is None:
+        return ""
     return _deviation_path_desc(
-        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform, row
+        start_x, start_y, series, scale, record_len, alignment_width, track_height, record_transform, row
     )
 
 

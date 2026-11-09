@@ -70,6 +70,16 @@ write-up of a release.
   record, as the command line writes them, so the "//" gap mark and the wider
   gap between them return; and a record edited after it was planned or cut is
   saved as the edited record, not as its file (OV-2923).
+- Fixed: a sequence with runs of N (unknown bases) drew a full-height GC content
+  block and GC skew spikes over every run, and those windows set the track's
+  scale, so the GC signal of the rest of the record was squashed (on human
+  chromosome 21, the first 5 Mbp of N drew as the strongest feature). GC content,
+  GC skew and the GC percent of a Circular definition now count only the known
+  bases A, C, G and T of each window; N and the other IUPAC codes are unknown. A
+  window with no known base has no value: the tracks break there, in both modes
+  and in Percent mode, and the scale reads only the windows with a value. A
+  record of unknown bases only draws no GC track. Records of A, C, G and T only
+  draw as before (OV-2799).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
