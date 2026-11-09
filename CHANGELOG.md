@@ -456,11 +456,18 @@ into the `[Unreleased]` list below.
   a similarity ring another ring's name, color, stack row or genetic code, for
   example after removing a ring above it or loading a Session whose ring
   genome file was missing. Each ring now keeps its own (OV-3089, OV-3091,
-  OV-3152, OV-3195).
+  OV-3152, OV-3166, OV-3167, OV-3195, OV-3197, OV-3200).
 - Fixed (Web app): editing a Circular drawing's similarity rings, or a
-  Generate of that drawing, also cleared the LOSAT results the Session keeps
-  for another drawing. They now clear only that drawing's results (OV-3196,
-  OV-3201).
+  Generate of that drawing, removed another drawing's results from its LOSAT
+  results list and from **Save Raw LOSAT TSV**, and a Session saved afterwards
+  lost their file names. Those results now stay listed with their names
+  (OV-3196, OV-3201).
+- Fixed (Web app): **Clear N LOSAT results** and **Save Raw LOSAT TSV** of a
+  drawing also counted and saved the LOSAT results of the project's other
+  drawings, and counted and saved twice a table that two similarity rings of
+  one genome share. Each panel now counts and saves its own drawing's results,
+  each table once, and **Clear LOSAT results** clears only that drawing's
+  results (OV-3203, OV-3204).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a
