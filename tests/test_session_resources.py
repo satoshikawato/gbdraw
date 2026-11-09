@@ -224,7 +224,7 @@ _SINGLE_REQUEST_DIGESTS = {
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
         "cba4557b663adde43ffd2b9b86b1fcf4ddf8dbd9dc234bcde29718e1aef41224",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "7edd7f795b2fcee40b28c0c8ec83ed7e4093e3055720364f9c2b08d468f673cf",
+        "49f804c719e50914ca66c84f41ee76e2b332495564a3bb12f3f3ed003da6fab8",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
         "31a911105b1c256269a62125407195658853db749ece05f1149b3fd93222e5e2",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
