@@ -226,6 +226,38 @@ for (const entry of cases) {
   });
 }
 
+// OV-2995: a CLI Session that draws one record in two windows (`--region` twice) with a LOSAT comparison names
+// drawn units, one per window, in its comparisons. The Web offers Inherit for it (its record indexes cannot hold
+// window pairs), and Generate draws the saved figure with the saved unit pairs.
+test('Session CLI windowed record with LOSAT regenerates through Inherit', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const bgc = id => path.join(root, `tests/test_inputs/${id}.gbk`);
+  const file = await cli('linear', ['--gbk', bgc('BGC0000708'), bgc('BGC0000709'), '--region', 'BGC0000708:1-15000',
+    '--region', 'BGC0000708:25000-40000', '--region', 'BGC0000709:1-30000', '--losat', 'losatp', '-f', 'svg'], testInfo, 'windowed');
+  const saved = shownSavedDrawing(await readSession(file)).renderRequest;
+  const unitPairs = request => request.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison')
+    .map(comparison => [comparison.queryRecordIndex, comparison.subjectRecordIndex]);
+  expect(saved.records.map(record => record.windows.length)).toEqual([2, 1]);
+  expect(unitPairs(saved)).toEqual([[0, 2], [1, 2]]);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const before = await snapshot(run.page);
+    const expectedSvg = await run.page.evaluate(svgSemantics, before.selected);
+    const resolution = run.page.locator('[data-imported-comparison-resolution]');
+    await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+    await expect(resolution).toContainText('INHERIT');
+    await generateAndWaitForResult(run.page);
+    const after = await snapshot(run.page);
+    expect(unitPairs(after.request)).toEqual([[0, 2], [1, 2]]);
+    expect(after.request.records.map(record => record.windows)).toEqual(saved.records.map(record => record.windows));
+    expect(await run.page.evaluate(svgSemantics, after.selected)).toEqual(expectedSvg);
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 // Where a figure places its legend and title: the size, each composition
 // role's transform, and which legend layout it shows (at 2 decimals).
 const placement = content => {

@@ -162,6 +162,13 @@ write-up of a release.
   Circular, and (Python API) a `RecordCollectionOptions` region on a record
   that already has windows or a region are refused; no command line, Web, or
   Session request writes both.
+- Fixed: a Session whose Linear drawing shows several windows of one record
+  with a LOSAT comparison (for example `gbdraw linear --region` twice for one
+  record with `--losat losatp`) opened in the Web with its comparison marked
+  as naming unavailable records, so Generate offered only Replace or Clear.
+  Its comparisons name the drawn windows, and the Web read them as records. It
+  now offers **Inherit saved comparison**, and Generate draws the saved
+  comparison of each window (OV-2995).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per
