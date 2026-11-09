@@ -415,3 +415,81 @@ test('one record replacing one record with another ID keeps the crop and still g
   expect(outcome).toEqual({ status: 'ok', code: null, selector: '', start: 500, end: 3000, label: 'Label X' });
   expect((await inspectCircularResult(page)).recordIds).toContain('BGC0000709');
 });
+
+// OV-3021: a Record Order row names its record after its File card's file name. Every word of
+// the row stays whole and in view, the record ID and the OFF badge too; the label wraps between
+// words, and only a word longer than the row (a long file name) may end in an ellipsis.
+const recordOrderRows = (page) => page.locator('[data-capture="multi-record-order"]').evaluate((root) => (
+  [...root.querySelectorAll('select[aria-label^="Row for "]')].map((select) => {
+    const label = select.parentElement.firstElementChild;
+    const box = label.getBoundingClientRect();
+    const words = [];
+    const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const match of node.data.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
+        words.push({
+          word: match[0],
+          lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+          inside: rects.every((rect) => rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5)
+        });
+      }
+    }
+    return {
+      text: label.textContent.replace(/\s+/g, ' ').trim(),
+      title: label.getAttribute('title'),
+      name: select.getAttribute('aria-label'),
+      clipped: label.scrollWidth > label.clientWidth,
+      words
+    };
+  })
+));
+
+for (const width of [1280, 390]) {
+  test(`Record Order rows of several File cards show each record ID and OFF badge whole at ${width}px`, async ({ page }) => {
+    test.setTimeout(300000);
+    await page.setViewportSize({ width, height: 900 });
+    await openApp(page);
+    const longName = 'Streptomyces_fradiae_tylosin_cluster_v2.gbk';
+    await page.evaluate(({ first, second, longName: name }) => {
+      const app = window.__GBDRAW_APP__;
+      const file = (text, fileName) => new File([text], fileName, { type: 'text/plain', lastModified: 1 });
+      void app.addCircularSourceFiles('gb', [
+        file(`${first}\n${first}`, 'dup.gbk'), file(second, 'b.gbk'), file(`${second}\n${first}`, name)
+      ]);
+      app.form.multi_record_canvas = true;
+    }, { first: firstGenbank, second: secondGenbank, longName });
+    await ready(page);
+    await page.locator('[data-record-list-open="circular"]').click();
+    const list = page.locator('[data-record-list-dialog]');
+    await list.locator('[data-record-list-row]').nth(1).uncheck();
+    await list.locator('[data-record-list-row]').nth(4).uncheck();
+    await list.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Show Multi-Record Canvas setting', exact: true }).click();
+    await expect(page.locator('[data-capture="multi-record-order"] select')).toHaveCount(5);
+
+    const rows = await recordOrderRows(page);
+    for (const row of rows) {
+      // No word wraps inside itself.
+      expect(row.words.filter((word) => word.lines !== 1)).toEqual([]);
+      // Every word but a file name longer than the row is in view: the record ID and the badge.
+      expect(row.words.filter((word) => !word.inside && word.word !== `${longName}:`)).toEqual([]);
+      if (!row.text.startsWith(longName)) expect(row.clipped).toBe(false);
+      // The whole label stays in the row's accessible name and in its title.
+      const label = row.text.replace(/ OFF$/, '');
+      expect(row.name).toBe(`Row for ${label}`);
+      expect(row.title).toBe(label);
+    }
+    // The badge is a word of its own, also for a screen reader.
+    expect(rows.map((row) => row.text)).toEqual([
+      'dup.gbk: BGC0000708 [#1]', 'dup.gbk: BGC0000708 [#2] OFF', 'b.gbk: BGC0000709',
+      `${longName}: BGC0000709`, `${longName}: BGC0000708 OFF`
+    ]);
+    if (width === 390) {
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+  });
+}
