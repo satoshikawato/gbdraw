@@ -151,18 +151,10 @@ export const createFeatureEditHistory = ({
   );
   const setTypeDefaultColorWithHistory = undoableAction(msg('Change feature color'), setTypeDefaultColor);
   // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
-  // `input` shows the row's color again afterwards (`shownColor()`): a refused edit leaves the view as it was.
-  /** @param {number} index @param {string} color @param {HTMLInputElement} input @param {() => string} shownColor */
-  const updateLegendEntryColorInPopup = async (index, color, input, shownColor) => {
-    try {
-      return await requestLegendEntryColorInPopup(index, color);
-    } finally {
-      await nextTick();
-      if (input.isConnected && input.value !== shownColor()) input.value = shownColor();
-    }
-  };
+  // The template hands the commit to its `v-committed-value` field, which shows the row's color once it has
+  // settled: a refused edit leaves the view as it was.
   /** @param {number} index @param {string} color */
-  const requestLegendEntryColorInPopup = async (index, color) => {
+  const updateLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
     const type = entry ? await preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
     if (typeof type === 'string') return setTypeDefaultColorWithHistory(type, color);

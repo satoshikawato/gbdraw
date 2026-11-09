@@ -400,12 +400,12 @@ const SECTION_NAMED = Object.freeze({
 // No settings-pane control writes these.
 const NO_PANE_CONTROL = Object.freeze(['canvas.linear.arrow_length_parameter']);
 
-/** The label keys of the pane controls that write `field` (v-model or :value). */
+/** The label keys of the pane controls that write `field` (v-model, :value, or v-committed-value). */
 const paneLabelKeys = async (field) => {
   const { readFileSync } = await import('node:fs');
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const tag = new RegExp(`<(?:input|select)\\b(?:[^>"]|"[^"]*")*?(?:v-model(?:\\.number)?="${escaped}"|:value="[^"]*\\b${escaped}\\b[^"]*")(?:[^>"]|"[^"]*")*>`, 'g');
+  const tag = new RegExp(`<(?:input|select)\\b(?:[^>"]|"[^"]*")*?(?:v-model(?:\\.number)?="${escaped}"|(?::value|v-committed-value)="[^"]*\\b${escaped}\\b[^"]*")(?:[^>"]|"[^"]*")*>`, 'g');
   return [...html.matchAll(tag)].map((match) => /:aria-label="[^"]*?t\('([^']*)'/.exec(match[0])?.[1] ?? null);
 };
 

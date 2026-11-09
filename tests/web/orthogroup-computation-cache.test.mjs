@@ -146,7 +146,10 @@ test('the Description field shows only the group\'s own edit and follows its fir
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const markup = html.match(/<textarea id="similarity-group-description"[^>]*><\/textarea>/)?.[0];
   assert.ok(markup, 'the Description field is found');
-  const render = Vue.compile(markup);
+  // The field shows its binding through `v-committed-value` (app/committed-value.js), which writes the
+  // bound value as the field's text; compiled alone, it is read as the value binding it replaces.
+  assert.match(markup, /\sv-committed-value="/);
+  const render = Vue.compile(markup.replace(' v-committed-value="', ' :value="'));
   // What the composition root hands the template (app/app-setup.js).
   const bindings = {
     t,

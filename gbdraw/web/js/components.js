@@ -21,6 +21,7 @@ import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, setting
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 import { isInputFileRef } from './services/history-files.js';
 import { projectPreviewSurface } from './app/ui.js';
+import { settleCommittedField } from './app/committed-value.js';
 import { sessionFilesOfKind } from './services/drawing/inputs.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
@@ -842,7 +843,7 @@ export const ColorValueControl = {
       </select>
       <input
         type="color"
-        :value="pickerValue"
+        v-committed-value="pickerValue"
         @input="updateColor"
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
@@ -1052,21 +1053,21 @@ export const RecordDisplayControl = {
   /** @param {{ row: unknown, controller: RecordDisplayControlPort }} props */
   setup(props) {
     const error = ref('');
-    // The Display start `<input>`: assigning a number sets its decimal text.
-    const setStart = async (/** @type {{ target: { value: string | number, checkValidity: () => boolean, validationMessage: string } }} */ event) => {
+    /** @param {HTMLInputElement} field The Display start `<input>`. */
+    const commitStart = async (field) => {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       try {
-        if (!event.target.checkValidity()) throw new Error(event.target.validationMessage);
-        await props.controller.setStart(props.row, event.target.value);
+        if (!field.checkValidity()) throw new Error(field.validationMessage);
+        await props.controller.setStart(props.row, field.value);
         error.value = '';
       } catch (failure) {
         error.value = failure.message;
       }
-      // The field shows the model's start after every change: a rejected value
-      // goes back, and a cleared field shows the current start (OV-421).
-      event.target.value = props.controller.surfaceFor(props.row).displayStart ?? '';
     };
+    // The field shows the model's start once the change has settled (`v-committed-value`): a
+    // rejected value goes back, and a cleared field shows the current start (OV-421).
+    const setStart = (/** @type {Event & { target: HTMLInputElement }} */ event) => settleCommittedField(event.target, commitStart(event.target));
     return { error, setStart, detectedTopologyNote, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
   }

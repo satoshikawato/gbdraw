@@ -339,14 +339,18 @@ write-up of a release.
   A Session file from an older gbdraw, whose saved figure shows while the
   file is converted (several seconds on a first Load), shows that figure
   fitted too, instead of at full size.
-- Fixed (Web app): text typed into a field that applies when you leave it
-  (a region annotation id, the figure width, a Legend name, a color rule's
-  qualifier, and 43 others) was erased when anything else on the page changed
-  before you left the field, such as Generate progress, the end of loading, or
-  a search. Such a field now keeps what you type, also during Japanese or
-  other input-method composition, until you leave it; a value the app does not
-  take, such as an id with only spaces added, shows the stored value again once
-  you leave the field (OV-3068).
+- Fixed (Web app): text typed into a field (a region annotation id, the
+  figure width, a Legend name, a color rule's qualifier, a Linear record row,
+  and every other text, number, and color field) was erased when anything else
+  on the page changed before the app took it, such as Generate progress, the
+  end of loading, or a search; in a Linear record row, clearing the row and
+  typing 3 could give 23. A field now keeps what you type, also during
+  Japanese or other input-method composition, until it is applied, and also
+  while a slow apply (a color rule's legend name while the figure is being
+  redrawn) is still running. A value the app does not take, such as an empty
+  Legend name or an id with only spaces added, shows the stored value again
+  once it is refused, also when you pressed Enter and stay in the field
+  (OV-3068).
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

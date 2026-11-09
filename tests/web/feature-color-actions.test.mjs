@@ -1563,7 +1563,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // is the only place that offers a group.
   const template = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
   const nameField = template.match(/<input\b[^>]*aria-label="t\('Feature legend name'\)"[^>]*>/)?.[0] || '';
-  assert.match(nameField, /@change="handleLegendNameCommit"/, 'the popup has its Legend name field');
+  assert.match(nameField, /@change="settleCommittedField\(\$event\.target, handleLegendNameCommit\(\)\)"/, 'the popup has its Legend name field');
   assert.doesNotMatch(nameField, /\blist=/, 'the Legend name field suggests no group');
   assert.doesNotMatch(template, /<datalist\b[^>]*legend-name/);
   const pickedDeleted = ruleRows({

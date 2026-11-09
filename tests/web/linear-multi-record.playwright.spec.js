@@ -2900,9 +2900,10 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   ))).toBe('Repeat');
 });
 
-// A render of the page that does not change a field's value (here a new Session title) leaves the text typed into a
-// field that commits on change, also during an IME composition; leaving the field commits it, and a field whose
-// commit keeps the old value shows that value once it loses focus.
+// OV-3068: a field the user types into shows its model's value through `v-committed-value`. A render of the page
+// that does not change the value (here a new Session title) leaves the text typed into the field, also during an IME
+// composition; when the commit ends the field shows the stored value, with or without focus, once the commit has
+// settled; a refused or normalized value is never left on screen.
 const renderPageWithTitle = (page, title) => page.evaluate(async (next) => {
   window.__GBDRAW_APP__.sessionTitle = next;
   await new Promise((done) => { requestAnimationFrame(() => done()); });
@@ -2917,8 +2918,18 @@ const openRegionAnnotationId = async (page) => {
   await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   return page.getByLabel('Annotation id', { exact: true });
 };
+/** Tab out of the field; its value in the first frame after it lost focus. */
+const tabAndReadFirstFrame = async (locator) => {
+  await locator.evaluate((field) => {
+    field.__firstFrameAfterBlur = new Promise((done) => {
+      field.addEventListener('blur', () => { requestAnimationFrame(() => done(field.value)); }, { once: true });
+    });
+  });
+  await locator.press('Tab');
+  return locator.evaluate((field) => field.__firstFrameAfterBlur);
+};
 
-test('Fields that commit on change keep typed text through a render of the page', async ({ page }) => {
+test('A text field that commits on change keeps typed text through a render of the page', async ({ page }) => {
   const idInput = await openRegionAnnotationId(page);
   await idInput.selectText();
   await idInput.pressSequentially('Repeat');
@@ -2929,20 +2940,26 @@ test('Fields that commit on change keep typed text through a render of the page'
   await idInput.press('Tab');
   await expect.poll(() => annotationId(page)).toBe('Repeat');
   await expect(idInput).toHaveValue('Repeat');
+});
 
-  await page.locator('[data-setting="layout"] > details').evaluate((element) => { element.open = true; });
-  const width = page.locator('#figure-width');
-  await width.scrollIntoViewIfNeeded();
-  await width.click();
-  await width.pressSequentially('180');
+test('A number field that commits on change keeps typed text through a render of the page', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const scale = () => page.evaluate(() => window.__GBDRAW_APP__.adv.identity_scale);
+  const min = page.locator('#circular-identity-scale-min');
+  await min.evaluate((field) => { for (let at = field.closest('details'); at; at = at.parentElement.closest('details')) at.open = true; });
+  await min.click();
+  await min.pressSequentially('40');
   await renderPageWithTitle(page, 'Render while typing a number');
-  await expect(width).toBeFocused();
-  await expect(width).toHaveValue('180');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.figure_width)).toBeNull();
-  await width.press('Tab');
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.form.figure_width)).toBe('180px');
-  await expect(width).toHaveValue('180');
+  await expect(min).toBeFocused();
+  await expect(min).toHaveValue('40');
+  expect(await scale()).toBeFalsy();
+  await min.press('Tab');
+  await expect.poll(async () => (await scale())?.[0]).toBe(40);
+  await expect(min).toHaveValue('40');
+});
 
+test('A field keeps the text of an IME composition through a render of the page', async ({ page }) => {
+  const idInput = await openRegionAnnotationId(page);
   const cdp = await page.context().newCDPSession(page);
   await idInput.selectText();
   await cdp.send('Input.imeSetComposition', { text: 'かめ', selectionStart: 2, selectionEnd: 2 });
@@ -2963,6 +2980,112 @@ test('A field whose commit keeps the old value shows that value once it loses fo
   await expect(idInput).not.toBeFocused();
   await expect(idInput).toHaveValue('region_1');
   expect(await annotationId(page)).toBe('region_1');
+});
+
+// The Linear record row stores each keystroke; an empty row is refused, so the next render used to put the old row
+// back while the field was empty, and the 3 typed next made 23.
+test('A field that stores each keystroke keeps a refused text through a render of the page', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate((records) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearInputType('gb');
+    app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [content], `typed-row-${index + 1}.gbk`, { type: 'text/plain', lastModified: index + 1 })));
+    app.setLinearRecordLayoutEnabled(true);
+  }, [makeComparisonGenbank('TypedRowA', 'atg'), makeComparisonGenbank('TypedRowB', 'gct')]);
+  const row = page.getByLabel('Linear record row for sequence 2', { exact: true });
+  await (await reveal(row)).scrollIntoViewIfNeeded();
+  await expect(row).toHaveValue('2');
+  const stored = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.linearRecordRowFor(app.linearSeqs[1].uid, 2);
+  });
+  await row.selectText();
+  await row.press('Backspace');
+  await renderPageWithTitle(page, 'Render while the row is empty');
+  await expect(row).toHaveValue('');
+  await row.pressSequentially('3');
+  await expect(row).toHaveValue('3');
+  await expect.poll(stored).toBe(3);
+  await row.selectText();
+  await row.press('Backspace');
+  await row.press('Tab');
+  await expect(row, 'the refused empty row shows the stored row once the field is left').toHaveValue('3');
+});
+
+const loadCircularSession = async (page) => {
+  page.on('dialog', (dialog) => dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(
+    join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json'));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+};
+
+// The rule's write waits for a running rerender; while it waits, the field shows the typed name (the stored one
+// would read as a refused edit), and after it the stored name.
+test('A color rule legend name committed while a rerender runs never shows the old name', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: 'kinase', color: '#112233', cap: 'Kinase' });
+    await app.addSpecificRule();
+  });
+  const name = page.getByLabel('Color rule 1 legend name', { exact: true });
+  await (await reveal(name)).scrollIntoViewIfNeeded();
+  await expect(name).toHaveValue('Kinase');
+  const rerendering = (busy) => page.evaluate(async (value) => {
+    const { state } = await import('./js/state.js');
+    state.labelReflowProcessing.value = value;
+  }, busy);
+  await rerendering(true);
+  await name.click();
+  await name.press('End');
+  await name.pressSequentially('s');
+  expect(await tabAndReadFirstFrame(name), 'the first frame after Tab').toBe('Kinases');
+  await renderPageWithTitle(page, 'Render while the rule waits');
+  await expect(name).toHaveValue('Kinases');
+  const cap = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].cap);
+  expect(await cap()).toBe('Kinase');
+  await rerendering(false);
+  await expect.poll(cap).toBe('Kinases');
+  await expect(name).toHaveValue('Kinases');
+});
+
+// Enter commits the Legend name; a refused (empty) name shows the stored one again at once, while the field keeps
+// focus, so the row never looks deleted.
+test('A refused Legend name committed by Enter shows the stored name while the field keeps focus', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  const name = page.getByLabel('Legend entry CDS name', { exact: true });
+  await expect(name).toHaveValue('CDS');
+  await name.selectText();
+  await name.press('Backspace');
+  await name.press('Enter');
+  await expect(name).toBeFocused();
+  await expect(name).toHaveValue('CDS');
+});
+
+// Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.
+test('Display start shows a valid start at once and the stored start after a refused one', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await page.locator('[data-circular-inspect]').click();
+  const start = page.getByLabel(/^Display start NC_012920\.1/);
+  await expect(start).toBeVisible({ timeout: 180000 });
+  await expect(start).toHaveValue('1');
+  await start.selectText();
+  await start.pressSequentially('100');
+  expect(await tabAndReadFirstFrame(start), 'the first frame after Tab').toBe('100');
+  await expect(start).toHaveValue('100');
+  await start.selectText();
+  await start.pressSequentially('99999999');
+  await start.press('Tab');
+  await expect(start).toHaveValue('100');
 });
 
 test('@comparison-contract GFF annotation targets follow FASTA record order', async ({ page }) => {

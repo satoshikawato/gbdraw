@@ -1623,13 +1623,15 @@ for (const qual of ['', '  ']) {
     await s.actions.addSpecificRule();
     assert.deepEqual([s.state.manualSpecificRules,s.transactions,s.state.newSpecRule.val],[[],[],'dehydrogenase']);
   }));
-  test(`a row edit that clears the qualifier (${JSON.stringify(qual)}) is refused and the field shows the rule's qualifier again (OV-2435)`, async () => {
+  // The field's `v-committed-value` shows the rule's qualifier again once the refused change has settled
+  // (tests/web/committed-value.test.mjs); the action leaves the field to it.
+  test(`a row edit that clears the qualifier (${JSON.stringify(qual)}) is refused and the rule keeps its qualifier (OV-2435)`, async () => {
     const s=setup();
     s.state.errorLog={value:null};
     s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:''});
     const input={value:qual,isConnected:true};
     assert.equal(await s.actions.setSpecificRuleField(0,'qual',qual,input),false);
-    assert.deepEqual([s.state.manualSpecificRules[0].qual,input.value,s.transactions],['gene','gene',[]]);
+    assert.deepEqual([s.state.manualSpecificRules[0].qual,input.value,s.transactions],['gene',qual,[]]);
   });
 }
 test('a row edit that gives a rule without a qualifier one is applied (OV-2435)', async () => {
