@@ -27,7 +27,7 @@ const lane = (name, side) => ({ recordKey: `${name}-record`, biologicalFeatureId
 const draftState = (mode = 'circular') => {
   const adv = createDefaultAdv(mode);
   // The simple controls differ from the default stacks, so Reset changes them.
-  return { mode: { value: mode }, form: { ...createDefaultForm(), track_type: 'middle', linear_track_layout: 'above',
+  return { sessionOperationAvailability: () => null, mode: { value: mode }, form: { ...createDefaultForm(), track_type: 'middle', linear_track_layout: 'above',
     separate_strands: false },
     adv: { ...adv, circular_track_slots_enabled: true, linear_track_slots_enabled: true }, featurePlacementOverrides: {},
     files: { c_depth: [], c_conservation_blasts: [], c_conservation_fastas: [] },

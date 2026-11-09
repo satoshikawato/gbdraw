@@ -110,7 +110,7 @@ test('turning Wrap Rows on switches what rows decide; turning it off writes only
 const linearDrawing = () => ({ id: 'linear', mode: 'linear', form: unwrappedForm({ separate_strands: false }),
   adv: { ...createDefaultAdv('linear'), linear_track_slots_enabled: false }, featurePlacementOverrides: {},
   featureCatalog: { value: null } });
-const placementStore = (drawing) => Object.assign(withDrawings(drawing), { mode: { value: 'linear' } });
+const placementStore = (drawing) => Object.assign(withDrawings(drawing), { mode: { value: 'linear' }, sessionOperationAvailability: () => null });
 const checkbox = (checked) => ({ target: { type: 'checkbox', checked, getAttribute: () => 'Wrap Rows' } });
 
 test('Wrap Rows is one edit of the layout transition: Cancel restores every field, Reset is one step (case 2)', async () => {

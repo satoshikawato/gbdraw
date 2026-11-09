@@ -8,6 +8,7 @@
 /** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
 /** @import { ResultIdentityPort } from './feature-editor/label-actions.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
+/** @import { WebState } from '../state.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -28,7 +29,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
 
 /**
  * @typedef {object} FeatureEditorOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {WebState} state The app state; this root passes it to the feature editor's owners.
  * @property {RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint

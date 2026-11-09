@@ -182,7 +182,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
   const features = ['one', 'two'].map((id) => ({ scope: 'linear', record_key: 'card', biological_feature_id: id }));
   const overrides = {};
   const transactions = [];
-  const state = { mode: { value: 'linear' }, selectedResultIndex: { value: 0 }, featurePlacementOverrides: overrides,
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, selectedResultIndex: { value: 0 }, featurePlacementOverrides: overrides,
     form: { linear_track_layout: 'middle', separate_strands: false }, adv: {},
     featureCatalog: { value: { items: [{ recordKeys: ['card'] }] } },
     trackSlotResolvedGeometry: { value: { mode: 'linear', records: [{ recordIndex: 0, resultIndex: 0,
@@ -205,7 +205,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
 for (const mode of ['circular', 'linear']) {
   test(`${mode} placement admission follows draft slots and preserves artifact geometry`, () => {
     const feature = { scope: mode, record_key: 'record-1', biological_feature_id: 'feature' };
-    const state = { mode: { value: mode }, form: createDefaultForm(), adv: createDefaultAdv(mode),
+    const state = { sessionOperationAvailability: () => null, mode: { value: mode }, form: createDefaultForm(), adv: createDefaultAdv(mode),
       featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
       trackSlotResolvedGeometry: { value: { mode, records: [] } } };
     const geometry = structuredClone(state.trackSlotResolvedGeometry.value);
@@ -272,7 +272,7 @@ test('a layout edit that drops lanes asks before it resets those placements', as
     featurePlacementOverrides: circularOverrides };
   const linear = { form: { ...createDefaultForm(), linear_track_layout: 'middle', separate_strands: false },
     adv: createDefaultAdv('linear'), featurePlacementOverrides: linearOverrides };
-  const state = withModeDrawings({ mode: { value: 'circular' } }, { circular, linear });
+  const state = withModeDrawings({ sessionOperationAvailability: () => null, mode: { value: 'circular' } }, { circular, linear });
   const steps = [];
   const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
