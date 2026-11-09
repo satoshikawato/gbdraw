@@ -14,7 +14,7 @@ globalThis.self = {};
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const indexURL = `${root}gbdraw/web/vendor/pyodide/v0.29.0/full/`;
 const { loadPyodide } = await import(new URL('../../gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.mjs', import.meta.url).href);
-const { finishReplyBuffers, replyBufferFactory } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+const { createReplyBuffer, finishReplyBuffers } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
 const pyodide = await loadPyodide({ indexURL });
 pyodide.FS.writeFile('/home/pyodide/reply_buffers.py', readFileSync(`${root}gbdraw/web_support/reply_buffers.py`));
@@ -50,7 +50,7 @@ def write(new_reply_buffer):
     buffer = write_reply_buffer(new_reply_buffer, chunks())
     return {"buffer": buffer, "low": sum(address < ${HIGH} for address in addresses), "chunks": len(addresses), "sha256": digest.hexdigest()}
 write`);
-  const reply = write(replyBufferFactory(pyodide.FS)).toJs({ dict_converter: Object.fromEntries });
+  const reply = write(() => createReplyBuffer(pyodide.FS)).toJs({ dict_converter: Object.fromEntries });
   // Every chunk sat above 2 GiB, so the test reads the addresses the bug was about.
   assert.ok(reply.chunks > 2);
   assert.equal(reply.low, 0);

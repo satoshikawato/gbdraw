@@ -182,10 +182,11 @@ export class ReplyBuffer {
 }
 
 /**
- * The factory Python calls for each reply buffer, over the Worker's file system.
+ * A reply buffer over the Worker's file system; the Worker hands Python
+ * `() => createReplyBuffer(pyodide.FS)` as the factory of the reply's buffers.
  * @param {ReplyBufferFiles} files
  */
-export const replyBufferFactory = (files) => () => new ReplyBuffer(files);
+export const createReplyBuffer = (files) => new ReplyBuffer(files);
 
 /**
  * Join the reply buffers of a converted Generate result in place: its
@@ -1442,7 +1443,7 @@ const runGeneration = async ({
       (/** @type {unknown} */ notice) => {
         self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
       },
-      replyBufferFactory(pyodide.FS)
+      () => createReplyBuffer(pyodide.FS)
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

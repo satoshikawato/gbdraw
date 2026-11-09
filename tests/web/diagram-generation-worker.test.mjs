@@ -9,7 +9,7 @@ const {
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
-  replyBufferFactory,
+  createReplyBuffer,
   resolveGeneratedFeatureCatalog,
   resolveGenerationCleanupOutcome,
   serializeError
@@ -111,7 +111,7 @@ const replyFiles = () => {
 };
 {
   const fs = replyFiles();
-  const buffer = replyBufferFactory(fs)();
+  const buffer = createReplyBuffer(fs);
   for (const chunk of [[1, 2, 3], [], [4, 5, 6, 7]]) {
     fs.files.set(buffer.path, chunk);
     buffer.take();
@@ -120,7 +120,7 @@ const replyFiles = () => {
   const joined = buffer.finish();
   assert.ok(joined instanceof ArrayBuffer);
   assert.deepEqual([...new Uint8Array(joined)], [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(replyBufferFactory(fs)().finish().byteLength, 0);
+  assert.equal(createReplyBuffer(fs).finish().byteLength, 0);
 }
 
 // The feature catalog and each Result's segments are their own transferred buffers.

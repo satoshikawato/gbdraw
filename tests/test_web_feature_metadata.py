@@ -75,7 +75,7 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
 
 
 class _ReplyBuffer:
-    """The Worker's reply buffer (replyBufferFactory) in Python: the chunks it took from its file."""
+    """The Worker's reply buffer (createReplyBuffer) in Python: the chunks it took from its file."""
 
     made: list[_ReplyBuffer] = []
 
