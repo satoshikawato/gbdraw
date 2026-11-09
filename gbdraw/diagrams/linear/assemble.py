@@ -217,6 +217,7 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
+from ...annotations.models import slots_in_paint_order
 from ...render.drawers.linear.feature_density import FeatureDensityHeatmapGroup
 from ...render.drawers.linear.annotations import (
     linear_annotation_label_extent,
@@ -4258,7 +4259,7 @@ def _draw_linear_record(canvas: Drawing, drawing: _LinearRecordDrawing) -> Drawi
     features, and its definition."""
 
     vertical_plan = drawing.vertical_plan
-    for slot in sorted(drawing.plan.tracks.linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
+    for slot in slots_in_paint_order(drawing.plan.tracks.linear_track_layout.slots):
         slot_drawing = _LinearSlotDrawing(
             slot,
             vertical_plan.slot_by_id(slot.id),

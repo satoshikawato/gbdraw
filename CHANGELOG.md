@@ -217,8 +217,15 @@ write-up of a release.
   `side=` is read as outside (above), and a Linear features row with no
   `side=` as below, as the CLI draws them. The Web lists the rows by side, so
   where the CLI's order of writing differs, a Circular Legend can list its
-  track rows in another order, and rows of one `z` that overlap can paint in
-  another order (OV-3079, OV-3155).
+  track rows in another order (OV-3079, OV-3155).
+- Fixed: a foreground annotation overlay written before another slot of the
+  same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
+  painted under that slot, so a GC content or skew plot hid the highlight. An
+  underlay written after such a slot was painted over it. Within one `z`, an
+  underlay now paints under, and a foreground overlay over, every other slot,
+  whatever order the slots are written in, in the CLI, the Python API, and the
+  Web app. Such a CLI stack saved as a Session now draws the same figure on Web
+  Generate. Other figures are unchanged (OV-3184, OV-3185).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split

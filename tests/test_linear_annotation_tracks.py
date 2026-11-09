@@ -784,6 +784,34 @@ def _build_linear_span(
     )
 
 
+@pytest.mark.parametrize(
+    ("slots", "painted"),
+    [
+        # A foreground overlay written before a row of its z that it covers paints over it (OV-3184).
+        (
+            ("features:features@side=overlay", _span_slot("anchor_slot=features,to_slot=skew,layer=foreground,z=1"),
+             "gc:dinucleotide_content@side=below,z=1", "skew:dinucleotide_skew@side=below"),
+            ["features", "skew", "gc", "regions"],
+        ),
+        # An underlay written after a row of its z that it covers paints under it.
+        (
+            ("features:features@side=overlay,z=1", "gc:dinucleotide_content@side=below",
+             _span_slot("anchor_slot=features,to_slot=skew,layer=underlay,z=0"),
+             "skew:dinucleotide_skew@side=below,z=1"),
+            ["regions", "gc", "features", "skew"],
+        ),
+    ],
+)
+def test_linear_overlay_paints_on_its_layer_side_of_every_row_of_its_z(slots, painted) -> None:
+    root = ElementTree.fromstring(_build_linear_span(*slots).tostring())
+    ids: list[str] = []
+    for element in root.iter():
+        slot_id = element.attrib.get("data-gbdraw-slot-id")
+        if slot_id is not None and slot_id not in ids:
+            ids.append(slot_id)
+    assert ids == painted
+
+
 def _linear_bands(drawing, record_index: int = 0) -> dict[str, tuple[float, float] | None]:
     """Each slot's band from its record axis, and the drawn ``span`` rectangle.
 

@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, NamedTuple, Sequence, TypeAlias, cast
+from typing import Iterable, Literal, Mapping, NamedTuple, Protocol, Sequence, TypeAlias, TypeVar, cast
 
 from pandas import DataFrame
 
@@ -535,6 +535,45 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
     )
 
 
+class PaintedSlot(Protocol):
+    """A resolved track slot as the paint order reads it, in either mode."""
+
+    @property
+    def slot_index(self) -> int: ...
+
+    @property
+    def renderer(self) -> str: ...
+
+    @property
+    def side(self) -> str: ...
+
+    @property
+    def z(self) -> int: ...
+
+    @property
+    def params(self) -> Mapping[str, object]: ...
+
+
+PaintedSlotT = TypeVar("PaintedSlotT", bound=PaintedSlot)
+
+
+def slots_in_paint_order(slots: Iterable[PaintedSlotT]) -> list[PaintedSlotT]:
+    """The order a drawing paints its slots in, the same in Circular and Linear.
+
+    Slots paint by ``z``. Within one ``z``, underlay overlays paint first, then
+    the other slots, then foreground overlays, so an overlay lies on its layer's
+    side of every slot of its ``z`` it overlaps, whatever order the slots were
+    written in. Slots of one rank keep their written order (OV-3184, OV-3185).
+    """
+
+    def rank(slot: PaintedSlotT) -> int:
+        if str(slot.renderer) != "annotations" or str(slot.side) != "overlay":
+            return 1
+        return 0 if annotation_track_params_from_mapping(slot.params).layer == "underlay" else 2
+
+    return sorted(slots, key=lambda slot: (int(slot.z), rank(slot), int(slot.slot_index)))
+
+
 @dataclass(frozen=True)
 class ResolvedRegionAnnotation:
     id: str
@@ -825,4 +864,5 @@ __all__ = [
     "origin_sides",
     "parse_feature_selector",
     "region_run",
+    "slots_in_paint_order",
 ]
