@@ -457,9 +457,10 @@ over the figure, with no **Choose a fix** button.
 A Circular region label that still meets another label or a leader line where
 it is drawn (for example two labels that explicit lanes with
 `overflow=compress` keep in one lane, or labels crowded inside the axis) is
-drawn there. Each feature label, leader line, or region label placed before it
-that its letters meet counts as one region label overlap (`1 region label
-overlap`), as in Linear. This only warns: the Web app shows "Region labels
+drawn there. Each feature label or region label placed before it that its
+letters meet counts as one region label overlap (`1 region label overlap`), as
+in Linear; a feature label counts once whether the letters meet its own
+letters, its leader line, or both. This only warns: the Web app shows "Region labels
 overlap other labels or lines (N)." over the figure, with no **Choose a fix**
 button. Other lanes, fewer or shorter labels, a smaller label font, or a slot
 outside the axis make room. Region labels over the centre definition text count
