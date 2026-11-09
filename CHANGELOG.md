@@ -439,6 +439,16 @@ write-up of a release.
   Circular slot). Its room now counts the lanes where they are drawn, in
   Circular and Linear. The size an `overflow=error` message names is now
   rounded up, not down.
+- Fixed: a Circular `inside` region slot whose set width (`w` with
+  `overflow=error` or `compress`) reached past the centre of the circle was
+  checked against that width instead of the room before the centre, so its
+  lanes were drawn 0 px wide. It is now refused, and the message names the
+  room before the centre (OV-2990). The size an inside slot's `overflow=error`
+  message names is now measured where the slot is drawn, so that size draws;
+  it was up to 0.12 px too small (OV-3024). In an `inside` slot whose room
+  stops at the centre, and in a clipped slot, a label of the innermost lane
+  whose letters cross the centre onto another annotation's mark is now left
+  out and counted instead of drawn over that mark (OV-2991).
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
