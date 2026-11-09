@@ -38,6 +38,7 @@ TARGET = REPO_ROOT / "tests" / "fixtures" / "legend_layout_vectors.json"
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 sys.path.insert(0, str(REPO_ROOT))
 
+from gbdraw.analysis.conservation import CONSERVATION_COLOR_SCHEMES  # noqa: E402
 from gbdraw.comparisons.identity_scale import identity_color_domain  # noqa: E402
 from gbdraw.session_drawings import checked_drawing_views  # noqa: E402
 from gbdraw.configurators.legend import (  # noqa: E402
@@ -65,8 +66,7 @@ SVG = "{http://www.w3.org/2000/svg}"
 NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 LONG_CAPTION = "A much longer Legend caption for this row"
 # The colors of ring rows whose rings differ in color (Python's ``fill``; the Web reads its ramp's end).
-RING_COLORS = ("#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb", "#77b26f", "#be92b2", "#f0d369", "#ae8e7c",
-               "#ffafb7")
+RING_COLORS = CONSERVATION_COLOR_SCHEMES["ten"]
 # A gradient title wider than its bar: the bar and scale move under it.
 LONG_GRADIENT_TITLE = "Pairwise match identity of every compared genome pair"
 OVERLAY_POLICY = {

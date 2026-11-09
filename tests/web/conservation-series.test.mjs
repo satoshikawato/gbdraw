@@ -110,8 +110,8 @@ test('withoutConservationSeries leaves out one series with its files; later seri
 // list stays as it was when it was derived by rounding (OV-2393 moved the colour
 // conversion to truncation); each colour is one of the CLI's `ten` scheme.
 test('a row without a colour takes the colour of its position', () => {
-  const colors = ['#6e91b7', '#f4a251', '#77b26f', '#e67577', '#8fc4c0',
-    '#f0d369', '#be92b2', '#ffafb7', '#ae8e7c', '#c6bebb'];
+  const colors = ['#81a5cc', '#e5a972', '#7cb075', '#d38282', '#8fc4c0',
+    '#ead487', '#be92b2', '#ffafb7', '#ae8e7c', '#c6bebb'];
   assert.deepEqual(colors.map((_, index) => normalizeConservationSeriesColor(null, index)), colors);
   assert.equal(normalizeConservationSeriesColor('', 10), colors[0]);
   assert.equal(normalizeConservationSeriesColor('#ABC', 3), '#aabbcc');

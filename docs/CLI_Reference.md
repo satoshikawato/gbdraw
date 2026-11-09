@@ -1053,7 +1053,7 @@ by its position among the drawn rings counted from the outermost ring:
 | Value | Ring colors |
 | --- | --- |
 | `same` (default) | Every ring `#8b9cc1`, the configured default (`objects.conservation.max_color`). |
-| `ten` | `#6e91b7 #f4a251 #8fc4c0 #e67577 #c6bebb #77b26f #be92b2 #f0d369 #ae8e7c #ffafb7`, repeating from ring 11. |
+| `ten` | `#81a5cc #e5a972 #8fc4c0 #d38282 #c6bebb #7cb075 #be92b2 #ead487 #ae8e7c #ffafb7`, repeating from ring 11. |
 | `per_five` | One color per five rings: `#8b9cc1 #c88890 #62ad9a #bf89ab #7caa7e #bc9464`, repeating from ring 31. |
 
 A color given with `--conservation_colors` or in the `color` column of

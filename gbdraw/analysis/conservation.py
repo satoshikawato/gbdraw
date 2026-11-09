@@ -266,8 +266,8 @@ _PER_FIVE_HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc946
 CONSERVATION_COLOR_SCHEMES: Mapping[ConservationColorScheme, tuple[str, ...]] = {
     "same": (),
     "ten": (
-        "#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb",
-        "#77b26f", "#be92b2", "#f0d369", "#ae8e7c", "#ffafb7",
+        "#81a5cc", "#e5a972", "#8fc4c0", "#d38282", "#c6bebb",
+        "#7cb075", "#be92b2", "#ead487", "#ae8e7c", "#ffafb7",
     ),
     "per_five": tuple(hue for hue in _PER_FIVE_HUES for _ in range(5)),
 }
