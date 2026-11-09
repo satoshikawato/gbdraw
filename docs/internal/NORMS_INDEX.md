@@ -281,7 +281,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
 | [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 8 |
 | [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page) | Diagram reply too large for the page | ACCEPTED | diagram-generation.reply-too-large-for-page | 1 | — | 3 |
-| [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 6 | scenario revision 2 | 4 |
+| [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 7 | scenario revision 6 | 4 |
 | [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
 | [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
 | [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 2 | scenario revision 1 | 14 |
