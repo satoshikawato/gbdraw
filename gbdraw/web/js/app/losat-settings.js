@@ -94,7 +94,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * a card (`linearDrawingWindowsOf` of services/config.js).
  * @typedef {object} LosatUnitPlanPorts
  * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
- * @property {(drawing: LosatSettingsDrawing) => LinearUnitWindowsOf} windowsOf
+ * @property {() => LinearUnitWindowsOf} shownWindowsOf The windows each card of the shown drawing writes in its request.
  */
 
 /**
@@ -105,13 +105,17 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @param {(drawing: LosatSettingsDrawing) => LinearComparisonResolution} readResolution
  * @param {LosatUnitPlanPorts} ports
  */
-const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, windowsOf }) => {
+const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownWindowsOf }) => {
   const unitPlanKey = computed(() => {
     const drawing = state.activeDrawing();
     const resolution = readResolution(drawing);
     const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
     if (resolution.valid === false || !resolution.hasLosatIntent || !drawsSeveralUnits(drawn)) return '';
-    return JSON.stringify(linearUnitPlanPayload(drawn, resolution, windowsOf(drawing)));
+    try {
+      return JSON.stringify(linearUnitPlanPayload(drawn, resolution, shownWindowsOf()));
+    } catch {
+      return 'refused'; // A window Generate refuses while it is typed: no plan, as when the helper fails.
+    }
   });
   /** @type {{ value: { key: string, search: LinearUnitSearch | null } | null }} */
   const unitPlan = ref(null);
@@ -121,7 +125,7 @@ const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, windowsOf 
     let search = null;
     try {
       search = await planLinearUnitSearch(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff),
-        readResolution(drawing), windowsOf(drawing), planLinearUnits);
+        readResolution(drawing), shownWindowsOf(), planLinearUnits);
     } catch {
       search = null;
     }

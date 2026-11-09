@@ -12,7 +12,6 @@ globalThis.window = {
 
 const { createShownDrawingReaders } = await import('../../gbdraw/web/js/app/shown-drawing-readers.js');
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
-const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
 
 /** A shown Linear drawing of one card with a wrapped Result, its input summary naming `summaryRegion`. */
 const readersFor = (seq, summaryRegion) => {
@@ -36,8 +35,7 @@ const readersFor = (seq, summaryRegion) => {
     state, shownDrawingOfMode: () => drawing,
     linearRecordsFor: () => [{ recordLength: 16569 }], linearRecordStatusFor: () => 'ready',
     refreshLinearRecords: () => ({ busy: true }), committedLinearRecordCards: () => null,
-    getCommittedCanonicalRenderRequest: () => request,
-    windowsOf: (shown) => (card) => linearWindowsPayload(card, { arranged: Boolean(shown.linearRecordLayoutEnabled.value) })
+    getCommittedCanonicalRenderRequest: () => request
   });
 };
 

@@ -32,7 +32,8 @@ import {
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
-import { catalogRecordLength, resolveWholeRecordWindows } from '../services/linear-card-windows.js';
+import { catalogCardRecord } from '../services/linear-card-windows.js';
+/** @import { LinearRecordCatalogRecords } from '../services/linear-card-windows.js' */
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel, runUntilCanceled } from '../services/losat.js';
 import {
@@ -77,7 +78,7 @@ import {
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot,
-  linearWindowsPayload,
+  linearDrawingWindowsOf,
   savedPipelineSearchDrawing
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
@@ -2789,7 +2790,11 @@ export const createRunAnalysis = ({
               })
         )
       : null;
+    /** @type {LinearRecordCatalogRecords} */
     let linearRecordCatalog = null;
+    // The record a drawn card reads, from this Generate's record catalog (unknown until it is read).
+    /** @param {LinearSeq} card */
+    const catalogRecordOf = (card) => catalogCardRecord(linearRecordCatalog, linearSeqs.indexOf(card));
 
     const generationToken = ++latestGenerationToken;
     let canceledAttemptOwnsPresentation = false;
@@ -3020,7 +3025,11 @@ export const createRunAnalysis = ({
       if (generationToken !== latestGenerationToken) return { status: 'stale' };
       const nextRecordPlan = identitySources ? requestRecordPlan({
         drawing: requestDrawing,
-        filesData: { linearSeqs: [...drawing.linearSeqs], circularSources: [...drawing.circularSources] }
+        // Each card with its record from the catalog, so an empty window draws the whole record here too (PD-OI-124).
+        filesData: {
+          linearSeqs: drawing.linearSeqs.map((card) => ({ ...card, cardRecord: catalogRecordOf(card) })),
+          circularSources: [...drawing.circularSources]
+        }
       }) : null;
       if (identitySources && nextRecordPlan) {
         // A committed request without kept identities reads them again from the current files.
@@ -3582,10 +3591,7 @@ export const createRunAnalysis = ({
         // writes is a unit's (OV-2738); an inherited pipeline searches with its own settings (OV-3003).
         const { unitSearch, inherited } = await linearSearchOf(drawing, linearSeqs, /** @type {LinearComparisonResolution} */ (
           activeComparisonPlanSnapshot), useSavedComparison,
-        (card) => linearWindowsPayload(
-          resolveWholeRecordWindows(card, catalogRecordLength(linearRecordCatalog, linearSeqs.indexOf(card))),
-          { arranged: Boolean(drawing.linearRecordLayoutEnabled.value), ordinal: drawing.linearSeqs.indexOf(card) + 1 }
-        ),
+        linearDrawingWindowsOf(drawing, catalogRecordOf),
         (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload));
         const searchDrawing = inherited ? savedPipelineSearchDrawing(drawing, inherited.pipeline) : drawing;
         if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
@@ -3757,8 +3763,10 @@ export const createRunAnalysis = ({
           recordSelectors.push(recordIdRaw || '');
           if (window) {
             viewTransformSpecs.push({ reverse: window.reverseComplement });
-            const isCircular = linearCardRequestedCircular(
-              { drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card), recordDisplayRows: recordDisplayRows?.value || [] });
+            const isCircular = linearCardRequestedCircular({
+              drawing: requestDrawing, card, index: drawing.linearSeqs.indexOf(card),
+              recordDisplayRows: recordDisplayRows?.value || [], windows: linearDrawingWindowsOf(drawing, catalogRecordOf)(card)
+            });
             return { file: window.searchRegion, acrossOrigin: window.start > window.end, isCircular };
           }
           const wantsReverse = Boolean(seq.region_reverse);

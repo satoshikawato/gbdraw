@@ -141,6 +141,8 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readScalarAxisLabels } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { UNKNOWN_CARD_RECORD, wholeRecordWindow } from './linear-card-windows.js';
+/** @import { CardRecordFacts } from './linear-card-windows.js' */
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
@@ -353,6 +355,8 @@ const requestDrawingMode = (drawing) => {
  * @property {unknown} [region_end]
  * @property {boolean} [region_reverse]
  * @property {readonly LinearSeqWindow[]} [windows] The windows of a record drawn in several (`LinearSeq`).
+ * @property {CardRecordFacts} [cardRecord] The length and ID of the record, as far as Generate's record catalog gives
+ *   them (`materializeLinearRecordFiles`): a listed window with both ends empty draws 1 to its length.
  * @property {CanonicalRecord['cardinality']} [cardinality]
  */
 /**
@@ -1471,18 +1475,18 @@ const circularWindowsPayload = (form, record) => {
 };
 
 /**
- * One window's endpoints, validated (R7): a window names both or neither.
- * @param {unknown} rawStart @param {unknown} rawEnd
+ * One window's endpoints, validated (R7): a window names both or neither. A refusal names the card (`context`).
+ * @param {unknown} rawStart @param {unknown} rawEnd @param {{ inputOrdinal?: number, recordName?: string }} context
  * @returns {{ start: number, end: number } | null}
  */
-const windowEndpoints = (rawStart, rawEnd) => {
+const windowEndpoints = (rawStart, rawEnd, context) => {
   // projectOptionalNumber yields null or a finite number: the only arm without
   // a number-or-null value is 'invalid', which it throws on.
   const start = /** @type {number | null} */ (projectOptionalNumber(rawStart, { field: 'region' }));
   const end = /** @type {number | null} */ (projectOptionalNumber(rawEnd, { field: 'region' }));
   if (start === null && end === null) return null;
   if (start === null || end === null) {
-    throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
+    throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return { start, end };
 };
@@ -1495,19 +1499,24 @@ const windowEndpoints = (rawStart, rawEnd) => {
  * placed by the record's column (D-14). A listed window with "Across the
  * origin" ticked runs from its Start across the origin to its End, and
  * Generate refuses one whose Start is not after its End, naming the card
- * (`ordinal`, PD-OI-124). A listed window with both ends empty draws the whole
- * record: Generate's card copies fill it in from the record's length
- * (`resolveWholeRecordWindows`), so here it is still a missing endpoint.
+ * (`ordinal`, the card's number among all cards, OFF cards counted, as the card
+ * list shows it; PD-OI-124). A listed window with both ends empty draws the
+ * whole record, 1 to the length of `record` (`wholeRecordWindow`): every
+ * reader of a card's windows (the request, the drawn-unit plan, the LOSAT
+ * estimate, the search extraction) reads them here, so none sees an empty
+ * window. Without a known length such a window is refused. A refusal of a
+ * listed window names the card and, once known, its record (`record.id`).
  * @param {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} seq
- * @param {{ arranged: boolean, ordinal?: number }} options
+ * @param {{ arranged: boolean, ordinal: number, record: CardRecordFacts }} options
  * @returns {CanonicalRecord['windows']}
  */
-export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
-  const context = ordinal === undefined ? {} : { inputOrdinal: ordinal };
+export const linearWindowsPayload = (seq, { arranged, ordinal, record }) => {
+  const context = { inputOrdinal: ordinal, ...(record.id ? { recordName: record.id } : {}) };
   if (seq.windows && seq.windows.length) {
     const placed = arranged && seq.windows.length > 1;
-    return seq.windows.map((window) => {
-      const span = windowEndpoints(window.start, window.end);
+    return seq.windows.map((listed) => {
+      const window = wholeRecordWindow(listed, record.length);
+      const span = windowEndpoints(window.start, window.end, context);
       if (span === null) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
       const crosses = typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end;
       if (crosses && span.start <= span.end) {
@@ -1521,7 +1530,8 @@ export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
       };
     });
   }
-  const span = windowEndpoints(seq.region_start, seq.region_end);
+  // The crop fields refuse as before PD-OI-124 (their card is named where the crop is read).
+  const span = windowEndpoints(seq.region_start, seq.region_end, {});
   if (span === null) return [];
   return [{
     start: Math.min(span.start, span.end),
@@ -1530,6 +1540,21 @@ export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
     column: null
   }];
 };
+
+/**
+ * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout,
+ * the card's number among all its cards, and the record the card draws, `recordOf`), for every reader of a card's
+ * windows outside the request build: the drawn-unit plan of Generate, of the draft request and of the LOSAT job
+ * estimate, and the wrap estimate.
+ * @template {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} C
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearSeqs: readonly C[] }} drawing
+ * @param {(card: C) => CardRecordFacts} recordOf
+ * @returns {(card: C) => CanonicalRecord['windows']}
+ */
+export const linearDrawingWindowsOf = (drawing, recordOf) => (card) => linearWindowsPayload(card, {
+  arranged: Boolean(drawing.linearRecordLayoutEnabled?.value), ordinal: drawing.linearSeqs.indexOf(card) + 1,
+  record: recordOf(card)
+});
 
 /**
  * The record-wide reverse complement a Linear card's request record writes beside `windows`, its windows as
@@ -1654,7 +1679,11 @@ const buildRecords = ({ drawing, filesData, resources }) => {
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
-      const written = linearWindowsPayload(seq, { arranged, ordinal: index + 1 });
+      const written = linearWindowsPayload(seq, {
+        arranged, ordinal: (drawing.linearSeqs || []).findIndex((/** @type {{ uid?: unknown }} */ card) => card.uid === seq.uid) + 1
+          || index + 1,
+        record: seq.cardRecord ?? UNKNOWN_CARD_RECORD
+      });
       const windows = places && written.length > 1
         ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
         : written;
@@ -4579,13 +4608,13 @@ const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, d
  * The record's display option `display.isCircular` the request writes for the record a Linear card draws (true,
  * false, or null for the topology its file states), read from the request writer (`requestRecordTransforms`). A
  * comparison search's extraction sends it with the card's window, so Python crops a window across the origin as the
- * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py).
- * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[], linearRecordLayoutEnabled?: { value: unknown } },
- *   card: RequestLinearSeq, index: number, recordDisplayRows: RequestRecordDisplayRow[] }} input
+ * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py). `windows` are the card's windows as the request
+ * writes them (`linearDrawingWindowsOf`).
+ * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
+ *   recordDisplayRows: RequestRecordDisplayRow[], windows: CanonicalRecord['windows'] }} input
  * @returns {boolean | null}
  */
-export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows }) => {
-  const windows = linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled?.value) });
+export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows, windows }) => {
   return requestRecordTransforms({
     mode: 'linear',
     sourceUid: linearSeqRecordKey(card, index),

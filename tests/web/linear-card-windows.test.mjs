@@ -16,10 +16,12 @@ globalThis.window = {
 
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  addCardWindow, cardWindowGaps, cardWindowList, catalogRecordLength, editCardWindow, originWindowLength,
-  removeCardWindow, resolveWholeRecordWindows
+  addCardWindow, cardWindowGaps, cardWindowList, editCardWindow, originWindowLength,
+  removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
-const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
+const {
+  linearCardRequestedCircular, linearDrawingWindowsOf, linearWindowsPayload
+} = await import('../../gbdraw/web/js/services/session-request.js');
 const {
   layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
@@ -36,7 +38,7 @@ test('an End typed before the Start is stored in order with Reverse complement t
   assert.equal(editCardWindow(card, 0, { end: 100 }), true);
   assert.deepEqual(crop(card), [100, 500, true, 0]);
   // The figure stays the reversed span 100..500; the request writes it as before.
-  assert.deepEqual(linearWindowsPayload(card, { arranged: false }), [{ start: 100, end: 500, reverseComplement: true, column: null }]);
+  assert.deepEqual(linearWindowsPayload(card, { arranged: false, ordinal: 1, record: UNKNOWN_CARD_RECORD }), [{ start: 100, end: 500, reverseComplement: true, column: null }]);
   // In a window of the list the same holds.
   const listed = createLinearSeq({ uid: 'b', windows: [span(1, 50), span(200, 300)] });
   editCardWindow(listed, 1, { start: 900 });
@@ -55,17 +57,20 @@ test('with "Across the origin" ticked a Start after the End stays a window acros
   // A window across the origin that New drawing from region or Find in other files writes arrives with the box ticked.
   const made = createLinearSeq({ uid: 'm', windows: [{ start: 16000, end: 100, reverseComplement: false, column: null }] });
   assert.equal(made.windows[0].acrossOrigin, true);
-  assert.deepEqual(linearWindowsPayload(card, { arranged: false }), [{ start: 16000, end: 100, reverseComplement: false, column: null }]);
+  assert.deepEqual(linearWindowsPayload(card, { arranged: false, ordinal: 1, record: UNKNOWN_CARD_RECORD }), [{ start: 16000, end: 100, reverseComplement: false, column: null }]);
   // Clearing the box keeps the fields as they are, now the reversed span.
   editCardWindow(card, 0, { acrossOrigin: false });
   assert.deepEqual(crop(card), [100, 16000, true, 0]);
 });
 
-test('Generate refuses a window across the origin whose Start is not after its End, naming the card', () => {
+test('Generate refuses a window across the origin whose Start is not after its End, naming the card and the record', () => {
   const card = createLinearSeq({ uid: 'a', windows: [{ ...span(100, 900), acrossOrigin: true }] });
-  assert.throws(() => linearWindowsPayload(card, { arranged: false, ordinal: 2 }), (error) => {
+  const record = { length: 16569, id: 'NC_012920.1' };
+  assert.throws(() => linearWindowsPayload(card, { arranged: false, ordinal: 2, record }), (error) => {
     const message = normalizeUserFacingError(error, { stage: 'request-validation' }).summary;
     assert.match(message, /Sequence 2\./);
+    // It names the record (S2).
+    assert.match(message, /Record: NC_012920\.1\./);
     assert.match(message, /Across the origin is ticked: give a Start greater than the End, or clear the box\./);
     return true;
   });
@@ -83,17 +88,33 @@ test('Add window appends an empty window; Remove leaves the last window; one win
   assert.deepEqual(cardWindowList(card), [{ start: null, end: null, reverseComplement: false, column: null, acrossOrigin: false }]);
 });
 
-test('an empty window draws the whole record at Generate, from the record catalog length', () => {
+test('an empty window draws the whole record for every reader of the card\'s windows (B1)', () => {
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
-  assert.throws(() => linearWindowsPayload(card, { arranged: false }), /region/i);
-  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000 }, { sourceIndex: 1, recordLength: 'x' }] };
-  assert.equal(catalogRecordLength(catalog, 0), 3000);
-  assert.equal(catalogRecordLength(catalog, 1), null);
-  assert.equal(catalogRecordLength(null, 0), null);
-  const resolved = resolveWholeRecordWindows(card, catalogRecordLength(catalog, 0));
-  assert.deepEqual(linearWindowsPayload(resolved, { arranged: false }).map(({ start, end }) => [start, end]), [[1, 50], [1, 3000]]);
-  assert.equal(resolveWholeRecordWindows(card, null), card);
+  const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1' }, { sourceIndex: 1, recordLength: 'x' }] };
+  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1' });
+  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '' });
+  assert.deepEqual(catalogCardRecord(null, 0), UNKNOWN_CARD_RECORD);
+  // The request, the drawn-unit plan, the LOSAT estimate and the extraction all read the windows here.
+  const record = catalogCardRecord(catalog, 0);
+  assert.deepEqual(linearWindowsPayload(card, { arranged: false, ordinal: 2, record }).map(({ start, end }) => [start, end]),
+    [[1, 50], [1, 3000]]);
+  const drawing = { linearRecordLayoutEnabled: { value: false }, linearSeqs: [createLinearSeq({ uid: 'off' }), card] };
+  assert.deepEqual(linearDrawingWindowsOf(drawing, () => record)(card).map(({ start, end }) => [start, end]), [[1, 50], [1, 3000]]);
+  // The card is untouched: it still shows an empty window.
   assert.deepEqual(card.windows[1], span(null, null));
+  // Before the record is read, the refusal names the card, counted among all cards as the card list shows them.
+  assert.throws(() => linearDrawingWindowsOf(drawing, () => UNKNOWN_CARD_RECORD)(card), (error) => {
+    assert.equal(error.context.inputOrdinal, 2);
+    assert.match(normalizeUserFacingError(error, { stage: 'request-validation' }).summary, /Sequence 2\./);
+    return true;
+  });
+});
+
+test('the extraction reads the topology with an empty window as the request writes it (B1)', () => {
+  const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
+  const drawing = { linearRecordLayoutEnabled: { value: false }, linearSeqs: [card], recordDisplayDrafts: [] };
+  const windows = linearDrawingWindowsOf(drawing, () => ({ length: 3000, id: 'NC_1' }))(card);
+  assert.equal(linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows: [], windows }), null);
 });
 
 test('the bases between two windows next to each other in the same direction are counted', () => {
@@ -219,7 +240,7 @@ test('Add window and Remove are one History step each through the record rows\' 
 test('Up and Down change only the places, so the unit indexes stored comparisons hold stay (F7)', () => {
   const { cards, entries } = arrangedLayout();
   const unitsOf = () => pythonLinearUnitPlan(linearUnitPlanPayload(cards, { edges: [] },
-    (card) => linearWindowsPayload(card, { arranged: true })));
+    (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: UNKNOWN_CARD_RECORD })));
   const before = unitsOf();
   moveLinearLayoutCell(cards, entries, { uid: 'a', window: 1 }, -1);
   assert.notDeepEqual(cards[0].windows.map(({ column }) => column), [null, null]);

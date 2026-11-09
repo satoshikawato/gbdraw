@@ -16,6 +16,8 @@ import {
   circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import { createLinearCardWindowReaders } from './linear-card-window-readers.js';
+import { sequenceCardRecord } from '../services/linear-card-windows.js';
+import { linearDrawingWindowsOf } from '../services/session-request.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
@@ -36,8 +38,6 @@ const { computed } = window.Vue;
  * @property {(drawing: DrawingState) => { record: CanonicalRenderRequest['records'][number], seq: LinearSeq }[] | null} committedLinearRecordCards
  *   Each record of the committed Linear request with the card of the drawing that still draws it.
  * @property {() => CanonicalRenderRequest | null} getCommittedCanonicalRenderRequest
- * @property {(drawing: DrawingState) => (card: LinearSeq) => CanonicalRenderRequest['records'][number]['windows']} windowsOf
- *   The windows a card of the drawing writes in its request (`linearDrawingWindowsOf`).
  */
 
 /**
@@ -91,7 +91,7 @@ const recordIdsOfResult = (request, trackSlotGeometry, resultCount) => {
  */
 export const createShownDrawingReaders = ({
   state, shownDrawingOfMode, linearRecordsFor, linearRecordStatusFor, refreshLinearRecords, committedLinearRecordCards,
-  getCommittedCanonicalRenderRequest, windowsOf
+  getCommittedCanonicalRenderRequest
 }) => {
   const { inputSummaries, selectedResultIndex, results } = state;
   /**
@@ -112,6 +112,11 @@ export const createShownDrawingReaders = ({
     const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
     return region && !('error' in region) ? regionClampNote(region.drawn) : '';
   };
+  // The windows a card of the drawing writes in its request, its record as the record selector read it
+  // (`linearDrawingWindowsOf`): the LOSAT job estimate and the wrap estimate read them here.
+  /** @param {DrawingState} drawing */
+  const linearCardWindowsOf = (drawing) => linearDrawingWindowsOf(drawing,
+    (card) => sequenceCardRecord(linearSeqRecord(drawing, card)));
   const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({ state, shownDrawingOfMode, linearSeqRecord });
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
@@ -135,7 +140,7 @@ export const createShownDrawingReaders = ({
   /** @param {DrawingState | null | undefined} drawing @returns {LinearDraftRecord[]} */
   const linearDraftRecordsOf = (drawing) => {
     if (!drawing || drawing.mode !== 'linear') return [];
-    const cardWindows = windowsOf(drawing);
+    const cardWindows = linearCardWindowsOf(drawing);
     const records = drawing.drawnLinearSeqs.value.map((seq, index) => {
       const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
       const region = linearCardRegion(seq, index + 1);
@@ -219,8 +224,8 @@ export const createShownDrawingReaders = ({
     });
   });
   return {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearCardWindowsOf, circularRegionNote, circularWindowRows,
+    shownInputSummary, drawnLinearRecordLengths, committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
     shownLinearWrapLeaf, shownLinearWrapReading
   };
 };

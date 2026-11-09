@@ -2734,7 +2734,9 @@ assert.equal(
     const written = buildDrawingRenderRequest({
       state: drawing, drawing, filesData, recordDisplayRows, comparisonPlanSnapshot: snapshot
     });
-    const sent = linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows });
+    const sent = linearCardRequestedCircular({
+      drawing, card, index: 0, recordDisplayRows, windows: written.renderRequest.records[0].windows
+    });
     assert.equal(sent, topologyOverride, `the card's topology draft ${topologyOverride}`);
     assert.equal(sent, written.renderRequest.records[0].display.isCircular, 'the extraction reads what the request writes');
   }

@@ -152,33 +152,53 @@ export const cardWindowGaps = (windows, { recordLength, circular }) => windows.s
 });
 
 /**
- * The card copy Generate draws: each listed window with both ends empty spans the whole record (1 to
- * `recordLength`), as the card says until its Start and End are set (PD-OI-124). A card without such a window is
- * returned as it is; without a length the empty window stays, and the request refuses it.
- * @template {{ windows?: readonly LinearSeqWindow[] }} C
- * @param {C} card
+ * A listed window as Generate draws it: with Start and End both empty it spans the whole record, 1 to `recordLength`,
+ * as the card says until they are set (PD-OI-124); any other window, or an empty one whose record length is not known
+ * yet, is returned as it is (the request then refuses it, naming the card). The one owner of that fill: every reader
+ * of a card's windows reads them through `linearWindowsPayload` (services/session-request.js), which calls it.
+ * @template {Pick<LinearSeqWindow, 'start' | 'end'> & { acrossOrigin?: boolean }} W
+ * @param {W} window
  * @param {number | null} recordLength
- * @returns {C}
+ * @returns {W}
  */
-export const resolveWholeRecordWindows = (card, recordLength) => {
-  const windows = card.windows || [];
-  const empty = (/** @type {LinearSeqWindow} */ window) => window.start === null && window.end === null;
-  if (recordLength === null || !windows.some(empty)) return card;
-  return {
-    ...card,
-    windows: windows.map((window) => (empty(window) ? { ...window, start: 1, end: recordLength, acrossOrigin: false } : window))
-  };
+export const wholeRecordWindow = (window, recordLength) => (
+  window.start === null && window.end === null && recordLength !== null
+    ? { ...window, start: 1, end: recordLength, acrossOrigin: false }
+    : window
+);
+
+/**
+ * What the page knows of the record a card draws: its length (null until read) and its ID ('' until read).
+ * @typedef {{ length: number | null, id: string }} CardRecordFacts
+ */
+/**
+ * The records of Generate's Linear record catalog, as this module reads them.
+ * @typedef {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown, recordId?: unknown }[] } | null | undefined} LinearRecordCatalogRecords
+ */
+/** A record not read yet. @type {CardRecordFacts} */
+export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '' });
+
+/**
+ * The record a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the
+ * drawn cards).
+ * @param {LinearRecordCatalogRecords} catalog
+ * @param {number} sourceIndex
+ * @returns {CardRecordFacts}
+ */
+export const catalogCardRecord = (catalog, sourceIndex) => {
+  const record = (catalog?.records || []).find((entry) => Number(entry?.sourceIndex) === sourceIndex);
+  return sequenceCardRecord(record);
 };
 
 /**
- * The length of the record a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place
- * among the drawn cards), or null when the catalog does not give one.
- * @param {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown }[] } | null | undefined} catalog
- * @param {number} sourceIndex
- * @returns {number | null}
+ * The facts of a record as a record list or the catalog holds it.
+ * @param {{ recordLength?: unknown, recordId?: unknown } | null | undefined} record
+ * @returns {CardRecordFacts}
  */
-export const catalogRecordLength = (catalog, sourceIndex) => {
-  const record = (catalog?.records || []).find((entry) => Number(entry?.sourceIndex) === sourceIndex);
+export const sequenceCardRecord = (record) => {
   const length = Number(record?.recordLength);
-  return Number.isSafeInteger(length) && length > 0 ? length : null;
+  return {
+    length: Number.isSafeInteger(length) && length > 0 ? length : null,
+    id: typeof record?.recordId === 'string' ? record.recordId : ''
+  };
 };
