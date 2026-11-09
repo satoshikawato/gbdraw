@@ -491,6 +491,15 @@ write-up of a release.
   `overflow=clip` whose set width reaches past the centre now counts the
   labels it leaves out "in clipped slots", as every clipped slot does, not
   "for want of room before the centre".
+- Performance: curved Circular region labels (`arc` and `auto`) are placed
+  with less work: each label's text is measured once where it stands. A
+  Circular map with 150 labelled regions in an `inside` slot took 9.8 s of CPU
+  time instead of 17.5 s, and one with 400 regions about 30 % less; the figure
+  is the same (OV-2981).
+- Fixed: after a font file was registered for a font family that had already
+  been used, curved Circular region labels were still checked against the
+  earlier font's letters (for overlaps and for their reach), while their size
+  came from the new font. They now use the registered font (OV-3103).
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
