@@ -145,7 +145,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
     createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }),
     createLinearSeq({ uid: 'b', windows: [window(10, 90), window(200, 280)] })
   ];
-  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
+  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } });
   const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
   const saved = (pairs, records = cards, mode = 'pairwise') => savedComparisonSource({
     renderRequest: {
