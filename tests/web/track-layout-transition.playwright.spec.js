@@ -338,25 +338,23 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
   });
   const place = (side) => page.evaluate(async (placement) => {
     const { state } = await import('./js/state.js');
-    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.id === 'annotations_1');
     return window.__GBDRAW_APP__.updateCircularTrackSlotPlacement(row, placement);
   }, side);
-  await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    app.setCircularTrackSlotsEnabled(true);
-    app.addCircularTrackSlot('annotations');
-  });
+  // Turning the stack on gives the set its row, annotations_1, outside the
+  // Axis as the figure without a stack draws it (D-35); the test places that row.
+  await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
   await place('overlay');
   // An anchor under the row (the editor gives it the z its layer needs, OV-1297)
   // and Compress, so the Generate draws (two regions share a lane under Error).
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.id === 'annotations_1');
     window.__GBDRAW_APP__.setCircularOverlayAnnotationParam(row, 'anchor_slot', 'features');
     row.params.overflow = 'compress';
   });
   const before = await stack();
-  expect(before.sides.annotations).toBe('overlay');
+  expect(before.sides.annotations_1).toBe('overlay');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -364,7 +362,7 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
   })).toEqual({ error: null, results: 1 });
   expect((await stack()).axis).toBe(before.axis);
   await place('outside');
-  expect((await stack()).sides).toEqual({ ...before.sides, annotations: 'outside' });
+  expect((await stack()).sides).toEqual({ ...before.sides, annotations_1: 'outside' });
 });
 
 // PD-OI-104 scenario revision 7: removing a Depth file or series, or a stack
