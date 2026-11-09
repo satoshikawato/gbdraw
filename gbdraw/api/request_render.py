@@ -1777,6 +1777,24 @@ def _warn_circular_topologies(records: Sequence[SeqRecord]) -> None:
             )
 
 
+def grid_placement_order(
+    positioned: Sequence[tuple[int, RecordPresentation]],
+) -> list[tuple[int, RecordPresentation]]:
+    """Records with a grid row (or, in a projected Linear request, drawn units), by index, in drawing order: by row,
+    then by column (one without a column by its index), then by index. The one owner of that order: the layouts below
+    place by it, and the Web's card numbers a row's windows by it (``plan_card_windows`` of
+    ``gbdraw.web_support.linear_units``)."""
+
+    return sorted(
+        positioned,
+        key=lambda item: (
+            int(item[1].grid_row or 0),
+            int(item[1].grid_column) if item[1].grid_column is not None else item[0],
+            item[0],
+        ),
+    )
+
+
 def _layout_with_record_placements(
     request: CircularDiagramRequest,
 ) -> CircularMultiRecordOptions | None:
@@ -1790,15 +1808,7 @@ def _layout_with_record_placements(
     ]
     if not positioned:
         return layout
-    positioned.sort(
-        key=lambda item: (
-            int(item[1].grid_row or 0),
-            int(item[1].grid_column)
-            if item[1].grid_column is not None
-            else item[0],
-            item[0],
-        )
-    )
+    positioned = grid_placement_order(positioned)
     positions = tuple(
         f"#{index + 1}@{presentation.grid_row}"
         for index, presentation in positioned
@@ -1821,15 +1831,7 @@ def _linear_layout_with_record_placements(
         return _windows_share_rows(request, layout)
     if layout is None:  # pragma: no cover - LinearDiagramRequest refuses grid rows without a layout.
         raise ValidationError("Grid placement requires LinearMultiRecordOptions.", diagnostic={"code": "INPUT_INVALID"})
-    positioned.sort(
-        key=lambda item: (
-            int(item[1].grid_row or 0),
-            int(item[1].grid_column)
-            if item[1].grid_column is not None
-            else item[0],
-            item[0],
-        )
-    )
+    positioned = grid_placement_order(positioned)
     positions = tuple(
         f"#{index + 1}@{presentation.grid_row}"
         for index, presentation in positioned
@@ -3712,6 +3714,7 @@ __all__ = [
     "build_request_diagram",
     "build_prepared_interactive_context",
     "diagram_request_output_paths",
+    "grid_placement_order",
     "normalize_request_records",
     "plan_request",
     "plan_circular_batch_request",

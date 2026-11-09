@@ -1807,8 +1807,14 @@ def unit_presentation(
     """The presentation a drawn unit is drawn with: its record's, placed by its window's column (D-08)."""
 
     effective = effective_record_presentation(presentation, options, item.place)
-    column = item.window.span.column if item.window is not None else None
-    return effective if column is None else replace(effective, grid_column=column)
+    return replace(effective, grid_column=unit_grid_column(effective.grid_column, item.window))
+
+
+def unit_grid_column(record_column: int | None, window: ResolvedWindow | None) -> int | None:
+    """The column a drawn unit is placed by: its window's own column, else its record's (D-08, D-14)."""
+
+    column = window.span.column if window is not None else None
+    return record_column if column is None else column
 
 
 def _apply_provenance_annotations(

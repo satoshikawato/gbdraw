@@ -70,6 +70,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
+  PLAN_CARD_WINDOWS: 'planCardWindows',
   PLAN_LINEAR_UNITS: 'planLinearUnits',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',

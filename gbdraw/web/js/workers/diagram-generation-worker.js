@@ -1223,6 +1223,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // The circled numbers and omitted lengths a Linear card shows beside its windows (PD-OI-124).
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_CARD_WINDOWS]: {
+    keys: ['records'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'plan_card_windows_json', [jsonArgument(payload.records, [])])
+  },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],
     fileRoles: [],
