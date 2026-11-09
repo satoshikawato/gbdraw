@@ -4,6 +4,7 @@ import {
   buildCircularTrackSlotSpec
 } from './circular-track-slots.js';
 import {
+  circularRequestSlotsWithPlacedLanes,
   parseCircularTrackSlotSpec
 } from '../services/circular-track-slot-model.js';
 import {
@@ -1799,8 +1800,12 @@ const appendTrackOptions = (args, request) => {
     throw recipeUnavailable(msg('an explicit empty track list means no tracks, which the current CLI cannot express.'));
   }
   const option = request.mode === 'circular' ? '--circular_track_slot' : '--linear_track_slot';
+  // Python reads the lane or side of a slot that names none from its place beside the Axis index (OV-3157, OV-3186).
   const placedSides = request.mode === 'linear' ? placedLinearSides(slots, tracks[axisField], options.dinucleotide || 'GC') : null;
-  slots.forEach((slot, index) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options, placedSides?.[index] ?? null)));
+  /** @type {readonly (typeof slots)[number][]} */
+  const rows = slots;
+  const placedSlots = request.mode === 'circular' ? circularRequestSlotsWithPlacedLanes(rows, tracks[axisField]) : rows;
+  placedSlots.forEach((slot, index) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options, placedSides?.[index] ?? null)));
   appendOption(
     args,
     request.mode === 'circular' ? '--circular_track_axis_index' : '--linear_track_axis_index',

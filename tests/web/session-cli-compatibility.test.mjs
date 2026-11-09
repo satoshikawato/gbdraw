@@ -528,6 +528,28 @@ await test('a Circular CLI stack with blank sides and an Overlay set row loads o
   }
 });
 
+// OV-3186: with an Axis index, Python gives a features slot that names no side and no lane the lane of its place
+// (outward before the index, inward past it), under every track type. Load reads it so.
+await test('a Circular CLI features slot without a side takes the lane of its place beside the Axis index (OV-3186)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    for (const [trackType, axis, lane] of [['middle', 2, 'outside'], ['tuckin', 2, 'outside'], ['spreadout', 1, 'inside']]) {
+      const output = path.join(directory, trackType);
+      execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', lambda, '--track_type', trackType,
+        '--circular_track_slot', 'gc:content', '--circular_track_slot', 'features:features', '--circular_track_slot', 'sk:skew',
+        '--circular_track_axis_index', String(axis), '-f', 'svg', '-o', output, '--session_output', `${output}.gbdraw-session.json.gz`], {
+        cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+      });
+      const result = await load(gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`)));
+      assert.equal(result.status, 'ok', JSON.stringify(result.error));
+      const features = modeDrawing(state, 'circular').adv.circular_track_slots.find(({ id }) => id === 'features');
+      assert.deepEqual([features.side, features.params.lane_direction], [lane, lane], trackType);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // OV-3155: the Linear stack of a CLI Session without an Axis index loads the same way: each row on the side the CLI
 // drew it (a features row without a side below, as Python reads it), the rows above the Axis first.
 await test('a Linear CLI stack without an Axis index loads each slot on the side the CLI drew it (OV-3155)', async () => {

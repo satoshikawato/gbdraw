@@ -60,7 +60,8 @@ import {
   hasCircularGeometryShortcuts,
   inferLegacyAxisIndexFromFeature,
   parseCircularTrackSlotSpecs,
-  effectiveSlotPlacement
+  effectiveSlotPlacement,
+  circularRequestSlotsWithPlacedLanes
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
 import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
@@ -7092,7 +7093,7 @@ export const projectCanonicalSessionRequest = ({
   const circularPreset = overrides.track_type || 'tuckin';
   const circularStack = Array.isArray(tracks.circularTrackSlots) && (tracks.circularTrackAxisIndex ?? null) === null
     ? stackTrackSlotsBySide(projectedCircularTrackSlots, (slot) => effectiveSlotPlacement(slot, circularPreset), 'outside')
-    : { slots: projectedCircularTrackSlots, axisIndex: tracks.circularTrackAxisIndex ?? null };
+    : { slots: circularRequestSlotsWithPlacedLanes(projectedCircularTrackSlots, tracks.circularTrackAxisIndex), axisIndex: tracks.circularTrackAxisIndex ?? null };
   const linearStack = Array.isArray(tracks.linearTrackSlots) && (tracks.linearTrackAxisIndex ?? null) === null
     ? stackTrackSlotsBySide(projectedLinearTrackSlots, effectiveLinearSlotPlacement, 'above')
     : { slots: projectedLinearTrackSlots, axisIndex: tracks.linearTrackAxisIndex ?? null };

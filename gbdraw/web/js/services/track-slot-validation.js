@@ -396,14 +396,54 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
  * @typedef {{ slots: T[], axisIndex: number }} SideOrderedStack
  */
 /**
+ * The gap of each Overlay set row among the side-ordered rows: gap g puts it before `fixed[g]`, gap `fixed.length` at
+ * the end. Python paints rows by z, then by their place, so two rows of one z keep the order the request gave them.
+ * An overlay and the rows it covers never share a z (Python refuses it), so only rows of one z bind each other. Per
+ * z, the overlays keep their order among themselves and against the side-ordered rows wherever some list can: each
+ * takes its place before the row that followed it in the request (the end when none did), moved into the range those
+ * rows of its z leave it. Where no list can keep a z's order, its overlays keep only their own order.
+ * @param {readonly { readonly z?: unknown }[]} rows
+ * @param {readonly number[]} fixed The request places of the side-ordered rows, in their new order.
+ * @param {readonly number[]} overlays The request places of the Overlay set rows, in order.
+ * @returns {Map<number, number>} The gap of each overlay, by its request place.
+ */
+const overlayGaps = (rows, fixed, overlays) => {
+  const zOf = (/** @type {number} */ index) => Number(rows[index].z ?? 0);
+  const placeOf = new Map(fixed.map((index, place) => [index, place]));
+  /** @type {Map<number, number>} */
+  const gaps = new Map();
+  for (const z of new Set(overlays.map(zOf))) {
+    const chain = overlays.filter((index) => zOf(index) === z);
+    const bounds = chain.map((overlay) => {
+      const before = fixed.filter((index) => index < overlay && zOf(index) === z).map((index) => Number(placeOf.get(index)) + 1);
+      const after = fixed.filter((index) => index > overlay && zOf(index) === z).map((index) => Number(placeOf.get(index)));
+      const next = Math.min(...fixed.filter((index) => index > overlay));
+      return { low: Math.max(0, ...before), high: Math.min(fixed.length, ...after), home: placeOf.get(next) ?? fixed.length };
+    });
+    const earliest = bounds.map(({ low }) => low);
+    earliest.forEach((low, i) => { earliest[i] = Math.max(low, i > 0 ? earliest[i - 1] : 0); });
+    const latest = bounds.map(({ high }) => high);
+    for (let i = latest.length - 2; i >= 0; i -= 1) latest[i] = Math.min(latest[i], latest[i + 1]);
+    const keepsOrder = earliest.every((low, i) => low <= latest[i]);
+    let previous = 0;
+    chain.forEach((overlay, i) => {
+      previous = keepsOrder
+        ? Math.min(Math.max(bounds[i].home, earliest[i], previous), latest[i])
+        : Math.max(bounds[i].home, previous);
+      gaps.set(overlay, previous);
+    });
+  }
+  return gaps;
+};
+
+/**
  * The Web stack of a request that names no Axis index (the CLI's and the Python API's). Python draws each row of
  * such a request on its own side, in the stack's order on each side; the Web stack holds a side as a place before or
  * after the Axis. So the rows on the outer side (outside, above) come first, then the rows on the Axis, then the
- * others, each in its order. An Overlay set row draws over its anchor on any side: it keeps its place before the row
- * after it (after the row before it at the end), so Python paints the rows in the order the request drew them where
- * it can. A stack whose sides follow its order comes back unchanged. The Axis index is the place of the first row on
- * the Axis or past it (OV-3079, OV-3155).
- * @template {{ readonly renderer?: unknown }} T
+ * others, each in its order. An Overlay set row draws over its anchor on any side and takes no row: it goes where
+ * Python paints it in the request's order (`overlayGaps`). A stack whose sides follow its order comes back unchanged.
+ * The Axis index is the place of the first row on the Axis or past it (OV-3079, OV-3155).
+ * @template {{ readonly renderer?: unknown, readonly z?: unknown }} T
  * @param {readonly T[]} rows
  * @param {(row: T) => string} placementOf The mode's reading of the side a row draws on.
  * @param {'outside' | 'above'} outerSide
@@ -417,14 +457,16 @@ export const stackTrackSlotsBySide = (rows, placementOf, outerSide) => {
     if (placement === 'overlay') return row.renderer === 'annotations' ? null : 1;
     return 2;
   });
-  const placed = rows.map((row, index) => ({
-    row,
-    index,
-    rank: ranks[index],
-    key: ranks[index] ?? ranks.slice(index).find((rank) => rank !== null) ?? ranks.slice(0, index).findLast((rank) => rank !== null) ?? 0
-  })).sort((a, b) => a.key - b.key || a.index - b.index);
-  const axisIndex = placed.findIndex(({ rank }) => rank === 1 || rank === 2);
-  return { slots: placed.map(({ row }) => row), axisIndex: axisIndex < 0 ? placed.length : axisIndex };
+  const fixed = rows.map((_row, index) => index).filter((index) => ranks[index] !== null)
+    .sort((a, b) => Number(ranks[a]) - Number(ranks[b]) || a - b);
+  const overlays = rows.map((_row, index) => index).filter((index) => ranks[index] === null);
+  const gaps = overlayGaps(rows, fixed, overlays);
+  const order = [...fixed, fixed.length].flatMap((index, place) => [
+    ...overlays.filter((overlay) => gaps.get(overlay) === place),
+    ...(place < fixed.length ? [index] : [])
+  ]);
+  const axisIndex = order.findIndex((index) => ranks[index] === 1 || ranks[index] === 2);
+  return { slots: order.map((index) => rows[index]), axisIndex: axisIndex < 0 ? order.length : axisIndex };
 };
 
 /**

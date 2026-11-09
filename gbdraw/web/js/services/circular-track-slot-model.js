@@ -526,6 +526,26 @@ export const clampCircularTrackAxisIndex = (value, slotCount, losses = null) => 
 };
 
 /**
+ * The slots of a request with an Axis index as Python reads them: a features slot that names neither a side nor a
+ * lane takes the lane of its place, outward before the index and inward past it, under every track type
+ * (`_slot_with_axis_derived_side` in gbdraw/tracks/circular.py; OV-3186). The Web writes both, so only the requests of
+ * the CLI and the Python API change. Other slots (a slot written as CLI text among them), and every slot without an
+ * index, come back as they are.
+ * @template T
+ * @param {readonly T[]} slots
+ * @param {unknown} axisIndex
+ * @returns {T[]}
+ */
+export const circularRequestSlotsWithPlacedLanes = (slots, axisIndex) => slots.map((slot, index) => {
+  if (!Number.isInteger(axisIndex) || typeof slot !== 'object' || slot === null) return slot;
+  const row = /** @type {{ readonly renderer?: unknown, readonly enabled?: unknown, readonly side?: unknown, readonly params?: unknown }} */ (slot);
+  const params = cloneParams(row.params);
+  if (row.renderer !== 'features' || row.enabled === false || row.side != null
+    || normalizeOptionalText(params.lane_direction ?? params.lanes) !== null) return slot;
+  return /** @type {T} */ ({ ...row, params: { ...params, lane_direction: index < Number(axisIndex) ? 'outside' : 'inside' } });
+});
+
+/**
  * @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place.
  * @param {unknown} axisIndex
  * @param {unknown} [preset]

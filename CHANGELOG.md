@@ -215,8 +215,16 @@ write-up of a release.
   (Linear) after the features row was drawn inside or below it. Load now
   places each row on the side the CLI drew it, and Generate draws the CLI's
   figure. An Annotations row with no `side=` is read as outside (above), and a
-  Linear features row with no `side=` as below, as the CLI draws them
+  Linear features row with no `side=` as below, as the CLI draws them.
+  Overlay Annotations rows of one `z` keep the order the CLI paints them in
   (OV-3079, OV-3155).
+- Fixed (Web app): a Circular Session saved by the CLI with
+  `--circular_track_axis_index` and a `features:features` slot with no
+  `side=` or `lane_direction=` loaded with the lanes of the track type (split
+  under Middle) instead of the lanes of the slot's place, as the CLI draws
+  them. Load now reads the lanes of the place, and the Run Info Source recipe
+  writes them; before, its command drew another figure (Middle) or failed
+  (Tuckin) (OV-3186).
 - Fixed (Web app): the Source recipe in Run Info for a Linear drawing whose
   track slots name an Axis index wrote `side=below` (`side=overlay` for the
   features slot) for each slot without a side, also for slots placed above the

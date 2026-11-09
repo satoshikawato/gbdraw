@@ -1259,7 +1259,7 @@ test('a Linear slot without a dinucleotide takes the request\'s in the source re
 
 // OV-3157: Python reads a Linear slot that names no side from its place beside the Axis index. The recipe writes
 // that side, so its command draws the request's stack instead of failing on a side that conflicts with the index.
-test('a Linear slot without a side takes the side of its place in the source recipe (OV-3157)', async () => {
+test('a slot without a side takes the side or lane of its place in the source recipe (OV-3157, OV-3186)', async () => {
   const session = structuredClone(linearGallerySession);
   const slot = (id, renderer) => ({ kind: 'linearTrackSlot', id, renderer, enabled: true, side: null, height: null, spacing: null, z: 0, params: {} });
   session.renderRequest.diagramOptions.tracks.linearTrackSlots = [
@@ -1272,17 +1272,23 @@ test('a Linear slot without a side takes the side of its place in the source rec
   assert.deepEqual(tokens.map((token) => [token.split(':')[0], (token.match(/[@,]side=(\w+)/) || [])[1]]),
     [['gc', 'above'], ['features', 'above'], ['sk', 'below']], tokens.join(' | '));
   await assertCliParserAccepts(recipe);
-  // Circular: a features slot without a side before the Axis draws outside, so its lanes go outward.
-  const circular = structuredClone(circularGallerySession);
-  const ring = (id, renderer) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null, width: null,
-    z: 0, params: {}, innerGapPx: null, outerGapPx: null });
-  circular.renderRequest.diagramOptions.tracks.circularTrackSlots = [
-    ring('gc', 'dinucleotide_content'), ring('features', 'features'), ring('sk', 'dinucleotide_skew')
-  ];
-  circular.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 2;
-  const circularRecipe = await buildSourceRecipe(circular);
-  assert.equal(circularRecipe.available, true, circularRecipe.unavailableReason);
-  await assertCliParserAccepts(circularRecipe);
+  // OV-3186: a Circular features slot without a side or a lane takes the lane of its place, under every track type
+  // (Middle wrote `split`, a different figure; Tuckin wrote `inside`, which the CLI refuses beside this index).
+  for (const trackType of ['middle', 'tuckin', 'spreadout']) {
+    const circular = structuredClone(circularGallerySession);
+    const ring = (id, renderer) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null, width: null,
+      z: 0, params: {}, innerGapPx: null, outerGapPx: null });
+    circular.renderRequest.diagramOptions.configOverrides['canvas.circular.track_type'] = trackType;
+    circular.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+      ring('gc', 'dinucleotide_content'), ring('features', 'features'), ring('sk', 'dinucleotide_skew')
+    ];
+    circular.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 2;
+    const circularRecipe = await buildSourceRecipe(circular);
+    assert.equal(circularRecipe.available, true, circularRecipe.unavailableReason);
+    const features = circularRecipe.args.find((arg, index) => circularRecipe.args[index - 1] === '--circular_track_slot' && arg.startsWith('features:'));
+    assert.equal((features.match(/lane_direction=(\w+)/) || [])[1], 'outside', `${trackType}: ${features}`);
+    await assertCliParserAccepts(circularRecipe);
+  }
 });
 
 // PD-OI-078 (rule L): a request that carries the track narrowing settings (a Python
