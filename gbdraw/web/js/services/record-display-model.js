@@ -304,7 +304,7 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
 
 /**
  * The windows a stored schema <= 9 record's `region` reads as at schema 10: one window, none for a value that is no
- * object. A region with the larger number first is the reversed span (v0.14.5); only a schema 10 window whose start
+ * object (a missing field is null; only integers can be reversed). A region with the larger number first is the reversed span (v0.14.5); only a schema 10 window whose start
  * is after its end crosses the origin, so the window states the span in order (Python's `_decode_region`). The one
  * reader of a stored region's span and orientation, for the request promotion (`promoteRecordRegionsToWindows`,
  * session-request.js) and the protein-frame check that reads a stored request before it (`storedRecordReverses`,
@@ -314,11 +314,13 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
  */
 export const storedRegionWindows = (region) => {
   if (!isPlainObject(region)) return [];
-  const { start, end } = region;
-  const reversed = typeof start === 'number' && typeof end === 'number' && start > end;
+  // A missing field reads as null, and only two integers can be the reversed span, as Python reads them.
+  const start = region.start ?? null;
+  const end = region.end ?? null;
+  const reversed = Number.isInteger(start) && Number.isInteger(end) && start > end;
   return [reversed
     ? { start: end, end: start, reverseComplement: true, column: null }
-    : { start, end, reverseComplement: region.reverseComplement, column: null }];
+    : { start, end, reverseComplement: region.reverseComplement ?? null, column: null }];
 };
 
 /**

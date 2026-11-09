@@ -1,5 +1,5 @@
 {
-  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957. Left out until decided (OV-2957): a region with no keys (Web writes absent fields, Python null) and non-integer numbers (Python reads only integers as reversed; the Web any number).",
+  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957.",
   "cases": [
     {
       "name": "forward span",
@@ -378,6 +378,43 @@
           "start": 1,
           "end": 9,
           "reverseComplement": "yes",
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "region is empty object",
+      "record": {
+        "selector": null,
+        "region": {}
+      },
+      "windows": [
+        {
+          "start": null,
+          "end": null,
+          "reverseComplement": null,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "non-integer numbers are not reversed",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 300.5,
+          "end": 50.5,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 300.5,
+          "end": 50.5,
+          "reverseComplement": false,
           "column": null
         }
       ],
