@@ -346,11 +346,13 @@ export const createCircularConservationSources = ({
   /**
    * The adoption of a candidate's request (`adopt`, which says whether it installed the rings' tables: only a
    * Generate's LOSAT result does), then, when it did, the rings' reconcile with Generate's own rings
-   * (`adoptedRingKeyChanges`): each adopted ring takes its searched ring's genetic code and stack row.
+   * (`adoptedRingKeyChanges`): each adopted ring takes its searched ring's genetic code and stack row. Only a Generate
+   * that searched rings (`ringAdoption`) reads the draft's rings; any other adoption (a Linear Generate, a candidate of
+   * the committed request) leaves them unread.
    * @param {DrawingState} drawing @param {() => boolean} adopt @param {SearchedRingAdoption | null} ringAdoption
    */
   const adoptCircularRingResult = (drawing, adopt, ringAdoption) => {
-    const draftSources = conservationSourceDescriptors(circularRingSources(drawing));
+    const draftSources = ringAdoption ? conservationSourceDescriptors(circularRingSources(drawing)) : [];
     if (adopt()) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption));
   };
   // Session Load (`afterImport`): a Session whose Show Comparison Rings is not
