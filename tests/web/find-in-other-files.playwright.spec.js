@@ -1,7 +1,7 @@
 // Find in other files (PD-OI-123): the Region popup of a Linear drawing opens the dialog with the picked span as the
 // reference; Search runs tblastn (the vendored LOSAT Wasm) for each other File under the LOSAT overlay; the proposal
 // comes from Python's plan; Create adds a new Linear drawing right after the source as one project step, which
-// Generate draws and Undo removes. The fixture is six MIBiG cluster records of one Linear drawing.
+// Generate draws and Undo removes. The fixture is five MIBiG cluster records (five Files) of one Linear drawing.
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
@@ -37,7 +37,15 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   const [source] = await drawingIds(page);
 
   // Select region on the first record, then the popup's entry.
+  // The fit animates the preview transform: read screen points once it has settled (as region-select's spec does).
   await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  let last = '';
+  await expect.poll(async () => {
+    const now = await page.evaluate(() => JSON.stringify(document.querySelector('.gbdraw-preview-surface').getBoundingClientRect()));
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
   const toggle = page.locator('[data-region-select-toggle]');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
@@ -46,6 +54,7 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 8 });
+  await expect(page.locator('[data-region-select-readout]')).toBeVisible();
   await page.mouse.up();
   const popup = page.locator('[data-preview-item-popup="region"]');
   const entry = popup.locator('[data-region-find-in-files]');
@@ -53,17 +62,19 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   // After "Use as search query".
   expect(await popup.locator('button').evaluateAll((buttons) => buttons.map((button) => button.hasAttribute('data-region-search-query')
     ? 'query' : button.hasAttribute('data-region-find-in-files') ? 'find' : '').filter(Boolean))).toEqual(['query', 'find']);
+  // The popup's span ("2,001-20,001 (18,001 bp)"): the dialog's reference row is that span.
+  const [spanStart, spanEnd] = (await page.locator('[data-region-span]').innerText()).split(' ')[0].split('-').map((text) => text.replace(/,/g, ''));
   await entry.click();
 
   const dialog = page.locator('[data-find-files-dialog]');
   await expect(dialog.locator('[data-find-files-genes]')).toBeVisible({ timeout: 180_000 });
   const row = dialog.locator('[data-find-files-row]');
   await expect(row).toHaveCount(1);
-  // The picked span, in source coordinates (this record is drawn from a later display start).
   await expect(row.locator('[data-find-files-record]')).not.toHaveValue('');
-  expect(Number(await row.locator('[data-find-files-end]').inputValue()) - Number(await row.locator('[data-find-files-start]').inputValue())).toBe(18_000);
+  await expect(row.locator('[data-find-files-start]')).toHaveValue(spanStart);
+  await expect(row.locator('[data-find-files-end]')).toHaveValue(spanEnd);
   // Every other File is offered, ticked at first.
-  await expect(dialog.locator('[data-find-files-target]')).toHaveCount(5);
+  await expect(dialog.locator('[data-find-files-target]')).toHaveCount(4);
   await expect(dialog.locator('[data-find-files-target] input:not(:checked)')).toHaveCount(0);
   await expect(dialog.locator('[data-find-files-program]')).toHaveValue('tlosatn');
 
@@ -71,7 +82,10 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   await dialog.locator('[data-find-files-search]').click();
   await expect.poll(() => status(page), { timeout: 600_000 }).toBe('proposal');
   await expect(dialog).toHaveAttribute('data-find-files-screen', 'proposal');
-  await expect(dialog.locator('[data-find-files-file]')).toHaveCount(5);
+  await expect(dialog.locator('[data-find-files-file]')).toHaveCount(4);
+  // A screen 768 px wide or wider shows the proposal as a table, not as cards.
+  await expect(dialog.locator('[data-find-files-table]').first()).toBeVisible();
+  await expect(dialog.locator('[data-find-files-cards]').first()).toBeHidden();
   const windows = await dialog.locator('[data-find-files-table] [data-find-files-window]').count();
   expect(windows).toBeGreaterThan(0);
   await expect(dialog.locator('[data-find-files-count]')).toContainText(' in ');
@@ -103,4 +117,7 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   await undo.click();
   await expect.poll(() => drawingIds(page)).toEqual([source]);
   await expect(drawingTab(page, source)).toHaveAttribute('aria-selected', 'true');
+  // Redo restores it.
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(() => drawingIds(page)).toEqual([source, added]);
 });

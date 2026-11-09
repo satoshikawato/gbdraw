@@ -87,7 +87,9 @@ export const ChoiceDialog = {
     labelledby: { type: String, required: true },
     describedby: { type: String, default: null },
     busy: { type: Boolean, default: false },
-    busyStatus: { type: String, default: null }
+    busyStatus: { type: String, default: null },
+    // A wide panel, for a dialog that shows a table (Find in other files) instead of a few choices.
+    wide: { type: Boolean, default: false }
   },
   emits: ['cancel'],
   /** @param {{ busy: boolean }} props */

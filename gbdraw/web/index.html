@@ -9690,7 +9690,7 @@
         <!-- Find in other files (PD-OI-123): the view of app/find-in-other-files.js, which owns open, close and every input.
              The dialog steps aside while the LOSAT overlay shows the search; nothing here is saved or makes a History step. -->
         <choice-dialog v-if="findInOtherFiles.dialog.show" v-show="findInOtherFiles.dialog.status !== 'searching'"
-             labelledby="find-files-title" describedby="find-files-description" data-find-files-dialog
+             wide labelledby="find-files-title" describedby="find-files-description" data-find-files-dialog
              :data-find-files-screen="findInOtherFiles.dialog.screen" :data-find-files-status="findInOtherFiles.dialog.status"
              @cancel="findInOtherFiles.close()" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-2 sm:p-4">
@@ -9937,7 +9937,7 @@
 <script type="text/x-template" id="choice-dialog-template">
     <div v-dialog-focus data-modal-overlay @click.self="$emit('cancel')" @keydown.esc.prevent.stop="$emit('cancel')">
         <div ref="panel" role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
-             :aria-busy="busy ? 'true' : null" class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+             :aria-busy="busy ? 'true' : null" class="bg-white rounded-xl shadow-2xl p-6 mx-4" :class="wide ? 'w-full max-w-4xl' : 'max-w-md'">
             <fieldset :disabled="busy" class="contents [&_button:disabled]:opacity-60 [&_button:disabled]:cursor-wait"><slot></slot></fieldset>
             <p v-if="busy" role="status" class="mt-3 text-xs text-slate-500">{{ busyStatus || t('Applying an edit…') }}</p>
         </div>
