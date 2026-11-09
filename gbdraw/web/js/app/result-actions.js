@@ -28,7 +28,6 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { ExportLimitReply, ExportSnapshot, FontEmbedding, SvgRootReply } from '../services/export.js' */
 /** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 /** @import { CatalogSequences } from '../services/catalog-sequences.js' */
-/** @import { EmbedCatalogItem } from '../services/standalone-interactivity.js' */
 
 const { computed, reactive, ref } = window.Vue;
 
@@ -318,7 +317,7 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
  * @property {(drawing: DrawingState) => CanonicalRenderRequest | null} shownCommittedRequest
  * @property {(drawing: DrawingState) => Promise<void>} awaitLinearRecordDiscovery
  * @property {(drawing: DrawingState) => LinearDraftRecord[]} committedLinearRecordsOf
- * @property {CatalogSequences['readEmbedItem']} readEmbedItem Python's encoding of the shown Result's catalog item
+ * @property {CatalogSequences['readEmbedJson']} readEmbedJson Python's encoding of the shown Result's catalog item
  *   with every sequence an Interactive SVG embeds (D5); null when another Result is shown before it arrives.
  */
 
@@ -329,7 +328,7 @@ export const createClickedFeatureCopy = ({ clickedFeature }) => {
 export const createResultExport = ({
   state, errorLog, showNotice, captureSvgExport, loadExportService, runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS,
   displayedArtifactDrawing, embedInExports, shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest,
-  awaitLinearRecordDiscovery, committedLinearRecordsOf, readEmbedItem
+  awaitLinearRecordDiscovery, committedLinearRecordsOf, readEmbedJson
 }) => {
   /** @param {unknown} filename @param {unknown} text @param {string} [type] */
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
@@ -352,10 +351,10 @@ export const createResultExport = ({
       // from (D5) before the file is built: a failed read writes no file and shows why (Retry); a Result shown
       // before the read ends writes nothing and says nothing.
       const { interactivity } = captured;
-      const embedItem = interactivity?.catalogItem ? await readEmbedItem(interactivity.catalogItem) : null;
-      if (interactivity?.catalogItem && !embedItem) return { status: 'stale' };
-      const snapshot = interactivity && embedItem ? {
-        ...captured, interactivity: { ...interactivity, embedItem: /** @type {EmbedCatalogItem} */ (embedItem) }
+      const embeddedSequences = interactivity?.catalogItem ? await readEmbedJson(interactivity.catalogItem) : null;
+      if (interactivity?.catalogItem && !embeddedSequences) return { status: 'stale' };
+      const snapshot = interactivity && embeddedSequences ? {
+        ...captured, interactivity: { ...interactivity, embeddedSequences }
       } : captured;
       const exportService = await loadExportService();
       const exportMethod = exportService?.[methodName];

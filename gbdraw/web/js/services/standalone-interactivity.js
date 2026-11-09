@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { EmbeddedSequencesJson } from './catalog-sequences.js' */
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
 import { locationPartNumber, normalizeStringArray } from './feature-utils.js';
@@ -45,17 +46,6 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  */
 
 /**
- * The catalog item an exported Interactive SVG embeds, in the export encoding:
- * Python's `embed_catalog_item`, which the CLI export writes too, read through
- * the Worker (`CatalogSequences['readEmbedItem']`, D5). It is the shown
- * Result's stored item whose biological rows carry their sequences (inline, or
- * as `sequenceSourceIndex` and the `translationFromAminoAcidSequence` mark),
- * with the whole-record sources its matches read (`sequenceSources`). The page
- * derives none of these.
- * @typedef {FeatureCatalogItem & { sequenceSources?: FeatureCatalogRow[] }} EmbedCatalogItem
- */
-
-/**
  * What the caller of the Interactive SVG export hands over: the export
  * (`result-actions.js`) gives the embed item it read, and the capture
  * (`captureSvgExport` in `svg-serialization.js`) the popup mode and the
@@ -63,8 +53,13 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * `normalizeStandaloneContext`.
  * @typedef {object} StandaloneInteractivityOptions
  * @property {string} [popupMode] `simple` or `rich`; anything else is `rich`.
- * @property {EmbedCatalogItem | null} [embedItem] The item the file embeds; without it the export writes nothing
- *   when `requireFeatureCatalog` is set.
+ * @property {FeatureCatalogItem | null} [catalogItem] The shown Result's stored catalog item, which the file
+ *   embeds with `embeddedSequences`; without both the export writes nothing when `requireFeatureCatalog` is set.
+ * @property {EmbeddedSequencesJson | null} [embeddedSequences] The item's sequences in the export encoding, as
+ *   Python's encoder writes them (`embed_catalog_part`, which the CLI export writes too), read through the Worker
+ *   (`CatalogSequences['readEmbedJson']`, D5): the biological rows with their sequences (inline, or as
+ *   `sequenceSourceIndex` and the `translationFromAminoAcidSequence` mark) and the whole-record sources the item's
+ *   matches read. The page derives none of these and writes them into the file as they are.
  * @property {boolean} [requireFeatureCatalog]
  * @property {AliasSource[]} [features] Source Feature rows of the legacy, catalog-free path.
  * @property {StandaloneEditableLabel[]} [editableLabels]
@@ -80,7 +75,8 @@ const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
  * The options after `normalizeStandaloneContext`: every field present.
  * @typedef {object} StandaloneContext
  * @property {'simple' | 'rich'} popupMode
- * @property {EmbedCatalogItem | null} embedItem
+ * @property {FeatureCatalogItem | null} catalogItem
+ * @property {EmbeddedSequencesJson | null} embeddedSequences
  * @property {boolean} requireFeatureCatalog
  * @property {AliasSource[]} features
  * @property {StandaloneEditableLabel[]} editableLabels
@@ -452,7 +448,9 @@ const standaloneCanonicalIdentityStatus = (payload) => {
  */
 const normalizeStandaloneContext = (options = {}) => ({
   popupMode: normalizeStandalonePopupMode(options.popupMode),
-  embedItem: options.embedItem && typeof options.embedItem === 'object' ? options.embedItem : null,
+  catalogItem: options.catalogItem && typeof options.catalogItem === 'object' ? options.catalogItem : null,
+  embeddedSequences: options.embeddedSequences && typeof options.embeddedSequences === 'object'
+    ? options.embeddedSequences : null,
   requireFeatureCatalog: options.requireFeatureCatalog === true,
   features: Array.isArray(options.features) ? options.features : [],
   editableLabels: Array.isArray(options.editableLabels) ? options.editableLabels : [],
@@ -479,8 +477,8 @@ const normalizeStandaloneContext = (options = {}) => ({
 });
 
 /**
- * @param {EmbedCatalogItem} item
- * @returns {EmbedCatalogItem}
+ * @param {FeatureCatalogItem} item
+ * @returns {FeatureCatalogItem}
  */
 const cloneStandaloneCatalogItem = (item) => JSON.parse(JSON.stringify(item));
 
@@ -859,9 +857,9 @@ const getStandaloneOrthogroupDescription = (group, context) => {
 };
 
 /**
- * @param {EmbedCatalogItem} sourceItem
+ * @param {FeatureCatalogItem} sourceItem
  * @param {StandaloneContext} context
- * @returns {EmbedCatalogItem | null}
+ * @returns {FeatureCatalogItem | null}
  */
 const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   const item = cloneStandaloneCatalogItem(sourceItem);
@@ -1861,6 +1859,24 @@ const applyStandaloneViewportRoot = (svg) => {
 };
 
 /**
+ * The JSON text of the item an exported Interactive SVG embeds: `JSON.stringify` of the stored item with the
+ * drawing's edits, whose biological rows and whole-record sources are the export encoding Python wrote, taken as text
+ * (the item Python's `embed_catalog_item` writes: the rows in their place, the sources after every stored key).
+ * @param {FeatureCatalogItem} item
+ * @param {EmbeddedSequencesJson} sequences
+ * @returns {string}
+ */
+export const embeddedCatalogItemJson = (item, sequences) => {
+  /** @type {Record<string, unknown>} */
+  const fields = { ...item, biologicalFeatures: null, ...(sequences.sequenceSources === null ? {} : { sequenceSources: null }) };
+  const text = (/** @type {string} */ key, /** @type {unknown} */ value) => (key === 'biologicalFeatures'
+    ? sequences.biologicalFeatures
+    : key === 'sequenceSources' && sequences.sequenceSources !== null ? sequences.sequenceSources : JSON.stringify(value));
+  return `{${Object.entries(fields).filter(([, value]) => value !== undefined && typeof value !== 'function')
+    .map(([key, value]) => `${JSON.stringify(key)}:${text(key, value)}`).join(',')}}`;
+};
+
+/**
  * @param {SVGSVGElement | null | undefined} svg
  * @param {StandaloneInteractivityOptions} [options]
  * @returns {boolean}
@@ -1869,8 +1885,9 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   if (!svg) return false;
 
   const context = normalizeStandaloneContext(options);
-  // The file embeds the item Python encoded with every sequence (D5): the page adds only the drawing's edits.
-  const sourceCatalogItem = context.embedItem;
+  // The file embeds the stored item with the drawing's edits and the sequences Python encoded (D5).
+  const embeddedSequences = context.embeddedSequences;
+  const sourceCatalogItem = embeddedSequences ? context.catalogItem : null;
   if (context.requireFeatureCatalog && !sourceCatalogItem) return false;
   const catalogItem = sourceCatalogItem
     ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)
@@ -1941,10 +1958,8 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     metadata.setAttribute('data-schema', String(INTERACTIVE_EMBED_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
-    metadata.textContent = JSON.stringify({
-      schema: INTERACTIVE_EMBED_SCHEMA,
-      items: [catalogItem]
-    });
+    metadata.textContent = `{"schema":${INTERACTIVE_EMBED_SCHEMA},"items":[${
+      embeddedCatalogItemJson(catalogItem, /** @type {EmbeddedSequencesJson} */ (embeddedSequences))}]}`;
   } else {
     metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
     metadata.textContent = JSON.stringify(compactWireValue({

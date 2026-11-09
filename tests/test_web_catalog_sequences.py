@@ -25,6 +25,7 @@ from gbdraw.render.interactive_svg import CatalogSequenceRecords
 from gbdraw.session import build_session_document, load_session_document, materialize_session
 from gbdraw.web_support.catalog_sequences import (
     read_embed_catalog_item,
+    read_embed_catalog_part,
     read_feature_sequences,
     read_match_sequences,
 )
@@ -113,6 +114,79 @@ def test_embed_of_the_stored_item_equals_the_item_dev_stored(tmp_path: Path) -> 
 
     assert embedded == stored_five
     assert sum("sequenceSourceIndex" in row for row in embedded["biologicalFeatures"]) == 342
+
+
+def _assembled_from_parts(item: Mapping[str, object], read_part: object) -> dict[str, object]:
+    """The export item as the Web export writes it: one part per record of the item, in the order of its drawn
+    records, the comparison sources with the last part; rows in their order, sources placed by their index."""
+
+    windows = item.get("windowOf") or {}
+    order = list(dict.fromkeys(str(windows.get(key, key)) for key in item["recordKeys"]))  # type: ignore[union-attr, attr-defined]
+    rows: list[dict[str, object]] = []
+    sources: dict[int, dict[str, object]] = {}
+    counts = set()
+    for position, key in enumerate(order):
+        part_rows = [row for row in item["biologicalFeatures"] if row["recordKey"] == key]  # type: ignore[attr-defined]
+        context = {name: item[name] for name in ("recordKeys", "windowOf", "comparisonMatches") if name in item}
+        reply = read_part(  # type: ignore[operator]
+            {**context, "biologicalFeatures": part_rows},
+            {"sourcesOf": [key], "comparisonSources": position == len(order) - 1},
+        )
+        assert [(row["recordKey"], row["biologicalFeatureId"]) for row in reply["biologicalFeatures"]] == [
+            (row["recordKey"], row["biologicalFeatureId"]) for row in part_rows
+        ]
+        rows.extend(reply["biologicalFeatures"])
+        counts.add(reply["sourceCount"])
+        for entry in reply["sequenceSources"]:
+            assert entry["index"] not in sources
+            sources[entry["index"]] = entry["source"]
+    [count] = counts
+    assert sorted(sources) == list(range(count))
+    embedded: dict[str, object] = {**item, "biologicalFeatures": rows}
+    if sources:
+        embedded["sequenceSources"] = [sources[index] for index in range(count)]
+    return embedded
+
+
+def _compact(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def test_the_export_read_record_by_record_equals_the_whole_item_byte_for_byte(tmp_path: Path) -> None:
+    """The Web export reads the embed one record at a time (no reply holds the whole item); assembled, the parts are
+    the item the one encoder writes for the CLI export, with the same source references."""
+
+    path = SESSIONS / "BGC0000708-BGC0000713.v40-schema5.json"
+    catalog = json.loads(path.read_text(encoding="utf-8"))["editorState"]["featureCatalog"]
+    [bare] = promote_legacy_feature_catalog(catalog)["items"]
+
+    with _committed(path, tmp_path) as (request, paths, output):
+        whole = read_embed_catalog_item(request, paths, output, bare)
+        assembled = _assembled_from_parts(
+            bare, lambda item, part: read_embed_catalog_part(request, paths, output, item, part)
+        )
+
+    assert len(whole["sequenceSources"]) == 5  # type: ignore[arg-type]
+    assert _compact(assembled) == _compact(whole)
+
+
+def test_an_embed_part_names_the_records_whose_sources_it_returns(tmp_path: Path) -> None:
+    path = SESSIONS / "BGC0000708-BGC0000713.v40-schema5.json"
+    catalog = json.loads(path.read_text(encoding="utf-8"))["editorState"]["featureCatalog"]
+    [bare] = promote_legacy_feature_catalog(catalog)["items"]
+    item = {"recordKeys": bare["recordKeys"], "comparisonMatches": bare["comparisonMatches"], "biologicalFeatures": []}
+
+    with _committed(path, tmp_path) as (request, paths, output):
+        reply = read_embed_catalog_part(
+            request, paths, output, item, {"sourcesOf": [bare["recordKeys"][1]], "comparisonSources": False}
+        )
+        with pytest.raises(ValidationError, match="names the records"):
+            read_embed_catalog_part(request, paths, output, item, {"sourcesOf": "record-1", "comparisonSources": False})
+
+    assert reply["biologicalFeatures"] == []
+    assert [entry["index"] for entry in reply["sequenceSources"]] == [1]
+    assert reply["sequenceSources"][0]["source"]["key"] == "linear:record:1"
+    assert reply["sourceCount"] == 5
 
 
 def test_whole_record_sources_equal_stored_sequence_sources(tmp_path: Path) -> None:

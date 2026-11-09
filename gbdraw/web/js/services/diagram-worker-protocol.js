@@ -352,12 +352,39 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 /** The `readMatchSequences` reply (`MatchSequencesReply`): the spans in the order asked. @typedef {{ spans: readonly MatchSpanSequence[] }} MatchSequencesReply */
 
 /**
- * The payload of `readEmbedSequences`: the committed request, its resources, and the stored catalog item of the
- * Result to export; the reply is that item in the export encoding (`embed_catalog_item`).
+ * The part of the stored catalog item an export read sends (`readEmbedSequences`): the item's drawn records and
+ * matches, and the biological rows of the part.
+ * @typedef {object} EmbedItemPart
+ * @property {readonly string[]} recordKeys
+ * @property {Readonly<Record<string, string>>} [windowOf]
+ * @property {readonly unknown[]} [comparisonMatches]
+ * @property {readonly Readonly<Record<string, unknown>>[]} biologicalFeatures
+ */
+
+/**
+ * Which whole-record sources a part returns (`EmbedPartInput`): those of the records named by record key, and, with
+ * `comparisonSources`, those of the comparison FASTA records.
+ * @typedef {{ sourcesOf: readonly string[], comparisonSources: boolean }} EmbedPartInput
+ */
+
+/**
+ * The payload of `readEmbedSequences`: the committed request, its resources, and one part of the stored catalog
+ * item of the Result to export; the reply is that part in the export encoding (`EmbedCatalogPart`,
+ * `embed_catalog_part`).
  * @typedef {object} EmbedSequencesPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
- * @property {Readonly<Record<string, unknown>>} item
+ * @property {EmbedItemPart} item
+ * @property {EmbedPartInput} part
+ */
+
+/**
+ * The `readEmbedSequences` reply (`EmbedCatalogPart`): the part's rows in the order sent, with their sequences, and
+ * the whole-record sources the part owns, each with its place among the item's `sourceCount` sources.
+ * @typedef {object} EmbedCatalogPart
+ * @property {readonly Readonly<Record<string, unknown>>[]} biologicalFeatures
+ * @property {readonly { index: number, source: Readonly<Record<string, unknown>> }[]} sequenceSources
+ * @property {number} sourceCount
  */
 
 /** @type {readonly string[]} */

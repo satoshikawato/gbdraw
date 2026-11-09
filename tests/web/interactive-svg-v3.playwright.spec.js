@@ -1139,10 +1139,12 @@ test('browser export embeds the exact selected current-schema item and expands r
         data-gbdraw-annotation-mark="band" data-gbdraw-annotation-label="Review window">
         <rect x="5" y="25" width="20" height="6" fill="#94a3b8" />
       </g>`;
-    // The item as Python's export encoder returns it (`readEmbedItem`, D5): the export embeds it as given.
+    // The item with its sequences as Python's export encoder returns them (`readEmbedJson`, D5): the export embeds
+    // them as given.
     const enriched = enrichSvgWithStandaloneInteractivity(svg, {
       popupMode: 'rich',
-      embedItem: catalog.items[0],
+      catalogItem: catalog.items[0],
+      embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null },
       requireFeatureCatalog: true,
       labelTextFeatureOverrides: {
         'rendered-visible': 'Edited visible label'
@@ -1560,7 +1562,8 @@ test('standalone rejects conflicting compact provenance markers', async ({
           x="5" y="5" width="20" height="10" />`;
       enrichSvgWithStandaloneInteractivity(svg, {
         popupMode: 'rich',
-        embedItem: catalog.items[0],
+        catalogItem: catalog.items[0],
+        embeddedSequences: { biologicalFeatures: JSON.stringify(catalog.items[0].biologicalFeatures), sequenceSources: null },
         requireFeatureCatalog: true
       });
       return {
@@ -1684,11 +1687,12 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      // The export embeds the item Python returns for the captured one (`readEmbedItem`, D5); this item holds no
-      // sequence, so the stand-in returns it as captured.
+      // The export embeds the sequences Python returns for the captured item (`readEmbedJson`, D5); this item holds
+      // no sequence, so the stand-in returns its rows as captured.
       const captured = captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true });
+      const rows = JSON.stringify(captured.interactivity.catalogItem.biologicalFeatures);
       await downloadInteractiveSVG({
-        ...captured, interactivity: { ...captured.interactivity, embedItem: captured.interactivity.catalogItem }
+        ...captured, interactivity: { ...captured.interactivity, embeddedSequences: { biologicalFeatures: rows, sequenceSources: null } }
       });
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');

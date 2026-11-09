@@ -6,12 +6,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   createCatalogSequences,
+  embedReadParts,
   featureSequenceKey,
   featureSequenceReads,
   matchSequenceRecordsOf,
   readRowsFasta
 } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { normalizeCaughtError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { embeddedCatalogItemJson } from '../../gbdraw/web/js/services/standalone-interactivity.js';
 
 const committedOf = (fastaFiles = []) => ({
   renderRequest: { mode: 'circular', diagramOptions: { conservationFastaFiles: fastaFiles } },
@@ -20,6 +22,17 @@ const committedOf = (fastaFiles = []) => ({
 const featureReply = ({ recordKey, biologicalFeatureId }) => ({
   recordKey, biologicalFeatureId, nucleotideSequence: `ATG${biologicalFeatureId}`.toUpperCase().replace(/[^ACGT]/g, 'A'),
   aminoAcidSequence: 'M', sequenceWarnings: []
+});
+
+// A stand-in for Python's export encoder (`embed_catalog_part`): every row gets its sequence; each drawn record has
+// one whole-record source (its index the record's place) and a comparison source comes last.
+const EMBED_SOURCES = [{ key: 'linear:record:0', recordIndex: 0 }, { key: 'linear:record:1', recordIndex: 1 },
+  { key: 'homology:comparison:0:C', sourceIndex: 0 }];
+const embedPartReply = ({ item, part }) => ({
+  biologicalFeatures: item.biologicalFeatures.map((row) => ({ ...row, nucleotide_sequence: `N${row.biologicalFeatureId}` })),
+  sequenceSources: EMBED_SOURCES.map((source, index) => ({ index, source })).filter(({ source }) => (
+    source.recordIndex === undefined ? part.comparisonSources : part.sourcesOf.includes(item.recordKeys[source.recordIndex]))),
+  sourceCount: EMBED_SOURCES.length
 });
 
 const doorWith = (initialCommitted) => {
@@ -47,7 +60,7 @@ const doorWith = (initialCommitted) => {
         length: Math.abs(span.end - span.start) + 1, sequence: 'ACGT'
       })) } };
     },
-    readEmbedSequences: async (payload) => ({ result: payload.item })
+    readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
   };
   const door = createCatalogSequences({ getCommittedSession: () => committed, helpers });
   return {
@@ -101,7 +114,7 @@ test('the Worker receives plain spans and features even when the popup state hol
         sent.push(structuredClone(payload));
         return { result: { spans: payload.spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' })) } };
       },
-      readEmbedSequences: async (payload) => ({ result: payload.item })
+      readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
     }
   });
   const committed = committedOf();
@@ -183,4 +196,66 @@ test('the FASTA of catalog rows reads every row once and leaves out rows without
   assert.equal(await readRowsFasta(rows, 'aa', readFeatures), '');
   assert.equal(await readRowsFasta(rows, 'nt', async () => null), null, 'a discarded read gives null');
   assert.equal(await readRowsFasta([{ read: null, feature: {} }], 'nt', readFeatures), '');
+});
+
+const exportItem = {
+  resultIndex: 0, resultName: 'd.svg', recordKeys: ['rec-a', 'rec-b'], features: [],
+  biologicalFeatures: [
+    { recordKey: 'rec-a', biologicalFeatureId: 'a1', start: 0, end: 10 },
+    { recordKey: 'rec-a', biologicalFeatureId: 'a2', start: 10, end: 30 },
+    { recordKey: 'rec-b', biologicalFeatureId: 'b1', start: 0, end: 5 }
+  ],
+  orthogroups: [], annotations: [], comparisonMatches: [{ id: 'm1' }]
+};
+
+test('an export reads one part per record, never the whole item, with each source once', () => {
+  const parts = embedReadParts(exportItem, 25);
+  assert.deepEqual(parts.map(({ item, part }) => [item.biologicalFeatures.map((row) => row.biologicalFeatureId), part]), [
+    [['a1'], { sourcesOf: ['rec-a'], comparisonSources: false }],
+    [['a2'], { sourcesOf: [], comparisonSources: false }],
+    [['b1'], { sourcesOf: ['rec-b'], comparisonSources: true }]
+  ]);
+  assert.deepEqual(Object.keys(parts[0].item), ['recordKeys', 'comparisonMatches', 'biologicalFeatures']);
+  // A record without rows gives its sources with the last part; an item without rows is one part.
+  const noRows = embedReadParts({ ...exportItem, biologicalFeatures: exportItem.biologicalFeatures.slice(2) }, 25);
+  assert.deepEqual(noRows.map(({ part }) => part), [{ sourcesOf: ['rec-b', 'rec-a'], comparisonSources: true }]);
+  assert.deepEqual(embedReadParts({ ...exportItem, biologicalFeatures: [] }, 25).map(({ item, part }) => [item.biologicalFeatures, part]),
+    [[[], { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true }]]);
+});
+
+test('the parts written as they arrive are the item Python encodes whole, byte for byte', async () => {
+  const sent = [];
+  const committed = committedOf();
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => { sent.push(payload.part); return { result: embedPartReply(payload) }; } }
+  });
+  const sequences = await door.readEmbedJson(exportItem);
+  assert.equal(sent.length, 3);
+  const whole = embedPartReply({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
+  assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
+    ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source)
+  }));
+});
+
+test('an export read the shown Result outlived gives null; a source missing or given twice is an invalid reply', async () => {
+  let committed = committedOf();
+  const outlived = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => { committed = committedOf(); return { result: embedPartReply(payload) }; } }
+  });
+  assert.equal(await outlived.readEmbedJson(exportItem), null);
+  for (const reply of [
+    (payload) => ({ ...embedPartReply(payload), sequenceSources: [] }),
+    (payload) => ({ ...embedPartReply(payload), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
+    (payload) => ({ ...embedPartReply(payload), biologicalFeatures: [] })
+  ]) {
+    const fixed = committedOf();
+    const door = createCatalogSequences({
+      getCommittedSession: () => fixed, featureReadBases: 25,
+      helpers: { readEmbedSequences: async (payload) => ({ result: reply(payload) }) }
+    });
+    const error = await door.readEmbedJson(exportItem).catch((caught) => caught);
+    assert.equal(normalizeCaughtError(error).code, 'RESULT_INVALID');
+  }
 });

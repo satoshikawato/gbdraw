@@ -173,8 +173,8 @@ const renderedLabelTextOverrides = (item, drawing) => {
 /**
  * What the capture of an Interactive SVG export holds: the popup mode and the
  * drawing's edits, and the stored catalog item of the exported Result, which
- * the export gives Python to read its sequences (`readEmbedItem`, D5) before
- * it writes the file with the item Python returns (`embedItem`).
+ * the export gives Python to read its sequences (`readEmbedJson`, D5) before
+ * it writes the file with them (`embeddedSequences`).
  * @typedef {StandaloneInteractivityOptions & { catalogItem: FeatureCatalogItem | null }} ExportInteractivity
  */
 

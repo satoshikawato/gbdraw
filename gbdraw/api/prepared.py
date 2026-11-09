@@ -1309,7 +1309,12 @@ def get_or_build_decoded_resource(
     key: Hashable,
     builder: Callable[[], Any],
 ) -> Any:
-    """Reuse one decoded immutable value while its Worker resource is unchanged."""
+    """Reuse one decoded immutable value while its Worker resource is unchanged.
+
+    The value depends only on the resource bytes and ``key`` (the decoder), so it is found by the resource's content
+    token and size, not by its resource id: a Session's saved request and the Web compile name the same comparison
+    table by different ids, and a sequence read after a Load serves the Generate after it.
+    """
 
     transaction = _ACTIVE_PREPARED_TRANSACTION.get()
     identity = prepared_resource_identity(source)
@@ -1317,7 +1322,7 @@ def get_or_build_decoded_resource(
         return builder()
     value = transaction.cache.get_or_build(
         "decoded",
-        (identity, key),
+        (identity.cache_token, identity.size, key),
         frozenset({identity}),
         builder,
     )

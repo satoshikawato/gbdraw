@@ -39,6 +39,7 @@ from gbdraw.api import (
 )
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
+    PreparedInputRetention,
     PreparedResourceIdentity,
     get_or_build_decoded_resource,
     get_or_build_parsed_source,
@@ -240,6 +241,34 @@ def test_decoded_resource_cache_reuses_only_the_same_worker_identity(
     assert changed_metrics["decodedResourceCacheMissCount"] == 1
     assert changed_metrics["decodedResourceBuildCount"] == 1
     assert changed_metrics["preparedInputCacheEvictionCount"] == 1
+
+
+def test_decoded_resource_cache_reuses_the_same_bytes_under_another_resource_id(
+    tmp_path: Path,
+) -> None:
+    """A decoded value depends only on the resource bytes and the decoder: a sequence read after a Session Load
+    decodes the saved request's comparison table (``comparison-protein-1``), and the Generate after it names the same
+    bytes as the Web compile does (``comparison-canonical-protein-1``), so it decodes nothing again."""
+
+    path = tmp_path / "typed.json"
+    path.write_text('{"schema":1}', encoding="utf-8")
+    cache = PreparedBiologicalInputCache()
+    size = path.stat().st_size
+    saved = PreparedResourceIdentity("comparison-protein-1", "render-resource-1", size)
+    compiled = PreparedResourceIdentity("comparison-canonical-protein-1", "render-resource-1", size)
+    value = {"decoded": True}
+    with cache.transaction(resource_paths={path: saved}, diagnostics=None, read_only=True, publish_inputs=True):
+        assert get_or_build_decoded_resource(path, ("canonical-typed-json", "result"), lambda: value) is value
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    retention = PreparedInputRetention(drawing="drawing-1", resource_tokens=frozenset(), held_tokens=frozenset())
+    with cache.transaction(resource_paths={path: compiled}, diagnostics=diagnostics, retention=retention):
+        assert get_or_build_decoded_resource(
+            path,
+            ("canonical-typed-json", "result"),
+            lambda: pytest.fail("the same bytes under another resource id were decoded again"),
+        ) is value
+    assert _metrics(diagnostics)["decodedResourceCacheHitCount"] == 1
 
 
 def test_warm_and_render_only_generates_reuse_biological_preparation(
@@ -1122,7 +1151,7 @@ def test_a_failed_render_publishes_its_input_layers_but_no_failed_build_or_rende
             _read_in_a_record_stage(parsed[0], "failed-render")
             raise RuntimeError("render failed")
     assert set(cache._layers["parsed"]) == {("source", identity), ("parsed", identity)}
-    assert set(cache._layers["decoded"]) == {(identity, ("decoded",))}
+    assert set(cache._layers["decoded"]) == {(identity.cache_token, identity.size, ("decoded",))}
     assert not cache._layers["resolved"]
     assert not cache._layers["render_stage"]
     _assert_running_total_matches_a_recount(cache)

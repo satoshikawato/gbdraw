@@ -1350,10 +1350,10 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  // The stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds, in the export
-  // encoding, read from the shown Result's request (D5).
+  // One part of the stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds,
+  // in the export encoding, read from the shown Result's request (D5): the export reads it record by record.
   [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
-    keys: ['canonicalRequest', 'item'],
+    keys: ['canonicalRequest', 'item', 'part'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'read_embed_sequences_json', [
@@ -1361,6 +1361,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
         jsonArgument(payload.item, {}),
+        jsonArgument(payload.part, {}),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )

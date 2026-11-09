@@ -8,7 +8,7 @@
 // so a second read waits for nothing. The replies live only here: never in the catalog, a History step, or a Session.
 // A reply that arrives after the shown Result changed (Generate, Undo, Redo, a drawing switch, a Load) is discarded:
 // the read resolves to `null` and its caller shows nothing of it.
-/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload } from './diagram-worker-protocol.js' */
+/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedCatalogPart, EmbedItemPart, EmbedPartInput } from './diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
 /** @import { FeatureCatalogItem } from './feature-catalog.js' */
@@ -70,17 +70,75 @@ export const readMatchSequencesReply = (result, spans) => {
 };
 
 /**
- * The `readEmbedSequences` reply: the catalog item asked, with the same record keys, in the export encoding.
+ * The `readEmbedSequences` reply, checked against the part sent: its rows in the order sent (same identities), and
+ * sources placed among the item's `sourceCount` sources.
  * @param {unknown} result
- * @param {Readonly<Record<string, unknown>>} item
- * @returns {Readonly<Record<string, unknown>>}
+ * @param {readonly Readonly<Record<string, unknown>>[]} rows
+ * @returns {EmbedCatalogPart}
  */
-export const readEmbedSequencesReply = (result, item) => {
-  if (!isRecord(result) || !Array.isArray(result.features)
-    || JSON.stringify(result.recordKeys) !== JSON.stringify(item.recordKeys)) {
+export const readEmbedSequencesReply = (result, rows) => {
+  const read = isRecord(result) ? result : null;
+  const count = read?.sourceCount;
+  if (!read || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0
+    || !Array.isArray(read.biologicalFeatures) || read.biologicalFeatures.length !== rows.length
+    || !read.biologicalFeatures.every((row, index) => isRecord(row) && row.recordKey === rows[index].recordKey
+      && row.biologicalFeatureId === rows[index].biologicalFeatureId)
+    || !Array.isArray(read.sequenceSources) || !read.sequenceSources.every((entry) => isRecord(entry)
+      && typeof entry.index === 'number' && Number.isSafeInteger(entry.index) && entry.index >= 0
+      && entry.index < count && isRecord(entry.source))) {
     throw diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
   }
-  return result;
+  return /** @type {EmbedCatalogPart} */ (read);
+};
+
+/**
+ * The JSON text an exported Interactive SVG embeds for a catalog item's sequences, as Python's export encoder writes
+ * them (`embed_catalog_part`): the item's biological rows with their sequences, and the whole-record sources its
+ * matches read (null when they read none). The export writes it into the file as it is.
+ * @typedef {{ biologicalFeatures: string, sequenceSources: string | null }} EmbeddedSequencesJson
+ */
+
+/**
+ * The parts one export read sends, so no reply holds the whole item: the rows in their stored order, a part per run
+ * of rows of one record (split at `limit` bases as feature reads are); each record's sources come with the part of
+ * its first row, the sources of records without rows and of the comparison FASTA records with the last part.
+ * @param {Readonly<Record<string, unknown>>} item The stored catalog item.
+ * @param {number} limit
+ * @returns {{ item: EmbedItemPart, part: EmbedPartInput }[]}
+ */
+export const embedReadParts = (item, limit) => {
+  const recordKeys = isStringList(item.recordKeys) ? item.recordKeys : [];
+  const windowOf = isRecord(item.windowOf) ? /** @type {Record<string, string>} */ (item.windowOf) : {};
+  const rows = /** @type {Readonly<Record<string, unknown>>[]} */ (
+    Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : []);
+  /** @type {Readonly<Record<string, unknown>>[][]} */
+  const runs = [];
+  rows.forEach((row, index) => {
+    if (index === 0 || row.recordKey !== rows[index - 1].recordKey) runs.push([]);
+    runs[runs.length - 1].push(row);
+  });
+  const chunks = runs.flatMap((run) => featureReadChunks(run, (row) => {
+    const bases = Math.abs(Number(row.end) - Number(row.start));
+    return Number.isFinite(bases) ? bases : 1;
+  }, limit));
+  if (!chunks.length) chunks.push([]);
+  /** @type {Set<string>} */
+  const owned = new Set();
+  const context = {
+    recordKeys,
+    ...(isRecord(item.windowOf) ? { windowOf } : {}),
+    ...(Array.isArray(item.comparisonMatches) ? { comparisonMatches: item.comparisonMatches } : {})
+  };
+  return chunks.map((chunk, index) => {
+    const sourcesOf = [...new Set(chunk.map((row) => String(row.recordKey)))].filter((key) => !owned.has(key));
+    sourcesOf.forEach((key) => owned.add(key));
+    const last = index === chunks.length - 1;
+    if (last) {
+      [...new Set(recordKeys.map((unit) => windowOf[unit] ?? unit))]
+        .filter((key) => !owned.has(key)).forEach((key) => sourcesOf.push(key));
+    }
+    return { item: { ...context, biologicalFeatures: chunk }, part: { sourcesOf, comparisonSources: last } };
+  });
 };
 
 /** The feature span a read of many features sends at most, in bases: its reply stays far below the reply wall. */
@@ -102,9 +160,9 @@ const spanInput = (span) => (span.kind === 'record'
 const spanKey = (span) => JSON.stringify(Object.values(spanInput(span)));
 
 /**
- * The features of one read in chunks of at most `limit` bases each (a feature longer than the limit is a chunk of
- * its own), in the order asked.
- * @template {FeatureSequenceInput} F
+ * The features (or catalog rows) of one read in chunks of at most `limit` bases each (one longer than the limit is a
+ * chunk of its own), in the order asked.
+ * @template F
  * @param {readonly F[]} features
  * @param {(feature: F) => number} basesOf
  * @param {number} limit
@@ -147,8 +205,9 @@ export const featureReadChunks = (features, basesOf, limit) => {
  *   The features' sequences by `featureSequenceKey`, or null when the shown Result changed before they arrived.
  * @property {(spans: readonly MatchSpanInput[]) => Promise<readonly MatchSpanSequence[] | null>} readSpans
  *   The spans' bases in the order asked, or null as above.
- * @property {(item: Readonly<Record<string, unknown>>) => Promise<Readonly<Record<string, unknown>> | null>} readEmbedItem
- *   The shown Result's catalog item in the export encoding (not kept), or null as above.
+ * @property {(item: Readonly<Record<string, unknown>>) => Promise<EmbeddedSequencesJson | null>} readEmbedJson
+ *   The sequences the shown Result's catalog item embeds in an export, read part by part (not kept), or null as
+ *   above.
  */
 
 /** The key `readFeatures` returns a feature's sequences under. */
@@ -353,13 +412,31 @@ export const createCatalogSequences = ({
     return getCommittedSession() === owner.committed ? read : null;
   };
 
-  /** @type {CatalogSequences['readEmbedItem']} */
-  const readEmbedItem = async (item) => {
+  /** @type {CatalogSequences['readEmbedJson']} */
+  const readEmbedJson = async (item) => {
     const { owner, request } = committedOf('readEmbedSequences');
-    const reply = await helpers.readEmbedSequences({ ...request, item });
-    const embedded = readEmbedSequencesReply(reply?.result, item);
-    return getCommittedSession() === owner.committed ? embedded : null;
+    const invalid = () => diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
+    // One part at a time, each written as text as it arrives: no reply, and no copy in the page, holds the whole
+    // item with its sequences.
+    /** @type {string[]} */
+    const rows = [];
+    /** @type {(string | undefined)[] | null} */
+    let sources = null;
+    for (const part of embedReadParts(item, featureReadBases)) {
+      const reply = readEmbedSequencesReply(
+        (await helpers.readEmbedSequences({ ...request, ...part }))?.result, part.item.biologicalFeatures);
+      if (getCommittedSession() !== owner.committed) return null;
+      sources ??= new Array(reply.sourceCount).fill(undefined);
+      if (sources.length !== reply.sourceCount) throw invalid();
+      if (reply.biologicalFeatures.length) rows.push(reply.biologicalFeatures.map((row) => JSON.stringify(row)).join(','));
+      for (const { index, source } of reply.sequenceSources) {
+        if (sources[index] !== undefined) throw invalid();
+        sources[index] = JSON.stringify(source);
+      }
+    }
+    if (!sources || sources.some((source) => source === undefined)) throw invalid();
+    return { biologicalFeatures: `[${rows.join(',')}]`, sequenceSources: sources.length ? `[${sources.join(',')}]` : null };
   };
 
-  return { readFeatures, readSpans, readEmbedItem };
+  return { readFeatures, readSpans, readEmbedJson };
 };

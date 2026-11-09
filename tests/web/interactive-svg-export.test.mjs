@@ -1,7 +1,7 @@
 // The Web Interactive SVG export (D5): the capture selects the shown Result's stored catalog item, the export asks
-// Python for that item with every sequence (`readEmbedItem`, the encoder the CLI export uses) before it builds the
-// file, and the file embeds what Python returned under the export schema (INTERACTIVE_EMBED_SCHEMA), not the stored
-// catalog schema. A failed read writes no file; a read that another Result outlived writes nothing and says nothing.
+// Python for that item's sequences (`readEmbedJson`, part by part, from the encoder the CLI export uses) before it
+// builds the file, and the file embeds the item with what Python returned under the export schema
+// (INTERACTIVE_EMBED_SCHEMA), not the stored catalog schema. A failed read writes no file; a read that another Result outlived writes nothing and says nothing.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -56,7 +56,7 @@ globalThis.window = {
 };
 
 const { captureSvgExport } = await import('../../gbdraw/web/js/services/svg-serialization.js');
-const { enrichSvgWithStandaloneInteractivity } = await import('../../gbdraw/web/js/services/standalone-interactivity.js');
+const { embeddedCatalogItemJson, enrichSvgWithStandaloneInteractivity } = await import('../../gbdraw/web/js/services/standalone-interactivity.js');
 const { createResultExport } = await import('../../gbdraw/web/js/app/result-actions.js');
 
 const storedItem = {
@@ -71,7 +71,7 @@ const storedItem = {
   comparisonMatches: [{ id: 'match-a', match_kind: 'pairwise', query_record_index: 0, query_record_id: 'acc-a' }]
 };
 // What Python's `embed_catalog_item` returns for it: the rows' sequences in the compact export encoding and the
-// whole-record sources the matches read.
+// whole-record sources the matches read; the page gets the rows and the sources as text (`embeddedSequences`).
 const embedItem = {
   ...storedItem,
   biologicalFeatures: [{ recordKey: 'record-a', biologicalFeatureId: 'feature-a', stableFeatureId: 'feature-a', type: 'CDS',
@@ -113,26 +113,40 @@ test('the capture holds the stored catalog item of the shown Result, found by it
   assert.equal(captureSvgExport(state, drawing, { interactive: true }).interactivity.catalogItem, storedItem);
 });
 
-test('the file embeds the item Python encoded, under the export schema', () => {
+const embeddedSequences = {
+  biologicalFeatures: JSON.stringify(embedItem.biologicalFeatures), sequenceSources: JSON.stringify(embedItem.sequenceSources)
+};
+
+test('the file embeds the item Python encoded, under the export schema, byte for byte', () => {
   assert.equal(INTERACTIVE_EMBED_SCHEMA, 5);
   assert.notEqual(INTERACTIVE_EMBED_SCHEMA, FEATURE_CATALOG_SCHEMA);
   const svg = new FakeElement('svg');
-  assert.equal(enrichSvgWithStandaloneInteractivity(svg, { requireFeatureCatalog: true, embedItem }), true);
+  assert.equal(enrichSvgWithStandaloneInteractivity(svg, {
+    requireFeatureCatalog: true, catalogItem: storedItem, embeddedSequences
+  }), true);
   const metadata = svg.childNodes.find((child) => child.localName === 'metadata');
   assert.equal(metadata.getAttribute('data-schema'), String(INTERACTIVE_EMBED_SCHEMA));
   assert.equal(metadata.getAttribute('data-result-index'), '0');
   assert.equal(metadata.getAttribute('data-result-name'), 'diagram.svg');
-  assert.deepEqual(JSON.parse(metadata.textContent), { schema: INTERACTIVE_EMBED_SCHEMA, items: [embedItem] });
-  // Without Python's item the export writes nothing: the stored item holds no sequence.
-  assert.equal(enrichSvgWithStandaloneInteractivity(new FakeElement('svg'), { requireFeatureCatalog: true }), false);
+  assert.equal(metadata.textContent, JSON.stringify({ schema: INTERACTIVE_EMBED_SCHEMA, items: [embedItem] }));
+  // Without Python's sequences the export writes nothing: the stored item holds no sequence.
+  for (const options of [{ catalogItem: storedItem }, { embeddedSequences }]) {
+    assert.equal(enrichSvgWithStandaloneInteractivity(new FakeElement('svg'), { requireFeatureCatalog: true, ...options }), false);
+  }
+});
+
+test('an item whose matches read no source embeds no sequenceSources key, as Python writes it', () => {
+  const rows = embedItem.biologicalFeatures.map(({ sequenceSourceIndex, ...row }) => ({ ...row, nucleotide_sequence: 'ATG' }));
+  const sequences = { biologicalFeatures: JSON.stringify(rows), sequenceSources: null };
+  assert.equal(embeddedCatalogItemJson(storedItem, sequences), JSON.stringify({ ...storedItem, biologicalFeatures: rows }));
 });
 
 /**
- * The export action over stubbed owners: `readEmbedItem` answers as given, and the export service records the
+ * The export action over stubbed owners: `readEmbedJson` answers as given, and the export service records the
  * snapshot it would write.
- * @param {(item: object) => Promise<object | null>} readEmbedItem
+ * @param {(item: object) => Promise<object | null>} readEmbedJson
  */
-const exportAction = (readEmbedItem) => {
+const exportAction = (readEmbedJson) => {
   const written = [];
   const asked = [];
   const errorLog = { value: null };
@@ -156,21 +170,22 @@ const exportAction = (readEmbedItem) => {
     shownCommittedRequest: () => null,
     awaitLinearRecordDiscovery: async () => {},
     committedLinearRecordsOf: () => [],
-    readEmbedItem: async (item) => {
+    readEmbedJson: async (item) => {
       asked.push(item);
-      return readEmbedItem(item);
+      return readEmbedJson(item);
     }
   });
   return { actions, written, asked, errorLog };
 };
 
 test('Interactive SVG export asks Python for the shown item and writes what it returns', async () => {
-  const { actions, written, asked, errorLog } = exportAction(async () => embedItem);
+  const { actions, written, asked, errorLog } = exportAction(async () => embeddedSequences);
   const outcome = await actions.downloadInteractiveSVG();
   assert.equal(outcome.filename, 'diagram.interactive.svg');
   assert.deepEqual(asked, [storedItem]);
   assert.equal(written.length, 1);
-  assert.equal(written[0].interactivity.embedItem, embedItem);
+  assert.equal(written[0].interactivity.embeddedSequences, embeddedSequences);
+  assert.equal(written[0].interactivity.catalogItem, storedItem);
   assert.equal(errorLog.value, null);
 });
 

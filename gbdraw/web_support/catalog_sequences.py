@@ -10,7 +10,8 @@ Copy FASTA of Select region (``record_spans.py``). Python resolves the records a
 - ``read_match_sequences``: the bases of match spans, on the displayed strand of a drawn record (named by its record
   key) or of a comparison FASTA record (named by its source and record ID): the Copy and FASTA of a match popup.
 - ``read_embed_catalog_item``: a stored catalog item with every sequence an exported Interactive SVG embeds, in the
-  export encoding (``embed_catalog_item``).
+  export encoding (``embed_catalog_item``); ``read_embed_catalog_part`` reads one part of it (the rows of some records
+  and the whole-record sources they own, ``embed_catalog_part``), which the Web export reads record by record.
 
 Nothing is found by caption, label or display text.
 """
@@ -28,7 +29,13 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import FeatureIdentity, resolve_feature_identities
 from gbdraw.render.interactive_svg import CatalogSequenceRecords
 from gbdraw.session_request_codec import decode_canonical_request
-from gbdraw.web_support.feature_catalog import embed_catalog_item, match_sequence_sources, read_match_span
+from gbdraw.web_support.feature_catalog import (
+    EmbedCatalogPart,
+    embed_catalog_item,
+    embed_catalog_part,
+    match_sequence_sources,
+    read_match_span,
+)
 from gbdraw.web_support.feature_metadata import feature_sequence_payload
 
 
@@ -295,6 +302,53 @@ def read_embed_catalog_item(
     return embed_catalog_item(item, _sequence_records(request, collection, unit_keys))
 
 
+@final
+class EmbedPartInput(TypedDict):
+    """Which whole-record sources a part of the export returns: those of the records named by record key
+    (``sourcesOf``) and, with ``comparisonSources``, those of the comparison FASTA records."""
+
+    sourcesOf: list[str]
+    comparisonSources: bool
+
+
+def _embed_part_input(value: object) -> EmbedPartInput:
+    if not (
+        isinstance(value, Mapping)
+        and set(value) == {"sourcesOf", "comparisonSources"}
+        and isinstance(value["sourcesOf"], list)
+        and all(isinstance(key, str) and key for key in value["sourcesOf"])
+        and isinstance(value["comparisonSources"], bool)
+    ):
+        raise _protocol_error("An embed part names the records whose sources it returns.")
+    return {"sourcesOf": list(value["sourcesOf"]), "comparisonSources": value["comparisonSources"]}
+
+
+def read_embed_catalog_part(
+    request_payload: Mapping[str, object],
+    resource_paths: Mapping[str, str],
+    output_directory: str,
+    item: Mapping[str, object],
+    part: Mapping[str, object],
+) -> EmbedCatalogPart:
+    """A part of the export encoding of a stored catalog item (``embed_catalog_part``): ``item`` holds the item's
+    ``recordKeys``, ``windowOf`` and ``comparisonMatches`` and the ``biologicalFeatures`` of the part; ``part`` names the
+    records whose whole-record sources it returns."""
+
+    if not (
+        isinstance(item, Mapping)
+        and isinstance(item.get("recordKeys"), list)
+        and isinstance(item.get("biologicalFeatures"), list)
+    ):
+        raise _protocol_error("An embed read needs the rows of a stored catalog item.")
+    asked = _embed_part_input(part)
+    request, collection = _committed_records(request_payload, resource_paths, output_directory)
+    unit_keys = [str(key) for key in cast("list[object]", item["recordKeys"])]
+    return embed_catalog_part(
+        item, _sequence_records(request, collection, unit_keys),
+        source_record_keys=asked["sourcesOf"], comparison_sources=asked["comparisonSources"],
+    )
+
+
 def read_feature_sequences_json(
     request_json: str, resource_paths_json: str, output_directory: str, features_json: str
 ) -> str:
@@ -315,17 +369,20 @@ def read_match_sequences_json(request_json: str, resource_paths_json: str, outpu
     ))
 
 
-def read_embed_sequences_json(request_json: str, resource_paths_json: str, output_directory: str, item_json: str) -> str:
-    """JSON boundary of the diagram Worker."""
+def read_embed_sequences_json(
+    request_json: str, resource_paths_json: str, output_directory: str, item_json: str, part_json: str
+) -> str:
+    """JSON boundary of the diagram Worker: one part of the export encoding."""
 
-    return json.dumps(read_embed_catalog_item(
+    return json.dumps(read_embed_catalog_part(
         json.loads(str(request_json)), json.loads(str(resource_paths_json)), str(output_directory),
-        json.loads(str(item_json)),
+        json.loads(str(item_json)), json.loads(str(part_json)),
     ), ensure_ascii=False, separators=(",", ":"))
 
 
 __all__ = [
     "ComparisonMatchSpan",
+    "EmbedPartInput",
     "FeatureSequenceInput",
     "FeatureSequencesOf",
     "FeatureSequencesReply",
@@ -333,6 +390,7 @@ __all__ = [
     "MatchSpanSequence",
     "RecordMatchSpan",
     "read_embed_catalog_item",
+    "read_embed_catalog_part",
     "read_embed_sequences_json",
     "read_feature_sequences",
     "read_feature_sequences_json",

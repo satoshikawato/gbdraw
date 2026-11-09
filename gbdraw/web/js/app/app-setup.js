@@ -2984,7 +2984,7 @@ export const createAppSetup = () => {
     state, errorLog, showNotice, captureSvgExport, loadExportService, runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS,
     displayedArtifactDrawing: historySnapshots.displayedArtifactDrawing, embedInExports: fontSettings.embedInExports,
     shownInputSummary, shownLinearWrapLeaf, shownCommittedRequest, awaitLinearRecordDiscovery, committedLinearRecordsOf,
-    readEmbedItem: catalogSequences.readEmbedItem
+    readEmbedJson: catalogSequences.readEmbedJson
   });
 
   const { popupLegendGroups, featureVisibilityFeatureSuggestions } = createFeatureChoiceReaders({

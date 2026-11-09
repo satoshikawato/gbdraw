@@ -11,7 +11,7 @@ import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, Any, Iterable, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Iterable, TypedDict, TypeVar, cast
 
 from svgwrite import Drawing
 
@@ -2401,14 +2401,40 @@ def _row_with_sequences(row: Mapping[str, object], sequences: FeatureSequences |
     return embedded
 
 
-def embed_catalog_item(item: Mapping[str, object], records: CatalogSequenceRecords) -> dict[str, object]:
-    """The export encoder (D5-02): a stored catalog item with every sequence an exported Interactive SVG embeds.
+class EmbeddedSequenceSource(TypedDict):
+    """One whole-record source of the export, with its place in the item's ``sequenceSources``."""
 
-    Each biological row gets its feature's sequences from ``feature_sequence_payload`` (the one producer), found
-    by its record key and source feature index in the drawn records; a nucleotide sequence that a whole-record
-    source of the item's matches reconstructs is written as ``sequenceSourceIndex``; the item gets the sources its
-    matches read (``sequenceSources``). The CLI and Python export and the Web export (through the Worker) write
-    this, in ``INTERACTIVE_EMBED_SCHEMA``.
+    index: int
+    source: dict[str, object]
+
+
+class EmbedCatalogPart(TypedDict):
+    """A part of the export encoding of one catalog item (D5-02): the biological rows asked, with their sequences,
+    and the whole-record sources the part owns, each with its place among the item's ``sourceCount`` sources."""
+
+    biologicalFeatures: list[dict[str, object]]
+    sequenceSources: list[EmbeddedSequenceSource]
+    sourceCount: int
+
+
+def embed_catalog_part(
+    item: Mapping[str, object],
+    records: CatalogSequenceRecords,
+    *,
+    source_record_keys: Sequence[str] | None,
+    comparison_sources: bool,
+) -> EmbedCatalogPart:
+    """The export encoder (D5-02), for a part of a stored catalog item: ``item["biologicalFeatures"]`` are the rows
+    of the part; ``item`` names the drawn records (``recordKeys``, ``windowOf``) and the matches of the whole item.
+
+    Each row gets its feature's sequences from ``feature_sequence_payload`` (the one producer), found by its record
+    key and source feature index in the drawn records; a nucleotide sequence that a whole-record source of the item's
+    matches reconstructs is written as ``sequenceSourceIndex``. The part returns the sources the item's matches read
+    that belong to the records ``source_record_keys`` name (each drawn unit of such a record; ``None``: every
+    record) and, with
+    ``comparison_sources``, those of the comparison FASTA records, each with its index among the item's sources. The
+    CLI and Python export read the whole item as one part (``embed_catalog_item``); the Web export reads one part per
+    record, so no reply holds the whole item.
     """
 
     from gbdraw.features.source import drawn_source_features
@@ -2441,9 +2467,31 @@ def embed_catalog_item(item: Mapping[str, object], records: CatalogSequenceRecor
     matches = cast("Sequence[Mapping[str, object]]", item.get("comparisonMatches") or ())
     sequence_sources = _deduplicated_sequence_sources(matches, match_sequence_sources(records))
     _reference_reconstructible_nucleotide_sequences(biological, identity_keys, sequence_sources)
-    embedded: dict[str, object] = {**item, "biologicalFeatures": biological}
-    if sequence_sources:
-        embedded["sequenceSources"] = sequence_sources
+    owners = set(identity_keys if source_record_keys is None else source_record_keys)
+
+    def owned(source: Mapping[str, object]) -> bool:
+        unit = source.get("recordIndex")
+        return comparison_sources if type(unit) is not int else identity_keys[unit] in owners
+
+    return {
+        "biologicalFeatures": biological,
+        "sequenceSources": [
+            {"index": index, "source": source} for index, source in enumerate(sequence_sources) if owned(source)
+        ],
+        "sourceCount": len(sequence_sources),
+    }
+
+
+def embed_catalog_item(item: Mapping[str, object], records: CatalogSequenceRecords) -> dict[str, object]:
+    """The export encoder (D5-02): a stored catalog item with every sequence an exported Interactive SVG embeds, its
+    biological rows in the export encoding and the whole-record sources its matches read (``sequenceSources``), as
+    one part (``embed_catalog_part``). The CLI and Python export write this, in ``INTERACTIVE_EMBED_SCHEMA``."""
+
+    whole = embed_catalog_part(item, records, source_record_keys=None, comparison_sources=True)
+    sources = [entry["source"] for entry in whole["sequenceSources"]]
+    embedded: dict[str, object] = {**item, "biologicalFeatures": whole["biologicalFeatures"]}
+    if sources:
+        embedded["sequenceSources"] = sources
     return embedded
 
 
@@ -3151,7 +3199,10 @@ __all__ = [
     "materialize_catalog_nucleotide_sequence",
     "STORED_SEQUENCE_KEYS",
     "INTERACTIVE_EMBED_SCHEMA",
+    "EmbedCatalogPart",
+    "EmbeddedSequenceSource",
     "embed_catalog_item",
+    "embed_catalog_part",
     "match_sequence_sources",
     "promote_legacy_feature_catalog",
     "read_match_span",
