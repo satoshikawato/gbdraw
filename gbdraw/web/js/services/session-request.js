@@ -16,6 +16,7 @@ import {
   requestFeaturePlacements
 } from './feature-placement.js';
 import { resultRenderedFeatures } from './feature-catalog.js';
+import { storedProteinResultMode } from './imported-comparison-intent.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
@@ -5525,11 +5526,11 @@ const resolvePipelineCollinearInference = (settings, mode) =>
 
 /**
  * @param {UnvalidatedFields<'kind' | 'mode' | 'settings'>} comparison A request's comparison (unvalidated).
- * @param {{ adoptCanonicalPayloads?: boolean }} [options]
+ * @param {{ adoptCanonicalPayloads?: boolean, storedMode?: string }} [options] `storedMode`: the draft mode of a marker of mode `none` (`storedProteinResultMode`), or '' to keep the saved controls.
  */
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false } = {}
+  { adoptCanonicalPayloads = false, storedMode = '' } = {}
 ) => {
   if (
     !comparison ||
@@ -5549,6 +5550,7 @@ const projectGeneratedProteinPipeline = (
   }
   const parameters = settings.collinearityParams?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
+  const draftMode = mode === 'none' ? storedMode : mode;
   return {
     generatedProteinComparison: adoptCanonicalPayloads
       ? comparison
@@ -5562,8 +5564,9 @@ const projectGeneratedProteinPipeline = (
           // "none" means that the canonical request is reusing resolved
           // artifacts. It does not identify the Web generation mode that
           // should be selected for a future rerun, so leave the saved UI
-          // setting authoritative in that case.
-          ...(mode === 'none' ? {} : { mode }),
+          // setting authoritative in that case; a request without saved
+          // controls (a CLI Session) passes the mode of its stored results.
+          ...(draftMode ? { mode: draftMode } : {}),
           maxHits: settings.proteinBlastpMaxHits,
           candidateLimit: settings.proteinBlastpCandidateLimit,
           orthogroupMembershipMode: settings.orthogroupMembershipMode,
@@ -6527,7 +6530,11 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads }
+    {
+      adoptCanonicalPayloads,
+      // A CLI Session has no saved controls: its draft takes the mode the CLI drew (OV-3037).
+      storedMode: initializeCliInputs && storedConfig == null ? storedProteinResultMode(renderRequest.comparisons || []) : ''
+    }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []

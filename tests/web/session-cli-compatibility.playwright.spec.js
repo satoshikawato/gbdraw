@@ -269,6 +269,29 @@ for (const mode of [null, 'pairwise']) test(`Session CLI windowed record with LO
   }
 });
 
+// OV-3047: a CLI Session of whole records stores the LOSATP results it drew and no Web controls. It loads with the
+// LOSATP mode the CLI drew, and the first Generate draws the stored results, with no LOSAT run, as the CLI drew them.
+for (const mode of ['pairwise', 'collinear']) test(`Session CLI LOSATP ${mode} loads in its mode and draws its stored results`, async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const bgc = id => path.join(root, `tests/test_inputs/${id}.gbk`);
+  const file = await cli('linear', ['--gbk', bgc('BGC0000708'), bgc('BGC0000709'), '--losat', 'losatp',
+    '--losatp_mode', mode, '-f', 'svg'], testInfo, `whole-${mode}`);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const expectedSvg = await run.page.evaluate(svgSemantics, (await snapshot(run.page)).selected);
+    expect(await run.page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.mode)).toBe(mode);
+    await run.page.evaluate(() => {
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => { throw new Error('LOSAT ran'); };
+    });
+    await generateAndWaitForResult(run.page);
+    expect(await run.page.evaluate(svgSemantics, (await snapshot(run.page)).selected)).toEqual(expectedSvg);
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 // OV-3003, OV-3037: a Session whose LOSATP Pairwise pipeline holds no table and no LOSAT cache: one that names the
 // window pairs (as Python's locate writes it), and one that names none (as the CLI wrote a Pairwise run before it
 // stored its tables). Inherit runs it in the browser, for the named pairs or else the records of adjacent rows, and

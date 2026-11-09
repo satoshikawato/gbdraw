@@ -313,23 +313,30 @@ const unitInputsOf = (records) => records.map((record, index) => ({
   recordKey: recordKey(record, index), windows: Array.isArray(record?.windows) ? record.windows : []
 }));
 
+/**
+ * The LOSATP mode whose results a request stores beside a pipeline marker of mode `none`, as the CLI and the Web
+ * write them after a render: Collinear for a `collinearityResult`, Similarity groups for an `orthogroupResult`,
+ * Pairwise for protein tables alone, and '' for none. The one reader of that mode: the classifier and Load's draft of
+ * a CLI Session, which has no saved controls (`projectCanonicalSessionRequest` in services/session-request.js).
+ * @param {readonly { kind?: unknown }[]} comparisons The request's comparisons.
+ * @returns {'collinear' | 'orthogroup' | 'pairwise' | ''}
+ */
+export const storedProteinResultMode = (comparisons) => {
+  const stores = (/** @type {string} */ kind) => comparisons.some((comparison) => comparison?.kind === kind);
+  if (stores('collinearityResult')) return 'collinear';
+  if (stores('orthogroupResult')) return 'orthogroup';
+  return stores('precomputedProteinComparison') ? 'pairwise' : '';
+};
+
 /** @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable. */
 const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
   const endpoints = comparisons.filter((comparison) => ENDPOINT_KINDS.has(comparison.kind));
   if (pipeline.mode === 'pairwise' && pipeline.pairs.length === 0 && endpoints.length === 0) {
     return false;
   }
-  if (pipeline.mode === 'none') {
-    const inferredMode = comparisons.some((comparison) => comparison.kind === 'collinearityResult')
-      ? 'collinear'
-      : comparisons.some((comparison) => comparison.kind === 'orthogroupResult')
-        ? 'orthogroup'
-        : endpoints.some((comparison) => comparison.kind === 'precomputedProteinComparison')
-          ? 'pairwise'
-          : '';
-    // A disabled pipeline can carry CLI settings without any comparison work.
-    if (!inferredMode && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
-  }
+  // A disabled pipeline can carry CLI settings without any comparison work.
+  if (pipeline.mode === 'none' && !storedProteinResultMode(comparisons)
+    && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
   const collinearity = pipeline.settings?.collinearityParams;
   if (!isObject(collinearity) || collinearity.kind !== 'lossless') return false;
   const parameters = collinearity.parameters;

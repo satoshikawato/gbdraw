@@ -236,6 +236,10 @@ write-up of a release.
   the tables the CLI drew, as Similarity groups does, and draws them without
   LOSAT. A Pairwise Session written before still loads; Inherit runs LOSAT in
   the browser for the records of adjacent rows (OV-3037).
+- Fixed: in the Web, a CLI Session of `--losatp_mode collinear` loaded with the
+  LOSATP mode Similarity groups, so its first Generate searched again and drew
+  Similarity groups. A CLI Session now loads with the mode the CLI drew, and
+  its first Generate draws the stored results without LOSAT (OV-3047).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per

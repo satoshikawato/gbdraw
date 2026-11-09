@@ -629,7 +629,8 @@ A CLI Session written with `--losat losatp` and an editable protein pipeline
 loads with the adjacent LOSATP comparison it drew. It stores the protein
 results the CLI computed: Pairwise stores the comparison tables, Similarity
 groups the tables and the `orthogroupResult`, and Collinear only the
-`collinearityResult` (no tables). The first Generate after Load reuses them
+`collinearityResult` (no tables). The Session loads with the LOSATP mode
+that these results show, and the first Generate after Load reuses them
 instead of running LOSAT again.
 
 Without saved `ui.layoutPreferences`, the legend and plot-title positions come
