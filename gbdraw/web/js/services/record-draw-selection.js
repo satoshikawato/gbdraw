@@ -341,7 +341,10 @@ export const isFlatRecordSelector = (key) => flatRecordSelectorNumber(key) !== n
 export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, sources) => {
   const flat = legacyFlatRecords(sources);
   /** @param {string} key @returns {string | null} */
-  const place = (key) => (isFlatRecordSelector(key) ? flat[Number(key.slice(1)) - 1]?.identity ?? null : key);
+  const place = (key) => {
+    const number = flatRecordSelectorNumber(key);
+    return number === null ? key : flat[number - 1]?.identity ?? null;
+  };
   return {
     recordsOff: recordsOff.flatMap((key) => place(key) ?? []),
     selector: place(selector) ?? '',

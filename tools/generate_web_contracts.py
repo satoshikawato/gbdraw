@@ -102,6 +102,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("OTHER_MODE_RESULT_LEGEND_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_LEGEND_FIELDS"),
     ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
     ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
+    # The file slots of a Circular File card (a `circularSources` row) besides its uid, in the card's order.
+    ("CIRCULAR_SOURCE_FILE_SLOTS", "gbdraw.session_io", "CIRCULAR_SOURCE_FILE_SLOTS"),
     ("LEGACY_SVG_ATTRIBUTE_RENAMES", "gbdraw.render.interactive_svg", "LEGACY_SVG_ATTRIBUTE_RENAMES"),
     # A former palette name reads as the current one (Session Load).
     ("PALETTE_NAME_ALIASES", "gbdraw.io.colors", "PALETTE_NAME_ALIASES"),
@@ -179,6 +181,12 @@ def _frozen(value: object, indent: str = "") -> str:
 
 
 def _declaration(web_name: str, value: object) -> str:
+    if isinstance(value, tuple) and value and all(isinstance(item, str) for item in value):
+        # Strings in the owner's order, each typed as itself (a typedef may name them).
+        return (
+            f"/** @type {{readonly [{', '.join(_scalar(item) for item in value)}]}} */\n"
+            f"export const {web_name} = {_frozen(list(value))};\n"
+        )
     if isinstance(value, (frozenset, set)):
         items = "string" if all(isinstance(item, str) for item in value) else "number"
         return (

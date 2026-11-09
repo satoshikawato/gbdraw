@@ -105,6 +105,23 @@ def test_a_changed_session_field_set_makes_the_generated_module_stale(
     assert "Object.freeze(['another', 'originalColors', 'originalOrder'])" in generator.render_web_contracts_module()
 
 
+def test_the_circular_file_card_slots_come_from_the_python_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-2961: the Web reads a Circular File card's fields (`circularSources` row) from Python's
+    # `CircularSourceCard`, each slot typed as itself; a new field makes the generated module stale.
+    import gbdraw.session_io as session_io
+
+    assert session_io.CIRCULAR_SOURCE_FIELDS == {"uid", *session_io.CIRCULAR_SOURCE_FILE_SLOTS}
+    generator = _generator()
+    assert (
+        "/** @type {readonly ['gb', 'gff', 'fasta']} */\n"
+        "export const CIRCULAR_SOURCE_FILE_SLOTS = Object.freeze(['gb', 'gff', 'fasta']);\n"
+    ) in generator.render_web_contracts_module()
+
+    monkeypatch.setattr(session_io, "CIRCULAR_SOURCE_FILE_SLOTS", (*session_io.CIRCULAR_SOURCE_FILE_SLOTS, "depth"))
+
+    assert "Object.freeze(['gb', 'gff', 'fasta', 'depth'])" in generator.render_web_contracts_module()
+
+
 def test_the_member_role_and_confidence_values_come_from_the_python_literals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

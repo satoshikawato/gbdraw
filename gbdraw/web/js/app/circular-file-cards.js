@@ -102,7 +102,7 @@ export const createCircularFileCards = ({
   /**
    * New cards, one per file, each with its file in `field` (one History step);
    * a new card that still waits for a file shows open. The first card replaces
-   * the empty list's uploaders, so a focus on them moves to it (`keepFocusInFileCard`).
+   * the empty list's uploaders, so a focus on them moves to its zone of `field` (`keepFocusInFileCard`).
    * @param {InputSlot} field
    * @param {readonly (InputFileCandidate | InputFileRef)[]} files
    */
@@ -114,7 +114,7 @@ export const createCircularFileCards = ({
     added.filter((card) => !card.ready).forEach((card) => openCards.add(card.uid));
     if (added.length) {
       await nextTick();
-      keepFocusInFileCard('circular', added[0].uid, focused);
+      keepFocusInFileCard('circular', added[0].uid, field, focused);
     }
     return outcome;
   };

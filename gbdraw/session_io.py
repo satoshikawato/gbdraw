@@ -211,6 +211,9 @@ class CircularSourceCard(TypedDict):
 
 # The fields of one Circular File card (``circularSources`` row).
 CIRCULAR_SOURCE_FIELDS = CircularSourceCard.__required_keys__
+# The file slots of a Circular File card, every field but its uid, in the
+# card's order; the Web reads them from the generated contracts.
+CIRCULAR_SOURCE_FILE_SLOTS: tuple[str, ...] = tuple(field for field in CircularSourceCard.__annotations__ if field != "uid")
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -896,7 +899,7 @@ def _validate_circular_source_rows(rows: object, leaf: Callable[[object], None])
         if not isinstance(uid, str) or not uid or uid != uid.strip() or uid in uids:
             raise ValidationError("Each Circular File card needs a distinct uid.", diagnostic=_SESSION_FIELDS_INVALID)
         uids.add(uid)
-        for key in ("gb", "gff", "fasta"):
+        for key in CIRCULAR_SOURCE_FILE_SLOTS:
             if row[key] is not None:
                 leaf(row[key])
 

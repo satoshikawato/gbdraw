@@ -166,6 +166,10 @@ export const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = Object.freeze(['annotationW
 /** @type {readonly string[]} */
 export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologicalFeatures', 'extractedFeatures', 'featureCatalog', 'featureRecordIds', 'featureSelectorSafetyScope']);
 
+// gbdraw/session_io.py: CIRCULAR_SOURCE_FILE_SLOTS
+/** @type {readonly ['gb', 'gff', 'fasta']} */
+export const CIRCULAR_SOURCE_FILE_SLOTS = Object.freeze(['gb', 'gff', 'fasta']);
+
 // gbdraw/render/interactive_svg.py: LEGACY_SVG_ATTRIBUTE_RENAMES
 /** @type {Readonly<Record<'data-gbdraw-pairwise-match-id', string>>} */
 export const LEGACY_SVG_ATTRIBUTE_RENAMES = Object.freeze({

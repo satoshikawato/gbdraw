@@ -2443,6 +2443,20 @@ assert.deepEqual(
   cardsOfKeys([{ recordKey: 'circular-BGC0000709-#2', resourceId: firstResource }]),
   [{ uid: 'record-1', name: firstName }]
 );
+// OV-2960: a Record Order token `#k` names the committed request's k-th record through the one `#N` reader
+// (`flatRecordSelectorNumber`); `#0` and `#01` are not that selector and stay as they are.
+const projectedPositions = projectCanonicalSessionRequest({
+  renderRequest: {
+    ...canonical.renderRequest,
+    grouping: 'grid',
+    records: ['record-1:1', 'record-1:2'].map((recordKey) => ({ ...canonical.renderRequest.records[0], recordKey })),
+    layout: { ...canonical.renderRequest.layout, multiRecordPositions: ['#0@1', '#01@1', '#2@1', '#1@2'] }
+  },
+  resources: canonical.resources
+}).config.adv.multi_record_positions;
+assert.deepEqual(projectedPositions, [
+  { selector: '#0', row: 1 }, { selector: '#01', row: 1 }, { selector: 'record-1:2', row: 1 }, { selector: 'record-1:1', row: 2 }
+]);
 
 state.mode = 'linear';
 state.inputType.value = 'gb';

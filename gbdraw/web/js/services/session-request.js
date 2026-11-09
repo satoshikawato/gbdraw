@@ -92,7 +92,9 @@ import {
   circularRecordEntries,
   isSingleCircularJourney
 } from './record-options.js';
-import { cardHoldsRecordKey, expandedRecordKey, linearSeqRecordKey, recordKeyExpansion } from './record-draw-selection.js';
+import {
+  cardHoldsRecordKey, expandedRecordKey, flatRecordSelectorNumber, linearSeqRecordKey, recordKeyExpansion
+} from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
   orderedConservationSources,
@@ -1945,9 +1947,9 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
  * @param {string} token
  */
 const positionRecordIdentity = (records, token) => {
-  const index = /^#(\d+)$/.exec(token);
-  const record = index
-    ? records[Number(index[1]) - 1]
+  const number = flatRecordSelectorNumber(token);
+  const record = number !== null
+    ? records[number - 1]
     : records.find(({ selector }) => {
       const named = /** @type {{ kind?: unknown, value?: unknown } | null} */ (selector && typeof selector === 'object' ? selector : null);
       return named?.kind === 'recordId' && named.value === token;

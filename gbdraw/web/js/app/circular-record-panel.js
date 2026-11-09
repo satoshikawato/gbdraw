@@ -14,7 +14,6 @@ import { buildDefaultMultiRecordPositions } from './run-analysis.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { MultiRecordPosition } from '../services/config.js' */
-/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const { computed } = window.Vue;
 
@@ -33,8 +32,9 @@ const { computed } = window.Vue;
  * @property {() => SessionBusy | null} sessionOperationAvailability
  * @property {ShownDrawingOfMode} shownDrawingOfMode
  * @property {() => unknown} refreshCircularRecordOrder The record read of the shown drawing, with its Record Order.
- * @property {(drawing: { id: string }) => CanonicalRenderRequest | null} shownCommittedRequest The committed request of
- *   the Result a drawing shows; null while it shows no Result of its own (app/shown-drawing-readers.js).
+ * @property {(drawing: { id: string }) => ReadonlyMap<string, string>} shownRecordIds The record ID the Result a
+ *   drawing shows names each of its records by, by record key; empty while it shows no Result of its own
+ *   (app/shown-drawing-readers.js).
  */
 
 /**
@@ -43,7 +43,7 @@ const { computed } = window.Vue;
  */
 export const createCircularRecordPresentation = ({
   state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder,
-  shownCommittedRequest
+  shownRecordIds
 }) => {
   // The file name a record's label begins with: its card's file when the drawing has several source cards.
   /** @param {DrawingState} drawing @returns {(uid: string) => string} */
@@ -54,21 +54,20 @@ export const createCircularRecordPresentation = ({
   };
   /**
    * The name shown for a Record select or Record Order value whose record is not
-   * in the read list (OV-2949): a record identity (`<uid>`, `<uid>:<k>`) by the
-   * record ID that the request of the Result this drawing shows names it by
-   * (the record ID selector of the record keyed by that identity), else by its
-   * card's file name, with `#k` for the k-th record of a file; any other value
-   * (a kept `#N`, a record ID) as it is. The one owner of an unread record's
-   * name in the panel.
+   * in the read list (OV-2949, OV-2959): a record identity (`<uid>`,
+   * `<uid>:<k>`) by the record ID that the Result this drawing shows names the
+   * record keyed by that identity by (`shownRecordIds`), else by its card's
+   * file name, with `#k` for the k-th record of a file; any other value (a
+   * kept `#N`, a record ID) as it is. The one owner of an unread record's name
+   * in the panel.
    * @param {DrawingState} drawing
    * @param {string} value
    */
   const unreadRecordName = (drawing, value) => {
     const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
     if (!card) return value;
-    const request = shownCommittedRequest(drawing);
-    const named = request?.mode === 'circular' ? request.records.find((record) => record.recordKey === value) : undefined;
-    if (named?.selector?.kind === 'recordId' && named.selector.value.trim()) return named.selector.value.trim();
+    const recordId = shownRecordIds(drawing).get(value);
+    if (recordId) return recordId;
     const [input] = circularSourceInputs(drawing.inputType.value, [card]);
     const fileName = String(input.primaryFile?.name || '') || card.uid;
     const k = recordKeyExpansion(value, card.uid);

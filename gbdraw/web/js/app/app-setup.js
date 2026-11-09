@@ -1398,8 +1398,8 @@ export const createAppSetup = () => {
   const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
     linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
-    shownLinearWrapReading
+    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
+    shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
@@ -3062,7 +3062,7 @@ export const createAppSetup = () => {
     circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
     circularSingleRecordPresentationEnabled
   } = createCircularRecordPresentation({
-    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder, shownCommittedRequest
+    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder, shownRecordIds
   });
 
   // The legend-entry and record-definition popups (match popup frame): views

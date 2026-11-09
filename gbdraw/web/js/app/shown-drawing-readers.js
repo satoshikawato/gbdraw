@@ -3,11 +3,13 @@
 // card draws and the notes beside the Region fields, the shown Result's input
 // summary, the records the next Linear Generate draws and those a loaded
 // Result drew, the wait for a deferred Linear record read, the Web-only moves
-// of the canvas, the committed request of the Result a drawing shows, and Wrap
-// Rows as that Result drew it. The composition root passes the state, the
+// of the canvas, the committed request of the Result a drawing shows, the
+// record IDs that Result names its records by, and Wrap Rows as that Result
+// drew it. The composition root passes the state, the
 // shown drawing of a mode, the Linear record selector's members, and the
 // committed request and its Linear record cards as ports.
 import { inputSummaryOf } from '../services/input-summary.js';
+import { readRegionAxisRecords } from '../services/region-axis.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
   circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, linearRecordWindowRows, regionClampNote, resolveDisambiguatedRecordSelection
@@ -35,6 +37,31 @@ const { computed } = window.Vue;
  * @property {(drawing: DrawingState) => (card: LinearSeq) => CanonicalRenderRequest['records'][number]['windows']} windowsOf
  *   The windows a card of the drawing writes in its request (`linearDrawingWindowsOf`).
  */
+
+/**
+ * The record ID a Result names each of its records by, by record key (OV-2959):
+ * the one Python drew the record with, as the Result's run metadata keeps it
+ * (its track-slot geometry, which a Session keeps), else, for a Result saved
+ * before Session 51 (whose run metadata keys no record), the record ID its
+ * committed request selects the record by.
+ * @param {CanonicalRenderRequest | null} request The committed request of the Result.
+ * @param {unknown} trackSlotGeometry The run metadata `trackSlotGeometry` of the Result.
+ * @param {number} resultCount
+ * @returns {ReadonlyMap<string, string>}
+ */
+const recordIdsOfResult = (request, trackSlotGeometry, resultCount) => {
+  /** @type {Map<string, string>} */
+  const ids = new Map();
+  for (const { recordKey, selector } of request?.records ?? []) {
+    if (selector?.kind === 'recordId' && selector.value.trim()) ids.set(recordKey, selector.value.trim());
+  }
+  for (let index = 0; index < resultCount; index += 1) {
+    for (const { recordKey, recordId } of readRegionAxisRecords(trackSlotGeometry, index)) {
+      if (recordId) ids.set(recordKey, recordId);
+    }
+  }
+  return ids;
+};
 
 /**
  * Registers the computeds (`circularRegionNote`, `circularWindowRows`, `shownInputSummary`,
@@ -148,11 +175,17 @@ export const createShownDrawingReaders = ({
     .some((offset) => Boolean(Number(offset.x) || Number(offset.y)));
   /** @param {{ canvasPadding: Record<string, unknown> }} drawing */
   const canvasPadded = (drawing) => (/** @type {const} */ (['top', 'right', 'bottom', 'left'])).some((side) => Number(drawing.canvasPadding[side]));
+  /** Whether a drawing shows a Result of its own. @param {{ id: string }} drawing */
+  const showsOwnResult = (drawing) => state.generatedDrawingId.value === drawing.id && results.value.length > 0;
   // The committed request of the Result a drawing shows; null while it shows no Result of its own.
   /** @param {{ id: string }} drawing */
-  const shownCommittedRequest = (drawing) => (
-    state.generatedDrawingId.value === drawing.id && results.value.length > 0 ? getCommittedCanonicalRenderRequest() : null
-  );
+  const shownCommittedRequest = (drawing) => (showsOwnResult(drawing) ? getCommittedCanonicalRenderRequest() : null);
+  // The record ID the Result a drawing shows names each of its records by (`recordIdsOfResult`); empty while it shows
+  // no Result of its own.
+  /** @param {{ id: string }} drawing @returns {ReadonlyMap<string, string>} */
+  const shownRecordIds = (drawing) => (showsOwnResult(drawing) ? recordIdsOfResult(
+    getCommittedCanonicalRenderRequest(), state.trackSlotResolvedGeometry.value, results.value.length
+  ) : new Map());
   // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
   // summary and the committed request of the drawing whose Result is shown:
   // the field's Auto text and the Auto hints of sizes and ticks read it.
@@ -173,7 +206,7 @@ export const createShownDrawingReaders = ({
   });
   return {
     linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownLinearWrapLeaf,
-    shownLinearWrapReading
+    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
+    shownLinearWrapLeaf, shownLinearWrapReading
   };
 };

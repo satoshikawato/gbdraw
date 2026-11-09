@@ -80,6 +80,22 @@ test('Circular File cards: empty state, add, replace, move, and remove with its 
   ]);
 });
 
+// OV-2962: the first file of a GFF3 + FASTA list chosen in the FASTA uploader makes File 1; the focus that left
+// with the empty list's uploaders lands on the card's FASTA button, the slot the user chose, not on its first one.
+test('a FASTA chosen first in a GFF3 + FASTA list keeps the focus on the FASTA slot of File 1', async ({ page }, testInfo) => {
+  await openApp(page);
+  await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
+  const section = page.locator('[data-setting=inputs]');
+  await section.getByRole('button', { name: 'Choose FASTA File', exact: true }).focus();
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.fasta');
+  await expect(cards(page)).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[data-circular-source-card]')))).toBe(true);
+  await section.screenshot({ path: testInfo.outputPath('gff-fasta-focus.png') });
+  const fastaButton = cards(page).first().getByRole('button', { name: 'Choose FASTA File', exact: true });
+  await expect(fastaButton).toBeFocused();
+  await expect(fastaButton).toBeInViewport();
+});
+
 // OV-2840: a CLI Session of several --gbk files shows one card per file, each named after its own file.
 test('a CLI Session of several --gbk files loads as one File card per file', async ({ page }, testInfo) => {
   test.setTimeout(600_000);
