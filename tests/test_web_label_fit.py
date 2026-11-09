@@ -606,6 +606,13 @@ def test_a_row_computed_after_the_conservation_file_is_gone_reads_no_file(tmp_pa
     assert "Skipping conservation source" not in caplog.text
 
 
+# The OV-732 figures' band and its label, which stays clear of the feature labels and leaders. A region label that
+# warns (over them, OV-3015) is one no outer label row clears, so each such row would verify every grid value up to
+# its limit: about 120 full assemblies per figure in place of 5 (OV-3104). The tests pin the files, not that, and
+# check that no region label warns.
+OV732_BAND = "12000\t12500\tregion"  # start, end, label
+
+
 def _write_input_files(directory: Path, record) -> dict[str, Path]:
     directory.mkdir(parents=True, exist_ok=True)
     texts = {
@@ -613,7 +620,7 @@ def _write_input_files(directory: Path, record) -> dict[str, Path]:
         "colors": "CDS\tproduct\t.*\t#D55E00\tCDS\n",
         "default_colors": "CDS\t#D0D0D0\n",
         "visibility": "*\tCDS\tproduct\t.*\tshow\n",
-        "annotations": "set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t500\tregion\n",
+        "annotations": f"set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t{OV732_BAND}\n",
     }
     paths = {name: directory / f"{name}.tsv" for name in texts}
     for name, text in texts.items():
@@ -657,6 +664,7 @@ def test_rows_computed_after_every_input_file_is_gone_match_the_rows_with_the_fi
 
     report = label_fit_report(drawings["gone"])
     assert report is not None and report.drawn and report.rows
+    assert "circular_region" not in {record.label_kind for record in report.records}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for row in report.rows:
@@ -692,7 +700,7 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
     shutil.rmtree(tmp_path / "inputs")
 
     kinds = [row["kind"] for row in entries["gone"]["report"]["rows"]]
-    assert kinds
+    assert kinds and "circular_region" not in {record["labelKind"] for record in entries["gone"]["report"]["records"]}
     for kind in kinds:
         gone = searches["gone"].row(entries["gone"]["rowToken"], kind)
         assert gone == searches["kept"].row(entries["kept"]["rowToken"], kind)
@@ -721,7 +729,7 @@ def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]
         encoding="utf-8",
     )
     paths["annotations"].write_text(
-        "set_id\tid\tmark\trecord\tstart\tend\tlabel\ns\ta\tband\tLAMBDA_B\t1\t500\tregion\n", encoding="utf-8"
+        f"set_id\tid\tmark\trecord\tstart\tend\tlabel\ns\ta\tband\tLAMBDA_B\t{OV732_BAND}\n", encoding="utf-8"
     )
     return records, paths
 
@@ -746,6 +754,7 @@ def test_rows_of_two_circular_records_computed_after_every_input_file_is_gone(tm
 
     report = label_fit_report(drawings["gone"])
     assert report is not None and report.drawn and report.rows
+    assert "circular_region" not in {record.label_kind for record in report.records}
     assert {record.record_id for record in report.records} == {"LAMBDA_A", "LAMBDA_B"}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -775,7 +784,7 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
 
     assert {record["recordId"] for record in entries["gone"]["report"]["records"]} == {"LAMBDA_A", "LAMBDA_B"}
     kinds = [row["kind"] for row in entries["gone"]["report"]["rows"]]
-    assert kinds
+    assert kinds and "circular_region" not in {record["labelKind"] for record in entries["gone"]["report"]["records"]}
     for kind in kinds:
         gone = searches["gone"].row(entries["gone"]["rowToken"], kind)
         assert gone == searches["kept"].row(entries["kept"]["rowToken"], kind)
