@@ -95,3 +95,57 @@ test('a Session saved during the hold stores the view from before it', async () 
   const unregistered = await savedUi('no reader');
   assert.deepEqual({ zoom: unregistered.zoom, canvasPan: unregistered.canvasPan }, fitted);
 });
+
+test('the held view refits the shown figure when its room changes, but not in the room of the last Fit', () => {
+  const observers = [];
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; this.observed = null; observers.push(this); }
+    observe(element) { this.observed = element; }
+    disconnect() { this.observed = null; }
+  };
+  const canvas = {
+    offsetWidth: 800, offsetHeight: 400, clientWidth: 800, clientHeight: 400, clientLeft: 0, clientTop: 0,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), style: {}
+  };
+  let fits = 0;
+  const svg = { getBoundingClientRect: () => { fits += 1; return { left: 300, top: 0, width: 200, height: 100 }; } };
+  state.canvasContainerRef.value = canvas;
+  state.svgContainer.value = { querySelector: () => svg, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 100 }) };
+  const owner = createPanZoom(state);
+  try {
+    let shown = true;
+    const resize = (width) => {
+      canvas.offsetWidth = width;
+      observers.filter(({ observed }) => observed === canvas).forEach(({ callback }) => callback());
+    };
+    owner.holdPreviewViewport(() => shown);
+    resize(800);
+    assert.equal(fits, 1, 'the first room under the hold is fitted');
+    resize(800);
+    assert.equal(fits, 1, 'the room of the last Fit is no change');
+    resize(600);
+    assert.equal(fits, 2, 'a new room is fitted');
+    canvas.offsetWidth = 650;
+    owner.fitPreviewToViewport();
+    resize(650);
+    assert.equal(fits, 3, 'the room of a Fit made under the hold is no change either');
+    resize(0);
+    assert.equal(fits, 3, 'a hidden canvas has no room');
+    shown = false;
+    resize(700);
+    assert.equal(fits, 3, 'another figure shown under the hold is not fitted');
+    owner.releasePreviewViewport({ restore: false });
+    shown = true;
+    resize(500);
+    assert.equal(fits, 3, 'a released hold observes no room');
+    owner.fitPreviewToViewport();
+    owner.holdPreviewViewport(() => shown);
+    resize(500);
+    assert.equal(fits, 5, 'a new hold forgets the room of the Fit before it');
+  } finally {
+    owner.disposePanZoom();
+    state.canvasContainerRef.value = null;
+    state.svgContainer.value = null;
+    delete globalThis.ResizeObserver;
+  }
+});

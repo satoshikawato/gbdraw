@@ -112,7 +112,6 @@ const FUNCTION_LINES = {
   'app/settings-pane.js::createSettingsPaneController': 178,
   'app/similarity-alignment.js::createSimilarityAlignmentActions': 1112,
   'app/svg-styles.js::createSvgStyles': 186,
-  'app/ui.js::createPanZoom': 387,
   'app/watchers.js::setupWatchers': 449,
   'components.js::SettingsSectionIndex.setup': 163,
   'services/config.js::exportSessionDocument': 193,
