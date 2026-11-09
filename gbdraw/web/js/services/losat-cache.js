@@ -12,6 +12,7 @@ import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.ge
 import { shapeViolations } from '../utils/contract-shape.js';
 import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -59,6 +60,50 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
 // The `flow` of a raw entry a Circular conservation ring's search wrote,
 // generated from the CLI's owner: Generate writes it, Save reads it.
 export { CIRCULAR_CONSERVATION_FLOW };
+
+/**
+ * The kind of drawing a raw entry's search is for: a ring search (`flow` circular-conservation) is a Circular
+ * drawing's, any other a Linear drawing's (its pairs, or an older Session's search without record ids). Save writes an
+ * entry only into drawings of its kind that name it (an entry without record ids into every drawing with a request);
+ * Load gives its cache-info row to a drawing of its kind.
+ * @param {{ flow?: unknown }} entry
+ * @returns {'circular' | 'linear'}
+ */
+export const losatEntryDrawingKind = ({ flow }) => (flow === CIRCULAR_CONSERVATION_FLOW ? 'circular' : 'linear');
+
+/**
+ * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome,
+ * two drawings that hold one entry) name one LOSAT result, with the first row's file name, as the CLI raw cache keeps
+ * one file per key. Save writes one entry for each; a panel shows each once (`losatResultRowsOfDrawing`).
+ * @template {{ key: unknown }} Row
+ * @param {readonly Row[]} rows
+ * @returns {Row[]}
+ */
+export const losatRowsOnePerKey = (rows) => {
+  const seen = new Set();
+  return rows.filter(({ key }) => {
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+/**
+ * The LOSAT results of a drawing: its cache-info rows, one per raw key. Its panel counts them (**Clear N LOSAT
+ * results**), **Save Raw LOSAT TSV** saves them and Run Info lists their runtimes (OV-3203, OV-3204).
+ * @template {{ key: unknown, drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(rows.filter((row) => row.drawingId === drawingId));
+
+/**
+ * The cache-info rows of the other drawings: what a drawing's Generate, ring edit or **Clear LOSAT results** leaves.
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatRowsOfOtherDrawings = (rows, drawingId) => rows.filter((row) => row.drawingId !== drawingId);
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw

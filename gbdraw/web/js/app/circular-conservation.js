@@ -10,6 +10,7 @@ import {
   bindDrawingInputFileList, bindDrawingInputFileTree, ringGenomeFileLists, setConservationBlastsSource
 } from '../services/drawing/inputs.js';
 import { readComparisonSequence } from '../services/record-discovery.js';
+import { losatRowsOfOtherDrawings } from '../services/losat-cache.js';
 import {
   applyComparisonSequenceRecordLabel,
   circularRingSources,
@@ -177,9 +178,11 @@ const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption) => {
  * name, the rows of other drawings stay (OV-3196).
  * @param {WebState} state @param {WriteLosatCacheInfo} writeLosatCacheInfo @param {DrawingState} drawing
  */
-const clearRingCacheInfo = (state, writeLosatCacheInfo, drawing) => writeLosatCacheInfo(
-  state.losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ row) => row.drawingId !== drawing.id)
-);
+const clearRingCacheInfo = (state, writeLosatCacheInfo, drawing) => {
+  /** @type {LosatCacheInfoEntry[]} */
+  const rows = state.losatCacheInfo.value;
+  writeLosatCacheInfo(losatRowsOfOtherDrawings(rows, drawing.id));
+};
 
 /**
  * A change of the ring sources (`write`) that keeps each ring at its place: each series entry takes the identity of

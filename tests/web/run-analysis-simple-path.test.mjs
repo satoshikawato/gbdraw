@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LOSAT_WASM_BUILD } from '../../gbdraw/web/js/services/losat-build.generated.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -21,11 +22,13 @@ globalThis.window = {
 };
 let downloadedBlob = null;
 let downloadedFilename = '';
+// Every file name a download saved, in order (Save Raw LOSAT TSV saves one file per result).
+const downloadedFilenames = [];
 globalThis.document = {
   body: { appendChild: (node) => { node.parentNode = globalThis.document.body; } },
   createElement: () => ({
     addEventListener() {},
-    click() { downloadedFilename = this.download; },
+    click() { downloadedFilename = this.download; downloadedFilenames.push(this.download); },
     parentNode: null
   }),
   removeChild() {}
@@ -1641,6 +1644,14 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   assert.equal(sent.length, 3);
 });
 
+// #1777 review 9 (OV-3203, OV-3204): the Circular and the Linear panel count their LOSAT results ("Clear N LOSAT
+// results") through the one reader that Save Raw LOSAT TSV and Clear read, never the project's rows.
+test('both LOSAT result panels count the shown drawing\'s results through the one reader', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.equal(html.includes('losatCacheInfo'), false);
+  assert.equal(html.match(/tn\(losatResultRows\.length, 'Clear \{count\} LOSAT result'/g)?.length, 2);
+});
+
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
   const resourceMetrics = [];
   const previousTestHooks = globalThis.__GBDRAW_TEST_HOOKS__;
@@ -1705,51 +1716,55 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
   }
 
+  // The ring drawing: three LOSAT rings on one reference (also a copy of it, below).
+  const setUpRingDrawing = (drawing) => {
+    drawing.inputType.value = 'gb';
+    drawing.form.prefix = 'lazy-circular';
+    drawing.form.show_depth = false;
+    drawing.form.multi_record_canvas = false;
+    drawing.adv.circular_track_slots_enabled = false;
+    drawing.adv.circular_track_slots = [];
+    Object.assign(drawing.adv, {
+      min_bitscore: 0,
+      evalue: '1e-2',
+      identity: 0,
+      alignment_length: 0
+    });
+    Object.assign(drawing.circularConservation, {
+      enabled: true,
+      source: 'losat',
+      losat_program: 'blastn',
+      subject_gencode: 1,
+      reference: 'auto',
+      labels: '',
+      ring_width: 5,
+      ring_gap: 2
+    });
+    drawing.circularConservation.series.splice(
+      0,
+      drawing.circularConservation.series.length,
+      ...comparisonViews.map((file, index) => ({
+        sourceKey: `${file.name}|${file.size}|0|${index}`,
+        fileName: file.name,
+        sourceIndex: index,
+        label: ['comparison-b', 'comparison-c', 'comparison-d'][index],
+        color: ['#4e79a7', '#e15759', '#59a14f'][index],
+        losat_gencode: 1
+      }))
+    );
+    setCircularFile(referenceView, drawing);
+    drawing.files.c_depth = bound(null);
+    drawing.files.c_conservation_blasts = bound([]);
+    drawing.files.c_conservation_fastas = bound(comparisonViews);
+    drawing.files.c_conservation_sequence_sources = bound([]);
+    drawing.annotationSets.splice(0);
+    drawing.circularRecordList.value = [];
+    Object.assign(drawing.circularRecordDiscovery, {
+      status: 'idle', error: '', inputType: '', sources: []
+    });
+  };
   installShownDrawing('circular');
-  modeDrawing(state, 'circular').inputType.value = 'gb';
-  state.activeDrawing().form.prefix = 'lazy-circular';
-  state.activeDrawing().form.show_depth = false;
-  state.activeDrawing().form.multi_record_canvas = false;
-  state.activeDrawing().adv.circular_track_slots_enabled = false;
-  state.activeDrawing().adv.circular_track_slots = [];
-  Object.assign(state.activeDrawing().adv, {
-    min_bitscore: 0,
-    evalue: '1e-2',
-    identity: 0,
-    alignment_length: 0
-  });
-  Object.assign(state.activeDrawing().circularConservation, {
-    enabled: true,
-    source: 'losat',
-    losat_program: 'blastn',
-    subject_gencode: 1,
-    reference: 'auto',
-    labels: '',
-    ring_width: 5,
-    ring_gap: 2
-  });
-  state.activeDrawing().circularConservation.series.splice(
-    0,
-    state.activeDrawing().circularConservation.series.length,
-    ...comparisonViews.map((file, index) => ({
-      sourceKey: `${file.name}|${file.size}|0|${index}`,
-      fileName: file.name,
-      sourceIndex: index,
-      label: ['comparison-b', 'comparison-c', 'comparison-d'][index],
-      color: ['#4e79a7', '#e15759', '#59a14f'][index],
-      losat_gencode: 1
-    }))
-  );
-  setCircularFile(referenceView);
-  modeDrawing(state, 'circular').files.c_depth = bound(null);
-  modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
-  modeDrawing(state, 'circular').files.c_conservation_fastas = bound(comparisonViews);
-  modeDrawing(state, 'circular').files.c_conservation_sequence_sources = bound([]);
-  state.activeDrawing().annotationSets.splice(0);
-  modeDrawing(state, 'circular').circularRecordList.value = [];
-  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
-    status: 'idle', error: '', inputType: '', sources: []
-  });
+  setUpRingDrawing(modeDrawing(state, 'circular'));
 
   const subjectCanonicalHash = await sha256Text(referenceFasta);
   const cacheRows = [
@@ -1862,16 +1877,66 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     // A Circular Generate replaces only its own drawing's cache-info rows (#1777 review 8, OV-3201).
-    const linearRow = { key: 'linear-pair', filename: 'pair.tsv', display: true, edgeKey: 'a->b', drawingId: modeDrawing(state, 'linear').id };
-    state.losatCacheInfo.value = [linearRow, { key: 'stale-ring', filename: 'old.tsv', display: true, drawingId: state.activeDrawing().id }];
+    const linearId = modeDrawing(state, 'linear').id;
+    const linearRows = ['a->b', 'b->c'].map((edgeKey, index) => ({
+      key: `linear-pair-${index}`, filename: `pair-${index}.tsv`, display: true, edgeKey, drawingId: linearId
+    }));
+    state.losatCacheInfo.value = [...linearRows, { key: 'stale-ring', filename: 'old.tsv', display: true, drawingId: state.activeDrawing().id }];
     assert.deepEqual(
       await runner.runAnalysis(),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
-    assert.deepEqual(state.losatCacheInfo.value.map((row) => [row.key === 'linear-pair' || row.key === 'stale-ring' ? row.key : 'ring', row.drawingId]),
-      [['linear-pair', 'linear'], ...cacheEntries.map(() => ['ring', state.activeDrawing().id])]);
+    assert.deepEqual(state.losatCacheInfo.value.map((row) => [row.key.startsWith('linear-pair') || row.key === 'stale-ring' ? row.key : 'ring', row.drawingId]),
+      [['linear-pair-0', 'linear'], ['linear-pair-1', 'linear'], ...cacheEntries.map(() => ['ring', state.activeDrawing().id])]);
+
+    // #1777 review 9 (OV-3203, OV-3204): a panel counts, downloads (Save Raw LOSAT TSV) and clears the LOSAT results
+    // of the drawing it shows, one per cache key, through one reader (`losatResultRowsOf`).
+    const ringKeys = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === 'circular').map(({ key }) => key);
+    assert.equal(ringKeys.length, 3);
+    const panelOf = async (drawingId) => {
+      installShownDrawing(drawingId);
+      downloadedFilenames.splice(0);
+      await runner.downloadLosatCache(state.activeDrawing());
+      return { keys: runner.losatResultRowsOf(state.activeDrawing()).map(({ key }) => key), downloads: [...downloadedFilenames] };
+    };
+    const ringFiles = (await panelOf('circular')).downloads;
+    assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles },
+      'the Circular panel says 3 and saves only its 3 rings, not the Linear pairs');
+    assert.equal(new Set(ringFiles).size, 3, JSON.stringify(ringFiles));
+    assert.deepEqual((await panelOf(linearId)).keys, linearRows.map(({ key }) => key), 'the Linear panel says 2');
+    // Two rings of one genome in one drawing share a cache key: one result (as on dev, where Save writes one entry).
+    const generatedRows = state.losatCacheInfo.value;
+    state.losatCacheInfo.value = [...generatedRows, { ...generatedRows.at(-1), filename: 'same-genome-again.tsv' }];
+    assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles }, 'one row per cache key');
+    state.losatCacheInfo.value = generatedRows;
+    // A copy of the drawing, Generated: each drawing's panel says 3 and saves its 3 files once.
+    const copy = createDrawingState('circular-copy', 'circular');
+    state.addDrawing(copy, 'Circular copy', 2);
+    try {
+      setUpRingDrawing(copy);
+      installShownDrawing(copy.id);
+      // The copy's rings reuse the ring reads and tables of the first Generate: no helper runs.
+      const copyResult = result('lazy-circular-copy.svg', 'lazy-circular-copy');
+      workerResponses.push(response(copyResult, validCatalog(copyResult.name)));
+      assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+      assert.equal(losatCalls, 0);
+      assert.equal(state.losatCacheInfo.value.length, 8, 'each drawing keeps its own rows');
+      for (const drawingId of [copy.id, 'circular']) {
+        assert.deepEqual(await panelOf(drawingId), { keys: ringKeys, downloads: ringFiles }, drawingId);
+      }
+      // Clear in the copy clears the copy's results; the results the other drawings list stay.
+      installShownDrawing(copy.id);
+      runner.clearLosatCache(state.activeDrawing());
+      assert.deepEqual(runner.losatResultRowsOf(state.activeDrawing()), []);
+      assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles }, 'Clear left the other drawing');
+      assert.deepEqual([...state.losatCache.value.keys()], ringKeys);
+      assert.deepEqual((await panelOf(linearId)).keys, linearRows.map(({ key }) => key));
+    } finally {
+      installShownDrawing('circular');
+      state.removeDrawing(copy.id, { takeSlot: () => null });
+    }
     // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
     // ring rows in the search frame.
     assert.deepEqual(

@@ -1220,3 +1220,22 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
   assert.equal(cache.losatEdgeFilename(left, right, suffix, queryWindow, subjectWindow), expected,
     JSON.stringify({ left, right, queryWindow, subjectWindow }));
 }
+
+// #1777 review 9 (OV-3203, OV-3204): the LOSAT results a drawing's panel counts, downloads and clears are its own
+// cache-info rows, one per cache key (the first row of a key, as Save writes one entry per key); a drawing's
+// Generate, ring edit and Clear leave the other drawings' rows.
+{
+  const row = (key, drawingId, filename = `${key}.tsv`) => ({ key, filename, display: true, drawingId });
+  const rows = [row('pair', 'linear'), row('ring', 'circular'), row('ring', 'circular', 'again.tsv'), row('ring', 'circular-2'),
+    row('other', 'circular')];
+  assert.deepEqual(cache.losatRowsOnePerKey(rows), [rows[0], rows[1], rows[4]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular'), [rows[1], rows[4]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular-2'), [rows[3]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'linear'), [rows[0]]);
+  assert.deepEqual(cache.losatRowsOfOtherDrawings(rows, 'circular'), [rows[0], rows[3]]);
+  // The one kind rule Save and Load read (review 9 finding 3): a ring search is a Circular drawing's, any other a
+  // Linear drawing's (its pairs, or an older Session's search without record ids).
+  assert.equal(cache.losatEntryDrawingKind({ flow: cache.CIRCULAR_CONSERVATION_FLOW }), 'circular');
+  assert.equal(cache.losatEntryDrawingKind({ queryUid: 'a', subjectUid: 'b' }), 'linear');
+  assert.equal(cache.losatEntryDrawingKind({}), 'linear');
+}

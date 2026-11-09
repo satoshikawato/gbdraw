@@ -222,7 +222,8 @@ import {
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
   validateProteinIdentityManifest,
-  CIRCULAR_CONSERVATION_FLOW
+  losatEntryDrawingKind,
+  losatRowsOnePerKey
 } from './losat-cache.js';
 import { NO_CONSERVATION_PAIRS, conservationPairKey, conservationPairsOfEntries } from './circular-conservation-keys.js';
 /** @import { AdoptedConservationPairs, ConservationPairs } from './circular-conservation-keys.js' */
@@ -3944,6 +3945,7 @@ const serializeLosatCache = () => {
   }
   const manifest = state.proteinIdentityManifest.value;
   const rawManifest = toRaw(manifest);
+  /** @type {LosatCacheInfoEntry[]} */
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   /** @type {Record<string, unknown>[]} */
   const entries = [];
@@ -3981,13 +3983,12 @@ const serializeLosatCache = () => {
     return entry;
   };
 
-  // One entry per raw key: rows that share a key (two rings of one sequence)
-  // keep the first row's filename, as the CLI raw cache does.
-  info.forEach((/** @type {{ key?: string, filename?: string, display?: boolean } | null} */ entry, /** @type {number} */ idx) => {
-    if (!entry || !entry.key || seen.has(entry.key)) return;
+  // One entry per raw key (`losatRowsOnePerKey`), with its first row's file name.
+  losatRowsOnePerKey(info).forEach((entry) => {
+    const idx = info.indexOf(entry);
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    entries.push(buildEntry(entry.key, cached, {
+    entries.push(buildEntry(String(entry.key), cached, {
       ...entry,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false
@@ -4066,8 +4067,8 @@ const restoredLosatCacheValue = (entry, adoptCurrent, validatedManifest) => {
  * their content; a Session 27-50's one list is its Linear drawing's). Its
  * cache-info rows name the drawing whose entries they are (`drawingId`), so a
  * ring edit clears only its drawing's rows (OV-3201): an entry of a drawing's
- * own kind (a ring entry of a Circular drawing, any other of a Linear one) is
- * that drawing's, one row for each drawing that holds it; a Session 27-50's
+ * own kind (`losatEntryDrawingKind`, the rule Save writes by: a ring entry of
+ * a Circular drawing, any other of a Linear one) is that drawing's, one row for each drawing that holds it; a Session 27-50's
  * ring entries are its Circular part's (`ringDrawingId`); an entry that no
  * drawing of its kind holds keeps one row, its first holder's.
  * @param {readonly {
@@ -4098,8 +4099,8 @@ const applyLosatCache = (
       if (kind !== 'current') return;
       if (!earlier.has(entry.key)) map.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent, validatedManifest));
       if (entry.display === false) return;
-      const ring = entry.flow === CIRCULAR_CONSERVATION_FLOW;
-      const owner = (drawing.mode === 'circular') === ring ? drawing.id : ring ? ringDrawingId : null;
+      const drawingKind = losatEntryDrawingKind(entry);
+      const owner = drawing.mode === drawingKind ? drawing.id : drawingKind === 'circular' ? ringDrawingId : null;
       rows.push({ owned: owner !== null, row: {
         key: entry.key,
         // A saved name that is no text is read as none (OV-981).
@@ -6575,13 +6576,15 @@ const artifactUiState = (view) => ({
 /**
  * The raw LOSAT entries Save writes into one Session 51 drawing: those its
  * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
- * written in both and a drawing without a request names none. A Linear entry
+ * written in both and a drawing without a request names none. By the entry's
+ * kind (`losatEntryDrawingKind`, the rule Load reads too): a Linear entry
  * names its pair's rows, which a Linear request names as its records' keys
  * (a window pair's row names two drawn units, each a record key or a window
  * of one, as the drawing's catalog `catalog` names it; OV-2918);
  * a Circular conservation entry names its subject and query hashes, which
  * must be a pair the drawing's committed request recorded (D-15-124; Save
- * reads no ring file); any other entry goes to every drawing with a request.
+ * reads no ring file); a Linear entry without record ids (an older Session's)
+ * goes to every drawing with a request.
  * Load merges every drawing's entries into the one cache.
  * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
  * @param {ConservationPairs} conservationPairs The hash pairs its committed request names (none for a draft request).
@@ -6598,12 +6601,13 @@ const losatEntriesOfDrawing = (request, conservationPairs, entries, catalog) => 
   // A request without sequence rings names no pair, whatever its drawing's file held.
   const readsRings = request.mode === 'circular'
     && (request.diagramOptions.conservationFastaFiles ?? []).some((files) => files.length > 0);
-  return entries.filter(({ queryUid, subjectUid, flow, queryCanonicalHash, subjectCanonicalHash }) => (
-    typeof queryUid === 'string' && typeof subjectUid === 'string' ? named(queryUid) && named(subjectUid)
-      : flow === CIRCULAR_CONSERVATION_FLOW
-        ? readsRings && conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash))
-        : true
-  ));
+  return entries.filter((entry) => {
+    const { queryUid, subjectUid, queryCanonicalHash, subjectCanonicalHash } = entry;
+    if (losatEntryDrawingKind(entry) === 'circular') {
+      return readsRings && conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash));
+    }
+    return typeof queryUid === 'string' && typeof subjectUid === 'string' ? named(queryUid) && named(subjectUid) : true;
+  });
 };
 
 /**

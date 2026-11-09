@@ -197,6 +197,8 @@ import {
   webLosatRuntimeRecord,
   isReusableLosatEntry,
   writtenLegacyProteinArtifacts,
+  losatResultRowsOfDrawing,
+  losatRowsOfOtherDrawings,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
@@ -3338,7 +3340,7 @@ export const createRunAnalysis = ({
           ? 'upload'
           : 'losat';
         // A Circular Generate replaces only its own drawing's cache-info rows (OV-3201).
-        workingLosatCacheInfo = workingLosatCacheInfo.filter((/** @type {LosatCacheInfoEntry} */ row) => row.drawingId !== drawing.id);
+        workingLosatCacheInfo = losatRowsOfOtherDrawings(workingLosatCacheInfo, drawing.id);
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
           : ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
@@ -5209,7 +5211,7 @@ export const createRunAnalysis = ({
           startedAtIso: manualRunStartedAtIso,
           losatComparisons: mode.value === 'linear' && requestComparisonPlan?.hasLosatIntent === true,
           losatRuntimes: summarizeLosatRuntimes(
-            (pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo).filter((/** @type {LosatCacheInfoEntry} */ row) => row.drawingId === drawing.id),
+            losatResultRowsOfDrawing(pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo, drawing.id),
             pendingLosatCacheCommit?.cacheMap || losatCache.value
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices
@@ -6376,12 +6378,24 @@ export const createRunAnalysis = ({
     }
   };
 
-  const downloadLosatCache = async () => {
-    if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
+  /** @returns {LosatCacheInfoEntry[]} */
+  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
+  /**
+   * The LOSAT results of a drawing, the one reader of its panel (#1777 review 9, OV-3203, OV-3204): the
+   * **Clear N LOSAT results** count and **Save Raw LOSAT TSV** read its rows, one per cache key, never another
+   * drawing's, and **Clear LOSAT results** clears them.
+   * @param {DrawingState} drawing
+   */
+  const losatResultRowsOf = (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id);
+
+  /** @param {DrawingState} drawing */
+  const downloadLosatCache = async (drawing) => {
+    const rows = losatResultRowsOf(drawing);
+    if (rows.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
     const identityManifest = cloneJsonData(proteinIdentityManifest.value);
-    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (/** @type {LosatCacheInfoEntry} */ entry, /** @type {number} */ idx) => {
+    const hydratedEntries = (await Promise.all(rows.map(async (entry, idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
       return {
@@ -6390,7 +6404,7 @@ export const createRunAnalysis = ({
         idx,
         hydrated: await hydrateLosatDownloadText(entry.key, cached, identityManifest)
       };
-    }))).filter(Boolean);
+    }))).filter((item) => item !== null);
     const totalBytes = totalHydratedLosatExportBytes(
       hydratedEntries.map((item) => item.hydrated)
     );
@@ -6411,16 +6425,23 @@ export const createRunAnalysis = ({
     }
   };
 
-  const clearLosatCache = () => {
+  // Clear LOSAT results clears the shown drawing's results: its rows, and every cached search that no other
+  // drawing's row names. The protein and derived caches serve the remaining searches; they go with the last one.
+  /** @param {DrawingState} drawing */
+  const clearLosatCache = (drawing) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    const kept = losatRowsOfOtherDrawings(cacheInfoRows(), drawing.id);
+    const keptKeys = new Set(kept.map(({ key }) => key));
     completedLosatSearch = null;
-    losatCache.value = new Map();
-    losatDerivedCache.value = new Map();
-    proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
-    legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-    losatCacheInfo.value = [];
+    losatCache.value = new Map([...(losatCache.value || [])].filter(([key]) => keptKeys.has(key)));
+    if (losatCache.value.size === 0) {
+      losatDerivedCache.value = new Map();
+      proteinIdentityManifest.value = emptyProteinIdentityManifest();
+      legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+      legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
+    }
+    losatCacheInfo.value = kept;
   };
 
   // A run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123) under the
@@ -6499,6 +6520,7 @@ export const createRunAnalysis = ({
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
+    losatResultRowsOf,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,
