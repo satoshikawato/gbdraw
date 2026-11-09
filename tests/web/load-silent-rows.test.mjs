@@ -485,6 +485,10 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
   assert.deepEqual(pastRows.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
     [['files.c_conservation_blasts[1]', 'b']]);
   assert.deepEqual(drawn(), [['A', first.name], ['c', 'second.tsv']]);
+  // A series label with a comma does not shift the labels past the series (#1777 round 10, OV-3197).
+  past.config.circularConservation.series = [{ label: 'A, x', fileName: first.name }];
+  await importSession(input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.deepEqual(drawn(), [['A, x', first.name], ['c', 'second.tsv']]);
 });
 
 // OV-896: with no series left, the comparison is off, as Remove leaves it.

@@ -128,7 +128,6 @@ export const withoutConservationSeries = ({ blasts, fastas, sequenceSources, ser
     fastas: without(fastas),
     sequenceSources: without(sequenceSources),
     series: kept,
-    labels: kept.map((entry) => /** @type {{ label?: unknown }} */ (entry).label).join(','),
     enabled: keptBlasts.length > 0
   };
 };

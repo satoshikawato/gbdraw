@@ -177,7 +177,9 @@ import {
   bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows, ringGenomeFileLists
 } from '../services/drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
-import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
+import {
+  NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs, losatRequestRings
+} from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -240,7 +242,10 @@ import {
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatOverlayRun, LosatRunOptions } from '../services/losat.js' */
-/** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
+/**
+ * @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject, SearchedRingAdoption }
+ *   from '../services/circular-conservation-keys.js'
+ */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
@@ -573,10 +578,6 @@ const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, re
   return new Map(rings.map(({ resourceId }, index) => [resourceId, converted[index]]));
 };
 
-/**
- * One circular conservation comparison, resolved to the BLAST text the request carries.
- * @typedef {{ name: string, text: string, sourceIndex: number, label: string, color: string }} ResolvedCircularConservation
- */
 
 /**
  * A match in one of Generate's cache maps, whose keys are text (`RawLosatCacheMatch` of services/losat-cache.js
@@ -1658,11 +1659,11 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
  *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean, drawing: DrawingState,
- *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, ringAdoption?: SearchedRingAdoption | null,
+ *   drawing: DrawingState, conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
- *   `builtFromDraft` says the draft's rings at this adoption are the rings the request was built from: a Generate whose
- *   rings did not change while it ran, not the committed request (a rotation, an alignment, a placement).
+ *   `ringAdoption` is a LOSAT Generate's own rings (`SearchedRingAdoption`); a candidate of the committed request (a
+ *   rotation, an alignment, a placement) has none and leaves the draft's rings.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -3055,8 +3056,11 @@ export const createRunAnalysis = ({
       let requestComparisonPlan = activeComparisonPlanSnapshot;
       let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
       let searchedSavedPipeline = false; // Whether it searched the saved pipeline Inherit runs (OV-3003).
-      /** @type {ResolvedCircularConservation[]} */
-      let resolvedCircularConservation = [];
+      // The rings the ring searches read and their tables, in ring order (`losatRequestRings`); none without a search.
+      /** @type {SearchedRingAdoption['searched']} */
+      let searchedRings = [];
+      /** @type {{ name: string, text: string }[]} */
+      let searchedRingTables = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
       /** @type {ConservationPairs} */
       let conservationPairs = NO_CONSERVATION_PAIRS;
@@ -3407,11 +3411,7 @@ export const createRunAnalysis = ({
                 filename: fallbackName
               };
               losatPairs.push(pair);
-              cacheInfo.push({
-                key: cacheKey,
-                filename: fallbackName,
-                display: true
-              });
+              cacheInfo.push({ key: cacheKey, filename: fallbackName, display: true, drawingId: drawing.id });
               const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
               const hasCachedText = Boolean(cached);
               if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
@@ -3523,20 +3523,11 @@ export const createRunAnalysis = ({
             requestRings = ringsOfDrawing(drawing);
             const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
             conservationPairs = conservationHashPairs(conservationKeys);
-            // Each ring's source with its label and color, as the ring keys matched it (`orderedConservationSources`).
-            const conservationEntries = conservationKeys.rings.map(({ source }) => source);
+            // Each ring's source with its label, color and genetic code, as the ring keys matched it (`searchedRingSources`).
+            searchedRings = conservationKeys.rings.map(({ source }) => source);
             const conservationResults = await runCircularLosatConservation(conservationKeys);
             drawing.circularConservation.reference = 'subject';
-            resolvedCircularConservation = conservationResults.map((result, index) => {
-              const source = conservationEntries[index];
-              return {
-                name: result.name || getPayloadName(result.path),
-                text: result.text,
-                sourceIndex: source ? source.sourceIndex : index,
-                label: source?.label || `Comparison ${index + 1}`,
-                color: source?.color || '#D9EAF7'
-              };
-            });
+            searchedRingTables = conservationResults.map((result) => ({ name: result.name || getPayloadName(result.path), text: result.text }));
           }
         } else {
           workingLosatCacheInfo = [];
@@ -4523,6 +4514,7 @@ export const createRunAnalysis = ({
                 key: cacheKey,
                 filename: pair.filename,
                 display: true,
+                drawingId: drawing.id,
                 edgeKey: spec.edgeKey,
                 ordinal: spec.ordinal,
                 queryUid: resolvedEdge.queryUid,
@@ -4999,10 +4991,9 @@ export const createRunAnalysis = ({
       const candidateFiles = forceEmptyComparison
         ? { ...serializedFiles, linearCanonicalComparisons: [] }
         : serializedFiles;
-      const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
-        ...entry,
-        fastas: ringGenomeFileLists(candidateFiles.c_conservation_fastas).filter((files) => files.length > 0)[entry.sourceIndex] || []
-      }));
+      const canonicalCircularConservation = losatRequestRings(
+        searchedRings, searchedRingTables, ringGenomeFileLists(candidateFiles.c_conservation_fastas)
+      );
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
         state,
@@ -5437,9 +5428,9 @@ export const createRunAnalysis = ({
           adoptOwnedRequest: true,
           drawing,
           conservationPairs,
-          // The ring controls are disabled during a Generate (index.html), but a change from outside them may still have
-          // changed the draft's rings since the searches.
-          builtFromDraft: requestRings !== null && requestRings === ringsOfDrawing(drawing)
+          // The rings it searched. The ring controls are disabled during a Generate (index.html), but a change from
+          // outside them may still have changed the draft's rings since the searches.
+          ringAdoption: requestRings === null ? null : { searched: searchedRings, builtFromDraft: requestRings === ringsOfDrawing(drawing) }
         });
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.

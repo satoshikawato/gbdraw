@@ -1642,8 +1642,7 @@ export const createAppSetup = () => {
     state, writeLosatCacheInfo, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
     rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
-    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
-    keepCircularConservationRowsThrough: circularTrackSlotEditor.keepCircularConservationRowsThrough
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
@@ -1792,10 +1791,11 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     // A Generate that adopts a Circular LOSAT result reconciles its drawing's
-    // rings (`adoptCircularRingResult`); a Linear Generate and a Circular one
-    // without such a result leave them.
-    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => adoptCircularRingResult(
-      options.drawing, () => adoptCanonicalRenderArtifacts(canonical, options), builtFromDraft
+    // rings with the rings it searched (`adoptCircularRingResult`); a Linear
+    // Generate, a Circular one without such a result and a candidate of the
+    // committed request leave them.
+    adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
+      options.drawing, () => adoptCanonicalRenderArtifacts(canonical, options), ringAdoption
     ),
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,

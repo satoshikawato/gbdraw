@@ -104,7 +104,7 @@ test('withoutConservationSeries leaves out one series with its files; later seri
   assert.deepEqual(kept, {
     blasts: ['b.tsv', 'd.tsv'], fastas: ['b.fa', 'd.fa'], sequenceSources: ['b.fa', null],
     series: [{ label: 'b', sourceIndex: 0, color: '#0' }, { label: 'd', sourceIndex: 1, color: '#2' }],
-    labels: 'b,d', enabled: true
+    enabled: true
   });
   assert.equal(withoutConservationSeries({ blasts: ['b.tsv'], fastas: [], sequenceSources: [], series: [series[0]] }, 0).enabled, false,
     'with no series left the comparison is off');

@@ -46,7 +46,6 @@ const sources = createCircularConservationSources({
   syncCircularConservationSlots: () => {},
   rekeyCircularConservationRows: () => {},
   circularConservationRowsLeaving: () => new Set(),
-  keepCircularConservationRowsThrough: (_drawing, replaceSources) => replaceSources(),
   askingStackPorts
 });
 const panel = createCircularConservationSeriesPanel({
@@ -373,7 +372,6 @@ const stackSources = createCircularConservationSources({
     leavingAsked.push([...leaving]);
     return leaving;
   },
-  keepCircularConservationRowsThrough: (drawing, replaceSources) => stackEditor.keepCircularConservationRowsThrough(drawing, replaceSources),
   askingStackPorts
 });
 const stackFiles = createCircularConservationComparisonFiles({
@@ -513,6 +511,7 @@ const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { ringGenomeFilesInRingOrder } = await import('../../gbdraw/web/js/services/conservation-series.js');
+const { NO_CONSERVATION_PAIRS, losatRequestRings, searchedRingSources } = await import('../../gbdraw/web/js/services/circular-conservation-keys.js');
 const { readFileText } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { ringIdentityDefects } = await import('./helpers/ring-identity.mjs');
 const REFERENCE_GENBANK = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
@@ -524,37 +523,37 @@ const placeReference = (drawing) => {
     record_length: 8, detectedTopology: 'linear' }];
 };
 /**
- * A LOSAT Generate of the draft's rings, adopted: each ring's table is named after its first genome file, as Generate
- * names it, so three rings of `sequence.fasta` files give three tables of one name.
+ * A LOSAT Generate of the draft's rings as production builds it (the rings its ring keys read, `losatRequestRings`,
+ * the request builder), adopted with the rings it searched: each ring's table is named after its first genome file,
+ * as Generate names it, so three rings of `sequence.fasta` files give three tables of one name.
  * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
  */
 const generateRings = async (drawing) => {
+  const searched = searchedRingSources(drawing);
   const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
-  const genomes = ringGenomeFileLists(filesData.c_conservation_fastas).filter((files) => files.length > 0);
-  const rings = orderedConservationSources(circularRingSources(drawing), drawing.circularConservation);
+  const tables = searched.map((ring, index) => ({
+    name: `${ring.fileName.replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`,
+    text: `q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t2${index}\n`
+  }));
   const canonical = buildCanonicalRenderRequest({
     state, drawing, filesData,
-    resolvedCircularConservation: rings.map((ring, index) => ({
-      name: `${ring.fileName.replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`,
-      text: `q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t2${index}\n`,
-      sourceIndex: ring.sourceIndex, label: ring.label, color: ring.color, fastas: genomes[ring.sourceIndex] || []
-    }))
+    resolvedCircularConservation: losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
   });
-  adoptRings(drawing, canonical, true);
+  stackSources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+    adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS
+  }), { searched, builtFromDraft: true });
+  assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
   return canonical;
 };
 /**
- * Generate's adoption of a request's rings; `builtFromDraft` false is a rerender of the committed Session (a Rotate),
- * which may adopt rings the draft has since moved.
+ * A rerender of the committed request (a Rotate): it replaces only the committed Session (R1 (c)).
  * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
  * @param {Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0]} canonical
- * @param {boolean} builtFromDraft
  */
-const adoptRings = (drawing, canonical, builtFromDraft) => {
+const rerenderCommitted = (drawing, canonical) => {
   stackSources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
     adoptOwnedRequest: true, drawing, conservationPairs: 'committed'
-  }), builtFromDraft);
-  assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
+  }), null);
 };
 const ringLooks = () => circular().circularConservation.series.map((entry) => [entry.label, entry.color]);
 /** Each drawn ring's label and bases; a Generate binds its own views (Files) of the ring files. */
@@ -643,24 +642,31 @@ test('after a LOSAT Generate, the source radio upload, LOSAT, upload keeps each 
   });
 });
 
-test('a rerender of the committed rings after a move gives each ring its own label, colour and stack row (#1777 round 8)', async () => {
+// #1777 review 7 (OV-3194): a rerender of the committed request (R1 (c)) leaves the draft's moved rings as the move
+// left them; the next Generate draws them in that order (tests/web/ring-draft-transitions.test.mjs walks every edit).
+test('a rerender of the committed request after a move leaves each ring where the move put it, with its own label, colour and stack row (#1777 review 7)', async () => {
   for (const distinct of [false, true]) {
     await withStack(async (drawing) => {
       const { rows, looks } = await threeSequenceRings(drawing, { distinct });
       const canonical = await generateRings(drawing);
       stackPanel.moveCircularConservationSeries(0, 1);
-      adoptRings(drawing, canonical, false);
+      rerenderCommitted(drawing, canonical);
       const files = distinct ? 'files of their own names' : 'sequence.fasta files';
-      assert.deepEqual(ringLooks(), looks, `${files}: the committed rings, each with its own label and colour`);
+      assert.deepEqual(ringLooks(), [looks[1], looks[0], looks[2]], `${files}: the moved rings, each with its own label and colour`);
       assert.deepEqual(stackRingRows(), rows, `${files}: each ring in its own row`);
-      assert.deepEqual(await drawnRings(), [['GA', 'ACGT'], ['GB', 'TTTT'], ['GC', 'GGGG']], files);
+      assert.deepEqual(await drawnRings(), [['GB', 'TTTT'], ['GA', 'ACGT'], ['GC', 'GGGG']], files);
       assert.deepEqual(ringIdentityDefects(drawing), [], files);
+      await generateRings(drawing);
+      assert.deepEqual(ringLooks(), [looks[1], looks[0], looks[2]], `${files}: the next Generate`);
+      assert.deepEqual(stackRingRows(), rows, `${files}: the next Generate keeps each row`);
+      assert.deepEqual(await drawnRings(), [['GB', 'TTTT'], ['GA', 'ACGT'], ['GC', 'GGGG']], `${files}: the next Generate`);
     });
   }
 });
 
-// OV-3178: the request carries no ring's LOSAT genetic code, so the adoption takes it from the draft's ring the request
-// ring is, through the one matcher, never from the draft's entry at the same index: after a move that is another ring.
+// OV-3178: the request carries no ring's LOSAT genetic code. A rerender of the committed request leaves the draft's codes
+// (OV-3194), and a Generate gives each ring the code it searched it with (OV-3195), never the draft's entry at the same
+// index.
 test('a rerender of the committed rings after a move keeps each ring\'s own genetic code for the next Generate (#1777 round 9, OV-3178)', async () => {
   for (const distinct of [false, true]) {
     await withStack(async (drawing) => {
@@ -675,12 +681,12 @@ test('a rerender of the committed rings after a move keeps each ring\'s own gene
       assert.deepEqual(codes(), [['GA', 11], ['GB', 4], ['GC', 2]], `${files}: the Generate keeps each ring's code`);
       stackPanel.moveCircularConservationSeries(0, 1);
       assert.deepEqual(await searched(), [['TTTT', 4], ['ACGT', 11], ['GGGG', 2]], `${files}: the moved rings`);
-      adoptRings(drawing, canonical, false);
-      assert.deepEqual(codes(), [['GA', 11], ['GB', 4], ['GC', 2]], `${files}: a rerender of the committed rings after a move`);
-      assert.deepEqual(await searched(), [['ACGT', 11], ['TTTT', 4], ['GGGG', 2]], `${files}: the next Generate searches each ring with its code`);
+      rerenderCommitted(drawing, canonical);
+      assert.deepEqual(codes(), [['GB', 4], ['GA', 11], ['GC', 2]], `${files}: a rerender of the committed request after a move`);
+      assert.deepEqual(await searched(), [['TTTT', 4], ['ACGT', 11], ['GGGG', 2]], `${files}: the next Generate searches each ring with its code`);
       stackPanel.moveCircularConservationSeries(1, 1);
       await generateRings(drawing);
-      assert.deepEqual(codes(), [['GA', 11], ['GC', 2], ['GB', 4]], `${files}: a Generate after a move`);
+      assert.deepEqual(codes(), [['GB', 4], ['GC', 2], ['GA', 11]], `${files}: a Generate after a move`);
       assert.deepEqual(ringIdentityDefects(drawing), [], files);
     });
   }
@@ -713,14 +719,14 @@ test('a new ring is named after its file, not after a ring that went (#1777 roun
   });
 });
 
-test('re-picked tables of other names are named after their files while the stored label list names the rings left (#1777 round 8, OV-3166)', () => {
+test('re-picked tables of other names are named after their files, not after the rings that went (#1777 round 8, OV-3166; D-144)', () => {
   const drawing = circular();
   const table = (name) => textFile(name, 'q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t20\n');
   panel.changeCircularConservationSource('upload');
   panel.setCircularConservationUploadFiles([table('a.tsv'), table('b.tsv')]);
   drawing.circularConservation.series.forEach((entry, index) => { entry.label = `U${index}`; });
   comparisonFiles.removeCircularConservationSource(1);
-  assert.equal(drawing.circularConservation.labels, 'U0', 'the reconcile writes the label list from the rings left');
+  assert.equal(drawing.circularConservation.labels, '', 'the series owns the labels; no ring edit writes the stored label list (OV-3193)');
   // D-144: a re-picked set of other names gets rings of its own; the list's U0 is the ring that went, not c.tsv.
   panel.setCircularConservationUploadFiles([table('c.tsv'), table('d.tsv')]);
   assert.deepEqual(drawing.circularConservation.series.map((entry) => [entry.fileName, entry.label]), [['c.tsv', 'c'], ['d.tsv', 'd']]);

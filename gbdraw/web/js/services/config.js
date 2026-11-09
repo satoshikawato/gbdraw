@@ -3832,6 +3832,8 @@ export const setPreviewRuntime = (ports) => {
  * @property {string} filename A file name: Generate's, or the saved one a Session load reads (a default when it is
  *   no text or empty).
  * @property {boolean} display
+ * @property {DrawingId} drawingId The drawing whose Generate wrote the row, or whose saved entries a Session load read
+ *   it from: a change of that drawing's ring files clears it (OV-3196). Runtime only; Save writes no drawing.
  * @property {string} [edgeKey]
  * @property {number} [ordinal]
  * @property {string} [queryUid]
@@ -3854,7 +3856,7 @@ export const writeLosatCacheInfo = (next) => {
 };
 /**
  * The fields of a cache-info row that name a linear pair's comparison edge.
- * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display'>} LosatCacheInfoIdentity
+ * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display' | 'drawingId'>} LosatCacheInfoIdentity
  */
 /** @type {readonly ('edgeKey' | 'queryUid' | 'subjectUid')[]} */
 const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
@@ -4092,6 +4094,7 @@ const applyLosatCache = (
         // A saved name that is no text is read as none (OV-981).
         filename: typeof entry.filename === 'string' && entry.filename ? entry.filename : `losat_pair_${idx + 1}.tsv`,
         display: true,
+        drawingId: drawing.id,
         ...restoredLosatCacheInfoIdentity(drawing, entry, places)
       });
     });
@@ -4607,7 +4610,9 @@ const deserializeCanonicalComparisons = (
  *   `drawing`: the drawing Generate drew, whose comparison and ring files the request's resources replace;
  *   `conservationPairs`: the hash pairs of the request's conservation rings (`conservationHashPairs`), or
  *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay).
- * @returns {boolean} Whether it installed the Circular drawing's ring files (a LOSAT-cache result).
+ *   Such a candidate (a rotation, an alignment, a placement) replaces only the committed Session: the draft's rings,
+ *   their files, series and stack rows stay as the draft has them (R1 (c)); a Generate's own result installs them.
+ * @returns {boolean} Whether it installed the Circular drawing's ring files (a Generate's LOSAT-cache result).
  */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
@@ -4641,12 +4646,11 @@ export const adoptCanonicalRenderArtifacts = (
       projection.files.linearCanonicalComparisons,
       { adoptCanonicalPayloads: preserveAdoptedResources }
     );
-  } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
+  } else if (conservationPairs !== 'committed' && projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
-    // Each adopted ring is the request's ring at its table's place, nothing of the draft's ring at its index: once the
-    // draft moved its rings (a rerender of the committed Session, such as a Rotate), that is another ring (#1777 round
-    // 8, OV-3178). The rings' adoption transition gives each ring the LOSAT genetic code of the draft's ring it is,
-    // which the request does not carry (`adoptCircularRingResult`), and its reconcile names each entry's table.
+    // Each adopted ring is the request's ring at its table's place. The rings' adoption transition gives each ring the
+    // LOSAT genetic code Generate searched it with, which the request does not carry (`adoptCircularRingResult`), and
+    // its reconcile names each entry's table.
     const nextSeries = Array.isArray(projectedConservation?.series)
       ? projectedConservation.series.map((entry, index) => ({ ...entry, sourceIndex: index }))
       : [];
@@ -4683,8 +4687,6 @@ export const adoptCanonicalRenderArtifacts = (
     if (nextCircularState.projectedConservation) {
       drawing.circularConservation.source = 'losat';
       drawing.circularConservation.reference = nextCircularState.projectedConservation.reference;
-      drawing.circularConservation.labels = nextCircularState.series
-        .map((entry) => entry.label).join(',');
       drawing.circularConservation.ring_width = nextCircularState.projectedConservation.ring_width;
       drawing.circularConservation.ring_gap = nextCircularState.projectedConservation.ring_gap;
       drawing.circularConservation.series.splice(
@@ -4974,7 +4976,6 @@ const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, sto
     fastas: inSeriesOrder(placedRings(files.c_conservation_fastas)),
     sequenceSources: inSeriesOrder(placedRings(files.c_conservation_sequence_sources)),
     series: [...series, ...parseConservationLabelText(conservation.labels).slice(series.length).map((label) => ({ label }))],
-    labels: '',
     enabled: true
   };
   let keptSeries = series.length;
@@ -4999,9 +5000,14 @@ const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, sto
   files.c_conservation_blasts = kept.blasts;
   files.c_conservation_fastas = kept.fastas;
   files.c_conservation_sequence_sources = kept.sequenceSources;
-  // Load turns the comparison off only when no series is left.
+  // Load turns the comparison off only when no series is left. The label list names only the rings past the series,
+  // by place: each series place holds a stand-in its reader skips (`listLabelOfUnclaimedSource` reads past the series),
+  // so a series label with a comma shifts no place (OV-3197).
   return { ...config, circularConservation: {
-    ...conservation, series: kept.series.slice(0, keptSeries), labels: kept.labels, ...(kept.enabled ? {} : { enabled: false })
+    ...conservation,
+    series: kept.series.slice(0, keptSeries),
+    labels: kept.series.map((entry, index) => (index < keptSeries ? '-' : String(entry.label))).join(','),
+    ...(kept.enabled ? {} : { enabled: false })
   } };
 };
 

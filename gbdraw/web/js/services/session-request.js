@@ -4884,8 +4884,11 @@ const projectCanonicalRenderInput = ({
       }
     }
     if (conservationSource === 'losat') {
-      // In the order Generate draws the rings, matched by source key (`ringGenomeFilesInRingOrder`).
-      const comparisonFastas = ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
+      // The rings a Generate searched (its request's rings, so each list sits beside its ring's table), else the rings
+      // in the order Generate draws them, matched by source key (`ringGenomeFilesInRingOrder`).
+      const comparisonFastas = Array.isArray(resolvedCircularConservation) && resolvedCircularConservation.length > 0
+        ? resolvedCircularConservation.map((entry) => [...(entry?.fastas || [])])
+        : ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
       if (comparisonFastas.length > 0) {
         // Each ring's LOSAT query files, one list of resource IDs per ring.
         webFiles.conservationLosatFastaSources = comparisonFastas.map((files, index) => (files || []).map(

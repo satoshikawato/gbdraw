@@ -11,7 +11,6 @@ import {
   isManagedConservationSlot,
   orderedConservationSources,
   ringKeyAfter,
-  ringKeyChangesOf,
   safeConservationSlotId
 } from '../services/conservation-series.js';
 import {
@@ -1067,28 +1066,6 @@ export const createCircularTrackSlotEditor = ({
       : new Set()
   );
 
-  /**
-   * A Generate's adoption of the LOSAT result it built from the current draft, whose rows take the place of the FASTA
-   * or of the rows an earlier search wrote. A managed row names its ring by the source file's key (`series_key`), so it
-   * moves to the new key here and keeps its id, by which other rows anchor to it, and its edits (OV-2442).
-   * Precondition, which the caller checks: the draft's ring at each place in the series is the new request's ring at
-   * that place, because the series at adoption has the keys, in order, it had when the request was built. Do not call
-   * it otherwise, as for the committed request a rotation, an alignment, or a placement adopts, or for a Generate whose
-   * rings changed while it ran, since a row would move to another ring. Without the call the rows are replaced at the
-   * adoption's reconcile: their ids and edits are lost, and no row is on another ring.
-   * @template T
-   * @param {DrawingState} drawing @param {() => T} replaceSources
-   * @returns {T}
-   */
-  const keepCircularConservationRowsThrough = (drawing, replaceSources) => {
-    const before = conservationEntries(drawing);
-    const replaced = replaceSources();
-    const after = conservationEntries(drawing);
-    if (before.length !== after.length) return replaced;
-    rekeyCircularConservationRows(drawing, ringKeyChangesOf(before, after));
-    return replaced;
-  };
-
   /** @param {DrawingState} drawing */
   const syncConservationSlots = (drawing) => {
     const entries = conservationEntries(drawing);
@@ -1957,7 +1934,6 @@ export const createCircularTrackSlotEditor = ({
     circularDepthSourceLoss,
     circularConservationRowsLeaving,
     rekeyCircularConservationRows,
-    keepCircularConservationRowsThrough,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,

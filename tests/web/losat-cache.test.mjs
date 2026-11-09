@@ -1108,6 +1108,8 @@ await exercisePairLoop({failure: 'cancel'});
     promoteRawLosatCacheEntry() {},
     losatTiming: { totalPairs: 0, cacheHits: 0, cacheMisses: 0 },
     losatPairs: [], cacheInfo: [],
+    // The drawing whose cache-info rows these are (a ring edit of another drawing leaves them, OV-3196).
+    drawing: { id: 'drawing-linear' },
     // The card's file name (`buildCacheFilename` reads the edge the spec names).
     buildCacheFilename: (spec) => `${spec.edgeKey}.tsv`,
     pendingJobKeys: new Set(), losatJobs: []
