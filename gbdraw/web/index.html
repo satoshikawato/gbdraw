@@ -2525,7 +2525,7 @@
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
-        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ sequenceSearch.panel.running ? t('Searching sequences...') : t('Generating Diagram...') }}</h3>
+        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ sequenceSearch.panel.running ? t('Searching sequences...') : findInOtherFiles.dialog.status === 'searching' ? t('Searching other files...') : t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
         <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
@@ -2663,6 +2663,7 @@
                              { label: t('New Circular drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('circular') },
                              { label: t('New Linear drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('linear') },
                              { label: t('New drawing from a region…'), icon: 'ph-crop', disabled: !drawingSwitchAvailable, run: () => regionDrawings.open() },
+                             ...(tab.mode === 'linear' ? [{ label: t('Find in other files…'), icon: 'ph-magnifying-glass', disabled: !drawingSwitchAvailable, run: () => findInOtherFiles.open() }] : []),
                              { label: t('Duplicate drawing'), icon: 'ph-copy', disabled: !drawingSwitchAvailable, run: () => drawingBar.duplicateDrawing(tab.id) },
                              { label: t('New Circular drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'circular') },
                              { label: t('New Linear drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'linear') },
@@ -7731,6 +7732,13 @@
                                                 @click="regionSelect.useAsQuery()"><i class="ph ph-binoculars" aria-hidden="true"></i><span>{{ t('Use as search query') }}</span></button>
                                         <p v-if="regionPopup.query.status" class="text-xs text-red-700 mt-0.5 px-1" role="status" data-region-query-status>{{ regionPopup.query.status }}</p>
                                     </div>
+                                    <!-- Find in other files (PD-OI-123): Linear drawings only; its dialog opens with the region as the reference. -->
+                                    <div v-if="mode === 'linear'">
+                                        <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-find-in-files
+                                                :disabled="regionPopup.busy || !drawingSwitchAvailable || Boolean(findInOtherFiles.entryReason())"
+                                                @click="regionSelect.findInFiles()"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>{{ t('Find in other files') }}</span></button>
+                                        <p v-if="findInOtherFiles.entryReason()" class="text-xs text-slate-500 mt-0.5 px-1" data-region-find-reason>{{ findInOtherFiles.entryReason() }}</p>
+                                    </div>
                                 </div>
                                 <p v-else class="match-muted">{{ t('This item is no longer in the diagram.') }}</p>
                             </template>
@@ -9678,6 +9686,201 @@
                 <button type="button" data-history-managed data-region-drawing-create @click="regionDrawings.confirm()" class="btn btn-primary btn-sm"
                         :disabled="regionDrawings.dialog.status !== 'derived' || !drawingSwitchAvailable">{{ t('Create') }}</button>
             </div>
+        </choice-dialog>
+        <!-- Find in other files (PD-OI-123): the view of app/find-in-other-files.js, which owns open, close and every input.
+             The dialog steps aside while the LOSAT overlay shows the search; nothing here is saved or makes a History step. -->
+        <choice-dialog v-if="findInOtherFiles.dialog.show" v-show="findInOtherFiles.dialog.status !== 'searching'"
+             labelledby="find-files-title" describedby="find-files-description" data-find-files-dialog
+             :data-find-files-screen="findInOtherFiles.dialog.screen" :data-find-files-status="findInOtherFiles.dialog.status"
+             @cancel="findInOtherFiles.close()" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-2 sm:p-4">
+            <h2 id="find-files-title" class="text-base font-bold text-slate-800">{{ t('Find in other files') }}</h2>
+            <template v-if="findInOtherFiles.dialog.screen === 'search'">
+                <p id="find-files-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ t('Find where the genes of the reference windows lie in the other files, and draw them as windows, one row per file.') }}</p>
+                <div class="mt-2 max-h-[62vh] overflow-y-auto pr-1">
+                    <h3 class="text-xs font-semibold text-slate-700">{{ t('Reference windows') }}</h3>
+                    <ol data-find-files-rows class="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                        <li v-for="(row, index) in findInOtherFiles.dialog.rows" :key="row.id" data-find-files-row class="px-2 py-1.5 text-xs">
+                            <div class="flex flex-wrap items-end gap-2">
+                                <span class="self-center text-slate-500 tabular-nums">{{ index + 1 }}</span>
+                                <label class="min-w-0 text-[11px] font-semibold text-slate-600">{{ t('Record') }}
+                                    <select data-history-ignore data-find-files-record class="form-select mt-0.5 block max-w-[16rem] px-2 py-1 text-xs font-normal"
+                                            :value="row.recordKey" @change="findInOtherFiles.editRow(row.id, { recordKey: $event.target.value })">
+                                        <option value="">{{ t('Choose a record') }}</option>
+                                        <template v-for="file in findInOtherFiles.dialog.files" :key="file.fileKey">
+                                            <option v-for="record in file.records.filter((item) => item.recordKey)" :key="record.recordKey" :value="record.recordKey">{{ record.recordId }} · {{ file.name }}</option>
+                                        </template>
+                                    </select>
+                                </label>
+                                <!-- Start and End wrap as one unit: never an End alone on a line -->
+                                <div class="flex items-end gap-2">
+                                    <label class="text-[11px] font-semibold text-slate-600">{{ t('Start') }}
+                                        <input type="text" inputmode="numeric" data-history-ignore data-find-files-start class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
+                                               :value="row.start" @input="findInOtherFiles.editRow(row.id, { start: $event.target.value })">
+                                    </label>
+                                    <label class="text-[11px] font-semibold text-slate-600">{{ t('End') }}
+                                        <input type="text" inputmode="numeric" data-history-ignore data-find-files-end class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
+                                               :value="row.end" @input="findInOtherFiles.editRow(row.id, { end: $event.target.value })">
+                                    </label>
+                                </div>
+                                <button type="button" data-history-ignore data-find-files-remove class="btn btn-secondary btn-sm px-2" :aria-label="t('Remove window {number}', { number: index + 1 })"
+                                        @click="findInOtherFiles.removeRow(row.id)"><i class="ph ph-x" aria-hidden="true"></i></button>
+                            </div>
+                            <label v-if="row.recordKey && findInOtherFiles.dialog.files.some((file) => file.records.some((record) => record.recordKey === row.recordKey && record.circular))"
+                                   class="mt-1 flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                                <input type="checkbox" data-history-ignore data-find-files-origin class="form-checkbox"
+                                       :checked="row.acrossOrigin" @change="findInOtherFiles.editRow(row.id, { acrossOrigin: $event.target.checked })">
+                                <span>{{ t('Across the origin') }}</span>
+                            </label>
+                        </li>
+                    </ol>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <button type="button" data-history-ignore data-find-files-add class="font-semibold text-blue-700 hover:underline" @click="findInOtherFiles.addRow()">{{ t('+ Add window') }}</button>
+                        <span v-if="findInOtherFiles.dialog.genes !== null" data-find-files-genes class="text-slate-600">{{ tn(findInOtherFiles.dialog.genes, '{count} gene whose whole CDS lies inside a window', '{count} genes whose whole CDS lies inside a window') }}</span>
+                    </div>
+                    <h3 class="mt-3 text-xs font-semibold text-slate-700">{{ t('Search in') }}</h3>
+                    <ul data-find-files-targets class="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                        <li v-for="file in findInOtherFiles.searchFiles()" :key="file.fileKey" :data-find-files-target="file.fileKey" class="px-2 py-1.5 text-xs">
+                            <label class="flex min-w-0 items-center gap-2">
+                                <input type="checkbox" data-history-ignore class="form-checkbox shrink-0" :checked="findInOtherFiles.dialog.targets[file.fileKey]"
+                                       @change="findInOtherFiles.setTarget(file.fileKey, $event.target.checked)">
+                                <span class="min-w-0 truncate font-semibold text-slate-800" :title="file.name">{{ file.name }}</span>
+                                <span class="ml-auto shrink-0 tabular-nums text-slate-500">{{ file.size }}</span>
+                            </label>
+                        </li>
+                    </ul>
+                    <p class="mt-1 text-[11px] text-slate-500">{{ t('Every record of a file is searched, drawn or not. The file of the reference is not searched.') }}</p>
+                    <h3 class="mt-3 text-xs font-semibold text-slate-700">{{ t('Search settings') }}</h3>
+                    <div data-find-files-settings class="mt-1 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-2 text-[11px] font-semibold text-slate-600">
+                        <label class="col-span-2">{{ t('Program') }}
+                            <select data-history-ignore data-find-files-program class="form-select mt-0.5 block w-full px-2 py-1 text-xs font-normal"
+                                    :value="findInOtherFiles.dialog.settings.program" @change="findInOtherFiles.setSetting({ program: $event.target.value })">
+                                <option value="tlosatn">{{ t('tblastn (protein of each gene, nucleotide records)') }}</option>
+                                <option value="losatn">{{ t('blastn (nucleotide sequence of each gene)') }}</option>
+                            </select>
+                        </label>
+                        <label>{{ t('Bitscore') }}<input type="text" inputmode="decimal" data-history-ignore data-find-files-bitscore class="form-input mt-0.5 block w-full px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.settings.bitscore" @input="findInOtherFiles.setSetting({ bitscore: $event.target.value })"></label>
+                        <label>{{ t('E-value') }}<input type="text" inputmode="decimal" data-history-ignore data-find-files-evalue class="form-input mt-0.5 block w-full px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.settings.evalue" @input="findInOtherFiles.setSetting({ evalue: $event.target.value })"></label>
+                        <label>{{ t('Minimum Identity') }}<input type="text" inputmode="decimal" data-history-ignore data-find-files-identity class="form-input mt-0.5 block w-full px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.settings.identity" @input="findInOtherFiles.setSetting({ identity: $event.target.value })"></label>
+                        <label>{{ t('Minimum Length') }}<input type="text" inputmode="numeric" data-history-ignore data-find-files-length class="form-input mt-0.5 block w-full px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.settings.alignmentLength" @input="findInOtherFiles.setSetting({ alignmentLength: $event.target.value })"></label>
+                        <p class="col-span-2 font-normal text-slate-500">{{ t('They start from the thresholds of Pairwise Comparisons and do not change them.') }}</p>
+                    </div>
+                </div>
+                <div class="mt-2 text-xs" aria-live="polite">
+                    <p v-if="findInOtherFiles.dialog.message" data-find-files-message class="text-red-700">{{ findInOtherFiles.dialog.message }}</p>
+                    <p v-else-if="findInOtherFiles.searchReason()" data-find-files-reason class="text-slate-600">{{ findInOtherFiles.searchReason() }}</p>
+                </div>
+                <div class="mt-3 flex flex-wrap justify-end gap-2">
+                    <button type="button" data-history-ignore data-find-files-cancel @click="findInOtherFiles.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                    <button type="button" data-history-ignore data-find-files-search @click="findInOtherFiles.search()" class="btn btn-primary btn-sm"
+                            :disabled="Boolean(findInOtherFiles.searchReason()) || findInOtherFiles.dialog.status === 'searching'">{{ t('Search') }}</button>
+                </div>
+            </template>
+            <template v-else>
+                <p id="find-files-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ findInOtherFiles.dialog.reference }} {{ t('Each file becomes one row of the new drawing. Untick a window to leave it out.') }}</p>
+                <p v-if="findInOtherFiles.dialog.cutGenes" data-find-files-cut class="mt-1 text-xs text-amber-800">{{ findInOtherFiles.dialog.cutGenes }}</p>
+                <div data-find-files-proposal class="mt-2 max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+                    <section v-for="file in findInOtherFiles.dialog.proposal" :key="file.fileKey" :data-find-files-file="file.fileKey" class="rounded-lg border border-slate-200 text-xs">
+                        <header class="flex flex-wrap items-baseline justify-between gap-x-3 px-2 pt-1.5">
+                            <span class="font-semibold text-slate-800">{{ file.name }}</span>
+                            <span class="text-slate-500" data-find-files-summary>{{ file.summary }}</span>
+                        </header>
+                        <p v-if="file.empty" data-find-files-empty class="px-2 py-1.5 text-slate-600">{{ file.empty }}</p>
+                        <!-- 768 px and wider: a table, one line per window -->
+                        <table v-if="file.windows.length || file.notSelected.length" class="hidden w-full md:table" data-find-files-table>
+                            <thead class="text-[11px] text-slate-500"><tr>
+                                <th class="w-14 px-2 text-left font-semibold">#</th><th class="px-2 text-left font-semibold">{{ t('Record') }}</th>
+                                <th class="px-2 text-left font-semibold">{{ t('Span') }}</th><th class="px-2 text-left font-semibold">{{ t('Genes') }}</th>
+                                <th class="px-2 text-left font-semibold">{{ t('Reaches') }}</th><th class="px-2"></th>
+                            </tr></thead>
+                            <tbody>
+                                <template v-for="(window, index) in [...file.windows, ...file.notSelected]" :key="window.key">
+                                    <tr v-if="index === file.windows.length && file.notSelected.length" class="border-t border-slate-100"><td colspan="6" class="px-2 pt-1 text-[11px] font-semibold text-slate-500">{{ t('Not selected') }}</td></tr>
+                                    <tr class="border-t border-slate-100" :class="window.ticked ? 'text-slate-800' : 'text-slate-500'" :data-find-files-window="window.key">
+                                        <td class="px-2 py-1 whitespace-nowrap"><label class="flex items-center gap-1"><input type="checkbox" data-history-ignore class="form-checkbox" :checked="window.ticked"
+                                            :aria-label="t('Keep window {record} {span}', { record: window.recordId, span: window.span })" @change="findInOtherFiles.toggleWindow(window.key, $event.target.checked)">
+                                            <span class="tabular-nums">{{ window.number }}</span></label></td>
+                                        <td class="px-2 py-1 font-semibold">{{ window.recordId }}</td>
+                                        <td class="px-2 py-1 tabular-nums whitespace-nowrap">{{ window.span }}</td>
+                                        <td class="px-2 py-1">{{ window.genes }}<span v-if="window.reason" class="block text-[11px]">{{ window.reason }}</span></td>
+                                        <td class="px-2 py-1 whitespace-nowrap">{{ window.ends.join(', ') }}</td>
+                                        <td class="px-2 py-1 text-right"><button type="button" data-history-ignore data-find-files-edit class="text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <!-- Narrower: a card, one block per window -->
+                        <div class="space-y-1 px-2 pb-1 md:hidden" data-find-files-cards>
+                            <template v-for="(window, index) in [...file.windows, ...file.notSelected]" :key="window.key">
+                                <p v-if="index === file.windows.length && file.notSelected.length" class="pt-1 text-[11px] font-semibold text-slate-500">{{ t('Not selected') }}</p>
+                                <div class="rounded border border-slate-100 p-1.5" :class="window.ticked ? 'text-slate-800' : 'text-slate-500'" :data-find-files-window="window.key">
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" data-history-ignore class="form-checkbox" :checked="window.ticked"
+                                               :aria-label="t('Keep window {record} {span}', { record: window.recordId, span: window.span })" @change="findInOtherFiles.toggleWindow(window.key, $event.target.checked)">
+                                        <span class="tabular-nums">{{ window.number }}</span><span class="min-w-0 truncate font-semibold">{{ window.recordId }}</span>
+                                        <button type="button" data-history-ignore data-find-files-edit class="ml-auto text-blue-700 hover:underline" @click="findInOtherFiles.startEdit(window.key)">{{ t('Edit') }}</button>
+                                    </div>
+                                    <p class="tabular-nums">{{ window.span }}<span v-if="window.ends.length"> · {{ window.ends.join(', ') }}</span></p>
+                                    <p>{{ window.genes }}</p>
+                                    <p v-if="window.reason" class="text-[11px]">{{ window.reason }}</p>
+                                </div>
+                            </template>
+                        </div>
+                        <div v-if="!file.empty || file.partial || file.absent" class="border-t border-slate-100 px-2 py-1 text-[11px] text-slate-600" data-find-files-coverage>
+                            <p>{{ file.found }}</p>
+                            <p v-if="file.partial">{{ t('Found in part: {genes}.', { genes: file.partial }) }}</p>
+                            <p v-if="file.absent">{{ t('Not found: {genes}.', { genes: file.absent }) }}</p>
+                        </div>
+                    </section>
+                </div>
+                <!-- Edit: Start, End and Reverse complement of one window -->
+                <div v-if="findInOtherFiles.dialog.edit" data-find-files-edit-form class="mt-2 rounded-lg border border-blue-200 bg-blue-50/40 p-2 text-xs">
+                    <div class="flex flex-wrap items-end gap-2">
+                        <label class="text-[11px] font-semibold text-slate-600">{{ t('Start') }}
+                            <input type="text" inputmode="numeric" data-history-ignore data-find-files-edit-start class="form-input mt-0.5 block w-28 px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.edit.start" @input="findInOtherFiles.editWindowField({ start: $event.target.value })"></label>
+                        <label class="text-[11px] font-semibold text-slate-600">{{ t('End') }}
+                            <input type="text" inputmode="numeric" data-history-ignore data-find-files-edit-end class="form-input mt-0.5 block w-28 px-2 py-1 text-xs font-normal"
+                                   :value="findInOtherFiles.dialog.edit.end" @input="findInOtherFiles.editWindowField({ end: $event.target.value })"></label>
+                        <label class="flex items-center gap-2 pb-1 text-[11px] font-semibold text-slate-600">
+                            <input type="checkbox" data-history-ignore data-find-files-edit-reverse class="form-checkbox"
+                                   :checked="findInOtherFiles.dialog.edit.reverseComplement" @change="findInOtherFiles.editWindowField({ reverseComplement: $event.target.checked })">
+                            <span>{{ t('Reverse complement') }}</span></label>
+                        <span class="ml-auto flex gap-2">
+                            <button type="button" data-history-ignore data-find-files-edit-cancel class="btn btn-secondary btn-sm" @click="findInOtherFiles.cancelEdit()">{{ t('Cancel') }}</button>
+                            <button type="button" data-history-ignore data-find-files-edit-apply class="btn btn-primary btn-sm" @click="findInOtherFiles.applyEdit()">{{ t('Apply') }}</button>
+                        </span>
+                    </div>
+                    <p v-if="findInOtherFiles.dialog.edit.message" data-find-files-edit-message class="mt-1 text-red-700">{{ findInOtherFiles.dialog.edit.message }}</p>
+                </div>
+                <div class="mt-2 text-xs leading-relaxed text-slate-600" aria-live="polite">
+                    <p v-if="findInOtherFiles.dialog.message" data-find-files-message class="text-red-700">{{ findInOtherFiles.dialog.message }}</p>
+                    <div v-if="findInOtherFiles.dialog.returnedToAuto.length" data-find-files-returned>
+                        <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
+                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                            <li v-for="item in findInOtherFiles.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                        </ul>
+                    </div>
+                    <div v-if="findInOtherFiles.dialog.notCarried.length" data-find-files-not-carried class="mt-1">
+                        <p class="font-semibold text-slate-700">{{ t('Not carried to the new drawing:') }}</p>
+                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                            <li v-for="(line, index) in findInOtherFiles.dialog.notCarried" :key="index">{{ line }}</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                    <span data-find-files-count class="mr-auto text-xs text-slate-600">{{ findInOtherFiles.dialog.count }}</span>
+                    <p v-if="findInOtherFiles.dialog.createReason" data-find-files-create-reason class="basis-full text-right text-xs text-slate-600">{{ findInOtherFiles.dialog.createReason }}</p>
+                    <button type="button" data-history-ignore data-find-files-back @click="findInOtherFiles.back()" class="btn btn-secondary btn-sm">{{ t('Back') }}</button>
+                    <button type="button" data-history-ignore data-find-files-cancel @click="findInOtherFiles.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                    <button type="button" data-history-managed data-find-files-create @click="findInOtherFiles.confirm()" class="btn btn-primary btn-sm"
+                            :disabled="findInOtherFiles.dialog.status !== 'proposal' || Boolean(findInOtherFiles.dialog.createReason) || !drawingSwitchAvailable">{{ t('Create new drawing') }}</button>
+                </div>
+            </template>
         </choice-dialog>
         <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
              data-choice-prompt

@@ -201,7 +201,7 @@ class LocateWindowPairReply(TypedDict):
 class LocatePlanReply(TypedDict):
     """The plan as ``LocatePlan.to_json`` writes it (``gbdraw locate`` writes the same as ``PREFIX.plan.json``),
     the window pairs of its drawing (``locate_drawing``), and the name the dialog shows for each reference gene
-    by protein ID (its gene name, else its locus tag, else its protein ID)."""
+    and each CDS a window edge cuts, by protein ID (its gene name, else its locus tag, else its protein ID)."""
 
     plan: LocatePlanJson
     pairs: list[LocateWindowPairReply]
@@ -424,7 +424,7 @@ def locate_web_plan(
     return {
         "plan": plan.to_json(),
         "pairs": _pairs(plan),
-        "geneNames": {gene.protein_id: gene.cds.name for gene in plan.reference.genes},
+        "geneNames": {cds.protein_id: cds.name for cds in (*(gene.cds for gene in plan.reference.genes), *plan.reference.cut_genes)},
     }
 
 

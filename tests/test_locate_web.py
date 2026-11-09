@@ -137,6 +137,8 @@ def test_the_plan_of_the_web_search_is_the_plan_the_command_writes(tmp_path: Pat
     assert [reply["geneNames"][gene["cds"]["protein_id"]] for gene in reply["plan"]["reference"]["genes"]] == [
         f"g{index}" for index in range(1, 7)
     ]
+    # The CDS a window edge cuts is named too: the proposal names it.
+    assert [reply["geneNames"][cds["protein_id"]] for cds in reply["plan"]["reference"]["cut_genes"]] == ["g7"]
 
 
 def test_the_plan_reads_back_from_its_json(tmp_path: Path) -> None:

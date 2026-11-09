@@ -37,6 +37,7 @@
     "tests/web/feature-fill-scope.playwright.spec.js": 0.29,
     "tests/web/feature-identity-overrides.playwright.spec.js": 2.28,
     "tests/web/feature-location-search.playwright.spec.js": 0.38,
+    "tests/web/find-in-other-files.playwright.spec.js": 3.0,
     "tests/web/gallery-session-regeneration.playwright.spec.js": 0.39,
     "tests/web/gallery-tutorial.playwright.spec.js": 0.7,
     "tests/web/generation-feedback.playwright.spec.js": 1.22,
@@ -189,7 +190,8 @@
       "tests/web/sidebar-inputs.playwright.spec.js",
       "tests/web/ui-component-styles.playwright.spec.js",
       "tests/web/unmanaged-config-overrides.playwright.spec.js",
-      "tests/web/region-select.playwright.spec.js"
+      "tests/web/region-select.playwright.spec.js",
+      "tests/web/find-in-other-files.playwright.spec.js"
     ],
     [
       "tests/web/circular-cards-session-resources.playwright.spec.js",
