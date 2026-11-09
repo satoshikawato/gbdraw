@@ -1193,6 +1193,21 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Find in other files: one step (the reference, the search plan, the plan of its rows, the new drawing) over the
+  // Files of the shown drawing's draft projection.
+  [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: {
+    keys: ['canonicalRequest', 'locate'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'locate_web_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.locate, null),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   // Copy FASTA of Select region: Python slices the records of the request the shown Result was made from.
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: {
     keys: ['canonicalRequest', 'spans'],

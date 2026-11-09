@@ -55,6 +55,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   DERIVE_REGION_DRAWING: 'deriveRegionDrawing',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
+  FIND_IN_OTHER_FILES: 'findInOtherFiles',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
@@ -101,6 +102,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource

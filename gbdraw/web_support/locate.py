@@ -55,8 +55,11 @@ from gbdraw.comparisons.locate import (
     finish_locate,
     locate_drawing,
     locate_results,
+    locate_target,
     prepare_locate_search,
+    read_locate_file,
 )
+from gbdraw.comparisons.losat_runtime import LOSAT_PROGRAMS
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import RecordWindow
@@ -71,6 +74,29 @@ class LocateWindowInput(TypedDict):
     start: int
     end: int
     reverseComplement: bool
+
+
+class LocateFileRecord(TypedDict):
+    """One record of a File: its key in the drawing (``None`` when the drawing does not draw it), its ID, its
+    length and whether it is circular."""
+
+    recordKey: str | None
+    recordId: str
+    length: int
+    circular: bool
+
+
+class LocateFileReply(TypedDict):
+    """One File of the drawing (a Linear File card), by its key, with every record it holds."""
+
+    fileKey: str
+    records: list[LocateFileRecord]
+
+
+class LocateFilesReply(TypedDict):
+    """The Files of the drawing in its order."""
+
+    files: list[LocateFileReply]
 
 
 class LocateReferenceInput(TypedDict):
@@ -121,9 +147,11 @@ class LocateJobReply(TypedDict):
 
 
 class LocateSearchPlanReply(TypedDict):
-    """The jobs to run with ``program`` and the search options in the raw-cache form."""
+    """The jobs to run with ``program``: the LOSAT search it runs (``search``, as the LOSAT runtime names it) and
+    its options in the raw-cache form."""
 
     program: LocateProgramName
+    search: str
     cacheArgs: list[str]
     jobs: list[LocateJobReply]
 
@@ -137,18 +165,19 @@ class LocateOutcomeInput(TypedDict):
 
 
 class LocateOptionsInput(TypedDict):
-    """The dialog's thresholds and window rules."""
+    """The dialog's thresholds; the window rules are the program's defaults (``LocateOptions.for_program``), as
+    ``gbdraw locate`` has them without its options."""
 
     evalue: float
     bitscore: float
     identity: float
     alignmentLength: int
-    flank: int
-    mergeDistance: int
-    maxWindows: int
 
 
-class LocatePlanInput(LocateSearchInput):
+class LocatePlanInput(TypedDict):
+    """The search, each job's outcome, and the dialog's options."""
+
+    search: LocateSearchInput
     outcomes: list[LocateOutcomeInput]
     options: LocateOptionsInput
 
@@ -293,6 +322,28 @@ def _search(drawing: _Drawing, payload: LocateSearchInput) -> LocateSearch:
     )
 
 
+def locate_web_files(
+    request_payload: Mapping[str, object], resource_paths: Mapping[str, str], output_directory: str,
+) -> LocateFilesReply:
+    """Every File of the drawing with every record it holds (each is searched, drawn or not)."""
+
+    drawing = _drawing(request_payload, resource_paths, output_directory)
+    files: list[LocateFileReply] = []
+    for key, source in drawing.files.items():
+        records = read_locate_file(_input_file(key, source))
+        drawn = drawing.record_keys.get(key, {})
+        target = locate_target(key, records, [drawn.get(index, "") for index in range(1, len(records) + 1)])
+        files.append({
+            "fileKey": key,
+            "records": [
+                {"recordKey": record.record_key or None, "recordId": record.record_id, "length": record.length,
+                 "circular": record.circular}
+                for record in target.records
+            ],
+        })
+    return {"files": files}
+
+
 def _refused(refusal: LocateWindowRefusal) -> LocateWindowRefused:
     return {"status": "refused", "reason": refusal.reason, "start": refusal.start, "end": refusal.end}
 
@@ -330,6 +381,7 @@ def locate_web_search_plan(
     plan = _search(_drawing(request_payload, resource_paths, output_directory), payload).plan
     return {
         "program": plan.program,
+        "search": LOSAT_PROGRAMS[plan.program].search,
         "cacheArgs": list(plan.cache_args),
         "jobs": [
             {"fileKey": job.file_key, "queryFasta": job.query_fasta, "subjectFasta": job.subject_fasta, "rawKey": job.raw_key}
@@ -356,16 +408,13 @@ def locate_web_plan(
 ) -> LocatePlanReply:
     """The plan of the jobs' rows with the dialog's thresholds and window rules."""
 
-    search = _search(_drawing(request_payload, resource_paths, output_directory), payload)
+    search = _search(_drawing(request_payload, resource_paths, output_directory), payload["search"])
     values = payload["options"]
     options = replace(
-        LocateOptions.for_program(payload["program"]),
+        LocateOptions.for_program(payload["search"]["program"]),
         thresholds=ComparisonThresholds(
             float(values["evalue"]), float(values["bitscore"]), float(values["identity"]), int(values["alignmentLength"])
         ),
-        flank=int(values["flank"]),
-        merge_distance=int(values["mergeDistance"]),
-        max_windows=int(values["maxWindows"]),
     )
     outcomes = [
         LocateSearchResult(str(outcome["fileKey"]), str(outcome["text"]), outcome["error"])
@@ -425,7 +474,14 @@ def locate_web_drawing(
     }
 
 
-def describe_locate() -> dict[str, dict[str, Shape]]:
+class LocateDescription(TypedDict):
+    """The named shapes of the helpers' inputs and replies, and the replies the page checks by name."""
+
+    roots: dict[str, str]
+    types: dict[str, Shape]
+
+
+def describe_locate() -> LocateDescription:
     """The inputs and replies of the helpers above as named shapes of :mod:`gbdraw.contract_shapes`
     (tools/generate_web_contracts.py writes them as the Web's typedefs)."""
 
@@ -441,72 +497,107 @@ def describe_locate() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (
-        LocateReferenceInput, LocateReferenceReady, LocateWindowRefused, LocateSearchInput, LocateSearchPlanReply,
-        LocatePlanInput, LocatePlanReply, LocateDrawingInput, LocateDrawingReady, LocateEditRefused,
-    ):
+    for root in (LocateFilesStep, LocateReferenceStep, LocateSearchStep, LocatePlanStep, LocateDrawingStep):
         special(root)
-    return {"types": types_}
+    # The replies the page checks, by name.
+    replies = (LocateFilesReply, LocateReferenceReady, LocateWindowRefused, LocateSearchPlanReply, LocatePlanReply, LocateDrawingReady, LocateEditRefused)
+    for root in replies:
+        special(root)
+    return {"roots": {root.__name__: root.__name__ for root in replies}, "types": types_}
 
 
-def _json_helper(function, request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:  # type: ignore[no-untyped-def]
-    return json.dumps(function(
+class LocateFilesStep(TypedDict):
+    step: Literal["files"]
+
+
+class LocateReferenceStep(TypedDict):
+    step: Literal["reference"]
+    reference: LocateReferenceInput
+
+
+class LocateSearchStep(TypedDict):
+    step: Literal["search"]
+    search: LocateSearchInput
+
+
+class LocatePlanStep(TypedDict):
+    step: Literal["plan"]
+    plan: LocatePlanInput
+
+
+class LocateDrawingStep(TypedDict):
+    step: Literal["drawing"]
+    drawing: LocateDrawingInput
+
+
+LocateStep = LocateFilesStep | LocateReferenceStep | LocateSearchStep | LocatePlanStep | LocateDrawingStep
+LocateReply = LocateFilesReply | LocateReferenceReply | LocateSearchPlanReply | LocatePlanReply | LocateDrawingReply
+
+
+def locate_web(
+    request_payload: Mapping[str, object], resource_paths: Mapping[str, str], output_directory: str, payload: LocateStep,
+) -> LocateReply:
+    """One step of Find in other files over the shown drawing's request (the Worker operation ``findInOtherFiles``)."""
+
+    if payload["step"] == "files":
+        return locate_web_files(request_payload, resource_paths, output_directory)
+    if payload["step"] == "reference":
+        return locate_web_reference(request_payload, resource_paths, output_directory, payload["reference"])
+    if payload["step"] == "search":
+        return locate_web_search_plan(request_payload, resource_paths, output_directory, payload["search"])
+    if payload["step"] == "plan":
+        return locate_web_plan(request_payload, resource_paths, output_directory, payload["plan"])
+    if payload["step"] == "drawing":
+        return locate_web_drawing(request_payload, resource_paths, output_directory, payload["drawing"])
+    raise _protocol_error(f"Find in other files has no step {payload.get('step')!r}.")
+
+
+def locate_web_json(request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:
+    """JSON boundary of the diagram Worker."""
+
+    return json.dumps(locate_web(
         json.loads(str(request_json)), json.loads(str(resource_paths_json)), str(output_directory),
         json.loads(str(payload_json)),
     ))
 
 
-def locate_web_reference_json(request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:
-    """JSON boundary of the diagram Worker."""
-
-    return _json_helper(locate_web_reference, request_json, resource_paths_json, output_directory, payload_json)
-
-
-def locate_web_search_plan_json(request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:
-    """JSON boundary of the diagram Worker."""
-
-    return _json_helper(locate_web_search_plan, request_json, resource_paths_json, output_directory, payload_json)
-
-
-def locate_web_plan_json(request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:
-    """JSON boundary of the diagram Worker."""
-
-    return _json_helper(locate_web_plan, request_json, resource_paths_json, output_directory, payload_json)
-
-
-def locate_web_drawing_json(request_json: str, resource_paths_json: str, output_directory: str, payload_json: str) -> str:
-    """JSON boundary of the diagram Worker."""
-
-    return _json_helper(locate_web_drawing, request_json, resource_paths_json, output_directory, payload_json)
-
-
 __all__ = [
+    "LocateDescription",
     "LocateDrawingInput",
     "LocateDrawingReady",
     "LocateDrawingReply",
+    "LocateDrawingStep",
     "LocateEditRefused",
+    "LocateFileRecord",
+    "LocateFileReply",
+    "LocateFilesReply",
+    "LocateFilesStep",
     "LocateJobReply",
     "LocateOptionsInput",
     "LocateOutcomeInput",
     "LocatePlanInput",
     "LocatePlanReply",
+    "LocatePlanStep",
     "LocateReferenceInput",
     "LocateReferenceReady",
     "LocateReferenceReply",
+    "LocateReferenceStep",
+    "LocateReply",
     "LocateSearchInput",
     "LocateSearchPlanReply",
+    "LocateSearchStep",
+    "LocateStep",
     "LocateWindowChoiceInput",
     "LocateWindowInput",
     "LocateWindowName",
     "LocateWindowPairReply",
     "LocateWindowRefused",
     "describe_locate",
+    "locate_web",
     "locate_web_drawing",
-    "locate_web_drawing_json",
+    "locate_web_files",
+    "locate_web_json",
     "locate_web_plan",
-    "locate_web_plan_json",
     "locate_web_reference",
-    "locate_web_reference_json",
     "locate_web_search_plan",
-    "locate_web_search_plan_json",
 ]

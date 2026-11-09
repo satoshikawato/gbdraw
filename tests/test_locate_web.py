@@ -19,20 +19,10 @@ from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, Record
 from gbdraw.comparisons.locate import LocatePlan, LocateWindowChoice, choose_locate_windows
 from gbdraw.comparisons.losat_runtime import run_losat_search
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
-from gbdraw.web_support.locate import (
-    LocateOptionsInput,
-    LocateSearchInput,
-    locate_web_drawing_json,
-    locate_web_plan_json,
-    locate_web_reference_json,
-    locate_web_search_plan_json,
-)
+from gbdraw.web_support.locate import LocateOptionsInput, LocateSearchInput, locate_web_json
 from tests.test_locate_command import _fake_losat, _genomes, _locate_args, _run
 
-OPTIONS: LocateOptionsInput = {
-    "evalue": 1e-2, "bitscore": 50.0, "identity": 0.0, "alignmentLength": 0, "flank": 500, "mergeDistance": 10_000,
-    "maxWindows": 4,
-}
+OPTIONS: LocateOptionsInput = {"evalue": 1e-2, "bitscore": 50.0, "identity": 0.0, "alignmentLength": 0}
 
 
 def _source(paths: dict[str, Path], *names: str) -> tuple[dict[str, Any], dict[str, str]]:
@@ -44,9 +34,13 @@ def _source(paths: dict[str, Path], *names: str) -> tuple[dict[str, Any], dict[s
     return encoded.payload, {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
 
 
-def _call(helper: Any, source: tuple[dict[str, Any], dict[str, str]], tmp_path: Path, payload: object) -> Any:
+def _call(step: str, source: tuple[dict[str, Any], dict[str, str]], tmp_path: Path, payload: object) -> Any:
+    """One step of the Worker operation, through its JSON boundary."""
+
     request, resources = source
-    return json.loads(helper(json.dumps(request), json.dumps(resources), str(tmp_path / "out"), json.dumps(payload)))
+    return json.loads(locate_web_json(
+        json.dumps(request), json.dumps(resources), str(tmp_path / "out"), json.dumps({"step": step, step: payload})
+    ))
 
 
 def _windows(*spans: tuple[int, int]) -> list[dict[str, Any]]:
@@ -56,7 +50,7 @@ def _windows(*spans: tuple[int, int]) -> list[dict[str, Any]]:
 def test_the_reference_counts_its_genes_or_names_the_rule_a_window_breaks(tmp_path: Path) -> None:
     source = _source(_genomes(tmp_path), "ref", "a")
 
-    ready = _call(locate_web_reference_json, source, tmp_path, {"recordKey": "ref", "windows": _windows((1501, 8100))})
+    ready = _call("reference", source, tmp_path, {"recordKey": "ref", "windows": _windows((1501, 8100))})
     assert ready == {"status": "ready", "fileKey": "ref", "recordId": "REF", "genes": 6, "cutGenes": ["g7"]}
     refusals = {
         "WINDOW_WITHOUT_CDS": _windows((100, 900)),
@@ -65,11 +59,24 @@ def test_the_reference_counts_its_genes_or_names_the_rule_a_window_breaks(tmp_pa
         "WINDOW_ACROSS_LINEAR_ORIGIN": _windows((8100, 1501)),
     }
     for reason, windows in refusals.items():
-        reply = _call(locate_web_reference_json, source, tmp_path, {"recordKey": "ref", "windows": windows})
+        reply = _call("reference", source, tmp_path, {"recordKey": "ref", "windows": windows})
         assert (reply["status"], reply["reason"]) == ("refused", reason)
-    assert _call(locate_web_reference_json, source, tmp_path, {"recordKey": "ref", "windows": _windows((1501, 4500), (4000, 8100))})[
+    assert _call("reference", source, tmp_path, {"recordKey": "ref", "windows": _windows((1501, 4500), (4000, 8100))})[
         "start"
     ] == 4000
+
+
+def test_the_files_list_every_record_of_every_file_of_the_drawing(tmp_path: Path) -> None:
+    source = _source(_genomes(tmp_path), "ref", "b")
+    request, resources = source
+    reply = json.loads(locate_web_json(json.dumps(request), json.dumps(resources), str(tmp_path / "out"), json.dumps({"step": "files"})))
+    assert reply == {"files": [
+        {"fileKey": "ref", "records": [{"recordKey": "ref", "recordId": "REF", "length": 12_000, "circular": False}]},
+        {"fileKey": "b", "records": [
+            {"recordKey": "b:1", "recordId": "B1", "length": 5_500, "circular": False},
+            {"recordKey": "b:2", "recordId": "B2", "length": 8_500, "circular": False},
+        ]},
+    ]}
 
 
 def _search(paths: dict[str, Path], tmp_path: Path) -> tuple[Any, LocateSearchInput, Any]:
@@ -80,9 +87,9 @@ def _search(paths: dict[str, Path], tmp_path: Path) -> tuple[Any, LocateSearchIn
         "targets": ["a", "b", "c"],
         "program": "tlosatn",
     }
-    jobs = _call(locate_web_search_plan_json, source, tmp_path, search)
-    reply = _call(locate_web_plan_json, source, tmp_path, {
-        **search,
+    jobs = _call("search", source, tmp_path, search)
+    reply = _call("plan", source, tmp_path, {
+        "search": search,
         "outcomes": [
             {"fileKey": job["fileKey"], "text": run_losat_search("tlosatn", job["queryFasta"], job["subjectFasta"], losat_bin=losat), "error": None}
             for job in jobs["jobs"]
@@ -112,7 +119,8 @@ def test_the_plan_of_the_web_search_is_the_plan_the_command_writes(tmp_path: Pat
     paths = _genomes(tmp_path)
     prefix = tmp_path / "cli"
     losat = _fake_losat(tmp_path)
-    assert _run([*_locate_args(paths, losat, prefix, "a", "b", "c"), "--flank", "500", "--max_windows", "4"], monkeypatch) == 0
+    assert _run([*_locate_args(paths, losat, prefix, "a", "b", "c"), "--bitscore", "50", "--evalue", "0.01", "--identity", "0",
+                 "--alignment_length", "0"], monkeypatch) == 0
     written = json.loads(Path(str(prefix) + ".plan.json").read_text(encoding="utf-8"))
 
     _source_, _search_, reply = _search(paths, tmp_path)
@@ -183,7 +191,7 @@ def test_the_new_drawing_draws_the_kept_windows_from_the_source_drawing(tmp_path
         for file in plan["files"] for w in file["windows"]
     ]
     labels = {"ref": "ref.gb", "a": "a.gb", "b": "b.gb", "c": "c.gb"}
-    derived = _call(locate_web_drawing_json, source, tmp_path, {"plan": plan, "choices": kept, "labels": labels, "adaptSizes": True})
+    derived = _call("drawing", source, tmp_path, {"plan": plan, "choices": kept, "labels": labels, "adaptSizes": True})
 
     assert derived["status"] == "derived"
     assert derived["pairs"] == reply["pairs"]
@@ -204,14 +212,14 @@ def test_the_new_drawing_draws_the_kept_windows_from_the_source_drawing(tmp_path
     assert decoded.options.losat_search is not None and len(decoded.options.losat_search.pairs) == 3
 
     # Leaving B2 out leaves its record out of the drawing and out of the pairs.
-    fewer = _call(locate_web_drawing_json, source, tmp_path, {
+    fewer = _call("drawing", source, tmp_path, {
         "plan": plan, "choices": kept[:-1], "labels": labels, "adaptSizes": True,
     })
     assert len(fewer["drawing"]["renderRequest"]["records"]) == 3
     assert len(fewer["pairs"]) == 2
 
     # An edit the plan cannot take names its window.
-    refused = _call(locate_web_drawing_json, source, tmp_path, {
+    refused = _call("drawing", source, tmp_path, {
         "plan": plan, "choices": [{**kept[2], "start": 3000, "end": 100}], "labels": labels, "adaptSizes": True,
     })
     assert refused == {
