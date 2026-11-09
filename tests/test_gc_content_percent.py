@@ -641,22 +641,32 @@ def _circular_transform(length: int) -> RecordDisplayTransform:
 def _tick_label_path_radii(svg: str) -> list[float]:
     """The radii of the circles the scale's tick labels are written along (in the scale's group)."""
 
-    ticks = re.search(r'<g [^>]*id="tick" .*?</g>', svg, re.S)
-    assert ticks is not None
+    ticks = _slot_group(svg, "ticks")
     return [
-        float(radius)
-        for radius in re.findall(
-            r'<path d="M [^"]* A ([0-9.]+),[0-9.]+ [^"]*" fill="none" id="circular_tick_label_path_', ticks.group(0)
-        )
+        float(match.group(1))
+        for path in ticks.iter()
+        if path.tag.endswith("path") and str(path.get("id", "")).startswith("circular_tick_label_path_")
+        if (match := re.search(r" A ([0-9.]+),", str(path.get("d", "")))) is not None
     ]
+
+
+def _slot_group(svg: str, slot_id: str) -> ET.Element:
+    """The group a track slot draws into, found by its slot id."""
+
+    group = next(
+        (element for element in ET.fromstring(svg).iter() if element.get("data-gbdraw-slot-id") == slot_id), None
+    )
+    assert group is not None
+    return group
 
 
 def _percent_outer_edge_px(svg: str) -> float:
     """Where the Percent GC band's paint ends outward: its background ring's outer edge."""
 
-    background = re.search(r'<circle [^>]*id="gc_content_percent_background" r="([0-9.]+)" [^>]*stroke-width="([0-9.]+)"', svg)
-    assert background is not None
-    return float(background.group(1)) + 0.5 * float(background.group(2))
+    # The band's background ring is the first child of the gc_content slot's group.
+    background = _slot_group(svg, "gc_content")[0]
+    assert background.tag.endswith("circle")
+    return float(background.get("r", "nan")) + 0.5 * float(background.get("stroke-width", "nan"))
 
 
 @pytest.mark.circular
