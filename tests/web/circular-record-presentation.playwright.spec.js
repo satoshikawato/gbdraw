@@ -456,7 +456,7 @@ for (const width of [1280, 390]) {
     await page.evaluate(({ first, second, longName: name }) => {
       const app = window.__GBDRAW_APP__;
       const file = (text, fileName) => new File([text], fileName, { type: 'text/plain', lastModified: 1 });
-      void app.addCircularSourceFiles('gb', [
+      void app.addCircularSourceFiles([
         file(`${first}\n${first}`, 'dup.gbk'), file(second, 'b.gbk'), file(`${second}\n${first}`, name)
       ]);
       app.form.multi_record_canvas = true;
