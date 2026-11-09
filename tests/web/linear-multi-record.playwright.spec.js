@@ -2900,6 +2900,71 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   ))).toBe('Repeat');
 });
 
+// A render of the page that does not change a field's value (here a new Session title) leaves the text typed into a
+// field that commits on change, also during an IME composition; leaving the field commits it, and a field whose
+// commit keeps the old value shows that value once it loses focus.
+const renderPageWithTitle = (page, title) => page.evaluate(async (next) => {
+  window.__GBDRAW_APP__.sessionTitle = next;
+  await new Promise((done) => { requestAnimationFrame(() => done()); });
+}, title);
+const annotationId = (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0].annotations[0].id);
+const openRegionAnnotationId = async (page) => {
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.addCoordinateAnnotation(app.addAnnotationSet('review'));
+  });
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
+  return page.getByLabel('Annotation id', { exact: true });
+};
+
+test('Fields that commit on change keep typed text through a render of the page', async ({ page }) => {
+  const idInput = await openRegionAnnotationId(page);
+  await idInput.selectText();
+  await idInput.pressSequentially('Repeat');
+  await renderPageWithTitle(page, 'Render while typing');
+  await expect(idInput).toBeFocused();
+  await expect(idInput).toHaveValue('Repeat');
+  expect(await annotationId(page)).toBe('region_1');
+  await idInput.press('Tab');
+  await expect.poll(() => annotationId(page)).toBe('Repeat');
+  await expect(idInput).toHaveValue('Repeat');
+
+  await page.locator('[data-setting="layout"] > details').evaluate((element) => { element.open = true; });
+  const width = page.locator('#figure-width');
+  await width.scrollIntoViewIfNeeded();
+  await width.click();
+  await width.pressSequentially('180');
+  await renderPageWithTitle(page, 'Render while typing a number');
+  await expect(width).toBeFocused();
+  await expect(width).toHaveValue('180');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.figure_width)).toBeNull();
+  await width.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.form.figure_width)).toBe('180px');
+  await expect(width).toHaveValue('180');
+
+  const cdp = await page.context().newCDPSession(page);
+  await idInput.selectText();
+  await cdp.send('Input.imeSetComposition', { text: 'かめ', selectionStart: 2, selectionEnd: 2 });
+  await renderPageWithTitle(page, 'Render while composing');
+  await cdp.send('Input.insertText', { text: '亀' });
+  await expect(idInput).toBeFocused();
+  await expect(idInput).toHaveValue('亀');
+  await idInput.press('Tab');
+  await expect.poll(() => annotationId(page)).toBe('亀');
+});
+
+test('A field whose commit keeps the old value shows that value once it loses focus', async ({ page }) => {
+  const idInput = await openRegionAnnotationId(page);
+  await idInput.selectText();
+  // The id is stored trimmed, so the commit leaves `region_1` as it was.
+  await idInput.pressSequentially('  region_1  ');
+  await idInput.press('Tab');
+  await expect(idInput).not.toBeFocused();
+  await expect(idInput).toHaveValue('region_1');
+  expect(await annotationId(page)).toBe('region_1');
+});
+
 test('@comparison-contract GFF annotation targets follow FASTA record order', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 

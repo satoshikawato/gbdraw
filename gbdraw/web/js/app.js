@@ -33,6 +33,7 @@ import { FileCard } from './app/file-card.js';
 import { createAppSetup } from './app/app-setup.js';
 import { chooseUiLanguage, showStoredUiLanguage, translationFeedbackUrl } from './app/ui-language.js';
 import { headerFit } from './app/header-fit.js';
+import { committedValue } from './app/committed-value.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
@@ -63,6 +64,8 @@ app.directive('preview-panning', previewPanning);
 app.directive('reset-layout-state', resetLayoutState);
 app.directive('preview-markup', previewMarkup);
 app.directive('header-fit', headerFit);
+// A field that commits on change, blur, or Enter shows its model's value through `v-committed-value`, not `:value`.
+app.directive('committed-value', committedValue);
 // Vue's production build only logs an error raised in a render, watcher,
 // event handler or hook; throw it, as the development build did, so it stays
 // an uncaught page error.

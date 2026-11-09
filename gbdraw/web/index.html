@@ -2986,7 +2986,7 @@
                                             <label class="input-label text-[10px]">{{ t('Color') }}</label>
                                             <input
                                                 type="color"
-                                                :value="getDepthTrackColor(track.index)"
+                                                v-committed-value="getDepthTrackColor(track.index)"
                                                 @input="setDepthTrackColor(track.index, $event.target.value)"
                                                 @change="setDepthTrackColor(track.index, $event.target.value)"
                                                 :aria-label="track.index === 0 ? t('Depth color') : t('Depth {n} color', { n: track.index + 1 })"
@@ -3531,7 +3531,7 @@
                                             <label class="input-label text-[10px]">{{ t('Color') }}</label>
                                             <input
                                                 type="color"
-                                                :value="getDepthTrackColor(track.index)"
+                                                v-committed-value="getDepthTrackColor(track.index)"
                                                 @input="setDepthTrackColor(track.index, $event.target.value)"
                                                 @change="setDepthTrackColor(track.index, $event.target.value)"
                                                 :aria-label="track.index === 0 ? t('Depth color') : t('Depth {n} color', { n: track.index + 1 })"
@@ -3749,11 +3749,11 @@
                                             </div>
                                             <div>
                                                 <span class="linear-primary-label mb-1"><label for="linear-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-linear-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
-                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="linear-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Linear comparison identity scale minimum')" aria-describedby="help-linear-identity-scale" class="form-input px-2 py-1.5 text-xs" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="linear-identity-scale-min">
+                                                <input type="number" min="0" max="100" v-committed-value="adv.identity_scale ? adv.identity_scale[0] : ''" id="linear-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Linear comparison identity scale minimum')" aria-describedby="help-linear-identity-scale" class="form-input px-2 py-1.5 text-xs" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="linear-identity-scale-min">
                                             </div>
                                             <div>
                                                 <label class="linear-primary-label mb-1">{{ t('Identity scale max (%)') }}</label>
-                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Linear comparison identity scale maximum')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="linear-identity-scale-max">
+                                                <input type="number" min="0" max="100" v-committed-value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Linear comparison identity scale maximum')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="linear-identity-scale-max">
                                             </div>
                                         </div>
                                     </div>
@@ -3918,7 +3918,7 @@
                                                 <input
                                                     :id="`linear-raw-name-${pair.edgeKey}`"
                                                     type="text"
-                                                    :value="pair.draft?.losatFilename || pair.resolved?.losatFilename || ''"
+                                                    v-committed-value="pair.draft?.losatFilename || pair.resolved?.losatFilename || ''"
                                                     :placeholder="getLosatPairDefaultName(pair.edgeKey)"
                                                     :title="getLosatPairDefaultName(pair.edgeKey)"
                                                     @change="setResolvedLinearComparisonLosatFilename(pair.edgeKey, $event.target.value)"
@@ -3996,7 +3996,7 @@
                                     </ul>
                                     <div v-if="unplaced.draft.losatFilename" :data-linear-raw-unplaced="unplaced.draft.id" class="min-w-0 space-y-1">
                                         <label class="linear-primary-label block" :for="`linear-raw-name-unplaced-${unplaced.draft.id}`">{{ t('Retained Raw LOSAT filename') }}</label>
-                                        <input :id="`linear-raw-name-unplaced-${unplaced.draft.id}`" type="text" :value="unplaced.draft.losatFilename" @change="setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)" :aria-label="t('Raw LOSAT filename for unplaced comparison {id}', { id: unplaced.draft.id })" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                        <input :id="`linear-raw-name-unplaced-${unplaced.draft.id}`" type="text" v-committed-value="unplaced.draft.losatFilename" @change="setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)" :aria-label="t('Raw LOSAT filename for unplaced comparison {id}', { id: unplaced.draft.id })" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
                                         <button v-if="!unplaced.draft.losatFilenameActive" type="button" class="btn btn-secondary w-full px-1 py-0.5 text-[9px]" @click="reuseLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">{{ t('Reuse name and LOSAT') }}</button>
                                         <button v-else type="button" class="btn btn-secondary w-full px-1 py-0.5 text-[9px]" @click="deactivateLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">{{ t('Use automatic filename') }}</button>
                                     </div>
@@ -4149,21 +4149,21 @@
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
                             <div v-for="(set, setIndex) in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                    <input :value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :aria-label="t('Annotation set id')" :disabled="!semanticMutationAvailable">
+                                    <input v-committed-value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :aria-label="t('Annotation set id')" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Duplicate set')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" :title="t('Duplicate set')" :disabled="!semanticMutationAvailable"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                     <button :aria-label="t('Delete set')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" :title="t('Delete set')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
                                 <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('legend label')" :disabled="!semanticMutationAvailable">
                                 <div v-for="(item, itemIndex) in set.annotations" :key="item.id" data-annotation-row class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_auto_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_1.5rem]': item.target.kind === 'featureIdentity' }">
-                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
+                                        <input v-committed-value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
                                         <template v-if="item.target.kind === 'coordinateSpan'">
                                             <input type="number" min="1" :value="item.target.start" @input="setAnnotationField(set, item, 'start', $event.target.value)" :aria-label="t('Annotation start (1-based)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Start')" :disabled="!semanticMutationAvailable">
                                             <input type="number" min="1" :value="item.target.end" @input="setAnnotationField(set, item, 'end', $event.target.value)" :aria-label="t('Annotation end (inclusive)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('End')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <template v-else-if="item.target.kind === 'featureSpan'">
-                                            <input :value="item.target.selectors[0].key" @input="setAnnotationField(set, item, 'selectorKey', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Qualifier')" :disabled="!semanticMutationAvailable">
-                                            <input :value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
+                                            <input v-committed-value="item.target.selectors[0].key" @input="setAnnotationField(set, item, 'selectorKey', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Qualifier')" :disabled="!semanticMutationAvailable">
+                                            <input v-committed-value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
                                         <div data-setting="annotation-style" class="flex items-center gap-0.5">
@@ -4243,13 +4243,13 @@
                             </button>
                             <div v-else class="space-y-2">
                                 <label for="sequence-search-query" class="input-label text-[10px] mb-0">{{ t('Query FASTA') }}</label>
-                                <textarea id="sequence-search-query" :value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
+                                <textarea id="sequence-search-query" v-committed-value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
                                 <p v-if="sequenceSearch.panel.queryError" id="sequence-search-query-error" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.queryError.summaryParts) }}</p>
                                 <button type="button" class="btn btn-secondary text-[10px] w-full" @click="$refs.sequenceSearchQueryInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Choose file') }}</button>
                                 <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
                                 <ul v-if="sequenceSearch.panel.queries.length" class="space-y-1" :aria-label="t('Queries')">
                                     <li v-for="query in sequenceSearch.panel.queries" :key="query.name" data-sequence-search-query class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 text-[10px]">
-                                        <input type="color" :value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
+                                        <input type="color" v-committed-value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
                                         <span class="truncate font-mono" :title="query.name">{{ query.name }}</span>
                                         <span class="text-slate-500">{{ sequenceSearch.queryLengthText(query) }}</span>
                                         <button type="button" class="btn btn-secondary h-5 w-5 p-0" @click="sequenceSearch.removeQuery(query.name)" :aria-label="t('Remove {query}', { query: query.name })" :title="t('Remove {query}', { query: query.name })"><i class="ph ph-x" aria-hidden="true"></i></button>
@@ -4425,11 +4425,11 @@
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px]"><label for="circular-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-circular-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
-                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="circular-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Circular comparison identity scale minimum')" aria-describedby="help-circular-identity-scale" class="form-input form-input-compact" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="circular-identity-scale-min">
+                                        <input type="number" min="0" max="100" v-committed-value="adv.identity_scale ? adv.identity_scale[0] : ''" id="circular-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Circular comparison identity scale minimum')" aria-describedby="help-circular-identity-scale" class="form-input form-input-compact" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="circular-identity-scale-min">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Identity scale max (%)') }}</label>
-                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Circular comparison identity scale maximum')" class="form-input form-input-compact" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="circular-identity-scale-max">
+                                        <input type="number" min="0" max="100" v-committed-value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Circular comparison identity scale maximum')" class="form-input form-input-compact" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="circular-identity-scale-max">
                                     </div>
                                 </div>
                             </div>
@@ -4546,7 +4546,7 @@
                                 <div class="flex items-center gap-1">
                                     <label for="figure-width" class="w-12 shrink-0 text-[11px] text-slate-600">{{ t('Width') }}</label>
                                     <auto-value-field class="flex-1 min-w-0" :visible="figureWidthAmount === ''" :text="t('Auto')">
-                                        <input type="number" id="figure-width" min="0" step="any" :value="figureWidthAmount" @change="changeFigureSize($event, 'width', 'amount')" :aria-label="t('Figure width')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
+                                        <input type="number" id="figure-width" min="0" step="any" v-committed-value="figureWidthAmount" @change="changeFigureSize($event, 'width', 'amount')" :aria-label="t('Figure width')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                     <select id="figure-width-unit" :value="figureWidthUnit" @change="changeFigureSize($event, 'width', 'unit')" :aria-label="t('Figure width unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable">
                                         <option v-for="unit in figureLengthUnits" :key="unit" :value="unit">{{ unit }}</option>
@@ -4555,7 +4555,7 @@
                                 <div class="flex items-center gap-1">
                                     <label for="figure-height" class="w-12 shrink-0 text-[11px] text-slate-600">{{ t('Height') }}</label>
                                     <auto-value-field class="flex-1 min-w-0" :visible="figureHeightAmount === ''" :text="t('Auto')">
-                                        <input type="number" id="figure-height" min="0" step="any" :value="figureHeightAmount" @change="changeFigureSize($event, 'height', 'amount')" :aria-label="t('Figure height')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
+                                        <input type="number" id="figure-height" min="0" step="any" v-committed-value="figureHeightAmount" @change="changeFigureSize($event, 'height', 'amount')" :aria-label="t('Figure height')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                     <select id="figure-height-unit" :value="figureHeightUnit" @change="changeFigureSize($event, 'height', 'unit')" :aria-label="t('Figure height unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable">
                                         <option v-for="unit in figureLengthUnits" :key="unit" :value="unit">{{ unit }}</option>
@@ -4633,7 +4633,7 @@
                                         </div>
                                         <div v-if="linearWrapOn" class="ml-6 flex items-center gap-1">
                                             <auto-value-field class="flex-1 min-w-0" :visible="linearWrapAmount === ''" :text="linearWrapAutoText">
-                                                <input type="number" id="linear-wrap-length" min="1" step="any" :value="linearWrapAmount" @change="changeLinearWrap($event, 'amount')" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable || linearWrapBlocked">
+                                                <input type="number" id="linear-wrap-length" min="1" step="any" v-committed-value="linearWrapAmount" @change="changeLinearWrap($event, 'amount')" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable || linearWrapBlocked">
                                             </auto-value-field>
                                             <select id="linear-wrap-unit" :value="linearWrapUnit" @change="changeLinearWrap($event, 'unit')" :aria-label="t('Row length unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable || linearWrapBlocked">
                                                 <option value="bp">bp</option>
@@ -5290,7 +5290,7 @@
                                                                     <span class="track-slot-field-label">{{ t('inner gap') }} <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" :text="t('Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto.')"></help-tip></span>
                                                                     <div class="track-slot-value-field track-slot-pixel-field">
                                                                         <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                        <input :value="entry.slot.inner_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'inner_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Inner gap')" :aria-label="t('Circular track slot {id} Inner gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
+                                                                        <input v-committed-value="entry.slot.inner_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'inner_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Inner gap')" :aria-label="t('Circular track slot {id} Inner gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
                                                                         <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                                     </div>
                                                                 </div>
@@ -5298,7 +5298,7 @@
                                                                     <span class="track-slot-field-label">{{ t('outer gap') }} <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" :text="t('Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto.')"></help-tip></span>
                                                                     <div class="track-slot-value-field track-slot-pixel-field">
                                                                         <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                        <input :value="entry.slot.outer_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'outer_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Outer gap')" :aria-label="t('Circular track slot {id} Outer gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
+                                                                        <input v-committed-value="entry.slot.outer_gap_px ?? ''" @change="updateCircularTrackSlotGap(entry.slot, 'outer_gap_px', $event.target.value)" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" :title="t('Outer gap')" :aria-label="t('Circular track slot {id} Outer gap', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" :placeholder="t('px optional')" :disabled="!semanticMutationAvailable">
                                                                         <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                                     </div>
                                                                 </div>
@@ -5870,16 +5870,16 @@
                                             <span class="col-span-4">{{ t('Qualifier') }}</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="t('Visibility rule {n} record ID', { n: i + 1 })" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                            <input v-committed-value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="t('Visibility rule {n} record ID', { n: i + 1 })" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
                                             <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="t('Visibility rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
                                             </select>
-                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="t('Visibility rule {n} qualifier', { n: i + 1 })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                            <input v-committed-value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="t('Visibility rule {n} qualifier', { n: i + 1 })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">{{ t('Value regex') }}</label>
-                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="t('Visibility rule {n} value regex', { n: i + 1 })" :placeholder="t('value regex')" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
+                                            <input v-committed-value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="t('Visibility rule {n} value regex', { n: i + 1 })" :placeholder="t('value regex')" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <!-- The action has its own line: its longest text does not fit a quarter of the row. -->
                                         <div>
@@ -6111,7 +6111,7 @@
                                                         type="number"
                                                         min="0.01"
                                                         step="0.5"
-                                                        :value="adv.circular_label_spacing ?? ''"
+                                                        v-committed-value="adv.circular_label_spacing ?? ''"
                                                         @input="setOptionalNumberInputValue(adv, 'circular_label_spacing', $event.target.value, true)" :disabled="!semanticMutationAvailable"
                                                         @blur="setOptionalNumberInputValue(adv, 'circular_label_spacing', Number($event.target.value) > 0 ? $event.target.value : '', true)"
                                                         class="form-input form-input-compact auto-value-input"
@@ -6163,7 +6163,7 @@
                                                         type="number"
                                                         min="0.01"
                                                         step="0.5"
-                                                        :value="adv.linear_label_spacing ?? ''"
+                                                        v-committed-value="adv.linear_label_spacing ?? ''"
                                                         @input="setOptionalNumberInputValue(adv, 'linear_label_spacing', $event.target.value, true)" :disabled="!semanticMutationAvailable"
                                                         @blur="setOptionalNumberInputValue(adv, 'linear_label_spacing', Number($event.target.value) > 0 ? $event.target.value : '', true)"
                                                         class="form-input form-input-compact auto-value-input"
@@ -7070,24 +7070,24 @@
                             <div></div>
                             <div>
                                 <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">{{ t('Top') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0); $event.target.value = String(canvasPadding.top)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" min="0" aria-describedby="canvas-padding-help" v-committed-value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0); $event.target.value = String(canvasPadding.top)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-left" class="text-[10px] text-slate-500 block">{{ t('Left') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0); $event.target.value = String(canvasPadding.left)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" min="0" aria-describedby="canvas-padding-help" v-committed-value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0); $event.target.value = String(canvasPadding.left)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
                                 <label for="canvas-padding-right" class="text-[10px] text-slate-500 block">{{ t('Right') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0); $event.target.value = String(canvasPadding.right)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" min="0" aria-describedby="canvas-padding-help" v-committed-value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0); $event.target.value = String(canvasPadding.right)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-bottom" class="text-[10px] text-slate-500 block">{{ t('Bottom') }}</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" min="0" aria-describedby="canvas-padding-help" :value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0); $event.target.value = String(canvasPadding.bottom)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" min="0" aria-describedby="canvas-padding-help" v-committed-value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0); $event.target.value = String(canvasPadding.bottom)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                         </div>
@@ -7198,7 +7198,7 @@
                             <label class="text-xs font-medium text-slate-500 block mb-1">{{ t('Fill Color') }}</label>
                             <div class="flex items-center gap-4">
                                 <input type="color"
-                                       :value="clickedFeature.color || '#cccccc'"
+                                       v-committed-value="clickedFeature.color || '#cccccc'"
                                        @change="updateClickedFeatureColor($event.target.value)"
                                        data-history-managed
                                        :disabled="!semanticMutationAvailable"
@@ -7226,7 +7226,7 @@
                                     class="w-36">
                                 </color-value-control>
                                 <input type="number"
-                                       :value="clickedFeature.strokeWidth"
+                                       v-committed-value="clickedFeature.strokeWidth"
                                        @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
                                        @keydown.enter.prevent="$event.target.blur()"
                                        data-history-managed
@@ -7307,7 +7307,7 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">{{ t('Legend name') }}</label>
                             <input type="text"
-                                   :value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
+                                   v-committed-value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
                                    @input="clickedFeature.legendName = $event.target.value"
                                    @change="handleLegendNameCommit"
                                    @keydown.enter.prevent="handleLegendNameCommit"
@@ -7699,7 +7699,7 @@
                                         <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="feature-popup-heading">{{ t('Color') }}</h3>
                                         <div class="flex items-center gap-2">
                                             <!-- OV-1386: a row of color none shows the input empty and None, as the Palette pane does; it opens at its type's palette color. -->
-                                            <input type="color" :value="previewItemView.swatch.picker"
+                                            <input type="color" v-committed-value="previewItemView.swatch.picker"
                                                    @change="updateLegendEntryColorInPopup(previewItemView.index, $event.target.value, $event.target, () => previewItemView.swatch.picker)"
                                                    :aria-label="t('Color of {name}', { name: previewItemView.name })"
                                                    aria-describedby="preview-legend-color-value"
@@ -7715,7 +7715,7 @@
                                     </section>
                                     <section>
                                         <label for="preview-legend-caption" class="feature-popup-heading block">{{ t('Legend name') }}</label>
-                                        <input id="preview-legend-caption" type="text" :value="previewItemView.name"
+                                        <input id="preview-legend-caption" type="text" v-committed-value="previewItemView.name"
                                                @change="renameLegendEntryInPopup(previewItemView.index, $event.target.value)"
                                                @keydown.enter.prevent="commitPreviewItemField"
                                                :disabled="!semanticMutationAvailable"
@@ -7741,7 +7741,7 @@
                                         <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
                                         <div :data-setting="previewItemView.draft.fields.name.setting" class="text-xs text-slate-600">
                                             <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note id="preview-record-name-timing" :setting="previewItemView.draft.fields.name.setting"></setting-note>
-                                            <input id="preview-record-name" type="text" aria-describedby="preview-record-name-timing" :value="previewItemView.draft.name"
+                                            <input id="preview-record-name" type="text" aria-describedby="preview-record-name-timing" v-committed-value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
@@ -7749,7 +7749,7 @@
                                         </div>
                                         <div :data-setting="previewItemView.draft.fields.subtitle.setting" class="text-xs text-slate-600">
                                             <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note id="preview-record-subtitle-timing" :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
-                                            <input id="preview-record-subtitle" type="text" aria-describedby="preview-record-subtitle-timing" :value="previewItemView.draft.subtitle"
+                                            <input id="preview-record-subtitle" type="text" aria-describedby="preview-record-subtitle-timing" v-committed-value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
@@ -8842,7 +8842,7 @@
                                         <i class="ph ph-dots-six-vertical text-sm" aria-hidden="true"></i>
                                     </button>
                                     <color-swatch class="w-5 h-5 rounded border border-slate-300 shrink-0" :color="legendEntryColor(entry)"></color-swatch>
-                                    <input type="text" :value="shownLegendEntryName(entry)" :aria-label="t('Legend entry {name} name', { name: shownLegendEntryName(entry) })" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
+                                    <input type="text" v-committed-value="shownLegendEntryName(entry)" :aria-label="t('Legend entry {name} name', { name: shownLegendEntryName(entry) })" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Stroke options for {name}', { name: shownLegendEntryName(entry) })" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry) ? t('Hide stroke options') : t('Show stroke options')">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
@@ -8859,7 +8859,7 @@
                                         :aria-label="t('Legend stroke color for {name}', { name: shownLegendEntryName(entry) })"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :aria-label="t('Legend stroke width for {name}', { name: shownLegendEntryName(entry) })" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" :placeholder="tx('stroke width', 'Width')" step="0.5" min="0" :title="t('Stroke width')" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :aria-label="t('Legend stroke width for {name}', { name: shownLegendEntryName(entry) })" v-committed-value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" :placeholder="tx('stroke width', 'Width')" step="0.5" min="0" :title="t('Stroke width')" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Reset stroke of {name} to default', { name: shownLegendEntryName(entry) })" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" :title="t('Reset stroke to default')" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
@@ -8908,7 +8908,7 @@
                                  :class="['border-b border-slate-100 text-xs overflow-hidden', featureListExpandedId === feat.id ? 'h-[80px] bg-blue-50/60' : 'h-[36px]']">
                                 <div class="h-[36px] px-3 flex items-center gap-2">
                                     <input type="color"
-                                           :value="getFeatureColor(feat)"
+                                           v-committed-value="getFeatureColor(feat)"
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
                                            :disabled="!semanticMutationAvailable"
                                            :title="t('Change fill color')"
@@ -8944,7 +8944,7 @@
                                         <label class="flex-1 min-w-0 flex items-center gap-1 text-[10px] text-slate-500">
                                             <span class="shrink-0">{{ t('Label') }}</span>
                                             <input type="text" data-history-managed
-                                                   :value="getEditableLabelByFeatureId(featureListState(feat).renderedId).draftText"
+                                                   v-committed-value="getEditableLabelByFeatureId(featureListState(feat).renderedId).draftText"
                                                    @input="getEditableLabelByFeatureId(featureListState(feat).renderedId).draftText = $event.target.value"
                                                    @change="commitListLabelDraft(featureListState(feat).renderedId, $event.target.value)"
                                                    :disabled="!semanticMutationAvailable"
@@ -10035,7 +10035,7 @@
 
 <script type="text/x-template" id="depth-track-index-input-template">
     <div>
-        <input :id="controlId" type="number" min="0" step="1" :value="text" @change="commit($event.target.value)"
+        <input :id="controlId" type="number" min="0" step="1" v-committed-value="text" @change="commit($event.target.value)"
                :aria-label="t('Depth track index {slot}', { slot: slotId })" :aria-describedby="describedBy || null"
                :aria-invalid="error ? 'true' : 'false'" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="disabled">
         <p v-if="error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ error }}</p>
@@ -10045,7 +10045,7 @@
 <script type="text/x-template" id="specific-rule-rows-template">
 <div class="space-y-1 mb-3">
     <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="flex items-start gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
-        <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
+        <input type="color" v-committed-value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
         <div class="min-w-0 flex-1">
         <details data-color-rule-editor>
             <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
@@ -10058,9 +10058,9 @@
                     <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="t('Color rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact" :disabled="!available">
                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                     </select>
-                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
+                    <input v-committed-value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
                 </div>
-                <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
+                <input :id="fieldId(rule)" :disabled="!available" v-committed-value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
                 <!-- The pattern's state under its field, once; the rule for what Save Session, Generate and the downloads use sits in the help tip. -->
                 <div v-if="patternDraft(rule)" :id="`${fieldId(rule)}-status`" class="space-y-0.5 break-words text-[10px] leading-snug" data-color-rule-pattern-status data-history-ignore>
                     <div class="flex items-center gap-1 text-amber-800">
@@ -10073,7 +10073,7 @@
                         <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">{{ t('Revert') }}</button>
                     </div>
                 </div>
-                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="t('Color rule {n} legend name', { n: i + 1 })" :placeholder="t('Legend name')" class="form-input form-input-compact w-full" :disabled="!available">
+                <input v-committed-value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="t('Color rule {n} legend name', { n: i + 1 })" :placeholder="t('Legend name')" class="form-input form-input-compact w-full" :disabled="!available">
                 <div class="flex items-center justify-end gap-0.5">
                     <button :aria-label="t('Move rule up')" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                     <button :aria-label="t('Move rule down')" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule down')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
@@ -10163,7 +10163,7 @@
       <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">{{ t('Reset to detected') }}</button>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <label class="flex items-center gap-1.5">{{ t('Display start') }} <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" :value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="t('Display start {record} {selector}', { record: row.recordId, selector: row.selector })" class="form-input form-input-compact w-24"></label>
+      <label class="flex items-center gap-1.5">{{ t('Display start') }} <input ref="start" data-history-managed type="number" min="1" :max="row.recordLength" v-committed-value="surface.displayStart" :disabled="!controlAvailable || !surface.startEnabled" @change="setStart($event)" :aria-label="t('Display start {record} {selector}', { record: row.recordId, selector: row.selector })" class="form-input form-input-compact w-24"></label>
       <button v-if="draft.startCoordinate != null" data-history-managed type="button" :disabled="!controlAvailable" @click="($refs.start.disabled ? $refs.topology : $refs.start).focus(); controller.resetStart(row)" class="ml-auto text-[10px] text-blue-600">{{ t('Reset start') }}</button>
     </div>
     <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
