@@ -483,7 +483,7 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
   assert.deepEqual(payload.sequenceBundle.entries.map(({ read }) => read), [
     { kind: 'record', recordKey: 'rec-0', start: 1, end: 4 }, { kind: 'record', recordKey: 'rec-1', start: 4, end: 1 }
   ]);
-  const reply = { status: 'ok', reason: null, recordId: 'Q', orientation: '+', length: 4, sequence: 'ACGT' };
+  const reply = { status: 'ok', reason: null, recordId: 'Q', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 12000 };
   assert.match(matchSpanFasta(payload.sequenceBundle.entries[0], reply), /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
   // A record shown as in its file (rotate only) keeps its coordinates.
   const plain = buildMatchPopupPayload(

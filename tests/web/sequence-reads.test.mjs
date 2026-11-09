@@ -7,6 +7,8 @@ import { test } from 'node:test';
 import { createSequenceReads } from '../../gbdraw/web/js/app/sequence-reads.js';
 import { createCatalogSequences, featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { buildFeaturePopup } from '../../gbdraw/web/js/services/feature-popup.js';
+import { matchSpanUnavailableReason } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
+import { MATCH_SPAN_REASONS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 const feat = {
   id: 'rec-1\u0000kinase', recordKey: 'rec-1', biologicalFeatureId: 'kinase', record_id: 'REC', type: 'CDS',
@@ -25,7 +27,7 @@ const harness = ({ readFeatures, readSpans, isShown } = {}) => {
     isShown: isShown || (() => true),
     readFeatures: readFeatures || (async (asked) => new Map(asked.map((read) => [featureSequenceKey(read), sequencesOf(read)]))),
     readSpans: readSpans || (async (spans) => spans.map((span) => ({
-      status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT'
+      status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8
     }))),
     copyPending: async (pending) => {
       const text = await pending;
@@ -114,7 +116,7 @@ test('span Copy reads the span when pressed and copies its FASTA; FASTA download
   const asked = [];
   const { reads, copied, downloaded } = harness({ readSpans: async (spans) => {
     asked.push(spans);
-    return spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' }));
+    return spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 }));
   } });
   const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }), entryOf('subject', null)]);
   assert.equal(await reads.spanAction(bundle, [bundle.entries[0]], 'copy'), true);
@@ -148,12 +150,12 @@ test('both spans are offered only when every span can be read, and a span unread
     entryOf('subject', { kind: 'record', recordKey: 'rec-2', start: 1, end: 9 })
   ]);
   replies.push((spans) => spans.map((span) => (span.recordKey === 'rec-2'
-    ? { status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '' }
-    : { status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' })));
+    ? { status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '', sourceLength: 8 }
+    : { status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 })));
   assert.equal(await reads.spanAction(both, both.entries, 'copy'), false);
   assert.deepEqual(copied, [], 'the clipboard gets no part of the pair');
   assert.deepEqual(both.entries.map((entry) => [entry.available, entry.unavailableReason]), [
-    [true, ''], [false, 'Coordinates exceed the sequence length.']
+    [true, ''], [false, 'Coordinates exceed the sequence length (8 bp).']
   ]);
   assert.equal(both.read.status, '', 'the reason shows in the span\'s row');
   assert.equal(reads.spansReadable(both.entries), false);
@@ -161,14 +163,32 @@ test('both spans are offered only when every span can be read, and a span unread
 
 test('a span Python cannot read shows its reason in its row and copies nothing', async () => {
   const { reads, copied } = harness({ readSpans: async (spans) => spans.map(() => ({
-    status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: ''
+    status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '', sourceLength: 8
   })) });
   const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 })]);
   assert.equal(await reads.spanAction(bundle, bundle.entries, 'copy'), false);
   assert.equal(bundle.entries[0].available, false);
-  assert.equal(bundle.entries[0].unavailableReason, 'Coordinates exceed the sequence length.');
+  assert.equal(bundle.entries[0].unavailableReason, 'Coordinates exceed the sequence length (8 bp).');
   assert.equal(bundle.read.status, '', 'the reason shows in the span\'s row');
   assert.deepEqual(copied, []);
+});
+
+// Each reason Python gives shows the text the match popup showed for that case before D5, with the record and length.
+test('each reason a span cannot be read shows the match popup\'s text from before D5', () => {
+  const entry = entryOf('query', { kind: 'reference', recordId: 'NC_1', start: 1, end: 4 });
+  entry.span.recordId = 'NC_1';
+  const textOf = (reason) => matchSpanUnavailableReason(entry, {
+    status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 12345
+  });
+  assert.deepEqual(Object.fromEntries(MATCH_SPAN_REASONS.map((reason) => [reason, textOf(reason)])), {
+    NEVER_SUPPLIED: 'Comparison sequence was not supplied for this BLAST source.',
+    RECORD_UNKNOWN: 'No sequence source matched record “NC_1”.',
+    RECORD_AMBIGUOUS: 'Record ID “NC_1” is ambiguous in the available sequence sources.',
+    RECORD_ALIAS_AMBIGUOUS: 'Record alias “NC_1” is ambiguous in the available sequence sources.',
+    COORDINATE_BELOW_ONE: 'Coordinates must be greater than or equal to 1.',
+    SOURCE_EMPTY: 'The sequence source is empty.',
+    OUT_OF_RANGE: `Coordinates exceed the sequence length (${(12345).toLocaleString()} bp).`
+  });
 });
 
 test('a discarded span read writes nothing; a failed one keeps its error and Retry', async () => {
@@ -185,7 +205,7 @@ test('a discarded span read writes nothing; a failed one keeps its error and Ret
   await reads.spanAction(bundle, bundle.entries, 'copy');
   assert.equal(bundle.read.status, 'failed');
   assert.equal(bundle.read.error.operation, 'readMatchSequences');
-  reply = [{ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' }];
+  reply = [{ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 }];
   assert.equal(await bundle.read.retry(), true);
   assert.equal(bundle.read.status, '');
   assert.equal(copied.length, 1);

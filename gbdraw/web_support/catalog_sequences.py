@@ -99,13 +99,18 @@ class ComparisonMatchSpan(TypedDict):
 
 
 MatchSpanInput = RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan
-MatchSpanReason = Literal["NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "OUT_OF_RANGE"]
-# Why a span cannot be read, in the reply's order: the Web reads its list from here (tools/generate_web_contracts.py).
+MatchSpanReason = Literal[
+    "NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_BELOW_ONE",
+    "SOURCE_EMPTY", "OUT_OF_RANGE",
+]
+# Why a span cannot be read: the Web reads this list from here (tools/generate_web_contracts.py) and shows one text
+# per reason, the text the match popup showed for that case before D5.
 MATCH_SPAN_REASONS: tuple[MatchSpanReason, ...] = get_args(MatchSpanReason)
 
 
 class MatchSpanSequence(TypedDict):
-    """The bases of one span, on its strand (``orientation``), or why they cannot be read (``reason``)."""
+    """The bases of one span, on its strand (``orientation``), or why they cannot be read (``reason``);
+    ``sourceLength`` is the length of the record the span reads (0 when no record is found)."""
 
     status: Literal["ok", "unavailable"]
     reason: MatchSpanReason | None
@@ -113,6 +118,7 @@ class MatchSpanSequence(TypedDict):
     orientation: Literal["+", "-"]
     length: int
     sequence: str
+    sourceLength: int
 
 
 class MatchSequencesReply(TypedDict):
@@ -239,15 +245,28 @@ def _match_source(
         candidates = [source for source in sources if source.get("sourceIndex") == index]
     if not span["recordId"].strip():
         return None, "RECORD_UNKNOWN"
-    for found in (
+    reasons: tuple[MatchSpanReason, MatchSpanReason] = ("RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS")
+    for found, ambiguous in zip((
         [source for source in candidates if source["recordId"] == span["recordId"]],
         [source for source in candidates if span["recordId"] in _aliases(source)],
-    ):
+    ), reasons, strict=True):
         if len(found) == 1:
             return found[0], None
         if found:
-            return None, "RECORD_AMBIGUOUS"
+            return None, ambiguous
     return None, "RECORD_UNKNOWN"
+
+
+def _span_reason(sequence: str, start: int, end: int) -> MatchSpanReason | None:
+    """Why the coordinates of a span cannot be read on ``sequence``, checked in the match popup's order before D5."""
+
+    if start < 1 or end < 1:
+        return "COORDINATE_BELOW_ONE"
+    if not sequence:
+        return "SOURCE_EMPTY"
+    if start > len(sequence) or end > len(sequence):
+        return "OUT_OF_RANGE"
+    return None
 
 
 def read_feature_sequences(
@@ -298,17 +317,19 @@ def read_match_sequences(
     for span in asked:
         orientation: Literal["+", "-"] = "+" if span["start"] <= span["end"] else "-"
         source, reason = _match_source(records, sources, span)
-        bases = None if source is None else read_match_span(cast("str", source["sequence"]), span["start"], span["end"])
+        sequence = "" if source is None else cast("str", source["sequence"])
+        reason = reason or _span_reason(sequence, span["start"], span["end"])
+        bases = None if source is None or reason else read_match_span(sequence, span["start"], span["end"])
         if source is None or bases is None:
             read.append({
                 "status": "unavailable", "reason": reason or "OUT_OF_RANGE",
                 "recordId": "" if source is None else str(source["recordId"]),
-                "orientation": orientation, "length": 0, "sequence": "",
+                "orientation": orientation, "length": 0, "sequence": "", "sourceLength": len(sequence),
             })
             continue
         read.append({
             "status": "ok", "reason": None, "recordId": str(source["recordId"]),
-            "orientation": orientation, "length": len(bases), "sequence": bases,
+            "orientation": orientation, "length": len(bases), "sequence": bases, "sourceLength": len(sequence),
         })
     return {"spans": read}
 

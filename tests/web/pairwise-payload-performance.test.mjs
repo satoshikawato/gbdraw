@@ -651,6 +651,22 @@ test('a Circular comparison band reads its reference by the record ID its hit na
   ]);
 });
 
+// A whole coordinate below 1 is Python's to judge after the record (as the popup judged it before D5: the record,
+// then "greater than or equal to 1"); a coordinate that is not a whole number is refused where the popup opens.
+test('a whole coordinate below 1 is read by Python; one that is not whole gives the popup\'s reason', () => {
+  const spansOf = (qstart) => popupModule.buildMatchPopupPayload(elementFrom({ ...commonAttributes, 'data-qstart': qstart }), {
+    matchSequenceRecords: syntheticSequenceRecords()
+  }).sequenceBundle.entries[0];
+  for (const [qstart, start] of [['0', 0], ['-5', -5]]) {
+    const entry = spansOf(qstart);
+    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', start, end: 18 }, '']);
+  }
+  for (const qstart of ['1.5', 'ten']) {
+    const entry = spansOf(qstart);
+    assert.deepStrictEqual([entry.read, entry.unavailableReason], [null, 'Coordinates must be whole 1-based values.']);
+  }
+});
+
 // OV-1010: a member's null or blank bound is missing, not 0.
 test('group member coordinates read a missing bound as missing (OV-1010)', () => {
   for (const missing of [null, '', '  ']) {

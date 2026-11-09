@@ -2054,7 +2054,8 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, records) => {
   if (!spans.length) return null;
   const entries = spans.map((span) => {
     const role = span.role === 'subject' ? 'subject' : 'query';
-    const [start, end] = [span.start, span.end].map((value) => (/^\d+$/.test(value) ? Number(value) : Number.NaN));
+    // A whole coordinate, below 1 too, is Python's to judge after the record, as the popup judged it before D5.
+    const [start, end] = [span.start, span.end].map(Number);
     const whole = Number.isSafeInteger(start) && Number.isSafeInteger(end);
     const { read, reason } = whole ? matchSpanRead(span, matchKind, records, start, end)
       : { read: null, reason: t('Coordinates must be whole 1-based values.') };
@@ -2102,7 +2103,10 @@ const MATCH_SPAN_REASON_TEXTS = Object.freeze({
   NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
   RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
   RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
-  OUT_OF_RANGE: msg('Coordinates exceed the sequence length.')
+  RECORD_ALIAS_AMBIGUOUS: msg('Record alias “{id}” is ambiguous in the available sequence sources.'),
+  COORDINATE_BELOW_ONE: msg('Coordinates must be greater than or equal to 1.'),
+  SOURCE_EMPTY: msg('The sequence source is empty.'),
+  OUT_OF_RANGE: msg('Coordinates exceed the sequence length ({length} bp).')
 });
 
 /**
@@ -2110,7 +2114,8 @@ const MATCH_SPAN_REASON_TEXTS = Object.freeze({
  * @param {MatchSpanSequence} read A span Python could not read.
  */
 export const matchSpanUnavailableReason = (entry, read) => tm(
-  read.reason ? MATCH_SPAN_REASON_TEXTS[read.reason] : MATCH_SPAN_REASON_TEXTS.OUT_OF_RANGE, { id: entry.span.recordId || read.recordId }
+  read.reason ? MATCH_SPAN_REASON_TEXTS[read.reason] : MATCH_SPAN_REASON_TEXTS.OUT_OF_RANGE,
+  { id: entry.span.recordId || read.recordId, length: read.sourceLength.toLocaleString() }
 );
 
 /**

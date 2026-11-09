@@ -369,6 +369,8 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
             {"kind": "record", "recordKey": "key-7", "start": 1, "end": 2},
             {"kind": "record", "recordKey": "key-0", "start": 1, "end": 9},
             {"kind": "comparison", "sourceIndex": 0, "recordId": "same-id", "start": 1, "end": 2},
+            {"kind": "record", "recordKey": "key-0", "start": 0, "end": 3},
+            {"kind": "record", "recordKey": "key-0", "start": 3, "end": -2},
         ])["spans"]
 
     assert [(span["status"], span["reason"], span["orientation"], span["sequence"]) for span in read] == [
@@ -377,8 +379,25 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
         ("unavailable", "RECORD_UNKNOWN", "+", ""),
         ("unavailable", "OUT_OF_RANGE", "+", ""),
         ("unavailable", "NEVER_SUPPLIED", "+", ""),
+        ("unavailable", "COORDINATE_BELOW_ONE", "+", ""),
+        ("unavailable", "COORDINATE_BELOW_ONE", "-", ""),
     ]
     assert read[0]["recordId"] == "same-id" and read[0]["length"] == 3
+    # The length of the record a span reads, for the reason a span past its end shows (base: "({length} bp)").
+    assert [span["sourceLength"] for span in read] == [8, 8, 0, 8, 0, 8, 8]
+
+
+def test_a_span_of_an_empty_source_and_a_coordinate_below_one_have_their_reasons() -> None:
+    """The coordinate reasons in the order the match popup checked them before D5: below 1, an empty source, past
+    the record's end."""
+
+    from gbdraw.web_support.catalog_sequences import _span_reason
+
+    assert _span_reason("ACGT", 0, 2) == "COORDINATE_BELOW_ONE"
+    assert _span_reason("", 0, 2) == "COORDINATE_BELOW_ONE"
+    assert _span_reason("", 1, 2) == "SOURCE_EMPTY"
+    assert _span_reason("ACGT", 2, 5) == "OUT_OF_RANGE"
+    assert _span_reason("ACGT", 4, 1) is None
 
 
 def test_a_drawn_reference_named_by_an_alias_is_read_without_catalog_rows(tmp_path: Path) -> None:
@@ -417,8 +436,10 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
             SeqRecord(Seq("AAAA"), id="same", name="one"),
             SeqRecord(Seq("CCCC"), id="same", name="two"),
             SeqRecord(Seq("GGGG"), id="third described", name="three"),
+            SeqRecord(Seq("TTTT"), id="fourth", name="shared"),
+            SeqRecord(Seq("ACAC"), id="fifth", name="shared"),
         ),
-        unit_keys=("key-0", "key-1", "key-2"),
+        unit_keys=("key-0", "key-1", "key-2", "key-3", "key-4"),
     )
     sources = match_sequence_sources(records)
 
@@ -429,6 +450,8 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
         return (None if source is None else source["sequence"]), reason
 
     assert found("same") == (None, "RECORD_AMBIGUOUS")
+    # Two records with one alias and no shared ID: the alias is ambiguous, as the match popup said before D5.
+    assert found("shared") == (None, "RECORD_ALIAS_AMBIGUOUS")
     assert found("two") == ("CCCC", None)
     assert found("third") == ("GGGG", None)
     assert found("") == (None, "RECORD_UNKNOWN")
@@ -460,6 +483,7 @@ def test_comparison_records_are_found_by_id_then_alias_and_ambiguity_is_a_reason
     assert found("contig_1") == ("CCCC", None)
     assert found("c1") == ("CCCC", None)
     assert found("dup") == (None, "RECORD_AMBIGUOUS")
+    assert found("x") == ("GGGG", None)
     assert found("absent") == (None, "RECORD_UNKNOWN")
 
 

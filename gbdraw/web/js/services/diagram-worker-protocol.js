@@ -343,7 +343,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 /** Why a span's bases cannot be read (`MatchSpanReason`, Python's list). @typedef {typeof MATCH_SPAN_REASONS[number]} MatchSpanReason */
 
 /**
- * The bases of one span on its strand, or why they cannot be read (`MatchSpanSequence`).
+ * The bases of one span on its strand, or why they cannot be read (`MatchSpanSequence`), with the length of the
+ * record the span reads (0 when no record is found).
  * @typedef {object} MatchSpanSequence
  * @property {'ok' | 'unavailable'} status
  * @property {MatchSpanReason | null} reason
@@ -351,6 +352,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {'+' | '-'} orientation
  * @property {number} length
  * @property {string} sequence
+ * @property {number} sourceLength
  */
 
 /**
