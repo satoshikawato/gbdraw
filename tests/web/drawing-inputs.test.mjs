@@ -92,16 +92,20 @@ test('the refs of two views of one stored resource share its source; other files
 
 // OV-3018: a Circular ring Generate binds its comparison FASTA as two views of
 // one stored resource (the ring sequence and its source); the History byte
-// budget counts their bytes once.
+// budget counts their bytes once, by the payload they stand for (the app gives
+// `inputFilePayload`; OV-3019 in session-losat-cache-validation.test.mjs runs it
+// over ring Generates).
 test('the History file estimate counts the views of one stored resource once', () => {
   const descriptor = {};
-  const store = createInputFileStore({ sourceOf: (file) => file.backing || null });
+  const store = createInputFileStore();
+  const payloadOf = (file) => file.backing || file;
   const first = store.registerFile({ name: 'ring.fna', size: 9, backing: descriptor });
   const second = store.registerFile({ name: 'ring.fna', size: 9, backing: descriptor });
   const other = store.registerFile({ name: 'other.gb', size: 5 });
-  assert.equal(store.estimateBytes([first.fileId, second.fileId]), 9);
-  assert.equal(store.estimateBytes(new Set([first.fileId, second.fileId, other.fileId])), 14);
-  assert.equal(store.estimateBytes([second.fileId, 'file-none']), 9);
+  assert.equal(store.estimateBytes([first.fileId, second.fileId], payloadOf), 9);
+  assert.equal(store.estimateBytes([first.fileId, second.fileId]), 18, 'without a payload, each file counts');
+  assert.equal(store.estimateBytes(new Set([first.fileId, second.fileId, other.fileId]), payloadOf), 14);
+  assert.equal(store.estimateBytes([second.fileId, 'file-none'], payloadOf), 9);
 });
 
 test('a Load installs its Files as refs at install, and a rolled-back ref stays bound', () => {

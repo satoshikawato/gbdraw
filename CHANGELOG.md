@@ -279,6 +279,10 @@ write-up of a release.
   counted an input file once for each place that names it. It now counts what
   each step keeps, so the steps before the last Generate stay undoable until
   the memory limit is reached.
+- Fixed (Web app): every Generate with comparison rings counted the
+  comparison sequence files once more in the Undo history's memory estimate,
+  so later Generates discarded older Undo steps early. Each comparison file
+  now counts once, however many Generates use it.
 - Changed: the command line writes its progress messages, warnings, and errors
   to standard error, and standard output stays empty while it draws. A script
   that saved the messages with `> log.txt` now needs `2> log.txt`. Each log

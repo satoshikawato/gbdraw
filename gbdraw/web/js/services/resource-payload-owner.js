@@ -40,16 +40,31 @@ export const getResourcePayloadOwner = (descriptor) => {
   return (key && payloadOwners.get(key)) || key;
 };
 
+/** @param {object} value @returns {object | null} The source descriptor of a Session resource view. */
+const viewSourceOf = (value) => /** @type {{ descriptor?: object } | null} */ (getSessionResourceSource(value))?.descriptor || null;
+
 /**
  * The object whose bytes a File, a Session resource view or a descriptor
- * stands for: every view of one Session resource stands for its source
- * descriptor, anything else for its payload owner.
+ * stands for, followed to the end: a view stands for its source descriptor,
+ * a descriptor for its payload owner (the File a Generate described, or the
+ * view it was described from), and the end names no other. So every view a
+ * ring Generate binds of one chosen File stands for that File (OV-3019). A
+ * descriptor owned by a view of itself ends at the descriptor.
  * @param {object} value
  * @returns {object}
  */
 export const getResourcePayloadIdentity = (value) => {
-  const owner = /** @type {object} */ (getResourcePayloadOwner(value));
-  return /** @type {{ descriptor?: object } | null} */ (getSessionResourceSource(owner))?.descriptor || owner;
+  /** @type {Set<object>} */
+  const seen = new Set();
+  let current = value;
+  while (!seen.has(current)) {
+    seen.add(current);
+    const owner = /** @type {object} */ (getResourcePayloadOwner(current));
+    const next = viewSourceOf(current) || (viewSourceOf(owner) === current ? current : owner);
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
 };
 
 /**

@@ -105,6 +105,7 @@ import {
   readCommittedResourceRecordCount,
   assertDrawingInputs,
   importSession as importSessionFromFile,
+  inputFilePayload,
   serializeActiveRenderFiles,
   encodeSessionResources,
   projectDraftRequest,
@@ -853,7 +854,7 @@ export const createAppSetup = () => {
     // OV-1260: dropped older steps are told, not silent.
     onHistoryLimit: (text) => showNotice({ text: tm(text), tone: 'warning' }),
     makeRef: ref,
-    estimateFileBytes: state.inputFiles.estimateBytes,
+    estimateFileBytes: (fileIds) => state.inputFiles.estimateBytes(fileIds, inputFilePayload),
     // A file stays stored while any History step or binding names it (R11).
     retainOnlyFiles: retainHistoryAndBoundFiles(state, state.inputFiles),
     // A History finds its drawing by ID at each call, never a held object: a

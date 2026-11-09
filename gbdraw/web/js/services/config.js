@@ -252,7 +252,7 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
-import { getResourcePayloadIdentity, setResourcePayloadOwner } from './resource-payload-owner.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner, setResourcePayloadOwner } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
   readStoredSimilarityAlignmentResetReceipt,
@@ -3576,9 +3576,19 @@ const sessionViewDescriptor = (file) => {
   const descriptor = visibleName && visibleName !== source.descriptor.name
     ? renamedResourceDescriptor(source.descriptor, visibleName)
     : source.descriptor;
-  setResourcePayloadOwner(descriptor, file);
+  // The view never replaces an owner its descriptor has: the File a Generate described (OV-3019).
+  if (getResourcePayloadOwner(descriptor) === descriptor) setResourcePayloadOwner(descriptor, file);
   return descriptor;
 };
+
+/**
+ * The object whose bytes a bound input file stands for (`getResourcePayloadIdentity`): the File the
+ * user chose, for that File and for every view a Generate bound of it. The History file estimate
+ * counts each once (the composition root gives it to `InputFileStore.estimateBytes`).
+ * @param {object} file A `File` or a Session resource view.
+ * @returns {object}
+ */
+export const inputFilePayload = (file) => getResourcePayloadIdentity(file);
 
 /**
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes

@@ -63,7 +63,9 @@ export const collectHistoryFileIds = (value, target = new Set()) => {
  * @property {(file: InputFileCandidate) => InputFileRef | null} registerFile
  * @property {(ref: InputFileRef | null | undefined) => FileLike | null} fileOf
  * @property {(fileIds: Iterable<string> | null | undefined) => void} retainOnly
- * @property {(fileIds: Iterable<string> | null | undefined) => number} estimateBytes
+ * @property {(fileIds: Iterable<string> | null | undefined, payloadOf?: (file: HistoryFile) => object) => number} estimateBytes
+ *   The bytes of the files; files that stand for one payload (`payloadOf`, the composition root gives
+ *   `inputFilePayload`) count once.
  * @property {(fileId: string) => boolean} has
  * @property {typeof collectHistoryFileIds} collectIds
  */
@@ -139,18 +141,19 @@ export const createInputFileStore = ({ sourceOf = () => null, onHold = () => {},
     });
   };
 
-  // The views of one stored resource share its bytes, so they count once, by
-  // their `sourceId` (OV-3018).
-  /** @param {Iterable<string> | null | undefined} fileIds */
-  const estimateBytes = (fileIds) => {
-    /** @type {Map<string, number>} */
-    const bytesBySource = new Map();
+  // Files that stand for the same bytes count once, by their payload, read at
+  // each estimate: the views of one stored resource (OV-3018), and the views
+  // each Generate bound of one chosen File, with that File (OV-3019).
+  /** @type {InputFileStore['estimateBytes']} */
+  const estimateBytes = (fileIds, payloadOf = (file) => file) => {
+    /** @type {Map<object, number>} */
+    const bytesByPayload = new Map();
     for (const fileId of fileIds || []) {
       const stored = files.get(fileId);
-      if (stored) bytesBySource.set(stored.ref.sourceId, stored.file.size || 0);
+      if (stored) bytesByPayload.set(payloadOf(stored.file), stored.file.size || 0);
     }
     let total = 0;
-    bytesBySource.forEach((bytes) => { total += bytes; });
+    bytesByPayload.forEach((bytes) => { total += bytes; });
     return total;
   };
 

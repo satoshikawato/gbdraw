@@ -1065,6 +1065,56 @@ ORIGIN
   assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
 });
 
+// OV-3019: each ring Generate builds its request from the views the last one
+// bound, adopts a new resource table and binds new views of its comparison
+// FASTA. They hold the bytes of the File the user chose, so the History file
+// estimate counts them once, however many ring Generates the History keeps;
+// a committed resource still names the bound view as its own (OV-1555).
+test('ring Generates over one comparison FASTA count its bytes once in the History file estimate (OV-3019)', async () => {
+  const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
+  const { bindDrawingInputFileList } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const genbank = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
+  const fasta = new File(['>comparison\naaaacccc\n'], 'comparison.fna', { type: 'text/plain' });
+  installShownDrawing('circular');
+  const drawing = state.activeDrawing();
+  const inputs = drawing.slices.inputs;
+  drawing.circularSources.splice(0, drawing.circularSources.length,
+    { uid: 'record-1', gb: state.inputFiles.registerFile(new File([genbank], 'reference.gb')), gff: null, fasta: null });
+  drawing.circularRecordList.value = [{ uid: 'record-1', k: 1, identity: 'record-1', selector: '#1', record_id: 'REFERENCE',
+    record_length: 8, detectedTopology: 'linear' }];
+  Object.assign(drawing.circularConservation, { enabled: true, source: 'losat', reference: 'subject', labels: '' });
+  drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length,
+    { sourceIndex: 0, fileName: fasta.name, label: 'comparison', color: '#4e79a7', losat_gencode: 11 });
+  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_fastas', [fasta]);
+  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_sequence_sources', []);
+  const fileIds = state.inputFiles.collectIds(drawing.files);
+  // A ring Generate (run-analysis.js): its request names the comparison FASTA for the search and for the ring.
+  const ringGenerate = async () => {
+    const filesData = await serializeActiveRenderFiles(state, drawing);
+    const canonical = buildCanonicalRenderRequest({
+      state, drawing, filesData,
+      resolvedCircularConservation: [{ sourceIndex: 0, name: 'comparison.tsv', text: '', label: 'comparison',
+        color: '#4e79a7', fasta: filesData.c_conservation_fastas[0] }]
+    });
+    assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }), true);
+    state.inputFiles.collectIds(drawing.files, fileIds);
+    return canonical;
+  };
+  await ringGenerate();
+  await ringGenerate();
+  const { resources, renderRequest } = await ringGenerate();
+  const [ringFasta] = renderRequest.diagramOptions.conservationFastaFiles;
+  const [view] = drawing.files.c_conservation_fastas;
+  assert.ok(fileIds.size > 3, 'every ring Generate bound new views of the comparison FASTA');
+  assert.equal(state.inputFiles.estimateBytes([...fileIds].filter((fileId) => (
+    state.inputFiles.fileOf({ fileId })?.name === fasta.name)), sessionConfig.inputFilePayload), fasta.size);
+  assert.deepEqual(Object.keys(resources).filter((id) => resources[id].kind === 'conservation-fasta-file'), [ringFasta.resourceId],
+    'the request holds the comparison FASTA once');
+  assert.equal(resourceIdOwnedBy(resources, state.inputFiles.fileOf(view), 'conservation-fasta-file'), ringFasta.resourceId);
+  assert.equal(resourceIdOwnedBy(resources, fasta, 'conservation-fasta-file'), ringFasta.resourceId);
+});
+
 test('legacy standalone config import migrates retired values without a writer envelope', async () => {
   alerts.length = 0;
   const file = new Blob([JSON.stringify({
