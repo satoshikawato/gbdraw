@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShowElementSettings, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
+/** @import { FeatureSelectionPort, IsPreviewTransformActivePort, PrepareDrawnFeatureMatchesPort, ShowElementSettings, ShownLegendNamePort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
@@ -61,7 +61,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's port of the editor intent onto the displayed Result (R3, R13).
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
- * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {IsPreviewTransformActivePort} isPreviewTransformActive
+ * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] The root's hold of the popups while a review hides them.
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('./candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
@@ -112,7 +113,7 @@ export const createFeatureEditor = ({
   showEditorIntent,
   selectResult,
   isPatternEditAvailable = () => true,
-  previewTransformInteraction = null,
+  isPreviewTransformActive, subscribePreviewTransformChanges,
   previewPopupsHeld = () => false,
   projectPaletteAndRules,
   projectFeatureEdits,
@@ -153,7 +154,7 @@ export const createFeatureEditor = ({
     // OV-923: an unchanged Result keeps its label binding.
     onFeaturePopupOpened: () => editorPorts.syncLabelEditor({ reuseCurrentBinding: true }),
     featureSelection,
-    previewTransformInteraction,
+    isPreviewTransformActive, subscribePreviewTransformChanges,
     previewPopupsHeld,
     showElementSettings,
     closeElementSettings

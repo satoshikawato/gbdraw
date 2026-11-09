@@ -7,6 +7,7 @@
 /** @import { MatchFramePopup, PreviewItem, PreviewItemPopup } from '../../services/match-frame-popup.js' */
 /** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
+/** @import { PreviewTransformInteractionListener } from '../ui.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
@@ -103,10 +104,14 @@ export {
  */
 
 /**
- * The preview owner's pan and zoom interaction, which pauses feature hover.
- * @typedef {object} PreviewTransformInteractionPort
- * @property {() => boolean} [isActive]
- * @property {(listener: (change: { active: boolean, kind: string, event: Event | null, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
+ * Whether the preview owner's pan or wheel zoom is active; feature hover waits while it is.
+ * @typedef {() => boolean} IsPreviewTransformActivePort
+ */
+
+/**
+ * The preview owner's subscription to the start and end of a pan or wheel zoom, which pause and resume feature
+ * hover. It returns the unsubscribe.
+ * @typedef {(listener: PreviewTransformInteractionListener) => () => void} SubscribePreviewTransformChangesPort
  */
 
 /**
@@ -139,7 +144,8 @@ export {
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
  * @property {FeatureSelectionPort | null} [featureSelection]
  *   The preview owner's projection of feature visibility changes.
- * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {IsPreviewTransformActivePort} isPreviewTransformActive
+ * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
  * @property {ShowElementSettings} [showElementSettings]
@@ -266,7 +272,8 @@ export const createFeatureSvgActions = ({
   // prepared; the composition root injects the visibility owner's preparation.
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
-  previewTransformInteraction = null,
+  isPreviewTransformActive,
+  subscribePreviewTransformChanges,
   previewPopupsHeld = () => false,
   showElementSettings = () => false,
   closeElementSettings = () => {}
@@ -288,9 +295,6 @@ export const createFeatureSvgActions = ({
   } = state;
   /** @type {DelegatedFeatureHandlers | null} */
   let delegatedFeatureHandlers = null;
-  const isPreviewTransformInteractionActive = () => Boolean(
-    previewTransformInteraction?.isActive?.()
-  );
   /** @type {HoverSummaryState} */
   const hoverSummaryState = {
     view: null,
@@ -623,7 +627,7 @@ export const createFeatureSvgActions = ({
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
     if (clickedPairwiseMatch?.value) return false;
-    if (isPreviewTransformInteractionActive()) return false;
+    if (isPreviewTransformActive()) return false;
     if (finePointerQuery === undefined) {
       finePointerQuery = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
     }
@@ -1480,7 +1484,7 @@ export const createFeatureSvgActions = ({
           overlay.frame = 0;
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
           // Hidden while the preview pans or zooms; the end of the gesture places it again (OV-936).
-          if (isPreviewTransformInteractionActive()) return;
+          if (isPreviewTransformActive()) return;
           const frame = viewport.getBoundingClientRect();
           const paper = svgContainer.value.getBoundingClientRect();
           const referenceBox = boxIn(referenceFeature?.blocks, frame);
@@ -1600,7 +1604,7 @@ export const createFeatureSvgActions = ({
       // (null) leaves none (OV-2281).
       /** @param {MouseEvent | null} pointer @returns {boolean} whether the hover is deferred */
       const followTransformPointer = (pointer) => {
-        const deferred = isPreviewTransformInteractionActive();
+        const deferred = isPreviewTransformActive();
         if (!deferred && handlerState.hoverReconcileFrame === null) return false;
         if (pointer) {
           rememberTransformPointer(pointer);
@@ -1671,7 +1675,7 @@ export const createFeatureSvgActions = ({
         }
         handlerState.hoverReconcileFrame = window.requestAnimationFrame(() => {
           handlerState.hoverReconcileFrame = null;
-          if (isPreviewTransformInteractionActive() || delegatedFeatureHandlers !== handlerState) return;
+          if (isPreviewTransformActive() || delegatedFeatureHandlers !== handlerState) return;
           const pointer = handlerState.transformPointer;
           handlerState.transformPointer = null;
           handlerState.reconcileHoverAfterTransform = false;
@@ -1974,7 +1978,7 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
-  const unsubscribePreviewTransformInteraction = previewTransformInteraction?.subscribe?.(({
+  const unsubscribePreviewTransformChanges = subscribePreviewTransformChanges(({
     active,
     kind,
     event,
@@ -1986,12 +1990,10 @@ export const createFeatureSvgActions = ({
       return;
     }
     delegatedFeatureHandlers?.endPreviewTransformInteraction?.({ reconcile });
-  }) || null;
+  });
 
   const dispose = () => {
-    if (typeof unsubscribePreviewTransformInteraction === 'function') {
-      unsubscribePreviewTransformInteraction();
-    }
+    unsubscribePreviewTransformChanges();
     cleanupDelegatedFeatureHandlers();
     if (hoverSummaryState.view?.element.isConnected) hoverSummaryState.view.element.remove();
     hoverSummaryState.view = null;
