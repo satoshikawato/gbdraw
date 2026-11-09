@@ -20,9 +20,17 @@ import pytest
 import gbdraw.labels.circular_repair as repair_module
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from gbdraw.labels.circular import _current_half_from_x, _label_bbox_min_radius, _label_bbox_rect, circular_label_shape
+from gbdraw.labels.circular import (
+    _current_half_from_x,
+    _label_bbox_min_radius,
+    _label_bbox_rect,
+    circular_label_defects,
+    circular_label_fits,
+    circular_label_shape,
+)
 from gbdraw.labels.circular_leaders import arrival_contact, chosen_contact_end, label_ink_box
 from gbdraw.labels.circular_repair import defect_count, make_way_for_region_labels, repair_circular_labels
+from gbdraw.labels.fit import LabelDefect
 from gbdraw.layout.spatial import Aabb, bounding_aabb, boxed_parts_meet
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
@@ -680,18 +688,42 @@ def test_no_label_moves_without_a_region_label_over_feature_letters() -> None:
     assert make_way_for_region_labels(labels, total_length, [[]], [0], **kwargs) is None
 
 
-def test_a_way_made_only_with_more_defects_is_not_kept(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A move that clears the region label but adds an overlap, a crossing or a definition cover is not kept: the
-    labels stay as they are and the region label is drawn and warned as today."""
+@pytest.mark.parametrize(
+    ("before_defects", "after_defects"),
+    [
+        ((), (LabelDefect("crossing", 3, 4),)),
+        # OV-3080: one overlap traded for another keeps the count, but adds a pair the labels did not have.
+        ((LabelDefect("overlap", 1, 2),), (LabelDefect("overlap", 3, 4),)),
+        ((LabelDefect("overlap", 1, 2),), (LabelDefect("definition", 5, 5),)),
+    ],
+)
+def test_a_way_that_adds_a_defect_is_not_kept(
+    monkeypatch: pytest.MonkeyPatch, before_defects: tuple, after_defects: tuple
+) -> None:
+    """A move that clears the region label but adds an overlapping pair, a crossing pair or a label over the
+    definition text it did not have is not kept, even when it removes another so that the count stays: the labels
+    stay as they are and the region label is drawn and warned as today."""
 
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
     before = copy.deepcopy(labels)
-    counts = iter((0, 1))
-    monkeypatch.setattr(repair_module, "defect_count", lambda *_args: next(counts))
+    found = iter((before_defects, after_defects))
+    monkeypatch.setattr(repair_module, "circular_label_defects", lambda *_args, **_kwargs: next(found))
     assert make_way_for_region_labels(
         labels, total_length, [_letters(box)], [0], region_overlaps=_no_overlaps, definition_text=definition
     ) is None
     assert labels == before
+
+
+def test_the_fit_counts_are_the_defects_counted() -> None:
+    """The fit check counts the defects it finds (``label_defects``), one owner for both (OV-3080)."""
+
+    labels, total_length, definition, _box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
+    fits = circular_label_fits(labels, total_length, definition_text=definition).values()
+    defects = circular_label_defects(labels, total_length, definition_text=definition)
+    assert [sum(getattr(fit, name) for fit in fits) for name in ("overlap_pairs", "crossing_pairs", "definition_overlaps")] == [
+        sum(defect.kind == kind for defect in defects) for kind in ("overlap", "crossing", "definition")
+    ]
+    assert len(set(defects)) == len(defects) == defect_count(labels, total_length, definition)
 
 
 def test_a_way_that_raises_what_a_region_label_overlaps_is_not_kept() -> None:

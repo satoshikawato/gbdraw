@@ -53,7 +53,6 @@ from ..layout.spatial import (
     union_aabbs,
 )
 from .circular import (
-    FITS,
     HEMISPHERE_AXIS_EPS_PX,
     _current_half_from_x,
     _label_bbox_max_radius,
@@ -65,7 +64,7 @@ from .circular import (
     _segments_through_rect_interior,
     angle_from_middle_unwrapped,
     assign_leader_start_points,
-    circular_label_fits,
+    circular_label_defects,
     circular_label_shape,
     normalize_angle_near_reference,
 )
@@ -983,8 +982,7 @@ def _clusters(defects: set[Defect]) -> list[set[int]]:
 def defect_count(labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb] = ()) -> int:
     """Overlapping pairs, crossing pairs and labels over the definition text of one record, as the fit check counts them."""
 
-    fit = sum(circular_label_fits(labels, total_length, definition_text=definition_text).values(), FITS)
-    return fit.overlap_pairs + fit.crossing_pairs + fit.definition_overlaps
+    return len(circular_label_defects(labels, total_length, definition_text=definition_text))
 
 
 def repair_circular_labels(
@@ -1045,10 +1043,11 @@ def make_way_for_region_labels(
     the first one than ``MAX_TEXT_SHIFT_PX`` plus the height of the tallest
     region label cleared so far: a stack of labels opens by that height to let
     a region label through. A region label is skipped when the labels cannot
-    clear it, or clear it only by raising their own defects (overlaps,
-    crossings, the definition text) or by adding a label to what any region
-    label overlaps (its letters, or leader lines behind them). The labels that made way do not
-    yield room afterwards (LP-D59): only they and the neighbours the repair
+    clear it, or clear it only by adding a defect of their own that they did
+    not have (an overlapping or crossing pair, a label over the definition
+    text, ``circular_label_defects``), or a label to what any region label
+    overlaps (its letters, or leader lines behind them), even where another
+    goes. The labels that made way do not yield room afterwards (LP-D59): only they and the neighbours the repair
     pushed move. Radial and turned labels do not make way.
     """
 
@@ -1056,7 +1055,7 @@ def make_way_for_region_labels(
         return None
     cleared: list[int] = []
     current = [label.copy() for label in labels]
-    own, overlaps = defect_count(current, total_length, definition_text), region_overlaps(current)
+    own, overlaps = set(circular_label_defects(current, total_length, definition_text=definition_text)), region_overlaps(current)
     tallest = 0.0
     for index in blocked:
         target = regions[index]
@@ -1076,8 +1075,9 @@ def make_way_for_region_labels(
         if not repair.run(boxes_only=True):
             continue
         moved = [label.copy() for label in repair.labels]
-        moved_defects, moved_overlaps = defect_count(moved, total_length, definition_text), region_overlaps(moved)
-        if moved_defects > own or any(not after <= before for after, before in zip(moved_overlaps, overlaps)):
+        moved_defects = set(circular_label_defects(moved, total_length, definition_text=definition_text))
+        moved_overlaps = region_overlaps(moved)
+        if not moved_defects <= own or any(not after <= before for after, before in zip(moved_overlaps, overlaps)):
             continue
         current, own, overlaps, tallest = moved, moved_defects, moved_overlaps, height
         cleared.append(index)

@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, TypeGuard, get_args
+from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 from ..layout.figure_size import LargerFigure
@@ -393,13 +393,42 @@ def box_covers_definition_text(label_box: Aabb, definition_text: Sequence[Aabb])
     )
 
 
+LabelDefectKind: TypeAlias = Literal["overlap", "crossing", "definition"]
+_DEFECT_COLUMN: dict[LabelDefectKind, int] = {"overlap": 0, "crossing": 1, "definition": 2}
+
+
+class LabelDefect(NamedTuple):
+    """One defect the fit check counts, by the labels' indices: two labels whose letters overlap, two leaders that
+    cross, or one label over the definition text (``second`` is ``first``)."""
+
+    kind: LabelDefectKind
+    first: int
+    second: int
+
+
+def label_defects(
+    shapes: Sequence[LabelShape],
+    *,
+    touching: bool = True,
+    definition_text: Sequence[Aabb] = (),
+) -> tuple[LabelDefect, ...]:
+    """The defects of one record's labels that ``label_fits_by_kind`` counts: overlapping pairs, crossing pairs
+    and labels with a leader over the ``definition_text`` boxes."""
+
+    return (
+        *(LabelDefect("overlap", left, right) for left, right in overlapping_pairs([shape.parts for shape in shapes], touching=touching)),
+        *(LabelDefect("crossing", left, right) for left, right in crossing_pairs([shape.leader for shape in shapes])),
+        *(LabelDefect("definition", at, at) for at, shape in enumerate(shapes) if covers_definition_text(shape, definition_text)),
+    )
+
+
 def label_fits_by_kind(
     shapes: Sequence[LabelShape],
     *,
     touching: bool = True,
     definition_text: Sequence[Aabb] = (),
 ) -> dict[LabelKind, LabelFit]:
-    """The fit of one record's labels of every kind together, split by kind.
+    """The fit of one record's labels of every kind together, split by kind: its ``label_defects`` counted.
 
     A pair of labels of two kinds counts once, for the kind that comes first
     in inner, outer, embedded, Linear order. Labels with a leader are tested
@@ -410,18 +439,9 @@ def label_fits_by_kind(
     counts: dict[LabelKind, list[int]] = {}
     for shape in shapes:
         counts.setdefault(shape.kind, [0, 0, 0])
-
-    def owner(left: int, right: int) -> LabelKind:
-        kinds = (shapes[left].kind, shapes[right].kind)
-        return next(kind for kind in _KIND_ORDER if kind in kinds)
-
-    for left, right in overlapping_pairs([shape.parts for shape in shapes], touching=touching):
-        counts[owner(left, right)][0] += 1
-    for left, right in crossing_pairs([shape.leader for shape in shapes]):
-        counts[owner(left, right)][1] += 1
-    for shape in shapes:
-        if covers_definition_text(shape, definition_text):
-            counts[shape.kind][2] += 1
+    for defect in label_defects(shapes, touching=touching, definition_text=definition_text):
+        kinds = (shapes[defect.first].kind, shapes[defect.second].kind)
+        counts[next(kind for kind in _KIND_ORDER if kind in kinds)][_DEFECT_COLUMN[defect.kind]] += 1
     return {
         kind: LabelFit(overlaps, crossings, covered)
         for kind, (overlaps, crossings, covered) in counts.items()
@@ -1084,6 +1104,8 @@ __all__ = [
     "LabelFitVerification",
     "LabelFitRows",
     "LabelFitValue",
+    "LabelDefect",
+    "LabelDefectKind",
     "LabelKind",
     "LabelShape",
     "Polygon",
@@ -1100,6 +1122,7 @@ __all__ = [
     "label_fit_notice",
     "label_fit_outcome",
     "label_fit_record_counts",
+    "label_defects",
     "label_fits_by_kind",
     "label_kind_nouns",
     "label_kind_title",
