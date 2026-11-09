@@ -115,7 +115,7 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
     required = (
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
+        'circular_file_input(page).set_input_files(',
         'get_by_label("Depth TSV tracks", exact=True)',
         'get_by_label("Depth TSV", exact=True).set_input_files',
         'get_by_label("Depth Window", exact=True)',

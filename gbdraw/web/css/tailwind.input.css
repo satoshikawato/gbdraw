@@ -138,7 +138,7 @@
     /* One row, about 32 px; neutral until a file is chosen. */
     .upload-zone { @apply relative flex cursor-pointer select-none flex-col items-center justify-center text-center transition-colors; min-height: 2rem; padding: 6px 10px; border: 1px dashed var(--ui-line-strong); border-radius: 8px; background-color: #f8fafc; }
     .upload-zone i { font-size: 15px; line-height: 1; }
-    .upload-zone:hover { border-color: var(--ui-accent); background-color: var(--ui-accent-soft); }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--ui-accent); background-color: var(--ui-accent-soft); }
     .upload-zone.ready, .file-card-chip { border-style: solid; border-color: #86efac; background-color: #f0fdf4; }
     /* A chosen file whose inspection failed (UI-08): no check; the message stays below the zone. */
     .upload-zone.failed, .file-card-chip.failed { border-style: solid; border-color: var(--ui-danger-line); background-color: var(--ui-danger-soft); }

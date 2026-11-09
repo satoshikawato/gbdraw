@@ -5,6 +5,7 @@ const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mod
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const snapshot = async (page) => {
   // Opening an imported Editor hydrates transient DOM label bindings and its
@@ -520,7 +521,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
     const resource = session.resources[session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).renderRequest.records[0].source.resourceId];
     return atob(resource.data);
   });
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: 'lambda-replacement.gb', mimeType: 'text/plain', buffer: Buffer.from(replacement)
   });
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');

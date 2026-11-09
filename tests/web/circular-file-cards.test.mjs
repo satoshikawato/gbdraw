@@ -264,9 +264,61 @@ await test('one pick of several files is one History step that adds a card per f
     runUndoable: async (label, fn) => { steps.push(label); return fn(); }
   });
   const before = drawing.circularSources.length;
-  await edits.addCircularSourceFiles('gb', ['a.gb', 'b.gb', 'c.gb'].map((name) => new File(['LOCUS'], name)));
+  await edits.addCircularSourceFiles(['a.gb', 'b.gb', 'c.gb'].map((name) => new File(['LOCUS'], name)));
   assert.deepEqual(steps, ['Add File']);
   assert.deepEqual(drawing.circularSources.slice(before).map((card) => card.gb?.name), ['a.gb', 'b.gb', 'c.gb']);
+  // GFF3 + FASTA: the files of one pick pair by stem (D-07), still one step.
+  drawing.inputType.value = 'gff';
+  const gffBefore = drawing.circularSources.length;
+  await edits.addCircularSourceFiles(['a.fasta', 'a.gff3', 'b.gff3'].map((name) => new File(['x'], name)));
+  assert.deepEqual(steps, ['Add File', 'Add File']);
+  assert.deepEqual(drawing.circularSources.slice(gffBefore).map((card) => [card.gb, card.gff?.name ?? null, card.fasta?.name ?? null]),
+    [[null, 'a.gff3', 'a.fasta'], [null, 'b.gff3', null]]);
+});
+
+// #1809 review 1 (M2, D-159): a Session whose Linear card holds genome.fna as its
+// FASTA and annotation.txt as its GFF3, and an empty Circular drawing in GFF3 +
+// FASTA. The empty zone offers both files, and each one chosen goes to the slot
+// of the kind the Session binds it as, whatever its name says (by name,
+// annotation.txt would be a FASTA).
+await test('a Session file chosen in the empty Add files zone goes to the slot of its kind, not by its name', async () => {
+  const { bindLinearSeqFile, sessionFilesOfKind } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { createCircularFileCards } = await import('../../gbdraw/web/js/app/circular-file-cards.js');
+  const linear = createDrawingState('circular-cards-session-kind-linear', 'linear');
+  const row = linear.linearSeqs[0].uid;
+  bindLinearSeqFile(state.inputFiles, linear.slices.inputs, row, 'fasta', new File(['>c\nACGT\n'], 'genome.fna'));
+  bindLinearSeqFile(state.inputFiles, linear.slices.inputs, row, 'gff', new File(['##gff-version 3\n'], 'annotation.txt'));
+  const [fasta, gff] = [linear.linearSeqs[0].fasta, linear.linearSeqs[0].gff];
+  const drawing = createDrawingState('circular-cards-session-kind', 'circular');
+  drawing.inputType.value = 'gff';
+  // The Session of the two drawings: what the zone offers and the writer reads the kinds of.
+  const session = { inputFiles: state.inputFiles, drawingList: () => [linear, drawing] };
+  const edits = createCircularSourceEdits({
+    state: session,
+    CIRCULAR_RECORD_FORM_DEFAULTS: { circular_record_selector: '', circular_region_start: null, circular_region_end: null,
+      circular_reverse: false, circular_record_label: '', circular_record_subtitle: '' },
+    changeRecordSources: (_drawing, mutate) => mutate(),
+    pendingDiscoveryOf: () => ({ circularUpload: null }),
+    discoverDrawingRecords: () => {},
+    shownAction: (_mode, action) => action(drawing),
+    runUndoable: async (_label, fn) => fn()
+  });
+  const cards = createCircularFileCards({
+    shownDrawingOfMode: () => drawing,
+    circularRecordDiscoveryState: { value: { status: 'idle', error: '', failedSources: [] } },
+    addCircularSourceFiles: edits.addCircularSourceFiles,
+    removeCircularSourceCard: async () => {}
+  });
+  // The empty zone offers the Session's files of both kinds the input type reads.
+  assert.deepEqual(cards.addZone.value.fileKinds, ['gff', 'fasta']);
+  assert.deepEqual(sessionFilesOfKind(session, cards.addZone.value.fileKinds).map((ref) => ref.name), ['annotation.txt', 'genome.fna']);
+  await cards.addFiles([gff]);
+  await cards.addFiles([fasta]);
+  assert.deepEqual(drawing.circularSources.map((card) => [card.gff?.name ?? null, card.fasta?.name ?? null]),
+    [['annotation.txt', null], [null, 'genome.fna']]);
+  assert.equal(drawing.circularSources[0].gff.fileId, gff.fileId, 'the chosen ref itself is bound; no file is stored twice');
+  // Once a card shows, the zone offers none: the cards' own uploaders do (D-156).
+  assert.deepEqual(cards.addZone.value.fileKinds, []);
 });
 
 await test('rows an older Session left under record-<n> move to their record on the first Generate', () => {

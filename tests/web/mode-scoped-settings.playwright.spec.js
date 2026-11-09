@@ -13,6 +13,7 @@ const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-b
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -536,7 +537,7 @@ for (const { fixture, from, to, path, value } of OV106_CASES) {
     await switchMode(page, to);
     if (to === 'linear') await setLinearFile(page);
     else {
-      await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE);
+      await circularFileInput(page, 'gb').setInputFiles(SINGLE);
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);
       await settleLive(page);
     }
@@ -591,7 +592,7 @@ test('OV-84 source replacement: the stroke of a feature the new Circular file la
   const withoutFl2 = readFileSync(SINGLE, 'utf8')
     .replace(/ {5}CDS {13}complement\(2001\.\.2600\)\n(?: {21}\/.*\n)+/, '');
   expect(withoutFl2).not.toContain('FL2');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: 'forced_label_underlay_without_fl2.gb', mimeType: 'text/plain', buffer: Buffer.from(withoutFl2)
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);

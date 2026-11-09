@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const loadSession = async (page) => {
   await openApp(page);
@@ -171,7 +172,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
   test.setTimeout(180000);
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(join(process.cwd(), 'tests/fixtures/regex_rules.gb'));
+  await circularFileInput(page, 'gb').setInputFiles(join(process.cwd(), 'tests/fixtures/regex_rules.gb'));
   await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
   await generateAndWaitForResult(page);
   for (const [pattern, expected] of [

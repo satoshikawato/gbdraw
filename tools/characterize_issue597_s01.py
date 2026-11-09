@@ -22,6 +22,11 @@ from measure_issue597_s01 import (
     transport,
 )
 
+import sys
+
+sys.path.insert(0, str(ROOT / "docs" / "capture"))
+from flows.web_capture import circular_file_input  # noqa: E402  (the capture flows' Circular file input)
+
 SNAPSHOT = """async () => {
   const {state}=await import('./js/state.js');
   const {getCommittedCanonicalRenderRequest}=await import('./js/services/config.js');
@@ -74,7 +79,7 @@ def main():
             browser = p.chromium.launch(args=[f"--remote-debugging-port={debug_port}"])
             evidence["browser"] = browser.version
             context, page, errors, dialogs, external = configure_page(browser, url)
-            upload = page.get_by_label("GenBank/DDBJ File", exact=True)
+            upload = circular_file_input(page)
             source = (ROOT / inputs[0]).read_bytes()
             upload.set_input_files(
                 {
@@ -105,7 +110,7 @@ def main():
               const slow=new File([text],'slow-old.gb');
               const pending=new Promise(resolve=>window.__s01ReleaseOld=()=>resolve(new TextEncoder().encode(text).buffer));
               slow.arrayBuffer=()=>pending;
-              await window.__GBDRAW_APP__.addCircularSourceFiles('gb',[slow]);
+              await window.__GBDRAW_APP__.addCircularSourceFiles([slow]);
             }""",
                 source.decode(),
             )
@@ -137,7 +142,7 @@ def main():
             )
             first_errors, first_dialogs, first_external = errors, dialogs, external
             errors, dialogs, external = more_errors, more_dialogs, more_external
-            upload = page.get_by_label("GenBank/DDBJ File", exact=True)
+            upload = circular_file_input(page)
             upload.set_input_files(str(ROOT / inputs[1]))
             page.wait_for_function(
                 "window.__GBDRAW_APP__.circularRecordList.length===1"
@@ -150,13 +155,13 @@ def main():
             )
             observe("remove", page)
             page.locator("input[type=radio][value=gff]").first.check()
-            page.get_by_label("GFF3 File", exact=True).set_input_files(
+            circular_file_input(page, "gff").set_input_files(
                 str(ROOT / inputs[2])
             )
             page.wait_for_timeout(200)
             observe("incompleteGffPair", page)
             assert evidence["observations"]["incompleteGffPair"]["records"] == []
-            page.get_by_label("FASTA File", exact=True).set_input_files(
+            circular_file_input(page, "fasta").set_input_files(
                 str(ROOT / inputs[3])
             )
             page.wait_for_function(
@@ -170,7 +175,7 @@ def main():
             )
             observe("savedPreview", page)
             assert evidence["observations"]["savedPreview"]["workers"] == []
-            page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+            circular_file_input(page).set_input_files(
                 str(ROOT / inputs[1])
             )
             page.wait_for_function(
@@ -192,7 +197,7 @@ def main():
                 "workers": page.evaluate("window.__s01.workers"),
             }
             assert helper[0]["recordId"] == "LC738868.1"
-            page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+            circular_file_input(page).set_input_files(
                 {
                     "name": "invalid.gb",
                     "mimeType": "text/plain",

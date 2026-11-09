@@ -11,6 +11,7 @@ const { gunzipSync, gzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const SOURCE = path.resolve('tests/test_inputs/NC_001416.gb');
 const OTHER = path.resolve('tests/test_inputs/AP027078.gb');
@@ -42,7 +43,7 @@ const changes = {
 };
 
 const chooseGenBank = async (page, file) => {
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
+  await circularFileInput(page, 'gb').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status),
     { timeout: 60_000 }).toBe('ready');
 };

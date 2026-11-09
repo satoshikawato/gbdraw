@@ -34,6 +34,7 @@ from flows.how_to.nucleotide_comparisons import (
 )
 from flows.how_to.tracks import _fit_circular_preview
 from flows.web_capture import (
+    circular_file_input,
     circular_file_card,
     expect_circular_file_card,
     toggle_disclosure,
@@ -210,7 +211,7 @@ def capture_gui_precomputed_circular_rings(
         wait_for_app_shell(page)
         show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
         expect_circular_file_card(page, 1, "HmmtDNA.gbk")

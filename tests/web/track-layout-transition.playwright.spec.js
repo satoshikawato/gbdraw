@@ -7,6 +7,7 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { RING_SESSION_FILE, ringSessionUpload } = require('./helpers/ring-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 // R-3, Q3 (Owner, 2026-10-04): every edit that changes the direction of a
 // draft feature slot runs through one transition, which asks before it leaves
@@ -327,7 +328,7 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
   const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions/';
   await openApp(page);
   await showDrawing(page, { kind: 'circular' });
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).first().setInputFiles(`${data}NC_001879.gbk`);
+  await circularFileInput(page, 'gb').first().setInputFiles(`${data}NC_001879.gbk`);
   await page.locator('[data-setting="region-annotations"] input[type=file]').first()
     .setInputFiles(`${data}nicotiana-tabacum-regions.tsv`);
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);

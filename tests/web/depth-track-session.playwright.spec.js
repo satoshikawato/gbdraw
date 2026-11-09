@@ -20,6 +20,7 @@ const {
   answerLoadRepairs,
   waitForSessionLoadAtRest,
 } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
@@ -94,7 +95,7 @@ test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-
   });
 
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+  await page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true }).click();
   await (await chooser).setFiles({
     name: 'simple-worker-only.gbk',
     mimeType: 'text/plain',
@@ -259,15 +260,16 @@ const runDiagramWithDiagnostics = async (page) => evaluateWithRetainedPromise(pa
   };
 });
 
-test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async ({ page }) => {
+test('Circular GFF3 mode exposes one Add files zone for its GFF3 and FASTA files', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  await expect(page.getByLabel('GenBank/DDBJ File', { exact: true })).toHaveCount(1);
+  const zone = page.locator('[data-circular-file-add] [role=button]');
+  await expect(zone).toHaveAccessibleName('Add GenBank/DDBJ files');
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
 
-  await expect(page.getByLabel('GenBank/DDBJ File', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('GFF3 File', { exact: true })).toHaveCount(1);
-  await expect(page.getByLabel('FASTA File', { exact: true })).toHaveCount(1);
+  await expect(zone).toHaveCount(1);
+  await expect(zone).toHaveAccessibleName('Add GFF3 and FASTA files');
+  await expect(page.locator('[data-circular-file-add] input[type=file]')).toHaveAttribute('accept', /^\.gff,\.gff3,\.fa,/);
 });
 
 test('Circular enabled options render without an undefined-property warning', async ({ page }) => {
@@ -3631,7 +3633,7 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
 test('a Circular Session keeps a Depth series without a file and a row whose file was cleared (BA-OD94)', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
   const depthTsv = Array.from({ length: 6 }, (_, index) => `NC_012920.1\t${index * 3000 + 1}\t${10 + index}`).join('\n');
@@ -3685,7 +3687,7 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
 test('Save Session over the Load size cap downloads nothing and names the size and the largest inputs (OV-2240)', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
   const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
@@ -3724,7 +3726,7 @@ test('Save Session over the Load size cap downloads nothing and names the size a
 test('Save Session over the Load file cap downloads nothing and names the file size and the largest inputs (OV-2245)', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
   const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
@@ -3822,7 +3824,7 @@ test('each Circular drawing keeps its own Depth series count, and Reset this dra
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
   const depthTsv = (base) => Array.from({ length: 6 }, (_, index) => `NC_012920.1\t${index * 3000 + 1}\t${base + index}`).join('\n');
@@ -3961,7 +3963,7 @@ test('Show Depth after hide reuses the held Depth file and its stages', async ({
 test('Save Session stores one Depth file used by two series once (D-220)', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
   const depthTsv = Array.from({ length: 16569 }, (_, index) => `NC_012920.1\t${index + 1}\t${10 + (index % 37)}`).join('\n');

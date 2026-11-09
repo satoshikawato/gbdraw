@@ -14,6 +14,7 @@ const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -514,7 +515,7 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   expect(loadedCache.entries).toBeGreaterThan(0);
 
   await showMode(page, 'circular');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
+  await circularFileInput(page, 'gb').setInputFiles(FIXTURE);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);
@@ -548,7 +549,7 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
   await load(page, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz');
   expect(await shown(page)).toMatchObject({ mode: 'linear', count: 1, mounted: true });
   await showMode(page, 'circular');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
+  await circularFileInput(page, 'gb').setInputFiles(FIXTURE);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);
@@ -604,7 +605,7 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
   expect(aligned.plan).not.toBe('null');
   expect(aligned.committed).not.toBeNull();
   await showMode(page, 'circular');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
+  await circularFileInput(page, 'gb').setInputFiles(FIXTURE);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);

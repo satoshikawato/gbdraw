@@ -8,6 +8,7 @@ const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { drawingIds, drawingTab, offerTab, shownDrawing, showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const loadGallerySession = (page, filename) => evaluateWithRetainedPromise(page, async (path) => {
   const name = path.split('/').pop();
@@ -337,7 +338,7 @@ test('New Linear drawing with this style copies a both-mode setting, no profile 
     const { form, adv } = (await import('./js/state.js')).state.drawingOf(drawingId);
     return { plotTitle: form.plot_title, legendFontSize: adv.legend_font_size };
   }, id);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  await circularFileInput(page, 'gb').setInputFiles('tests/test_inputs/NC_001416.gb');
   await expect.poll(async () => (await boundFiles(source)).length).toBe(1);
   // The Legend font size is a setting both modes share; Plot Title is a
   // `profile` setting, which each mode keeps its own of (D-15-182).
@@ -376,7 +377,7 @@ test('replacing a genome file that a Duplicate also uses asks for this drawing o
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   const [source] = await drawingIds(page);
-  const uploader = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const uploader = circularFileInput(page, 'gb');
   const fileName = (id) => page.evaluate(async (drawingId) => {
     const ref = (await import('./js/state.js')).state.drawingOf(drawingId).circularSources[0]?.gb;
     return ref ? ref.name : null;
@@ -416,7 +417,7 @@ test('an uploader offers the files in this Session and binds the chosen one with
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   const [circular] = await drawingIds(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  await circularFileInput(page, 'gb').setInputFiles('tests/test_inputs/NC_001416.gb');
   const boundId = (id, read) => page.evaluate(async ([drawingId, field]) => {
     const drawing = (await import('./js/state.js')).state.drawingOf(drawingId);
     const ref = field === 'c_gb' ? drawing.circularSources[0]?.gb : drawing.linearSeqs[0].gb;

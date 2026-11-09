@@ -4,6 +4,7 @@ const { showDrawing } = require('./drawing-bar.cjs');
 const {
   evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp, waitForPreviewAtRest
 } = require('./app-lifecycle.cjs');
+const { circularFileInput } = require('./circular-inputs.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
@@ -41,7 +42,7 @@ const openFresh = async (page) => {
 };
 
 const uploadCircularGenBank = async (page, path, configure = null) => {
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(path);
+  await circularFileInput(page, 'gb').setInputFiles(path);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), {
     timeout: 60_000
   }).toBeGreaterThan(0);

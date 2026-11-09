@@ -6,6 +6,7 @@ const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs'
 const path = require('node:path');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
@@ -192,7 +193,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const missingSource = await generateAndWaitForResult(restored, { expectedStatus: 'error' });
     expect(missingSource.errorSummary).toMatch(/input|GenBank|file/i);
     assertSourceFree(await snapshot(restored));
-    await restored.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(
+    await circularFileInput(restored, 'gb').setInputFiles(
       path.join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb'));
     await restored.waitForFunction(async () =>
       (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status !== 'loading');

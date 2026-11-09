@@ -17,6 +17,7 @@ from playwright.sync_api import BrowserType, Page, expect
 from assertions.svg_semantics import inspect_first_circular_svg
 from config import ACTION_TIMEOUT_MS, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from flows.web_capture import (
+    circular_file_input,
     expect_circular_file_card,
     fit_complete_preview,
     assert_fixture_identity,
@@ -641,7 +642,7 @@ def capture_gui_quantitative_tracks(
         show_drawing(page, "circular")
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             GUI_QUANTITATIVE_GENBANK_PATH
         )
         expect_circular_file_card(page, 1, "AP027133.gb")
@@ -789,7 +790,7 @@ def capture_gui_annotation_tracks(
         show_drawing(page, "circular")
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             GUI_ANNOTATION_GENBANK_PATH
         )
         expect_circular_file_card(page, 1, "NC_001879.gbk")

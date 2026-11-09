@@ -306,7 +306,8 @@ def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
     assert ':tabindex="uploadAvailable ? 0 : -1"' in template
     assert ':aria-disabled="!uploadAvailable"' in template
     assert (
-        ':aria-label="t(\'Choose {name}\', '
+        ':aria-label="drop ? t(\'Add {name}\', '
+        '{ name: $attrs[\'data-input-aria-label\'] || label }) : t(\'Choose {name}\', '
         '{ name: $attrs[\'data-input-aria-label\'] || label })"' in template
     )
     assert '@keydown.enter.prevent="uploadAvailable && $refs.input.click()"' in template

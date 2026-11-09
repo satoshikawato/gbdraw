@@ -73,7 +73,7 @@
         ],
         "rows": [
           [
-            "GenBank/DDBJ File",
+            "Add GenBank/DDBJ files",
             "NC_001879.gbk"
           ],
           [
@@ -111,14 +111,14 @@
             "cropPadding": 14,
             "actions": [
               {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('Circular GenBank file was not restored.'); if (file.name !== 'NC_001879.gbk') throw new Error('Circular GenBank file has an unexpected name.');"
-              },
-              {
                 "type": "waitForFunction",
-                "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'NC_001879.gbk'"
+                "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('NC_001879.gbk')"
               }
-            ]
+            ],
+            "assertAppState": {
+              "mode": "circular",
+              "circularFileCards.cards.value.0.source.gb.name": "NC_001879.gbk"
+            }
           }
         },
         {

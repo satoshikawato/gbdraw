@@ -1,33 +1,37 @@
 // @ts-check
 // The Circular File cards of the shown drawing (one card per source file, or
 // per GFF3 + FASTA pair, in drawing order): each card's header line, state and
-// records line, its fold, the place a record's Topology card names, Add file,
-// and the File removal dialog's target. The cards show in the shell the Linear
+// records line, its fold, the place a record's Topology card names, the Add
+// files zone (several files of one pick or drop become cards), the read error
+// that names its card, and the File removal dialog's target. The cards show in the shell the Linear
 // File cards use (app/file-card.js). The edits are the source card writers'
 // (app/circular-record-controls.js), passed as ports; this owner writes no
 // drawing.
-import { circularSourceInputs } from '../services/input-types.js';
-import { linearCardFileFields } from '../services/linear-sources.js';
+import { circularSlotFileKind } from '../services/drawing/inputs.js';
+import { circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
 import { formatRecordLength } from '../services/record-options.js';
-import { tn } from '../utils/i18n.js';
-import { fileCardLine, keepFocusInFileCard } from './file-card.js';
+import { errorText } from '../utils/error-text.js';
+import { t, tn } from '../utils/i18n.js';
+import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
-/** @import { InputSlot } from '../services/input-types.js' */
+/** @import { InputType } from '../services/input-types.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
+/** @import { InputFileKind } from '../services/drawing/inputs.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 
-const { computed, nextTick, reactive } = window.Vue;
+const { computed, reactive } = window.Vue;
 
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 
 /**
  * @typedef {object} CircularFileCardsPorts
  * @property {ShownDrawingOfMode} shownDrawingOfMode
- * @property {{ readonly value: { status: string, failedSources: readonly string[] } }} circularRecordDiscoveryState
- *   The shown drawing's record catalog: its status, and the cards whose read failed.
- * @property {(field: InputSlot, files: readonly (InputFileCandidate | InputFileRef)[]) => unknown} addCircularSourceFiles
- *   New cards at the end of the list, one per file, each with its file in `field`: one History step.
+ * @property {{ readonly value: { status: string, error: UserFacingError | '', failedSources: readonly string[] } }} circularRecordDiscoveryState
+ *   The shown drawing's record catalog: its status, the first failed card's error, and the cards whose read failed.
+ * @property {(files: readonly (InputFileCandidate | InputFileRef)[]) => unknown} addCircularSourceFiles
+ *   New cards at the end of the list from the files of one pick or drop: one History step.
  * @property {(uid: string) => unknown} removeCircularSourceCard Removes a card, one History step.
  */
 
@@ -43,6 +47,29 @@ const { computed, nextTick, reactive } = window.Vue;
  * @property {CircularListRecord[]} records Its records, once read.
  * @property {string} recordsLine "1 record · 92,721 bp" once its records are read, else ''.
  */
+
+/**
+ * What the Add files zone names, takes and offers from this Session.
+ * @typedef {object} CircularAddZone
+ * @property {string} label
+ * @property {readonly InputFileKind[]} fileKinds The kinds of the Session files it offers while the list is empty:
+ *   those of every slot the input type reads (a GFF3 + FASTA zone offers both, and a chosen one goes to the slot of
+ *   its kind, as the empty list's two uploaders offered them); none once a card shows, whose own uploaders offer
+ *   them, so the zone lists no file already in the list.
+ * @property {string} accept
+ */
+const COMMON_ACCEPT = '.txt,text/plain,text/*,.gz,application/gzip';
+/** @type {Readonly<Record<InputType, { label: () => string, accept: string }>>} */
+const ADD_ZONES = Object.freeze({
+  gb: { label: () => t('GenBank/DDBJ files'), accept: `.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,${COMMON_ACCEPT}` },
+  gff: { label: () => t('GFF3 and FASTA files'), accept: `.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,${COMMON_ACCEPT}` },
+  fasta: { label: () => t('FASTA files'), accept: `.fa,.fas,.fasta,.fna,.ffn,${COMMON_ACCEPT}` }
+});
+/** @param {InputType} inputType @returns {InputFileKind[]} the kinds of the slots the input type reads */
+const fileKindsOf = (inputType) => {
+  const { primary, paired } = inputTypeSpec(inputType);
+  return (paired ? [primary, paired] : [primary]).map(circularSlotFileKind);
+};
 
 /** @param {readonly CircularListRecord[]} records */
 const recordsLineOf = (records) => {
@@ -60,10 +87,12 @@ const recordsLineOf = (records) => {
 export const createCircularFileCards = ({
   shownDrawingOfMode, circularRecordDiscoveryState, addCircularSourceFiles, removeCircularSourceCard
 }) => {
-  /** The file slots a card shows for the drawing's input type, in the order of its uploaders. */
-  const fields = computed(() => {
+  /** @type {{ readonly value: CircularAddZone }} */
+  const addZone = computed(() => {
     const drawing = shownDrawingOfMode('circular');
-    return linearCardFileFields(drawing ? drawing.inputType.value : 'gb');
+    const inputType = drawing ? drawing.inputType.value : 'gb';
+    const zone = ADD_ZONES[inputType];
+    return { label: zone.label(), accept: zone.accept, fileKinds: drawing && drawing.circularSources.length ? [] : fileKindsOf(inputType) };
   });
   /** @type {{ readonly value: CircularFileCardView[] }} */
   const cards = computed(() => {
@@ -100,35 +129,30 @@ export const createCircularFileCards = ({
   };
 
   /**
-   * New cards, one per file, each with its file in `field` (one History step);
-   * a new card that still waits for a file shows open. The first card replaces
-   * the empty list's uploaders, so a focus on them moves to its zone of `field` (`keepFocusInFileCard`).
-   * @param {InputSlot} field
+   * The files of one pick or drop on the Add files zone become new cards (one
+   * History step); a new card that still waits for a file shows open. The zone
+   * stays where it is, above the cards, so the focus stays on it.
    * @param {readonly (InputFileCandidate | InputFileRef)[]} files
    */
-  const addFiles = async (field, files) => {
-    const focused = document.activeElement;
+  const addFiles = async (files) => {
+    if (files.length === 0) return undefined;
     const before = new Set(cards.value.map((card) => card.uid));
-    const outcome = await addCircularSourceFiles(field, files);
-    const added = cards.value.filter((card) => !before.has(card.uid));
-    added.filter((card) => !card.ready).forEach((card) => openCards.add(card.uid));
-    if (added.length) {
-      await nextTick();
-      keepFocusInFileCard('circular', added[0].uid, field, focused);
-    }
+    const outcome = await addCircularSourceFiles(files);
+    cards.value.filter((card) => !before.has(card.uid) && !card.ready).forEach((card) => openCards.add(card.uid));
     return outcome;
   };
   /**
-   * Add file: the picked files become new cards in the slot the input type
-   * reads first (GenBank, GFF3, or FASTA).
-   * @param {Event} event the hidden file input's change
+   * The read error the Source records line shows: the first failed card's,
+   * named by that card's files when the list holds several cards, so a wrong
+   * kind of file says which file it is.
    */
-  const addPickedFiles = (event) => {
-    const input = /** @type {HTMLInputElement} */ (event.target);
-    const files = Array.from(input.files || []);
-    input.value = '';
-    return files.length ? addFiles(fields.value[0], files) : undefined;
-  };
+  const readError = computed(() => {
+    const discovery = circularRecordDiscoveryState.value;
+    if (discovery.status !== 'error') return '';
+    const message = (discovery.error && errorText(discovery.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.');
+    const failed = cards.value.find((card) => card.failed);
+    return failed && cards.value.length > 1 ? t('{file}: {message}', { file: failed.line, message }) : message;
+  });
 
   /**
    * The place a record's Topology card names it by: its file, and its `#k`
@@ -157,7 +181,7 @@ export const createCircularFileCards = ({
   };
 
   return {
-    fields, cards, isFolded, setFolded, addFiles, addPickedFiles, recordPlace, removal, removalTarget, requestRemoval,
+    addZone, cards, isFolded, setFolded, addFiles, readError, recordPlace, removal, removalTarget, requestRemoval,
     cancelRemoval, applyRemoval
   };
 };

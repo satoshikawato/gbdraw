@@ -124,7 +124,7 @@ def test_presentation_flows_use_visible_controls_without_state_injection() -> No
     required = (
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
+        'circular_file_input(page).set_input_files(',
         'get_by_label("Palette", exact=True)',
         'get_by_label("Default colors file", exact=True).set_input_files',
         'get_by_role("button", name="Whitelist", exact=True)',

@@ -865,14 +865,64 @@ export const ColorValueControl = {
  *   `afterChange` imports or takes back (OV-1280, R16-4); a result of `false` records no step
  * @property {(file: File | InputFileRef | undefined) => unknown} [afterChange] runs after the selection is stored, and after
  *   a Remove with the removed file (OV-1280); a result of `false` is not committed
- * @property {InputFileKind} [fileKind] the kind of file the uploader takes: it also offers the files of that kind
- *   in this Session (`sessionFilesOfKind`, PD-OI-090 〔入力ファイル〕), and choosing one is the same selection as
- *   an upload of it, by its ref
+ * @property {InputFileKind | readonly InputFileKind[]} [fileKind] the kind of file the uploader takes, or the kinds
+ *   (an empty list: none): it also offers the files of those kinds in this Session (`sessionFilesOfKind`, PD-OI-090
+ *   〔入力ファイル〕), and choosing one is the same selection as an upload of it, by its ref
  * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
  *   chosen) and referenced by the zone through aria-describedby
  * @property {boolean} [replace] a chosen file shows Replace (choose another file for this slot) in
  *   place of Remove: the slot's file leaves only with its File card (Circular File cards)
+ * @property {boolean} [drop] the zone also takes files dropped on it, as one selection of them: its name and
+ *   visible label are "Add {label}", and a second line, its description, says it takes several or a drop (the
+ *   Circular Add files zone)
+ * @property {boolean} [parentStep] the parent's `update:modelValue` handler records the History step itself
+ *   (the Circular Add files writer's "Add File"): the uploader opens none
  */
+
+/**
+ * A file dragged over the page outside a zone that takes drops would open in
+ * the tab when dropped, and the page with its unsaved work would leave
+ * (OV-3098): the window refuses such a drag and its drop. A zone's own
+ * handler (`FileUploader` with `drop`) runs first and takes its drop.
+ * @param {DragEvent} event
+ */
+export const refuseStrayFileDrop = (event) => {
+  if (event.defaultPrevented || !event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'none';
+};
+
+/**
+ * The drop of a FileUploader that takes drops (`drop`): a file dragged over the
+ * zone shows it as a press would, and the dropped files are one selection of
+ * them; a drop elsewhere opens nothing (`refuseStrayFileDrop`).
+ * @param {FileUploaderProps} props
+ * @param {{ readonly value: boolean }} uploadAvailable
+ * @param {(files: File[], pickTop: null) => void} select
+ */
+const useFileDrop = (props, uploadAvailable, select) => {
+  const dragging = ref(false);
+  const dropHintId = `file-drop-hint-${useId()}`;
+  /** @param {DragEvent} event */
+  const dragOver = (event) => {
+    if (!props.drop || !uploadAvailable.value || !event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    dragging.value = true;
+  };
+  /** @param {DragEvent} event */
+  const dropFiles = (event) => {
+    dragging.value = false;
+    if (!props.drop || !uploadAvailable.value) return undefined;
+    event.preventDefault();
+    const busy = state.sessionOperationAvailability();
+    if (busy) return busy;
+    const dropped = Array.from(event.dataTransfer?.files || []);
+    if (dropped.length) select(dropped, null);
+    return undefined;
+  };
+  return { dragging, dragOver, dropFiles, dropHintId };
+};
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
 // parent that shows its message (for example "No records were found"): a
@@ -880,7 +930,7 @@ export const ColorValueControl = {
 export const FileUploader = {
   template: '#file-uploader-template',
   components: { HelpTip },
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help', 'replace'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help', 'replace', 'drop', 'parentStep'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -945,7 +995,7 @@ export const FileUploader = {
       ? zone.value.getBoundingClientRect().top : null);
     // The files in this Session that this uploader offers, less the ones it shows.
     const sessionFiles = computed(() => {
-      if (!props.fileKind) return [];
+      if (!props.fileKind || props.fileKind.length === 0) return [];
       const shown = new Set(selectedFiles.value.map((/** @type {unknown} */ file) => (isInputFileRef(file) ? file.fileId : '')));
       return sessionFilesOfKind(state, props.fileKind).filter((ref) => !shown.has(ref.fileId));
     });
@@ -973,7 +1023,9 @@ export const FileUploader = {
         await nextTick();
         return await props.afterChange?.(nextFiles[0]);
       };
-      if (props.importStep) {
+      if (props.parentStep) {
+        update();
+      } else if (props.importStep) {
         void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
         void history.runUndoable(msg('Change uploaded file'), apply);
@@ -987,6 +1039,7 @@ export const FileUploader = {
       select(Array.from(e.target.files || []), pickTopNow());
       e.target.value = '';
     };
+    const { dragging, dragOver, dropFiles, dropHintId } = useFileDrop(props, uploadAvailable, select);
     const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
       const chosen = sessionFiles.value.find((/** @type {InputFileRef} */ ref) => ref.fileId === e.target.value);
       e.target.value = '';
@@ -1019,7 +1072,10 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable };
+    return {
+      input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable,
+      dragging, dragOver, dropFiles, dropHintId
+    };
   }
 };
 

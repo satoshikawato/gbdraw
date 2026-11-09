@@ -16,6 +16,7 @@ const {
   openWithGenBank,
   settle
 } = require('./helpers/audit-browser.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -89,7 +90,7 @@ const resultRecordIds = (page) => page.evaluate(() => {
 test('Prokka-style GenBank records keep their LOCUS names through Circular Generate and Linear LOSAT', async ({ page }) => {
   test.setTimeout(600_000);
   await openFresh(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'R2c.gbk', mimeType: 'text/plain', buffer: Buffer.from(PROKKA_R2C) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList
     .map((record) => record.record_id)), { timeout: 60_000 }).toEqual(['R2c']);
@@ -133,8 +134,8 @@ test('GFF3+FASTA records without GFF3 lines are not offered and both modes gener
   const [gffFile, fastaFile] = pairFiles(pair.files.gff, pair.files.fasta);
   await openFresh(page);
   await page.locator('input[type=radio][value=gff]').first().check();
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles(gffFile);
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fastaFile);
+  await circularFileInput(page, 'gff').setInputFiles(gffFile);
+  await circularFileInput(page, 'fasta').setInputFiles(fastaFile);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList
     .map((record) => record.record_id)), { timeout: 60_000 }).toEqual(annotated);
   await settle(page);
@@ -598,7 +599,7 @@ const generationError = (page) => page.evaluate(() => window.__GBDRAW_APP__.erro
 test('replacing or completing the Circular input that failed Generate clears that input error', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  const genbank = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const genbank = circularFileInput(page, 'gb');
   await genbank.setInputFiles({ name: 'notgenbank.gb', mimeType: 'text/plain', buffer: Buffer.from('not a record\n') });
   await settle(page);
   await generateAndWaitForResult(page, { expectedStatus: 'error' });
@@ -610,11 +611,11 @@ test('replacing or completing the Circular input that failed Generate clears tha
   await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
 
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.gff3');
+  await circularFileInput(page, 'gff').setInputFiles('tests/test_inputs/NC_013668.gff3');
   await settle(page);
   await generateAndWaitForResult(page, { expectedStatus: 'error' });
   expect(await generationError(page)).toBe('FASTA_REQUIRED');
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.fasta');
+  await circularFileInput(page, 'fasta').setInputFiles('tests/test_inputs/NC_013668.fasta');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBe(1);
   await settle(page);
   expect(await generationError(page)).toBe(null);

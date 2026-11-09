@@ -828,7 +828,7 @@ def _run_browser_contract(contract: str) -> None:
             async ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
               app.selectDrawing('circular');
-              await app.addCircularSourceFiles('gb', [new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' })]);
+              await app.addCircularSourceFiles([new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' })]);
               const run = { status: 'running', error: '' };
               window.__GBDRAW_OFFLINE_CONTRACT_RUN__ = run;
               void (async () => {

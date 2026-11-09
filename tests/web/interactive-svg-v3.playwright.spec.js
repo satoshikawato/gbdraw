@@ -17,6 +17,7 @@ const {
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const installDiagramRequestObserver = (page) => page.addInitScript(() => {
   window.__GBDRAW_DIAGRAM_RUNS__ = [];
@@ -91,7 +92,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(join(
+  await circularFileInput(page, 'gb').setInputFiles(join(
     process.cwd(), 'tests/test_inputs/HmmtDNA.gbk'
   ));
   await generateAndWaitForResult(page);
@@ -384,7 +385,7 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
   test.setTimeout(240000);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: 'two-chromosomes.gbk',
     mimeType: 'text/plain',
     buffer: Buffer.from(
@@ -487,7 +488,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   });
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: 'two-chromosomes.gbk',
     mimeType: 'text/plain',
     buffer: Buffer.from(
@@ -627,7 +628,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     }
     const upload = mode === 'linear'
       ? page.getByTestId('linear-genbank-1')
-      : page.getByLabel('GenBank/DDBJ File', { exact: true });
+      : circularFileInput(page, 'gb');
     await upload.setInputFiles({
       name: 'shared-anchor.gbk',
       mimeType: 'text/plain',

@@ -11,6 +11,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -667,7 +668,7 @@ test('Circular, a first Result: the popup gives the focus back, follows a window
   test.setTimeout(420_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/HmmtDNA.gbk');
+  await circularFileInput(page, 'gb').setInputFiles('tests/test_inputs/HmmtDNA.gbk');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);
   await generateAndWaitForResult(page);
   await frames(page);

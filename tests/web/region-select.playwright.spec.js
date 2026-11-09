@@ -9,6 +9,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -544,7 +545,7 @@ ${origin}
 test('Circular: Shift+click selects the features between two features along the record, also when they cover one arc', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'ARC1.gbk', mimeType: 'text/plain', buffer: Buffer.from(arcGenbank()) });
+  await circularFileInput(page, 'gb').setInputFiles({ name: 'ARC1.gbk', mimeType: 'text/plain', buffer: Buffer.from(arcGenbank()) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
   await generateAndWaitForResult(page);
   await fitToPreview(page);

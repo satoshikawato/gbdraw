@@ -44,7 +44,7 @@ files selected.
 ### Step 1: Load the complete plastome
 
 In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**,
-choose `NC_001879.gbk` in **GenBank/DDBJ File**, and set **Output Prefix** to
+choose `NC_001879.gbk` in **Add GenBank/DDBJ files**, and set **Output Prefix** to
 `annotated_chloroplast_map`.
 
 ![Tobacco plastome GenBank file ready in the Circular drawing](../images/t-gui-05/01-input-ready.png)

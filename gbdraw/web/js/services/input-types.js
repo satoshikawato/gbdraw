@@ -186,3 +186,49 @@ export const circularSourceInputs = (inputType, sources) => sources.map((source)
  * @param {readonly { complete: boolean }[]} inputs `circularSourceInputs`
  */
 export const circularInputComplete = (inputs) => inputs.length > 0 && inputs.every((input) => input.complete);
+/**
+ * The slots of one new Circular source card: the file of each slot it fills.
+ * @template F
+ * @typedef {Partial<Record<InputSlot, F>>} PickedCardFiles
+ */
+// A GFF3 file of a pick is one named `.gff` or `.gff3`, also with `.gz`; any other is its FASTA.
+const GFF3_NAME = /\.gff3?$/i;
+const COMPRESSED_NAME = /\.gz$/i;
+/** @param {string} name A file name without its `.gz`. The name to its last dot, in lower case: `NC_1.GFF3` and `nc_1.fasta` share one. */
+const fileNameStem = (name) => (name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name).toLowerCase();
+/**
+ * The new source cards of one pick or drop of files, in the order given: one
+ * card per file in the slot the input type reads, whatever the file's name
+ * says (a wrong kind is the card's read error). GFF3 + FASTA pairs a GFF3 file
+ * with a FASTA of its file-name stem (`a.gff3` and `a.fasta`); a card stands
+ * where its first file stood, and a file with no partner is a card with the
+ * other slot empty, as a Linear card shows it (circular-multi-file D-07). A
+ * file whose slot is known (a Session file, bound as a GFF3 or a FASTA
+ * elsewhere: `knownSlot`) is a card of its own in that slot, whatever its name.
+ * @template {{ name?: string } | null | undefined} F A chosen file (`InputFileCandidate`) or its ref; a file with no name is a FASTA.
+ * @param {unknown} inputType
+ * @param {readonly F[]} files
+ * @param {(file: F) => InputSlot | null} [knownSlot] The slot of the input type a file is known to fill, else null.
+ * @returns {PickedCardFiles<F>[]}
+ */
+export const pickedFileCards = (inputType, files, knownSlot = () => null) => {
+  const spec = inputTypeSpec(inputType);
+  const paired = spec.paired;
+  if (paired === null) return files.map((file) => ({ [spec.primary]: file }));
+  /** @type {{ stem: string | null, slots: PickedCardFiles<F> }[]} */
+  const cards = [];
+  for (const file of files) {
+    const known = knownSlot(file);
+    if (known) {
+      cards.push({ stem: null, slots: { [known]: file } });
+      continue;
+    }
+    const name = String(file?.name || '').replace(COMPRESSED_NAME, '');
+    const slot = GFF3_NAME.test(name) ? spec.primary : paired;
+    const stem = fileNameStem(name);
+    const partner = cards.find((card) => card.stem === stem && !card.slots[slot]);
+    if (partner) partner.slots[slot] = file;
+    else cards.push({ stem, slots: { [slot]: file } });
+  }
+  return cards.map((card) => card.slots);
+};

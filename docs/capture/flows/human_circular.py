@@ -20,6 +20,7 @@ from config import (
     FIRST_LINEAR_LABEL_RULE_SIZE,
 )
 from flows.web_capture import (
+    circular_file_input,
     expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
@@ -76,7 +77,7 @@ def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
     genbank = page.get_by_role("radio", name="GenBank", exact=True)
     genbank.check()
     expect(genbank).to_be_checked()
-    page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+    circular_file_input(page).set_input_files(
         FIRST_CIRCULAR_FIXTURE_PATH
     )
     expect_circular_file_card(page, 1, FIRST_CIRCULAR_FIXTURE_PATH.name)

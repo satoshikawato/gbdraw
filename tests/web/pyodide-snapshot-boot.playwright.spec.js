@@ -17,6 +17,7 @@ const { join } = require('node:path');
 const { fetchRoute, openApp } = require('./helpers/app-lifecycle.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
 const { PYODIDE_SNAPSHOT_TEST_PATH, forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const SESSION = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const GENBANK = join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -142,7 +143,7 @@ test('the first Worker boots from the files the page prefetched when a file was 
     await openApp(page);
     const bootUrls = await page.evaluate(async () => (
       await import('./js/services/pyodide-assets.js')).resolvePyodideBootAssetUrls());
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(GENBANK);
+    await circularFileInput(page, 'gb').setInputFiles(GENBANK);
     // The prefetch has finished once the page has a resource entry (written at
     // the end of the body) for every boot file.
     await expect.poll(() => page.evaluate((urls) => {

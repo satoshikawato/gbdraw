@@ -66,7 +66,7 @@
     ],
     "rows": [
      [
-      "GenBank/DDBJ File",
+      "Add GenBank/DDBJ files",
       "AP027133.gb"
      ],
      [
@@ -99,7 +99,7 @@
       "actions": [
        {
         "type": "waitForFunction",
-        "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'AP027133.gb'"
+        "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('AP027133.gb')"
        }
       ],
       "clipSelectors": [
@@ -108,7 +108,7 @@
       ],
       "assertAppState": {
        "mode": "circular",
-       "files.c_gb.name": "AP027133.gb"
+       "circularFileCards.cards.value.0.source.gb.name": "AP027133.gb"
       },
       "visibleText": [
        "AP027133.gb"

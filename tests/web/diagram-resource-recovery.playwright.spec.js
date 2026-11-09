@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { snapshot, download } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const gffPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3';
 const fastaPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna';
@@ -100,10 +101,13 @@ for (const mode of ['linear', 'circular']) {
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
-    const suffix = mode === 'linear' ? '' : ' File';
-    await page.getByLabel(`GFF3${suffix}`, { exact: true }).setInputFiles(gffPath);
-    const upload = () => page.getByLabel(`FASTA${suffix}`, { exact: true }).and(page.locator('input[type="file"]'))
-      .setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: mismatch });
+    // Circular: the GFF3 makes File 1 through the Add files zone, then the
+    // FASTA is chosen in that card's own FASTA uploader.
+    const input = slot => mode === 'linear'
+      ? page.getByLabel(slot === 'gff' ? 'GFF3' : 'FASTA', { exact: true }).and(page.locator('input[type="file"]'))
+      : circularFileInput(page, slot);
+    await input('gff').setInputFiles(gffPath);
+    const upload = () => input('fasta').setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: mismatch });
     await upload();
     await expect.poll(discoveryError, { timeout: 180_000 }).toContain('matching FASTA');
     expect(await reads()).toBe(1);

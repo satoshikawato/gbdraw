@@ -28,7 +28,7 @@ for (const mode of ['circular', 'linear']) {
     });
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
-    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
+    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : circularFileInput(page, 'gb');
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank('circular') + genbank('linear')) });
     if (mode === 'linear') {
       await page.getByRole('button', { name: 'Records for file 1', exact: true }).click();
@@ -71,6 +71,7 @@ const { join } = require('node:path');
 const {
   assertDiagramWorkerIdle, assertSessionLoadLeftWorkerIdle, getDiagramWorkerActivity
 } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 const fixture = (path) => join(process.cwd(), path);
 const snapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
@@ -90,7 +91,7 @@ const snapshot = (page) => page.evaluate(async () => {
 const waitStatus = (page, status) => expect.poll(() => page.evaluate(async () => (
   (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status
 )), { timeout: 180000 }).toBe(status);
-const uploadNative = (page, text, name = 'native.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
+const uploadNative = (page, text, name = 'native.gb') => circularFileInput(page, 'gb')
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
 // The GenBank file of the Circular drawing's one File card, set as its card's
 // slot sets it: a new card when there is none; null removes the card.
@@ -99,7 +100,7 @@ const defineSetCardGenbank = (page) => page.evaluate(() => {
     const { state } = await import('./js/state.js');
     const app = window.__GBDRAW_APP__;
     const card = state.drawingList().find((drawing) => drawing.mode === 'circular').circularSources[0];
-    return card ? app.setCircularSourceFile(card.uid, 'gb', file) : app.addCircularSourceFiles('gb', [file]);
+    return card ? app.setCircularSourceFile(card.uid, 'gb', file) : app.addCircularSourceFiles([file]);
   };
 });
 const loadPreview = async (page) => {
@@ -130,10 +131,10 @@ test('native upload automatically inspects one, two, duplicate and DDBJ records 
 test('incomplete GFF pair stays idle; complete pair automatically discovers without Python', async ({ page }) => {
   await openApp(page);
   await page.locator('input[type=radio][value=gff]').first().check();
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.gff3'));
+  await circularFileInput(page, 'gff').setInputFiles(fixture('tests/test_inputs/NC_013668.gff3'));
   await waitStatus(page, 'idle');
   await expect(page.locator('[data-circular-discovery-status]')).toHaveText('');
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
+  await circularFileInput(page, 'fasta').setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
   await waitStatus(page, 'ready');
   expect((await snapshot(page)).rows).toEqual([['#1', 'NC_013668.3']]);
   await assertDiagramWorkerIdle(page);
@@ -311,7 +312,7 @@ for (const mode of ['circular', 'linear']) {
     await page.locator('input[type=radio][value=fasta]').first().check();
     await expect(page.getByText('Records are drawn without features.')).toBeVisible();
     await expect(page.locator('input[type=radio][value=gff]').first()).toBeVisible();
-    const upload = mode === 'linear' ? page.getByTestId('linear-fasta-1') : page.getByLabel('FASTA File', { exact: true });
+    const upload = mode === 'linear' ? page.getByTestId('linear-fasta-1') : circularFileInput(page, 'fasta');
     await upload.setInputFiles({ name: 'two.fasta', mimeType: 'text/plain', buffer: Buffer.from(twoRecordFasta) });
     if (mode === 'circular') {
       await waitStatus(page, 'ready');
@@ -335,7 +336,7 @@ test('a protein FASTA alone is refused before Generate with the record named', a
   test.setTimeout(240000);
   await openApp(page);
   await page.locator('input[type=radio][value=fasta]').first().check();
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'fasta').setInputFiles({
     name: 'protein.fasta', mimeType: 'text/plain', buffer: Buffer.from('>LvMJNV_ORF1 hypothetical protein\nMKLVEQRSTWYF\n')
   });
   await waitStatus(page, 'error');
@@ -372,7 +373,7 @@ test('a saved Session with a FASTA source loads its Result without the Worker', 
   test.setTimeout(300000);
   await openApp(page);
   await page.locator('input[type=radio][value=fasta]').first().check();
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
+  await circularFileInput(page, 'fasta').setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
   await waitStatus(page, 'ready');
   await generateAndWaitForResult(page);
   const download = page.waitForEvent('download');

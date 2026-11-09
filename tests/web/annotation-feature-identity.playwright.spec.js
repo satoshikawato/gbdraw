@@ -10,6 +10,7 @@ const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const records = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
   .map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
@@ -294,7 +295,7 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
     const { addCircularSource, createCircularSource } = await import('/gbdraw/web/js/services/drawing/inputs.js');
     addCircularSource(state.activeDrawing().slices.inputs, createCircularSource({ uid: 'record-1' }));
   });
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  await circularFileInput(page, 'gb').setInputFiles('tests/test_inputs/NC_001416.gb');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   // A one-record grid names its record `record-1`, as the Linear Session does.
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });

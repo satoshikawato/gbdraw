@@ -35,7 +35,7 @@ const collect = (page) => {
 // Adds one Circular File card holding this GenBank file.
 const addCircularGenbank = (page, path, name) => page.evaluate(async ({ content, name }) => {
   const app = window.__GBDRAW_APP__;
-  await app.addCircularSourceFiles('gb', [new File([content], name, { type: 'text/plain' })]);
+  await app.addCircularSourceFiles([new File([content], name, { type: 'text/plain' })]);
   await window.Vue.nextTick();
 }, { content: readFileSync(path, 'utf8'), name: name || path.split('/').pop() });
 

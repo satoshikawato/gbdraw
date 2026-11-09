@@ -70,7 +70,7 @@
             "GenBank"
           ],
           [
-            "GenBank/DDBJ File",
+            "Add GenBank/DDBJ files",
             "HmmtDNA.gbk"
           ],
           [
@@ -85,10 +85,35 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
             "alt": "Circular GenBank uploader with the HmmtDNA.gbk file chip.",
             "caption": "Upload HmmtDNA.gbk in the Circular GenBank uploader."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "replayThrough": 2,
+            "cardTitle": "Input Genomes",
+            "cropPadding": 14,
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('HmmtDNA.gbk')"
+              }
+            ],
+            "clipSelectors": [
+              "[data-setting='inputs'] .card-header",
+              "[data-circular-record-presentation]"
+            ],
+            "assertAppState": {
+              "mode": "circular",
+              "circularFileCards.cards.value.0.source.gb.name": "HmmtDNA.gbk"
+            },
+            "visibleText": [
+              "HmmtDNA.gbk"
+            ]
           }
         }
       ],

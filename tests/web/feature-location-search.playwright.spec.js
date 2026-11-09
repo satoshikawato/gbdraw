@@ -9,6 +9,7 @@ const {
   openApp,
   waitForAppShell
 } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const FIXTURE = join(process.cwd(), 'tests/fixtures/feature_location_search.gb');
 const SPLIT = '1101..1200, 1..200 (+)';
@@ -34,7 +35,7 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
   test.setTimeout(240000);
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
+  await circularFileInput(page, 'gb').setInputFiles(FIXTURE);
   await generateAndWaitForResult(page);
   const ids = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
     .filter((feature) => feature.locus_tag)
@@ -216,7 +217,7 @@ test('a none Specific Table color survives Generate, Save, and Load', async ({ p
   test.setTimeout(360000);
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
+  await circularFileInput(page, 'gb').setInputFiles(FIXTURE);
   const table = testInfo.outputPath('none-color.tsv');
   fs.writeFileSync(table, 'CDS\tproduct\tduplicate\tNONE\thollow\n');
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles(table);

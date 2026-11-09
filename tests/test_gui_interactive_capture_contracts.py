@@ -97,7 +97,7 @@ def test_interactive_flows_use_raw_inputs_and_visible_actions() -> None:
     for required in (
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
+        'circular_file_input(page).set_input_files(',
         'get_by_role("searchbox", name="Search features", exact=True)',
         'name="Open active feature", exact=True',
         'name="Apply color and legend name to selected features"',

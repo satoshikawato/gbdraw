@@ -6,6 +6,7 @@ const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -13,7 +14,7 @@ const seeds = {
 };
 const upload = async (page, name, linear = true) => {
   const session = JSON.parse(await fs.readFile(seeds[name], 'utf8'));
-  const input = linear ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const input = linear ? page.getByTestId('linear-genbank-1') : circularFileInput(page, 'gb');
   await input.setInputFiles({ name: `${name}.gb`, mimeType: 'text/plain', buffer: Buffer.from(
     session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') });
 };
@@ -112,7 +113,7 @@ for (const mode of ['linear', 'circular']) {
       if (mode === 'linear') await switchMode(page, 'linear');
       const input = mode === 'linear'
         ? page.getByTestId('linear-genbank-1')
-        : page.getByLabel('GenBank/DDBJ File', { exact: true });
+        : circularFileInput(page, 'gb');
       await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
       await generate(page);
       await addLegendRow(page, 'Manual row', '#118833');
@@ -171,7 +172,7 @@ const loadGenerated = async (browser, mode) => {
   if (mode === 'linear') await switchMode(page, 'linear');
   const input = mode === 'linear'
     ? page.getByTestId('linear-genbank-1')
-    : page.getByLabel('GenBank/DDBJ File', { exact: true });
+    : circularFileInput(page, 'gb');
   await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
   await generate(page);
   return page;
@@ -1096,7 +1097,7 @@ test('G1-G3 rejected candidates preserve A and dormant category intent and manua
     const a = await inspect(page);
     expect(a.entries).toContain('Retained annotation');
     expect(a.original).not.toContain('Retained annotation');
-    const input = page.getByLabel('GenBank/DDBJ File', { exact: true });
+    const input = circularFileInput(page, 'gb');
     await input.setInputFiles({ name: 'corrupt.gb', mimeType: 'text/plain', buffer: Buffer.from('not a GenBank record') });
     expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
     const rejected = await inspect(page);
