@@ -183,10 +183,13 @@ _CIRCULAR_LABELS = frozenset({"circular_labels", "label_leaders_content", "label
 
 # The options that move the Circular radial layout: the centre definition
 # reserve (its text and font), the tick band, the depth axis footprint, and the
-# feature lanes. Every stage that takes the layout's slots may rebuild.
+# feature lanes; the GC content mode, as the tick labels keep their margin from
+# a Percent GC band that paints its edges (OV-3116). Every stage that takes the
+# layout's slots may rebuild.
 _RADIAL_LAYOUT_OPTIONS = (
     "keep_full_definition_with_plot_title", "definition_font_size", "scale_interval", "hide_scale",
     "show_depth_axis", "show_depth_ticks", "depth_tick_font_size", "feature_overlap_tolerance_bp",
+    "gc_content_mode",
 )
 _RADIAL_LAYOUT_STAGES = _CIRCULAR_LABELS | {
     "circular_record_content", "ticks_content", "gc_content_content", "gc_skew_content", "depth_content",
