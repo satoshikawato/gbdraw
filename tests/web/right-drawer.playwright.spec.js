@@ -749,7 +749,8 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(groupNtCopy).toHaveText(/Copy nt/);
   await expect(groupAaCopy).toHaveText(/Copy aa/);
   await groupAaCopy.click();
-  await expect(groupAaCopy).toHaveText(/Copied!/);
+  // The first read after Load starts Python in the diagram Worker (D5); the group is copied when it replies.
+  await expect(groupAaCopy).toHaveText(/Copied!/, { timeout: 60000 });
   await expect(groupAaCopy).toHaveAccessibleName('Copied!');
   await expect(groupAaCopy).toHaveAttribute('aria-live', 'polite');
   await expect(groupAaCopy).toHaveAttribute('aria-atomic', 'true');
@@ -891,7 +892,8 @@ test('a Similarity group read that fails in the feature popup shows why, with De
 }, testInfo) => {
   test.setTimeout(180000);
   // Python is asked for a feature no record has, while the test says so: the read fails as a wrong request would.
-  await page.addInitScript(() => {
+  // The page is already open (beforeEach), so the Worker's postMessage is patched in place.
+  await page.evaluate(() => {
     const post = Worker.prototype.postMessage;
     Worker.prototype.postMessage = function postMessage(message, ...rest) {
       const failing = window.__failFeatureReads && message?.type === 'helper' && message.operation === 'readFeatureSequences';
