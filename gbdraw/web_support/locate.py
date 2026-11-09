@@ -201,7 +201,7 @@ class LocateWindowPairReply(TypedDict):
 class LocatePlanReply(TypedDict):
     """The plan as ``LocatePlan.to_json`` writes it (``gbdraw locate`` writes the same as ``PREFIX.plan.json``),
     the window pairs of its drawing (``locate_drawing``), and the name the dialog shows for each reference gene
-    and each CDS a window edge cuts, by protein ID (its gene name, else its locus tag, else its protein ID)."""
+    and each CDS a window edge cuts, by protein ID (``ReferenceCds.name``)."""
 
     plan: LocatePlanJson
     pairs: list[LocateWindowPairReply]
@@ -497,13 +497,13 @@ def describe_locate() -> LocateDescription:
             return ref(hint.__name__)
         return None
 
-    for root in (LocateFilesStep, LocateReferenceStep, LocateSearchStep, LocatePlanStep, LocateDrawingStep):
-        special(root)
+    for step in (LocateFilesStep, LocateReferenceStep, LocateSearchStep, LocatePlanStep, LocateDrawingStep):
+        special(step)
     # The replies the page checks, by name.
     replies = (LocateFilesReply, LocateReferenceReady, LocateWindowRefused, LocateSearchPlanReply, LocatePlanReply, LocateDrawingReady, LocateEditRefused)
-    for root in replies:
-        special(root)
-    return {"roots": {root.__name__: root.__name__ for root in replies}, "types": types_}
+    for reply in replies:
+        special(reply)
+    return {"roots": {reply.__name__: reply.__name__ for reply in replies}, "types": types_}
 
 
 class LocateFilesStep(TypedDict):

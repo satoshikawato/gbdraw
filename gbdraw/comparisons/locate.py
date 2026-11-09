@@ -179,7 +179,8 @@ class ReferenceCds:
 
     ``start > end`` is a CDS across the origin of a circular record.
     ``protein_id`` names its query in the search rows; ``length_aa`` and
-    ``length_nt`` are its protein and coding lengths.
+    ``length_nt`` are its protein and coding lengths; ``source_protein_id`` is
+    the record's own ``/protein_id`` qualifier, if any.
     """
 
     protein_id: str
@@ -191,12 +192,14 @@ class ReferenceCds:
     strand: Strand
     length_aa: int
     length_nt: int
+    source_protein_id: str | None = None
 
     @property
     def name(self) -> str:
-        """The name a report gives the CDS: its gene name, else its locus tag, else its protein ID."""
+        """The name a report gives the CDS: its gene name, else its locus tag, else the record's protein ID, else
+        gbdraw's query ID."""
 
-        return self.gene or self.locus_tag or self.protein_id
+        return self.gene or self.locus_tag or self.source_protein_id or self.protein_id
 
     def __post_init__(self) -> None:
         _require(bool(str(self.protein_id).strip()), "A reference CDS needs a protein ID.")
@@ -548,6 +551,7 @@ class ReferenceCdsJson(TypedDict):
     strand: Strand
     length_aa: int
     length_nt: int
+    source_protein_id: str | None
 
 
 class ReferenceGeneJson(TypedDict):
@@ -1591,6 +1595,7 @@ def locate_query(
         ReferenceCds(
             protein_id=protein.protein_id,
             locus_tag=protein.locus_tag,
+            source_protein_id=protein.source_protein_id,
             gene=protein.gene,
             product=protein.product,
             start=int(protein.arc[0]) + 1,

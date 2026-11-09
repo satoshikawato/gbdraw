@@ -116,6 +116,7 @@
  * @property {'+' | '-'} strand
  * @property {number} length_aa
  * @property {number} length_nt
+ * @property {string | null} source_protein_id
  */
 /**
  * @typedef {object} LocateOptionsJson
@@ -521,7 +522,11 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         end: Object.freeze({kind: "integer"}),
         strand: Object.freeze({kind: "literal", values: Object.freeze(["+", "-"])}),
         length_aa: Object.freeze({kind: "integer"}),
-        length_nt: Object.freeze({kind: "integer"})
+        length_nt: Object.freeze({kind: "integer"}),
+        source_protein_id: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        })
       }),
       optional: Object.freeze([]),
       open: false

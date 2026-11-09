@@ -28,7 +28,7 @@ const sent = {
 };
 
 const cds = (index, start, end) => ({
-  protein_id: `p${index}`, locus_tag: `g${index}`, gene: null, product: null, start, end, strand: '+', length_aa: 100, length_nt: 303
+  protein_id: `p${index}`, locus_tag: `g${index}`, gene: null, product: null, start, end, strand: '+', length_aa: 100, length_nt: 303, source_protein_id: null
 });
 const gene = (index) => ({ protein_id: `p${index}`, order: index, window_index: 0, start: 100 * index, end: 100 * index + 300, strand: '+', query_coverage: 1, bits: 200, status: 'complete' });
 const planned = (recordKey, recordId, column, start, end, { selected = true, reason = null, reverse = false, genes = [1, 2], ends = [false, false] } = {}) => ({
@@ -192,7 +192,7 @@ test('the search runs one job per File and proposes the windows Python planned, 
 
   const { dialog } = owner;
   assert.equal(dialog.screen, 'proposal');
-  assert.equal(dialog.reference, 'Reference: ref.gb REF, 1 window, 3 genes.');
+  assert.equal(dialog.reference, 'Reference: REF in ref.gb, 1 window, 3 genes.');
   assert.equal(dialog.cutGenes, 'Cut by a window edge and not searched: g7.');
   const [a, b] = dialog.proposal;
   assert.deepEqual([a.name, a.summary, b.name, b.summary], ['a.gb', '1 window · 2 of 3 genes', 'b.gff', '2 windows · 3 of 3 genes']);

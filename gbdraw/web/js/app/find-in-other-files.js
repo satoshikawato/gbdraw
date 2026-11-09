@@ -190,7 +190,7 @@ const fileViews = (files, names) => files.map(({ fileKey, records }) => ({
  */
 const referenceLine = (dialog, reply) => {
   const { reference } = reply.plan;
-  return t('Reference: {file} {record}, {windows}, {genes}.', {
+  return t('Reference: {record} in {file}, {windows}, {genes}.', {
     file: dialog.files.find((file) => file.fileKey === reference.file_key)?.name ?? reference.file_key,
     record: reference.record_id,
     windows: tn(reference.windows.length, '{count} window', '{count} windows'),
