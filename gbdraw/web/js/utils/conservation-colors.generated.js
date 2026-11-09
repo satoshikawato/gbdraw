@@ -4,4 +4,4 @@
 
 /** The colours of the `ten` similarity ring colour scheme, in Python's order. */
 /** @type {readonly string[]} */
-export const CONSERVATION_TEN_COLORS = Object.freeze(['#6e91b7', '#f4a251', '#8fc4c0', '#e67577', '#c6bebb', '#77b26f', '#be92b2', '#f0d369', '#ae8e7c', '#ffafb7']);
+export const CONSERVATION_TEN_COLORS = Object.freeze(['#81a5cc', '#e5a972', '#8fc4c0', '#d38282', '#c6bebb', '#7cb075', '#be92b2', '#ead487', '#ae8e7c', '#ffafb7']);

@@ -142,6 +142,17 @@ write-up of a release.
   color, the Legend keeps one band, and its scale line now takes the same form:
   the minimum, `identity`, and `100%` under the band, with no `identity` to its
   right (PD-OI-110 scenario revision 2).
+- Changed: the `ten` similarity-ring colors are calmer. The blue is lighter
+  (`#81a5cc`), and the orange, red, green and yellow are less saturated
+  (`#e5a972`, `#d38282`, `#7cb075`, `#ead487`); the other five stay. The Web's
+  automatic ring colors come from the same list, so new rings in the Web take
+  the new colors. A ring that already has its own color keeps it, so Web
+  Sessions open unchanged. A CLI or Python Session saved with
+  `--conservation_color_scheme ten` and rings without their own colors now
+  opens with the new colors. To draw the old ones, give them in ring order
+  with `--conservation_colors '#6e91b7' '#f4a251' '#8fc4c0' '#e67577'
+  '#c6bebb' '#77b26f' '#be92b2' '#f0d369' '#ae8e7c' '#ffafb7'`, repeating
+  from ring 11 (PD-OI-110 scenario revision 3).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every

@@ -272,7 +272,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-107](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-107-organism-name-lines-from-record-metadata) | Organism name lines from record metadata | ACCEPTED | diagram-generation.organism-name-lines | 1 | — | 0 |
 | [PD-OI-108](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-108-tutorials-of-the-interactive-gallery-from-the-app) | Tutorials of the Interactive Gallery from the app | ACCEPTED | web.gallery-tutorial-discoverability | 3 | scenario revision 2 | 5 |
 | [PD-OI-109](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-109-hide-the-circular-center-definition) | Hide the Circular center definition | ACCEPTED | diagram-generation.circular-definition-visibility | 1 | — | 7 |
-| [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover) | Similarity-ring colors and hover | ACCEPTED | tracks.circular-conservation-ring-colors | 2 | scenario revision 1 | 6 |
+| [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover) | Similarity-ring colors and hover | ACCEPTED | tracks.circular-conservation-ring-colors | 3 | scenario revision 2 | 6 |
 | [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open) | Partial feature ends drawn open | ACCEPTED | features.partial-ends-open | 1 | — | 0 |
 | [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |

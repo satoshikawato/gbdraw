@@ -1,4 +1,4 @@
-"""Similarity-ring colour schemes (PD-OI-110, ``tracks.circular-conservation-ring-colors`` revision 2).
+"""Similarity-ring colour schemes (PD-OI-110, ``tracks.circular-conservation-ring-colors`` revision 3).
 
 One setting picks the colour of every ring without a colour of its own: ``same`` (the configured default
 gradient), ``ten`` (ten colours, repeating from ring 11) or ``per_five`` (one colour per five rings, repeating from
@@ -29,7 +29,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.tracks import CircularTrackSlot
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
-TEN = ("#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb", "#77b26f", "#be92b2", "#f0d369", "#ae8e7c", "#ffafb7")
+TEN = ("#81a5cc", "#e5a972", "#8fc4c0", "#d38282", "#c6bebb", "#7cb075", "#be92b2", "#ead487", "#ae8e7c", "#ffafb7")
 HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
 SCHEME_PATH = "objects.conservation.color_scheme"
 
