@@ -184,6 +184,16 @@ write-up of a release.
   which the custom stack does not use, instead of the width of the Depth row
   (for example 8 px shown, 5.5 px drawn for a 25 px row). They now show the
   size the figure draws (OV-2876).
+- Fixed: in a Circular figure, the scale's tick labels stood on the painted
+  edge of a neighbouring track: the descenders of "Mbp" on the border of a
+  Percent GC content band (yeast chromosome IV drawn alone), and the letters of
+  "kbp" on the edge of a sequence conservation ring or a feature density
+  heatmap placed next to the labels. The tick labels now keep their margin from
+  such a track, in the CLI, the Python API, and the Web app; the tracks inside
+  them move inward by that margin (3.1 px at the default 14 pt). Tick labels
+  facing outward keep the larger of the track gap and the margin, as before.
+  Figures whose tick labels face no painted edge, such as GC content in the
+  default deviation mode, are unchanged (OV-3116, OV-3149, OV-3150).
 - Fixed: a custom track stack (**Use custom stack** in the Web app,
   `--circular_track_slot` or `--linear_track_slot` on the command line) with no
   Annotations row for a Region Annotation set left the set out of the figure
