@@ -25,7 +25,7 @@ const {
   linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
-  layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, setLinearRecordRow
+  layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, placeRecordAtRowEnd, setLinearRecordRow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -207,13 +207,41 @@ test('the Record Layout has one cell per window; Up and Down move a cell within 
   const moved = moveLinearLayoutCell(cards, entries, { uid: 'b', window: null }, -1);
   assert.ok(moved);
   assert.deepEqual(cellsOf(linearLayoutCells(cards, moved)), [['a', 0, 1, 1], ['b', null, 1, 2], ['a', 1, 1, 3], ['c', null, 2, 1]]);
-  assert.deepEqual(cards[0].windows.map(({ column }) => column), [1, 3]);
+  // b's whole-card cell passed a window of a: the cards swap in the list, so their "#n" swap as on dev (PD-OI-018).
+  assert.deepEqual(cards.map(({ uid }) => uid), ['b', 'a', 'c']);
+  assert.deepEqual(cards[1].windows.map(({ column }) => column), [1, 3]);
   // Row 1's cells now have their places and c in row 2 has none: the request writes a place for every cell, as
   // Python reads a place for every cell or none.
   const places = linearLayoutPlaces(linearLayoutCells(cards, moved));
   assert.ok(places);
   assert.deepEqual([['a', 0], ['b', null], ['a', 1], ['c', null]].map(([uid, window]) => places.get(layoutCellKey(uid, window))), [1, 2, 3, 1]);
   assert.equal(moveLinearLayoutCell(cards, moved, { uid: 'a', window: 0 }, -1), null);
+});
+
+test('Up and Down depend on the cell: a window moves only its place, a whole card swaps with its neighbour\'s card', () => {
+  const { cards, entries } = arrangedLayout();
+  // A window cell passing the whole card b: places only, the list stays.
+  const moved = moveLinearLayoutCell(cards, entries, { uid: 'a', window: 1 }, 1);
+  assert.ok(moved);
+  assert.deepEqual(cards.map(({ uid }) => uid), ['a', 'b', 'c']);
+  assert.deepEqual(cellsOf(linearLayoutCells(cards, moved)), [['a', 0, 1, 1], ['b', null, 1, 2], ['a', 1, 1, 3], ['c', null, 2, 1]]);
+  // The whole card b passing window 0 of a: the cards swap, the places follow the cells.
+  const back = moveLinearLayoutCell(cards, moved, { uid: 'b', window: null }, -1);
+  assert.ok(back);
+  assert.deepEqual(cards.map(({ uid }) => uid), ['b', 'a', 'c']);
+  assert.deepEqual(cellsOf(linearLayoutCells(cards, back)), [['b', null, 1, 1], ['a', 0, 1, 2], ['a', 1, 1, 3], ['c', null, 2, 1]]);
+});
+
+test('a Row change puts the record\'s windows at the end of the new row', () => {
+  // a (two windows) in row 1, b in row 2, no places: Row 2 for a puts a's windows after b.
+  const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 100), span(301, 400)] }), createLinearSeq({ uid: 'b' })];
+  const entries = [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }];
+  setLinearRecordRow(entries, 'a', 2);
+  const placed = placeRecordAtRowEnd(cards, entries, 'a');
+  assert.ok(placed);
+  assert.deepEqual(cellsOf(linearLayoutCells(cards, placed)), [['b', null, 2, 1], ['a', 0, 2, 2], ['a', 1, 2, 3]]);
+  // A card drawn whole keeps the rule it had: its place goes with its row.
+  assert.equal(placeRecordAtRowEnd(cards, placed, 'b'), null);
 });
 
 test('a cell without a place among cells with one gets its position in the request', () => {

@@ -25,6 +25,7 @@ import {
 import {
   moveLinearLayoutCell,
   moveLinearRecordInRow,
+  placeRecordAtRowEnd,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from '../services/linear-record-layout.js';
@@ -262,7 +263,8 @@ export const createLinearComparisonPlanWriter = ({
     updateLinearRecordRow(drawing.linearRecordRows, uid, row);
     if (drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row !== previous) {
       // All windows of the record move with its row, to the end of the new row in their order (PD-OI-124).
-      drawing.linearSeqs.find((card) => card.uid === uid)?.windows.forEach((window) => { window.column = null; });
+      const placed = placeRecordAtRowEnd(drawing.linearSeqs, drawing.linearRecordRows, uid);
+      if (placed) drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...placed);
       invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
     }
   });
@@ -276,12 +278,13 @@ export const createLinearComparisonPlanWriter = ({
     if (nextEnabled) return materializeAutomaticLinearRecords(drawing);
   });
   /**
-   * Up and Down of a Record Layout cell: a card swaps places with its row neighbour; while a card is drawn in several
-   * windows, each cell (a window, or a whole card) moves one place within its row (PD-OI-124).
+   * Up and Down of a Record Layout cell, by what the cell is (PD-OI-124, PD-OI-018): a whole card swaps with the card
+   * next to it in its row, "#n" included, as before; a window's cell moves one place within its row. While no card is
+   * drawn in several windows every cell is a whole card and the cards swap without writing places, as before.
    * @param {string} uid @param {number} direction @param {number | null} [window]
    */
   const moveLinearRecordWithinRow = (uid, direction, window = null) => shownAction('linear', (drawing) => {
-    const next = drawing.linearSeqs.some((card) => card.windows.length > 1)
+    const next = window !== null || drawing.linearSeqs.some((card) => card.windows.length > 1)
       ? moveLinearLayoutCell(drawing.linearSeqs, drawing.linearRecordRows, { uid, window }, direction)
       : moveLinearRecordInRow(drawing.linearSeqs, drawing.linearRecordRows, uid, direction);
     if (!next) return;
