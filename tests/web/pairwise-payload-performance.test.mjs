@@ -651,20 +651,25 @@ test('a Circular comparison band reads its reference by the record ID its hit na
   ]);
 });
 
-// A whole coordinate below 1 is Python's to judge after the record (as the popup judged it before D5: the record,
-// then "greater than or equal to 1"); a coordinate that is not a whole number is refused where the popup opens.
-test('a whole coordinate below 1 is read by Python; one that is not whole gives the popup\'s reason', () => {
+// Every coordinate is Python's to judge after the record, as the popup judged it before D5 (the record, then "whole",
+// then "greater than or equal to 1"): a coordinate that is not a whole number goes as null, a whole one as itself.
+test('a coordinate below 1 or not whole is read by Python after the record, in the popup\'s old order', () => {
   const spansOf = (qstart) => popupModule.buildMatchPopupPayload(elementFrom({ ...commonAttributes, 'data-qstart': qstart }), {
     matchSequenceRecords: syntheticSequenceRecords()
   }).sequenceBundle.entries[0];
-  for (const [qstart, start] of [['0', 0], ['-5', -5]]) {
+  for (const [qstart, start] of [['0', 0], ['-5', -5], ['1.5', null], ['ten', null], ['1e21', 1e21]]) {
     const entry = spansOf(qstart);
-    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', start, end: 18 }, '']);
+    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', start, end: 18 }, ''], qstart);
+    // The popup row shows no length for a span whose coordinates are not whole (index.html hides a 0 length).
+    if (start === null) assert.equal(entry.sequenceLength, 0, qstart);
   }
-  for (const qstart of ['1.5', 'ten']) {
-    const entry = spansOf(qstart);
-    assert.deepStrictEqual([entry.read, entry.unavailableReason], [null, 'Coordinates must be whole 1-based values.']);
-  }
+  // A comparison source that supplied no FASTA is said first, whatever its coordinates (base resolved the source
+  // before it read the coordinates).
+  const homology = popupModule.buildMatchPopupPayload(elementFrom({
+    ...commonAttributes, 'data-match-kind': 'homology', 'data-source-index': '4', 'data-reference-side': 'query',
+    'data-sstart': '2.5'
+  }), { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) }).sequenceBundle.entries[1];
+  assert.deepStrictEqual([homology.read, homology.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
 });
 
 // OV-1010: a member's null or blank bound is missing, not 0.

@@ -185,6 +185,7 @@ test('each reason a span cannot be read shows the match popup\'s text from befor
     RECORD_UNKNOWN: 'No sequence source matched record “NC_1”.',
     RECORD_AMBIGUOUS: 'Record ID “NC_1” is ambiguous in the available sequence sources.',
     RECORD_ALIAS_AMBIGUOUS: 'Record alias “NC_1” is ambiguous in the available sequence sources.',
+    COORDINATE_NOT_WHOLE: 'Coordinates must be whole 1-based values.',
     COORDINATE_BELOW_ONE: 'Coordinates must be greater than or equal to 1.',
     SOURCE_EMPTY: 'The sequence source is empty.',
     OUT_OF_RANGE: `Coordinates exceed the sequence length (${(12345).toLocaleString()} bp).`

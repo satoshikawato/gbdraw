@@ -388,16 +388,49 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
 
 
 def test_a_span_of_an_empty_source_and_a_coordinate_below_one_have_their_reasons() -> None:
-    """The coordinate reasons in the order the match popup checked them before D5: below 1, an empty source, past
-    the record's end."""
+    """The coordinate reasons in the order the match popup checked them before D5: not a whole number, below 1, an
+    empty source, past the record's end."""
 
     from gbdraw.web_support.catalog_sequences import _span_reason
 
+    assert _span_reason("ACGT", None, 2) == "COORDINATE_NOT_WHOLE"
+    assert _span_reason("", 0, None) == "COORDINATE_NOT_WHOLE"
     assert _span_reason("ACGT", 0, 2) == "COORDINATE_BELOW_ONE"
     assert _span_reason("", 0, 2) == "COORDINATE_BELOW_ONE"
     assert _span_reason("", 1, 2) == "SOURCE_EMPTY"
     assert _span_reason("ACGT", 2, 5) == "OUT_OF_RANGE"
     assert _span_reason("ACGT", 4, 1) is None
+
+
+def test_a_coordinate_that_is_not_whole_is_judged_after_the_record(tmp_path: Path) -> None:
+    """The page sends a coordinate that is not a whole number as ``None``; Python judges it in the match popup's order
+    before D5: the record (unknown, ambiguous ID or alias, never supplied) first, then "not whole", then below 1,
+    an empty source and past the end. A whole number JSON writes in exponent form is still whole."""
+
+    query = SeqRecord(Seq("AACCGGTT"), id="query-id", name="shared", features=[_cds(0, 3, 1)])
+    subject = SeqRecord(Seq("TTGGCCAA"), id="subject-id", name="shared", features=[_cds(0, 3, 1)])
+    with _rendered(tmp_path, query, subject) as (request, paths, output, _item):
+        read = read_match_sequences(request, paths, output, [
+            {"kind": "record", "recordKey": "key-7", "start": None, "end": 4},
+            {"kind": "reference", "recordId": "missing", "start": 1, "end": None},
+            {"kind": "reference", "recordId": "shared", "start": None, "end": 4},
+            {"kind": "comparison", "sourceIndex": 0, "recordId": "query-id", "start": None, "end": None},
+            {"kind": "record", "recordKey": "key-0", "start": None, "end": -2},
+            {"kind": "reference", "recordId": "subject-id", "start": 2, "end": None},
+            {"kind": "record", "recordKey": "key-0", "start": 1, "end": 1e21},
+        ])["spans"]
+        with pytest.raises(ValidationError, match="start and an end"):
+            read_match_sequences(request, paths, output, [{"kind": "record", "recordKey": "key-0", "start": 1.5, "end": 2}])
+
+    assert [(span["status"], span["reason"], span["sourceLength"]) for span in read] == [
+        ("unavailable", "RECORD_UNKNOWN", 0),
+        ("unavailable", "RECORD_UNKNOWN", 0),
+        ("unavailable", "RECORD_ALIAS_AMBIGUOUS", 0),
+        ("unavailable", "NEVER_SUPPLIED", 0),
+        ("unavailable", "COORDINATE_NOT_WHOLE", 8),
+        ("unavailable", "COORDINATE_NOT_WHOLE", 8),
+        ("unavailable", "OUT_OF_RANGE", 8),
+    ]
 
 
 def test_a_drawn_reference_named_by_an_alias_is_read_without_catalog_rows(tmp_path: Path) -> None:

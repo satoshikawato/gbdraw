@@ -371,7 +371,7 @@ test('a span reply carries any of Python\'s span reasons and no other', () => {
   const spans = MATCH_SPAN_REASONS.map((_, index) => ({ kind: 'record', recordKey: `rec-${index}`, start: 1, end: 2 }));
   const unavailable = (reason) => ({ status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 0 });
   assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS',
-    'COORDINATE_BELOW_ONE', 'SOURCE_EMPTY', 'OUT_OF_RANGE']);
+    'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'SOURCE_EMPTY', 'OUT_OF_RANGE']);
   assert.throws(() => readMatchSequencesReply({ spans: [{ ...unavailable('OUT_OF_RANGE'), sourceLength: undefined }] }, spans.slice(0, 1)),
     (error) => error.code === 'RESULT_INVALID', 'a reply without the source length is refused');
   assert.equal(readMatchSequencesReply({ spans: MATCH_SPAN_REASONS.map(unavailable) }, spans).length, spans.length);

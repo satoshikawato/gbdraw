@@ -309,13 +309,19 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 /** The `readFeatureSequences` reply (`FeatureSequencesReply`): the features in the order asked. @typedef {{ features: readonly FeatureSequencesOf[] }} FeatureSequencesReply */
 
 /**
+ * A span coordinate (`SpanCoordinate`): a whole number, or null when the drawing's value is not a whole number
+ * (Python says so after it finds the record, as the match popup did before D5).
+ * @typedef {number | null} SpanCoordinate
+ */
+
+/**
  * A span of a drawn record by the record key of its drawn unit (`RecordMatchSpan`): displayed coordinates, 1-based
  * and inclusive; a start after the end is the reverse strand.
  * @typedef {object} RecordMatchSpan
  * @property {'record'} kind
  * @property {string} recordKey
- * @property {number} start
- * @property {number} end
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
  */
 
 /**
@@ -325,8 +331,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @typedef {object} ReferenceMatchSpan
  * @property {'reference'} kind
  * @property {string} recordId
- * @property {number} start
- * @property {number} end
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
  */
 
 /**
@@ -336,8 +342,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {'comparison'} kind
  * @property {number} sourceIndex
  * @property {string} recordId
- * @property {number} start
- * @property {number} end
+ * @property {SpanCoordinate} start
+ * @property {SpanCoordinate} end
  */
 
 /** @typedef {RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan} MatchSpanInput */

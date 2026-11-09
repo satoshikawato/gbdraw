@@ -65,6 +65,11 @@ class FeatureSequencesReply(TypedDict):
     features: list[FeatureSequencesOf]
 
 
+SpanCoordinate = int | None
+"""A span coordinate as the drawing gives it: a whole number, or ``None`` when the drawing's value is not a whole
+number (the page reads the value as the match popup did before D5, and Python says so after the record)."""
+
+
 @final
 class RecordMatchSpan(TypedDict):
     """A span of a drawn record, by the record key of its drawn unit: displayed coordinates, 1-based and inclusive;
@@ -72,8 +77,8 @@ class RecordMatchSpan(TypedDict):
 
     kind: Literal["record"]
     recordKey: str
-    start: int
-    end: int
+    start: SpanCoordinate
+    end: SpanCoordinate
 
 
 @final
@@ -83,8 +88,8 @@ class ReferenceMatchSpan(TypedDict):
 
     kind: Literal["reference"]
     recordId: str
-    start: int
-    end: int
+    start: SpanCoordinate
+    end: SpanCoordinate
 
 
 @final
@@ -94,14 +99,14 @@ class ComparisonMatchSpan(TypedDict):
     kind: Literal["comparison"]
     sourceIndex: int
     recordId: str
-    start: int
-    end: int
+    start: SpanCoordinate
+    end: SpanCoordinate
 
 
 MatchSpanInput = RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan
 MatchSpanReason = Literal[
-    "NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_BELOW_ONE",
-    "SOURCE_EMPTY", "OUT_OF_RANGE",
+    "NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_NOT_WHOLE",
+    "COORDINATE_BELOW_ONE", "SOURCE_EMPTY", "OUT_OF_RANGE",
 ]
 # Why a span cannot be read: the Web reads this list from here (tools/generate_web_contracts.py) and shows one text
 # per reason, the text the match popup showed for that case before D5.
@@ -148,21 +153,32 @@ def _feature_inputs(value: object) -> list[FeatureSequenceInput]:
     return features
 
 
+def _span_coordinate(value: object) -> SpanCoordinate:
+    """A whole number (JSON writes one of 1e21 or more in exponent form, which reads as a float), or ``None``."""
+
+    if value is None or type(value) is int:
+        return value
+    if type(value) is float and value.is_integer():
+        return int(value)
+    raise _protocol_error("A match span needs a start and an end.")
+
+
 def _span_inputs(value: object) -> list[MatchSpanInput]:
     if not isinstance(value, list) or not value:
         raise _protocol_error("A match sequence read needs a list of spans.")
     spans: list[MatchSpanInput] = []
     for item in value:
-        if not isinstance(item, Mapping) or not all(type(item.get(key)) is int for key in ("start", "end")):
+        if not isinstance(item, Mapping) or not {"start", "end"} <= set(item):
             raise _protocol_error("A match span needs a start and an end.")
+        start, end = _span_coordinate(item["start"]), _span_coordinate(item["end"])
         if set(item) == {"kind", "recordKey", "start", "end"} and item["kind"] == "record" and isinstance(
             item["recordKey"], str
         ):
-            spans.append({"kind": "record", "recordKey": item["recordKey"], "start": item["start"], "end": item["end"]})
+            spans.append({"kind": "record", "recordKey": item["recordKey"], "start": start, "end": end})
         elif set(item) == {"kind", "recordId", "start", "end"} and item["kind"] == "reference" and isinstance(
             item["recordId"], str
         ):
-            spans.append({"kind": "reference", "recordId": item["recordId"], "start": item["start"], "end": item["end"]})
+            spans.append({"kind": "reference", "recordId": item["recordId"], "start": start, "end": end})
         elif (
             set(item) == {"kind", "sourceIndex", "recordId", "start", "end"}
             and item["kind"] == "comparison"
@@ -171,7 +187,7 @@ def _span_inputs(value: object) -> list[MatchSpanInput]:
         ):
             spans.append({
                 "kind": "comparison", "sourceIndex": item["sourceIndex"], "recordId": item["recordId"],
-                "start": item["start"], "end": item["end"],
+                "start": start, "end": end,
             })
         else:
             raise _protocol_error(
@@ -257,9 +273,11 @@ def _match_source(
     return None, "RECORD_UNKNOWN"
 
 
-def _span_reason(sequence: str, start: int, end: int) -> MatchSpanReason | None:
+def _span_reason(sequence: str, start: SpanCoordinate, end: SpanCoordinate) -> MatchSpanReason | None:
     """Why the coordinates of a span cannot be read on ``sequence``, checked in the match popup's order before D5."""
 
+    if start is None or end is None:
+        return "COORDINATE_NOT_WHOLE"
     if start < 1 or end < 1:
         return "COORDINATE_BELOW_ONE"
     if not sequence:
@@ -315,11 +333,16 @@ def read_match_sequences(
     sources = match_sequence_sources(records)
     read: list[MatchSpanSequence] = []
     for span in asked:
-        orientation: Literal["+", "-"] = "+" if span["start"] <= span["end"] else "-"
+        start, end = span["start"], span["end"]
+        # A coordinate that is not whole has no strand; the page shows its own for that span.
+        orientation: Literal["+", "-"] = "-" if start is not None and end is not None and start > end else "+"
         source, reason = _match_source(records, sources, span)
         sequence = "" if source is None else cast("str", source["sequence"])
-        reason = reason or _span_reason(sequence, span["start"], span["end"])
-        bases = None if source is None or reason else read_match_span(sequence, span["start"], span["end"])
+        reason = reason or _span_reason(sequence, start, end)
+        bases = (
+            None if source is None or reason or start is None or end is None
+            else read_match_span(sequence, start, end)
+        )
         if source is None or bases is None:
             read.append({
                 "status": "unavailable", "reason": reason or "OUT_OF_RANGE",

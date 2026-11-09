@@ -8106,7 +8106,7 @@
                                                 <div class="text-xs font-semibold text-slate-700">{{ t('{role} span', { role: entry.span.displayRole }) }}</div>
                                                 <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
                                                 <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
-                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available"> · <span class="whitespace-nowrap">{{ entry.sequenceLength.toLocaleString() }} bp</span></template>
+                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available && entry.sequenceLength"> · <span class="whitespace-nowrap">{{ entry.sequenceLength.toLocaleString() }} bp</span></template>
                                                 </div>
                                             </div>
                                             <button type="button"

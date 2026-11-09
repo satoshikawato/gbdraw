@@ -28,7 +28,7 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
-/** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence } from './diagram-worker-protocol.js' */
+/** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence, SpanCoordinate } from './diagram-worker-protocol.js' */
 /** @import { SequenceReadState } from './catalog-sequences.js' */
 
 /**
@@ -1986,7 +1986,7 @@ const buildMatchSpans = (element, matchKind) => {
  * @typedef {object} MatchSpanEntry
  * @property {{ role: 'query' | 'subject', recordId: string, start: number, end: number, displayRole: string }} span
  * @property {'+' | '-'} orientation
- * @property {number} sequenceLength
+ * @property {number} sequenceLength The bases the span names; 0 when a coordinate is not a whole number.
  * @property {MatchSpanInput | null} read
  * @property {boolean} available
  * @property {string} unavailableReason
@@ -2015,8 +2015,8 @@ const safeFilePart = (value, fallback = 'sequence') => {
  * @param {ReturnType<typeof buildMatchSpans>[number]} span
  * @param {MatchKind} matchKind
  * @param {MatchSequenceRecords | null} records
- * @param {number} start
- * @param {number} end
+ * @param {SpanCoordinate} start
+ * @param {SpanCoordinate} end
  * @returns {{ read: MatchSpanInput | null, reason: string }}
  */
 const matchSpanRead = (span, matchKind, records, start, end) => {
@@ -2054,15 +2054,16 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, records) => {
   if (!spans.length) return null;
   const entries = spans.map((span) => {
     const role = span.role === 'subject' ? 'subject' : 'query';
-    // A whole coordinate, below 1 too, is Python's to judge after the record, as the popup judged it before D5.
-    const [start, end] = [span.start, span.end].map(Number);
-    const whole = Number.isSafeInteger(start) && Number.isSafeInteger(end);
-    const { read, reason } = whole ? matchSpanRead(span, matchKind, records, start, end)
-      : { read: null, reason: t('Coordinates must be whole 1-based values.') };
+    // Every coordinate is Python's to judge after the record, as the popup judged it before D5: one that is not a
+    // whole number goes as null.
+    const [shown, shownEnd] = [span.start, span.end].map(Number);
+    const [start, end] = [shown, shownEnd].map((value) => (Number.isInteger(value) ? value : null));
+    const { read, reason } = matchSpanRead(span, matchKind, records, start, end);
     // The span rows and the FASTA header show input-file coordinates (PD-OI-076); the bases are read on the
     // displayed record.
+    const whole = start !== null && end !== null;
     const source = whole ? recordSourceInterval(span.sourceSpan, start, end) : null;
-    const coords = source || { start, end };
+    const coords = source || { start: shown, end: shownEnd };
     /** @type {MatchSpanEntry} */
     const entry = {
       span: { role, recordId: span.recordId, start: coords.start, end: coords.end, displayRole: span.displayRole },
@@ -2104,6 +2105,7 @@ const MATCH_SPAN_REASON_TEXTS = Object.freeze({
   RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
   RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
   RECORD_ALIAS_AMBIGUOUS: msg('Record alias “{id}” is ambiguous in the available sequence sources.'),
+  COORDINATE_NOT_WHOLE: msg('Coordinates must be whole 1-based values.'),
   COORDINATE_BELOW_ONE: msg('Coordinates must be greater than or equal to 1.'),
   SOURCE_EMPTY: msg('The sequence source is empty.'),
   OUT_OF_RANGE: msg('Coordinates exceed the sequence length ({length} bp).')
