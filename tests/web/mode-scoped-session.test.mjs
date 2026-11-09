@@ -1556,7 +1556,8 @@ const twoConservationDrawings = async () => {
   const circular = session.drawings.find((entry) => entry.id === 'circular');
   const entries = circular.losatCache.entries;
   assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
-  const ringId = circular.webFiles.bindings.c_conservation_fastas[2].resourceId;
+  // A Session 51 binds each ring's genome as a list of files.
+  const ringId = circular.webFiles.bindings.c_conservation_fastas[2][0].resourceId;
   const ringText = Buffer.from(session.resources[ringId].data, 'base64').toString();
   const otherText = ringText.replace('\nACGT', '\nTCGT');
   assert.notEqual(otherText, ringText);
@@ -1598,9 +1599,9 @@ test('Save keeps the request\'s conservation entry for a ring whose bound file i
   const { session, keys } = await twoConservationDrawings();
   const second = session.drawings.find((entry) => entry.id === 'circular-2');
   // circular-2's request still names `ring-other`; its ring 3 binds circular's ring 3 file.
-  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2].resourceId;
+  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2][0].resourceId;
   for (const field of ['c_conservation_fastas', 'c_conservation_sequence_sources']) {
-    second.webFiles.bindings[field][2] = { ...second.webFiles.bindings[field][2], resourceId: ringId };
+    second.webFiles.bindings[field][2] = [{ ...second.webFiles.bindings[field][2][0], resourceId: ringId }];
   }
   resetDrawings();
   const loaded = await loadKeepingSlots(session);

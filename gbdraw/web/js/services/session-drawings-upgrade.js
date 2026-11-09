@@ -405,8 +405,9 @@ const drawingResourceIds = (drawing) => {
   const found = new Set(LAYOUT.drawingResourceFields.flatMap((field) => [...resourceIdsOf(drawing[field])]));
   const webFiles = mapping(drawing.webFiles);
   LAYOUT.resourceIdListFields.forEach((field) => {
+    // One list of IDs per ring: the files of its comparison genome.
     const ids = webFiles[field];
-    if (Array.isArray(ids)) ids.forEach((id) => { if (typeof id === 'string') found.add(id); });
+    if (Array.isArray(ids)) ids.flat().forEach((id) => { if (typeof id === 'string') found.add(id); });
   });
   return found;
 };

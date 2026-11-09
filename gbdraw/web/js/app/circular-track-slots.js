@@ -5,8 +5,8 @@
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
+  circularRingSources,
   isManagedConservationSlot,
-  normalizeFileList,
   orderedConservationSources,
   safeConservationSlotId
 } from '../services/conservation-series.js';
@@ -408,25 +408,10 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 };
 
 /** @param {DrawingState} drawing */
-const conservationSourceFiles = (drawing) => {
-  const blasts = normalizeFileList(drawing.files.c_conservation_blasts);
-  if (
-    String(drawing?.circularConservation?.source || '').trim().toLowerCase() === 'upload' ||
-    (
-      drawing.files.c_conservation_blasts_source === 'losat-cache' &&
-      blasts.length > 0
-    )
-  ) {
-    return blasts;
-  }
-  return normalizeFileList(drawing.files.c_conservation_fastas);
-};
-
-/** @param {DrawingState} drawing */
 const conservationEntries = (drawing) => {
   if (drawing?.circularConservation?.enabled !== true) return [];
   return orderedConservationSources(
-    conservationSourceFiles(drawing),
+    circularRingSources(drawing),
     drawing.circularConservation
   );
 };

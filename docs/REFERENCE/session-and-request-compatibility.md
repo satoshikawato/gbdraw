@@ -688,6 +688,13 @@ otherwise the selector stays `#N`, and the Web app places it over the records of
 the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
 
+A Session 51 Circular drawing binds each similarity ring's comparison genome as
+a list of files (`c_conservation_fastas` and `c_conservation_sequence_sources`,
+one list per ring, in the ring's file order), and its
+`conservationLosatFastaSources` and `conservationSequenceSources` hold one list
+of resource IDs per ring. A Session 50 or older wrote one file or none per
+ring; it loads as a ring of that one file, or a ring without files.
+
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.

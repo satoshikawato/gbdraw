@@ -5,7 +5,7 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
-import { cardCropWindow } from './drawing/inputs.js';
+import { cardCropWindow, ringGenomeFileLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 import {
   canonicalFeatureOverrides,
@@ -340,7 +340,7 @@ const requestDrawingMode = (drawing) => {
  * @typedef {object} ResolvedConservationEntry
  * @property {string} [name]
  * @property {string} [text]
- * @property {ResourceEntry | null} [fasta]
+ * @property {readonly ResourceEntry[]} [fastas] The files of the ring's comparison genome, in the listed order.
  * @property {string} [label]
  * @property {string} [color]
  * @property {string} [sourceKey]
@@ -384,8 +384,8 @@ const requestDrawingMode = (drawing) => {
  * @property {DepthFileSlots | DepthFileSlots[]} [c_depth]
  * @property {FileLike[]} [c_conservation_blasts]
  * @property {string | null} [c_conservation_blasts_source]
- * @property {FileLike[]} [c_conservation_fastas]
- * @property {(ResourceEntry | null)[]} [c_conservation_sequence_sources]
+ * @property {FileLike[][]} [c_conservation_fastas] Each LOSAT ring's comparison genome files.
+ * @property {ResourceEntry[][]} [c_conservation_sequence_sources] Each table's comparison sequence files.
  * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
  * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
@@ -1247,6 +1247,17 @@ const createResourceBuilder = ({ encode = true } = {}) => {
  * @returns {CanonicalFileRef}
  */
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
+/**
+ * The request's `conservationFastaFiles`: each ring's comparison genome files,
+ * one list of file references per ring, resource `<base>-<ring>-<file>` (D-62).
+ * @param {ResourceBuilder} resources
+ * @param {string} base
+ * @param {readonly (readonly ResourceEntry[])[]} rings
+ * @returns {CanonicalFileRef[][]}
+ */
+const ringFileRefs = (resources, base, rings) => rings.map((files, ringIndex) => files.map((entry, fileIndex) => (
+  fileRef(resources.addFile(`${base}-${ringIndex + 1}-${fileIndex + 1}`, 'conservation-fasta-file', entry))
+)));
 // The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
 const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
 /**
@@ -4858,23 +4869,14 @@ const projectCanonicalRenderInput = ({
           entry.file
         )
       ));
-      const comparisonSources = Array.isArray(filesData.c_conservation_sequence_sources)
-        ? filesData.c_conservation_sequence_sources
-        : [];
+      /** @type {ResourceEntry[][]} */
+      const comparisonSources = ringGenomeFileLists(filesData.c_conservation_sequence_sources);
       const orderedComparisonSources = conservationEntries.map(
-        (entry) => comparisonSources[entry.sourceIndex] || null
+        (entry) => comparisonSources[entry.sourceIndex] || []
       );
-      if (orderedComparisonSources.some(Boolean)) {
-        // One list of genome files per ring (request schema 10); the Web gives a ring one file.
-        diagramOptions.conservationFastaFiles = orderedComparisonSources.map((entry, index) => (
-          entry
-            ? [fileRef(resources.addFile(
-              `conservation-fasta-files-${index + 1}-1`,
-              'conservation-fasta-file',
-              entry
-            ))]
-            : []
-        ));
+      if (orderedComparisonSources.some((files) => files.length > 0)) {
+        // One list of genome files per ring (request schema 10).
+        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-fasta-files', orderedComparisonSources);
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation, conservationEntries, 'auto'));
       if (conservationBlastsAreDerived) {
@@ -4883,21 +4885,18 @@ const projectCanonicalRenderInput = ({
     }
     if (conservationSource === 'losat') {
       const comparisonFastas = orderedOptionalConservationFiles(
-        filesData.c_conservation_fastas,
+        ringGenomeFileLists(filesData.c_conservation_fastas),
         drawing.circularConservation
       );
       if (comparisonFastas.length > 0) {
-        webFiles.conservationLosatFastaSources = comparisonFastas.map(
-          (entry, index) => (
+        // Each ring's LOSAT query files, one list of resource IDs per ring.
+        webFiles.conservationLosatFastaSources = comparisonFastas.map((files, index) => (files || []).map(
+          (entry, fileIndex) => resources.addFile(
+            `conservation-losat-fasta-files-${index + 1}-${fileIndex + 1}`,
+            'conservation-fasta-file',
             entry
-              ? resources.addFile(
-                  `conservation-losat-fasta-files-${index + 1}`,
-                  'conservation-fasta-file',
-                  entry
-                )
-              : null
           )
-        );
+        ));
       }
     }
     if (
@@ -4912,19 +4911,9 @@ const projectCanonicalRenderInput = ({
           String(entry?.text || '')
         ))
       );
-      const comparisonFastas = resolvedCircularConservation.map(
-        (entry, index) => (
-          entry?.fasta
-            ? [fileRef(resources.addFile(
-                `conservation-resolved-fasta-${index + 1}`,
-                'conservation-fasta-file',
-                entry.fasta
-              ))]
-            : []
-        )
-      );
+      const comparisonFastas = resolvedCircularConservation.map((entry) => [...(entry?.fastas || [])]);
       if (comparisonFastas.some((files) => files.length > 0)) {
-        diagramOptions.conservationFastaFiles = comparisonFastas;
+        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-resolved-fasta', comparisonFastas);
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
         resolvedCircularConservation.map((entry, index) => ({
@@ -6909,40 +6898,33 @@ export const projectCanonicalSessionRequest = ({
       files.c_conservation_blasts_source = 'losat-cache';
     }
   }
+  /** @param {unknown} resourceId */
+  const resourceFile = (resourceId) => (typeof resourceId === 'string' && resourceId
+    ? (resolveResourceFile ? resolveResourceFile(resourceId) : resourceAsLegacyFile(resources, resourceId))
+    : null);
+  // Each ring's genome files, in their order: the request's references
+  // (request schema 10), else the Web metadata's resource IDs, one list per
+  // ring (one ID or null per ring in a Session 50 or older, `ringGenomeFileLists`).
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
-    // A Web ring holds one file: the first of the ring's genome files (request schema 10).
-    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {unknown} */ ringFiles) => {
-      const [ref] = /** @type {UnvalidatedFields<'resourceId'>[]} */ (Array.isArray(ringFiles) ? ringFiles : []);
-      return ref?.resourceId
-        ? (resolveResourceFile
-            ? resolveResourceFile(ref.resourceId)
-            : resourceAsLegacyFile(resources, ref.resourceId))
-        : null;
-    });
+    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {unknown} */ ringFiles) => (
+      (Array.isArray(ringFiles) ? ringFiles : []).flatMap((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => {
+        const file = resourceFile(ref?.resourceId);
+        return file ? [file] : [];
+      })
+    ));
   } else if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
-    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map(
-      (/** @type {unknown} */ resourceId) => (resourceId
-        ? (resolveResourceFile
-            ? resolveResourceFile(resourceId)
-            : resourceAsLegacyFile(resources, resourceId))
-        : null)
-    );
+    files.c_conservation_sequence_sources = ringGenomeFileLists(webMetadata.conservationSequenceSources)
+      .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
   }
   if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationLosatFastaSources)
   ) {
-    files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
-      .map((/** @type {unknown} */ resourceId) => (
-        resourceId
-          ? (resolveResourceFile
-              ? resolveResourceFile(resourceId)
-              : resourceAsLegacyFile(resources, resourceId))
-          : null
-      ));
+    files.c_conservation_fastas = ringGenomeFileLists(webMetadata.conservationLosatFastaSources)
+      .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
   }
   // The tables the request reads. A Web or CLI binding names the file a table
   // was imported from; the writer stored the table derived from it (OV-367).
@@ -7601,15 +7583,14 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
  * Schema 10 writes the files of a ring's comparison genome as a list
  * (`conservationFastaFiles[i]`); schemas 9 and older wrote one file reference
  * or null per ring, read as a list of that one file or none, as Python's
- * decoder reads it (`_decode_option_value`). Edited in place; a value that is
- * no array is left to the repair.
+ * decoder reads it (`_decode_option_value`), by the Web's one reading of that
+ * older ring form (`ringGenomeFileLists`). Edited in place; a value that is no
+ * array is left to the repair.
  * @param {unknown} diagramOptions
  */
 const promoteRingFilesToLists = (diagramOptions) => {
   if (!isPlainObject(diagramOptions) || !Array.isArray(diagramOptions.conservationFastaFiles)) return;
-  diagramOptions.conservationFastaFiles = diagramOptions.conservationFastaFiles.map(
-    (/** @type {unknown} */ ref) => (ref === null ? [] : [ref])
-  );
+  diagramOptions.conservationFastaFiles = ringGenomeFileLists(diagramOptions.conservationFastaFiles);
 };
 
 /**

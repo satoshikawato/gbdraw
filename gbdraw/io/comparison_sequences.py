@@ -229,17 +229,10 @@ def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGeno
     return ComparisonGenome(tuple(files))
 
 
-def read_comparison_sequence_records(path: str | os.PathLike[str]) -> tuple[SeqRecord, ...]:
-    """The records of :func:`read_comparison_sequence_file`."""
-
-    return read_comparison_sequence_file(path).records
-
-
 __all__ = [
     "ComparisonGenome",
     "ComparisonSequenceFile",
     "comparison_file_stem",
     "comparison_genome",
     "read_comparison_sequence_file",
-    "read_comparison_sequence_records",
 ]

@@ -258,6 +258,13 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  */
 
 /**
+ * An input, and for a list its members at every depth (a Depth matrix, a ring's genome files).
+ * @param {unknown} input
+ * @returns {unknown[]}
+ */
+const inputAndMembers = (input) => (Array.isArray(input) ? [input, ...input.flatMap(inputAndMembers)] : [input]);
+
+/**
  * @param {RulePreparationOptions} options
  * @returns {RulePreparation}
  */
@@ -341,7 +348,7 @@ export const createRulePreparation = ({
         files.c_conservation_blasts, files.c_conservation_blasts_source,
         files.c_conservation_fastas, files.c_conservation_sequence_sources,
         files.d_color, files.blacklist, files.whitelist, files.qualifier_priority
-      ]).flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
+      ]).flatMap(inputAndMembers)
     };
   };
   /** @type {RulePreparation['isCurrent']} */

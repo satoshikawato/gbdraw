@@ -362,9 +362,10 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
     'file-entry-dropped webFiles.bindings.c_conservation_fastas[1]',
     'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
   ]);
-  const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  // Each ring place is its genome's file list; the dropped one is empty.
+  const ringNames = (rings) => rings.map((files) => files.map((file) => file.name));
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_fastas), [['comparison-b.fasta'], [], ['comparison-d.fasta']]);
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), [['comparison-b.fasta'], [], ['comparison-d.fasta']]);
 });
 
 // OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
@@ -385,12 +386,13 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   const names = (files) => files.map((file) => file?.name ?? null);
   assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_blasts),
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  const ringNames = (rings) => rings.map((files) => files.map((file) => file.name));
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_fastas), [['comparison-b.fasta'], ['comparison-d.fasta']]);
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), [['comparison-b.fasta'], ['comparison-d.fasta']]);
   const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
   assert.deepEqual(orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, conservation)
-    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex][0].name]), [
     ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
     ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
   ]);
@@ -407,7 +409,7 @@ test('a comparison file entry of an older Session that cannot be read is listed'
     'file-entry-dropped files.c_conservation_fastas[0]',
     'file-entry-dropped files.c_conservation_sequence_sources[0]'
   ]);
-  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [null, null]);
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [[], []]);
 });
 
 // OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,

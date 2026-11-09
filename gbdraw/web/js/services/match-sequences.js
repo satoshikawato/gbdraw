@@ -6,6 +6,7 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
+import { ringGenomeFileLists } from './drawing/inputs.js';
 import {
   gffFastaReaderSelector,
   readAllSequenceRecords,
@@ -554,22 +555,24 @@ export const resolveCircularComparisonSequenceAvailability = ({
   const sourceMode = text(circularConservation?.source).toLowerCase();
   if (!['upload', 'losat'].includes(sourceMode)) return [];
 
-  const comparisonFiles = sourceMode === 'upload'
-    ? (files?.c_conservation_sequence_sources || [])
-    : (files?.c_conservation_fastas || []);
+  // Each ring's comparison genome files (`ringGenomeFileLists`).
+  /** @type {FileLike[][]} */
+  const comparisonFiles = ringGenomeFileLists(sourceMode === 'upload'
+    ? files?.c_conservation_sequence_sources
+    : files?.c_conservation_fastas);
   const orderedComparisonFiles = sourceMode === 'upload'
     ? orderedConservationSources(
         files?.c_conservation_blasts || [],
         circularConservation
-      ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
+      ).map((entry) => comparisonFiles[entry.sourceIndex] || [])
     : orderedOptionalConservationFiles(
         comparisonFiles,
         circularConservation
       );
-  return orderedComparisonFiles.map((file, sourceIndex) => ({
+  return orderedComparisonFiles.map((ringFiles, sourceIndex) => ({
     sourceIndex,
-    file: file || null,
-    availability: file ? 'recoverable' : 'never-supplied'
+    files: ringFiles || [],
+    availability: ringFiles?.length ? 'recoverable' : 'never-supplied'
   }));
 };
 
@@ -612,7 +615,7 @@ const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
       reason: `The Circular comparison source availability is unknown for source index ${sourceIndex}.`
     };
   }
-  const hasFile = Boolean(entry.file);
+  const hasFile = Array.isArray(entry.files) && entry.files.length > 0;
   if (
     (availability === 'recoverable' && !hasFile)
     || (availability === 'never-supplied' && hasFile)
@@ -1242,8 +1245,9 @@ export const buildRestoredMatchSequenceSources = async ({
     files,
     circularConservation
   });
-  for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
-    const records = await readComparisonRecords(file);
+  for (const { sourceIndex: displayIndex, files: ringFiles } of comparisonSourceAvailability) {
+    // Every file of the ring's genome, in its order, as the ring search read them.
+    const records = (await Promise.all(ringFiles.map((file) => readComparisonRecords(file)))).flat();
     records.forEach((record) => {
       if (!record.sequence) return;
       sources.push({

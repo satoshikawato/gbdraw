@@ -1,6 +1,8 @@
 // @ts-check
 import { CONSERVATION_TEN_COLORS } from '../utils/conservation-colors.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
+import { ringGenomeFileLists } from './drawing/inputs.js';
+/** @import { InputFileRef } from './history-files.js' */
 
 /**
  * What a comparison source slot holds, as these helpers read it (its name,
@@ -24,8 +26,17 @@ import { resolveColorToHex } from '../utils/color-utils.js';
  */
 /** @typedef {{ series?: RawConservationSeriesEntry[] | null, labels?: unknown }} CircularConservationLike */
 /**
+ * One comparison source: `files` are what it reads, `file` the first of them, which names it (its file name, its
+ * default label). A BLAST table is a source of one file; a ring's comparison genome is a source of its files, in the
+ * listed order (a chromosome and its plasmids).
  * @template {ConservationFile} [F=ConservationFile]
- * @typedef {{ file: F, sourceKey: string, sourceIndex: number, fileName: string, defaultLabel: string }} ConservationSourceDescriptor
+ * @typedef {{ file: F, files: readonly F[], sourceKey: string, sourceIndex: number, fileName: string,
+ *   defaultLabel: string }} ConservationSourceDescriptor
+ */
+/**
+ * The places of a source list as the helpers read them: a file (a BLAST table), a ring's genome files, or nothing.
+ * @template {ConservationFile} F
+ * @typedef {F | readonly (F | null)[] | null | undefined} ConservationSourcePlace
  */
 /**
  * @template {ConservationFile} [F=ConservationFile]
@@ -46,8 +57,51 @@ const CONSERVATION_SERIES_COLORS = [0, 1, 5, 3, 2, 7, 6, 9, 8, 4].map((index) =>
 export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(/** @returns {file is T} */ (file) => Boolean(file)) : (files ? [files] : []));
 
 /**
- * @template {ConservationFile} T
- * @param {(T | null)[] | null | undefined} files An empty place is kept as one.
+ * What `circularRingSources` reads of a Circular drawing.
+ * @typedef {{
+ *   files: {
+ *     readonly c_conservation_blasts: readonly InputFileRef[], readonly c_conservation_blasts_source: string | null,
+ *     readonly c_conservation_fastas: readonly (readonly InputFileRef[])[]
+ *   },
+ *   circularConservation: { readonly source?: unknown }
+ * }} RingSourceDrawing
+ */
+/**
+ * The sources of a Circular drawing's rings, the one reading of which files
+ * its ring series follow: the BLAST tables of uploaded rings and of a
+ * LOSAT-cache replay, else each LOSAT ring's comparison genome files.
+ * @param {RingSourceDrawing} drawing
+ * @returns {readonly (InputFileRef | readonly InputFileRef[])[]}
+ */
+export const circularRingSources = (drawing) => {
+  const blasts = normalizeFileList([...drawing.files.c_conservation_blasts]);
+  const upload = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload';
+  if (upload || (drawing.files.c_conservation_blasts_source === 'losat-cache' && blasts.length > 0)) return blasts;
+  return ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
+};
+
+/**
+ * The files of a source place, in order: one for a file, a ring genome's files for a list.
+ * @template {ConservationFile} F
+ * @param {ConservationSourcePlace<F>} place
+ * @returns {F[]}
+ */
+const filesOfPlace = (place) => {
+  if (Array.isArray(place)) {
+    return /** @type {readonly (F | null)[]} */ (place).filter(/** @returns {file is F} */ (file) => Boolean(file));
+  }
+  return place ? [/** @type {F} */ (place)] : [];
+};
+
+/**
+ * The name that matches a place to a series entry's `fileName`: its first file's.
+ * @param {ConservationSourcePlace<ConservationFile>} place
+ */
+const placeName = (place) => String(filesOfPlace(place)[0]?.name || '').trim();
+
+/**
+ * @template {ConservationSourcePlace<ConservationFile>} T
+ * @param {T[] | null | undefined} files An empty place is kept as one.
  * @param {CircularConservationLike | null | undefined} circularConservation
  * @returns {(T | null)[]}
  */
@@ -66,10 +120,7 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
     const fileName = String(entry?.fileName || '').trim();
     let index = fileName
       ? sourceFiles.findIndex(
-          (file, candidateIndex) => (
-            !used.has(candidateIndex) &&
-            String(file?.name || '').trim() === fileName
-          )
+          (file, candidateIndex) => !used.has(candidateIndex) && placeName(file) === fileName
         )
       : -1;
     if (index < 0) {
@@ -78,13 +129,13 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
     }
     if (index >= 0 && index < sourceFiles.length && !used.has(index)) {
       used.add(index);
-      ordered.push(sourceFiles[index] || null);
+      ordered.push(sourceFiles[index]);
       return;
     }
     ordered.push(null);
   });
   sourceFiles.forEach((file, index) => {
-    if (!used.has(index)) ordered.push(file || null);
+    if (!used.has(index)) ordered.push(file);
   });
   return ordered;
 };
@@ -96,9 +147,10 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
  * order; the place `index` goes from every list, and the series after it keep
  * their own files and take the place before (`sourceIndex`). The comparison
  * stays on while a series keeps its BLAST table (`enabled`).
- * @template F
+ * @template B The place of a BLAST table.
+ * @template G The place of a ring genome's files.
  * @template {object} S
- * @param {{ blasts: F[], fastas: F[], sequenceSources: F[], series: S[] }} lists
+ * @param {{ blasts: B[], fastas: G[], sequenceSources: G[], series: S[] }} lists
  * @param {number} index
  */
 export const withoutConservationSeries = ({ blasts, fastas, sequenceSources, series }, index) => {
@@ -173,21 +225,29 @@ const fileSignature = (file, index) => {
 };
 
 /**
+ * The sources of a source list, in order; a place without a file is left out,
+ * so `sourceIndex` counts the sources. A source's key is its files'
+ * signatures (one file's is that file's, as before a ring took several), with
+ * the count of earlier sources of the same files.
  * @template {ConservationFile} F
- * @param {F | F[] | null | undefined} sourceFiles
+ * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @returns {ConservationSourceDescriptor<F>[]}
  */
 export const conservationSourceDescriptors = (sourceFiles) => {
   /** @type {Map<string, number>} */
   const seen = new Map();
-  return normalizeFileList(sourceFiles).map((file, index) => {
-    const signature = fileSignature(file, index);
+  /** @type {readonly ConservationSourcePlace<F>[]} */
+  const places = Array.isArray(sourceFiles) ? sourceFiles : [sourceFiles];
+  return places.map((place) => filesOfPlace(place)).filter((files) => files.length > 0).map((files, index) => {
+    const [file] = files;
+    const signature = files.map((member) => fileSignature(member, index)).join(' + ');
     const duplicateIndex = seen.get(signature) || 0;
     seen.set(signature, duplicateIndex + 1);
     const fileName = String(file?.name || `source_${Number(index) + 1}`).trim();
     const sourceKey = `${signature}|${duplicateIndex}`;
     return {
       file,
+      files,
       sourceKey,
       sourceIndex: index,
       fileName,
@@ -217,7 +277,7 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
 
 /**
  * @param {{
- *   sourceFiles: ConservationFile | ConservationFile[] | null | undefined,
+ *   sourceFiles: ConservationSourcePlace<ConservationFile> | readonly ConservationSourcePlace<ConservationFile>[],
  *   previousSeries: RawConservationSeriesEntry[] | null | undefined,
  *   legacyLabels: string[] | null | undefined
  * }} options
@@ -285,7 +345,7 @@ export const reconcileConservationSeries = ({
 /**
  * @param {{
  *   series: ConservationSeriesEntry[] | null | undefined,
- *   sourceFiles: ConservationFile | ConservationFile[] | null | undefined,
+ *   sourceFiles: ConservationSourcePlace<ConservationFile> | readonly ConservationSourcePlace<ConservationFile>[],
  *   file: ConservationFile | null | undefined,
  *   recordLabel: unknown
  * }} options
@@ -304,12 +364,13 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
 
 /**
  * @template {ConservationFile} F
- * @param {F | F[] | null | undefined} sourceFiles
+ * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
  * @returns {OrderedConservationSource<F>[]}
  */
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
-  const descriptors = conservationSourceDescriptors(sourceFiles);
+  // The places' union hides F from the call's inference; the descriptors hold the given files.
+  const descriptors = /** @type {ConservationSourceDescriptor<F>[]} */ (conservationSourceDescriptors(sourceFiles));
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
   /** @type {Map<string, ConservationSourceDescriptor<F>[]>} */

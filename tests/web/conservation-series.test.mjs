@@ -13,6 +13,7 @@ const {
   reconcileConservationSeries,
   withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
+const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 
 const file = (name, size = 10) => ({ name, size, lastModified: 0 });
 
@@ -115,4 +116,20 @@ test('a row without a colour takes the colour of its position', () => {
   assert.deepEqual(colors.map((_, index) => normalizeConservationSeriesColor(null, index)), colors);
   assert.equal(normalizeConservationSeriesColor('', 10), colors[0]);
   assert.equal(normalizeConservationSeriesColor('#ABC', 3), '#aabbcc');
+});
+
+// PR-B: a ring's place holds its comparison genome's files. A place that is one
+// file or null (a Session 50 or older) reads as a genome of that one file, or of
+// none; a ring of one file keeps the key it had before a ring took several.
+test('a ring place is its genome\'s files; the one-file form of an older Session reads as one', () => {
+  const [a, b, c] = [file('a.fasta'), file('b.fasta', 20), file('c.fasta', 30)];
+  assert.deepEqual(ringGenomeFileLists([a, null, [b, null, c]]), [[a], [], [b, c]]);
+  assert.deepEqual(ringGenomeFileLists(undefined), []);
+  const [oneFlat] = rowsFor([a]);
+  const [oneList] = rowsFor([[a]]);
+  assert.equal(oneList.sourceKey, oneFlat.sourceKey, 'a one-file ring keeps its key');
+  const series = rowsFor([[b, c], [], [a]]);
+  assert.deepEqual(series.map(({ fileName, sourceIndex }) => [fileName, sourceIndex]), [['b.fasta', 0], ['a.fasta', 1]],
+    'an empty place is no ring; a ring is named by its first file');
+  assert.notEqual(series[0].sourceKey, rowsFor([[c, b]])[0].sourceKey, 'the order of a genome\'s files is part of its key');
 });

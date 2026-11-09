@@ -391,8 +391,8 @@ test('comparison availability preserves nulls and duplicate-name source ordering
   });
 
   assert.deepEqual(availability, [
-    { sourceIndex: 0, file: null, availability: 'never-supplied' },
-    { sourceIndex: 1, file: firstFasta, availability: 'recoverable' }
+    { sourceIndex: 0, files: [], availability: 'never-supplied' },
+    { sourceIndex: 1, files: [firstFasta], availability: 'recoverable' }
   ]);
 });
 

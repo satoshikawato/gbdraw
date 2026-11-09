@@ -966,15 +966,17 @@ into the `[Unreleased]` list below.
   files first. `gbdraw circular --conservation_genome FILE [FILE ...]`, given
   once per ring, a `comparison_sequence` cell of `--conservation_table` that
   lists the files separated by `;`, and a list of paths in
-  `CircularDiagramOptions.conservation_sequence_files` give one ring every
-  record of those files, file after file: the ring of one file that holds them
-  all. The ring is labelled after its first file. `--losat_output_dir` writes
+  `CircularDiagramOptions.conservation_sequence_files`, a list of paths in
+  `ComparisonRingTrackOptions.comparison_sequence_source`, and **Add file** on
+  a Web app ring row (which also reorders and removes the ring's files) give
+  one ring every record of those files, file after file: the ring of one file
+  that holds them all. The ring is labelled after its first file. `--losat_output_dir` writes
   the `;` list, so its `conservation.tsv` still reads back unchanged. Two files
   of one genome that hold the same record ID are refused
   (`DUPLICATE_RECORD_ID`). `--conservation_sequence` keeps one file per ring.
-  A request now writes each ring's `conservationFastaFiles` entry as a list of
-  file references; a request or Session saved by gbdraw 0.14.5 or earlier reads
-  each ring's one file as before.
+  A request now writes each ring's `conservationFastaFiles` entry, and a
+  Session its ring file bindings, as a list of files; a request or Session
+  saved by gbdraw 0.14.5 or earlier reads each ring's one file as before.
 - Added (Web app): a Circular **Show Comparison Rings** setting, beside
   **Show Depth**. Generate draws the comparison rings and runs their LOSAT
   searches or reads their BLAST tables only while it is on. Like **Show

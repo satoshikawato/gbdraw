@@ -389,7 +389,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
-/** @import { ConservationFile, RawConservationSeriesEntry } from './conservation-series.js' */
+/** @import { ConservationFile, ConservationSourcePlace, RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots, DepthSlotFile } from './depth-track-state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
@@ -4960,10 +4960,15 @@ const convertDetachedProteinResultFrames = async (source, committed, projectionI
 const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, stored }, repairs) => {
   /** @param {unknown} list @returns {(ConservationFile | null)[]} */
   const placed = (list) => (Array.isArray(list) ? list : []);
+  /**
+   * A ring genome's place: its files, or one file or none as a Session 50 or older wrote it.
+   * @param {unknown} list @returns {ConservationSourcePlace<ConservationFile>[]}
+   */
+  const placedRings = (list) => (Array.isArray(list) ? list : []);
   if (!placed(files.c_conservation_blasts).some((file) => !file)) return config;
   const conservation = isPlainObject(config.circularConservation) ? config.circularConservation : {};
   const series = /** @type {RawConservationSeriesEntry[]} */ (Array.isArray(conservation.series) ? conservation.series : []);
-  /** @template {ConservationFile} T @param {(T | null)[]} list */
+  /** @template {ConservationSourcePlace<ConservationFile>} T @param {T[]} list */
   const inSeriesOrder = (list) => orderedOptionalConservationFiles(list, { series });
   // Where each table, in series order, is in the stored list.
   const storedPlaces = inSeriesOrder(placed(files.c_conservation_blasts).map((file, place) => ({ name: file?.name, place })))
@@ -4971,8 +4976,8 @@ const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, sto
   const storedTables = placed(stored);
   let kept = {
     blasts: inSeriesOrder(placed(files.c_conservation_blasts)),
-    fastas: inSeriesOrder(placed(files.c_conservation_fastas)),
-    sequenceSources: inSeriesOrder(placed(files.c_conservation_sequence_sources)),
+    fastas: inSeriesOrder(placedRings(files.c_conservation_fastas)),
+    sequenceSources: inSeriesOrder(placedRings(files.c_conservation_sequence_sources)),
     series: [...series, ...parseConservationLabelText(conservation.labels).slice(series.length).map((label) => ({ label }))],
     labels: '',
     enabled: true
@@ -5036,7 +5041,8 @@ const readFileSlot = (stored, path, readable, repairs) => {
 /**
  * A file list's stored value, read by place: an entry `readable` does not
  * keep leaves its place empty and is listed at `path[index]`; an entry that
- * holds nothing is no row. (A list in a place is kept, as `deserializeFile` reads one.)
+ * holds nothing is no row. A list in a place (a ring's genome files) is read
+ * so too, its places at `path[index][fileIndex]`.
  * @param {unknown} stored
  * @param {string} path
  * @param {StoredFileTest} readable
@@ -5044,7 +5050,8 @@ const readFileSlot = (stored, path, readable, repairs) => {
  * @returns {unknown[]}
  */
 const readFileList = (stored, path, readable, repairs) => (Array.isArray(stored) ? stored : []).map((entry, index) => {
-  if (Array.isArray(entry) || readable(entry)) return entry;
+  if (Array.isArray(entry)) return readFileList(entry, `${path}[${index}]`, readable, repairs);
+  if (readable(entry)) return entry;
   if (!holdsNothing(entry)) repairs?.push(loadRepair({ code: 'file-entry-dropped', path: `${path}[${index}]`, effect: 'dropped' }));
   return null;
 });

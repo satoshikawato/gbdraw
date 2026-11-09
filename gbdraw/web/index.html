@@ -4517,22 +4517,30 @@
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
-                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
+                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add a comparison sequence file (FASTA, GenBank, or DDBJ) for each pairwise comparison ring; Add file on a ring adds more files of the same genome. Then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">{{ t('Series') }} <help-tip :text="t('Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
                                     <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" @input="refreshCircularConservationSlots()" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
-                                        <label v-if="circularConservation.source === 'upload'"
-                                               class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
-                                            <span class="shrink-0">{{ t('Comparison sequence') }}</span>
-                                            <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || t('Choose file…') }}</span>
-                                            <input type="file"
-                                                   class="hidden"
+                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span><template v-if="circularConservation.source === 'upload'"> - {{ row.filename }}</template></div>
+                                        <!-- The ring's comparison genome: its files in order (a LOSAT query, or an uploaded table's optional comparison sequence), each added, moved, or removed here. -->
+                                        <div data-ring-row-files class="space-y-0.5">
+                                            <span v-if="circularConservation.source === 'upload'" class="block text-[9px] text-slate-500">{{ t('Comparison sequence') }}</span>
+                                            <div v-for="(name, fileIndex) in row.files" :key="`ring-file-${row.index}-${fileIndex}-${name}`" data-ring-row-file class="flex items-center gap-0.5 text-[9px] text-slate-600">
+                                                <span class="min-w-0 flex-1 truncate" :title="name">{{ name }}</span>
+                                                <template v-if="row.files.length > 1">
+                                                    <button type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="moveRingRowFile(row.index, fileIndex, -1)" :disabled="!semanticMutationAvailable || processing || fileIndex === 0" :aria-label="t('Move File {n} up', { n: fileIndex + 1 })" :title="t('Move File {n} up', { n: fileIndex + 1 })"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                    <button type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="moveRingRowFile(row.index, fileIndex, 1)" :disabled="!semanticMutationAvailable || processing || fileIndex === row.files.length - 1" :aria-label="t('Move File {n} down', { n: fileIndex + 1 })" :title="t('Move File {n} down', { n: fileIndex + 1 })"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                </template>
+                                                <button v-if="row.canRemoveFile" type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="removeRingRowFile(row.index, fileIndex)" :disabled="!semanticMutationAvailable || processing" :aria-label="t('Remove {name}', { name })" :title="t('Remove {name}', { name })"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                            </div>
+                                            <input type="file" multiple class="hidden"
                                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
-                                                   @change="setCircularConservationCompanionFile(row.sourceIndex, $event)" :disabled="!semanticMutationAvailable">
-                                        </label>
+                                                   :aria-label="t('Add file')"
+                                                   @change="addRingRowFiles(row.index, $event)" :disabled="!semanticMutationAvailable || processing">
+                                            <button type="button" data-history-ignore data-ring-row-file-add class="btn btn-secondary h-5 px-1 text-[9px]" @click="$event.currentTarget.previousElementSibling.click()" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
+                                        </div>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">{{ t('Comparison gencode') }}</label>
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">

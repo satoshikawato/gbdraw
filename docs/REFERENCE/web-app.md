@@ -1102,10 +1102,19 @@ Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular
 comparison uses the displayed Circular record as the search subject and each
-file under **Comparison sequence files** as a query. A comparison file is FASTA,
-GenBank, or DDBJ, and all records of one file are one genome. The diagram worker
-reads it with the reader of `--conservation_sequence`, so a ring has the CLI raw
-cache key for every format and FASTA layout. A row added from a GenBank or DDBJ
+ring's genome under **Comparison sequence files** as a query. **Add comparison
+sequence** adds a ring for the chosen file. A genome split over several files
+(a chromosome and its plasmids, for example) is one ring: **Add file** on the
+ring row adds files to that ring's genome, and the arrows and the remove button
+beside each file reorder or remove it; the ring keeps its name and color. The
+files are read in their order as one genome, as `--conservation_genome a b`
+reads them, and two files of one genome that share a record ID are refused. A
+LOSAT ring keeps at least one file; **Remove series** removes the ring. A
+comparison file is FASTA, GenBank, or DDBJ. The diagram worker reads a ring's
+files with the reader of `--conservation_genome`, so a ring has the CLI raw
+cache key for every format and FASTA layout. An uploaded BLAST table's ring
+takes its optional comparison sequence files the same way, under
+**Comparison sequence**. A row added from a GenBank or DDBJ
 file is labelled like the CLI ring without `--conservation_labels`: the first
 record's DEFINITION, or its organism when the DEFINITION is empty. The worker
 reads the label after the row appears, and a typed label is kept. The **Add
@@ -1847,8 +1856,7 @@ the renderer's text measurements; Generate applies it. **Undo** and **Redo** tra
 editor changes. Each change of a checkbox, radio button, select, or button is one step. This
 holds whether you use the pointer, click its label text, or use the keyboard,
 and also when a text field had focus. A text field's edit is its own step. A file chosen for an input is one step, also when a button or label
-opens the picker, such as **Add comparison sequence** or an uploaded BLAST row's **Comparison
-sequence**. In a Session whose Circular rings replay saved LOSAT
+opens the picker, such as **Add comparison sequence** or a ring row's **Add file**. In a Session whose Circular rings replay saved LOSAT
 rows, Undo and Redo of a ring change, such as **Remove series** or **Add comparison sequence**,
 also restore those rows, so a custom stack keeps its ring rows and the next
 Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also while a

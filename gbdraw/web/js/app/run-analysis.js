@@ -176,7 +176,9 @@ import {
   readParsedSequenceRecords,
   circularDepthRowsAfterRead
 } from '../services/record-discovery.js';
-import { bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows } from '../services/drawing/inputs.js';
+import {
+  bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows, ringGenomeFileLists
+} from '../services/drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
 import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
@@ -1359,7 +1361,7 @@ export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelec
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
 /**
- * @param {InputFileRef | InputFileRef[] | null | undefined} sourceFiles
+ * @param {readonly (InputFileRef | readonly InputFileRef[])[]} sourceFiles BLAST tables, or each ring's genome files.
  * @param {CircularConservationLike | null | undefined} circularConservation
  */
 const buildConservationSeries = (sourceFiles, circularConservation) => {
@@ -3353,7 +3355,7 @@ export const createRunAnalysis = ({
           : 'losat';
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
-          : normalizeFileList(drawing.files.c_conservation_fastas);
+          : ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
         // Show Comparison Rings decides whether Generate searches and draws the
         // rings (OV-2818); the request reads the same setting.
         if (drawing.circularConservation.enabled === true && circularConservationSourceFiles.length > 0) {
@@ -3399,11 +3401,11 @@ export const createRunAnalysis = ({
             for (const [index, ring] of conservationKeys.rings.entries()) {
               throwIfGenerationCanceled();
               const comparisonEntry = ring.source;
-              const fileObj = /** @type {FileLike} */ (ring.file);
+              const ringFiles = /** @type {readonly [FileLike, ...FileLike[]]} */ (ring.files);
               const queryHash = /** @type {string} */ (ring.queryCanonicalHash);
-              // One sequence reader (D12): the Python helper reads FASTA, GenBank
-              // or DDBJ and returns the query FASTA that the CLI ring hashes.
-              const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
+              // One sequence reader (D12): the Python helper reads FASTA, GenBank or DDBJ, every
+              // file of the ring in order, into the query FASTA the CLI ring hashes.
+              const { fasta: queryFasta } = await readComparisonSequence({ files: ringFiles });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
@@ -3417,7 +3419,7 @@ export const createRunAnalysis = ({
               };
               const cacheKey = await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               const fallbackName = makeSafeFilename(
-                `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
+                `${String(ringFiles[0].name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
               );
               const pair = {
                 sourceIndex: index,
@@ -5022,7 +5024,7 @@ export const createRunAnalysis = ({
         : serializedFiles;
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
-        fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
+        fastas: ringGenomeFileLists(candidateFiles.c_conservation_fastas).filter((files) => files.length > 0)[entry.sourceIndex] || []
       }));
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({

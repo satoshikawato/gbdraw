@@ -48,7 +48,9 @@ def canonical_resource_ids(value: object) -> set[str]:
 
 
 
-# The ``webFiles`` keys that list the resource IDs of conservation inputs.
+# The ``webFiles`` keys that list the resource IDs of conservation inputs: one
+# list per similarity ring, the files of its comparison genome (a Session
+# before ring genomes listed one ID or null per ring).
 _RESOURCE_ID_LIST_FIELDS = ("conservationLosatFastaSources", "conservationSequenceSources")
 # The parts of a drawing that name resources (:func:`drawing_resource_ids`).
 _DRAWING_RESOURCE_FIELDS = ("renderRequest", "webFiles", "results")
@@ -67,8 +69,14 @@ def drawing_resource_ids(fields: Mapping[str, object]) -> set[str]:
     web_files = fields.get("webFiles")
     for field_name in _RESOURCE_ID_LIST_FIELDS:
         source_ids = web_files.get(field_name) if isinstance(web_files, Mapping) else None
-        if isinstance(source_ids, list):
-            found.update(item for item in source_ids if isinstance(item, str))
+        # One list of IDs per ring: the files of its comparison genome.
+        pending: list[object] = [source_ids] if isinstance(source_ids, list) else []
+        while pending:
+            item = pending.pop()
+            if isinstance(item, list):
+                pending.extend(item)
+            elif isinstance(item, str):
+                found.add(item)
     return found
 
 @dataclass

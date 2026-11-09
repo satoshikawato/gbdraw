@@ -1070,7 +1070,7 @@ const createLayoutPreferences = () => ({
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [null, fileStore.registerFile(makeFile('comparison-2.fa', 30))],
+      c_conservation_fastas: [[], [fileStore.registerFile(makeFile('comparison-2.fa', 30))]],
       linearCanonicalComparisons: [
         {
           kind: 'precomputedProteinComparison',
@@ -1213,8 +1213,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.circularSources[0].gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
-  assert.equal(state.files.c_conservation_fastas[0], null);
-  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.deepEqual(state.files.c_conservation_fastas[0], []);
+  assert.equal(state.files.c_conservation_fastas[1][0].name, 'comparison-2.fa');
   assert.equal(state.linearComparisonPlan.mode, 'selected');
   assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
   assert.equal(state.linearComparisonPlan.edges[0].id, 'edge-a-b');
@@ -1558,7 +1558,7 @@ const createLayoutPreferences = () => ({
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
-      c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
+      c_conservation_sequence_sources: [[fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))]],
       linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
     },
     circularSources: [],
@@ -1645,7 +1645,7 @@ const createLayoutPreferences = () => ({
   // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
   assert.deepEqual(intent.files.c_conservation_blasts, []);
   assert.deepEqual(
-    Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
+    Object.keys(intent.files.c_conservation_sequence_sources[0][0]).sort(),
     ['fileId', 'lastModified', 'name', 'size', 'sourceId', 'type']
   );
 
@@ -1656,7 +1656,7 @@ const createLayoutPreferences = () => ({
   assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
   state.files.c_conservation_sequence_sources = [];
   await snapshots.drawingHistory('circular').applyIntent(uploadIntent, { changes: [{ path: ['files'] }] });
-  assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
+  assert.deepEqual(state.files.c_conservation_sequence_sources.map((files) => files.map((file) => file.name)), [['generated-source.fa']]);
 
   // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
   // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
@@ -1668,8 +1668,9 @@ const createLayoutPreferences = () => ({
   Object.assign(state.files, {
     c_conservation_blasts: [...derivedBlasts],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [...ringFastas],
-    c_conservation_sequence_sources: [...derivedSources]
+    // One list of genome files per ring.
+    c_conservation_fastas: ringFastas.map((file) => [file]),
+    c_conservation_sequence_sources: derivedSources.map((file) => [file])
   });
   const replayHistory = createHistoryManager({
     estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
@@ -1690,8 +1691,8 @@ const createLayoutPreferences = () => ({
   const loadedRows = replayRows();
   await replayHistory.runUndoable('Remove series', () => {
     state.files.c_conservation_blasts = derivedBlasts.slice(1);
-    state.files.c_conservation_fastas = ringFastas.slice(1);
-    state.files.c_conservation_sequence_sources = derivedSources.slice(1);
+    state.files.c_conservation_fastas = ringFastas.slice(1).map((file) => [file]);
+    state.files.c_conservation_sequence_sources = derivedSources.slice(1).map((file) => [file]);
   });
   const removedRows = replayRows();
   await replayHistory.undo();
@@ -1739,8 +1740,8 @@ const createLayoutPreferences = () => ({
       c_depth: [ref(circularDepth)],
       c_conservation_blasts: [ref(conservationBlast)],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [ref(conservationFasta)],
-      c_conservation_sequence_sources: [ref(conservationSequenceSource)],
+      c_conservation_fastas: [[ref(conservationFasta)]],
+      c_conservation_sequence_sources: [[ref(conservationSequenceSource)]],
       linearCanonicalComparisons: [
         { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
         { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },

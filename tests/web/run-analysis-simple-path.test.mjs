@@ -1592,12 +1592,12 @@ test('a ring comparison file is read once, and a failed read is read again', asy
     operations.push(operation);
     return replies.shift();
   };
-  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), /injected ring read failure/);
+  await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), /injected ring read failure/);
   // A reply without its record IDs is a protocol error, and it is not kept either.
-  await assert.rejects(readComparisonSequence({ file, runHelperOperation }), { code: 'HELPER_PROTOCOL' });
-  const read = await readComparisonSequence({ file, runHelperOperation });
+  await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), { code: 'HELPER_PROTOCOL' });
+  const read = await readComparisonSequence({ files: [file], runHelperOperation });
   assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] });
-  assert.equal(await readComparisonSequence({ file, runHelperOperation }), read);
+  assert.equal(await readComparisonSequence({ files: [file], runHelperOperation }), read);
   assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']);
 });
 
@@ -1610,17 +1610,35 @@ test('a ring comparison read is frozen and its digest is kept with it', async ()
     operations.push(operation);
     return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'] } };
   };
-  const read = await readComparisonSequence({ file, runHelperOperation });
+  const read = await readComparisonSequence({ files: [file], runHelperOperation });
   assert.equal(Object.isFrozen(read), true);
   assert.throws(() => { read.fasta = '>other\n'; }, TypeError);
-  assert.equal((await readComparisonSequence({ file, runHelperOperation })).fasta, '>ring\nACGT\n');
+  assert.equal((await readComparisonSequence({ files: [file], runHelperOperation })).fasta, '>ring\nACGT\n');
   const expected = await sha256Text('>ring\nACGT\n');
   const watched = await watchLosatPreparation(async () => {
-    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
-    assert.equal(await readComparisonSequenceDigest({ file, runHelperOperation }), expected);
+    assert.equal(await readComparisonSequenceDigest({ files: [file], runHelperOperation }), expected);
+    assert.equal(await readComparisonSequenceDigest({ files: [file], runHelperOperation }), expected);
   });
   assert.equal(watched.fastaDigests, 1);
   assert.deepEqual(operations, ['readComparisonSequence']);
+});
+
+// A ring's comparison genome may be several files: one read sends them all, in
+// order, and is kept for that list (not for each file alone, nor another order).
+test('a ring comparison genome of two files is one read of both, kept for those files in that order', async () => {
+  const first = new File(['>chr1\nacgt\n'], 'chr1.fasta', { type: 'text/plain' });
+  const second = new File(['>chr2\nttgg\n'], 'chr2.fasta', { type: 'text/plain' });
+  const sent = [];
+  const runHelperOperation = async (operation, payload) => {
+    sent.push([operation, payload.files.map(({ role, bytes }) => [role, new TextDecoder().decode(bytes)])]);
+    return { result: { fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`] } };
+  };
+  const both = await readComparisonSequence({ files: [first, second], runHelperOperation });
+  assert.deepEqual(sent, [['readComparisonSequence', [['source', '>chr1\nacgt\n'], ['source', '>chr2\nttgg\n']]]]);
+  assert.equal(await readComparisonSequence({ files: [first, second], runHelperOperation }), both);
+  assert.notEqual(await readComparisonSequence({ files: [first], runHelperOperation }), both);
+  assert.notEqual(await readComparisonSequence({ files: [second, first], runHelperOperation }), both);
+  assert.equal(sent.length, 3);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
@@ -1840,7 +1858,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     }));
     // Add Seq reads the first ring file with the same reader before Generate,
     // which reuses that read (OV-1545).
-    assert.equal((await readComparisonSequence({ file: comparisonViews[0] })).fasta, comparisonTexts[0]);
+    assert.equal((await readComparisonSequence({ files: [comparisonViews[0]] })).fasta, comparisonTexts[0]);
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(

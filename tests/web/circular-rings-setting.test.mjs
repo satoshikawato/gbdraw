@@ -24,7 +24,7 @@ const {
   createCircularConservationSources, createCircularConservationSeriesPanel, createCircularConservationComparisonFiles
 } = await import('../../gbdraw/web/js/app/circular-conservation.js');
 const { createDrawingReset } = await import('../../gbdraw/web/js/app/reset-settings.js');
-const { bindDrawingInputFileList } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { bindDrawingInputFileList, bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { sessionSourceFactsOf } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
 
 const circular = () => modeDrawing(state, 'circular');
@@ -110,7 +110,7 @@ test('the source radio follows the ring files of the source it switches to', asy
   panel.changeCircularConservationSource('upload');
   panel.setCircularConservationUploadFiles([]);
   panel.changeCircularConservationSource('losat');
-  bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
+  bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
   sources.reconcileCircularConservation(drawing);
 });
 
@@ -124,7 +124,7 @@ test('Reset Settings turns the rings off and keeps the ring rows and their files
   resetDrawing(drawing);
 
   assert.equal(drawing.circularConservation.enabled, false);
-  assert.deepEqual(drawing.files.c_conservation_fastas.map((file) => file.name), ['zebrafish.fasta', 'fly.fasta']);
+  assert.deepEqual(drawing.files.c_conservation_fastas.map((files) => files.map((file) => file.name)), [['zebrafish.fasta'], ['fly.fasta']]);
   assert.deepEqual(ringNames(), ['zebrafish.fasta', 'fly.fasta']);
   assert.notEqual(drawing.circularConservation.series[0].label, 'Danio', 'the ring rows return to their defaults');
   // Turning the setting on again draws the kept rows.
@@ -144,7 +144,57 @@ test('Load keeps a Session 51 rings setting and reads an older Session by its ri
   assert.equal(drawing.circularConservation.enabled, false, 'a Session 51 keeps the rings off');
   sources.reconcileLoadedCircularConservation(drawing, false);
   assert.equal(drawing.circularConservation.enabled, true, 'an older Session with ring files shows its rings');
-  bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
+  bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
   sources.reconcileLoadedCircularConservation(drawing, false);
   assert.equal(drawing.circularConservation.enabled, false, 'an older Session without ring files has none');
+});
+
+// PR-B (D-02, Owner 2026-11-08 「すべて推奨通り」): a ring compares one genome,
+// which may be several files. Its row adds files to that genome, moves and
+// removes them, and keeps its name and place; a LOSAT ring keeps its last file
+// (Remove series removes the ring).
+test('a ring row adds, moves and removes the files of its genome and keeps its name', async () => {
+  const drawing = circular();
+  await addSeq('chr1.fasta');
+  await addSeq('fly.fasta');
+  drawing.circularConservation.series[0].label = 'Two chromosomes';
+  const rows = () => panel.circularConservationSeriesRows.value;
+  const boundNames = () => drawing.files.c_conservation_fastas.map((files) => files.map((file) => file.name));
+  comparisonFiles.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('chr2.fasta'), textFile('chr3.fasta')], value: 'x' } }));
+  assert.deepEqual(rows().map((row) => row.files), [['chr1.fasta', 'chr2.fasta', 'chr3.fasta'], ['fly.fasta']]);
+  assert.deepEqual(boundNames(), [['chr1.fasta', 'chr2.fasta', 'chr3.fasta'], ['fly.fasta']]);
+  assert.equal(drawing.circularConservation.series.length, 2, 'added files join the ring, not new rings');
+  assert.equal(drawing.circularConservation.series[0].label, 'Two chromosomes');
+  assert.match(String(drawing.circularConservation.series[0].sourceKey), /chr1\.fasta.* \+ .*chr2\.fasta.* \+ .*chr3\.fasta/);
+
+  comparisonFiles.moveRingRowFile(0, 2, -1);
+  assert.deepEqual(rows()[0].files, ['chr1.fasta', 'chr3.fasta', 'chr2.fasta']);
+  comparisonFiles.removeRingRowFile(0, 0);
+  assert.deepEqual(rows()[0].files, ['chr3.fasta', 'chr2.fasta']);
+  assert.equal(drawing.circularConservation.series[0].label, 'Two chromosomes');
+  assert.deepEqual(rows().map((row) => row.canRemoveFile), [true, false]);
+  comparisonFiles.removeRingRowFile(1, 0);
+  assert.deepEqual(boundNames(), [['chr3.fasta', 'chr2.fasta'], ['fly.fasta']], 'a LOSAT ring keeps its last file');
+
+  comparisonFiles.removeCircularConservationSource(1);
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(ringNames(), []);
+});
+
+// An uploaded BLAST table's ring takes its comparison genome's files the same way; they are optional.
+test('an uploaded table ring row takes the files of its comparison genome, and may have none', () => {
+  const drawing = circular();
+  panel.changeCircularConservationSource('upload');
+  panel.setCircularConservationUploadFiles([textFile('two.blast.tsv', 'q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t20\n')]);
+  const rows = () => panel.circularConservationSeriesRows.value;
+  assert.deepEqual(rows().map((row) => [row.files, row.canRemoveFile]), [[[], false]]);
+  comparisonFiles.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('chr1.fasta'), textFile('chr2.fasta')], value: 'x' } }));
+  assert.deepEqual(rows()[0].files, ['chr1.fasta', 'chr2.fasta']);
+  assert.deepEqual(drawing.files.c_conservation_sequence_sources.map((files) => files.map((file) => file.name)), [['chr1.fasta', 'chr2.fasta']]);
+  comparisonFiles.removeRingRowFile(0, 1);
+  comparisonFiles.removeRingRowFile(0, 0);
+  assert.deepEqual(rows()[0].files, []);
+  assert.equal(drawing.circularConservation.series.length, 1, 'the table keeps its ring');
+  panel.setCircularConservationUploadFiles([]);
+  panel.changeCircularConservationSource('losat');
 });

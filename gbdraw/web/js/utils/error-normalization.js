@@ -128,7 +128,7 @@ const REASONS = Object.freeze({
   // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
   DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for comparison rings.',
-  RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.',
+  RING_LOSAT_INPUT: 'Give each ring one or more comparison sequence files, without BLAST tables, and use the reference file as the subject.',
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
   FAILED: 'The search runtime exited with an error; check its message and inputs.',

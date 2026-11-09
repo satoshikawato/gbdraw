@@ -275,3 +275,79 @@ def test_a_saved_session_stores_every_file_of_the_ring(tmp_path: Path) -> None:
     replay = tmp_path / "replay"
     circular_main(["--session", str(prefix.with_suffix(".gbdraw-session.json")), "-o", str(replay), "-f", "svg"])
     assert _svg(replay) == _svg(prefix)
+
+
+def test_the_web_helper_reads_every_file_of_a_genome_as_the_cli_ring_does(tmp_path: Path) -> None:
+    """The Web reads a ring's files in one helper call: the query FASTA and its raw key are the CLI's."""
+
+    from gbdraw.comparisons.circular_losat import comparison_query_fasta
+    from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+
+    result = json.loads(read_comparison_sequence_json(str(DANIO), str(DROSOPHILA)))
+    genome = comparison_genome((read_comparison_sequence_file(DANIO), read_comparison_sequence_file(DROSOPHILA)))
+    assert result["fasta"] == comparison_query_fasta(genome, ordinal=1)
+    assert result["recordIds"] == ["NC_002333.2", "NC_024511.2"]
+    assert result["recordLabel"] == read_comparison_sequence_file(DANIO).record_label
+    joined = _one_file_genome(tmp_path, DANIO, DROSOPHILA)
+    assert result["fasta"] == json.loads(read_comparison_sequence_json(str(joined)))["fasta"]
+    copy = tmp_path / "copy" / DANIO.name
+    copy.parent.mkdir()
+    copy.write_bytes(DANIO.read_bytes())
+    with pytest.raises(ValidationError) as excinfo:
+        read_comparison_sequence_json(str(DANIO), str(copy))
+    assert excinfo.value.diagnostic["reason"] == "DUPLICATE_RECORD_ID"
+
+
+def test_the_beginner_api_takes_the_files_of_a_ring_genome() -> None:
+    """D-66: ``comparison_sequence_source`` takes one path or a sequence of paths, normalized once."""
+
+    from gbdraw.interface import ComparisonRingOptions, ComparisonRingTrackOptions, _ring_losat_values
+
+    rings = ComparisonRingOptions(
+        losat="losatn",
+        tracks=(
+            ComparisonRingTrackOptions(comparison_sequence_source=(DANIO, str(DROSOPHILA))),
+            ComparisonRingTrackOptions(comparison_sequence_source=DANIO_FASTA),
+        ),
+    )
+    values = _ring_losat_values(rings)
+    options = CircularDiagramOptions(conservation_sequence_files=values["conservation_sequence_files"])
+    assert options.conservation_genome_files == ((str(DANIO), str(DROSOPHILA)), (str(DANIO_FASTA),))
+    with pytest.raises(ValidationError, match="or a sequence of them"):
+        _ring_losat_values(ComparisonRingOptions(
+            losat="losatn", tracks=(ComparisonRingTrackOptions(comparison_sequence_source=()),)
+        ))
+
+
+def test_a_restored_cli_table_cell_keeps_every_file_of_its_ring(tmp_path: Path) -> None:
+    """A legacy Session's table dependencies of one cell are its ``;`` parts, in order."""
+
+    import base64
+
+    from gbdraw.session_io import _restore_cli_table_paths
+
+    def embedded(name: str, data: bytes) -> dict[str, str]:
+        return {"name": name, "encoding": "base64", "data": base64.b64encode(data).decode("ascii")}
+
+    table = b"blast\tcomparison_sequence\nring.tsv\ta.gb;b.gb\n"
+    session = {
+        "files": {
+            "cliInputs": [
+                embedded("table.tsv", table), embedded("a.gb", b"A"), embedded("b.gb", b"B"),
+            ],
+            "cliTables": [{
+                "argIndex": 1,
+                "slot": "files.cliInputs[0]",
+                "dependencies": [
+                    {"rowIndex": 0, "column": "comparison_sequence", "slot": "files.cliInputs[1]"},
+                    {"rowIndex": 0, "column": "comparison_sequence", "slot": "files.cliInputs[2]"},
+                ],
+            }],
+        }
+    }
+    run_args = ["--conservation_table", str(tmp_path / "missing.tsv")]
+    _restore_cli_table_paths(session, run_args, temp_dir=tmp_path / "restored")
+    restored = Path(run_args[1])
+    [_header, row] = restored.read_text(encoding="utf-8").splitlines()
+    parts = row.split("\t")[1].split(";")
+    assert [(restored.parent / part).read_bytes() for part in parts] == [b"A", b"B"]

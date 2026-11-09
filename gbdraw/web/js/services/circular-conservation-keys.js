@@ -7,7 +7,8 @@
 // request when Generate or Load installs it; Save reads that record, no file.
 import { inputSequenceSource } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { normalizeFileList, orderedConservationSources } from './conservation-series.js';
+import { orderedConservationSources } from './conservation-series.js';
+import { ringGenomeFileLists } from './drawing/inputs.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { CIRCULAR_CONSERVATION_FLOW } from './losat-cache.js';
 import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile } from './record-discovery.js';
@@ -21,7 +22,7 @@ import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile }
  * What the key builder reads of a Circular drawing: its input type, the reference and ring files it binds, and its
  * conservation settings (the ring order and whether the rings read sequences or uploaded BLAST tables).
  * @typedef {{
- *   files: { readonly c_conservation_fastas: (InputFileRef | null)[] },
+ *   files: { readonly c_conservation_fastas: readonly (readonly InputFileRef[])[] },
  *   circularSources: readonly Readonly<CircularSource>[],
  *   inputType: { readonly value: string },
  *   circularConservation: CircularConservationLike & { readonly source?: unknown }
@@ -48,10 +49,11 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
  * @typedef {{ files: readonly FileLike[], fasta: string, hash: string }} ConservationSubject
  */
 /**
- * One conservation ring in ring order: its source, its bound File and that File's query hash (the entry's
- * `queryCanonicalHash`, from the Python ring reader); `file` and the hash are null when the File is not bound.
- * @typedef {{ source: OrderedConservationSource<InputFileRef>, file: FileLike, queryCanonicalHash: string }
- *   | { source: OrderedConservationSource<InputFileRef>, file: null, queryCanonicalHash: null }} ConservationRingKey
+ * One conservation ring in ring order: its source, the bound Files of its comparison genome (in the listed order) and
+ * their query hash (the entry's `queryCanonicalHash`: of the genome's LOSAT query FASTA, from the Python ring reader,
+ * as the CLI ring of the same files hashes it); `files` and the hash are null when a File is not bound.
+ * @typedef {{ source: OrderedConservationSource<InputFileRef>, files: readonly [FileLike, ...FileLike[]], queryCanonicalHash: string }
+ *   | { source: OrderedConservationSource<InputFileRef>, files: null, queryCanonicalHash: null }} ConservationRingKey
  */
 /**
  * @typedef {{ subject: ConservationSubject | null, rings: ConservationRingKey[] }} CircularConservationKeys
@@ -106,7 +108,9 @@ export const readConservationSubject = async (files, fmt) => {
  */
 export const circularConservationKeys = async (drawing, fileOf, beforeRing = () => {}) => {
   if (String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload') return { subject: null, rings: [] };
-  const sources = orderedConservationSources(normalizeFileList(drawing.files.c_conservation_fastas), drawing.circularConservation);
+  /** @type {InputFileRef[][]} */
+  const ringFiles = ringGenomeFileLists(drawing.files.c_conservation_fastas);
+  const sources = orderedConservationSources(ringFiles, drawing.circularConservation);
   if (!sources.length) return { subject: null, rings: [] };
   const { slot, format } = inputSequenceSource(drawing.inputType.value);
   const subjectFiles = drawing.circularSources.map((source) => fileOf(source[slot]));
@@ -116,10 +120,14 @@ export const circularConservationKeys = async (drawing, fileOf, beforeRing = () 
   const rings = [];
   for (const source of sources) {
     beforeRing();
-    const file = fileOf(source.file);
-    rings.push(file
-      ? { source, file, queryCanonicalHash: await readComparisonSequenceDigest({ file }) }
-      : { source, file: null, queryCanonicalHash: null });
+    const files = source.files.map((ref) => fileOf(ref));
+    rings.push(files.every(Boolean)
+      ? {
+          source,
+          files: /** @type {[FileLike, ...FileLike[]]} */ (files),
+          queryCanonicalHash: await readComparisonSequenceDigest({ files: /** @type {[FileLike, ...FileLike[]]} */ (files) })
+        }
+      : { source, files: null, queryCanonicalHash: null });
   }
   return { subject, rings };
 };

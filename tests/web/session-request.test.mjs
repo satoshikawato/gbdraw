@@ -1834,7 +1834,7 @@ const conservationCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta],
+    c_conservation_sequence_sources: [[comparisonFasta]],
   },
 });
 assert.deepEqual(
@@ -1843,7 +1843,7 @@ assert.deepEqual(
 );
 assert.equal(conservationCanonical.webFiles.conservationSequenceSources, undefined);
 assert.equal(
-  projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
+  projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0][0].data,
   comparisonFasta.data
 );
 const conservationProjection = projectCanonicalSessionRequest(conservationCanonical);
@@ -1913,7 +1913,7 @@ const losatConservationCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB]]
   }
 });
 assert.equal(
@@ -1922,19 +1922,41 @@ assert.equal(
 );
 assert.deepEqual(
   losatConservationCanonical.webFiles.conservationLosatFastaSources,
+  // One list of resource IDs per ring, in series order.
   [
-    'conservation-losat-fasta-files-1',
-    'conservation-losat-fasta-files-2'
+    ['conservation-losat-fasta-files-1-1'],
+    ['conservation-losat-fasta-files-2-1']
   ]
 );
 assert.equal(
-  losatConservationCanonical.resources['conservation-losat-fasta-files-1'].data,
+  losatConservationCanonical.resources['conservation-losat-fasta-files-1-1'].data,
   comparisonFastaB.data
 );
 assert.deepEqual(
   projectCanonicalSessionRequest(losatConservationCanonical)
-    .files.c_conservation_fastas.map((file) => file.data),
-  [comparisonFastaB.data, comparisonFasta.data]
+    .files.c_conservation_fastas.map((files) => files.map((file) => file.data)),
+  [[comparisonFastaB.data], [comparisonFasta.data]]
+);
+// PR-B: a ring's comparison genome of two files writes both, in order, and the
+// Load projection reads both back into that ring (series B is the outer ring).
+// Not one of the characterized requests below.
+const twoFileRingCanonical = buildCanonicalRenderRequestRaw({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB, comparisonFasta]]
+  }
+});
+// A file both rings read is one resource (allocated by content).
+assert.deepEqual(twoFileRingCanonical.webFiles.conservationLosatFastaSources, [
+  ['conservation-losat-fasta-files-1-1', 'conservation-losat-fasta-files-1-2'],
+  ['conservation-losat-fasta-files-1-2']
+]);
+assert.deepEqual(
+  projectCanonicalSessionRequest(twoFileRingCanonical)
+    .files.c_conservation_fastas.map((files) => files.map((file) => file.data)),
+  [[comparisonFastaB.data, comparisonFasta.data], [comparisonFasta.data]]
 );
 const losatReplayCanonical = buildCanonicalRenderRequest({
   state,
@@ -1942,7 +1964,7 @@ const losatReplayCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_conservation_blasts: [blastTable, blastTableB],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB]]
   }
 });
 assert.equal(
@@ -1961,8 +1983,8 @@ assert.deepEqual(
 assert.equal(losatReplayCanonical.webFiles.conservationBlastSource, 'losat-cache');
 assert.deepEqual(
   losatReplayCanonical.webFiles.conservationLosatFastaSources
-    .map((resourceId) => losatReplayCanonical.resources[resourceId].data),
-  [comparisonFastaB.data, comparisonFasta.data]
+    .map((ids) => ids.map((resourceId) => losatReplayCanonical.resources[resourceId].data)),
+  [[comparisonFastaB.data], [comparisonFasta.data]]
 );
 const losatReplayProjection = projectCanonicalSessionRequest(losatReplayCanonical);
 assert.equal(losatReplayProjection.files.c_conservation_blasts_source, 'losat-cache');
@@ -1972,18 +1994,18 @@ const mixedFastaCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_conservation_blasts: [blastTable, blastTableB],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [comparisonFasta, null]
+    c_conservation_fastas: [[comparisonFasta], []]
   }
 });
 assert.deepEqual(
   mixedFastaCanonical.webFiles.conservationLosatFastaSources,
-  [null, 'conservation-losat-fasta-files-2']
+  [[], ['conservation-losat-fasta-files-2-1']]
 );
 const mixedFastaProjection = projectCanonicalSessionRequest(mixedFastaCanonical);
 assert.equal(mixedFastaProjection.files.c_conservation_fastas.length, 2);
-assert.equal(mixedFastaProjection.files.c_conservation_fastas[0], null);
+assert.deepEqual(mixedFastaProjection.files.c_conservation_fastas[0], []);
 assert.equal(
-  mixedFastaProjection.files.c_conservation_fastas[1].data,
+  mixedFastaProjection.files.c_conservation_fastas[1][0].data,
   comparisonFasta.data
 );
 const mixedFastaRebuilt = buildCanonicalRenderRequest({
@@ -1998,7 +2020,7 @@ const mixedFastaRebuilt = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   mixedFastaRebuilt.webFiles.conservationLosatFastaSources,
-  [null, 'conservation-losat-fasta-files-2']
+  [[], ['conservation-losat-fasta-files-2-1']]
 );
 const missingFastasCanonical = buildCanonicalRenderRequest({
   state,
@@ -2011,14 +2033,14 @@ const missingFastasCanonical = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   missingFastasCanonical.webFiles.conservationLosatFastaSources,
-  [null, null]
+  [[], []]
 );
 const missingFastasProjection = projectCanonicalSessionRequest(
   missingFastasCanonical
 );
 assert.deepEqual(
   missingFastasProjection.files.c_conservation_fastas,
-  [null, null]
+  [[], []]
 );
 const missingFastasRebuilt = buildCanonicalRenderRequest({
   state: {
@@ -2032,7 +2054,7 @@ const missingFastasRebuilt = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   missingFastasRebuilt.webFiles.conservationLosatFastaSources,
-  [null, null]
+  [[], []]
 );
 state.circularConservation = {
   ...losatReplayProjection.config.circularConservation,
@@ -5394,7 +5416,7 @@ const combinedGeometryCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_depth: [depthA, depthB],
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta]
+    c_conservation_sequence_sources: [[comparisonFasta]]
   }
 });
 const combinedGeometrySlots =
@@ -5477,7 +5499,7 @@ const managedComparisonCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta]
+    c_conservation_sequence_sources: [[comparisonFasta]]
   }
 });
 assert.equal(

@@ -6,10 +6,13 @@
 // follow them, and the ring controls of the Circular panel. The composition root passes the state,
 // the shown-drawing admission, the stack editor's ring-row functions, the
 // LOSAT cache-info write, and History's undoable step as ports.
-import { bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource } from '../services/drawing/inputs.js';
+import {
+  bindDrawingInputFileList, bindDrawingInputFileTree, ringGenomeFileLists, setConservationBlastsSource
+} from '../services/drawing/inputs.js';
 import { readComparisonSequence } from '../services/record-discovery.js';
 import {
   applyComparisonSequenceRecordLabel,
+  circularRingSources,
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
@@ -27,8 +30,8 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ConservationSlotEntry } from './circular-track-slots.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
-/** @import { ConservationFile, RawConservationSeriesEntry } from '../services/conservation-series.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
+/** @import { ConservationFile, ConservationSourcePlace, RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 
@@ -45,13 +48,16 @@ const { computed } = window.Vue;
 /**
  * The ask before a change of the comparison sources takes out managed ring rows other rows reach.
  * @typedef {(
- *   drawing: DrawingState, sourceFiles: ConservationFile[], series: readonly RawConservationSeriesEntry[], label: string,
+ *   drawing: DrawingState, sourceFiles: readonly ConservationSourcePlace<ConservationFile>[],
+ *   series: readonly RawConservationSeriesEntry[], label: string,
  *   apply: (turnOffReaching: () => void) => unknown
  * ) => unknown} AskRingSourceRemoval
  */
 /**
- * The ring source files of a drawing, set by a change of the kind `change` names.
- * @typedef {(drawing: DrawingState, nextFiles: InputFileCandidate | readonly InputFileCandidate[], change: DepthSourceChange) => void} SetRingSourceFiles
+ * The ring source files of a drawing, set by a change of the kind `change` names: the BLAST tables of uploaded
+ * rings, else each ring's genome files (`circularRingSources`).
+ * @typedef {(drawing: DrawingState, nextFiles: readonly (InputFileRef | null | readonly InputFileRef[])[],
+ *   change: DepthSourceChange) => void} SetRingSourceFiles
  */
 
 /** @param {DrawingState} drawing */
@@ -64,22 +70,52 @@ const isDerivedCircularConservationReplay = (drawing) => (
   drawing.files.c_conservation_blasts_source === 'losat-cache' &&
   normalizeFileList(drawing.files.c_conservation_blasts).length > 0
 );
+/**
+ * The comparison genome files of each ring row, in series order: the row's
+ * LOSAT query files, or for an uploaded BLAST table its optional comparison
+ * sequence files (the span export reads them). A row lists them and its file
+ * controls change them (`setRingRowFiles`).
+ * @param {DrawingState} drawing
+ * @returns {InputFileRef[][]}
+ */
+const ringRowFiles = (drawing) => {
+  const { series } = drawing.circularConservation;
+  if (isCircularConservationUploadSource(drawing)) {
+    /** @type {InputFileRef[][]} */
+    const companions = ringGenomeFileLists(drawing.files.c_conservation_sequence_sources);
+    return series.map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => (
+      [...(companions[seriesSourceIndex(entry, index)] || [])]
+    ));
+  }
+  /** @type {InputFileRef[][]} */
+  const rings = ringGenomeFileLists(drawing.files.c_conservation_fastas);
+  // A LOSAT-cache replay keeps each ring's place beside its table, a ring
+  // without its files included; otherwise every ring has files.
+  const places = isDerivedCircularConservationReplay(drawing) ? rings : rings.filter((files) => files.length > 0);
+  return orderedOptionalConservationFiles(places, drawing.circularConservation)
+    .slice(0, series.length).map((files) => [...(files || [])]);
+};
+/**
+ * The source index a series entry names (its place among the sources), else its place in the series.
+ * @param {RawConservationSeriesEntry | null | undefined} entry @param {number} index
+ */
+const seriesSourceIndex = (entry, index) => (Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry?.sourceIndex) : index);
 /** @param {DrawingState} drawing */
-const getCircularConservationSourceFiles = (drawing) => (
-  isCircularConservationUploadSource(drawing) || isDerivedCircularConservationReplay(drawing)
-    ? normalizeFileList(drawing.files.c_conservation_blasts)
-    : normalizeFileList(drawing.files.c_conservation_fastas)
-);
-/** @param {DrawingState} drawing */
-const hasRingSourceFiles = (drawing) => getCircularConservationSourceFiles(drawing).length > 0;
+const hasRingSourceFiles = (drawing) => circularRingSources(drawing).length > 0;
 /** A ring file added as a new series (Add Seq, an upload). @type {DepthSourceChange} */
 const RING_FILE_ADDED = Object.freeze({ setsFile: true, series: 'added' });
 /** A series removed with its ring file. @type {DepthSourceChange} */
 const RING_FILE_REMOVED = Object.freeze({ setsFile: false, series: 'removed' });
 /** A change of the ring source or of its files that adds or removes no series. @type {DepthSourceChange} */
 const RING_SOURCE_CHANGED = Object.freeze({ setsFile: false, series: 'same' });
-/** A ring file replaced in its place. @type {DepthSourceChange} */
+/** A ring file replaced in its place, or added to a ring's genome. @type {DepthSourceChange} */
 const RING_FILE_REPLACED = Object.freeze({ setsFile: true, series: 'same' });
+/**
+ * Whether a ring row's file control may remove one of its `count` files: a
+ * LOSAT ring keeps its last (Remove series removes the ring).
+ * @param {DrawingState} drawing @param {number} count
+ */
+const canRemoveRingRowFile = (drawing, count) => (isCircularConservationUploadSource(drawing) ? count > 0 : count > 1);
 
 /**
  * A change of the ring source files (`write` binds them) and the setting that
@@ -103,7 +139,7 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 
 /**
  * The series a change of the ring files leaves (`reconcileCircularConservation`).
- * @param {DrawingState} drawing @param {ConservationFile[]} sourceFiles
+ * @param {DrawingState} drawing @param {readonly ConservationSourcePlace<ConservationFile>[]} sourceFiles
  */
 const seriesOfRingFiles = (drawing, sourceFiles) => reconcileConservationSeries({
   sourceFiles,
@@ -138,11 +174,12 @@ export const createCircularConservationSources = ({
   const setCircularConservationSourceFiles = (drawing, nextFiles, change) => {
     changeRingSourceFiles(state, drawing, change, () => {
       if (isCircularConservationUploadSource(drawing)) {
-        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
+        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts',
+          /** @type {readonly (InputFileRef | null)[]} */ (nextFiles));
         setConservationBlastsSource(drawing.slices.inputs, null);
       } else {
         clearDerivedCircularConservationBlasts(drawing);
-        bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
+        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
       }
     });
     writeLosatCacheInfo([]);
@@ -167,7 +204,7 @@ export const createCircularConservationSources = ({
   /**
    * A change of the comparison sources asks when a managed ring row another row
    * reaches leaves with its source (`askTrackSourceRemoval`).
-   * @param {DrawingState} drawing @param {ConservationFile[]} sourceFiles The ring files it leaves.
+   * @param {DrawingState} drawing @param {readonly ConservationSourcePlace<ConservationFile>[]} sourceFiles The ring files it leaves.
    * @param {readonly RawConservationSeriesEntry[]} series The series it leaves. @param {string} label
    * @param {(turnOffReaching: () => void) => unknown} apply
    */
@@ -193,7 +230,7 @@ export const createCircularConservationSources = ({
   // restore and the Load rollback install what they captured.
   /** @param {DrawingState} drawing */
   const reconcileCircularConservation = (drawing) => {
-    const sourceFiles = getCircularConservationSourceFiles(drawing);
+    const sourceFiles = circularRingSources(drawing);
     if (isDerivedCircularConservationReplay(drawing)) {
       refreshCircularConservationSlots(drawing);
       return;
@@ -283,18 +320,17 @@ export const createCircularConservationSeriesPanel = ({
   });
   const circularConservationSeriesRows = computed(() => {
     const drawing = state.activeDrawing();
+    const rowFiles = ringRowFiles(drawing);
     return (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => ({
       index,
       filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
       sourceLabel: isCircularConservationUploadSource(drawing)
         ? t('BLAST {n}', { n: Number(index) + 1 })
         : t('Comparison {n}', { n: Number(index) + 1 }),
-      sourceIndex: Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index,
-      comparisonSequenceFilename: String(
-        drawing.files.c_conservation_sequence_sources[
-          Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
-        ]?.name || ''
-      ),
+      sourceIndex: seriesSourceIndex(entry, index),
+      // The row's genome files (`ringRowFiles`): names, and whether a file may move or go.
+      files: (rowFiles[index] || []).map((file) => String(file?.name || '')),
+      canRemoveFile: canRemoveRingRowFile(drawing, (rowFiles[index] || []).length),
       defaultLabel: defaultConservationSeriesLabel(
         { name: entry?.fileName },
         Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
@@ -363,8 +399,92 @@ export const createCircularConservationSeriesPanel = ({
  */
 
 /**
- * The comparison sequences of the shown Circular drawing: Add Seq (with its record label read), a companion file,
- * and the removal of a series.
+ * The file controls of a ring row (D-02): Add file, the arrows, and the remove
+ * button change the genome files of that ring, one History step each.
+ * @param {Pick<CircularConservationComparisonFilesPorts, 'state' | 'shownAction' | 'writeLosatCacheInfo'
+ *   | 'clearDerivedCircularConservationBlasts' | 'reconcileCircularConservation'>} ports
+ */
+const createRingRowFileEdits = ({
+  state, shownAction, writeLosatCacheInfo, clearDerivedCircularConservationBlasts, reconcileCircularConservation
+}) => {
+  /**
+   * The genome files of one ring row (`ringRowFiles`), in their new order. An
+   * uploaded table's row writes its comparison sequence files at its source's
+   * place. A LOSAT ring writes the rings in series order, each series entry
+   * then keyed by its ring's files (so a row keeps its name and color while
+   * its files change), and a LOSAT-cache replay's tables go: its rings search
+   * again at the next Generate.
+   * @param {DrawingState} drawing @param {number} rowIndex @param {InputFileRef[]} nextFiles
+   * @param {DepthSourceChange} change
+   */
+  const setRingRowFiles = (drawing, rowIndex, nextFiles, change) => {
+    const rows = ringRowFiles(drawing);
+    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= rows.length) return;
+    if (isCircularConservationUploadSource(drawing)) {
+      /** @type {InputFileRef[][]} */
+      const companions = ringGenomeFileLists(drawing.files.c_conservation_sequence_sources);
+      const place = seriesSourceIndex(drawing.circularConservation.series[rowIndex], rowIndex);
+      while (companions.length <= place) companions.push([]);
+      companions[place] = nextFiles;
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', companions);
+      return;
+    }
+    rows[rowIndex] = nextFiles;
+    changeRingSourceFiles(state, drawing, change, () => {
+      clearDerivedCircularConservationBlasts(drawing);
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', rows);
+    });
+    const descriptors = conservationSourceDescriptors(rows);
+    let sourceIndex = 0;
+    drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
+      if (!rows[index]?.length) return;
+      const { sourceKey, fileName } = descriptors[sourceIndex];
+      Object.assign(entry, { sourceKey, fileName, sourceIndex });
+      sourceIndex += 1;
+    });
+    writeLosatCacheInfo([]);
+    reconcileCircularConservation(drawing);
+  };
+  /**
+   * Add file on a ring row: the picked files join the end of the row's genome.
+   * @param {number} rowIndex @param {Event & { target: HTMLInputElement }} event
+   */
+  const addRingRowFiles = (rowIndex, event) => shownAction('circular', (drawing) => {
+    const picked = Array.from(event?.target?.files || []).filter(Boolean);
+    if (event?.target) event.target.value = '';
+    if (picked.length === 0) return;
+    const added = picked.map((file) => /** @type {InputFileRef} */ (state.inputFiles.registerFile(file)));
+    setRingRowFiles(drawing, Number(rowIndex), [...(ringRowFiles(drawing)[Number(rowIndex)] || []), ...added], RING_FILE_REPLACED);
+  });
+  /**
+   * Move a file of a ring row up (-1) or down (1) in the row's genome.
+   * @param {number} rowIndex @param {number} fileIndex @param {number} direction
+   */
+  const moveRingRowFile = (rowIndex, fileIndex, direction) => shownAction('circular', (drawing) => {
+    const files = ringRowFiles(drawing)[Number(rowIndex)] || [];
+    const target = Number(fileIndex) + Math.sign(Number(direction));
+    if (!Number.isInteger(Number(fileIndex)) || target < 0 || target >= files.length || Number(fileIndex) < 0) return;
+    const next = [...files];
+    [next[Number(fileIndex)], next[target]] = [next[target], next[Number(fileIndex)]];
+    setRingRowFiles(drawing, Number(rowIndex), next, RING_SOURCE_CHANGED);
+  });
+  /**
+   * Remove a file of a ring row. A LOSAT ring keeps at least one file (Remove
+   * series removes the ring); an uploaded table's comparison sequence is
+   * optional.
+   * @param {number} rowIndex @param {number} fileIndex
+   */
+  const removeRingRowFile = (rowIndex, fileIndex) => shownAction('circular', (drawing) => {
+    const files = ringRowFiles(drawing)[Number(rowIndex)] || [];
+    if (!canRemoveRingRowFile(drawing, files.length) || !(Number(fileIndex) in files)) return;
+    setRingRowFiles(drawing, Number(rowIndex), files.filter((_, index) => index !== Number(fileIndex)), RING_SOURCE_CHANGED);
+  });
+  return { addRingRowFiles, moveRingRowFile, removeRingRowFile };
+};
+
+/**
+ * The comparison sequences of the shown Circular drawing: Add Seq (with its record label read), the file controls
+ * of a ring row (`createRingRowFileEdits`), and the removal of a series.
  * @param {CircularConservationComparisonFilesPorts} ports
  */
 export const createCircularConservationComparisonFiles = ({
@@ -387,11 +507,11 @@ export const createCircularConservationComparisonFiles = ({
     // D12: the Python ring reader names a GenBank or DDBJ row after it is added
     // (a read failure keeps the file-name default; Generate reports it).
     // Generate waits for these reads before it reads the row labels.
-    const pending = readComparisonSequence({ file: selectedFile })
+    const pending = readComparisonSequence({ files: [selectedFile] })
       .then(({ recordLabel }) => {
         const applied = applyComparisonSequenceRecordLabel({
           series: drawing.circularConservation.series,
-          sourceFiles: getCircularConservationSourceFiles(drawing),
+          sourceFiles: circularRingSources(drawing),
           file: selectedRef,
           recordLabel
         });
@@ -407,24 +527,14 @@ export const createCircularConservationComparisonFiles = ({
     const step = runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
     changeRingSourceFiles(state, drawing, RING_FILE_ADDED, () => {
       clearDerivedCircularConservationBlasts(drawing);
+      // A new ring of the picked file; Add file on its row adds the genome's other files.
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
-        [...normalizeFileList(drawing.files.c_conservation_fastas), selectedRef]);
+        [...ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0), [selectedRef]]);
     });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
     if (target) target.value = '';
     return step;
-  });
-  /** @param {number} sourceIndex @param {Event & { target: HTMLInputElement }} event */
-  const setCircularConservationCompanionFile = (sourceIndex, event) => shownAction('circular', (drawing) => {
-    const index = Number(sourceIndex);
-    if (!Number.isInteger(index) || index < 0) return;
-    const selectedFile = Array.from(event?.target?.files || []).filter(Boolean)[0] || null;
-    const next = [...drawing.files.c_conservation_sequence_sources];
-    while (next.length <= index) next.push(null);
-    next[index] = state.inputFiles.registerFile(selectedFile);
-    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', next);
-    if (event?.target) event.target.value = '';
   });
   /** @param {number} index */
   const removeCircularConservationSource = (index) => shownAction('circular', (drawing) => {
@@ -455,8 +565,10 @@ export const createCircularConservationComparisonFiles = ({
         drawing.circularConservation.labels = kept.labels;
         changeRingSourceFiles(state, drawing, RING_FILE_REMOVED, () => {
           bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', kept.blasts);
-          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', kept.fastas);
-          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources);
+          bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', kept.fastas.map((files) => files || []));
+          bindDrawingInputFileTree(
+            state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources.map((files) => files || [])
+          );
           setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
         });
         writeLosatCacheInfo([]);
@@ -466,7 +578,7 @@ export const createCircularConservationComparisonFiles = ({
       return askRingSourceRemoval(drawing, normalizeFileList(kept.blasts), kept.series, msg('Remove series'), applyKept) ?? applyKept();
     }
     const entry = drawing.circularConservation.series[idx];
-    const sourceFiles = getCircularConservationSourceFiles(drawing);
+    const sourceFiles = circularRingSources(drawing);
     const descriptors = conservationSourceDescriptors(sourceFiles);
     let sourceIndex = descriptors.findIndex((descriptor) => descriptor.sourceKey === String(entry?.sourceKey || ''));
     if (sourceIndex < 0) {
@@ -488,7 +600,7 @@ export const createCircularConservationComparisonFiles = ({
     return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();
   });
   return {
-    settleComparisonRecordLabels, addCircularConservationComparisonFile, setCircularConservationCompanionFile,
-    removeCircularConservationSource
+    settleComparisonRecordLabels, addCircularConservationComparisonFile, removeCircularConservationSource,
+    ...createRingRowFileEdits({ state, shownAction, writeLosatCacheInfo, clearDerivedCircularConservationBlasts, reconcileCircularConservation })
   };
 };

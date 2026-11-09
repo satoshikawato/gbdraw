@@ -616,7 +616,7 @@ test('evicting the Delete step ends its Undo and releases the files only the del
   const { drawingId } = app.drawingList.newDrawing('circular');
   const drawing = state.drawingOf(drawingId);
   bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', [new File(['>r\nACGT\n'], 'only-here.fa')]);
-  const { fileId } = drawing.files.c_conservation_fastas[0];
+  const { fileId } = drawing.files.c_conservation_fastas[0][0];
   app.drawingList.deleteDrawing(drawingId);
   const kept = state.activeDrawingId.value;
   assert.equal(state.inputFiles.has(fileId), true, 'the held drawing keeps its file');

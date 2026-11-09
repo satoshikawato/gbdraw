@@ -1037,8 +1037,9 @@ ORIGIN
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts.length, 2);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts[0].size, 0);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas.length, 2);
-  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[0], null);
-  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[1].name, 'comparison.fna');
+  // The flat form of a schema-5 request reads as one ring genome of one file, or of none.
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas[0], []);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[1][0].name, 'comparison.fna');
   assert.equal(state.activeDrawing().circularConservation.source, 'losat');
   assert.deepEqual(
     {
@@ -1061,8 +1062,8 @@ ORIGIN
   state.activeDrawing().circularConservation.enabled = true;
   const serialized = await serializeActiveRenderFiles(state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
-  assert.equal(serialized.c_conservation_fastas[0], null);
-  assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
+  assert.deepEqual(serialized.c_conservation_fastas[0], []);
+  assert.equal(serialized.c_conservation_fastas[1][0].data, btoa(fasta));
 });
 
 // OV-3019: each ring Generate builds its request from the views the last one

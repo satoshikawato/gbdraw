@@ -29,7 +29,7 @@
       "read_fasta",
       "read_gff"
     ],
-    "contract_sha256": "8b175173d57133d3c43b0db921719ded39aee2e9d11cd3b4cf09d89ad245209a"
+    "contract_sha256": "a5641be18d1f4ef2a18fc25d93c797cf814e66f9e41fd33da7a8221315548ed7"
   },
   "circular_cli": {
     "actions_sha256": "39cd2677fdfd3588bb9ae425accd679efbda7d8196edfcc930585dd9ce322155",
