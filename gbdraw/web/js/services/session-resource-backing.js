@@ -9,7 +9,7 @@ import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
-import { SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
+import { CIRCULAR_SOURCE_FILE_SLOTS, SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -264,10 +264,11 @@ export const readSessionResources = (resources) => {
  * }>} WebFileCompositeBinding
  */
 /**
- * One Circular File card of a Session 51 drawing (`circularSources` row): a
- * uid, distinct among the drawing's cards, and each file a leaf or null.
- * @typedef {Readonly<{ uid: string, gb: WebFileLeafBinding | null, gff: WebFileLeafBinding | null,
- *   fasta: WebFileLeafBinding | null }>} WebFileCircularSourceBinding
+ * One Circular File card of a Session 51 drawing (`circularSources` row,
+ * Python's `CircularSourceCard`): a uid, distinct among the drawing's cards,
+ * and each file slot (`CIRCULAR_SOURCE_FILE_SLOTS`) a leaf or null.
+ * @typedef {Readonly<{ uid: string }
+ *   & Record<(typeof CIRCULAR_SOURCE_FILE_SLOTS)[number], WebFileLeafBinding | null>>} WebFileCircularSourceBinding
  */
 /**
  * A row of `linearSeqs` or of a comparison list: only its file slots are checked.
@@ -303,8 +304,8 @@ export const readSessionResources = (resources) => {
  */
 export const webFileBindingPath = (at) => at.map((key, index) => (
   typeof key === 'number' ? `[${key}]` : `${index ? '.' : ''}${key}`)).join('');
-// The files of a Circular File card (`circularSources` row) besides its uid.
-const CIRCULAR_SOURCE_FILES = Object.freeze(['gb', 'gff', 'fasta']);
+// The fields of a Circular File card (`circularSources` row): its uid and its file slots.
+const CIRCULAR_SOURCE_FIELDS = Object.freeze(['uid', ...CIRCULAR_SOURCE_FILE_SLOTS]);
 /**
  * The binding lists whose index is a place, not an order: a Depth track
  * (`c_depth`, a Linear row's `depth`) and a Circular comparison series's
@@ -411,20 +412,21 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   if (!modeScoped && Object.hasOwn(bindings, 'circularSources')) {
     const cards = bindings.circularSources;
     // The File cards of a Circular drawing (`_validate_circular_source_rows`):
-    // a card that is no {uid, gb, gff, fasta} row or repeats a uid is dropped;
+    // a card that is no row of exactly its fields or repeats a uid is dropped;
     // a file that cannot be read leaves its card without it.
     if (!Array.isArray(cards)) return [{ at: null }];
     /** @type {Set<string>} */
     const uids = new Set();
     cards.forEach((/** @type {unknown} */ card, index) => {
       const uid = object(card) ? card.uid : null;
-      if (!object(card) || Object.keys(card).length !== 4 || !CIRCULAR_SOURCE_FILES.every(key => Object.hasOwn(card, key))
+      if (!object(card) || Object.keys(card).length !== CIRCULAR_SOURCE_FIELDS.length
+          || !CIRCULAR_SOURCE_FIELDS.every(key => Object.hasOwn(card, key))
           || typeof uid !== 'string' || !uid || uid !== uid.trim() || uids.has(uid)) {
         faults.push({ at: ['circularSources', index] });
         return;
       }
       uids.add(uid);
-      CIRCULAR_SOURCE_FILES.forEach(slot => {
+      CIRCULAR_SOURCE_FILE_SLOTS.forEach(slot => {
         if (card[slot] !== null && badLeaf(card[slot])) faults.push({ at: ['circularSources', index, slot] });
       });
     });

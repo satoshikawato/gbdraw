@@ -31,22 +31,25 @@ export const fileCardLine = (inputType, slots) => {
 
 /**
  * Keeps keyboard focus in a File card list when a change of the list took the
- * focused control off the page (D-42, OV-2905): a list with no card shows its
- * input type's uploaders, and a file chosen there makes the first card, so the
- * uploader that had focus leaves. The focus then moves to the new card's file
- * button, which the card's fold opens to show. A focus still on the page stays.
- * The one rule of the Linear and the Circular lists.
+ * focused control off the page (D-42, D-45, OV-2905): a list with no card
+ * shows its input type's uploaders, and a file chosen there makes the first
+ * card, so the uploader that had focus leaves. The focus then moves to the
+ * new card's upload zone of the slot the file was chosen in (OV-2962; the
+ * card's body marks each zone `data-<mode>-source-slot`), which the card's
+ * fold opens to show. A focus still on the page stays. The Circular list
+ * calls it (app/circular-file-cards.js).
  * @param {'linear' | 'circular'} mode
  * @param {string} uid The new card.
+ * @param {InputSlot} slot The slot the file was chosen in.
  * @param {Element | null} focused What had focus before the change.
  */
-export const keepFocusInFileCard = (mode, uid, focused) => {
+export const keepFocusInFileCard = (mode, uid, slot, focused) => {
   if (focused === null || focused === document.body || focused.isConnected) return;
   const card = document.querySelector(`[data-${mode}-source-card="${CSS.escape(uid)}"]`);
   const fold = card?.querySelector(`[data-${mode}-source-fold]`);
   // The disclosure reports the opening through the shell's `fold`, as a press does.
   if (fold instanceof HTMLDetailsElement) fold.open = true;
-  const button = card?.querySelector('.upload-zone[tabindex="0"]');
+  const button = card?.querySelector(`[data-${mode}-source-slot="${slot}"] .upload-zone[tabindex="0"]`);
   if (button instanceof HTMLElement) button.focus();
 };
 

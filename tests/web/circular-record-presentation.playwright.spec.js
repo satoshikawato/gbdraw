@@ -334,8 +334,9 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   // A Session load does not inspect the source; the saved selector is unverified, not missing.
   await expect(page.locator('[data-circular-discovery-status]')).toHaveText('Records not inspected');
   await shot('record-control-loaded.png');
-  // The record of a file of one record has no record ID in the request: its file names it (OV-2949).
-  await expect(select.locator('option:checked')).toHaveText('presentation.gb (not inspected)');
+  // The record of a file of one record has no record ID in the request; the record ID the loaded Result drew it
+  // with names it, as before the File cards (OV-2959, D-68).
+  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (not inspected)');
 
   // Inspection resolves the selector to the real record entry.
   await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();

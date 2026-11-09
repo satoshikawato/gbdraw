@@ -12,6 +12,7 @@
 /** @import { DepthFileSlots } from '../depth-track-state.js' */
 /** @import { CircularRecordDiscovery } from '../record-discovery.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
+import { CIRCULAR_SOURCE_FILE_SLOTS } from '../../contracts/schema.generated.js';
 import { isInputFileRef } from '../history-files.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
@@ -296,7 +297,6 @@ const BOUND_FILE_KEYS = Object.freeze([
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
 // The fields of `files` that hold card marks (`CircularCardMark`), whose files bind no input.
 const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards']);
-const CIRCULAR_SOURCE_FILE_KEYS = Object.freeze(/** @type {const} */ (['gb', 'gff', 'fasta']));
 
 /**
  * The kinds of file an uploader takes; a binding slot's kind is the kind of
@@ -355,7 +355,7 @@ const visitDrawingFiles = (drawing, visit) => {
     .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(field('committed'), comparison?.file));
   drawing.linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => (
     add({ slot: `row.${key}`, rowUid: sequence.uid, edgeId: null }, sequence[key]))));
-  drawing.circularSources.forEach((source) => CIRCULAR_SOURCE_FILE_KEYS.forEach((key) => (
+  drawing.circularSources.forEach((source) => CIRCULAR_SOURCE_FILE_SLOTS.forEach((key) => (
     add({ slot: `source.${key}`, rowUid: source.uid, edgeId: null }, source[key]))));
   (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add({ slot: 'edge', rowUid: null, edgeId: edge.id }, edge.file));
 };
