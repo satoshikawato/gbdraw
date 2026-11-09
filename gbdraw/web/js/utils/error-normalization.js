@@ -48,6 +48,7 @@ const REASONS = Object.freeze({
   TRACK_PARAMS: 'Use the parameters supported by the selected renderer.', TRACK_AXIS: 'Select one eligible enabled feature track as the axis.',
   TRACK_LANE: 'Use a supported feature lane and matching side.', CONSERVATION_SOURCE: 'Use the supported conservation workflow and select a comparison source.',
   TICK_PARAMETER: 'Use large_tick_interval instead of tick_interval.', FEATURES_COUNT: 'Use the supported number of feature tracks for this layout.',
+  UNDERLAY_FEATURE_SLOTS: 'Feature types drawn as Underlay (repeat_region by default) need exactly one enabled Features row. Keep one Features row enabled, or set those types to Arrow or Rectangle in Feature Types.',
 
   CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose Auto (Default), Linear, or Equal.',
   LINEAR_TRACK_LAYOUT: 'Choose Above, Features on axis, or Below.',

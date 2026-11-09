@@ -820,7 +820,7 @@ gbdraw circular \
 
 A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
 
-Automatic feature underlays are derived at render time and are not annotation rows. A custom track stack must contain exactly one enabled `features` slot when a visible underlay exists; the underlay is anchored to that slot's actual ID. Manual annotation `highlight` rows remain independently editable and may intentionally overlap an automatic underlay.
+Automatic feature underlays are derived at render time and are not annotation rows. An underlay is drawn behind the custom track stack's one enabled `features` slot, anchored to that slot's actual ID. A stack without an enabled `features` slot draws no feature one by one, underlays included. A stack with two or more enabled `features` slots is refused when a record has a feature drawn as an underlay: keep one `features` slot, or draw the type as `arrow` or `rectangle` with `--feature_shape`. Manual annotation `highlight` rows remain independently editable and may intentionally overlap an automatic underlay.
 
 ## TSV manifest inputs
 

@@ -1750,9 +1750,9 @@ const collectCustomTrackIssues = ({
       parts: sentence(msg('Only one enabled Features row is allowed.'))
     }));
   }
-  // Whether the plan needs a Features row for underlays depends on the
+  // Whether two Circular Features rows refuse an underlay depends on the
   // record's features, which only Python reads; it reports TRACK_INVALID
-  // FEATURES_COUNT, as the CLI does (TK-13).
+  // UNDERLAY_FEATURE_SLOTS, as the CLI does (TK-13).
 
   overlayReferenceIssues(normalizedEnabled, mode, (slot) => rowIndexByNormalizedSlot.get(slot) ?? 0)
     .forEach(({ issue }) => pushRowIssue(rowIssues, issue));

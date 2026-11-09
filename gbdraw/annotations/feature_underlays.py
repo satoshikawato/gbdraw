@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -12,6 +12,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.objects import FeatureObject
 from gbdraw.svg.ids import instance_svg_id
+from gbdraw.tracks.parsing import SlotView, slots_draw_features
 
 from .models import (
     RegionAnnotationStyle,
@@ -143,28 +144,28 @@ def merge_feature_underlays(
     )
 
 
-def feature_underlay_anchor_slot_id(slots: Sequence[object]) -> str:
-    """Resolve the single enabled feature renderer used as the underlay anchor."""
+def feature_underlay_anchor_slot_id(
+    slots: Sequence[SlotView], underlay_features: Iterable[FeatureObject]
+) -> str | None:
+    """The enabled features slot the drawn underlays lie under, or ``None`` when the stack draws none.
 
-    feature_slots = [
-        slot
-        for slot in slots
-        if bool(getattr(slot, "enabled", True))
-        and str(getattr(slot, "renderer", "")).strip().lower() == "features"
-    ]
-    # The record has features drawn as underlays, so the plan needs one
-    # Features row to draw them on (the Web relies on this check, TK-13).
-    if not feature_slots:
+    A stack draws its feature underlays when it draws its features (:func:`slots_draw_features`, the answer
+    the Legend and the input summary read): without an enabled features slot it draws no feature one by one,
+    underlays included. With two or more there is no one slot to lie under, and the drawing is refused.
+    """
+
+    if not slots_draw_features(slots):
+        return None
+    feature_slots = [slot for slot in slots if slot.enabled and str(slot.renderer) == "features"]
+    if len(feature_slots) > 1:
+        types = ", ".join(sorted({str(feature.feature_type) for feature in underlay_features}))
         raise ValidationError(
-            "Visible feature underlays require an enabled features track slot.",
-            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
+            f"Feature types drawn as underlay ({types}) need exactly one enabled features track slot; "
+            f"{len(feature_slots)} are enabled. Keep one features slot, or draw those types as arrow or "
+            "rectangle (--feature_shape TYPE=rectangle).",
+            diagnostic={"code": "TRACK_INVALID", "reason": "UNDERLAY_FEATURE_SLOTS"},
         )
-    if len(feature_slots) != 1:
-        raise ValidationError(
-            "Visible feature underlays require exactly one enabled features track slot.",
-            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
-        )
-    return str(getattr(feature_slots[0], "id"))
+    return str(feature_slots[0].id)
 
 
 def feature_underlay_slot_id(slots: Sequence[object]) -> str:

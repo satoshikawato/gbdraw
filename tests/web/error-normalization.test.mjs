@@ -635,6 +635,16 @@ test('an annotation lane conflict names the table lane and the Overflow behavior
   assert.deepEqual(model.actions, ['edit-track', 'retry']);
 });
 
+// OV-2801: two Circular Features rows leave an underlay without one row to lie
+// under; the words say where the underlay types are set and the two ways out.
+test('an underlay without one Features row says where its types are set and the ways out (OV-2801)', () => {
+  const model = roundtrip({ code: 'TRACK_INVALID', operation: 'generate', stage: 'render', context: { reason: 'UNDERLAY_FEATURE_SLOTS' } });
+  assert.deepEqual([model.code, model.context], ['TRACK_INVALID', { reason: 'UNDERLAY_FEATURE_SLOTS' }]);
+  assert.equal(model.summary, 'The track settings are invalid. Feature types drawn as Underlay (repeat_region by default) need '
+    + 'exactly one enabled Features row. Keep one Features row enabled, or set those types to Arrow or Rectangle in Feature Types.');
+  assert.deepEqual(model.actions, ['edit-track', 'retry']);
+});
+
 // B9 (P07: offer only working actions): an unclassified failure inside the
 // engine's render or result stage repeats for the same inputs. It is reported as
 // a render failure naming the Python exception class, with Save Session and no

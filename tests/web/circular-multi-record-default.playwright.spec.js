@@ -9,6 +9,11 @@ const { generateAndWaitForResult, openApp, reveal } = require('./helpers/app-lif
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const hmmt = readFileSync(join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk'), 'utf8');
 const withOrganism = (organism) => hmmt.replace('/organism="Homo sapiens"', `/organism="${organism}"`);
+// A repeat_region, which the Web draws as an underlay by default (OV-2801).
+const withRepeat = hmmt.replace(
+  '                     /db_xref="taxon:9606"\n',
+  '                     /db_xref="taxon:9606"\n     repeat_region   303..315\n                     /rpt_type=tandem\n'
+);
 
 const uploadGenbank = async (page, name, text) => {
   const chooser = page.waitForEvent('filechooser');
@@ -28,7 +33,8 @@ const inspectResult = (page) => page.evaluate(() => {
     multiRecordCanvas: app.form.multi_record_canvas,
     slotIds: [...doc.querySelectorAll('[data-gbdraw-slot-id]')].map((node) => node.getAttribute('data-gbdraw-slot-id')),
     definitionLines: definition ? [...definition.querySelectorAll('text')].map((node) => node.textContent.trim()) : [],
-    legendKeys: [...doc.querySelectorAll('#legend [data-legend-key]')].map((node) => node.getAttribute('data-legend-key'))
+    legendKeys: [...doc.querySelectorAll('#legend [data-legend-key]')].map((node) => node.getAttribute('data-legend-key')),
+    underlays: doc.querySelectorAll('[data-gbdraw-auto-feature-underlay="true"]').length
   };
 });
 
@@ -85,7 +91,9 @@ test('Web Circular default legend uses custom slot labels and added skew slots',
 test('Web Circular custom stack without a Features row names no feature in the Legend', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await uploadGenbank(page, 'HmmtDNA.gbk', hmmt);
+  // The record has a repeat_region, drawn as an underlay by default: the stack still draws (OV-2801).
+  expect(withRepeat).toContain('repeat_region   303..315');
+  await uploadGenbank(page, 'HmmtDNA.gbk', withRepeat);
 
   const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
   await reveal(panel);
@@ -100,5 +108,6 @@ test('Web Circular custom stack without a Features row names no feature in the L
   expect(outcome.errorSummary).toBe('');
   expect(result.slotIds).not.toContain('features');
   expect(result.legendKeys).toEqual(expect.arrayContaining(['GC content', 'GC skew (+)', 'GC skew (-)']));
-  expect(result.legendKeys.filter((key) => ['CDS', 'tRNA', 'rRNA'].includes(key))).toEqual([]);
+  expect(result.legendKeys.filter((key) => ['CDS', 'tRNA', 'rRNA', 'repeat_region'].includes(key))).toEqual([]);
+  expect(result.underlays).toBe(0);
 });

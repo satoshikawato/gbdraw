@@ -231,7 +231,7 @@ def test_linear_reports_its_rows(tmp_path):
 
 def _linear(tmp_path: Path, **options):
     output = RenderOutputRequest(output_prefix="linear", formats=("svg",), output_directory=tmp_path, overwrite=True)
-    record = _record("rec", repeats=False)
+    record = _record("rec")
     return LinearDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(record), record_key=record.id),),
         options=LinearDiagramOptions(**options),
@@ -247,7 +247,7 @@ _NO_FEATURES_SLOTS = ["gc_content:dinucleotide_content", "gc_skew:dinucleotide_s
     [
         lambda tmp_path, **options: _circular(
             tmp_path,
-            records=[_record("rec", repeats=False)],
+            records=[_record("rec")],
             tracks=CircularTrackOptions(circular_track_slots=_NO_FEATURES_SLOTS),
             **options,
         ),
@@ -260,16 +260,17 @@ _NO_FEATURES_SLOTS = ["gc_content:dinucleotide_content", "gc_skew:dinucleotide_s
 def test_a_track_stack_without_a_features_slot_draws_no_feature_row(tmp_path, request_of):
     """A stack with no enabled features slot draws no feature, so its Legend names none (OV-2797).
 
-    The records hold no repeat_region: its default underlay needs a features slot.
+    The records hold a repeat_region, drawn as an underlay by default: the stack draws it no more than the
+    other features (OV-2801).
     """
     [(facts, svg_keys)] = _render(
         request_of(tmp_path, colors=_color_table(("CDS", "locus_tag", "_1$", "#c83366", "Zeta"))), tmp_path
     )
     assert facts["drawn"] == svg_keys
     assert {"GC content", "GC skew (+)", "GC skew (-)"} <= set(facts["drawn"])
-    assert not {"CDS", "Zeta", "other proteins"} & set(facts["drawn"])
+    assert not {"CDS", "Zeta", "other proteins", "repeat_region"} & set(facts["drawn"])
     # The rows are producible, as the rows of a switched-off GC track are.
-    assert {"CDS", "Zeta"} <= set(facts["suppressed"])
+    assert {"CDS", "Zeta", "repeat_region"} <= set(facts["suppressed"])
 
 
 def test_a_drawing_without_facts_reports_empty_lists():

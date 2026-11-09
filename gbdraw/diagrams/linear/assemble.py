@@ -465,9 +465,13 @@ def _add_linear_feature_underlays(
         records,
         mode="linear",
     )
-    if set_id is None:
+    anchor_id = (
+        feature_underlay_anchor_slot_id(slots, (f for result in feature_layers for f in result.underlay_features))
+        if set_id is not None
+        else None
+    )
+    if anchor_id is None:
         return slots, bundle, layouts, auto_slot_ids, 0
-    anchor_id = feature_underlay_anchor_slot_id(slots)
     anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
     slot_id = feature_underlay_slot_id(slots)
     underlay_slot = LinearTrackSlot(

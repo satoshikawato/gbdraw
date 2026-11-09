@@ -467,17 +467,35 @@ def _assemble_without_feature_slot(mode: str, record: SeqRecord):
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_visible_underlay_requires_enabled_feature_slot(mode: str) -> None:
+def test_a_stack_without_a_features_slot_draws_no_underlay(mode: str) -> None:
+    """A stack without a features slot draws no feature one by one, underlays included (OV-2801)."""
+    svg = _assemble_without_feature_slot(mode, _record(include_cds=False)).tostring()
+    assert _underlay_shapes(svg) == []
+    assert PRIVATE_SLOT_ID not in svg
+
+
+def test_two_features_slots_refuse_an_underlay_and_name_the_way_out() -> None:
+    """With two features slots the underlay has no one slot to lie under: the refusal names the types and the way out."""
     record = _record(include_cds=False)
-    with pytest.raises(ValidationError, match="enabled features track slot") as raised:
-        _assemble_without_feature_slot(mode, record)
-    # The Web reads the typed diagnostic; it no longer checks the configured
-    # underlay types itself (TK-13).
-    payload = serialize_web_error(raised.value, operation="generate", stage="render")
-    assert (payload["code"], payload["context"]) == (
-        "TRACK_INVALID",
-        {"reason": "FEATURES_COUNT"},
+    record.features.append(SeqFeature(FeatureLocation(200, 260, strand=1), type="misc_feature"))
+    with pytest.raises(ValidationError) as raised:
+        assemble_circular_diagram_from_record(
+            record,
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region", "misc_feature"],
+                feature_shapes={"misc_feature": "underlay"},
+                circular_track_slots=["inner:features@side=inside", "outer:features@side=outside"],
+                legend="none",
+            ),
+        )
+    assert str(raised.value) == (
+        "Feature types drawn as underlay (misc_feature, repeat_region) need exactly one enabled features track "
+        "slot; 2 are enabled. Keep one features slot, or draw those types as arrow or rectangle "
+        "(--feature_shape TYPE=rectangle)."
     )
+    payload = serialize_web_error(raised.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == ("TRACK_INVALID", {"reason": "UNDERLAY_FEATURE_SLOTS"})
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
