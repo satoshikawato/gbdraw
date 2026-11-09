@@ -1,6 +1,7 @@
 // Find in other files (PD-OI-123): the Region popup of a Linear drawing opens the dialog with the picked span as the
-// reference; Search runs tblastn (the vendored LOSAT Wasm) for each other File under the LOSAT overlay; the proposal
-// comes from Python's plan; Create adds a new Linear drawing right after the source as one project step, which
+// reference; Search runs under the full-window overlay from Python's first step to its last, with tblastn (the
+// vendored LOSAT Wasm) for each other File; the proposal comes from Python's plan, as a table on a wide screen and as
+// cards on a phone; Create adds a new Linear drawing right after the source as one project step, which
 // Generate draws and Undo removes. The fixture is five MIBiG cluster records (five Files) of one Linear drawing.
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -78,9 +79,24 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   await expect(dialog.locator('[data-find-files-target] input:not(:checked)')).toHaveCount(0);
   await expect(dialog.locator('[data-find-files-program]')).toHaveValue('tlosatn');
 
+  const referenceName = await page.evaluate(() => {
+    const view = window.__GBDRAW_APP__.findInOtherFiles.dialog;
+    return view.files.find((file) => file.records.some((record) => record.recordKey === view.rows[0].recordKey)).name;
+  });
   const steps = (await undoLabels(page)).length;
   await dialog.locator('[data-find-files-search]').click();
+  // The overlay covers the app for the whole search, its Python steps included, and the dialog steps aside.
+  const overlay = page.locator('[data-generation-progress]');
+  await expect(overlay).toBeVisible();
+  await expect(dialog).toBeHidden();
+  const shots = process.env.FIND_FILES_SHOTS;
+  if (shots) {
+    // The status line of a Python step, when the poll sees it before LOSAT starts.
+    await expect.poll(() => overlay.innerText(), { timeout: 60_000, intervals: [50] }).toMatch(/Reading the files|Running LOSAT/);
+    await page.screenshot({ path: `${shots}/overlay-search.png` });
+  }
   await expect.poll(() => status(page), { timeout: 600_000 }).toBe('proposal');
+  await expect(overlay).toBeHidden();
   await expect(dialog).toHaveAttribute('data-find-files-screen', 'proposal');
   await expect(dialog.locator('[data-find-files-file]')).toHaveCount(4);
   // A screen 768 px wide or wider shows the proposal as a table, not as cards.
@@ -90,6 +106,15 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   expect(windows).toBeGreaterThan(0);
   await expect(dialog.locator('[data-find-files-count]')).toContainText(' in ');
   expect((await undoLabels(page)).length, 'the search and the proposal make no History step').toBe(steps);
+  // A narrower screen, such as a phone, shows each file as a card with one block per window.
+  const wide = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.locator('[data-find-files-cards]').first()).toBeVisible();
+  await expect(dialog.locator('[data-find-files-table]').first()).toBeHidden();
+  expect(await dialog.locator('[data-find-files-cards] [data-find-files-window]').count()).toBe(windows);
+  if (shots) await page.screenshot({ path: `${shots}/proposal-phone.png` });
+  await page.setViewportSize(wide);
+  await expect(dialog.locator('[data-find-files-table]').first()).toBeVisible();
 
   // Back and Search again, then Create.
   await dialog.locator('[data-find-files-back]').click();
@@ -105,10 +130,11 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   expect(await shownDrawing(page)).toEqual({ id: added, kind: 'linear' });
   expect((await undoLabels(page))[0], 'Create is one project step').toBe('Find in other files');
 
-  // Generate draws it: the reference row first, labelled with its File's name.
+  // Generate draws it, the reference row labelled with its File's name.
   await generateAndWaitForResult(page);
   const rows = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().length);
   expect(rows).toBeGreaterThan(0);
+  expect(await page.locator('.gbdraw-preview-surface svg text').allTextContents()).toContain(referenceName);
 
   // Generate is a step of its own: the first Undo takes the figure back, the second the new drawing.
   const undo = page.getByRole('button', { name: 'Undo', exact: true });

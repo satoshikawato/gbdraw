@@ -1414,7 +1414,11 @@ def plan_locate(
 class LocateDrawnRecord:
     """One record of a row of the drawing: its windows in column order, numbered 1..k over the row's windows.
 
-    ``window_genes`` are the protein IDs of the reference genes each window holds, in the order of ``windows``.
+    A window's column is its place in the drawn row: the records table and the new drawing place it there, and the
+    drawn row numbers its windows in column order (``plan_row_windows``), so the column is the window's number in the
+    drawing. ``plan_columns`` are the windows' columns in the plan, their identity there (the plan counts the
+    windows it does not select), and ``window_genes`` the protein IDs of the reference genes each window holds,
+    both in the order of ``windows``.
     """
 
     file_key: str
@@ -1422,6 +1426,7 @@ class LocateDrawnRecord:
     record_id: str
     record_length: int
     windows: tuple[RecordWindow, ...]
+    plan_columns: tuple[int, ...]
     window_genes: tuple[frozenset[str], ...]
 
     @property
@@ -1461,7 +1466,8 @@ _DrawnWindow = tuple[str, str, int, RecordWindow, frozenset[str]]
 
 
 def _drawn_row(file_key: str, windows: Sequence[_DrawnWindow]) -> LocateDrawnRow:
-    """A row from its windows in column order, each as (record key, record ID, length, window, genes)."""
+    """A row from its windows in column order, each as (record key, record ID, length, window, genes); each
+    ``window.column`` is its column in the plan."""
 
     grouped: dict[str, list[tuple[int, _DrawnWindow]]] = {}
     for column, item in enumerate(windows, start=1):
@@ -1478,6 +1484,7 @@ def _drawn_row(file_key: str, windows: Sequence[_DrawnWindow]) -> LocateDrawnRow
                     RecordWindow(item[3].start, item[3].end, item[3].reverse_complement, column)
                     for column, item in items
                 ),
+                plan_columns=tuple(item[3].column or 0 for _column, item in items),
                 window_genes=tuple(item[4] for _column, item in items),
             )
             for key, items in grouped.items()
@@ -1532,6 +1539,46 @@ def locate_drawing(plan: LocatePlan) -> LocateDrawing:
         if upper_genes & lower_genes
     )
     return LocateDrawing(tuple(rows), pairs)
+
+
+@dataclass(frozen=True)
+class LocateFileCounts:
+    """What the report and the proposal say of one File (PD-OI-123), from the plan of its selected windows.
+
+    ``window_numbers`` gives each selected window's number in the drawing as (column in the plan, number), in plan
+    column order: the drawn row's column of the window (:class:`LocateDrawnRecord`). ``genes_found`` are the
+    reference genes found in full or in part, of ``genes_total``; ``alignments_removed`` are the rows the thresholds
+    removed.
+    """
+
+    file_key: str
+    window_numbers: tuple[tuple[int, int], ...]
+    genes_found: int
+    genes_total: int
+    alignments_removed: int
+
+
+def locate_file_counts(plan: LocatePlan) -> tuple[LocateFileCounts, ...]:
+    """The counts of each File of ``plan``, in plan order."""
+
+    numbers = {
+        row.file_key: tuple(sorted(
+            (plan_column, window.column or 0)
+            for record in row.records
+            for window, plan_column in zip(record.windows, record.plan_columns)
+        ))
+        for row in locate_drawing(plan).rows[1:]
+    }
+    return tuple(
+        LocateFileCounts(
+            file_key=file_plan.file_key,
+            window_numbers=numbers.get(file_plan.file_key, ()),
+            genes_found=len(file_plan.coverage.complete) + len(file_plan.coverage.partial),
+            genes_total=len(plan.reference.genes),
+            alignments_removed=file_plan.tally.rows_read - file_plan.tally.rows_kept,
+        )
+        for file_plan in plan.files
+    )
 
 
 # Inputs from records and the search plan.
@@ -1860,6 +1907,7 @@ __all__ = [
     "read_locate_file",
     "LocateDrawnRecord",
     "LocateDrawnRow",
+    "LocateFileCounts",
     "LocateOptions",
     "LocatePlan",
     "LocatePlanJson",
@@ -1880,6 +1928,7 @@ __all__ = [
     "WindowGene",
     "locate_default_thresholds",
     "locate_drawing",
+    "locate_file_counts",
     "locate_query",
     "locate_reference",
     "locate_search_args",

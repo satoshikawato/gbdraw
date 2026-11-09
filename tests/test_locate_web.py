@@ -10,17 +10,20 @@ source drawing as New drawing from a region derives one.
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordCardinality, RecordInput
-from gbdraw.comparisons.locate import LocatePlan, LocateWindowChoice, choose_locate_windows
+from gbdraw.api import render_request
+from gbdraw.comparisons.locate import LocatePlan, LocateWindowChoice, choose_locate_windows, locate_file_counts
 from gbdraw.comparisons.losat_runtime import run_losat_search
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.web_support.locate import LocateOptionsInput, LocateSearchInput, locate_web_json
-from tests.test_locate_command import _fake_losat, _genomes, _locate_args, _run
+from tests.test_locate_command import _fake_losat, _genomes, _interleaved, _locate_args, _run
 
 OPTIONS: LocateOptionsInput = {"evalue": 1e-2, "bitscore": 50.0, "identity": 0.0, "alignmentLength": 0}
 
@@ -51,7 +54,7 @@ def test_the_reference_counts_its_genes_or_names_the_rule_a_window_breaks(tmp_pa
     source = _source(_genomes(tmp_path), "ref", "a")
 
     ready = _call("reference", source, tmp_path, {"recordKey": "ref", "windows": _windows((1501, 8100))})
-    assert ready == {"status": "ready", "fileKey": "ref", "recordId": "REF", "genes": 6, "cutGenes": ["g7"]}
+    assert ready == {"status": "ready", "fileKey": "ref", "recordId": "REF", "genes": 6}
     refusals = {
         "WINDOW_WITHOUT_CDS": _windows((100, 900)),
         "WINDOWS_OVERLAP": _windows((1501, 4500), (4000, 8100)),
@@ -79,12 +82,12 @@ def test_the_files_list_every_record_of_every_file_of_the_drawing(tmp_path: Path
     ]}
 
 
-def _search(paths: dict[str, Path], tmp_path: Path) -> tuple[Any, LocateSearchInput, Any]:
+def _search(paths: dict[str, Path], tmp_path: Path, targets: tuple[str, ...] = ("a", "b", "c")) -> tuple[Any, LocateSearchInput, Any]:
     losat = _fake_losat(tmp_path)
-    source = _source(paths, "ref", "a", "b", "c")
+    source = _source(paths, "ref", *targets)
     search: LocateSearchInput = {
         "reference": {"recordKey": "ref", "windows": _windows((1501, 8100))},
-        "targets": ["a", "b", "c"],
+        "targets": list(targets),
         "program": "tlosatn",
     }
     jobs = _call("search", source, tmp_path, search)
@@ -252,3 +255,152 @@ def test_a_span_picked_in_a_window_of_a_record_drawn_in_several_is_a_reference_o
     assert [record["recordKey"] for record in files["files"][0]["records"]] == ["mito"]
     ready = _call("reference", source, tmp_path, {"recordKey": units[1][0], "windows": _windows((5200, 8800))})
     assert (ready["status"], ready["fileKey"], ready["recordId"]) == ("ready", "mito", "NC_012920.1")
+
+
+def _kept(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"fileKey": file["file_key"], "column": w["window"]["column"], "start": w["window"]["start"],
+         "end": w["window"]["end"], "reverseComplement": w["window"]["reverse_complement"]}
+        for file in plan["files"] for w in file["windows"]
+    ]
+
+
+def test_the_proposal_counts_are_the_report_counts_and_number_the_windows_as_the_drawing_does(tmp_path: Path) -> None:
+    # PD-OI-123: the circled number of a window is the one it has in the drawing; Python gives it, with the genes
+    # found and the alignments the thresholds removed, to the dialog and to the report of `gbdraw locate`
+    # (`locate_file_counts`). D's windows run D1, D2, D1 in the order of the reference (PD-OI-122: by column).
+    paths = _interleaved(tmp_path)
+    source, _search_input, reply = _search(paths, tmp_path, ("d", "c"))
+    plan = reply["plan"]
+    derived = _call("drawing", source, tmp_path, {
+        "plan": plan, "choices": _kept(plan), "labels": {"ref": "ref.gb", "d": "d.gb", "c": "c.gb"}, "adaptSizes": True,
+    })
+    d, c = derived["counts"]
+    assert [(w["record_id"], w["window"]["column"]) for w in plan["files"][0]["windows"]] == [("D1", 1), ("D2", 2), ("D1", 3)]
+    assert d == {
+        "fileKey": "d", "windowNumbers": [{"column": 1, "number": 1}, {"column": 2, "number": 2}, {"column": 3, "number": 3}],
+        "genesFound": 6, "genesTotal": 6, "alignmentsRemoved": 0,
+    }
+    assert (c["fileKey"], c["windowNumbers"], c["genesFound"]) == ("c", [], 0)
+    chosen = LocatePlan.from_json(derived["plan"])
+    assert derived["counts"] == [
+        {"fileKey": item.file_key, "windowNumbers": [{"column": a, "number": b} for a, b in item.window_numbers],
+         "genesFound": item.genes_found, "genesTotal": item.genes_total, "alignmentsRemoved": item.alignments_removed}
+        for item in locate_file_counts(chosen)
+    ]
+
+    # The new drawing draws D's row in that order: its window list reads D1, D2, D1.
+    drawing = derived["drawing"]
+    request = decode_canonical_request(
+        drawing["renderRequest"], resource_paths={key: source[1][value] for key, value in drawing["resourceSources"].items()},
+        output_directory=tmp_path / "out",
+    )
+    assert isinstance(request, LinearDiagramRequest)
+    request = replace(request, options=replace(request.options, losat_search=None))
+    svg = render_request(request).drawing.tostring()
+    spans = [f"{w['record_id']}:{w['window']['start']:,}-{w['window']['end']:,}" for w in plan["files"][0]["windows"]]
+    assert re.findall(r">(D[12]:[^<]*)<", svg) == spans
+
+
+def _numbers(counts: dict[str, Any]) -> list[tuple[int, int]]:
+    return [(item["column"], item["number"]) for item in counts["windowNumbers"]]
+
+
+def _drawn_list(derived: dict[str, Any], source: tuple[dict[str, Any], dict[str, str]], tmp_path: Path) -> list[str]:
+    """The window list of the new drawing's windowed row, as the SVG writes it (numbers 1.. in that order)."""
+
+    drawing = derived["drawing"]
+    request = decode_canonical_request(
+        drawing["renderRequest"], resource_paths={key: source[1][value] for key, value in drawing["resourceSources"].items()},
+        output_directory=tmp_path / "out",
+    )
+    assert isinstance(request, LinearDiagramRequest)
+    request = replace(request, options=replace(request.options, losat_search=None))
+    return re.findall(r">([DE][12]:[^<]*)<", render_request(request).drawing.tostring())
+
+
+def test_an_unticked_first_window_leaves_the_others_numbered_as_the_drawing_numbers_them(tmp_path: Path) -> None:
+    # The number of a window is its place in the drawn row, found by its column in the plan: with D1 ① left out,
+    # D2 is drawn first and numbered 1, the second D1 window 2.
+    paths = _interleaved(tmp_path)
+    source, _search_input, reply = _search(paths, tmp_path, ("d",))
+    plan = reply["plan"]
+    labels = {"ref": "ref.gb", "d": "d.gb"}
+    derived = _call("drawing", source, tmp_path, {
+        "plan": plan, "choices": [item for item in _kept(plan) if (item["fileKey"], item["column"]) != ("d", 1)],
+        "labels": labels, "adaptSizes": True,
+    })
+    [d] = derived["counts"]
+    assert _numbers(d) == [(2, 1), (3, 2)]
+    windows = {w["window"]["column"]: w for w in plan["files"][0]["windows"]}
+    assert _drawn_list(derived, source, tmp_path) == [
+        f"{windows[column]['record_id']}:{windows[column]['window']['start']:,}-{windows[column]['window']['end']:,}"
+        for column, _number in _numbers(d)
+    ]
+
+
+def test_a_kept_window_after_one_not_selected_is_numbered_1_in_the_proposal(tmp_path: Path) -> None:
+    from tests.test_locate_command import _upstream_copy
+
+    paths = _upstream_copy(tmp_path)
+    source, _search_input, reply = _search(paths, tmp_path, ("e",))
+    plan = reply["plan"]
+    derived = _call("drawing", source, tmp_path, {
+        "plan": plan, "choices": _kept(plan), "labels": {"ref": "ref.gb", "e": "e.gb"}, "adaptSizes": True,
+    })
+    [e] = derived["counts"]
+    assert _numbers(e) == [(2, 1)]
+
+
+def _split(paths: dict[str, Path], name: str, *record_ids: str) -> list[RecordInput]:
+    """A card the request splits into one record per record of its File (as the Web writes a card whose records
+    differ in a per-record setting): records that share one source."""
+
+    from gbdraw.io.record_select import parse_record_selector
+
+    return [
+        RecordInput(GenBankInputSource(paths[name]), selector=parse_record_selector(record_id), record_key=f"{name}:{index}")
+        for index, record_id in enumerate(record_ids, start=1)
+    ]
+
+
+def _encoded(records: list[RecordInput]) -> tuple[dict[str, Any], dict[str, str]]:
+    encoded = encode_canonical_request(LinearDiagramRequest(records=records))
+    return encoded.payload, {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
+
+
+def test_records_of_one_source_are_one_file_searched_once(tmp_path: Path) -> None:
+    # Files are the drawing's sources: D's two request records are one File with both drawn record keys, searched
+    # once and listed once.
+    paths = _interleaved(tmp_path)
+    source = _encoded([
+        RecordInput(GenBankInputSource(paths["ref"]), record_key="ref", cardinality=RecordCardinality.ALL),
+        *_split(paths, "d", "D1", "D2"),
+    ])
+    files = _call("files", source, tmp_path, {})
+    assert [(file["fileKey"], [record["recordKey"] for record in file["records"]]) for file in files["files"]] == [
+        ("ref", ["ref"]), ("d:1", ["d:1", "d:2"]),
+    ]
+    search: LocateSearchInput = {
+        "reference": {"recordKey": "ref", "windows": _windows((1501, 8100))}, "targets": ["d:1"], "program": "tlosatn",
+    }
+    jobs = _call("search", source, tmp_path, search)["jobs"]
+    assert [job["fileKey"] for job in jobs] == ["d:1"]
+    with pytest.raises(Exception, match="other Files of the drawing"):
+        _call("search", source, tmp_path, {**search, "targets": ["d:1", "d:2"]})
+
+
+def test_a_record_that_shares_the_reference_source_is_not_another_file(tmp_path: Path) -> None:
+    # The reference's File is not searched (PD-OI-123): a record of the same source is part of it, not a target.
+    paths = _interleaved(tmp_path)
+    source = _encoded([*_split(paths, "d", "D1", "D2"), RecordInput(GenBankInputSource(paths["ref"]), record_key="ref")])
+    files = _call("files", source, tmp_path, {})
+    assert [file["fileKey"] for file in files["files"]] == ["d:1", "ref"]
+    ready = _call("reference", source, tmp_path, {"recordKey": "d:2", "windows": _windows((2001, 3300))})
+    assert (ready["status"], ready["fileKey"], ready["recordId"]) == ("ready", "d:1", "D2")
+    search: LocateSearchInput = {
+        "reference": {"recordKey": "d:2", "windows": _windows((2001, 3300))}, "targets": ["d:1"], "program": "tlosatn",
+    }
+    with pytest.raises(Exception, match="other Files of the drawing"):
+        _call("search", source, tmp_path, search)
+    assert [job["fileKey"] for job in _call("search", source, tmp_path, {**search, "targets": ["ref"]})["jobs"]] == ["ref"]

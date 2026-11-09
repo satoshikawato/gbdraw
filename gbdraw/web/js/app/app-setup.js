@@ -1716,7 +1716,7 @@ export const createAppSetup = () => {
     };
   };
   const {
-    runLosatJobsInOverlay,
+    runInLosatOverlay, runLosatJobsInOverlay,
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
@@ -3303,7 +3303,7 @@ export const createAppSetup = () => {
     resultFeatures: shownResultFeatures
   });
   const findInOtherFiles = createFindInOtherFiles({
-    shownDrawingId: () => state.activeDrawingId.value, projectShownRequest, runLosatJobs: runLosatJobsInOverlay,
+    shownDrawingId: () => state.activeDrawingId.value, projectShownRequest, runInOverlay: runInLosatOverlay,
     runLocateStep: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES, payload),
     shownDrawing: () => state.activeDrawing(), newDrawingFromSearch: drawingList.newDrawingFromRegion
   });

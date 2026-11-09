@@ -6,7 +6,7 @@
 // Create adds a project step, through the drawing list.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { t, tn } from '../utils/i18n.js';
+import { t, tm, tn } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
 import { resolveComparisonThresholds } from '../mode-profiles.js';
 import { formatRecordLength } from '../services/record-options.js';
@@ -19,7 +19,7 @@ import { proposalCountText, proposalView, windowChoices, windowDrafts, windowRef
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { LosatJob } from '../services/losat.js' */
+/** @import { LosatOverlayRun } from '../services/losat.js' */
 /** @import { LocateHelperPayload, LocateStep } from '../services/find-in-other-files.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
 /** @import { LinearSeq } from '../services/drawing/inputs.js' */
@@ -35,9 +35,9 @@ import { proposalCountText, proposalView, windowChoices, windowDrafts, windowRef
  * @property {() => Promise<ProjectedDraftRequest>} projectShownRequest The shown drawing's draft request.
  * @property {(payload: LocateHelperPayload) => Promise<{ result?: unknown }>} runLocateStep Runs the Worker operation
  *   `findInOtherFiles`; the reply is read here.
- * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string>, byFile: boolean }) => Promise<{ status: 'ok',
- *   results: (LosatJob & { text: string, error?: string })[] } | { status: 'canceled' } | { status: 'busy', reason: string }>}
- *   runLosatJobs The searches under the full-window LOSAT overlay, one File after another ("File k of N"), with Cancel.
+ * @property {(task: (run: LosatOverlayRun) => Promise<LocatePlanReply>) => Promise<{ status: 'ok', value: LocatePlanReply }
+ *   | { status: 'canceled' } | { status: 'busy', reason: string }>} runInOverlay The search under the full-window overlay
+ *   from its first step to its last (Python reads the Files, LOSAT by File, Python plans), with its status and Cancel.
  * @property {() => ShownDrawingInputs} shownDrawing The shown drawing's Pairwise Comparisons thresholds as its draft
  *   holds them (`adv`) and its File cards.
  * @property {(sourceId: DrawingId, derivation: RegionDerivation, kind: 'search') => Promise<DrawingListOutcome>}
@@ -74,6 +74,9 @@ import { proposalCountText, proposalView, windowChoices, windowDrafts, windowRef
  * @property {string[]} notCarried
  * @property {WindowEdit | null} edit
  */
+
+/** How long typing in Start or End pauses before the genes are counted. */
+const TYPING_PAUSE_MS = 250;
 
 /** @returns {FindDialogView} */
 const closedDialog = () => ({
@@ -132,21 +135,23 @@ export const searchReason = (dialog) => {
 };
 
 /**
- * The dialog's search settings, from the Pairwise Comparisons thresholds of the drawing (its mode's default for a
- * blank or an invalid value).
+ * The dialog's search settings, from the Pairwise Comparisons thresholds of the drawing, each field on its own (its
+ * mode's default for a blank or an invalid value).
  * @param {Readonly<Record<string, unknown>>} adv
  * @returns {SearchSettings}
  */
 const settingsFrom = (adv) => {
-  let resolved;
-  try {
-    resolved = resolveComparisonThresholds(adv, 'linear');
-  } catch {
-    resolved = resolveComparisonThresholds({}, 'linear');
-  }
+  /** @param {string} draftKey @param {string} field */
+  const one = (draftKey, field) => {
+    try {
+      return String(resolveComparisonThresholds({ [draftKey]: adv[draftKey] }, 'linear')[field]);
+    } catch {
+      return String(resolveComparisonThresholds({}, 'linear')[field]);
+    }
+  };
   return {
-    program: 'tlosatn', bitscore: String(resolved.bitscore), evalue: String(resolved.evalue),
-    identity: String(resolved.identity), alignmentLength: String(resolved.alignmentLength)
+    program: 'tlosatn', bitscore: one('min_bitscore', 'bitscore'), evalue: one('evalue', 'evalue'),
+    identity: one('identity', 'identity'), alignmentLength: one('alignment_length', 'alignmentLength')
   };
 };
 
@@ -257,13 +262,41 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
     }];
     return checkReference();
   };
-  /** A row edit, found by the row's id; a record that is not circular has no window across the origin. @param {number} id @param {Partial<Omit<ReferenceRow, 'id'>>} patch */
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let typing;
+  /** @type {((checked: Promise<void>) => void)[]} */
+  let waiting = [];
+  /** Drops a count that waits for a pause in typing (the dialog closes). */
+  const stopWaiting = () => {
+    clearTimeout(typing);
+    for (const resolve of waiting) resolve(Promise.resolve());
+    waiting = [];
+  };
+  /** Counts the genes once typing pauses: each keystroke in Start or End would read the reference file again. */
+  const checkAfterTyping = () => {
+    clearTimeout(typing);
+    begin(); // a count still running is for the text before this keystroke
+    Object.assign(dialog, { status: 'checking', genes: null, referenceReason: '' });
+    return new Promise((resolve) => {
+      waiting.push(resolve);
+      typing = setTimeout(() => {
+        const checked = checkReference();
+        for (const done of waiting) done(checked);
+        waiting = [];
+      }, TYPING_PAUSE_MS);
+    });
+  };
+  /**
+   * A row edit, found by the row's id; a record that is not circular has no window across the origin. Start and End
+   * are counted once typing pauses.
+   * @param {number} id @param {Partial<Omit<ReferenceRow, 'id'>>} patch
+   */
   const editRow = (id, patch) => {
     const row = dialog.rows.find((candidate) => candidate.id === id);
     if (!row) return Promise.resolve();
     Object.assign(row, patch);
     if (!recordOf(dialog, row.recordKey)?.record.circular) row.acrossOrigin = false;
-    return checkReference();
+    return 'start' in patch || 'end' in patch ? checkAfterTyping() : checkReference();
   };
   /** "+ Add window": a row of the last row's record. */
   const addRow = () => {
@@ -275,7 +308,7 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
     dialog.rows = dialog.rows.filter((row) => row.id !== id);
     return checkReference();
   };
-  return { firstRow, editRow, addRow, removeRow };
+  return { firstRow, editRow, addRow, removeRow, stopWaiting };
 };
 
 /**
@@ -307,7 +340,7 @@ const proposalActions = ({ dialog, session, begin, current, step, fail }, newDra
       }
       found.derived = reply;
       Object.assign(dialog, {
-        status: 'proposal', message: '', proposal: proposalView(search, reply.plan, drafts, names), count: proposalCountText(drafts),
+        status: 'proposal', message: '', proposal: proposalView(search, reply, drafts, names), count: proposalCountText(drafts),
         createReason: drafts.some((draft) => draft.ticked) ? '' : t('Tick at least one window to create the drawing.'),
         ...derivedDrawingNotes(reply.drawing)
       });
@@ -320,13 +353,13 @@ const proposalActions = ({ dialog, session, begin, current, step, fail }, newDra
   const draftOf = (key) => session()?.drafts.find((draft) => draft.key === key) ?? null;
   /**
    * A tick, or an edit of Start, End and Reverse complement: changes that window only. A change Python refuses is
-   * undone, with the reason shown.
+   * undone, with the reason shown. While Python answers the last change the proposal takes none (the dialog is busy).
    * @param {string} key @param {Partial<Pick<WindowDraft, 'ticked' | 'start' | 'end' | 'reverseComplement'>>} change
    * @returns {Promise<string>} The refusal, or ''.
    */
   const changeWindow = async (key, change) => {
     const draft = draftOf(key);
-    if (!draft) return '';
+    if (!draft || dialog.status !== 'proposal') return '';
     const before = { ...draft };
     Object.assign(draft, change, { edited: draft.edited || 'start' in change });
     const refused = await derive();
@@ -387,7 +420,7 @@ const proposalActions = ({ dialog, session, begin, current, step, fail }, newDra
  * @param {FindInOtherFilesPorts} ports
  */
 export const createFindInOtherFiles = ({
-  shownDrawingId, projectShownRequest, runLocateStep, runLosatJobs, shownDrawing, newDrawingFromSearch
+  shownDrawingId, projectShownRequest, runLocateStep, runInOverlay, shownDrawing, newDrawingFromSearch
 }) => {
   /** @type {FindDialogView} */
   const dialog = reactive(closedDialog());
@@ -406,12 +439,13 @@ export const createFindInOtherFiles = ({
     fail: (error) => { Object.assign(dialog, { status: 'error', message: failureText(error) }); }
   };
   const { step, fail } = context;
+  const rows = referenceRows(context);
   const close = () => {
     request += 1;
     found = null;
+    rows.stopWaiting();
     Object.assign(dialog, closedDialog());
   };
-  const rows = referenceRows(context);
   const proposal = proposalActions(context, newDrawingFromSearch, close);
 
   /**
@@ -440,13 +474,31 @@ export const createFindInOtherFiles = ({
     }
   };
 
-  /** Search: the LOSAT runs under the overlay; Cancel adds nothing and keeps the dialog on the search. */
+  /**
+   * The search's three steps under the overlay: Python reads the Files and gives one LOSAT job per File, LOSAT runs
+   * them by File, and Python plans the windows. The dialog steps aside while the overlay is up ('searching').
+   * @param {FindSession} session @param {LocateSearchInput} searchInput @param {LocateOptionsInput} options
+   * @param {LosatOverlayRun} overlay
+   */
+  const searchSteps = async (session, searchInput, options, overlay) => {
+    dialog.status = 'searching';
+    overlay.status(t('Reading the files of the drawing…'));
+    const { jobs, sequences } = locateLosatJobs(readSearchPlanReply(
+      await overlay.until(step(session.sent, { step: 'search', search: searchInput }))));
+    const results = await overlay.losat({ jobs, sequences, byFile: true });
+    overlay.status(t('Finding the windows in each file…'));
+    return readPlanReply(await overlay.until(step(session.sent, {
+      step: 'plan', plan: { search: searchInput, outcomes: locateOutcomes(jobs, results), options }
+    })));
+  };
+
+  /** Search, under the overlay from its first step to its last; Cancel adds nothing and keeps the dialog on the search. */
   const search = async () => {
     const input = referenceInput(dialog);
     if (searchReason(dialog) || !found || !('reference' in input)) return;
     const mine = ++request;
     const session = found;
-    Object.assign(dialog, { status: 'searching', message: '' });
+    dialog.message = '';
     try {
       const options = searchOptions(dialog.settings);
       /** @type {LocateSearchInput} */
@@ -454,15 +506,13 @@ export const createFindInOtherFiles = ({
         reference: input.reference, program: dialog.settings.program,
         targets: searchFiles(dialog).filter((file) => dialog.targets[file.fileKey]).map((file) => file.fileKey)
       };
-      const { jobs, sequences } = locateLosatJobs(readSearchPlanReply(await step(session.sent, { step: 'search', search: searchInput })));
-      const run = await runLosatJobs({ jobs, sequences, byFile: true });
+      const run = await runInOverlay((overlay) => searchSteps(session, searchInput, options, overlay));
       if (mine !== request) return;
       if (run.status !== 'ok') {
-        Object.assign(dialog, { status: 'ready', message: run.status === 'busy' ? run.reason : '' });
+        Object.assign(dialog, { status: 'ready', message: run.status === 'busy' ? tm(run.reason) : '' });
         return;
       }
-      const reply = readPlanReply(await step(session.sent, { step: 'plan', plan: { search: searchInput, outcomes: locateOutcomes(jobs, run.results), options } }));
-      if (mine !== request) return;
+      const reply = run.value;
       Object.assign(session, { search: reply, drafts: windowDrafts(reply.plan) });
       const cut = reply.plan.reference.cut_genes.map((cds) => reply.geneNames[cds.protein_id] ?? cds.protein_id);
       Object.assign(dialog, {

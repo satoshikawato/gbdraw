@@ -240,6 +240,18 @@ write-up of a release.
   contig ends, and the genes found in part or not at all on standard error.
   tblastn needs a LOSAT that has it (`--losat_bin`) or NCBI BLAST+
   (`--ncbi_blast_bin`); the LOSAT that `gbdraw setup-losat` installs has none.
+- Added (Web app): Find in other files, in the Region popup of a Linear
+  drawing (after "Use as search query") and in the Drawing menu, runs the same
+  search in the browser. The dialog takes one or more reference windows, the
+  files to search, and the search settings (tblastn by default, or blastn);
+  the search runs under the full-window overlay, file by file, with Cancel.
+  The proposal lists each file's windows with the number each will have in
+  the drawing, its genes and contig ends, the windows not selected with the
+  reason, and the genes found in part or not at all; a window can be ticked,
+  unticked, or edited. "Create new drawing" adds a new Linear drawing next to
+  the source drawing as one step that Undo removes: the reference windows on
+  the first row, then one row per file, compared by LOSAT where two windows
+  share a reference gene. Nothing of the search is saved in the Session.
 - Fixed (Web app): a loaded Session's figure appears already fitted to the
   Preview, instead of showing large for a moment and then shrinking to fit.
   A Session file from an older gbdraw, whose saved figure shows while the

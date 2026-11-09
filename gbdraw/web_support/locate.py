@@ -54,6 +54,7 @@ from gbdraw.comparisons.locate import (
     choose_locate_windows,
     finish_locate,
     locate_drawing,
+    locate_file_counts,
     locate_results,
     locate_target,
     prepare_locate_search,
@@ -108,14 +109,12 @@ class LocateReferenceInput(TypedDict):
 
 class LocateReferenceReady(TypedDict):
     """The reference windows can be searched: the File and record they are of, and their genes (``genes``, the
-    CDS that lie wholly inside a window) and the CDS a window edge cuts (``cutGenes``, by name), which are not
-    searched."""
+    CDS that lie wholly inside a window). The proposal names the CDS a window edge cuts (the plan's ``cut_genes``)."""
 
     status: Literal["ready"]
     fileKey: str
     recordId: str
     genes: int
-    cutGenes: list[str]
 
 
 class LocateWindowRefused(TypedDict):
@@ -229,11 +228,32 @@ class LocateDrawingInput(TypedDict):
     adaptSizes: bool
 
 
+class LocateWindowNumber(TypedDict):
+    """A kept window by its column (its identity in the plan) and the number it has in the drawing."""
+
+    column: int
+    number: int
+
+
+class LocateFileCountsReply(TypedDict):
+    """What the proposal says of one File (``locate_file_counts``, which the report of ``gbdraw locate`` reads):
+    the number each kept window has in the drawing, the reference genes found in full or in part of all of them,
+    and the alignments the thresholds removed."""
+
+    fileKey: str
+    windowNumbers: list[LocateWindowNumber]
+    genesFound: int
+    genesTotal: int
+    alignmentsRemoved: int
+
+
 class LocateDrawingReady(TypedDict):
-    """The plan with the windows kept, its window pairs, and the new drawing."""
+    """The plan with the windows kept, the counts of each of its Files in plan order, its window pairs, and the new
+    drawing."""
 
     status: Literal["derived"]
     plan: LocatePlanJson
+    counts: list[LocateFileCountsReply]
     pairs: list[LocateWindowPairReply]
     drawing: DerivedRegionDrawing
 
@@ -264,7 +284,9 @@ def _input_file(key: str, source: RecordInputSource) -> LocateInputFile:
 
 @dataclass(frozen=True)
 class _Drawing:
-    """The source drawing's request and its Files: each request record is one File, by its record key."""
+    """The source drawing's request and its Files. A File is one source of the drawing (a Linear File card), keyed
+    by the record key of its first request record: request records that read one source (a card the request splits
+    into one record per record) are one File, with the keys of each record it draws."""
 
     request: LinearDiagramRequest
     files: dict[str, RecordInputSource]
@@ -278,12 +300,13 @@ def _drawing(request_payload: Mapping[str, object], resource_paths: Mapping[str,
     request = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("Find in other files searches from a Linear drawing.", diagnostic={"code": "INPUT_INVALID"})
-    files: dict[str, RecordInputSource] = {}
-    for record in request.records:
-        if record.record_key is None or record.record_key in files:
-            raise _protocol_error("Each File of the drawing needs its own record key.")
-        files[record.record_key] = record.source
-    keys = list(files)
+    record_keys_given = [record.record_key for record in request.records]
+    if None in record_keys_given or len(set(record_keys_given)) != len(record_keys_given):
+        raise _protocol_error("Each record of the drawing needs its own record key.")
+    key_of_source: dict[RecordInputSource, str] = {}
+    # The File key of each request record, in request order.
+    keys = [key_of_source.setdefault(record.source, str(record.record_key)) for record in request.records]
+    files = {key: source for source, key in key_of_source.items()}
     records: dict[str, tuple[str, str, str]] = {}
     record_keys: dict[str, dict[int, str]] = {}
     for unit in resolve_request_records(request).provenance:
@@ -368,7 +391,6 @@ def locate_web_reference(
         "fileKey": located.file_key,
         "recordId": located.record_id,
         "genes": len(located.genes),
-        "cutGenes": [cds.name for cds in located.cut_genes],
     }
 
 
@@ -467,6 +489,16 @@ def locate_web_drawing(
     return {
         "status": "derived",
         "plan": plan.to_json(),
+        "counts": [
+            {
+                "fileKey": counts.file_key,
+                "windowNumbers": [{"column": column, "number": number} for column, number in counts.window_numbers],
+                "genesFound": counts.genes_found,
+                "genesTotal": counts.genes_total,
+                "alignmentsRemoved": counts.alignments_removed,
+            }
+            for counts in locate_file_counts(plan)
+        ],
         "pairs": _pairs(plan),
         "drawing": derived_drawing_reply(
             derived.request, "linear", derived.adaptation, derived.not_carried, resource_paths
@@ -568,6 +600,7 @@ __all__ = [
     "LocateDrawingReply",
     "LocateDrawingStep",
     "LocateEditRefused",
+    "LocateFileCountsReply",
     "LocateFileRecord",
     "LocateFileReply",
     "LocateFilesReply",
@@ -590,6 +623,7 @@ __all__ = [
     "LocateWindowChoiceInput",
     "LocateWindowInput",
     "LocateWindowName",
+    "LocateWindowNumber",
     "LocateWindowPairReply",
     "LocateWindowRefused",
     "describe_locate",
