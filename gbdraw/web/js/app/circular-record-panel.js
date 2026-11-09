@@ -84,9 +84,11 @@ export const createCircularRecordPresentation = ({
    * by. A read record's entry is its `circularRecordEntries` entry. An unread one
    * (OV-2949, OV-2959) is named from the records the shown Result names
    * (`shownRecordIds`) the same way; as the Result names only the records it drew,
-   * the k-th record of a file keeps its `#k` unless the committed request selected
-   * it by its record ID, which the Web writes only for an ID that is unique and
-   * safe in its file (review 1 of #1778). Null for a record the Result does not
+   * the k-th record of a file keeps its `#k` unless its ID suffices
+   * (`ShownRecordName`): the committed request selected it by its record ID, which
+   * the Web writes only for an ID that is unique and safe in its file, or drew its
+   * whole file, so a repeat shows among the named records (reviews 1 and 2 of
+   * #1778). Null for a record the Result does not
    * name and for a value that is no identity.
    * @param {DrawingState} drawing
    * @param {string} value
@@ -97,9 +99,9 @@ export const createCircularRecordPresentation = ({
     const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
     if (!card) return null;
     const named = [...shownRecordIds(drawing)].filter(([key]) => cardHoldsRecordKey(card.uid, key))
-      .map(([identity, { recordId, selectedById }]) => {
+      .map(([identity, { recordId, idSuffices }]) => {
         const k = recordKeyExpansion(identity, card.uid);
-        return { uid: card.uid, identity, k: k ?? 1, selector: `#${k ?? 1}`, record_id: recordId, provenUnique: k === null || selectedById };
+        return { uid: card.uid, identity, k: k ?? 1, selector: `#${k ?? 1}`, record_id: recordId, provenUnique: k === null || idSuffices };
       });
     const entry = circularRecordEntries(named).find((record) => record.value === value);
     return entry ? { ...entry, usesIndex: entry.usesIndex || !entry.provenUnique } : null;

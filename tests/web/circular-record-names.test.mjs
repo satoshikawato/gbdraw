@@ -25,8 +25,8 @@ const TWO = 'circular-source-2222';
  * The panel over one Circular drawing whose records are not read (a loaded Session) or are read; its cards
  * hold the files `files` names by card uid.
  * `named` gives the record ID the Result names a record by; a record its committed request selected by that ID is
- * named by `{ recordId, selectedById: true }`.
- * @param {{ selector: string, named?: Record<string, string | { recordId: string, selectedById: boolean }>, read?: object[] | null, files?: Record<string, string> }} input
+ * named by `{ recordId, idSuffices: true }`, as is a record of a file its request drew whole.
+ * @param {{ selector: string, named?: Record<string, string | { recordId: string, idSuffices: boolean }>, read?: object[] | null, files?: Record<string, string> }} input
  */
 const panelOf = ({ selector, named = {}, read = null, files = { [ONE]: 'one.gb', [TWO]: 'two.gb' } }) => {
   const sources = Object.entries(files).map(([uid, name]) => ({ uid, gb: file(name), gff: null, fasta: null }));
@@ -43,13 +43,13 @@ const panelOf = ({ selector, named = {}, read = null, files = { [ONE]: 'one.gb',
     state, mode: { value: 'circular' }, semanticMutationAvailable: { value: true }, sessionOperationAvailability: () => null,
     shownDrawingOfMode: () => drawing, refreshCircularRecordOrder: () => undefined,
     shownRecordIds: (shown) => new Map(shown.id === drawing.id ? Object.entries(named).map(([key, name]) => [
-      key, typeof name === 'string' ? { recordId: name, selectedById: false } : name
+      key, typeof name === 'string' ? { recordId: name, idSuffices: false } : name
     ]) : [])
   });
   return { panel, synthetic: () => panel.circularRecordPresentationOptions.value.find((option) => option.synthetic)?.label };
 };
 
-const byId = (recordId) => ({ recordId, selectedById: true });
+const byId = (recordId) => ({ recordId, idSuffices: true });
 const readRecord = (uid, k, recordId, identity = `${uid}:${k}`) => ({
   uid, k, identity, selector: `#${k}`, record_id: recordId, record_length: 100, detectedTopology: 'circular'
 });
@@ -127,6 +127,19 @@ test('a Record Order row names a record alike before and after its card is read'
   const oneRows = [1, 2, 3].map((k) => `${ONE}:${k}`);
   assert.deepEqual(oneRows.map(oneRead.getCircularRecordOrderLabel), ['#1 (X)', '#2 (X)', '#3 (Y)']);
   assert.deepEqual(oneRows.map(oneUnread.getCircularRecordOrderLabel), oneRows.map(oneRead.getCircularRecordOrderLabel));
+  // A Session the CLI or the Python API wrote draws each card's whole file, so every ID of the file is named
+  // (`idSuffices`): a unique ID shows no `#k` before the card is read, and a repeated one keeps it (review 2 of #1778).
+  const cliRows = [`${ONE}:1`, `${ONE}:2`, TWO];
+  for (const [first, second] of [['A', 'B'], ['X', 'X']]) {
+    const cliNamed = { [`${ONE}:1`]: byId(first), [`${ONE}:2`]: byId(second), [TWO]: 'Z' };
+    const cliRead = panelOf({ selector: '', files: { [ONE]: 'm.gb', [TWO]: 'b.gb' }, named: cliNamed,
+      read: [readRecord(ONE, 1, first), readRecord(ONE, 2, second), readRecord(TWO, 1, 'Z', TWO)] }).panel;
+    const cliUnread = panelOf({ selector: '', files: { [ONE]: 'm.gb', [TWO]: 'b.gb' }, named: cliNamed }).panel;
+    assert.deepEqual(cliRows.map(cliUnread.getCircularRecordOrderLabel), cliRows.map(cliRead.getCircularRecordOrderLabel));
+  }
+  assert.deepEqual(cliRows.map(panelOf({ selector: '', files: { [ONE]: 'm.gb', [TWO]: 'b.gb' },
+    named: { [`${ONE}:1`]: byId('A'), [`${ONE}:2`]: byId('B'), [TWO]: 'Z' } }).panel.getCircularRecordOrderLabel),
+  ['m.gb: A', 'm.gb: B', 'b.gb: Z']);
 });
 
 test('the three one-record cards of a Web Session keep their file names (Sakai)', () => {

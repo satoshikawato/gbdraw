@@ -77,15 +77,23 @@ test('the shown Result names its records by the record IDs it drew them with, el
     return Object.fromEntries(shownRecordIds(drawing));
   };
   const records = [
-    { recordKey: 'card-a', selector: null },
-    { recordKey: 'card-b:2', selector: { kind: 'recordId', value: ' BGC0000709 ' } },
-    { recordKey: 'card-b:3', selector: { kind: 'recordIndex', index: 2 } }
+    { recordKey: 'card-a', cardinality: 'exactly_one', selector: null, windows: [] },
+    { recordKey: 'card-b:2', cardinality: 'exactly_one', selector: { kind: 'recordId', value: ' BGC0000709 ' }, windows: [] },
+    { recordKey: 'card-b:3', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 2 }, windows: [] }
   ];
   const geometry = { schema: 1, mode: 'circular', records: [drawn(0, 'card-a', 'NC_012920.1'), drawn(1, 'card-b:3', 'BGC3')] };
-  // Each name says whether the request selected the record by that ID (`card-b:3` was selected by `#3`).
-  const name = (recordId, selectedById = false) => ({ recordId, selectedById });
+  // Each name says whether its ID suffices: the request selected the record by that ID (`card-b:3` was selected by
+  // `#3`), or drew the record's whole file.
+  const name = (recordId, idSuffices = false) => ({ recordId, idSuffices });
   assert.deepEqual(readersOf({ geometry, records }),
     { 'card-a': name('NC_012920.1'), 'card-b:2': name('BGC0000709', true), 'card-b:3': name('BGC3') });
+  // A card the CLI or the Python API wrote draws its whole file (`all`, no selector, no window): the Result names
+  // every record of the file, so each ID suffices; a card cropped to a window does not.
+  const wholeFile = [{ recordKey: 'card-m', cardinality: 'all', selector: null, windows: [] },
+    { recordKey: 'card-w', cardinality: 'all', selector: null, windows: [{ start: 1, end: 9, reverseComplement: false, column: null }] }];
+  const both = { schema: 1, mode: 'circular', records: [drawn(0, 'card-m:1', 'A'), drawn(1, 'card-m:2', 'B'), drawn(2, 'card-w:1', 'W')] };
+  assert.deepEqual(readersOf({ geometry: both, records: wholeFile }),
+    { 'card-m:1': name('A', true), 'card-m:2': name('B', true), 'card-w:1': name('W') });
   // A Result saved before Session 51: its run metadata keys no record, so only the request's record IDs name them.
   const older = { schema: 1, mode: 'circular', records: [{ recordIndex: 0, recordId: 'NC_012920.1' }] };
   assert.deepEqual(readersOf({ geometry: older, records }), { 'card-b:2': name('BGC0000709', true) });
