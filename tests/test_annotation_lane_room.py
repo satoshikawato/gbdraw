@@ -1148,9 +1148,11 @@ def _bands_and_left_out(
     orientation: str,
     empty: frozenset[str] = frozenset(),
     size: float = 60,
+    sizes: dict[str, float] | None = None,
 ) -> _LeftOut:
-    """The band radii of ``regions`` (id, start, end, label) labelled at ``size`` pt in ``orientation`` in an inside
-    slot (``slot`` adds settings), the labels of ``empty`` without text, the labels left out because no letter of them
+    """The band radii of ``regions`` (id, start, end, label) labelled at ``size`` pt (or their size in ``sizes``) in
+    ``orientation`` in an inside slot (``slot`` adds settings), the labels of ``empty`` without text, the labels left
+    out because no letter of them
     fits their circle (``CircularAnnotationLabels.without_letters``), as the assembler gets them, the warnings, each
     annotation's group and the labels drawn."""
 
@@ -1173,7 +1175,9 @@ def _bands_and_left_out(
             CoordinateSpan(None, start, end),
             label="" if identity in empty else label,
             mark="band",
-            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=size),
+            style=RegionAnnotationStyle(
+                fill="#ffcc00", label_orientation=orientation, label_font_size=(sizes or {}).get(identity, size)
+            ),
         )
         for identity, start, end, label in regions
     )
@@ -1287,6 +1291,27 @@ def test_a_label_drawn_where_a_set_width_squeezes_the_lanes_gets_its_room() -> N
         and band[0] - _EDGE + 0.002 < label.ink_radii[1]
     ]
     assert not met, met
+
+
+@pytest.mark.parametrize("size", [96, 150])
+def test_a_label_two_lanes_from_the_mark_it_crosses_gets_its_room_where_a_set_width_squeezes_the_lanes(
+    size: float,
+) -> None:
+    # The set width squeezes the lanes as above, so each lane between a label and the mark it crosses gives it less
+    # than the extent the lanes take. c's large label stands in lane 0 beside its mark and crosses the marks of b (lane
+    # 1) and a (lane 2): its room counts the lanes between where the drawer draws them, and its letters stay a label
+    # offset clear of a's painted mark.
+    regions = (
+        *((f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)),
+        ("c", 5801, 7200, "G"),
+        ("b", 5900, 6100, ""),
+        ("a", 6050, 7600, ""),
+    )
+    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", frozenset({"a", "b"}), 24, {"c": size})
+
+    (label,) = [label for label in drawn.drawn if label.annotation_id == "c"]
+    # The band radii are written to 0.001 px.
+    assert label.ink_radii[0] >= drawn.bands["a"][1] + _EDGE - 0.002, (label.ink_radii, drawn.bands["a"])
 
 
 def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gives_it_letters() -> None:
