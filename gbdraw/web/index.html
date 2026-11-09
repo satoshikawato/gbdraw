@@ -2705,7 +2705,7 @@
                         </div>
                         <!-- Add files: a pick or a drop of several files at once; each file (or GFF3 + FASTA pair by file-name stem) becomes a File card. -->
                         <file-uploader data-circular-file-add :label="circularFileCards.addZone.value.label" :model-value="[]" :multiple="true" :drop="true" :parent-step="true"
-                                       :file-kind="circularFileCards.addZone.value.fileKind" :accept="circularFileCards.addZone.value.accept"
+                                       :file-kind="circularFileCards.addZone.value.fileKinds" :accept="circularFileCards.addZone.value.accept"
                                        @update:model-value="circularFileCards.addFiles($event)"></file-uploader>
                         <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
                         <!-- The source files: one File card per file (or GFF3 + FASTA pair), in drawing order, in the Linear File card shell. -->
@@ -10257,10 +10257,10 @@
             class="upload-zone flex-1 min-w-0"
             :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed, 'drag-over': dragging}"
             role="button"
-            :aria-describedby="help ? helpId : undefined"
+            :aria-describedby="[help ? helpId : '', drop ? dropHintId : ''].filter(Boolean).join(' ') || undefined"
             :tabindex="uploadAvailable ? 0 : -1"
             :aria-disabled="!uploadAvailable"
-            :aria-label="t('Choose {name}', { name: $attrs['data-input-aria-label'] || label })"
+            :aria-label="drop ? t('Add {name}', { name: $attrs['data-input-aria-label'] || label }) : t('Choose {name}', { name: $attrs['data-input-aria-label'] || label })"
             @click="uploadAvailable && $refs.input.click()"
             @keydown.enter.prevent="uploadAvailable && $refs.input.click()"
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
@@ -10271,8 +10271,9 @@
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
-                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ drop ? t('Add {name}: choose several or drop them here', { name: label }) : t('Choose {name}', { name: label }) }}</span>
+                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ drop ? t('Add {name}', { name: label }) : t('Choose {name}', { name: label }) }}</span>
             </div>
+            <span v-if="drop" :id="dropHintId" class="text-[10px] text-slate-500">{{ t('Choose several or drop them here.') }}</span>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>

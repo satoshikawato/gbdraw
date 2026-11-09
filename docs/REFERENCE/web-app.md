@@ -80,8 +80,8 @@ label edits, Feature placements, annotation sets, Depth series, custom track
 stacks, and the layout positions. A change made in one mode stays in that mode,
 including a Generate; switching modes changes no setting and shows that mode's
 settings and Result. **Reset Settings** resets both modes, and one **Undo**
-restores both. The Circular inputs (**GenBank/DDBJ File**, or **GFF3 File** and
-**FASTA File**) and the Linear **File** cards are separate inputs: a Circular
+restores both. The Circular inputs (the **Add files** zone and its File cards)
+and the Linear **File** cards are separate inputs: a Circular
 upload does not appear in Linear, and a mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
 feature popup are shared. A saved Session keeps each mode's settings
 (Session 51, [compatibility](session-and-request-compatibility.md)).
@@ -93,7 +93,8 @@ first two bytes, and a saved Session keeps the plain file
 A gzip file that expands to more than 512 MiB is refused with its name; choose
 its plain file instead.
 
-A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
+A Circular GenBank upload starts in **Add GenBank/DDBJ files**, and its File
+card then holds the file in **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by its name fields and a closed **Record options**
 disclosure. The card shows one names block. A File with one record shows that
@@ -696,8 +697,12 @@ readability. Use preview zoom and pan to inspect individual features.
 The Circular input is a list of File cards, one per file (or per GFF3 and FASTA
 pair), in drawing order, as the command line takes `--gbk a.gb b.gb`. Above
 the cards, the **Add files** zone of the chosen input type, such as **Add
-GenBank/DDBJ files: choose several or drop them here**, adds cards; with no
-file yet, it is all that **Input Genomes** shows. Choose several files at once
+GenBank/DDBJ files** with the line *Choose several or drop them here.* under
+it, adds cards; with no file yet, it is all that **Input Genomes** shows. While
+the list is empty, its **Files in this Session** list offers the files that
+other drawings of the Session hold, of every kind the input type reads; a file
+chosen there makes a card with the file in the slot of its kind, so a GFF3
+stays the GFF3 whatever its name. Choose several files at once
 in its file picker, or drop them on it: each file becomes a File card, in the
 order the picker or the drop gives them, and the whole pick is one step that
 Undo reverses. A genome whose chromosome and plasmids are in separate files is
@@ -1971,7 +1976,7 @@ features, the shown tracks, the palette, or the color table change.
 ## Accessibility
 
 Primary controls have stable accessible names: **Circular**, **Linear** (the drawing tabs),
-**GenBank/DDBJ File**, **GenBank / DDBJ File**, **Add sequence**, **Output Prefix**,
+**Add GenBank/DDBJ files**, **GenBank/DDBJ File**, **GenBank / DDBJ File**, **Add sequence**, **Output Prefix**,
 **Species**, **Track Preset**, **Separate Strands**, **Hide GC Content**,
 **Hide GC Skew**, **Label Mode**, **Legend position**, **Generate Diagram**,
 **Result Preview**, and **SVG**. The visible **Show Coordinate Scale** control

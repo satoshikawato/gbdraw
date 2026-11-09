@@ -28,7 +28,7 @@ test('Circular File cards: empty state, add, replace, move, and remove with its 
   const section = page.locator('[data-setting=inputs]');
   // Empty: no card, the Add files zone, no input Generate can read.
   await expect(cards(page)).toHaveCount(0);
-  await expect(section.getByRole('button', { name: 'Choose GenBank/DDBJ files' })).toBeVisible();
+  await expect(section.getByRole('button', { name: 'Add GenBank/DDBJ files' })).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.shownInputComplete('circular'))).toBe(false);
 
   await section.locator('input[type=file]').first().setInputFiles(small);
@@ -90,8 +90,10 @@ test('Circular File cards: empty state, add, replace, move, and remove with its 
 test('Add files: a drop of several files is one card each and one undo; GFF3 + FASTA pairs by stem', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);
-  const zone = addZone(page).getByRole('button', { name: 'Choose GenBank/DDBJ files' });
-  await expect(zone).toContainText('Add GenBank/DDBJ files: choose several or drop them here');
+  // D-158: the name is the visible label; the second line is its description.
+  const zone = addZone(page).getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true });
+  await expect(zone).toContainText('Add GenBank/DDBJ files');
+  await expect(zone).toHaveAccessibleDescription('Choose several or drop them here.');
   const dropped = await page.evaluateHandle((files) => {
     const transfer = new DataTransfer();
     files.forEach(([name, text]) => transfer.items.add(new File([text], name, { type: 'text/plain' })));
@@ -125,7 +127,7 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
     await expect(cards(page)).toHaveCount(n - 1);
   }
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
-  const gffZone = addZone(page).getByRole('button', { name: 'Choose GFF3 and FASTA files' });
+  const gffZone = addZone(page).getByRole('button', { name: 'Add GFF3 and FASTA files' });
   await gffZone.focus();
   const gff = await readFile('tests/test_inputs/NC_013668.gff3');
   const fasta = await readFile('tests/test_inputs/NC_013668.fasta');

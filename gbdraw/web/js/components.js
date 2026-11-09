@@ -865,15 +865,16 @@ export const ColorValueControl = {
  *   `afterChange` imports or takes back (OV-1280, R16-4); a result of `false` records no step
  * @property {(file: File | InputFileRef | undefined) => unknown} [afterChange] runs after the selection is stored, and after
  *   a Remove with the removed file (OV-1280); a result of `false` is not committed
- * @property {InputFileKind} [fileKind] the kind of file the uploader takes: it also offers the files of that kind
- *   in this Session (`sessionFilesOfKind`, PD-OI-090 〔入力ファイル〕), and choosing one is the same selection as
- *   an upload of it, by its ref
+ * @property {InputFileKind | readonly InputFileKind[]} [fileKind] the kind of file the uploader takes, or the kinds
+ *   (an empty list: none): it also offers the files of those kinds in this Session (`sessionFilesOfKind`, PD-OI-090
+ *   〔入力ファイル〕), and choosing one is the same selection as an upload of it, by its ref
  * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
  *   chosen) and referenced by the zone through aria-describedby
  * @property {boolean} [replace] a chosen file shows Replace (choose another file for this slot) in
  *   place of Remove: the slot's file leaves only with its File card (Circular File cards)
- * @property {boolean} [drop] the zone also takes files dropped on it, as one selection of them, and says so
- *   (the Circular Add files zone)
+ * @property {boolean} [drop] the zone also takes files dropped on it, as one selection of them: its name and
+ *   visible label are "Add {label}", and a second line, its description, says it takes several or a drop (the
+ *   Circular Add files zone)
  * @property {boolean} [parentStep] the parent's `update:modelValue` handler records the History step itself
  *   (the Circular Add files writer's "Add File"): the uploader opens none
  */
@@ -901,6 +902,7 @@ export const refuseStrayFileDrop = (event) => {
  */
 const useFileDrop = (props, uploadAvailable, select) => {
   const dragging = ref(false);
+  const dropHintId = `file-drop-hint-${useId()}`;
   /** @param {DragEvent} event */
   const dragOver = (event) => {
     if (!props.drop || !uploadAvailable.value || !event.dataTransfer?.types.includes('Files')) return;
@@ -919,7 +921,7 @@ const useFileDrop = (props, uploadAvailable, select) => {
     if (dropped.length) select(dropped, null);
     return undefined;
   };
-  return { dragging, dragOver, dropFiles };
+  return { dragging, dragOver, dropFiles, dropHintId };
 };
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -993,7 +995,7 @@ export const FileUploader = {
       ? zone.value.getBoundingClientRect().top : null);
     // The files in this Session that this uploader offers, less the ones it shows.
     const sessionFiles = computed(() => {
-      if (!props.fileKind) return [];
+      if (!props.fileKind || props.fileKind.length === 0) return [];
       const shown = new Set(selectedFiles.value.map((/** @type {unknown} */ file) => (isInputFileRef(file) ? file.fileId : '')));
       return sessionFilesOfKind(state, props.fileKind).filter((ref) => !shown.has(ref.fileId));
     });
@@ -1037,7 +1039,7 @@ export const FileUploader = {
       select(Array.from(e.target.files || []), pickTopNow());
       e.target.value = '';
     };
-    const { dragging, dragOver, dropFiles } = useFileDrop(props, uploadAvailable, select);
+    const { dragging, dragOver, dropFiles, dropHintId } = useFileDrop(props, uploadAvailable, select);
     const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
       const chosen = sessionFiles.value.find((/** @type {InputFileRef} */ ref) => ref.fileId === e.target.value);
       e.target.value = '';
@@ -1072,7 +1074,7 @@ export const FileUploader = {
     };
     return {
       input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable,
-      dragging, dragOver, dropFiles
+      dragging, dragOver, dropFiles, dropHintId
     };
   }
 };

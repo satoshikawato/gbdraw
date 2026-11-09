@@ -255,17 +255,34 @@ def run_track_slot_row_action(row: Locator, label: str, *, only_if_enabled: bool
     return True
 
 
+# The accessible label of a Circular File card's uploader of each slot.
+CIRCULAR_FILE_SLOT_LABELS = {"gb": "GenBank/DDBJ File", "gff": "GFF3 File", "fasta": "FASTA File"}
+# The name (its visible label) of the Add files zone of each input type that reads a slot.
+CIRCULAR_ADD_ZONE_NAMES = {
+    "gb": ("Add GenBank/DDBJ files",),
+    "gff": ("Add GFF3 and FASTA files",),
+    "fasta": ("Add GFF3 and FASTA files", "Add FASTA files"),
+}
+
+
 def circular_file_input(page: Page, slot: str = "gb") -> Locator:
     """Return the file input that chooses File 1's file of `slot` ("gb", "gff" or "fasta").
 
-    It is the card's uploader of that slot once there is a card, else the Add
-    files zone, whose pick makes the first cards.
+    It is File 1's uploader of that slot, found by its label, once there is a
+    card; while the list is empty it is the Add files zone, found by its name,
+    whose pick makes the first cards.
     """
 
-    return page.locator(
-        f'[data-circular-source-slot="{slot}"] input[type=file], '
-        "[data-setting=inputs]:not(:has([data-circular-source-card])) [data-circular-file-add] input[type=file]"
-    ).first
+    file_1 = page.get_by_label(CIRCULAR_FILE_SLOT_LABELS[slot], exact=True)
+    no_card = page.locator("body").filter(
+        has_not=page.get_by_role("region", name="Circular input file 1", exact=True, include_hidden=True)
+    )
+    zone: Locator | None = None
+    for name in CIRCULAR_ADD_ZONE_NAMES[slot]:
+        named = no_card.get_by_role("button", name=name, exact=True, include_hidden=True)
+        zone = named if zone is None else zone.or_(named)
+    assert zone is not None
+    return file_1.or_(zone.locator("input[type=file]")).first
 
 
 def circular_file_card(page: Page, number: int) -> Locator:

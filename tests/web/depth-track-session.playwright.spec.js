@@ -95,7 +95,7 @@ test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-
   });
 
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
+  await page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true }).click();
   await (await chooser).setFiles({
     name: 'simple-worker-only.gbk',
     mimeType: 'text/plain',
@@ -264,11 +264,11 @@ test('Circular GFF3 mode exposes one Add files zone for its GFF3 and FASTA files
   await openApp(page, { waitForPalette: false });
 
   const zone = page.locator('[data-circular-file-add] [role=button]');
-  await expect(zone).toHaveAccessibleName('Choose GenBank/DDBJ files');
+  await expect(zone).toHaveAccessibleName('Add GenBank/DDBJ files');
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
 
   await expect(zone).toHaveCount(1);
-  await expect(zone).toHaveAccessibleName('Choose GFF3 and FASTA files');
+  await expect(zone).toHaveAccessibleName('Add GFF3 and FASTA files');
   await expect(page.locator('[data-circular-file-add] input[type=file]')).toHaveAttribute('accept', /^\.gff,\.gff3,\.fa,/);
 });
 

@@ -191,7 +191,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await openApp(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
-    const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true });
+    const upload = page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true });
     await upload.focus();
     await nativeUpload(page, singleSource);
     await ready(page);

@@ -152,14 +152,14 @@ test('Add files: one call of the writer for every file of a pick; a card still w
 test('the Add files zone names, accepts and offers the files of the input type', () => {
   const zoneOf = (inputType) => {
     const { cards } = makeCards({ inputType, sources: [] });
-    const { label, fileKind, accept } = cards.addZone.value;
-    return [label, fileKind, accept.split(',').filter((entry) => entry.startsWith('.')).join(' ')];
+    const { label, fileKinds, accept } = cards.addZone.value;
+    return [label, fileKinds, accept.split(',').filter((entry) => entry.startsWith('.')).join(' ')];
   };
-  assert.deepEqual(zoneOf('gb'), ['GenBank/DDBJ files', 'genbank', '.gb .gbk .gbff .genbank .ddbj .embl .emb .txt .gz']);
-  assert.deepEqual(zoneOf('gff'), ['GFF3 and FASTA files', 'gff', '.gff .gff3 .fa .fas .fasta .fna .ffn .faa .txt .gz']);
-  assert.deepEqual(zoneOf('fasta'), ['FASTA files', 'fasta', '.fa .fas .fasta .fna .ffn .txt .gz']);
+  assert.deepEqual(zoneOf('gb'), ['GenBank/DDBJ files', ['genbank'], '.gb .gbk .gbff .genbank .ddbj .embl .emb .txt .gz']);
+  assert.deepEqual(zoneOf('gff'), ['GFF3 and FASTA files', ['gff', 'fasta'], '.gff .gff3 .fa .fas .fasta .fna .ffn .faa .txt .gz']);
+  assert.deepEqual(zoneOf('fasta'), ['FASTA files', ['fasta'], '.fa .fas .fasta .fna .ffn .txt .gz']);
   // Once a card shows, the zone offers no Session file: the cards' own uploaders do.
-  assert.equal(makeCards({ sources: SAKAI() }).cards.addZone.value.fileKind, undefined);
+  assert.deepEqual(makeCards({ sources: SAKAI() }).cards.addZone.value.fileKinds, []);
 });
 
 test('Remove asks first: the dialog names the card and its records, Cancel removes nothing, Remove file removes that card', async () => {

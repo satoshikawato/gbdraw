@@ -374,7 +374,7 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
     for required in (
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
+        'circular_file_input(page).set_input_files(',
         'get_by_label("Output Prefix", exact=True)',
         'get_by_label("Species", exact=True)',
         'get_by_label("Track Preset", exact=True)',
@@ -418,6 +418,34 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
         assert forbidden not in source
         if forbidden != "page.locator(":
             assert forbidden not in shared_source
+
+
+def test_circular_file_input_finds_the_add_files_zone_and_file_1_by_their_labels() -> None:
+    """The flows choose File 1's file the way a user does: by the control's accessible label.
+
+    While the list is empty that control is the Add files zone (a button named
+    by its visible label); once a card shows, it is File 1's uploader of the
+    slot. The helper reads no data attribute or CSS class to tell them apart.
+    """
+
+    source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
+    start = source.index("def circular_file_input(")
+    helper = source[start : source.index("\ndef ", start + 1)]
+
+    for required in (
+        '"gb": "GenBank/DDBJ File"',
+        '"gff": "GFF3 File"',
+        '"fasta": "FASTA File"',
+        '"Add GenBank/DDBJ files"',
+        '"Add GFF3 and FASTA files"',
+        '"Add FASTA files"',
+        "get_by_label(CIRCULAR_FILE_SLOT_LABELS[slot], exact=True)",
+        'get_by_role("button", name=name, exact=True, include_hidden=True)',
+        'get_by_role("region", name="Circular input file 1", exact=True, include_hidden=True)',
+    ):
+        assert required in source, required
+    for forbidden in ("data-circular", "[data-", ".upload-zone"):
+        assert forbidden not in helper, forbidden
 
 
 def test_shared_linear_preview_fit_centers_the_complete_rendered_diagram() -> None:
@@ -635,7 +663,7 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
     for required in (
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
+        'circular_file_input(page).set_input_files(',
         'get_by_label("Output Prefix", exact=True)',
         'get_by_label("Multi-Record Canvas", exact=True)',
         'get_by_label("Record Size Mode", exact=True)',

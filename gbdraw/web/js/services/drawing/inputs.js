@@ -440,19 +440,28 @@ export const boundInputFileIds = (bindings) => {
  * The files in this Session that an uploader of `kind` offers (PD-OI-090
  * 〔入力ファイル〕, T-B4-6): every ref any drawing binds in a slot of that
  * kind, once per file, in binding order. Choosing one binds the ref itself,
- * so no file is stored twice.
+ * so no file is stored twice. An uploader that takes several kinds (the
+ * Circular Add files zone of GFF3 + FASTA) offers the files of each.
  * @param {InputBindings} bindings
- * @param {InputFileKind} kind
+ * @param {InputFileKind | readonly InputFileKind[]} kind
  * @returns {InputFileRef[]}
  */
 export const sessionFilesOfKind = (bindings, kind) => {
+  const kinds = typeof kind === 'string' ? [kind] : kind;
   /** @type {Map<string, InputFileRef>} */
   const refs = new Map();
   visitBoundFiles(bindings, (ref, slot) => {
-    if (isUploaderSlot(slot) && FILE_KIND_OF_SLOT[slot] === kind && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
+    if (isUploaderSlot(slot) && kinds.includes(FILE_KIND_OF_SLOT[slot]) && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
   });
   return [...refs.values()];
 };
+
+/**
+ * The kind of the files a Circular source card's slot binds.
+ * @param {'gb' | 'gff' | 'fasta'} slot
+ * @returns {InputFileKind}
+ */
+export const circularSlotFileKind = (slot) => FILE_KIND_OF_SLOT[`source.${slot}`];
 
 /**
  * The store's release for History's budget: it keeps the files History names

@@ -179,7 +179,7 @@ const loadSession = async (page, file) => {
 const uploadCircular = async (page, path, { viaChooser = false } = {}) => {
   if (viaChooser) {
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
+    await page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true }).click();
     await (await chooser).setFiles(path);
   } else {
     await circularFileInput(page, 'gb').setInputFiles(path);
@@ -321,7 +321,7 @@ const inputGenerateExport = async (page, steps, dir, { phone = false } = {}) => 
     return check('open');
   }, { limitMs: 240_000 });
   await steps.step('upload HmmtDNA.gbk (Circular)', async () => {
-    await check('before upload', [['Choose GenBank/DDBJ files', page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true })]]);
+    await check('before upload', [['Add GenBank/DDBJ files', page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true })]]);
     await uploadCircular(page, HMMT_GBK, { viaChooser: true });
     return check('after upload');
   });

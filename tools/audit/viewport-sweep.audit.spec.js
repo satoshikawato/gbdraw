@@ -21,7 +21,7 @@ for (const width of widths([390, 768, 1280, 1920])) {
     await openApp(page);
     const initial = await A.measureOverflow(page);
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
+    await page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true }).click();
     await (await chooser).setFiles({
       name: 'HmmtDNA.gbk',
       mimeType: 'text/plain',

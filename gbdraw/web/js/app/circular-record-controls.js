@@ -9,11 +9,12 @@
 // the settings pane's reveal, the panels' refs, and the record form defaults
 // as ports.
 import {
-  addCircularSource, bindCircularSourceFile, createCircularSource, markCircularDepthRows, moveCircularSource,
-  removeCircularSource
+  addCircularSource, bindCircularSourceFile, circularSlotFileKind, createCircularSource, markCircularDepthRows, moveCircularSource,
+  removeCircularSource, sessionFilesOfKind
 } from '../services/drawing/inputs.js';
+import { isInputFileRef } from '../services/history-files.js';
 import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
-import { inputSourceFiles, pickedFileCards } from '../services/input-types.js';
+import { inputSourceFiles, inputTypeSpec, pickedFileCards } from '../services/input-types.js';
 import { settledCircularCardMarks } from '../services/record-discovery.js';
 import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
 import { cardCropWindow } from '../services/drawing/inputs.js';
@@ -133,6 +134,22 @@ const createCircularSourceMoves = ({ state, discoverDrawingRecords, shownAction,
   return { canMoveCircularSource, moveCircularSourceCard };
 };
 
+/**
+ * The slot of the input type that a file of this Session fills: the first
+ * slot whose kind the Session binds it as (a ref chosen from "Files in this
+ * Session" keeps its kind, whatever its name says); null for a file from disk.
+ * @param {Parameters<typeof sessionFilesOfKind>[0]} bindings
+ * @param {unknown} inputType
+ * @returns {(file: InputFileCandidate | InputFileRef) => 'gb' | 'gff' | 'fasta' | null}
+ */
+const sessionSlotOf = (bindings, inputType) => (file) => {
+  if (!isInputFileRef(file)) return null;
+  const { primary, paired } = inputTypeSpec(inputType);
+  for (const slot of paired ? [primary, paired] : [primary]) {
+    if (sessionFilesOfKind(bindings, circularSlotFileKind(slot)).some((ref) => ref.fileId === file.fileId)) return slot;
+  }
+  return null;
+};
 
 /**
  * The edits of a Circular drawing's source cards (circular-multi-file D-01):
@@ -244,7 +261,8 @@ export const createCircularSourceEdits = ({
    * New source cards at the end of the drawing's list from the files of one
    * pick or drop, in their order, as the drawing's input type makes cards of
    * them (`pickedFileCards`: one per file; GFF3 + FASTA pairs by file-name
-   * stem): one History step for every file.
+   * stem; a file of this Session goes to the slot of the kind it is bound as,
+   * `sessionSlotOf`): one History step for every file.
    * @param {readonly (InputFileCandidate | InputFileRef)[]} files
    */
   const addCircularSourceFiles = (files) => shownAction('circular', (drawing) => (files.length === 0 ? undefined
@@ -252,7 +270,7 @@ export const createCircularSourceEdits = ({
       /** @type {InputFileRef | null} */
       let first = null;
       markDepthRowsBeforeEdit(drawing);
-      changeRecordSources(drawing, () => pickedFileCards(drawing.inputType.value, files).forEach((slots) => {
+      changeRecordSources(drawing, () => pickedFileCards(drawing.inputType.value, files, sessionSlotOf(state, drawing.inputType.value)).forEach((slots) => {
         const card = createCircularSource();
         addCircularSource(drawing.slices.inputs, card);
         for (const [field, file] of /** @type {['gb' | 'gff' | 'fasta', InputFileCandidate | InputFileRef][]} */ (Object.entries(slots))) {

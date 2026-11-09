@@ -17,7 +17,7 @@ const withRepeat = hmmt.replace(
 
 const uploadGenbank = async (page, name, text) => {
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
+  await page.getByRole('button', { name: 'Add GenBank/DDBJ files', exact: true }).click();
   await (await chooser).setFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
   await expect.poll(
     () => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
