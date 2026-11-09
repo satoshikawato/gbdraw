@@ -8,6 +8,7 @@ import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
+import { settleCommittedField } from '../committed-value.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
@@ -617,11 +618,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const revertSpecificRulePattern = (row, input = null) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
+    // The field shows the stored pattern again once its draft is gone (`v-committed-value`).
     patternDrafts.revert(row);
-    if (input?.isConnected) {
-      input.value = row.val;
-      input.focus();
-    }
+    if (input?.isConnected) input.focus();
   };
   /** @param {DrawingState} drawing @param {SpecificColorRule} row @param {string} value */
   const applySpecificRulePattern = async (drawing, row, value) => {
@@ -671,15 +670,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = drawing.manualSpecificRules[index];
     if (!current) return;
     if (field === 'val') return applySpecificRulePattern(drawing, current, value);
-    // OV-2435: a rule keeps its qualifier; the field shows it again, as after a refused write.
-    if (field === 'qual' && !specificRuleHasQualifier({ qual: value })) {
-      if (input) input.value = current.qual;
-      return false;
-    }
+    // OV-2435: a rule keeps its qualifier; the field shows it again, as after a refused write (`v-committed-value`).
+    if (field === 'qual' && !specificRuleHasQualifier({ qual: value })) return false;
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
-    return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), msg('Edit specific color rule'), () => {}, input).finally(() => {
-      if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
-    });
+    const commit = commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), msg('Edit specific color rule'), () => {}, input);
+    // The feature type is a <select>, whose value only a chosen option changes. The other fields are
+    // `v-committed-value` fields: they show the stored value once this commit has settled.
+    return field === 'feat' || !input ? commit : settleCommittedField(input, commit);
   };
 
   /** @param {DrawingState} drawing @param {number} index @param {number} offset */

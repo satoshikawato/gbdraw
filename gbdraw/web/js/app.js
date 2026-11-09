@@ -33,6 +33,7 @@ import { FileCard } from './app/file-card.js';
 import { createAppSetup } from './app/app-setup.js';
 import { chooseUiLanguage, showStoredUiLanguage, translationFeedbackUrl } from './app/ui-language.js';
 import { headerFit } from './app/header-fit.js';
+import { committedValue, settleCommittedField } from './app/committed-value.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
@@ -53,7 +54,9 @@ const app = createApp({
 // sentences shown together are separated by `sentenceSeparator()` (none in
 // Japanese and Chinese); `UI_LOCALES` lists the header Language menu;
 // `INTERACTIVE_GALLERY_URL` is the Gallery the header and the footer open.
-Object.assign(app.config.globalProperties, { t, tn, tx, tm, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL });
+// `settleCommittedField` hands an asynchronous commit of a `v-committed-value`
+// field to that directive (app/committed-value.js).
+Object.assign(app.config.globalProperties, { t, tn, tx, tm, uiLocale, errorText, UI_LOCALES, joinSentences, sentenceSeparator, INTERACTIVE_GALLERY_URL, settleCommittedField });
 // A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
 app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);
@@ -63,6 +66,8 @@ app.directive('preview-panning', previewPanning);
 app.directive('reset-layout-state', resetLayoutState);
 app.directive('preview-markup', previewMarkup);
 app.directive('header-fit', headerFit);
+// A field the user types into shows its model's value through `v-committed-value`, not `:value`.
+app.directive('committed-value', committedValue);
 // Vue's production build only logs an error raised in a render, watcher,
 // event handler or hook; throw it, as the development build did, so it stays
 // an uncaught page error.

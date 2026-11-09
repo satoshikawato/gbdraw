@@ -748,7 +748,10 @@ legendEntries.value = [{
 }];
 
 featureStyleScopeDialog.show = false;
+// A commit ends the field's draft, also when it changes nothing (OV-3068).
+clickedFeature.value.strokeWidthDraft = '1';
 assert.equal(await actions.setClickedFeatureStrokeWidthValue(1), false);
+assert.equal(clickedFeature.value.strokeWidthDraft, null);
 assert.equal(featureStyleScopeDialog.show, false);
 assert.equal(await actions.setClickedFeatureStrokeWidthValue(''), false);
 assert.equal(featureStyleScopeDialog.show, false);
@@ -1563,7 +1566,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // is the only place that offers a group.
   const template = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
   const nameField = template.match(/<input\b[^>]*aria-label="t\('Feature legend name'\)"[^>]*>/)?.[0] || '';
-  assert.match(nameField, /@change="handleLegendNameCommit"/, 'the popup has its Legend name field');
+  assert.match(nameField, /@change="settleCommittedField\(\$event\.target, handleLegendNameCommit\(\)\)"/, 'the popup has its Legend name field');
   assert.doesNotMatch(nameField, /\blist=/, 'the Legend name field suggests no group');
   assert.doesNotMatch(template, /<datalist\b[^>]*legend-name/);
   const pickedDeleted = ruleRows({

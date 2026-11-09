@@ -213,9 +213,8 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   expect(redone.legendEntryColor).toBe(changedColor);
 });
 
-test('Feature stroke width steppers defer scope selection and stroke changes keep atomic Undo and Redo', async ({
-  page
-}) => {
+/** Opens the popup of a drawn Feature whose Legend row has other Features, so a stroke change asks for its scope. */
+const openSharedFeaturePopup = async (page) => {
   const imported = await loadGallerySession(
     page,
     'HmmtDNA_basic_circular.gbdraw-session.json'
@@ -260,6 +259,38 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
 
   const popup = page.locator('.feature-popup');
   await expect(popup).toBeVisible();
+  return { target, featureRow, popup };
+};
+
+// OV-3068: the stroke width commits when the field is left; a typed or stepped width reaches the scope choice, and a
+// cancelled choice shows the stored width again.
+test('Feature stroke width typed or stepped and left with Tab asks for the scope of that width', async ({ page }) => {
+  const { popup } = await openSharedFeaturePopup(page);
+  const scopeDialog = page.getByRole('heading', { name: 'Stroke Change Scope' }).locator('..');
+  const strokeWidthInput = popup.getByLabel('Feature stroke width', { exact: true });
+  const initialStrokeWidth = Number(await strokeWidthInput.inputValue());
+  const askedWidth = () => page.evaluate(() => window.__GBDRAW_APP__.featureStyleScopeDialog.strokeWidth);
+  for (const [how, enter, expected] of [
+    ['typed', (field) => field.pressSequentially('2.5'), 2.5],
+    ['stepped', (field) => field.press('ArrowUp'), initialStrokeWidth + 0.1]
+  ]) {
+    await strokeWidthInput.selectText();
+    await enter(strokeWidthInput);
+    await expect(scopeDialog).toBeHidden();
+    await expect.poll(async () => Number(await strokeWidthInput.inputValue()), `the ${how} width stays`).toBeCloseTo(expected, 5);
+    await strokeWidthInput.press('Tab');
+    await expect(scopeDialog, `Tab commits the ${how} width`).toBeVisible();
+    expect(await askedWidth()).toBeCloseTo(expected, 5);
+    await scopeDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(scopeDialog).toBeHidden();
+    await expect(strokeWidthInput).toHaveValue(String(initialStrokeWidth));
+  }
+});
+
+test('Feature stroke width steppers defer scope selection and stroke changes keep atomic Undo and Redo', async ({
+  page
+}) => {
+  const { target, featureRow, popup } = await openSharedFeaturePopup(page);
   const strokeMode = popup.getByLabel('Feature stroke color mode', { exact: true });
   if (await strokeMode.inputValue() === 'auto') {
     await strokeMode.selectOption('color');
