@@ -174,37 +174,41 @@ export const wholeRecordWindow = (window, recordLength) => (
 );
 
 /**
- * What the page knows of the record a card draws: its length (null until read) and its ID ('' until read).
- * @typedef {{ length: number | null, id: string }} CardRecordFacts
+ * What the page knows of the records a card draws: `count`, how many (one for a chosen record or a file of one
+ * record, every record of the file otherwise; null until read), and the `length` and `id` of the one record it draws
+ * (null and '' until read, or while it draws several).
+ * @typedef {{ length: number | null, id: string, count: number | null }} CardRecordFacts
  */
 /**
  * The records of Generate's Linear record catalog, as this module reads them.
  * @typedef {{ records?: readonly { sourceIndex?: unknown, recordLength?: unknown, recordId?: unknown }[] } | null | undefined} LinearRecordCatalogRecords
  */
 /** A record not read yet. @type {CardRecordFacts} */
-export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '' });
+export const UNKNOWN_CARD_RECORD = Object.freeze({ length: null, id: '', count: null });
 
 /**
- * The record a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the
- * drawn cards).
+ * The facts of the records a card draws, as a record list or the catalog holds them: the one owner for Generate
+ * (`catalogCardRecord`) and the card while editing (the record selector's records).
+ * @param {readonly ({ recordLength?: unknown, recordId?: unknown } | null | undefined)[]} records
+ * @returns {CardRecordFacts}
+ */
+export const cardRecordFacts = (records) => {
+  if (records.length !== 1) return { ...UNKNOWN_CARD_RECORD, count: records.length || null };
+  const length = Number(records[0]?.recordLength);
+  return {
+    length: Number.isSafeInteger(length) && length > 0 ? length : null,
+    id: typeof records[0]?.recordId === 'string' ? records[0].recordId : '',
+    count: 1
+  };
+};
+
+/**
+ * The records a drawn card reads, from Generate's Linear record catalog (`sourceIndex`, the card's place among the
+ * drawn cards; the catalog holds the records its selector chose).
  * @param {LinearRecordCatalogRecords} catalog
  * @param {number} sourceIndex
  * @returns {CardRecordFacts}
  */
-export const catalogCardRecord = (catalog, sourceIndex) => {
-  const record = (catalog?.records || []).find((entry) => Number(entry?.sourceIndex) === sourceIndex);
-  return sequenceCardRecord(record);
-};
-
-/**
- * The facts of a record as a record list or the catalog holds it.
- * @param {{ recordLength?: unknown, recordId?: unknown } | null | undefined} record
- * @returns {CardRecordFacts}
- */
-export const sequenceCardRecord = (record) => {
-  const length = Number(record?.recordLength);
-  return {
-    length: Number.isSafeInteger(length) && length > 0 ? length : null,
-    id: typeof record?.recordId === 'string' ? record.recordId : ''
-  };
-};
+export const catalogCardRecord = (catalog, sourceIndex) => cardRecordFacts(
+  (catalog?.records || []).filter((entry) => Number(entry?.sourceIndex) === sourceIndex)
+);

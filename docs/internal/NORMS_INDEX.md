@@ -286,7 +286,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
 | [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 2 | scenario revision 1 | 14 |
 | [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 7 |
-| [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 5 |
+| [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 6 |
 | [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory) | Diagram engine out of memory | ACCEPTED | diagram-generation.engine-out-of-memory | 1 | — | 5 |
 
 ### Test files that cite each record
@@ -802,6 +802,7 @@ are listed under "Cited ids without a record".
   - `tests/web/region-drawing.test.mjs`
 - [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout)
   - `tests/test_web_linear_units.py`
+  - `tests/web/linear-card-windows-request.test.mjs`
   - `tests/web/linear-card-windows-state.test.mjs`
   - `tests/web/linear-card-windows.playwright.spec.js`
   - `tests/web/linear-card-windows.test.mjs`

@@ -87,7 +87,7 @@ test('one rule reads Start, End and "Across the origin" for the card, the reques
 
 test('Generate refuses a window across the origin whose Start is not after its End, naming the card and the record', () => {
   const card = createLinearSeq({ uid: 'a', windows: [{ ...span(100, 900), acrossOrigin: true }] });
-  const record = { length: 16569, id: 'NC_012920.1' };
+  const record = { length: 16569, id: 'NC_012920.1', count: 1 };
   assert.throws(() => linearWindowsPayload(card, { arranged: false, ordinal: 2, record }), (error) => {
     const message = normalizeUserFacingError(error, { stage: 'request-validation' }).summary;
     assert.match(message, /Sequence 2\./);
@@ -113,8 +113,8 @@ test('Add window appends an empty window; Remove leaves the last window; one win
 test('an empty window draws the whole record for every reader of the card\'s windows (B1)', () => {
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
   const catalog = { records: [{ sourceIndex: 0, recordLength: 3000, recordId: 'NC_1' }, { sourceIndex: 1, recordLength: 'x' }] };
-  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1' });
-  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '' });
+  assert.deepEqual(catalogCardRecord(catalog, 0), { length: 3000, id: 'NC_1', count: 1 });
+  assert.deepEqual(catalogCardRecord(catalog, 1), { length: null, id: '', count: 1 });
   assert.deepEqual(catalogCardRecord(null, 0), UNKNOWN_CARD_RECORD);
   // The request, the drawn-unit plan, the LOSAT estimate and the extraction all read the windows here.
   const record = catalogCardRecord(catalog, 0);
@@ -135,7 +135,7 @@ test('an empty window draws the whole record for every reader of the card\'s win
 test('the extraction reads the topology with an empty window as the request writes it (B1)', () => {
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 50), span(null, null)] });
   const drawing = { linearRecordLayoutEnabled: { value: false }, linearSeqs: [card], recordDisplayDrafts: [] };
-  const windows = linearDrawingWindowsOf(drawing, () => ({ length: 3000, id: 'NC_1' }))(card);
+  const windows = linearDrawingWindowsOf(drawing, () => ({ length: 3000, id: 'NC_1', count: 1 }))(card);
   assert.equal(linearCardRequestedCircular({ drawing, card, index: 0, recordDisplayRows: [], windows }), null);
 });
 
@@ -143,7 +143,9 @@ test('the extraction reads the topology with an empty window as the request writ
  * The card views and Record Layout cells of a Linear drawing of `cards`, each record `length` bp and `topology`, as
  * the readers show them once Python (the real `plan_card_windows_json`) has answered.
  */
-const shownWindows = async (cards, { length, topology = 'linear', entries = null }) => {
+const shownWindows = async (cards, { length, topology = 'linear', entries = null, recordsOf = null }) => {
+  const record = { recordLength: length, detectedTopology: topology, recordId: 'NC_1' };
+  const drawnRecords = (_drawing, card) => recordsOf?.(card) ?? [record];
   const drawing = {
     mode: 'linear', linearSeqs: cards, drawnLinearSeqs: { value: cards }, recordDisplayDrafts: [],
     linearRecordLayoutEnabled: { value: entries !== null }, linearRecordRows: entries || []
@@ -151,7 +153,8 @@ const shownWindows = async (cards, { length, topology = 'linear', entries = null
   let asked = Promise.resolve();
   const readers = createLinearCardWindowReaders({
     state: { activeDrawing: () => drawing }, shownDrawingOfMode: () => drawing,
-    linearSeqRecord: () => ({ recordLength: length, detectedTopology: topology, recordId: 'NC_1' }),
+    linearSeqRecord: (_drawing, card) => (drawnRecords(_drawing, card).length === 1 ? drawnRecords(_drawing, card)[0] : null),
+    linearSeqDrawnRecords: drawnRecords,
     planCardWindows: (payload) => { asked = pythonCardWindowPlan(payload); return asked; },
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => []
   });
@@ -184,28 +187,27 @@ test('the card shows the drawing\'s window numbers and omitted lengths, from Pyt
   assert.deepEqual(moved.cells, [['a', 0, 1], ['a', 2, 2], ['a', 1, 3]]);
 });
 
+test('a card drawn whole beside a windowed card does not hide its numbers, and each record it draws is counted', async () => {
+  // m reads a file of two records, no record chosen: it draws both whole, with no length the card knows. a is drawn
+  // in two windows. On the base the card waited for m's length and never showed a number.
+  const m = createLinearSeq({ uid: 'm' });
+  const a = createLinearSeq({ uid: 'a', windows: [span(1, 100), span(301, 400)] });
+  const recordsOf = (card) => (card.uid === 'm' ? [{ recordLength: 500, recordId: 'm1' }, { recordLength: 700, recordId: 'm2' }] : null);
+  // Rows of their own: a's windows are 1 and 2 of its row.
+  const between = (first, second) => `200 bp of the record lie between windows ${first} and ${second} and are left out.`;
+  assert.deepEqual((await shownWindows([m, a], { length: 10000, recordsOf })).cards[1], [[1, between(1, 2)], [2, '']]);
+  // One row: m's two records come first, so the drawing numbers a's windows 3 and 4.
+  const entries = [{ uid: 'm', row: 1 }, { uid: 'a', row: 1 }];
+  assert.deepEqual((await shownWindows([m, a], { length: 10000, recordsOf, entries })).cards[1], [[3, between(3, 4)], [4, '']]);
+});
+
 test('until Python can plan the windows the card shows no number and no omitted length', async () => {
   // An End without a Start is a window Generate refuses: no plan is asked for.
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 100), span(null, 400)] });
   assert.deepEqual((await shownWindows([card], { length: 10000 })).cards, [[[null, ''], [null, '']]]);
 });
 
-test('a drawing without a card drawn in several windows writes the places dev wrote (Must preserve)', () => {
-  // Places from a request (New drawing from region, a CLI Session): b and c in row 1, a in row 2; then a's Row is 1.
-  const cards = ['a', 'b', 'c'].map((uid) => createLinearSeq({ uid }));
-  const entries = [
-    { uid: 'a', row: 2, canonicalRow: 2, canonicalColumn: 1 },
-    { uid: 'b', row: 1, canonicalRow: 1, canonicalColumn: 1 },
-    { uid: 'c', row: 1, canonicalRow: 1, canonicalColumn: 2 }
-  ];
-  setLinearRecordRow(entries, 'a', 1);
-  const drawing = { linearRecordLayoutEnabled: { value: true }, linearRecordRows: entries, linearSeqs: cards, recordDisplayDrafts: [] };
-  const records = linearCardWindowPlanRecords(drawing, cards, () => ({ length: 1000, id: '', circular: false }), []);
-  assert.ok(records);
-  // a's place is dropped with its row: Python draws a, b, c (a column-less record sorts by its index), as on dev.
-  assert.deepEqual(records.map(({ recordKey, gridRow, gridColumn }) => [recordKey, gridRow, gridColumn]),
-    [['a', 1, null], ['b', 1, 1], ['c', 1, 2]]);
-});
+// The places the request writes, read by the real Python codec: tests/web/linear-card-windows-request.test.mjs.
 
 /** The cards and Record Layout of an arranged drawing: a in row 1 drawn in two windows, b in row 1, c in row 2. */
 const arrangedLayout = () => ({
@@ -333,7 +335,8 @@ test('Add window and Remove are one History step each through the record rows\' 
   edits.removeLinearCardWindow(drawing.linearSeqs[0], 0);
   assert.deepEqual(steps.map(String), ['Add window', 'Remove window']);
   assert.deepEqual(applied.map(({ items }) => items), [[{ uid: 'a', windows: 2 }, { uid: 'b', windows: 0 }], [{ uid: 'a', windows: 0 }, { uid: 'b', windows: 0 }]]);
-  // The transition drops the stored comparisons (their unit indexes shift); a LOSAT cache-info row keeps its file.
+  // The transition keeps a LOSAT cache-info row's file; that it empties the stored comparisons (their unit indexes
+  // shift) is checked through the app's own transition in linear-card-windows-state.test.mjs.
   assert.equal(applied.every(({ options }) => options.preserveLosatCacheInfo === true), true);
   // Editing a Start keeps the unit plan, so it stays a field edit.
   edits.setLinearCardWindow(drawing.linearSeqs[0], 0, 'start', 5);
@@ -354,7 +357,7 @@ test('the card owns every write of its windows: orientation, Reset Settings and 
   assert.equal(linearCardHasSettings(card), true);
 });
 
-test('Up and Down change only the places, so the unit indexes stored comparisons hold stay (F7)', () => {
+test('Up and Down on a window cell change only the places, so the unit indexes stored comparisons hold stay (F7)', () => {
   const { cards, entries } = arrangedLayout();
   const unitsOf = () => pythonLinearUnitPlan(linearUnitPlanPayload(cards, { edges: [] },
     (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: UNKNOWN_CARD_RECORD })));

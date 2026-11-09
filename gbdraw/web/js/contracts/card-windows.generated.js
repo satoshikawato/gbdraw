@@ -10,7 +10,8 @@
  * @property {number | null} gridRow
  * @property {number | null} gridColumn
  * @property {boolean} reverseComplement
- * @property {number} sourceLength
+ * @property {number | null} sourceLength
+ * @property {number} drawnRecords
  * @property {boolean} circular
  */
 /**

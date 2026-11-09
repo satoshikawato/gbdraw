@@ -201,12 +201,13 @@ def test_the_cli_and_the_web_write_one_record_analysis_and_display_binding(tmp_p
         assert cli_binding == web_binding, unit_key
 
 
-def _card(key, windows, length, circular, row=None, column=None, reverse=False):
+def _card(key, windows, length, circular, row=None, column=None, reverse=False, drawn=1):
     return {
         "recordKey": key, "windows": [
             {"start": start, "end": end, "reverseComplement": rc, "column": col} for start, end, rc, col in windows
         ],
         "gridRow": row, "gridColumn": column, "reverseComplement": reverse, "sourceLength": length, "circular": circular,
+        "drawnRecords": drawn,
     }
 
 
@@ -248,3 +249,18 @@ def test_card_window_plan_refuses_a_record_without_its_length() -> None:
     record["sourceLength"] = None
     with pytest.raises(ValidationError):
         plan_card_windows([record])
+    # A record with windows draws one record.
+    with pytest.raises(ValidationError):
+        plan_card_windows([_card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False, drawn=2)])
+
+
+def test_card_window_plan_counts_each_record_a_file_card_draws_whole() -> None:
+    """A file card of two records drawn whole, no length known, before a windowed card in one row: the drawing draws
+    both records first, so it numbers the windows 3 and 4; in rows of their own the windows are 1 and 2."""
+    from gbdraw.web_support.linear_units import plan_card_windows
+
+    windowed = _card("a", [(1, 100, False, None), (301, 400, False, None)], 10_000, False, row=1)
+    shared = plan_card_windows([_card("m", [], None, False, row=1, drawn=2), windowed])
+    assert [entry["number"] for entry in shared["windows"]] == [3, 4]
+    apart = plan_card_windows([_card("m", [], None, False, drawn=2), {**windowed, "gridRow": None}])
+    assert [entry["number"] for entry in apart["windows"]] == [1, 2]

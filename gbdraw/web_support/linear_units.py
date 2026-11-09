@@ -32,6 +32,7 @@ from gbdraw.api.request_render import grid_placement_order
 from gbdraw.api.requests import RecordPresentation
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.regions import window_drawn_reverse
 from gbdraw.layout.linear_row_windows import RowWindowUnit, plan_row_windows
 from gbdraw.session_request_codec import CanonicalRequestDecodingError, _decode_windows
 
@@ -164,14 +165,18 @@ class CardWindowInput(TypedDict):
 class CardWindowRecordInput(TypedDict):
     """A record the request draws, as its card's window plan reads it: its key, its windows and its place
     (``gridRow``, ``gridColumn``, ``reverseComplement``) as the request writes them, the length of the record it
-    reads, and whether it is drawn circular."""
+    reads (needed when it lists windows; a record drawn whole may leave it out, as no number or omitted length
+    reads its span), how many records it draws (``drawnRecords``: a file card drawn whole draws each record of its
+    file, one after another in its row, and one with windows draws one record), and whether it is drawn
+    circular."""
 
     recordKey: str
     windows: list[CardWindowInput]
     gridRow: int | None
     gridColumn: int | None
     reverseComplement: bool
-    sourceLength: int
+    sourceLength: int | None
+    drawnRecords: int
     circular: bool
 
 
@@ -206,8 +211,11 @@ def _card_record(record: object, position: int) -> tuple[CardWindowRecordInput, 
         raise _protocol_error("A record of a card window plan must be an object.")
     record_key = _key(record.get("recordKey"), "record")
     length, row, column = record.get("sourceLength"), record.get("gridRow"), record.get("gridColumn")
-    if not isinstance(length, int) or isinstance(length, bool) or length < 1:
-        raise _protocol_error(f"Record {record_key!r} needs its length.")
+    drawn = record.get("drawnRecords")
+    if length is not None and (not isinstance(length, int) or isinstance(length, bool) or length < 1):
+        raise _protocol_error(f"Record {record_key!r} has a length that is not a positive whole number.")
+    if not isinstance(drawn, int) or isinstance(drawn, bool) or drawn < 1:
+        raise _protocol_error(f"Record {record_key!r} needs how many records it draws.")
     if any(value is not None and (not isinstance(value, int) or isinstance(value, bool)) for value in (row, column)):
         raise _protocol_error(f"Record {record_key!r} has a grid row or column that is not a whole number.")
     if not isinstance(record.get("reverseComplement"), bool) or not isinstance(record.get("circular"), bool):
@@ -216,6 +224,8 @@ def _card_record(record: object, position: int) -> tuple[CardWindowRecordInput, 
         windows = _decode_windows(record.get("windows"), path=f"records[{position}].windows")
     except (CanonicalRequestDecodingError, ValueError) as exc:
         raise _protocol_error(str(exc)) from exc
+    if windows and (length is None or drawn != 1):
+        raise _protocol_error(f"Record {record_key!r} lists windows: it needs its length and draws one record.")
     return cast(CardWindowRecordInput, record), tuple(record_drawn_windows(record_key, windows))
 
 
@@ -227,12 +237,21 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     units: list[tuple[CardWindowRecordInput, int | None, RowWindowUnit, RecordPresentation]] = []
     for position, record in enumerate(records):
         card, windows = _card_record(record, position)
-        for window in windows:
-            span = (1, card["sourceLength"]) if window is None else (window.span.start, window.span.end)
-            reverse = card["reverseComplement"] != (window is not None and window.span.reverse_complement)
+        # A file card drawn whole draws each of its records as a unit of its own; a record drawn whole without a known
+        # length takes a one-base span, which no number or omitted length reads.
+        many = card["drawnRecords"] > 1
+        drawn = (
+            [(f"{card['recordKey']}:{index + 1}" if many else card["recordKey"], None) for index in range(card["drawnRecords"])]
+            if windows == (None,)
+            else [(card["recordKey"], window) for window in windows]
+        )
+        for identity, window in drawn:
+            length = card["sourceLength"] or 1
+            span = (1, length) if window is None else (window.span.start, window.span.end)
+            reverse = window_drawn_reverse(window is not None and window.span.reverse_complement, card["reverseComplement"])
             unit = RowWindowUnit(
-                record_index=len(units), identity_key=card["recordKey"], record_id=card["recordKey"], label="",
-                span=span, reverse=reverse, source_length=card["sourceLength"], circular=card["circular"],
+                record_index=len(units), identity_key=identity, record_id=identity, label="",
+                span=span, reverse=reverse, source_length=length, circular=card["circular"],
                 has_region=window is not None,
             )
             placement = RecordPresentation(
@@ -249,8 +268,8 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
         row_units = [*rows.values(), *unplaced]
     else:
         by_record: dict[str, list[int]] = {}
-        for index, (card, *_) in enumerate(units):
-            by_record.setdefault(card["recordKey"], []).append(index)
+        for index, (_card, _window, unit, _placement) in enumerate(units):
+            by_record.setdefault(unit.identity_key, []).append(index)
         row_units = list(by_record.values())
     numbers: list[CardWindowNumber] = []
     gaps: list[CardWindowGap] = []

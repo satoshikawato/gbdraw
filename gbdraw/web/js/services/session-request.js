@@ -1662,9 +1662,9 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
   const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
     seqs, drawing.linearRecordRows, { enabled: arranged }
   ));
-  // The places of the Record Layout's cells, when the Web owns them: only once a drawn card has two or more windows
-  // (PD-OI-124); until then every record keeps the place it held before (Must preserve).
-  const places = arranged && seqs.some((seq) => (seq.windows || []).length > 1) ? linearLayoutPlaces(linearLayoutCells(
+  // The places of the Record Layout's cells, when the stored ones cannot be written as they are: Python reads a place
+  // for every record or for none, each its own (OV-3071). Stored places Python reads as they are stay as they are.
+  const places = arranged ? linearLayoutPlaces(linearLayoutCells(
     seqs.map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
   )) : null;
   return seqs.map((seq, index) => {
@@ -1689,9 +1689,12 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
 
 /**
  * The records the Worker helper `planCardWindows` reads for the drawn cards of a Linear drawing: each card (keyed by
- * its uid) as the request writes it (`linearRecordPlacements`), with the length of its record and whether the request
- * draws it circular (its display topology, else the record's own). Null while a record is not read yet or a window is
- * one Generate refuses: the card then shows no number and no omitted length.
+ * its uid) as the request writes it (`linearRecordPlacements`), how many records it draws (`drawnRecords`: a card of
+ * a file of several records drawn whole draws each of them in its row), the length of its record when it lists
+ * windows, and whether the request draws it circular (its display topology, else the record's own). A record drawn
+ * whole needs no length: no number or omitted length reads its span. Null while a card's records are not read yet,
+ * a card that lists windows has no one record of known length, or a window is one Generate refuses: the cards then
+ * show no number and no omitted length.
  * @template {RequestLinearSeq} C
  * @param {Parameters<typeof linearRecordPlacements>[0] & { recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
  * @param {readonly C[]} seqs The drawn cards, in request order.
@@ -1701,7 +1704,7 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
  */
 export const linearCardWindowPlanRecords = (drawing, seqs, recordOf, recordDisplayRows) => {
   const records = seqs.map(recordOf);
-  if (records.some((record) => record.length === null)) return null;
+  if (records.some((record, index) => record.count === null || ((seqs[index].windows || []).length > 0 && record.length === null))) return null;
   let placements;
   try {
     placements = linearRecordPlacements(drawing, seqs, (seq) => records[seqs.indexOf(seq)]);
@@ -1712,8 +1715,9 @@ export const linearCardWindowPlanRecords = (drawing, seqs, recordOf, recordDispl
     const { windows, gridRow, gridColumn, reverseComplement } = placements[index];
     const requested = linearCardRequestedCircular({ drawing, card: seq, index, recordDisplayRows, windows });
     return {
-      recordKey: seq.uid, windows, gridRow, gridColumn, reverseComplement,
-      sourceLength: /** @type {number} */ (records[index].length), circular: requested ?? records[index].circular
+      recordKey: seq.uid, windows, gridRow, gridColumn, reverseComplement, sourceLength: records[index].length,
+      drawnRecords: windows.length ? 1 : /** @type {number} */ (records[index].count),
+      circular: requested ?? records[index].circular
     };
   });
 };
@@ -1739,7 +1743,8 @@ const buildRecords = ({ drawing, filesData, resources }) => {
         (/** @type {{ uid?: unknown, canonicalCardinality?: string }} */ entry) => [entry.uid, entry.canonicalCardinality]
       )
     );
-    const placements = linearRecordPlacements(drawing, seqs, (seq) => seq.cardRecord ?? UNKNOWN_CARD_RECORD);
+    const recordOf = (/** @type {RequestLinearSeq} */ seq) => seq.cardRecord ?? UNKNOWN_CARD_RECORD;
+    const placements = linearRecordPlacements(drawing, seqs, recordOf);
     /** @type {RequestDraftRecord[]} */
     const records = seqs.map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
@@ -1747,8 +1752,10 @@ const buildRecords = ({ drawing, filesData, resources }) => {
       const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
-        cardinality: canonicalCardinalityByUid.get(seq.uid)
-          || seq.cardinality || (selector || windows.length ? 'exactly_one' : 'all'),
+        // A card that draws the only record of its file and takes a place is that one record: Python places no
+        // file card drawn whole (OV-3072); without a place it stays the file, as before.
+        cardinality: canonicalCardinalityByUid.get(seq.uid) || seq.cardinality
+          || (selector || windows.length || (gridColumn !== null && recordOf(seq).count === 1) ? 'exactly_one' : 'all'),
         source,
         selector,
         windows,

@@ -142,7 +142,10 @@ export const createDrawingRecordCatalog = ({
     const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
     ));
-    if (!hasAutomaticSequence && !hasRegionAnnotations) {
+    // A card that lists windows reads its record here: an empty window draws the whole record, and a refused window
+    // names the record (PD-OI-124). Every reader of the request's windows reads the record from this catalog.
+    const listsWindows = drawing.drawnLinearSeqs.value.some((sequence) => sequence.windows.length > 0);
+    if (!hasAutomaticSequence && !hasRegionAnnotations && !listsWindows) {
       return { catalog: null, error: '' };
     }
     if (privateCandidate) {

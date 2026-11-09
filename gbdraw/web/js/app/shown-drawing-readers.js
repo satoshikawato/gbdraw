@@ -16,7 +16,7 @@ import {
   circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import { createLinearCardWindowReaders } from './linear-card-window-readers.js';
-import { sequenceCardRecord } from '../services/linear-card-windows.js';
+import { cardRecordFacts } from '../services/linear-card-windows.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
@@ -102,16 +102,19 @@ export const createShownDrawingReaders = ({
 }) => {
   const { inputSummaries, selectedResultIndex, results } = state;
   /**
-   * The record a Linear entry draws, once its records are read: the one its
-   * selector names, or the only record of its file.
+   * The records a Linear entry draws, once read: the one its selector names, else every record of its file ([]
+   * until read, or when its selector names none).
    * @param {DrawingState} drawing the drawing that holds the card
    * @param {LinearSeq} seq
    */
-  const linearSeqRecord = (drawing, seq) => {
+  const linearSeqDrawnRecords = (drawing, seq) => {
     const records = linearRecordsFor(drawing, seq);
     const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
-    return selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+    return selection.record ? [selection.record] : selection.status === 'unspecified' ? records : [];
   };
+  /** The one record a Linear entry draws, once read. @param {DrawingState} drawing @param {LinearSeq} seq */
+  const linearSeqRecord = (drawing, seq) => (linearSeqDrawnRecords(drawing, seq).length === 1
+    ? linearSeqDrawnRecords(drawing, seq)[0] : null);
   // The note beside a Linear entry's Region fields (`regionClampNote`). The
   // request draws the larger coordinate as the region's end (reverse when typed first).
   /** @param {LinearSeq} seq a card of the shown drawing */
@@ -123,9 +126,9 @@ export const createShownDrawingReaders = ({
   // (`linearDrawingWindowsOf`): the LOSAT job estimate and the wrap estimate read them here.
   /** @param {DrawingState} drawing */
   const linearCardWindowsOf = (drawing) => windowsOf(drawing,
-    (card) => sequenceCardRecord(linearSeqRecord(drawing, card)));
+    (card) => cardRecordFacts(linearSeqDrawnRecords(drawing, card)));
   const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({
-    state, shownDrawingOfMode, linearSeqRecord, planCardWindows, cardWindowPlanRecords, recordDisplayRows
+    state, shownDrawingOfMode, linearSeqRecord, linearSeqDrawnRecords, planCardWindows, cardWindowPlanRecords, recordDisplayRows
   });
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
