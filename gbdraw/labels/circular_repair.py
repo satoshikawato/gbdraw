@@ -69,7 +69,7 @@ from .circular import (
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
 from .circular_types import CircularLabel
-from .fit import LabelShape, covers_definition_text, polylines_cross, shapes_overlap
+from .fit import LabelShape, box_covers_definition_text, covers_definition_text, polylines_cross, shapes_overlap
 
 # LP-D57: repair records with up to this many defects, within this many evaluations.
 MAX_DEFECTS = 100
@@ -138,6 +138,16 @@ class _Geometry:
     box: Aabb | None
     leader_box: Aabb | None
     reach: Aabb | None
+
+    def covers(self, boxes: Sequence[Aabb]) -> bool:
+        """:func:`~gbdraw.labels.fit.covers_definition_text` from the text box measured already (a repair tests
+        each candidate place against the definition text and the boxes to clear)."""
+
+        if not self.shape.leader or not boxes:
+            return False
+        if self.box is None:
+            return covers_definition_text(self.shape, boxes)  # no finite text point: it refuses as the fit check does
+        return box_covers_definition_text(self.box, boxes)
 
 
 def _angle(x: float, y: float) -> float:
@@ -294,9 +304,9 @@ class _Repair:
             for other in self.peers[index]:
                 if other > index:
                     found.update(self._pair_defects(index, self.geometry[index], other, self.geometry[other]))
-            if covers_definition_text(self.geometry[index].shape, self.definition_text):
+            if self.geometry[index].covers(self.definition_text):
                 found.add(("definition", index, index))
-            if covers_definition_text(self.geometry[index].shape, self.boxes):
+            if self.geometry[index].covers(self.boxes):
                 found.add(("box", index, index))
         return found
 
@@ -309,9 +319,9 @@ class _Repair:
                 if other in geometry and other < index:
                     continue
                 found.update(self._pair_defects(index, own, other, geometry.get(other, self.geometry[other])))
-            if covers_definition_text(own.shape, self.definition_text):
+            if own.covers(self.definition_text):
                 found.add(("definition", index, index))
-            if covers_definition_text(own.shape, self.boxes):
+            if own.covers(self.boxes):
                 found.add(("box", index, index))
         return frozenset(found)
 

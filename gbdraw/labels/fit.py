@@ -377,7 +377,13 @@ def covers_definition_text(shape: LabelShape, definition_text: Sequence[Aabb]) -
 
     if not shape.leader or not definition_text:
         return False
-    label_box = _extent([point for part in shape.parts for point in part])
+    return box_covers_definition_text(_extent([point for part in shape.parts for point in part]), definition_text)
+
+
+def box_covers_definition_text(label_box: Aabb, definition_text: Sequence[Aabb]) -> bool:
+    """Whether the text box of a label with a leader covers a line of the definition text
+    (:func:`covers_definition_text` for a caller that has measured the box already)."""
+
     return any(
         min(label_box.max_x, text_box.max_x) - max(label_box.min_x, text_box.min_x)
         > DEFINITION_TEXT_MIN_OVERLAP_PX
@@ -1082,6 +1088,7 @@ __all__ = [
     "LabelShape",
     "Polygon",
     "Polyline",
+    "box_covers_definition_text",
     "covers_definition_text",
     "crossing_pairs",
     "fit_counts",

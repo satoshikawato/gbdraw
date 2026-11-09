@@ -1594,30 +1594,44 @@ _LAMBDA_REGIONS = (
 
 
 @pytest.mark.parametrize(
-    ("labels", "font_size", "overlaps", "not_cleared"),
-    [("out", 14, 7, []), pytest.param("both", 20, 4, ["lysis"], marks=pytest.mark.slow)],
+    ("labels", "font_size", "overlaps"),
+    [("out", 14, 7), pytest.param("both", 20, 4, marks=pytest.mark.slow)],
 )
 def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int, not_cleared: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int
 ) -> None:
     """OV-3017, CIR-RGN-YIELD: on lambda with outside regions, "Integration" was drawn over "integrase" and
     "Replication" over other feature labels, with no letter-free place along their regions. The feature labels make
-    way (side and order kept): no drawn region label's letters meet a feature label's letters but those of a label
-    they cannot clear ("Lysis" at 20 pt with --labels both), drawn and warned; the leader lines behind region letters
-    stay warned too (lambda --labels out 10 -> 7, --labels both 8 -> 4)."""
+    way (side and order kept): no drawn region label's letters meet a feature label's letters; the leader lines behind
+    region letters stay warned (lambda --labels out 10 -> 7, --labels both 8 -> 4)."""
 
+    import gbdraw.api.diagram as api_diagram
     import gbdraw.diagrams.circular.assemble as circular_assemble
     from gbdraw.circular import _get_args, run_circular_from_namespace
     from gbdraw.layout.text_geometry import convex_polygons_intersect
 
     passes: list[tuple[object, object]] = []
     original_labels = circular_assemble.circular_annotation_labels
+    original_fit_check = api_diagram.check_circular_label_fit
+    searching = [False]
 
     def labels_spy(*args, **kwargs):
-        passes.append((kwargs["obstacles"], original_labels(*args, **kwargs)))
-        return passes[-1][1]
+        placed = original_labels(*args, **kwargs)
+        if not searching[0]:
+            passes.append((kwargs["obstacles"], placed))
+        return placed
+
+    def fit_check_spy(*args, **kwargs):
+        # The rows of a warned figure are searched with other settings, as long as a wall-clock deadline allows:
+        # only the drawn figure's passes count.
+        searching[0] = True
+        try:
+            return original_fit_check(*args, **kwargs)
+        finally:
+            searching[0] = False
 
     monkeypatch.setattr(circular_assemble, "circular_annotation_labels", labels_spy)
+    monkeypatch.setattr(api_diagram, "check_circular_label_fit", fit_check_spy)
     table = tmp_path / "regions.tsv"
     table.write_text(
         "set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size\n"
@@ -1645,8 +1659,8 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
     covering = sorted(
         id_ for id_, label in drawn.items() if any(convex_polygons_intersect(a, b) for a in label.parts for b in letters)
     )
-    assert covering == not_cleared
-    assert sorted(label.place.annotation_id for label in placed.over_feature_letters) == not_cleared
+    assert covering == []
+    assert placed.over_feature_letters == ()
     assert any(f"({overlaps} region label overlaps)" in str(warning.message) for warning in caught), [
         str(warning.message) for warning in caught
     ]
