@@ -48,7 +48,7 @@ def _circular_distance(a: float, b: float, length: int) -> float:
 @pytest.mark.parametrize("column", ["GC content", "GC skew"])
 @pytest.mark.parametrize("run", [(4000, 4100), (0, 100), (9900, 10_000)], ids=["middle", "record-start", "record-end"])
 def test_the_samples_that_see_a_run_are_centred_on_it(column: str, run: tuple[int, int]) -> None:
-    frame = skew_df(_record(*run), WINDOW, STEP, "GC")
+    frame = skew_df(_record(*run), WINDOW, STEP, "GC", circular=True)
     seen = [float(p) for p in frame.index[frame[column].to_numpy() > 0]]
     # The window centred on p, [p - 500, p + 500), meets the run [s, e) when s - 500 < p < e + 500; a circular
     # record's windows wrap, so p is read on the circle.
@@ -60,7 +60,7 @@ def test_the_samples_that_see_a_run_are_centred_on_it(column: str, run: tuple[in
 
 def test_a_window_value_counts_the_bases_centred_on_its_sample() -> None:
     record = _record(4000, 4100)
-    frame = skew_df(record, WINDOW, STEP, "GC")
+    frame = skew_df(record, WINDOW, STEP, "GC", circular=True)
     sequence = str(record.seq)
     for position in (0, 3500, 4000, 4500, 9900):
         start = position - WINDOW // 2

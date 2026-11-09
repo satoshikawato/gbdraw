@@ -713,9 +713,13 @@ def test_depth_on_a_window_across_the_origin_reads_both_sides_of_it(reverse: boo
         "position": positions,
         "depth": [1 if position <= 1000 else 2 for position in positions],
     })
-    depths = depth_df(unit, table, window=10, step=10)["depth"].tolist()
-    # 570 bases before the origin, then 1000 after it (read backwards when reversed).
-    expected = [1.0] * 100 + [2.0] * 57 if reverse else [2.0] * 57 + [1.0] * 100
+    depths = depth_df(unit, table, window=10, step=10, circular=True)["depth"].tolist()
+    # 570 bases before the origin, then 1000 after it (read backwards when reversed). Each window is centred on
+    # its sample; the first window reads 5 bases of the source before the window (no depth), and the window at
+    # the origin reads 5 bases of each side.
+    expected = (
+        [0.5] + [1.0] * 99 + [1.5] + [2.0] * 56 if reverse else [1.0] + [2.0] * 56 + [1.5] + [1.0] * 99
+    )
     assert depths == expected
 
 

@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from gbdraw.core.record_metadata import _read_coord_map, _record_source_start, _source_period
+from gbdraw.analysis.windows import SlidingWindows, sliding_windows
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
@@ -401,55 +401,45 @@ def _select_record_depths(record: SeqRecord, coverage: DepthCoverage) -> DepthAr
     )
 
 
-def _record_window_sums(
-    record: SeqRecord,
-    depths: DepthArray,
-    record_len: int,
-    starts: NDArray[np.int64],
-    ends: NDArray[np.int64],
-) -> NDArray[np.float64]:
-    """The depth summed over each window ``starts[i] .. ends[i] - 1`` of the record's local bases.
+def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[np.float64]:
+    """The depth summed over each window ``windows.starts[i] .. windows.ends[i] - 1`` of the record's local axis.
 
-    The record shows source positions ``start .. start + record_len - 1``,
-    read backwards for a reverse complement; a crop across the origin (D-28)
-    runs on from the source end to position 1. Bases outside the parsed
-    positions add 0. Each sum is ``prefix[end] - prefix[start]`` of the
-    running float64 sums of the per-base depths after a leading 0. The
-    running sums are kept only at window bounds: the bases are summed one
-    chunk of ``_SUM_CHUNK_BASES`` at a time, each chunk carrying on from the
-    last sum of the one before, so every sum is the same chain of additions
-    as one pass over the whole record.
+    Each source piece of the windows (:func:`gbdraw.analysis.windows.sliding_windows`) reads source coordinates
+    in a run, backwards when the record reads its source backwards (a reverse complement); positions the depth
+    file does not hold add 0. Each sum is ``prefix[end] - prefix[start]`` of the running float64 sums of the
+    per-base depths along the local axis. The running sums are kept only at window bounds: the bases are summed
+    one chunk of ``_SUM_CHUNK_BASES`` at a time, each chunk carrying on from the last sum of the one before, so
+    every sum is the same chain of additions as one pass along the axis.
     """
 
+    starts, ends = windows.starts, windows.ends
     bounds, bound_of = np.unique(np.concatenate((starts, ends)), return_inverse=True)
     prefix = np.zeros(bounds.size, dtype=np.float64)
-    source_start = _record_source_start(record)
-    _coord_base, coord_step = _read_coord_map(record)
-    period = _source_period(record)
-    # The shown source spans in source order, each (first, last, the first's place on the unwrapped axis).
-    spans = (
-        [(source_start, source_start + record_len - 1, source_start)]
-        if period is None
-        else [(source_start, period, source_start), (1, source_start + record_len - 1 - period, period + 1)]
-    )
+    source = windows.source
+    available = int(depths.size)
     pieces: list[tuple[int, DepthArray]] = []
-    for span_first, span_last, unwrapped_first in spans:
-        first, last = max(span_first, 1), min(span_last, int(depths.size))
-        if first > last:
-            continue
-        shown = depths[first - 1 : last]
-        unwrapped = unwrapped_first + first - span_first
-        if coord_step > 0:
-            low = unwrapped - source_start
+    for piece in windows.pieces:
+        # Local position piece.local + k reads source coordinate first + run_step * k.
+        first = source.base + source.step * piece.index
+        run_step = source.step * piece.direction
+        if run_step > 0:
+            skip, keep = max(0, 1 - first), min(piece.length, available - first + 1)
         else:
-            shown = shown[::-1]
-            low = source_start + record_len - 1 - (unwrapped + last - first)
-        pieces.append((low, shown))
+            skip, keep = max(0, first - available), min(piece.length, first)
+        if skip >= keep:
+            continue
+        coordinate = first + run_step * skip
+        shown = (
+            depths[coordinate - 1 : coordinate - 1 + keep - skip]
+            if run_step > 0
+            else depths[coordinate - (keep - skip) : coordinate][::-1]
+        )
+        pieces.append((piece.local + skip, shown))
     carry = np.float64(0.0)
-    covered = 0
+    covered = int(bounds[0])
     # The first base starts the chain (adding 0.0 would turn a -0.0 depth into 0.0).
     summed = False
-    for low, shown in sorted(pieces, key=lambda piece: piece[0]):
+    for low, shown in pieces:
         # Bounds between the last shown base and this piece hold the running sum so far.
         prefix[np.searchsorted(bounds, covered, side="right") : np.searchsorted(bounds, low, side="right")] = carry
         # prefix[low + 1 + i] is the running sum up to shown[i].
@@ -487,17 +477,21 @@ def depth_df(
     window: int,
     step: int,
     *,
+    circular: bool,
     normalize: bool = False,
     min_depth: float | None = None,
     max_depth: float | None = None,
 ) -> DataFrame:
-    """Bin depth values for a record into fixed windows of its drawn sequence.
+    """The mean depth of each sliding window of a record: one row per sample.
 
     ``depth_table`` is a parsed file or a table of rows (an API table, which is
     converted here). Positions are 1-based source coordinates of the named
-    record. The record coordinate map keeps only the positions inside a crop
-    and maps them to local positions, flipped for a reverse complement. Output
-    positions are 0-based local window starts.
+    record; the record coordinate map maps them to local positions, flipped for
+    a reverse complement. The samples (``position``, 0-based local) and their
+    windows are those of :func:`gbdraw.analysis.windows.sliding_windows`, centred
+    on the sample; ``circular`` says whether the molecule is circular. A crop
+    reads its flanking positions of the source; a mean is over the bases a
+    window reads.
     """
 
     if window <= 0:
@@ -511,11 +505,9 @@ def depth_df(
     if record_len <= 0:
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
-    starts = np.arange(0, record_len, int(step), dtype=np.int64)
-    ends = np.minimum(starts + int(window), record_len)
-    bin_lengths = np.maximum(ends - starts, 1)
+    windows = sliding_windows(record, int(window), int(step), circular=circular)
     depths = _select_record_depths(record, coverage_source)
-    means = _record_window_sums(record, depths, record_len, starts, ends) / bin_lengths
+    means = _window_depth_sums(windows, depths) / windows.bases
 
     if min_depth is not None or max_depth is not None:
         lower = float(min_depth) if min_depth is not None else None
@@ -548,7 +540,7 @@ def depth_df(
 
     return pd.DataFrame(
         {
-            "position": starts,
+            "position": windows.samples,
             "depth": means,
             "depth_normalized": normalized,
         }

@@ -1,4 +1,4 @@
-"""The vectorized window counts must equal the former per-base Python loops."""
+"""The vectorized window counts of a circular record must equal the former per-base Python loops."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.analysis.skew import counted_dinucleotide, skew_df
+from gbdraw.analysis.skew import counted_sequence, skew_df
+from gbdraw.mode_profiles import validate_dinucleotide
 
 
 def _old_prefix(seq_bytes: bytes, target_base: int) -> list[int]:
@@ -38,7 +39,9 @@ def _old_window_count(prefix, seq_length, *, start, window, total_count) -> int:
 
 
 def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
-    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
+    nt = validate_dinucleotide(nt)
+    nt_1, nt_2 = nt.replace("U", "T")
+    seq_bytes = counted_sequence(record.seq)
     seq_length = len(seq_bytes)
     content_legend, skew_legend = f"{nt} content", f"{nt} skew"
     cumulative_legend = f"Cumulative {nt} skew, normalized"
@@ -98,7 +101,7 @@ def test_vectorized_window_counts_match_the_python_loops(
     record = _record(_random_sequence(rng, length, alphabet))
 
     pd.testing.assert_frame_equal(
-        skew_df(record, window, step, nt),
+        skew_df(record, window, step, nt, circular=True),
         _old_skew_df(record, window, step, nt),
         check_exact=True,
     )
@@ -109,7 +112,7 @@ def test_vectorized_window_counts_match_on_a_long_sequence() -> None:
     record = _record(_random_sequence(rng, 200_000, "ACGTACGTN"))
 
     pd.testing.assert_frame_equal(
-        skew_df(record, 10_000, 500, "GC"),
+        skew_df(record, 10_000, 500, "GC", circular=True),
         _old_skew_df(record, 10_000, 500, "GC"),
         check_exact=True,
     )
@@ -121,7 +124,7 @@ def test_degenerate_windows_and_empty_records_return_empty_frames(
 ) -> None:
     for record in (_record("ACGT"), _record("")):
         pd.testing.assert_frame_equal(
-            skew_df(record, window, step, "GC"),
+            skew_df(record, window, step, "GC", circular=True),
             _old_skew_df(record, window, step, "GC"),
         )
 
@@ -137,7 +140,7 @@ def test_window_counts_build_no_count_array_as_long_as_the_record() -> None:
     record = _record(_random_sequence(random.Random(3), length, "ACGT"))
     tracemalloc.start()
     try:
-        skew_df(record, 10_000, 1_000, "GC")
+        skew_df(record, 10_000, 1_000, "GC", circular=True)
         peak = tracemalloc.get_traced_memory()[1]
     finally:
         tracemalloc.stop()

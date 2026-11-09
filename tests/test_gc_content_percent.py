@@ -139,7 +139,7 @@ def test_definition_gc_percent_agrees_with_the_gc_track_for_a_mixed_case_record(
     record = SeqRecord(Seq("gcgcATATggCCaatt"), id="soft_masked")
     length = len(record.seq)
 
-    track_df = skew_df(record, window=length, step=length, nt="GC")
+    track_df = skew_df(record, window=length, step=length, nt="GC", circular=True)
 
     assert definition_record_facts(record).gc_percent == 50.0
     assert track_df.loc[0, "GC content"] * 100.0 == pytest.approx(50.0)
@@ -148,7 +148,7 @@ def test_definition_gc_percent_agrees_with_the_gc_track_for_a_mixed_case_record(
 def test_gc_windows_are_centred_on_their_sample_and_wrap_at_the_origin() -> None:
     record = SeqRecord(Seq("GGGGAAAA"), id="origin")
 
-    frame = skew_df(record, window=4, step=4, nt="GC")
+    frame = skew_df(record, window=4, step=4, nt="GC", circular=True)
 
     # The window of sample 0 is bases -2..1: AA (wrapped from the end) and GG.
     assert frame.loc[0, "GC content"] == pytest.approx(0.5)
@@ -158,7 +158,7 @@ def test_gc_windows_are_centred_on_their_sample_and_wrap_at_the_origin() -> None
 def test_gc_windows_longer_than_the_record_count_it_per_cycle() -> None:
     record = SeqRecord(Seq("GAAA"), id="short")
 
-    content_df = skew_df(record, window=10, step=10, nt="GC")
+    content_df = skew_df(record, window=10, step=10, nt="GC", circular=True)
 
     assert content_df.loc[0, "GC content"] == pytest.approx(0.3)
 

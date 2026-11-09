@@ -234,6 +234,7 @@ from gbdraw.layout.linear_wrap import (
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
+from gbdraw.layout.record_transform import bind_record_transforms
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
@@ -605,9 +606,12 @@ def _build_circular_dinucleotide_dataframes(
     window: int,
     step: int,
     nts: set[str],
+    circular: bool,
 ) -> dict[str, DataFrame]:
     """One ``skew_df`` frame per dinucleotide: the content and the skew slots of that dinucleotide read it."""
-    return {nt: render_stage("gc_skew_data", skew_df, record, window, step, nt) for nt in sorted(nts)}
+    return {
+        nt: render_stage("gc_skew_data", skew_df, record, window, step, nt, circular=circular) for nt in sorted(nts)
+    }
 
 
 def _has_conservation_inputs(
@@ -2877,11 +2881,15 @@ def assemble_circular_diagram_from_record(
         )
     else:
         requested_nts = {str(inputs.dinucleotide).upper()} if (cfg.canvas.show_gc or cfg.canvas.show_skew) else set()
+    record_transform = bind_record_transforms(
+        [gb_record], None if context.record_transform is None else [context.record_transform]
+    )[0]
     dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
         gb_record,
         window=int(window),
         step=int(step),
         nts=requested_nts,
+        circular=record_transform.is_circular,
     )
     gc_df = dinucleotide_dataframes.get(str(inputs.dinucleotide).upper(), DataFrame())
     if cfg.canvas.show_depth and depth_config is not None:
@@ -2900,6 +2908,7 @@ def assemble_circular_diagram_from_record(
             resolved_depth_tracks = build_depth_track_dataframes(
                 [gb_record],
                 record_depth_tracks,
+                [record_transform],
                 base_config=depth_config,
                 depth_df_builder=build_depth_df,
                 window_steps=[(resolved_depth_window, resolved_depth_step)],
@@ -3241,6 +3250,7 @@ def assemble_circular_diagram_from_records(
         record_depth_track_data = build_depth_track_dataframes(
             records,
             record_depth_tracks,
+            _record_transforms,
             base_config=base_depth_config,
             depth_df_builder=build_depth_df,
             window_steps=record_depth_window_steps,

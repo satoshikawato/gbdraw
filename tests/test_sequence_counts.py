@@ -1,4 +1,4 @@
-"""The counted bytes and window counts read a sequence without per-base arrays."""
+"""The counted bytes and prefix counts read a sequence without per-base arrays."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from Bio.Seq import MutableSeq, Seq
 
-from gbdraw.analysis.skew import _prefix_counts_at, counted_sequence, window_base_counts
+from gbdraw.analysis.skew import _prefix_counts_at, counted_sequence
 
 
 @pytest.mark.parametrize(
@@ -29,7 +29,7 @@ def test_prefix_counts_read_unsorted_duplicate_and_out_of_range_positions() -> N
     positions = np.array([40, 0, 91, 7, 7, 91, 13, 3, 200, -5], dtype=np.int64)
     for base in b"ACGTN":
         expected = [seq[: max(0, min(int(p), len(seq)))].count(bytes([base])) for p in positions]
-        assert _prefix_counts_at(seq, base, positions).tolist() == expected
+        assert _prefix_counts_at([seq], base, positions).tolist() == expected
 
 
 def test_prefix_counts_agree_across_chunk_boundaries() -> None:
@@ -39,16 +39,27 @@ def test_prefix_counts_agree_across_chunk_boundaries() -> None:
     positions = np.array([0, 10, 5_000, edge - 1, edge, edge + 1, 2 * edge, 2_900_000, 3_000_000, 2_000_000])
     for base in b"ACGT":
         expected = [seq[:p].count(bytes([base])) for p in positions.tolist()]
-        assert _prefix_counts_at(seq, base, positions).tolist() == expected
+        assert _prefix_counts_at([seq], base, positions).tolist() == expected
 
 
-def test_window_base_counts_need_no_array_as_long_as_the_sequence() -> None:
+def test_prefix_counts_read_segments_as_one_sequence_across_chunk_boundaries() -> None:
+    rng = np.random.default_rng(3)
+    seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=2_500_000).tobytes()
+    edge = 1 << 20
+    segments = [seq[:7], seq[7 : edge + 3], b"", seq[edge + 3 :]]
+    positions = np.array([0, 6, 7, 8, edge, edge + 3, edge + 4, 2 * edge + 5, len(seq), len(seq) + 9, -1])
+    for base in b"ACGT":
+        expected = [seq[: max(0, p)].count(bytes([base])) for p in positions.tolist()]
+        assert _prefix_counts_at(segments, base, positions).tolist() == expected
+
+
+def test_prefix_counts_need_no_array_as_long_as_the_sequence() -> None:
     rng = np.random.default_rng(1)
     seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=8_000_000).tobytes()
-    starts = np.arange(0, len(seq), 50_000, dtype=np.int64)
+    positions = np.arange(0, len(seq), 50_000, dtype=np.int64)
     tracemalloc.start()
-    counts = window_base_counts(seq, ord("G"), starts=starts, window=10_000)
+    counts = _prefix_counts_at([seq], ord("G"), positions)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     assert peak < 6 << 20
-    assert counts[3] == seq[150_000:160_000].count(b"G")
+    assert counts[3] == seq[:150_000].count(b"G")

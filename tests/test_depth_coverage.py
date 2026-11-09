@@ -54,6 +54,13 @@ def _reference_parse(path: Path) -> pd.DataFrame:
     return table
 
 
+def _linear_windows(record_len, window, step):
+    """The samples of a linear record and the bounds of their windows: centred, kept inside the record."""
+    samples = np.arange(0, record_len, int(step), dtype=np.int64)
+    starts = samples - int(window) // 2
+    return samples, np.clip(starts, 0, record_len), np.clip(starts + int(window), 0, record_len)
+
+
 def _reference_depth_df(record, table, window, step, *, normalize=False, min_depth=None, max_depth=None):
     table = table.loc[:, _COLUMNS].copy()
     table["reference_name"] = table["reference_name"].astype("string")
@@ -82,9 +89,8 @@ def _reference_depth_df(record, table, window, step, *, normalize=False, min_dep
         nonzero = counts > 0
         coverage[nonzero] = summed[nonzero] / counts[nonzero]
     prefix = np.concatenate(([0.0], np.cumsum(coverage)))
-    starts = np.arange(0, record_len, int(step), dtype=np.int64)
-    ends = np.minimum(starts + int(window), record_len)
-    means = (prefix[ends] - prefix[starts]) / np.maximum(ends - starts, 1)
+    samples, starts, ends = _linear_windows(record_len, window, step)
+    means = (prefix[ends] - prefix[starts]) / (ends - starts)
     if min_depth is not None or max_depth is not None:
         means = np.clip(means, min_depth, max_depth)
     if normalize:
@@ -100,7 +106,7 @@ def _reference_depth_df(record, table, window, step, *, normalize=False, min_dep
         normalized = np.zeros_like(means) if high <= low else np.clip((transform(means) - low) / (high - low), 0.0, 1.0)
     else:
         normalized = means.astype(np.float64, copy=True)
-    return pd.DataFrame({"position": starts, "depth": means, "depth_normalized": normalized})
+    return pd.DataFrame({"position": samples, "depth": means, "depth_normalized": normalized})
 
 
 def _outcome(build):
@@ -194,8 +200,8 @@ def test_binned_depth_equals_the_row_table_algorithm(seed: int, tmp_path: Path, 
         args = (binning["window"], binning["step"])
         kwargs = {key: binning[key] for key in ("normalize", "min_depth", "max_depth")}
         expected = _outcome(lambda: _reference_depth_df(record, _reference_parse(path), *args, **kwargs))
-        _assert_same(_outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), *args, **kwargs)), expected)
-        _assert_same(_outcome(lambda: depth_df(record, read_depth_tsv(str(path)), *args, **kwargs)), expected)
+        _assert_same(_outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), *args, circular=False, **kwargs)), expected)
+        _assert_same(_outcome(lambda: depth_df(record, read_depth_tsv(str(path)), *args, circular=False, **kwargs)), expected)
 
 
 def test_a_parsed_file_is_one_read_only_array_per_reference_in_the_smallest_exact_dtype(tmp_path: Path) -> None:
@@ -258,7 +264,7 @@ def test_a_damaged_file_reports_what_the_row_table_reported(
 
     expected = _outcome(lambda: _reference_depth_df(record, _reference_parse(path), 5, 5))
 
-    assert _outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), 5, 5)) == expected
+    assert _outcome(lambda: depth_df(record, parse_depth_tsv(str(path)), 5, 5, circular=False)) == expected
     assert _outcome(lambda: read_depth_tsv(str(path)).shape) == _outcome(lambda: _reference_parse(path).shape)
 
 
@@ -328,11 +334,10 @@ def test_window_sums_equal_the_per_base_running_sums(
             record = SeqRecord(Seq(None, length=record_len), id="chr")
             _write_coord_map(record, base=base if coord_step == 1 else base + record_len - 1, step=coord_step)
             prefix = _previous_record_prefix_sums(record, depths, record_len)
-            starts = np.arange(0, record_len, step, dtype=np.int64)
-            ends = np.minimum(starts + window, record_len)
-            expected = (prefix[ends] - prefix[starts]) / np.maximum(ends - starts, 1)
+            _samples, starts, ends = _linear_windows(record_len, window, step)
+            expected = (prefix[ends] - prefix[starts]) / (ends - starts)
 
-            actual = depth_df(record, coverage, window, step)["depth"].to_numpy()
+            actual = depth_df(record, coverage, window, step, circular=False)["depth"].to_numpy()
 
             assert actual.dtype == expected.dtype
             assert np.array_equal(actual, expected)
@@ -350,7 +355,7 @@ def test_binning_a_record_holds_no_per_base_float_array() -> None:
 
     tracemalloc.start()
     try:
-        binned = depth_df(record, coverage, 100_000, 100_000)
+        binned = depth_df(record, coverage, 100_000, 100_000, circular=False)
         _current, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()

@@ -152,6 +152,7 @@ def test_sparse_depth_shared_axis_and_representatives_are_per_logical_track() ->
     depth_data = build_depth_track_dataframes(
         records,
         normalized,
+        None,
         base_config=depth_config,
         depth_df_builder=lambda _record, table, _window, _step, **_kwargs: table,
     )
@@ -501,11 +502,12 @@ def test_read_depth_tsv_returns_a_new_table_on_every_call(tmp_path: Path) -> Non
 
 def test_depth_df_matching_fallback_and_mismatch() -> None:
     record = _make_record("rec1")
-    exact = depth_df(record, _depth_table("rec1"), window=10, step=10)
-    fallback = depth_df(record, _depth_table("other"), window=10, step=10)
+    exact = depth_df(record, _depth_table("rec1"), window=10, step=10, circular=False)
+    fallback = depth_df(record, _depth_table("other"), window=10, step=10, circular=False)
 
-    assert exact["depth"].iloc[0] == pytest.approx(7.0)
-    assert fallback["depth"].iloc[0] == pytest.approx(7.0)
+    # The first window, centred on base 1, reads bases 1..5 of the record (it stops at the record's start).
+    assert exact["depth"].iloc[0] == pytest.approx(6.0)
+    assert fallback["depth"].iloc[0] == pytest.approx(6.0)
 
     multi_ref = pd.DataFrame(
         {
@@ -515,7 +517,7 @@ def test_depth_df_matching_fallback_and_mismatch() -> None:
         }
     )
     with pytest.raises(ValidationError, match="do not match"):
-        depth_df(record, multi_ref, window=10, step=10)
+        depth_df(record, multi_ref, window=10, step=10, circular=False)
 
 
 def test_depth_df_missing_positions_clipping_and_normalization() -> None:
@@ -525,13 +527,15 @@ def test_depth_df_missing_positions_clipping_and_normalization() -> None:
         _depth_table("rec1"),
         window=10,
         step=10,
+        circular=False,
         normalize=True,
         min_depth=5,
         max_depth=20,
     )
 
     assert df["position"].tolist() == [0, 10, 20, 30]
-    assert df["depth"].tolist() == pytest.approx([7.0, 5.0, 8.0, 5.0])
+    # Windows centred on each sample: bases 1..5, 6..15, 16..25 and 26..35 (6, 4, 0 and 8), clipped to 5..20.
+    assert df["depth"].tolist() == pytest.approx([6.0, 5.0, 5.0, 8.0])
     assert df["depth_normalized"].min() >= 0
     assert df["depth_normalized"].max() <= 1
 
@@ -546,8 +550,9 @@ def test_depth_df_log_scale_makes_ten_x_twice_one_x() -> None:
         }
     )
 
-    log_scaled = depth_df(record, depth_table, window=10, step=10, normalize=True)
-    linear = depth_df(record, depth_table, window=10, step=10)
+    # One-base windows read base 1 (1x) and base 11 (10x).
+    log_scaled = depth_df(record, depth_table, window=1, step=10, circular=False, normalize=True)
+    linear = depth_df(record, depth_table, window=1, step=10, circular=False)
 
     assert log_scaled["depth_normalized"].tolist() == pytest.approx([0.5, 1.0])
     assert linear["depth_normalized"].tolist() == pytest.approx([1.0, 10.0])
@@ -687,7 +692,7 @@ def test_circular_depth_track_is_optional() -> None:
     assert 'id="depth"' in with_depth
     assert 'id="depth_axis"' in with_depth
     assert ">0x<" not in with_depth
-    assert ">1.5x<" in with_depth
+    assert ">3x<" in with_depth
     assert 'id="gc_content"' in with_depth
 
 
@@ -1131,7 +1136,7 @@ def test_linear_depth_track_is_optional() -> None:
     assert 'id="depth"' in with_depth
     assert 'id="depth_axis"' in with_depth
     assert ">0x<" not in with_depth
-    assert ">1.5x<" in with_depth
+    assert ">3x<" in with_depth
     assert 'id="gc_content"' in with_depth
     assert with_depth.index('id="depth"') < with_depth.index('id="gc_content"')
 
@@ -1932,9 +1937,11 @@ def test_linear_depth_defaults_to_linear_scale_for_plotting() -> None:
     match = re.search(r'id="depth"[^>]*><path d="([^"]+)"', svg)
     assert match is not None
     depth_path = match.group(1)
-    assert "L0 1.25" in depth_path
-    assert "L500 10" in depth_path
-    assert "L1000 0" in depth_path
+    # Windows centred on bases 1, 11, 21 and 31 read 6x, 4x, 0x and 8x (the axis top).
+    assert "L0 2.5" in depth_path
+    assert "L500 5" in depth_path
+    assert "L1000 10" in depth_path
+    assert "L1500 0" in depth_path
 
 
 @pytest.mark.linear
@@ -2646,12 +2653,16 @@ def _frame_table(*spans: tuple[int, int, float]) -> pd.DataFrame:
 _CROP_SPANS = ((1, 200, 500.0), (601, 700, 100.0), (801, 1000, 900.0))
 # Coverage 100 only at source 1-100.
 _HEAD_SPANS = ((1, 100, 100.0),)
-_HEAD_BINS = [(position, 100.0 if position == 0 else 0.0) for position in range(0, 1000, 100)]
-_HEAD_BINS_FLIPPED = [(position, 100.0 if position == 900 else 0.0) for position in range(0, 1000, 100)]
+# The windows (100 bp, centred) of the samples beside 1-100 read 50 of its bases; the record is circular, so the
+# window of sample 0 reads on round the origin.
+_HEAD_BINS = [(position, 50.0 if position in (0, 100) else 0.0) for position in range(0, 1000, 100)]
+_HEAD_BINS_FLIPPED = [(position, 50.0 if position in (0, 900) else 0.0) for position in range(0, 1000, 100)]
 
+# The crop's windows read 50 bases of the source beside it: the window of sample 0 of chr:601-800:rc reads source
+# 751-850 (half of it at 900).
 _RECORD_FRAME_CASES = {
-    "crop": ("chr:601-800", False, _CROP_SPANS, [(0, 100.0), (100, 0.0)]),
-    "crop_rc": ("chr:601-800:rc", False, _CROP_SPANS, [(0, 0.0), (100, 100.0)]),
+    "crop": ("chr:601-800", False, _CROP_SPANS, [(0, 50.0), (100, 50.0)]),
+    "crop_rc": ("chr:601-800:rc", False, _CROP_SPANS, [(0, 450.0), (100, 50.0)]),
     "reverse": (None, True, _HEAD_SPANS, _HEAD_BINS_FLIPPED),
     "forward_control": (None, False, _HEAD_SPANS, _HEAD_BINS),
 }
@@ -2675,19 +2686,21 @@ def test_depth_df_maps_source_positions_through_the_record_coordinate_map(case: 
     region, reverse, spans, expected = _RECORD_FRAME_CASES[case]
     record = _transformed_frame_record(region, reverse)
 
-    binned = depth_df(record, _frame_table(*spans), window=100, step=100)
+    binned = depth_df(record, _frame_table(*spans), window=100, step=100, circular=True)
 
     assert list(zip(binned["position"].tolist(), binned["depth"].tolist())) == expected
 
 
-def test_depth_df_crop_keeps_only_rows_inside_the_crop_for_partial_windows() -> None:
+def test_depth_df_crop_windows_read_the_source_rows_beside_the_crop() -> None:
     record = _transformed_frame_record("chr:651-750", False)
     table = _frame_table((1, 100, 7.0), (651, 700, 10.0), (701, 750, 30.0), (751, 1000, 9.0))
 
-    binned = depth_df(record, table, window=40, step=40)
+    binned = depth_df(record, table, window=40, step=30, circular=False)
 
-    assert binned["position"].tolist() == [0, 40, 80]
-    assert binned["depth"].tolist() == pytest.approx([10.0, 25.0, 30.0])
+    # Windows centred on source 651, 681, 711 and 741: 631-670, 661-700, 691-730 and 721-760. The first reads 20
+    # bases before the crop (no depth), the last 10 after it (9x); 1-100 lies too far away.
+    assert binned["position"].tolist() == [0, 30, 60, 90]
+    assert binned["depth"].tolist() == pytest.approx([5.0, 10.0, 25.0, 24.75])
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -2750,13 +2763,14 @@ def test_drawn_depth_follows_crop_and_reverse_complement(
 
     expected_length = 200 if region is not None else _FRAME_LENGTH
     assert drawn == [(expected_length, expected)]
-    # The Auto depth maximum comes from the rows inside the drawn region.
+    # The Auto depth maximum comes from the drawn windows: rows further than half a window from the drawn bases
+    # are not read.
     tick_labels = {
         "".join(node.itertext())
         for node in ET.fromstring(svg).iter()
         if node.tag.endswith("}text")
     }
-    assert "100x" in tick_labels
+    assert f"{max(depth for _position, depth in expected):g}x" in tick_labels
     assert not {"500x", "900x"} & tick_labels
 
 
@@ -2812,9 +2826,9 @@ def test_depth_df_bins_equal_for_parsed_files_and_api_tables(case: str, tmp_path
     )
     record = _transformed_frame_record(region, reverse)
 
-    expected = depth_df(record, string_table, window=50, step=25)
+    expected = depth_df(record, string_table, window=50, step=25, circular=False)
     for table in (parse_depth_tsv(depth_path), unused):
-        pd.testing.assert_frame_equal(depth_df(record, table, window=50, step=25), expected)
+        pd.testing.assert_frame_equal(depth_df(record, table, window=50, step=25, circular=False), expected)
 
 
 def test_depth_df_matches_an_integer_categorical_api_table_as_text() -> None:
@@ -2827,9 +2841,10 @@ def test_depth_df_matches_an_integer_categorical_api_table_as_text() -> None:
         }
     )
 
-    binned = depth_df(record, table, window=10, step=10)
+    binned = depth_df(record, table, window=10, step=10, circular=False)
 
-    assert binned["depth"].tolist() == pytest.approx([1.0, 0.0, 0.0, 0.0])
+    # The first window reads bases 1..5 of reference "1".
+    assert binned["depth"].tolist() == pytest.approx([2.0, 0.0, 0.0, 0.0])
 
 
 def test_categorical_multi_reference_mismatch_names_the_references(tmp_path: Path) -> None:
@@ -2840,7 +2855,7 @@ def test_categorical_multi_reference_mismatch_names_the_references(tmp_path: Pat
     )
 
     with pytest.raises(ValidationError, match=r"Available references: b, a$"):
-        depth_df(_make_record("rec1"), parsed, window=10, step=10)
+        depth_df(_make_record("rec1"), parsed, window=10, step=10, circular=False)
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
