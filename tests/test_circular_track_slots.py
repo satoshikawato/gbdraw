@@ -1992,8 +1992,8 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
     )
     svg_text = canvas.tostring()
 
-    assert 'id="gc_skew"' in svg_text
-    assert 'id="at_skew"' in svg_text
+    assert 'data-gbdraw-slot-id="gc_skew"' in svg_text
+    assert 'data-gbdraw-slot-id="at_skew"' in svg_text
     assert "GC skew" in svg_text
     assert "AT skew" in svg_text
 

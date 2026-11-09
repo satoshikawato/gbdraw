@@ -403,7 +403,8 @@ def test_empty_gc_series_pass_through_real_plan_without_phantom_data(mode, monke
     monkeypatch.setattr(linear_owner, "skew_df", lambda *a, **k: empty)
     _, root = _svg(_request(mode, _record(), 4001, overrides={"canvas.show_gc": True, "canvas.show_skew": True}))
     assert all("nan" not in n.get("d", "").lower() for n in root.iter())
-    assert all(not list(n) for n in root.iter() if n.get("id") in {"gc_content", "gc_skew", "skew"})
+    gc_groups = [n for n in root.iter() if n.get("data-gbdraw-slot-renderer") in {"dinucleotide_content", "dinucleotide_skew"}]
+    assert gc_groups and all(not list(n) for n in gc_groups)
 
 
 @pytest.mark.parametrize("mode,placement", [("circular", "horizontal"), ("circular", "radial"), ("linear", "auto")])

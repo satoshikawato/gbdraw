@@ -1945,7 +1945,7 @@ def test_linear_depth_defaults_to_linear_scale_for_plotting() -> None:
         ),
     ).tostring()
 
-    match = re.search(r'id="depth"[^>]*><path d="([^"]+)"', svg)
+    match = re.search(r'data-gbdraw-slot-renderer="depth"[^>]*><path d="([^"]+)"', svg)
     assert match is not None
     depth_path = match.group(1)
     # Windows centred on bases 1, 11, 21 and 31 read 6x, 4x, 0x and 8x (the axis top).
