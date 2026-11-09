@@ -467,10 +467,18 @@ only warns: the Web app shows "Region labels are cut to fit their circle (N)."
 or "Region labels are left out: no letter of them fits their circle (N)."
 over the figure, with no **Choose a fix** button.
 
+A Circular region label moves along its own region to keep clear of the
+feature labels. Where its letters still meet a feature label's letters, the
+region label keeps its place and the feature labels make way for it, as in
+Linear: the feature labels it meets, and the labels around them, move along
+their side of the circle in the same order, each text by at most 24 px plus
+the region label's height. A move that would add another overlap or a leader
+crossing is not made. The figure can grow a little where the labels open up.
+
 A Circular region label that still meets another label or a leader line where
-it is drawn (for example two labels that explicit lanes with
-`overflow=compress` keep in one lane, or labels crowded inside the axis) is
-drawn there. Each feature label or region label placed before it that its
+it is drawn (for example a leader line that passes behind its letters, two
+labels that explicit lanes with `overflow=compress` keep in one lane, or labels
+crowded inside the axis) is drawn there. Each feature label or region label placed before it that its
 letters meet counts as one region label overlap (`1 region label overlap`), as
 in Linear; a feature label counts once whether the letters meet its own
 letters, its leader line, or both. This only warns: the Web app shows "Region labels
