@@ -134,14 +134,14 @@ def _definition_lines(svg_text: str) -> list[str]:
 
 
 def _track_paths(svg_text: str) -> dict[str, str]:
-    """The drawn GC content and GC skew paths, by group id: their radii and widths."""
+    """The drawn GC content and GC skew paths, by slot id: their radii and widths."""
 
     root = ET.fromstring(svg_text)
     paths: dict[str, str] = {}
     for group in root.iter("{http://www.w3.org/2000/svg}g"):
-        group_id = str(group.get("id") or "")
-        if group_id.startswith(("gc_content", "skew", "gc_skew")):
-            paths[group_id] = "|".join(str(path.get("d")) for path in group.iter("{http://www.w3.org/2000/svg}path"))
+        if group.get("data-gbdraw-slot-renderer") in {"dinucleotide_content", "dinucleotide_skew"}:
+            slot_id = str(group.get("data-gbdraw-slot-id"))
+            paths[slot_id] = "|".join(str(path.get("d")) for path in group.iter("{http://www.w3.org/2000/svg}path"))
     assert paths
     return paths
 

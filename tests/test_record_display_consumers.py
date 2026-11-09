@@ -75,7 +75,7 @@ def _xy(path):
 
 
 def _group(root, name):
-    """A group by its id, or a Linear slot group by its slot id (OV-3012)."""
+    """A slot group by its slot id (OV-3012, OV-3084), or another group by its id."""
 
     return next(node for node in root.iter() if name in (node.get("id"), node.get("data-gbdraw-slot-id")))
 
@@ -104,7 +104,7 @@ def test_source_tick_text_position_and_record_length_definition(mode, reverse, s
             index = ((start - 2000) if reverse else (2000 - start)) % 10000
             assert float(tick.get("x")) == pytest.approx(width * index / 10000)
     else:
-        ticks = _group(root, "tick")
+        ticks = _group(root, "ticks")
         labels = [n for n in ticks.iter() if n.tag.endswith("}textPath")]
         assert any("".join(n.itertext()) == "2 kbp" for n in labels)
         if start is not None:
@@ -191,8 +191,7 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
         assert segment.points[0].value == pytest.approx(values[left] * (1-fraction) + values[(left+1) % 4] * fraction)
         assert (segment.source_indices[0] is None) == (not sampled)
     for name in ("gc_content", "gc_skew", "depth"):
-        group_name = "skew" if mode == "circular" and name == "gc_skew" else name
-        paths = [n for n in _group(root, group_name) if n.tag.endswith("}path")]
+        paths = [n for n in _group(root, name) if n.tag.endswith("}path")]
         assert paths
         for path in paths:
             points = _xy(path.get("d"))

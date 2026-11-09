@@ -479,9 +479,9 @@ test('Circular, the default layout with a plot title: an edit in the popup is on
   // The title is a Layout edit target too: its help cursor and frame stay, and the hint reads both.
   expect(await hover(page, '#plot_title text')).toEqual({ cursor: 'help', outline: 'dashed' });
   await expect(hint(page)).toHaveText(BOTH_HINTS, { useInnerText: true });
-  // The groups of the default layout, by their own ids.
-  for (const [selector, key, title] of [['#tick text', 'circular-axis', AXIS], ['#gc_content path', 'dinucleotide', DINUCLEOTIDE],
-    ['#skew path', 'dinucleotide', DINUCLEOTIDE], ['#plot_title text', 'titles', TITLES]]) {
+  // The groups of the default layout, by their slot renderers (each slot group's id is its slot's, OV-3084).
+  for (const [selector, key, title] of [[TICKS, 'circular-axis', AXIS], [GC_CONTENT, 'dinucleotide', DINUCLEOTIDE],
+    ['g[data-gbdraw-slot-id="gc_skew"] path', 'dinucleotide', DINUCLEOTIDE], ['#plot_title text', 'titles', TITLES]]) {
     await clickInk(page, selector);
     await expectPopup(page, key, title, selector);
   }

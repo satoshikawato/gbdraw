@@ -324,7 +324,7 @@ def test_typed_linear_builder_accepts_canonical_depth_tracks() -> None:
         ),
     ).tostring()
 
-    assert 'id="depth"' in svg
+    assert len(_semantic_slot_groups(svg, "depth")) == 1
     assert "Coverage" in svg
 
 
@@ -407,6 +407,14 @@ def _semantic_depth_axis_groups(svg: str, slot_id: str) -> list[ET.Element]:
 
 def _svg_element_markup(element: ET.Element) -> str:
     return ET.tostring(element, encoding="unicode")
+
+
+def _depth_axis_markup(svg: str) -> str:
+    """The SVG text of the one depth slot's axis group, found by its slot (OV-3084), not by its id."""
+
+    (axis,) = _semantic_depth_axis_groups(svg, "depth")
+    start = svg.index(f'id="{axis.get("id")}"')
+    return svg[start : svg.index("</g>", start)]
 
 
 def _semantic_slot_translate_y(svg: str, slot_id: str) -> float:
@@ -688,12 +696,12 @@ def test_circular_depth_track_is_optional() -> None:
         ),
     ).tostring()
 
-    assert 'id="depth"' not in without_depth
-    assert 'id="depth"' in with_depth
-    assert 'id="depth_axis"' in with_depth
+    assert not _semantic_slot_groups(without_depth, "depth")
+    assert len(_semantic_slot_groups(with_depth, "depth")) == 1
+    assert len(_semantic_depth_axis_groups(with_depth, "depth")) == 1
     assert ">0x<" not in with_depth
     assert ">3x<" in with_depth
-    assert 'id="gc_content"' in with_depth
+    assert _semantic_slot_groups(with_depth, "gc_content", renderer="dinucleotide_content")
 
 
 @pytest.mark.circular
@@ -733,7 +741,7 @@ def test_circular_depth_origin_label_requires_explicit_min() -> None:
         ),
     ).tostring()
 
-    depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 900]
+    depth_axis_svg = _depth_axis_markup(svg)
     assert ">5x<" in depth_axis_svg
     assert ">0x<" not in depth_axis_svg
 
@@ -756,8 +764,8 @@ def test_circular_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
         ),
     ).tostring()
 
-    assert 'id="depth"' in svg
-    assert 'id="depth_axis"' not in svg
+    assert len(_semantic_slot_groups(svg, "depth")) == 1
+    assert not _semantic_depth_axis_groups(svg, "depth")
     assert ">1.5x<" not in svg
 
 
@@ -977,7 +985,7 @@ def test_circular_depth_axis_uses_record_start_and_tick_options() -> None:
         ),
     ).tostring()
 
-    depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 900]
+    depth_axis_svg = _depth_axis_markup(svg)
     assert re.search(r'<line[^>]*x1="0" x2="0" y1="-[^"]+" y2="-[^"]+"', depth_axis_svg)
     assert 'font-size="11.0"' in depth_axis_svg
     assert ">4x<" in depth_axis_svg
@@ -1005,8 +1013,7 @@ def test_circular_depth_ticks_use_right_side_and_small_ticks_are_unlabeled() -> 
         ),
     ).tostring()
 
-    depth_axis_start = svg.index('id="depth_axis"')
-    depth_axis_svg = svg[depth_axis_start : svg.index("</g>", depth_axis_start)]
+    depth_axis_svg = _depth_axis_markup(svg)
     assert 'x1="-3.0"' not in depth_axis_svg
     assert re.search(r'<line[^>]*x1="0" x2="3.0" y1="-[^"]+" y2="-[^"]+"', depth_axis_svg)
     assert re.search(r'<line[^>]*x1="0" x2="2.0" y1="-[^"]+" y2="-[^"]+"', depth_axis_svg)
@@ -1055,8 +1062,8 @@ def test_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
         ),
     ).tostring()
 
-    assert 'id="depth"' in svg
-    assert 'id="depth_axis"' not in svg
+    assert len(_semantic_slot_groups(svg, "depth")) == 1
+    assert not _semantic_depth_axis_groups(svg, "depth")
     assert ">1.5x<" not in svg
 
 
@@ -1797,11 +1804,9 @@ def test_circular_multi_record_partial_depth_skips_paint_but_reserves_slot(
     svg = canvas.tostring()
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
 
-    assert svg.count('id="depth"') == 1
-    present_number = present_record_index + 1
-    missing_number = 2 if present_number == 1 else 1
-    assert svg.count(f'id="depth_record_{present_number}_axis"') == 1
-    assert f'id="depth_record_{missing_number}_axis"' not in svg
+    # One record draws depth: its slot group, with its axis, sits in that record's part.
+    assert _circular_semantic_slot_record_indices(svg, "depth") == [present_record_index]
+    assert len(_semantic_depth_axis_groups(svg, "depth")) == 1
     assert len(geometry["records"]) == 2
     assert all(
         any(slot["slotId"] == "depth" for slot in record_geometry["slots"])

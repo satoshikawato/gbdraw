@@ -106,7 +106,7 @@ def _namespace_slot_group(group: Group, slot_group_id: str) -> None:
 
 
 def slot_group_content(
-    slot_group_id: str | None,
+    slot_group_id: str,
     group_class: Callable[P, BuildsGroup],
     /,
     *args: P.args,
@@ -114,14 +114,13 @@ def slot_group_content(
 ) -> GroupContent:
     """A render-stage function: build one track group and give it its slot IDs.
 
-    With ``slot_group_id`` the group and its child IDs are namespaced inside
+    The group and its child IDs are namespaced by ``slot_group_id`` inside
     the stage, before the content is kept, so a stored content is never
     changed afterwards.
     """
 
     group = group_class(*args, **kwargs).get_group()
-    if slot_group_id is not None:
-        _namespace_slot_group(group, slot_group_id)
+    _namespace_slot_group(group, slot_group_id)
     return GroupContent.of(group)
 
 
@@ -151,11 +150,10 @@ def add_depth_group_on_canvas(
     group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float,
-    group_id: str | None = None,
-    axis_group_id: str | None = None,
-    slot_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    group_id: str,
+    slot_group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
@@ -181,7 +179,6 @@ def add_depth_group_on_canvas(
         depth_config,
         norm_factor_override=norm_factor_override,
         group_id=group_id,
-        axis_group_id=axis_group_id,
         record_transform=record_transform,
     )
     return _add_track_content(
@@ -215,8 +212,8 @@ def add_conservation_group_on_canvas(
     inner_radius_px: float,
     outer_radius_px: float,
     min_identity: float,
-    group_id: str | None = None,
-    slot_id: str | None = None,
+    group_id: str,
+    slot_id: str,
     record_transform: RecordDisplayTransform | None = None,
     record_index: int = 0,
 ) -> Drawing:
@@ -250,15 +247,15 @@ def add_gc_skew_group_on_canvas(
     group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float,
-    group_id: str | None = None,
-    slot_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    group_id: str,
+    slot_group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the GC skew group to the canvas.
 
-    With ``slot_group_id`` the group takes its slot DOM ids; ``slot_id`` and
+    The group takes its slot DOM ids from ``slot_group_id``; ``slot_id`` and
     ``slot_renderer`` tag the placed group.
     """
     skew_track_width = (
@@ -300,15 +297,15 @@ def add_gc_content_group_on_canvas(
     group_key: GroupKey,
     track_width_override: float | None = None,
     norm_factor_override: float,
-    group_id: str | None = None,
-    slot_group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
+    group_id: str,
+    slot_group_id: str,
+    slot_id: str,
+    slot_renderer: str,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the GC content group to the canvas.
 
-    With ``slot_group_id`` the group takes its slot DOM ids; ``slot_id`` and
+    The group takes its slot DOM ids from ``slot_group_id``; ``slot_id`` and
     ``slot_renderer`` tag the placed group.
     """
     gc_content_track_width = (
@@ -415,8 +412,8 @@ def add_record_group_on_canvas(
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
     record_index: int = 0,
-    group_id: str | None = None,
-    slot_id: str | None = None,
+    group_id: str,
+    slot_id: str,
     feature_dom_namespace: str | None = None,
 ) -> Drawing:
     """Adds the record group (features and embedded labels) to the canvas."""
@@ -467,8 +464,8 @@ def tick_group_content(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
-    group_id: str | None = None,
-    slot_id: str | None = None,
+    group_id: str,
+    slot_id: str,
     record_transform: RecordDisplayTransform | None = None,
 ) -> GroupContent:
     """The tick group of a tick slot: its ticks and scale labels (a render stage: a Worker transaction reuses a second build)."""
@@ -501,8 +498,8 @@ def add_tick_group_on_canvas(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
-    group_id: str | None = None,
-    slot_id: str | None = None,
+    group_id: str,
+    slot_id: str,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the tick group to the canvas."""

@@ -624,17 +624,13 @@ def test_default_dinucleotide_tracks_expose_canonical_slot_hooks(
         "gc_content": "dinucleotide_content",
         "gc_skew": "dinucleotide_skew",
     }
-    # Circular keeps its preset group names; Linear names every slot group as a written stack does (OV-3012).
-    if mode == "circular":
-        assert groups["gc_content"].attrib["id"] == "gc_content"
-        assert groups["gc_skew"].attrib["id"] == "skew"
-    else:
-        assert groups["gc_content"].attrib["id"].startswith("track_slot_")
-        assert groups["gc_skew"].attrib["id"].startswith("track_slot_")
+    # Both modes name every slot group as a written stack does (OV-3012, OV-3084).
+    assert groups["gc_content"].attrib["id"].startswith("track_slot_")
+    assert groups["gc_skew"].attrib["id"].startswith("track_slot_")
 
 
 @pytest.mark.circular
-def test_default_circular_ticks_expose_slot_hooks_without_renaming_group() -> None:
+def test_default_circular_ticks_expose_slot_hooks_and_the_slot_group_id() -> None:
     record = _duplicate_feature_record("default-circular-ticks")
     root = _root(
         assemble_circular_diagram_from_record(
@@ -657,7 +653,9 @@ def test_default_circular_ticks_expose_slot_hooks_without_renaming_group() -> No
     ]
     assert len(tick_groups) == 1
     assert tick_groups[0].attrib["data-gbdraw-slot-id"] == "ticks"
-    assert tick_groups[0].attrib["id"] == "tick"
+    # The id a written stack gives the ticks slot (OV-3084).
+    assert tick_groups[0].attrib["id"].startswith("track_slot_")
+    assert tick_groups[0].attrib["id"].endswith("_ticks")
 
 
 @pytest.mark.circular
@@ -747,14 +745,13 @@ def test_record_group_ids_do_not_collide_with_renderer_owned_groups(
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
-    # A Linear record's group is its features slot group (OV-3012); a Circular record has a record group.
-    group_prefix = "track_slot_" if mode == "linear" else "record_group_"
+    # A record's group is its features slot group in both modes (OV-3012, OV-3084).
     record_groups = [
         element
         for element in _root(first).iter()
         if element.tag.rsplit("}", 1)[-1] == "g"
         and element.attrib.get("data-gbdraw-record-id") == record_id
-        and element.attrib.get("id", "").startswith(group_prefix)
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
     ]
     assert len(record_groups) == 1
     assert record_groups[0].attrib["id"] != record_id

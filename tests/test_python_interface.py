@@ -415,7 +415,7 @@ def test_root_draw_functions_carry_hidden_scale_override_through_rendering() -> 
         ),
     ).to_svg()
 
-    assert 'id="tick"' not in circular_svg
+    assert 'data-gbdraw-slot-renderer="ticks"' not in circular_svg
     assert 'id="Axis"' in circular_svg
     assert 'id="length_bar"' not in linear_svg
     assert 'y1="0"' in linear_svg

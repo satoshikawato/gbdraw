@@ -1337,8 +1337,8 @@ def circular_annotation_track_content(
     font_family: str,
     params: AnnotationTrackParams,
     labels: Sequence[CircularAnnotationLabel] = (),
-    dom_group_id: str | None = None,
-    semantic_slot_id: str | None = None,
+    dom_group_id: str,
+    semantic_slot_id: str,
 ) -> GroupContent:
     """Build an annotation track around the circle centre (render stage ``annotation_content``).
 
@@ -1349,12 +1349,11 @@ def circular_annotation_track_content(
     use, and the clip path of a clipped track are the content's definitions.
     """
 
-    group_id = dom_group_id or f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}"
+    group_id = dom_group_id
     group = Group(id=group_id)
     definitions: dict[str, BaseElement] = {}
-    if semantic_slot_id:
-        group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
-        group.attribs["data-gbdraw-slot-renderer"] = "annotations"
+    group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
+    group.attribs["data-gbdraw-slot-renderer"] = "annotations"
     placements, slot_lane_width = _record_lanes(
         track, record_index=record_index, inner_radius_px=ring.inner_radius_px, outer_radius_px=ring.outer_radius_px,
         params=params,

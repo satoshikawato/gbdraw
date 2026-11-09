@@ -323,10 +323,10 @@ def test_paired_default_renders_apply_mode_track_and_axis_profiles() -> None:
     circular_svg = api_diagram.build_circular_diagram(_record()).tostring()
     linear_svg = api_diagram.build_linear_diagram([_record()]).tostring()
 
-    assert 'id="gc_content"' in circular_svg
-    assert 'id="skew"' in circular_svg
-    assert 'id="gc_content"' not in linear_svg
-    assert 'id="skew"' not in linear_svg
+    assert 'data-gbdraw-slot-renderer="dinucleotide_content"' in circular_svg
+    assert 'data-gbdraw-slot-renderer="dinucleotide_skew"' in circular_svg
+    assert 'data-gbdraw-slot-renderer="dinucleotide_content"' not in linear_svg
+    assert 'data-gbdraw-slot-renderer="dinucleotide_skew"' not in linear_svg
     assert 'stroke="lightgray"' in linear_svg
 
 
