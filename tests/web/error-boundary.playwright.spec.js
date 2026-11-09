@@ -279,9 +279,14 @@ test('an engine that runs out of memory is replaced, and Retry Generate draws on
   expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'OUT_OF_MEMORY',
     operation: 'generate', stage: 'render', context: {}, actions: ['retry', 'save-session'] } });
   expect(await snapshot()).toEqual(before);
+  // The engine that ran the failed Generate is ended, and no engine starts before the next operation. Its boot may
+  // follow a discarded one: a Worker whose snapshot restore fails is replaced by a cold one before it draws.
   const replaced = await getDiagramWorkerActivity(page);
-  expect(replaced.constructions).toBe(started + 1);
-  expect(replaced.instances.at(-1)).toMatchObject({ terminated: true });
+  const generating = replaced.instances.filter(engine => engine.id > started && engine.runs.length > 0);
+  expect(generating).toHaveLength(1);
+  const exhausted = generating[0];
+  expect(exhausted.terminated).toBe(true);
+  expect(replaced.instances.at(-1).id).toBe(exhausted.id);
   const alert = page.getByRole('alert', { name: 'Generation Error' });
   await expect(alert).toContainText('The diagram engine ran out of memory and was replaced with a new one. Generate again.'
     + ' If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it'
@@ -302,8 +307,8 @@ test('an engine that runs out of memory is replaced, and Retry Generate draws on
   expect(after.results).not.toEqual(before.results);
   expect(after.undo).toBe(before.undo + 1);
   const retried = await getDiagramWorkerActivity(page);
-  expect(retried.constructions).toBe(started + 2);
   const engine = retried.instances.at(-1);
+  expect(engine.id).toBeGreaterThan(exhausted.id);
   expect(engine.terminated).not.toBe(true);
   expect(engine.runs.length).toBeGreaterThanOrEqual(1);
   expect(engine.runs[0].stagedResourceCount).toBe(engine.runs[0].referencedResourceCount);
