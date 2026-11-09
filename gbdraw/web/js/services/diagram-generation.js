@@ -682,7 +682,7 @@ const terminateWorker = (error = null) => {
 };
 
 /**
- * Replace the engine that ran out of memory (OV-3027, Owner D-42): the Worker's Python heap never shrinks, so the
+ * Replace the engine that ran out of memory (OV-3027, PD-OI-125): the Worker's Python heap never shrinks, so the
  * Worker is terminated and the next request builds a new one, which receives every input again. A Generate in
  * progress on that Worker would never be answered: it ends with the same failure. A Generate that waits for a drain
  * has not reached the Worker; the termination ends the drain, and it starts the new one.

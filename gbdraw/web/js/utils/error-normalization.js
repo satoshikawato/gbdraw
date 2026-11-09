@@ -243,7 +243,7 @@ const DEFINITIONS = Object.freeze({
   RENDER_FAILED: ['The diagram engine failed while drawing this diagram. Generating again with the same inputs and settings fails the same way. Change the inputs or settings, or save a Session for investigation.', ['save-session']],
   // OUT_OF_MEMORY_CODE: Python's MEMORY_REFUSAL_CODE (gbdraw/web_support/error_adapter.py), a MemoryError by its
   // class. The engine's memory never shrinks, so services/diagram-generation.js replaces that engine and Retry runs
-  // on a new one (OV-3027, Owner D-42).
+  // on a new one (OV-3027, PD-OI-125).
   [OUT_OF_MEMORY_CODE]: ['The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).', ['retry', 'save-session']],
   // Python does not draw every forced label (an underlay feature, Embedded Only);
   // Generate fails the same way until the feature's popup choice changes.

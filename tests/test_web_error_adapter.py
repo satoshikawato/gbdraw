@@ -326,7 +326,7 @@ def test_a_genbank_slot_file_without_records_says_what_it_looks_like(helpers, tm
 
 @pytest.mark.parametrize('stage', ['render', 'result-admission', 'request-validation'])
 def test_a_memory_error_is_the_memory_refusal_by_its_class_raised_or_as_a_cause(stage):
-    # OV-3027: the SVG writer raised ExportError from the MemoryError of a large figure; it was a RENDER_FAILED
+    # PD-OI-125 (OV-3027): the SVG writer raised ExportError from the MemoryError of a large figure; it was a RENDER_FAILED
     # ("fails the same way"). The class decides, anywhere in the explicit cause chain that the adapter reads (the
     # first 8 links, error_adapter._chain), never the message.
     wrapped = ExportError('Failed to generate SVG: PRIVATE_SENTINEL')

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-// OV-3027, Owner D-42: when the diagram engine (Python in the Worker) runs out of memory, the page replaces it at
+// PD-OI-125 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md (OV-3027): when the diagram engine (Python in the Worker) runs out of memory, the page replaces it at
 // once. The Worker's heap never shrinks, so the Worker that raised the MemoryError is terminated by the one owner of
 // the Worker lifecycle (terminateWorker in services/diagram-generation.js), and the next request builds a new one
 // (getWorker), which receives every input again. Generate, a committed live redraw and a label reflow all run through

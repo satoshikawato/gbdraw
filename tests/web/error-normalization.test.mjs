@@ -671,15 +671,15 @@ test('an unclassified engine failure is a render failure with its exception clas
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
   // Memory depends on what the page's engine holds, not on the inputs alone: it is the memory refusal, and the
-  // page replaces that engine, so Retry runs on a new one (OV-3027, Owner D-42).
+  // page replaces that engine, so Retry runs on a new one (OV-3027, PD-OI-125).
   assert.deepEqual([memory.code, memory.actions], ['OUT_OF_MEMORY', ['retry', 'save-session']]);
 });
 
-// OV-3027: the engine ran out of memory while it wrote the SVG of a large figure, and the writer raised
+// PD-OI-125 (OV-3027): the engine ran out of memory while it wrote the SVG of a large figure, and the writer raised
 // ExportError from the MemoryError. By the exception class in its cause, never its text, it is the memory refusal:
 // the words say that the engine ran out of memory and was replaced, and what to do if it happens again, not that
 // the same inputs fail the same way. The page replaces the engine (services/diagram-generation.js), so the panel
-// offers Retry Generate and Save Session (Owner D-42).
+// offers Retry Generate and Save Session.
 test('a MemoryError under the SVG writer is the memory refusal, not a render failure (OV-3027)', () => {
   const model = roundtrip(invoke({ svgWriteMemoryError: true }).error);
   assert.deepEqual([model.code, model.operation, model.stage, model.context], ['OUT_OF_MEMORY', 'generate', 'render', {}]);

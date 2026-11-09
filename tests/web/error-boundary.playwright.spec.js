@@ -228,7 +228,8 @@ test('a reply too large for the page offers Save Session and no Retry Generate, 
   await inspectSafeDetails(page, alert, failed.error);
 });
 
-// OV-3027, Owner D-42: the diagram engine runs out of memory while it writes the SVG. A copy of the Worker's Python
+// PD-OI-125 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md (OV-3027): the diagram engine runs out of memory
+// while it writes the SVG. A copy of the Worker's Python
 // helpers served only by this case makes the SVG writer raise MemoryError in every Worker started while it is
 // served; the real Python adapter classifies it. The page replaces that engine at once: the panel says so, offers
 // Retry Generate and Save Session, and keeps the Result, the committed request, the draft and History; Retry draws

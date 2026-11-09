@@ -233,7 +233,7 @@ test('a second Cancel during the drain, then the timeout, boots no Worker for th
   assert.equal(ControlledWorker.instances.length, constructed, 'no Worker boots for a request that no longer exists');
 });
 
-// OV-3027: an engine that ran out of memory is replaced even when a Cancel settled the Generate first, whether its
+// PD-OI-125 (OV-3027): an engine that ran out of memory is replaced even when a Cancel settled the Generate first, whether its
 // reply was already on its way (the drain receives it) or the Worker dropped it (the drain answer carries the error).
 // The Generate that waits for the drain is not failed: the termination ends the drain and it boots a new Worker.
 for (const [name, outOfMemory] of [
