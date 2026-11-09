@@ -25,7 +25,7 @@ const {
   linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
-  layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow
+  layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, setLinearRecordRow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -169,6 +169,23 @@ test('until Python can plan the windows the card shows no number and no omitted 
   // An End without a Start is a window Generate refuses: no plan is asked for.
   const card = createLinearSeq({ uid: 'a', windows: [span(1, 100), span(null, 400)] });
   assert.deepEqual((await shownWindows([card], { length: 10000 })).cards, [[[null, ''], [null, '']]]);
+});
+
+test('a drawing without a card drawn in several windows writes the places dev wrote (Must preserve)', () => {
+  // Places from a request (New drawing from region, a CLI Session): b and c in row 1, a in row 2; then a's Row is 1.
+  const cards = ['a', 'b', 'c'].map((uid) => createLinearSeq({ uid }));
+  const entries = [
+    { uid: 'a', row: 2, canonicalRow: 2, canonicalColumn: 1 },
+    { uid: 'b', row: 1, canonicalRow: 1, canonicalColumn: 1 },
+    { uid: 'c', row: 1, canonicalRow: 1, canonicalColumn: 2 }
+  ];
+  setLinearRecordRow(entries, 'a', 1);
+  const drawing = { linearRecordLayoutEnabled: { value: true }, linearRecordRows: entries, linearSeqs: cards, recordDisplayDrafts: [] };
+  const records = linearCardWindowPlanRecords(drawing, cards, () => ({ length: 1000, id: '', circular: false }), []);
+  assert.ok(records);
+  // a's place is dropped with its row: Python draws a, b, c (a column-less record sorts by its index), as on dev.
+  assert.deepEqual(records.map(({ recordKey, gridRow, gridColumn }) => [recordKey, gridRow, gridColumn]),
+    [['a', 1, null], ['b', 1, 1], ['c', 1, 2]]);
 });
 
 /** The cards and Record Layout of an arranged drawing: a in row 1 drawn in two windows, b in row 1, c in row 2. */

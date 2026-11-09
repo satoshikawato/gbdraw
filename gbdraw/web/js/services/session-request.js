@@ -1664,8 +1664,9 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
   const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
     seqs, drawing.linearRecordRows, { enabled: arranged }
   ));
-  // The places of the Record Layout's cells, when the Web owns them (a card drawn in several windows, PD-OI-124).
-  const places = arranged ? linearLayoutPlaces(linearLayoutCells(
+  // The places of the Record Layout's cells, when the Web owns them: only once a drawn card has two or more windows
+  // (PD-OI-124); until then every record keeps the place it held before (Must preserve).
+  const places = arranged && seqs.some((seq) => (seq.windows || []).length > 1) ? linearLayoutPlaces(linearLayoutCells(
     seqs.map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
   )) : null;
   return seqs.map((seq, index) => {
