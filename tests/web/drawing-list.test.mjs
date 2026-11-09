@@ -838,6 +838,173 @@ test('removing the Circular source returns every record-bound form field to its 
     { ...CIRCULAR_RECORD_FORM_DEFAULTS });
 });
 
+// PD-OI-044 scenario revision 5: a grid or batch crop goes with its card's file when the card is removed, or when
+// its file is replaced and held more than one record; a replaced file of one record keeps it, as a one-record crop.
+test('removing or replacing a Circular file drops or keeps the grid and batch crops of its records', async () => {
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const drawing = state.activeDrawing();
+  const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  replaceCircularSources(drawing.slices.inputs, ['card-1', 'card-2', 'card-3'].map((uid) => createCircularSource({ uid })));
+  for (const uid of ['card-1', 'card-2', 'card-3']) app.setCircularSourceFile(uid, 'gb', new File(['LOCUS'], `${uid}.gb`));
+  const range = (source, record) => ({ source, record, windows: [{ start: 11, end: 90, reverseComplement: false, column: null }] });
+  drawing.form.circular_record_ranges = [range('card-1', ''), range('card-2', ''), range('card-3', 'B')];
+  // The records each card was read with (a replacement starts a new read).
+  const read = () => {
+    drawing.circularRecordList.value = [
+      { uid: 'card-2', k: 1, identity: 'card-2', record_id: 'A' },
+      { uid: 'card-3', k: 1, identity: 'card-3:1', record_id: 'A' }, { uid: 'card-3', k: 2, identity: 'card-3:2', record_id: 'B' }
+    ];
+  };
+  read();
+  app.setCircularSourceFile('card-1', 'gb', null);
+  read();
+  app.setCircularSourceFile('card-2', 'gb', new File(['LOCUS'], 'card-2-new.gb'));
+  assert.deepEqual(drawing.form.circular_record_ranges.map(({ source }) => source), ['card-2', 'card-3']);
+  read();
+  app.setCircularSourceFile('card-3', 'gb', new File(['LOCUS'], 'card-3-new.gb'));
+  assert.deepEqual(drawing.form.circular_record_ranges.map(({ source }) => source), ['card-2']);
+});
+
+// A Circular grid or batch drawing that holds two records' crops, read from one card of two records, with Record select
+// available (Multi-Record Canvas off, the card's records read).
+const CARD_RECORDS = {
+  'card-1': [
+    { uid: 'card-1', k: 1, identity: 'card-1:1', selector: '#1', record_id: 'A', record_length: 100 },
+    { uid: 'card-1', k: 2, identity: 'card-1:2', selector: '#2', record_id: 'B', record_length: 100 }
+  ],
+  'card-2': [{ uid: 'card-2', k: 1, identity: 'card-2', selector: '#1', record_id: 'C', record_length: 100 }]
+};
+// The drawing's cards are read: their records are listed and the discovery is current.
+const readCards = async (drawing) => {
+  const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
+  drawing.circularRecordList.value = drawing.circularSources.flatMap(({ uid }) => CARD_RECORDS[uid] ?? []);
+  Object.assign(drawing.circularRecordDiscovery, { status: 'ready', error: '', inputType: drawing.inputType.value,
+    sources: circularSourceInputs(drawing.inputType.value, drawing.circularSources).map(({ uid, primaryFile, pairedFile }) => (
+      { uid, primaryFile, pairedFile, error: '' })) });
+};
+const rangedCircularDrawing = async (app, uids = ['card-1']) => {
+  app.selectDrawing('circular');
+  const drawing = state.activeDrawing();
+  const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  replaceCircularSources(drawing.slices.inputs, uids.map((uid) => createCircularSource({ uid })));
+  for (const uid of uids) app.setCircularSourceFile(uid, 'gb', new File(['LOCUS'], `${uid}.gb`));
+  drawing.form.multi_record_canvas = false;
+  drawing.form.circular_record_selector = '';
+  await readCards(drawing);
+  drawing.form.circular_record_ranges = [
+    { source: 'card-1', record: 'A', windows: [{ start: 11, end: 90, reverseComplement: false, column: null, acrossOrigin: false }] },
+    { source: 'card-1', record: 'B', windows: [{ start: 21, end: 60, reverseComplement: true, column: null, acrossOrigin: false }] }
+  ];
+  return drawing;
+};
+const cropFields = ({ form }) => [form.circular_region_start, form.circular_region_end, form.circular_reverse];
+
+// PD-OI-044 scenario revision 5: a record chosen alone puts its crop in the one-record crop fields; a range changed
+// there stays through All records (which draw the loaded crops) and draws when that record is chosen alone again;
+// choosing another record puts that record's crop in the fields.
+test('a grid or batch crop changed in the crop fields stays through All records and comes back with its record', async () => {
+  const app = createAppSetup();
+  const drawing = await rangedCircularDrawing(app);
+  const loaded = JSON.parse(JSON.stringify(drawing.form.circular_record_ranges));
+  assert.equal(app.setCircularRecordPresentationSelector('card-1:1').status, 'ok');
+  assert.deepEqual(cropFields(drawing), [11, 90, false]);
+  drawing.form.circular_region_end = 50;
+  app.setCircularRecordPresentationSelector('');
+  assert.deepEqual(cropFields(drawing), [11, 50, false], 'All records keeps the fields');
+  assert.deepEqual(drawing.form.circular_record_ranges, loaded, 'and draws the loaded crops');
+  app.setCircularRecordPresentationSelector('card-1:1');
+  assert.deepEqual(cropFields(drawing), [11, 50, false], 'the same record alone again draws the changed crop');
+  app.setCircularRecordPresentationSelector('card-1:2');
+  assert.deepEqual(cropFields(drawing), [21, 60, true], 'another record puts its own crop in the fields');
+  app.setCircularRecordPresentationSelector('');
+  app.setCircularRecordPresentationSelector('card-1:1');
+  assert.deepEqual(cropFields(drawing), [11, 90, false], 'and the first record then takes its loaded crop again');
+  app.setCircularRecordPresentationSelector('');
+});
+
+// PD-OI-044 scenario revision 5: the crop fields filled from a record's crop go with the record's card when it is
+// removed, or when its file of several records is replaced, so another record chosen alone draws no crop (OV-3140).
+for (const change of ['remove', 'replace']) {
+  test(`a ${change}d card takes the crop fields filled from its record's crop with it (OV-3140)`, async () => {
+    const app = createAppSetup();
+    const drawing = await rangedCircularDrawing(app, ['card-1', 'card-2']);
+    app.setCircularRecordPresentationSelector('card-1:1');
+    assert.deepEqual(cropFields(drawing), [11, 90, false]);
+    app.setCircularRecordPresentationSelector('');
+    app.setCircularSourceFile('card-1', 'gb', change === 'remove' ? null : new File(['LOCUS'], 'card-1-new.gb'));
+    await readCards(drawing);
+    assert.deepEqual(drawing.form.circular_record_ranges, []);
+    assert.equal(app.setCircularRecordPresentationSelector('card-2').status, 'ok');
+    assert.deepEqual([...cropFields(drawing), drawing.form.circular_windows, drawing.form.circular_range_fields_record],
+      [null, null, false, [], ''], 'the other record alone draws whole');
+    app.setCircularRecordPresentationSelector('');
+  });
+}
+
+// PD-OI-044 scenario revision 5: a grid or batch drawing's crops are its settings. They stay through a record turned
+// OFF and ON and in a drawing's copy, with its card uids; Reset Settings clears them, so each record draws whole, and
+// Undo brings them back with the other settings.
+test('grid or batch crops stay through record OFF and ON and a duplicate; Reset Settings clears them and Undo restores them', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const drawing = await rangedCircularDrawing(app);
+  const { circularRequestDiagrams } = await import('../../gbdraw/web/js/services/record-options.js');
+  const lengths = (target) => circularRequestDiagrams(target.circularRecordList.value, target).map((diagram) => diagram.lengths);
+  const loaded = JSON.parse(JSON.stringify(drawing.form.circular_record_ranges));
+  assert.deepEqual(lengths(drawing), [[80], [40]], 'each record draws its crop');
+  assert.equal(await app.recordSelection.setRecordsDrawn('circular', 'card-1', ['card-1:1'], false), true);
+  await readCards(drawing);
+  assert.deepEqual(drawing.recordsOff, ['card-1:1']);
+  assert.deepEqual(lengths(drawing), [[40]]);
+  assert.equal(await app.recordSelection.setRecordsDrawn('circular', 'card-1', ['card-1:1'], true), true);
+  await readCards(drawing);
+  assert.deepEqual(lengths(drawing), [[80], [40]], 'a record turned ON again draws its crop');
+
+  const outcome = app.drawingList.duplicateDrawing('circular');
+  assert.equal(outcome.status, 'ok');
+  const copy = state.drawingOf(outcome.drawingId);
+  assert.deepEqual(copy.form.circular_record_ranges, loaded, 'the copy keeps the crops');
+  assert.deepEqual(copy.circularSources.map(({ uid }) => uid), ['card-1'], 'of the same cards');
+  assert.notEqual(copy.form.circular_record_ranges, drawing.form.circular_record_ranges);
+  await history.undo();
+  app.selectDrawing('circular');
+
+  // The crop fields hold the first record's crop when Reset Settings runs.
+  app.setCircularRecordPresentationSelector('card-1:1');
+  app.setCircularRecordPresentationSelector('');
+  assert.deepEqual(cropFields(drawing), [11, 90, false]);
+  await app.resetSettings();
+  assert.deepEqual(drawing.form.circular_record_ranges, [], 'Reset Settings clears the crops');
+  assert.deepEqual([...cropFields(drawing), drawing.form.circular_windows, drawing.form.circular_range_fields_record],
+    [null, null, false, [], ''], 'and the crop fields filled from them');
+  drawing.form.multi_record_canvas = false;
+  await readCards(drawing);
+  assert.deepEqual(lengths(drawing), [[100], [100]], 'so each record draws whole');
+  await history.undo();
+  assert.deepEqual(drawing.form.circular_record_ranges, loaded, 'Undo restores the crops');
+});
+
+// PD-OI-044 scenario revision 5: Delete settings of an OFF record clears its grid or batch crop, and the one-record
+// crop fields filled from it, so the record draws whole, alone or not; the other record keeps its crop.
+test('Delete settings clears a record\'s grid or batch crop and the crop fields filled from it', async () => {
+  const app = createAppSetup();
+  const drawing = await rangedCircularDrawing(app);
+  app.setCircularRecordPresentationSelector('card-1:1');
+  drawing.form.circular_region_end = 50;
+  app.setCircularRecordPresentationSelector('');
+  assert.equal(await app.recordSelection.setRecordsDrawn('circular', 'card-1', ['card-1:1'], false), true);
+  await readCards(drawing);
+  assert.equal(await app.recordSelection.deleteSettings('circular', ['card-1:1']), true);
+  assert.deepEqual(drawing.form.circular_record_ranges.map(({ record }) => record), ['B']);
+  assert.deepEqual([...cropFields(drawing), drawing.form.circular_range_fields_record], [null, null, false, '']);
+  assert.equal(await app.recordSelection.setRecordsDrawn('circular', 'card-1', ['card-1:1'], true), true);
+  await readCards(drawing);
+  app.setCircularRecordPresentationSelector('card-1:2');
+  assert.deepEqual(cropFields(drawing), [21, 60, true], 'the other record keeps its crop');
+  app.setCircularRecordPresentationSelector('');
+});
+
 // D-15-186: "Every drawing that uses this file" stays all-or-nothing. While the
 // drawing switch waits it writes nothing, not even the clicked card's upload,
 // and the busy reason is shown once through `onBusy`.

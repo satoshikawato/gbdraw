@@ -153,6 +153,36 @@ await test('Generate right after loading a CLI Session in batch grouping writes 
   }
 });
 
+// PD-OI-044 scenario revision 5: a records-table crop of a Circular grid or batch is saved as its file and range;
+// the Web loads the range by the record's card and draws it in the next Generate, as the CLI drew it.
+for (const grouping of ['grid', 'batch']) {
+  await test(`a CLI ${grouping} Session of records-table crops loads their ranges and Generate writes the CLI records`, async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), `gbdraw-circular-ranges-${grouping}-`));
+    try {
+      const { writeFile } = await import('node:fs/promises');
+      const table = path.join(directory, 'records.tsv');
+      await writeFile(table, 'gbk\trecord_id\tregion\n'
+        + `${twoRecords}\tTESTA\t101-500:rc\n${twoRecords}\tTESTB\t\n${mito}\t\t1001-3000\n`);
+      const bytes = await cliSession(directory, ['--records_table', table, ...(grouping === 'grid' ? ['--multi_record_canvas'] : [])]);
+      const session = JSON.parse(bytes);
+      const cliRequest = savedDrawingView(session, session.ui.activeDrawingId).renderRequest;
+      assert.equal(cliRequest.grouping, grouping);
+      const windowsOf = ({ windows }) => windows.map(({ start, end, reverseComplement }) => ({ start, end, reverseComplement }));
+      assert.deepEqual(cliRequest.records.map(windowsOf), [
+        [{ start: 101, end: 500, reverseComplement: true }], [], [{ start: 1001, end: 3000, reverseComplement: false }]
+      ]);
+      assert.equal((await load(bytes)).status, 'ok');
+      const records = await nextGenerateRecords();
+      // A table row is keyed by its row (`record-<n>`); the Web keys each record by its card (`cardUids`).
+      const selectorOf = ({ cardinality, selector }) => ({ cardinality, selector: selector ?? null });
+      assert.deepEqual(records.map(selectorOf), cliRequest.records.map(selectorOf));
+      assert.deepEqual(records.map(windowsOf), cliRequest.records.map(windowsOf));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
 // The Web side of the cards (DESIGN section 7, failing-first tests 2, 3, 6, 7,
 // 8 and 9): a record's identity is its card's uid with its place in that
 // card's file, so edits of other cards move none of its rows.

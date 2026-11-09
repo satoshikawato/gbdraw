@@ -28,6 +28,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.canvas import LINEAR_WRAP_LENGTH_PATH, LinearWrapLength, linear_wrap_length_from_config
 from gbdraw.config.modify import modify_config_dict, raw_config_value, with_config_overrides
 from gbdraw.exceptions import ValidationError
+from gbdraw.analysis.windows import cut_digest
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
@@ -311,10 +312,11 @@ class ResolvedRecordProvenance:
         """The key of the record whose window this unit draws (D-01), from this plan or the one before."""
         return self.window.window_of if self.window is not None else self.origin_window_of
 
-    def origin(self, record: SeqRecord) -> RecordOrigin:
-        """The origin of ``record``, this unit's planned record, as the projection carries it."""
+    def origin(self, record: SeqRecord, content_digest: str | None = None) -> RecordOrigin:
+        """The origin of ``record``, this unit's planned record, as the projection carries it; ``content_digest`` is
+        the record's ``record_content_digest`` when the caller holds it already."""
         return RecordOrigin(
-            content_digest=record_content_digest(record),
+            content_digest=content_digest if content_digest is not None else record_content_digest(record),
             source_kind=self.source_kind,
             source_paths=self.source_paths,
             source_record_index=self.source_record_index,
@@ -1860,6 +1862,8 @@ class _PendingRecord:
     provenance: ResolvedRecordProvenance
     windows: tuple[RecordWindow, ...]
     pending_reverse: bool
+    # Whether ``units`` were cut from the record by its windows in this plan (each keeps its cut's digest).
+    cut: bool = False
 
 
 def _expand_record_windows(
@@ -1895,6 +1899,7 @@ def _expand_record_windows(
         specs = collection_specs.get(position, ())
         windows = item.windows
         units = item.units
+        cut = item.cut
         if specs:
             if windows:
                 raise ValidationError(
@@ -1913,6 +1918,7 @@ def _expand_record_windows(
                 )
             except ValueError as exc:
                 raise ValidationError(str(exc), diagnostic={"code": "INPUT_INVALID"}) from exc
+            cut = True
         elif item.pending_reverse:
             units = crop_record_windows(units[0], (), True, log=logger)
         # The crop draws one unit per window, as ``record_drawn_windows`` plans them.
@@ -1932,7 +1938,8 @@ def _expand_record_windows(
             )
             _apply_record_key(unit, record_key=unit_item.record_key)
             _apply_provenance_annotations(unit, unit_item)
-            _keep_record_origin(unit, unit_item)
+            # Since its cut, a unit changed only in gbdraw's annotations, which its digest leaves out.
+            _keep_record_origin(unit, unit_item, cut_digest(unit) if cut else None)
             records.append(unit)
             provenance.append(unit_item)
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
@@ -1952,17 +1959,21 @@ def reverse_resolved_records(
     for index in sorted(indexes):
         (records[index],) = reverse_records((records[index],), True, log=logger)
         _apply_provenance_annotations(records[index], collection.provenance[index])
-        _keep_record_origin(records[index], collection.provenance[index])
+        # A reversed crop keeps the digest of its reverse complement as cut (``reversed_window_source``).
+        _keep_record_origin(records[index], collection.provenance[index], cut_digest(records[index]))
     return ResolvedRecordCollection(tuple(records), collection.provenance)
 
 
-def _keep_record_origin(record: SeqRecord, provenance: ResolvedRecordProvenance) -> None:
+def _keep_record_origin(
+    record: SeqRecord, provenance: ResolvedRecordProvenance, content_digest: str | None = None
+) -> None:
     """Keep on ``record``, a planned record now complete, where it was read from (OV-2923).
 
     A later plan of the record, or a Session writer, reads it while the record is unchanged (``held_record_origin``).
+    ``content_digest`` is the record's digest when its caller holds it (a crop's, from its cut).
     """
 
-    record.annotations[RECORD_ORIGIN_ANNOTATION] = provenance.origin(record)
+    record.annotations[RECORD_ORIGIN_ANNOTATION] = provenance.origin(record, content_digest)
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:
@@ -2089,7 +2100,7 @@ def resolve_record_inputs(
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)
                 _apply_provenance_annotations(unit, item)
-            pending.append(_PendingRecord(units, item, tuple(record_input.windows), reverse))
+            pending.append(_PendingRecord(units, item, tuple(record_input.windows), reverse, bool(record_input.windows)))
     return _expand_record_windows(pending, record_options or RecordCollectionOptions())
 
 

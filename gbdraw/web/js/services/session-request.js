@@ -92,6 +92,7 @@ import {
   circularDrawingRecordSet,
   circularFormCrop,
   circularRecordEntries,
+  circularRecordRange,
   isSingleCircularJourney
 } from './record-options.js';
 import {
@@ -138,7 +139,9 @@ import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readScalarAxisLabels } from './config-field-readers.js';
+import {
+  DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readCircularRecordRanges, readScalarAxisLabels
+} from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -1782,9 +1785,16 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
       return;
     }
     drawnHere.forEach((entry) => {
+      // A grid or batch record keeps the range a CLI or Python Session gave it (PD-OI-044 scenario revision 5).
+      const range = circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, entry);
       records.push({
         recordKey: entry.identity, cardinality: 'exactly_one', source, selector: cliRecordSelector(entry, listed.length),
-        windows: [], presentation: presentationPayload()
+        windows: range === null ? [] : range.windows.map((window) => {
+          const span = windowEndpoints(window.start, window.end);
+          if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
+          return { ...span, reverseComplement: window.reverseComplement, column: null };
+        }),
+        presentation: presentationPayload()
       });
       recordSources.push(card.uid);
       drawnIdentities.push(entry.identity);
@@ -6506,22 +6516,30 @@ export const projectCanonicalSessionRequest = ({
   // The legacy file bag that the Web form state reads; its fields depend on the mode.
   /** @type {Record<string, any>} */
   const files = { linearSeqs: [] };
+  // The uid of the File card each Circular record reads.
+  /** @type {Map<unknown, string>} */
+  const circularCardOfRecord = new Map();
   if (renderRequest.mode === 'circular') {
     // One File card per source file, in the order the records first read it
     // (OV-2878; the Circular counterpart of the Linear cards below). The uids
     // are the one card uid rule's (`cardUids`, D-12, OV-2904), over each file
     // its records read.
-    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, record: (typeof records)[number] }>} */
+    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, record: (typeof records)[number], index: number }>} */
     const sourceFiles = new Map();
+    // The card each record reads, by the place of its file among the cards.
+    /** @type {Map<unknown, number>} */
+    const cardIndexOfRecord = new Map();
     records.forEach((record) => {
       if (!record.recordKey) return;
       const ids = recordSourceSlotIds(record.source || {});
       const file = JSON.stringify([ids.gb ?? null, ids.gff ?? null, ids.fasta ?? null]);
-      const held = sourceFiles.get(file) || { ids, record };
+      const held = sourceFiles.get(file) || { ids, record, index: sourceFiles.size };
       sourceFiles.set(file, held);
+      cardIndexOfRecord.set(record, held.index);
     });
     const groups = [...sourceFiles.values()];
     const uids = cardUids(groups.map(({ record }) => ({ resourceId: requestRecordFile(record) })), records);
+    cardIndexOfRecord.forEach((index, record) => circularCardOfRecord.set(record, uids[index]));
     files.circularSources = groups.map(({ ids }, index) => {
       const slotFile = (/** @type {InputSlot} */ slot) => {
         const id = ids[slot];
@@ -7046,6 +7064,18 @@ export const projectCanonicalSessionRequest = ({
   const circularPresentationRecord = (
     renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
   ) ? records[0] : null;
+  // The crops of a grid's or batch's records, each by its card and its selector there (PD-OI-044 scenario
+  // revision 5); a window's orientation holds a record-wide reverse complement (`cropFieldsOfWindows`).
+  const circularRecordRanges = renderRequest.mode === 'circular' && grouping !== 'single'
+    ? readCircularRecordRanges(records.flatMap((record) => {
+      const { only, listed } = cropFieldsOfWindows(record);
+      const windows = only ? [only] : listed;
+      const source = circularCardOfRecord.get(record);
+      return windows.length && source
+        ? [{ source, record: canonicalRecordSelector(record) || '', windows: windows.map((window) => ({ ...window, column: null })) }]
+        : [];
+    }))
+    : [];
   // The crop the Start/End fields hold, or the window across the origin the list holds (D-45).
   const {
     only: circularPresentationRegion, listed: circularWindows, reverse: circularReverse
@@ -7069,6 +7099,7 @@ export const projectCanonicalSessionRequest = ({
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,
     circular_windows: circularWindows,
+    circular_record_ranges: circularRecordRanges,
     circular_reverse: circularReverse,
     circular_record_label: circularPresentationRecord?.presentation?.label || '',
     circular_record_subtitle: circularPresentationRecord?.presentation?.subtitle || '',

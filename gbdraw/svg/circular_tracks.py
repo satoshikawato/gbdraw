@@ -121,7 +121,7 @@ def circular_gc_content_line(
     positions = gc_df.index.to_numpy(dtype=float)
     if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
-    if not record_transform.is_circular:
+    if not _closes_round_its_origin(record_transform, record_len):
         return CircularTrackLine(*held_to_end(positions, radius_of_coordinate, float(record_len)))
     if len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
@@ -149,11 +149,20 @@ def generate_circular_gc_content_path_desc(
     return _closed_line_desc(line, float(record_len)) + generate_circle_path_desc(radius, norm_factor)
 
 
+def _closes_round_its_origin(record_transform: RecordDisplayTransform, record_len: int) -> bool:
+    """Whether a Circular line runs on from its last sample round to its first: the record drawn is a whole
+    circular molecule. A crop of a circular record ends at two places on the molecule, so its line, like a linear
+    record's, holds its last value to 12 o'clock and steps there (D-64); its transform's length is the source's."""
+
+    return record_transform.is_circular and record_len == record_transform.length
+
+
 def _closed_line_desc(line: CircularTrackLine, total_len: float) -> str:
     """The closed line of a GC content (deviation) or skew path: it starts at 12 o'clock on the radius of the
     first sample, runs through every sample, and closes back to 12 o'clock along the circle; the baseline
-    circle follows as its own subpath. The line of a record not drawn as circular already holds its last value
-    to 12 o'clock (``held_to_end``), so its close is a radial step there, not a ramp across bases (OV-2920)."""
+    circle follows as its own subpath. The line of a record that is not a whole circular molecule already holds
+    its last value to 12 o'clock (``held_to_end``, ``_closes_round_its_origin``), so its close is a radial step
+    there, not a ramp across bases (OV-2920)."""
 
     positions, radii, segment_starts = line
     drawn = circular_drawn_line(
@@ -200,7 +209,7 @@ def circular_gc_skew_line(
     positions = df.index
     if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
-    if not record_transform.is_circular:
+    if not _closes_round_its_origin(record_transform, total_len):
         return CircularTrackLine(*held_to_end(positions, radius_of_coordinate, float(total_len)))
     # A record drawn as circular closes from its last sample to its first along the circle (``_closed_line_desc``).
     return CircularTrackLine(positions.to_numpy(dtype=float), np.asarray(radius_of_coordinate, dtype=float))
@@ -246,7 +255,7 @@ def circular_scalar_area_line(
     segment_starts: tuple[int, ...] = ()
     if record_transform.start_coordinate is not None:
         positions, values, segment_starts = project_scalar_line(positions, values, record_transform)
-    elif not record_transform.is_circular:
+    elif not _closes_round_its_origin(record_transform, record_len):
         positions, values = held_to_end(positions, values, float(record_len))
     elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))

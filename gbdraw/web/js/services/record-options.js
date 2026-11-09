@@ -194,9 +194,45 @@ export const resolveCircularRequestRecordSet = ({
  */
 
 /**
+ * The crop a CLI or Python Session gave one record of a Circular grid or batch (PD-OI-044 scenario revision 5),
+ * which the drawing keeps while it draws that record in a grid or batch. `source` is the uid of the record's card;
+ * `record` names the record in that card's file as the Session's request did (its identity, its record ID or `#k`,
+ * or '' for the record of a file of one record), so it is read once the card's records are (`circularRecordRange`);
+ * `windows` are its windows in source coordinates, each with its own orientation.
+ * @typedef {{ source: string, record: string, windows: LinearSeqWindow[] }} CircularRecordRange
+ */
+
+/**
+ * The range a drawing keeps for one of its read records (`circularRecordEntries`): the row of the record's card
+ * that names it there (`circularRecordSelection` over that card's records), else null. The one reader of a
+ * record's range: the request, the diagram lengths, the Record select and the record rows read it.
+ * @template {{ uid?: unknown, value: string, selector: string, recordId: string }} E
+ * @param {readonly CircularRecordRange[]} ranges
+ * @param {readonly E[]} entries the drawing's read records, named
+ * @param {E} entry
+ * @returns {CircularRecordRange | null}
+ */
+export const circularRecordRange = (ranges, entries, entry) => {
+  if (!ranges.length) return null;
+  const uid = cleanText(entry.uid);
+  const card = entries.filter((candidate) => cleanText(candidate.uid) === uid);
+  return ranges.find((range) => range.source === uid
+    && circularRecordSelection(card, range.record || (card.length === 1 ? card[0].value : '')).record?.value === entry.value)
+    ?? null;
+};
+
+/**
+ * The ranges of a drawing without those of the records of card `uid`: what a Remove of the card, or a replacement
+ * of its file that retires its records' presentation, leaves.
+ * @param {readonly CircularRecordRange[]} ranges @param {string} uid
+ */
+export const circularRangesWithoutCard = (ranges, uid) => ranges.filter((range) => range.source !== uid);
+
+/**
  * What the record-set readers take from a Circular drawing.
  * @typedef {object} CircularRecordDrawing
- * @property {CircularRegionForm & { circular_record_selector: string, multi_record_canvas: boolean }} form
+ * @property {CircularRegionForm & { circular_record_selector: string, multi_record_canvas: boolean,
+ *   circular_record_ranges: readonly CircularRecordRange[] }} form
  * @property {{ circular_grouping_intent: string }} adv
  * @property {readonly string[]} recordsOff
  */
@@ -409,6 +445,21 @@ export const circularDrawingCropped = (records, drawing) => {
 };
 
 /**
+ * The identities of the records a Circular drawing draws cropped in a grid or batch: those its ranges keep
+ * (`circularRecordRange`); none while it offers one record alone, whose crop is the form's (`circularDrawingCropped`).
+ * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
+ * @param {CircularRecordDrawing} drawing
+ * @returns {Set<string>}
+ */
+export const circularDrawingCroppedRecords = (records, drawing) => {
+  const recordSet = circularDrawingRecordSet(records, drawing);
+  if (isSingleCircularJourney(recordSet) || !drawing.form.circular_record_ranges.length) return new Set();
+  return new Set(recordSet.recordSelectors
+    .filter((entry) => circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, entry) !== null)
+    .map((entry) => entry.value));
+};
+
+/**
  * The note beside the Circular Region fields (`regionClampNote`) for the
  * region the next Generate crops its record to.
  * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
@@ -455,10 +506,15 @@ export const circularRequestDiagrams = (records, drawing) => {
   const single = isSingleCircularJourney(recordSet);
   const drawn = recordSet.records.length > 0 ? recordSet.records : recordSet.recordSelectors;
   // A discovered record keeps its fields through the record set.
-  /** @param {{ record_length?: unknown, identity?: unknown }} record */
+  /** @param {{ record_length?: unknown, identity?: unknown, uid?: unknown, value: string, selector: string, recordId: string }} record */
   const drawnLength = (record) => {
     const crop = circularCropRegion(single, drawing.form, record);
-    return crop !== null ? crop.bases ?? 0 : Number(record.record_length);
+    if (crop !== null) return crop.bases ?? 0;
+    const length = Number(record.record_length);
+    const range = single ? null : circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, record);
+    return range === null ? length : range.windows.reduce((sum, window) => (
+      sum + (windowBases(Number(window.start), Number(window.end), Number.isInteger(length) && length > 0 ? length : null) ?? 0)
+    ), 0);
   };
   return (drawing.form.multi_record_canvas ? [drawn] : drawn.map((record) => [record]))
     .map((diagram) => ({

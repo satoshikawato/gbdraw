@@ -17,6 +17,7 @@ import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { INPUT_TYPES } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { CircularRecordRange } from './record-options.js' */
 import { isUnsetValue } from '../utils/field-reading.js';
 import { depthTrackEditDefaults, ensureDepthTrackConfigCount } from './depth-track-state.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
@@ -89,6 +90,9 @@ export const createDefaultForm = () => ({
   // The window across the origin a CLI or Python Session gave the record, which the Start/End fields cannot hold
   // (`cardCropWindow`); shown read-only.
   circular_windows: /** @type {LinearSeqWindow[]} */ ([]),
+  // The crop a CLI or Python Session gave each record of a Circular grid or batch, drawn read-only there and put
+  // into the fields above when Record select chooses the record alone (PD-OI-044 rev 5).
+  circular_record_ranges: /** @type {CircularRecordRange[]} */ ([]), circular_range_fields_record: '',
   circular_record_label: '', circular_record_subtitle: '',
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false,

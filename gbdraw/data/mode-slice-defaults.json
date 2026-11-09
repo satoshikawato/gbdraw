@@ -21,6 +21,8 @@
       {"domain":"config.form","path":"circular_region_end","value":null},
       {"domain":"config.form","path":"circular_reverse","value":false},
       {"domain":"config.form","path":"circular_windows","value":[]},
+      {"domain":"config.form","path":"circular_record_ranges","value":[]},
+      {"domain":"config.form","path":"circular_range_fields_record","value":""},
       {"domain":"config.form","path":"circular_record_label","value":""},
       {"domain":"config.form","path":"circular_record_subtitle","value":""},
       {"domain":"config.form","path":"separate_strands","value":true},
