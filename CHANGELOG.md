@@ -106,6 +106,11 @@ write-up of a release.
   block is now centred on one vertical axis: the feature rows, the ring names,
   the band (rings of one color) or the rows of names and ramps (rings of
   several colors), and the gradient bars (OV-2835).
+- Fixed: a Legend with one gradient bar (the Linear "Pairwise match identity"
+  bar, a sequence search's "Query position" bar) drew its title right on the
+  bar, so the letters p and y touched it. The title now stands 2 units above
+  the bar, the gap the scale line keeps below it, in Circular and Linear
+  figures and in the Web app (OV-2982).
 - Fixed (Web app): a mouse wheel zoom while a pan of the Result was under way
   showed the figure back where the pan began until the pointer moved or the
   button was released. The figure now stays where the pan has moved it while
