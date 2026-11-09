@@ -38,6 +38,16 @@
  * @typedef {{ type: 'cancel', id: string, ok: true, error?: unknown }} DiagramWorkerCancelReply
  */
 
+/**
+ * Where a request's reply carries its error: `error` of a failed reply (`ok: false`, any request type), or
+ * `results.error` of a Generate whose engine returned a structured error. A Cancel's drain reads a reply that was
+ * on its way when the Cancel settled its request (OV-3027).
+ * @typedef {object} DiagramWorkerReplyError
+ * @property {unknown} [ok]
+ * @property {unknown} [error]
+ * @property {{ error?: unknown }} [results]
+ */
+
 /** The signal a Cancel writes into the interrupt buffer: SIGINT, as Pyodide's `setInterruptBuffer` reads it. */
 export const DIAGRAM_WORKER_INTERRUPT_SIGNAL = 2;
 

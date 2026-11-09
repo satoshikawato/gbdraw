@@ -30,7 +30,7 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
-/** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage } from './diagram-worker-protocol.js' */
+/** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage, DiagramWorkerReplyError } from './diagram-worker-protocol.js' */
 /** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
@@ -723,7 +723,7 @@ const drainWorker = (currentWorker, buffer) => {
       return;
     }
     // A reply already on its way when the Cancel settled its request.
-    const reply = /** @type {{ ok?: unknown, error?: unknown, results?: { error?: unknown } }} */ (event.data || {});
+    const reply = /** @type {DiagramWorkerReplyError} */ (event.data || {});
     replaceEngineOutOfMemory(currentWorker, reply.ok === false ? reply.error : reply.results?.error);
   };
   const terminate = () => {
