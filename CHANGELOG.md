@@ -797,6 +797,12 @@ write-up of a release.
   track instead of the empty part of the scale (OV-2759). A saved Session
   keeps the color it was saved with, and a config or option that sets the
   color keeps it.
+- Fixed: Web UI: Japanese texts that used words the rest of the Japanese UI
+  does not: a table reads 表 instead of TSV where the English says table, a
+  History step reads 件の操作 instead of ステップ (the sliding-window step),
+  and Move above / below Axis reads 軸の上側へ移動 / 軸の下側へ移動, matching
+  the placement names 軸の上側 and 軸の下側. The Japanese translation is still
+  an LLM draft.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-03
 
