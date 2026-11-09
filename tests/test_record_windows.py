@@ -650,6 +650,46 @@ def test_a_cli_session_of_a_records_table_drawing_one_file_record_twice_replays_
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "v.svg").read_bytes()
 
 
+@pytest.mark.parametrize("second", ["5000-5600", "5000-5600:rc"], ids=["forward", "reversed"])
+def test_a_session_of_a_resolved_request_keeps_the_windows_of_a_file_record(tmp_path: Path, second: str) -> None:
+    """OV-2923: a request whose records are the planner's drawn units (``resolve_request``) is saved with each file
+    record and its windows, so the replay draws the "//" gap between the windows as the live figure does."""
+    from gbdraw.api import (
+        load_session_document,
+        materialize_session,
+        render_session,
+        resolve_request,
+        save_session_document,
+    )
+    from gbdraw.api.requests import RenderOutputRequest
+
+    output = RenderOutputRequest(output_prefix="live", output_directory=tmp_path, overwrite=True)
+    resolved = resolve_request(LinearDiagramRequest(
+        records=(
+            _windowed(RecordWindow.from_region(parse_region_spec("100-900")),
+                      RecordWindow.from_region(parse_region_spec(second)), grid_row=1),
+            RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector(raw="TESTA", record_id="TESTA", record_index=None),
+                        record_key="testa", presentation=RecordPresentation(grid_row=2)),
+        ),
+        options=LinearDiagramOptions(),
+        layout=LinearMultiRecordOptions(),
+        output=output,
+    ))
+    render_request(resolved)
+    live = (tmp_path / "live.svg").read_text(encoding="utf-8")
+    session = tmp_path / "saved.gbdraw-session.json"
+    save_session_document(session, resolved)
+    records = _saved_request(session)["records"]
+    assert [(record["recordKey"], len(record["windows"])) for record in records] == [("mito", 2), ("testa", 0)]
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+    with materialize_session(load_session_document(session), output_directory=replay_dir) as materialized:
+        render_session(materialized)
+    replay = next(replay_dir.glob("*.svg")).read_text(encoding="utf-8")
+    assert live.count('data-gbdraw-row-mark="gap"') == 1
+    assert replay == live
+
+
 @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
 def test_the_transform_of_a_window_across_the_origin_maps_bases_on_both_sides_of_it(reverse: bool) -> None:
     """The transform of a crossing window maps a base after the origin into the window, not before its start."""

@@ -1796,16 +1796,24 @@ def _apply_provenance_annotations(
     record.annotations.update(
         {
             "gbdraw_input_index": provenance.input_index,
-            "gbdraw_source_record_index": provenance.source_record_index,
-            "gbdraw_source_record_count": provenance.source_record_count,
-            "gbdraw_source_record_id": provenance.source_record_id,
-            "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
             "gbdraw_record_key": provenance.record_key,
             "gbdraw_record_cardinality": provenance.cardinality.value,
-            "gbdraw_source_kind": provenance.source_kind,
-            "gbdraw_source_paths": provenance.source_paths,
         }
     )
+    if provenance.source_kind != "memory":
+        # The file the record was read from. A record given in memory reads none: a drawn unit of an earlier plan
+        # keeps the file, record and window that plan named (with ``WINDOW_OF_ANNOTATION``), so a Session writes it
+        # as that plan's file record with its windows.
+        record.annotations.update(
+            {
+                "gbdraw_source_record_index": provenance.source_record_index,
+                "gbdraw_source_record_count": provenance.source_record_count,
+                "gbdraw_source_record_id": provenance.source_record_id,
+                "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
+                "gbdraw_source_kind": provenance.source_kind,
+                "gbdraw_source_paths": provenance.source_paths,
+            }
+        )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
     if provenance.window is not None:
