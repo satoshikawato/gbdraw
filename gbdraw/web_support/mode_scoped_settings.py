@@ -191,6 +191,9 @@ _ADV_ROWS = _rows(
     ("depth_large_tick_interval", "both", "copy"),
     ("depth_small_tick_interval", "both", "copy"),
     ("depth_tick_font_size", "both", "copy"),
+    # The feature density tracks a Session's request gave the drawing (diagramOptions.featureDensityTracks);
+    # Load reads them, Generate and Save write them back.
+    ("feature_density_tracks", "both", "copy", 51),
     ("linear_track_slots_enabled", "linear", "own"),
     ("linear_track_slots_schema_version", "linear", "own"),
     ("linear_track_slots_axis_index", "linear", "own"),

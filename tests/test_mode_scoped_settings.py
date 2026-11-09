@@ -89,13 +89,15 @@ def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> Non
     session_51_rows = {(row.domain, row.path) for row in MODE_SCOPED_SETTINGS if row.since == 51}
     assert session_51_rows == {
         ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
+        ("config.adv", "feature_density_tracks"),
     }
     assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 51}
     assert slice_containers(CURRENT_SESSION_VERSION) == SLICE_CONTAINERS
     for version in range(46, 51):
-        assert slice_containers(version)["config.form"] == SLICE_CONTAINERS["config.form"] - {
-            path for _domain, path in session_51_rows
-        }
+        for container in ("config.form", "config.adv"):
+            assert slice_containers(version)[container] == SLICE_CONTAINERS[container] - {
+                path for domain, path in session_51_rows if domain == container
+            }
 
 
 def test_registry_rows_match_the_phase_e_registry_table() -> None:
@@ -105,7 +107,7 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 289
+    assert len(table) == 290
     rows = set()
     for row in table:
         if row["migrate"] == "-":

@@ -1160,6 +1160,51 @@ test('a Session 51 with a 180 x 180 mm figure size loads both sides into the for
   }
 });
 
+// OV-3031: a Session the CLI wrote with two feature density tracks
+// (tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.provenance.json) loads the tracks into the drawing's draft
+// (`adv.feature_density_tracks`); the request Generate builds from the draft carries them, Save writes them into the
+// drawing's config and its request, and Load of that Save reads them back, with no repair row.
+test('a CLI Session with feature density tracks keeps them through Load, the Generate request and Save', async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz', import.meta.url))));
+  const tracks = fixture.drawings[0].renderRequest.diagramOptions.featureDensityTracks;
+  assert.deepEqual(tracks.map(({ id }) => id), ['genes', 'trna']);
+  // The request reads the Legend rows of the loaded Result's SVG; Node has no SVG parser, and no row matters here.
+  const draftRequest = async (drawing) => {
+    const parser = globalThis.DOMParser;
+    globalThis.DOMParser = class { parseFromString() { return { documentElement: { localName: 'none' } }; } };
+    try {
+      return (await sessionConfig.projectDraftRequest(state, drawing, {
+        linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+      })).envelope.renderRequest;
+    } finally {
+      globalThis.DOMParser = parser;
+    }
+  };
+  resetDrawings();
+  loadDialogs.length = 0;
+  assert.equal((await load(fixture)).status, 'ok');
+  const drawing = state.activeDrawing();
+  assert.deepEqual(drawing.adv.feature_density_tracks, tracks);
+  assert.deepEqual((await draftRequest(drawing)).diagramOptions.featureDensityTracks, tracks);
+  const saved = await save('feature-density');
+  const entry = saved.drawings.find(({ id }) => id === drawing.id);
+  assert.deepEqual(entry.config.adv.feature_density_tracks, tracks);
+  assert.deepEqual(entry.renderRequest.diagramOptions.featureDensityTracks, tracks);
+  resetDrawings();
+  assert.equal((await load(saved)).status, 'ok');
+  assert.deepEqual(state.activeDrawing().adv.feature_density_tracks, tracks);
+  assert.deepEqual((await draftRequest(state.activeDrawing())).diagramOptions.featureDensityTracks, tracks);
+  assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), []);
+  // A Session without tracks: its draft holds none, and its requests have no such key, as before the tracks existed.
+  const plain = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  assert.equal((await load(plain)).status, 'ok');
+  assert.deepEqual(state.activeDrawing().adv.feature_density_tracks, []);
+  assert.equal(Object.hasOwn((await draftRequest(state.activeDrawing())).diagramOptions, 'featureDensityTracks'), false);
+  const resaved = (await save('no-density')).drawings.find(({ id }) => id === 'circular');
+  assert.deepEqual(resaved.renderRequest, plain.drawings.find(({ id }) => id === 'circular').renderRequest);
+});
+
 // Issue #1427, review finding 2: a Session the CLI wrote with --figure_width 180mm
 // (tests/fixtures/sessions/HmmtDNA-figure-width-180mm.v51-cli.provenance.json) holds Python's full config, with the
 // height "auto", and a Result whose root states its size in mm. Load reads the width into the field and the height as

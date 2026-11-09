@@ -2,7 +2,7 @@
 /** @import { FileImports } from './file-imports.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
+/** @import { CanonicalFeatureDensityTrack, CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
 /** @import { FigureLengthFormValue } from './figure-size-form.js' */
@@ -117,7 +117,9 @@ export const createDefaultAdv = (mode = 'circular') => ({
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   ...DEFAULT_DEPTH_SETTINGS, depth_tracks: ensureDepthTrackConfigCount([], 1, depthTrackEditDefaults(DEFAULT_DEPTH_SETTINGS)), depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_axis_labels: SCALAR_AXIS_LABELS.default, depth_large_tick_interval: null,
-  depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  depth_small_tick_interval: null, depth_tick_font_size: null,
+  // The feature density tracks a Session's request gave the drawing (services/feature-density-tracks.js).
+  feature_density_tracks: /** @type {CanonicalFeatureDensityTrack[]} */ ([]), linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
   gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_axis_labels: SCALAR_AXIS_LABELS.default, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
   gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), identity_scale: null, scale_interval: null,

@@ -196,9 +196,16 @@ is `_encode_feature_density_tracks` in `gbdraw/session_request_codec.py`, the
 typed owner `FeatureDensityTrack` (`gbdraw/analysis/feature_density.py`) and
 `FeatureQuery` (`gbdraw/features/query.py`). An absent key or `null` reads as no
 tracks, as every earlier request does. A track slot names a track by id
-(`feature_density@track=<id>`) in the existing slot lists. Session 51 is
-unchanged: the request sits in its drawings as before. The Web app admits the
-key; until its editor exists it does not keep the tracks in a Generate.
+(`feature_density@track=<id>`) in the existing slot lists. The version of
+Session 51 does not change (it has not reached `main`); each drawing's draft
+gains `config.adv.feature_density_tracks`, a mode-scoped row of Session 51
+(`gbdraw/web_support/mode_scoped_settings.py`, `since` 51): the tracks as the
+request writes them, empty for a drawing without tracks. Load fills it from the
+request (`projectCanonicalSessionRequest`), Generate and Save write it back as
+the request's `featureDensityTracks` (the key only when the list is not empty),
+so a CLI Session's tracks survive a Web Generate and Save. A stored config
+without the key reads as no tracks; an entry that leaves the request's track
+shape is dropped with its Load repair row (`services/feature-density-tracks.js`).
 Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz`.
 
 ## Unreleased: depth and GC Percent axis label styles

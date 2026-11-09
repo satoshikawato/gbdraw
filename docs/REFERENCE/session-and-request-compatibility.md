@@ -150,7 +150,10 @@ Request schema 10 may also hold `diagramOptions.featureDensityTracks`, the
 feature density tracks of `--feature_density_track` and
 `--feature_density_table` (see
 [CLI Reference](../CLI_Reference.md#--feature_density_table)); a request
-without it draws none.
+without it draws none. The Web app keeps a loaded Session's tracks in each
+drawing's `config.adv.feature_density_tracks`, draws them again at Generate,
+and saves them; it has no editor for them yet and shows how many the drawing
+has under the track switches.
 
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key
