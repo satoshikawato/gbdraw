@@ -243,32 +243,33 @@ class RowWindowMarksGroup:
     def _gap(self, cx: float, axis_y: float, text_y: float, text: str, style: RowWindowStyle) -> None:
         gap = Group()
         gap.attribs[ROW_MARK_ATTRIBUTE] = "gap"
-        for offset in (-style.slash_spacing, style.slash_spacing):
-            gap.add(
-                Line(
-                    start=(_px(cx + offset - style.slash_slant), _px(axis_y + style.slash_half)),
-                    end=(_px(cx + offset + style.slash_slant), _px(axis_y - style.slash_half)),
-                    stroke=style.slash_color,
-                    stroke_width=_px(style.slash_stroke),
-                    stroke_linecap="round",
-                )
+        slashes = [
+            Line(
+                start=(_px(cx + offset - style.slash_slant), _px(axis_y + style.slash_half)),
+                end=(_px(cx + offset + style.slash_slant), _px(axis_y - style.slash_half)),
+                stroke=style.axis_stroke_color,
+                stroke_width=_px(style.slash_stroke),
+                stroke_linecap="round",
             )
+            for offset in (-style.slash_spacing, style.slash_spacing)
+        ]
+        elements: list[Rect | Line | Text] = [*slashes]
         if text:
+            # Painted box, "//", text: the box behind the length must not hide the strokes' round ends.
             width, height = style.omitted_text_box(text)
-            gap.add(
-                Rect(
-                    insert=(_px(cx - 0.5 * width - style.pad), _px(text_y - 0.5 * height)),
-                    size=(_px(width + 2.0 * style.pad), _px(height)),
-                    fill="white",
-                    fill_opacity=0.9,
-                )
+            box = Rect(
+                insert=(_px(cx - 0.5 * width - style.pad), _px(text_y - 0.5 * height)),
+                size=(_px(width + 2.0 * style.pad), _px(height)),
+                fill="white",
+                fill_opacity=0.9,
             )
-            gap.add(
-                create_text_element(
-                    text, _px(cx), _px(text_y), _px(style.list_font_size), "bold", style.font_family,
-                    fill=style.text_fill,
-                )
+            label = create_text_element(
+                text, _px(cx), _px(text_y), _px(style.list_font_size), "bold", style.font_family,
+                fill=style.text_fill,
             )
+            elements = [box, *slashes, label]
+        for element in elements:
+            gap.add(element)
         self.group.add(gap)
 
     def get_group(self) -> Group:

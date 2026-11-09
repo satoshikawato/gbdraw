@@ -29,7 +29,6 @@ from gbdraw.api.requests import (
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.linear_row_windows import (
-    LIST_TEXT_FILL,
     RowWindowUnit,
     omitted_length_text,
     plan_row_windows,
@@ -229,11 +228,17 @@ def test_a_windowed_row_draws_window_numbers_edge_marks_and_gap_marks(tmp_path: 
     assert [_texts(g) for g in marks[0] if g.get("data-gbdraw-row-mark") == "gap"] == [["3.0 kb"]]
     assert [_texts(g) for g in marks[1] if g.get("data-gbdraw-row-mark") == "gap"] == [[]]
     assert [len([n for n in g if n.get("data-gbdraw-row-mark") == "number"]) for g in marks] == [2, 2]
-    # "//" is a mark on the axis: drawn in the list's grey, never in the black of the row text (Owner 2026-11-09).
+    # "//" breaks the axis: drawn with the axis's stroke colour and width, as the dashed axis ends are (Owner 2026-11-09).
     slashes = [
         line for g in marks for gap in g if gap.get("data-gbdraw-row-mark") == "gap" for line in gap.iter(f"{SVG}line")
     ]
-    assert len(slashes) == 4 and {line.get("stroke") for line in slashes} == {LIST_TEXT_FILL}
+    dashes = [line for g in marks for line in g if line.get("data-gbdraw-row-mark") == "dash"]
+    axis_strokes = {(line.get("stroke"), line.get("stroke-width")) for line in dashes}
+    assert len(slashes) == 4 and len(axis_strokes) == 1
+    assert {(line.get("stroke"), line.get("stroke-width")) for line in slashes} == axis_strokes
+    # The white box behind the omitted length lies under "//", so it never hides the strokes' round ends.
+    [labelled] = [gap for gap in marks[0] if gap.get("data-gbdraw-row-mark") == "gap"]
+    assert [element.tag.removeprefix(SVG) for element in labelled] == ["rect", "line", "line", "text"]
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:

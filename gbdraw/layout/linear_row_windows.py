@@ -343,12 +343,8 @@ class RowWindowStyle:
 
     @property
     def slash_stroke(self) -> float:
-        return max(1.0, 0.075 * self.block_height)
-
-    @property
-    def slash_color(self) -> str:
-        """The list's grey: "//" is a mark on the axis and stays quieter than the row text."""
-        return LIST_TEXT_FILL
+        """"//" breaks the axis, so it is drawn with the axis's stroke (its colour is ``axis_stroke_color``)."""
+        return self.axis_stroke_width
 
     @property
     def slash_width(self) -> float:
