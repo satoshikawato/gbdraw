@@ -1,12 +1,14 @@
 // @ts-check
 /** @import { LinearSeq } from './drawing/inputs.js' */
-/** @import { LinearComparisonLayoutRow } from './linear-comparisons.js' */
+/** @import { LinearComparisonEdge, LinearComparisonLayoutRow } from './linear-comparisons.js' */
 /** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearUnitWindowsOf } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import {
   LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearComparisonEdge, resolveLinearComparisonPlan
 } from './linear-comparisons.js';
-import { drawsSeveralUnits, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf } from './linear-units.js';
+import {
+  drawsSeveralUnits, planLinearUnitSearch, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf
+} from './linear-units.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -679,23 +681,24 @@ const savedIndexCarrier = (source, candidateRecords) => {
 };
 
 /**
- * The saved LOSATP pipeline that Generate's Inherit runs in the browser (OV-3003): one that names unit pairs (mode
- * `pairwise`). The browser runs LOSAT only for the searches Generate plans, and Python's render has no LOSAT, so this
- * pipeline is searched by the draft path's planner and runner; any other saved comparison is copied as saved.
+ * The saved LOSATP Pairwise pipeline that Generate's Inherit runs in the browser (OV-3003). The browser runs LOSAT
+ * only for the searches Generate plans, and Python's render has no LOSAT, so this pipeline is searched by the draft
+ * path's planner and runner; any other saved comparison is copied as saved.
  * @param {SavedComparisonSource} source
  * @returns {SavedPipeline | null}
  */
 const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ (source.comparisons.find((comparison) => (
   comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'pairwise'
-  && isObject(comparison.settings) && Array.isArray(comparison.pairs) && comparison.pairs.length > 0
+  && isObject(comparison.settings) && Array.isArray(comparison.pairs)
 ))) ?? null;
 
 /**
- * Generate's Inherit of a saved LOSATP pipeline that names unit pairs (`searchedPipelineOf`): the pipeline, and the
- * searches of exactly its pairs over the units Python plans for the drawn cards (`savedPairsUnitSearch`), as a
- * selected LOSATP Pairwise plan of the drawn records (`resolveLinearComparisonPlan`), which Generate runs with the
- * pipeline's settings through the planner and runner of the draft path. Null when the drawing's saved comparison
- * holds no such pipeline: Inherit copies it as saved (`inheritSavedComparison`).
+ * Generate's Inherit of a saved LOSATP Pairwise pipeline (`searchedPipelineOf`): the pipeline, and the searches over
+ * the units Python plans for the drawn cards, which Generate runs with the pipeline's settings through the planner
+ * and runner of the draft path. A pipeline that names unit pairs searches exactly those (`savedPairsUnitSearch`), as
+ * a selected plan of their records; one that names none searches what Python's Pairwise searches without pairs, the
+ * records of adjacent rows (an adjacent plan, `planLinearUnitSearch`; OV-3037). Null when the drawing's saved
+ * comparison holds no such pipeline: Inherit copies it as saved (`inheritSavedComparison`).
  * @param {{
  *   source: SavedComparisonSource | null,
  *   cards: readonly LinearSeq[],
@@ -710,20 +713,25 @@ export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, 
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
   const carry = savedIndexCarrier(source, unitRecordInputs(cards, windowsOf));
-  const pairs = pipeline.pairs.map((pair) => ({
-    queryUnit: carry(pair.queryRecordIndex), subjectUnit: carry(pair.subjectRecordIndex)
-  }));
-  const unitSearch = await savedPairsUnitSearch(cards, pairs, windowsOf, runHelper, (recordPairs) => resolveLinearComparisonPlan({
+  /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
+  const losatPlan = (edges) => resolveLinearComparisonPlan({
     ...plan,
     plan: {
-      mode: LINEAR_COMPARISON_MODES.SELECTED, defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT,
-      edges: recordPairs.map(({ queryRecordKey, subjectRecordKey }) => createLinearComparisonEdge({
-        queryUid: queryRecordKey, subjectUid: subjectRecordKey, source: LINEAR_COMPARISON_SOURCES.LOSAT, included: true
-      }))
+      mode: edges.length > 0 ? LINEAR_COMPARISON_MODES.SELECTED : LINEAR_COMPARISON_MODES.ADJACENT,
+      defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT, edges
     },
     losatProgram: 'blastp',
     blastpMode: 'pairwise'
+  });
+  const pairs = pipeline.pairs.map((pair) => ({
+    queryUnit: carry(pair.queryRecordIndex), subjectUnit: carry(pair.subjectRecordIndex)
   }));
+  const unitSearch = pairs.length === 0
+    ? await planLinearUnitSearch(cards, losatPlan([]), windowsOf, runHelper)
+    : await savedPairsUnitSearch(cards, pairs, windowsOf, runHelper, (recordPairs) => losatPlan(recordPairs.map(
+      ({ queryRecordKey, subjectRecordKey }) => createLinearComparisonEdge({
+        queryUid: queryRecordKey, subjectUid: subjectRecordKey, source: LINEAR_COMPARISON_SOURCES.LOSAT, included: true
+      }))));
   return { pipeline, unitSearch, thresholds: source.thresholds };
 };
 

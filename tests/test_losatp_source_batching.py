@@ -222,17 +222,26 @@ def test_cli_session_keeps_one_file_as_one_source_on_replay(
         ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordId", "value": "BGC0000709"}),
         ({"kind": "genbank", "resourceId": "record-3-genbank"}, None),
     ]
-    # Similarity groups also stores its computed results (OV-1068).
+    # The Session stores the tables it drew, and Similarity groups its typed
+    # result, so the Session draws them without LOSAT (OV-1068, OV-3037).
     assert sorted(session["resources"]) == [
-        *(
-            ["comparison-orthogroups", "comparison-protein-1", "comparison-protein-2"]
-            if mode == "similarity_groups"
-            else []
-        ),
+        *(["comparison-orthogroups"] if mode == "similarity_groups" else []),
+        "comparison-protein-1",
+        "comparison-protein-2",
         "record-1-genbank",
         "record-3-genbank",
     ]
     assert session["resources"]["record-1-genbank"]["name"] == "two.gbk"
+    # The search is stored as done: its pipeline marker keeps the settings.
+    assert [
+        (comparison["kind"], comparison.get("mode"), comparison.get("queryRecordIndex"))
+        for comparison in session["renderRequest"]["comparisons"]
+        if comparison["kind"] != "orthogroupResult"
+    ] == [
+        ("precomputedProteinComparison", None, 0),
+        ("precomputedProteinComparison", None, 1),
+        ("generatedProteinComparison", "none", None),
+    ]
     # A replay writes the same layout and keeps every raw entry.
     assert replayed["renderRequest"]["records"] == records
     assert replayed["resources"] == session["resources"]

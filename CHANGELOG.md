@@ -230,6 +230,12 @@ write-up of a release.
   creates does. Generate now runs LOSAT in the browser for exactly the saved
   pairs, with the saved settings, and reuses earlier search results as a draft
   comparison does (OV-3003).
+- Fixed: a Session of `gbdraw linear --losat losatp --losatp_mode pairwise`
+  stored no comparison tables, so the Web stopped Generate with "Install LOSAT
+  or NCBI BLAST+" after **Inherit saved comparison**. The Session now stores
+  the tables the CLI drew, as Similarity groups does, and draws them without
+  LOSAT. A Pairwise Session written before still loads; Inherit runs LOSAT in
+  the browser for the records of adjacent rows (OV-3037).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per

@@ -604,11 +604,13 @@ the current schema. A Linear Session without a stored comparison plan loads
 with **No comparison**. A CLI Session written with `-b` therefore offers
 **Replace with current controls** only after a comparison is set up, and starts
 no LOSAT run before that.
-A saved LOSATP comparison that names its pairs of drawn records or windows but
-holds no search results (the drawing **Find in other files** creates, or a
-request saved before it was rendered) runs through **Inherit saved
-comparison**: Generate runs LOSAT in the browser for exactly those pairs, with
-the saved LOSATP settings and score thresholds.
+A saved LOSATP Pairwise comparison that holds no search results (the drawing
+**Find in other files** creates, a request saved before it was rendered, or a
+CLI Pairwise Session written before 0.15.0) runs through **Inherit saved
+comparison**: Generate runs LOSAT in the browser, with the saved LOSATP
+settings and score thresholds, for exactly the pairs of drawn records or
+windows it names, or, when it names none, for the records of adjacent rows, as
+the CLI searches them.
 **Generate Diagram** before choosing **Inherit saved comparison**, **Replace
 with current controls**, or **Clear comparison** stops with
 `COMPARISON_CHOICE_REQUIRED` ("Choose how to handle the saved comparison in the
@@ -625,10 +627,10 @@ protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
 without selecting LOSATP, so Generate draws no ribbons and starts no LOSAT run.
 A CLI Session written with `--losat losatp` and an editable protein pipeline
 loads with the adjacent LOSATP comparison it drew. It stores the protein
-results the CLI computed: Similarity groups stores the comparison tables and
-the `orthogroupResult`, and Collinear stores only the `collinearityResult` (no
-tables). The first Generate after Load reuses them instead of running LOSAT
-again. Pairwise stores nothing, so its first Generate still searches.
+results the CLI computed: Pairwise stores the comparison tables, Similarity
+groups the tables and the `orthogroupResult`, and Collinear only the
+`collinearityResult` (no tables). The first Generate after Load reuses them
+instead of running LOSAT again.
 
 Without saved `ui.layoutPreferences`, the legend and plot-title positions come
 from the committed `diagramOptions.output` for its mode and grouping, so a CLI

@@ -2480,11 +2480,12 @@ def stored_protein_result_request(
 ) -> DiagramRequest:
     """The request a Session stores after a render that ran a protein pipeline.
 
-    A Linear request that generated a Similarity groups or Collinear result
-    stores it as the Web Session writer does after a Generate (OV-1068): the
-    pipeline marker of mode ``"none"`` reuses the typed result; Similarity
-    groups also stores each drawn pair's table, Collinear only its typed
-    result. Any other request, Pairwise included, is stored as given.
+    A Linear request that generated a LOSATP result stores it as the Web
+    Session writer does after a Generate (OV-1068): the pipeline marker of
+    mode ``"none"`` reuses the stored result; Pairwise and Similarity groups
+    store each drawn pair's table, Similarity groups also its typed result,
+    Collinear only its typed result. So a Session draws its comparison
+    without LOSAT, the Web's included. Any other request is stored as given.
     ``metadata`` is the render's; nothing is computed again. The drawn
     results are stored in each record's search frame (R5, OV-1145).
     """
@@ -2493,11 +2494,13 @@ def stored_protein_result_request(
         return request
     options = request.options
     mode = losatp_analysis_mode(options.losat_search)
-    if mode not in {"orthogroup", "collinear"}:
+    if mode not in {"pairwise", "orthogroup", "collinear"}:
         return request
-    if metadata is None or (
-        metadata.collinearity_result if mode == "collinear" else metadata.orthogroups
-    ) is None:
+    if metadata is None or not {
+        "pairwise": metadata.protein_comparisons is not None or bool(metadata.linear_comparisons),
+        "orthogroup": metadata.orthogroups is not None,
+        "collinear": metadata.collinearity_result is not None,
+    }[mode]:
         raise ValueError(f"computed no {mode} result")
     metadata = _search_frame_metadata(metadata)
     stored = replace(options, losat_search=_resolved_losat_search(options.losat_search))

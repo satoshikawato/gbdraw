@@ -147,12 +147,12 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   ];
   const windowsOf = (card) => linearWindowsPayload(card, { arranged: true });
   const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
-  const saved = (pairs, records = cards) => savedComparisonSource({
+  const saved = (pairs, records = cards, mode = 'pairwise') => savedComparisonSource({
     renderRequest: {
       schema: 10, mode: 'linear', diagramOptions: { bitscore: 40 },
       records: records.map((card) => ({ recordKey: card.uid, windows: windowsOf(card) })),
       comparisons: [{
-        kind: 'generatedProteinComparison', mode: 'pairwise', settings,
+        kind: 'generatedProteinComparison', mode, settings,
         pairs: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ queryRecordIndex, subjectRecordIndex }))
       }]
     },
@@ -196,8 +196,21 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   inheritSavedComparison({ candidate, source: saved([[0, 2], [1, 3]]), searched: true });
   assert.deepEqual(candidate.renderRequest.comparisons, searched);
   assert.deepEqual(candidate.renderRequest.diagramOptions, { bitscore: 40 });
-  // A saved comparison without such a pipeline is copied as saved; changed windows ask for the choice before a search.
-  assert.equal(await search(saved([])), null);
+  // A pipeline that names no pairs (a CLI Session before 0.15.0) searches what Python's Pairwise searches without
+  // pairs: every unit pair of the records of adjacent rows, as Python plans them for the adjacent record pair.
+  asked.length = 0;
+  const adjacent = await search(saved([]));
+  assert.ok(adjacent);
+  assert.deepEqual(asked.map((payload) => payload.pairs), [[{ queryRecordKey: 'a', subjectRecordKey: 'b', source: 'losat' }]]);
+  const adjacentSpecs = buildLosatJobSpecs({
+    resolution: adjacent.unitSearch.resolution, recordCount: adjacent.unitSearch.sequences.length,
+    recordUids: adjacent.unitSearch.sequences.map((seq) => seq.uid),
+    program: 'blastp', blastpMode: 'pairwise', collinearInferOrthogroups: false
+  });
+  assert.deepEqual(adjacentSpecs.map((spec) => [spec.queryIndex, spec.subjectIndex]), [[0, 2], [0, 3], [1, 2], [1, 3]]);
+  // A saved comparison without a Pairwise pipeline is copied as saved; changed windows ask for the choice before a
+  // search.
+  assert.equal(await search(saved([], cards, 'none')), null);
   asked.length = 0;
   await assert.rejects(search(saved([[0, 2]], [cards[0], createLinearSeq({ uid: 'b', windows: [window(10, 90)] })])),
     (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
