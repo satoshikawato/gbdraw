@@ -101,6 +101,42 @@ const displayRow = (row) => ({
   note: row.note
 });
 
+/**
+ * The fields of each report record that the dialog shows, in report order.
+ * @param {LabelFitReport} report
+ * @returns {LabelFitDialogState['records']}
+ */
+const dialogRecords = (report) => report.records.map((record) => ({
+  recordId: record.recordId,
+  recordIndex: record.recordIndex,
+  labelKind: record.labelKind,
+  labelKindTitle: record.labelKindTitle,
+  labelCount: record.labelCount,
+  fontSize: record.fontSize,
+  counts: record.counts,
+  capacity: record.capacity
+}));
+
+/**
+ * The records whose name lines "Edit Species / Strain…" shows. Only a drawn
+ * figure has the definition to edit: after a Generate that drew nothing the
+ * preview may show an older figure. One per drawn record, by its index (two
+ * records may share an ID).
+ * @param {LabelFitReport} report
+ * @returns {LabelFitDefinitionRecord[]}
+ */
+const definitionRecordsOf = (report) => {
+  if (!report.drawn) return [];
+  /** @type {Map<number, LabelFitDefinitionRecord>} */
+  const records = new Map();
+  for (const { labelKind, recordIndex, recordId } of report.records) {
+    if (labelKind === 'circular_definition' && recordIndex !== null && !records.has(recordIndex)) {
+      records.set(recordIndex, { recordIndex, recordId });
+    }
+  }
+  return [...records.values()];
+};
+
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
@@ -189,28 +225,8 @@ export const createLabelFitDialog = ({
     dialog.capacity = report.records.some((record) => record.capacity !== null);
     reportRemedies = report.remedies;
     reportLargerFigure = report.largerFigure;
-    dialog.records = report.records.map((record) => ({
-      recordId: record.recordId,
-      recordIndex: record.recordIndex,
-      labelKind: record.labelKind,
-      labelKindTitle: record.labelKindTitle,
-      labelCount: record.labelCount,
-      fontSize: record.fontSize,
-      counts: record.counts,
-      capacity: record.capacity
-    }));
-    // Only a drawn figure has the definition to edit: after a Generate that drew nothing the preview may show an
-    // older figure. One button per drawn record, by its index (two records may share an ID).
-    /** @type {Map<number, LabelFitDefinitionRecord>} */
-    const definitionRecords = new Map();
-    if (report.drawn) {
-      for (const { labelKind, recordIndex, recordId } of report.records) {
-        if (labelKind === 'circular_definition' && recordIndex !== null && !definitionRecords.has(recordIndex)) {
-          definitionRecords.set(recordIndex, { recordIndex, recordId });
-        }
-      }
-    }
-    dialog.definitionRecords = [...definitionRecords.values()];
+    dialog.records = dialogRecords(report);
+    dialog.definitionRecords = definitionRecordsOf(report);
     dialog.rows = report.rows.map(displayRow);
     listRemedies();
     dialog.selectedKind = '';

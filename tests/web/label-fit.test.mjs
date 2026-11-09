@@ -302,6 +302,21 @@ test('Edit Species / Strain closes the dialog, applies nothing, and shows that r
   assert.deepEqual(dialog.labelFitDialog.definitionRecords, []);
 });
 
+test('the dialog shows each report record\'s display fields in order, and one definition button per drawn index', async () => {
+  const { dialog } = dialogHarness();
+  const drawn = report([foundRow('smaller_definition_font', 16.5)], { drawn: true });
+  // A record not placed for lack of room carries its capacity; the definition records share drawn index 1.
+  drawn.records = [{ ...drawn.records[0], capacityRatio: 2.5 }, definitionRecord('NC_2', 1), definitionRecord('NC_3', 1)];
+  const parsed = normalizeReport(drawn);
+  assert.notEqual(parsed.records[0].capacity, null);
+  await dialog.openLabelFitDialog(parsed, { mode: 'circular' });
+  const shownFields = ['recordId', 'recordIndex', 'labelKind', 'labelKindTitle', 'labelCount', 'fontSize', 'counts', 'capacity'];
+  assert.deepEqual(dialog.labelFitDialog.records,
+    parsed.records.map((record) => Object.fromEntries(shownFields.map((field) => [field, record[field]]))));
+  // The first record drawn at an index keeps its button.
+  assert.deepEqual(dialog.labelFitDialog.definitionRecords, [{ recordIndex: 1, recordId: 'NC_2' }]);
+});
+
 test('a report record\'s index is a drawn record index or null, never missing', () => {
   for (const recordIndex of [undefined, -1, 1.5, '0']) {
     const value = report([], { drawn: true });
