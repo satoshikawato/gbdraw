@@ -1083,3 +1083,78 @@ test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo ta
     app.selectDrawing(source);
   }
 });
+
+// #1777 round 14 (OV-3209, OV-3208): a drawing's LOSAT rows are in the state only while the drawing is. Delete holds
+// them with its slot and its Undo writes them back, so New or Duplicate under the deleted drawing's ID neither takes
+// nor erases them.
+test('Delete holds a drawing\'s LOSAT rows; New and Duplicate under its ID neither take nor erase them', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const source = modeDrawing(state, 'circular').id;
+  app.selectDrawing(source);
+  const rowsOf = (drawingId) => state.losatCacheInfo.value.filter((row) => row.drawingId === drawingId).map(({ key }) => key);
+  try {
+    const { drawingId: second } = app.drawingList.newDrawing('circular');
+    state.losatCacheInfo.value = [
+      { key: 'k1', filename: 'k1.tsv', display: true, drawingId: source },
+      { key: 'k2', filename: 'k2.tsv', display: true, drawingId: second }
+    ];
+    state.losatCache.value = new Map(['k1', 'k2'].map((key) => [key, { key }]));
+    app.selectDrawing(source);
+    app.drawingList.deleteDrawing(second);
+    assert.deepEqual([rowsOf(source), rowsOf(second)], [['k1'], []], 'the deleted drawing\'s rows leave with it');
+    const { drawingId: fresh } = app.drawingList.newDrawing('circular');
+    assert.equal(fresh, second, 'New takes the free ID');
+    assert.deepEqual(app.losatResultRows.value, [], 'and none of the deleted drawing\'s results (OV-3208)');
+    await history.undo();
+    const { drawingId: copy } = app.drawingList.duplicateDrawing(source);
+    assert.equal(copy, second, 'Duplicate takes the free ID');
+    assert.deepEqual([rowsOf(source), rowsOf(copy)], [['k1'], ['k1']], 'the copy holds its source\'s rows only');
+    await history.undo();
+    await history.undo();
+    assert.ok(state.drawingTabs.value.some((tab) => tab.id === second), 'Undo of the Delete');
+    assert.deepEqual([rowsOf(source), rowsOf(second)], [['k1'], ['k2']], 'brings the drawing back with its rows');
+    await history.redo();
+    assert.deepEqual([rowsOf(source), rowsOf(second)], [['k1'], []], 'and Redo takes them again');
+    await history.undo();
+  } finally {
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    app.selectDrawing(source);
+  }
+});
+
+// #1777 round 14 (OV-3210): Linear's per-pair readers read the shown drawing's rows, so a Linear drawing and its copy
+// each list a window pair once, and a raw file name typed in the copy names only the copy's row.
+test('a Linear drawing and its copy each list a window pair once; a name typed in the copy stays in the copy', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const shownBefore = state.activeDrawingId.value;
+  const catalog = state.featureCatalog.value;
+  try {
+    const { drawingId: linear } = app.drawingList.newDrawing('linear');
+    state.featureCatalog.value = { items: [{ recordKeys: ['a#1', 'a#2', 'b'], windowOf: { 'a#1': 'a', 'a#2': 'a' } }] };
+    state.losatCacheInfo.value = ['e1', 'e2'].map((edgeKey, index) => ({
+      key: `w${index + 1}`, filename: `w${index + 1}.tsv`, display: true, drawingId: linear, edgeKey,
+      queryUid: `a#${index + 1}`, subjectUid: 'b'
+    }));
+    state.losatCache.value = new Map(['w1', 'w2'].map((key) => [key, { key }]));
+    const { drawingId: copy } = app.drawingList.duplicateDrawing(linear);
+    const listed = () => Object.values(app.linearLosatWindowPairs.value).flat().map(({ edgeKey, filename }) => [edgeKey, filename]);
+    const byEdge = () => Object.values(app.linearLosatCacheInfoByEdgeKey.value).map(({ edgeKey, drawingId }) => [edgeKey, drawingId]);
+    assert.deepEqual(listed(), [['e1', 'w1.tsv'], ['e2', 'w2.tsv']], 'the copy lists each window pair once');
+    assert.deepEqual(byEdge(), [['e1', copy], ['e2', copy]], 'from its own rows');
+    app.setLosatPairFilename('e1', 'renamed.tsv');
+    assert.deepEqual(listed(), [['e1', 'renamed.tsv'], ['e2', 'w2.tsv']]);
+    app.selectDrawing(linear);
+    assert.deepEqual(listed(), [['e1', 'w1.tsv'], ['e2', 'w2.tsv']], 'the source keeps its name and lists each pair once');
+    assert.deepEqual(byEdge(), [['e1', linear], ['e2', linear]]);
+    await history.undo();
+    await history.undo();
+  } finally {
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    state.featureCatalog.value = catalog;
+    app.selectDrawing(shownBefore);
+  }
+});

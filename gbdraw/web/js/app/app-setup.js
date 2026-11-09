@@ -1754,7 +1754,7 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    losatResultRowsOf, clearableLosatResultRows, swapLosatResultRows,
+    losatResultRowsOf, clearableLosatResultRows, swapLosatResultRows, losatRowsOf,
     downloadLosatCache: downloadLosatCacheOfDrawing,
     downloadLosatPair: downloadLosatPairOfDrawing,
     clearLosatCache,
@@ -2553,26 +2553,26 @@ export const createAppSetup = () => {
       return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
         resultsManager.paletteColorsOf(source));
     },
-    // The copy's Result is its source's slot under the copy's ID: the shown
-    // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
+    // The copy's Result is its source's slot under its ID (the shown drawing's through `captureArtifactSlot`, R1).
     copyDrawing: (sourceId, copyId) => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatResultRowsOf(state.drawingOf(sourceId)) };
+      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId) } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
     addDrawing: state.addDrawing,
-    // An error that names a drawing leaves with it (R17-29), as it leaves on
-    // a switch away (OV-372): every Delete, its Redo, and the Undo of New and
-    // Duplicate remove a drawing here.
-    removeDrawing: (drawingId) => {
+    // An error that names a drawing leaves with it (R17-29), as on a switch away (OV-372): every Delete, its Redo,
+    // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
+    removeDrawing: (drawingId, left = []) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
-      return state.removeDrawing(drawingId, artifactSlots);
+      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left) };
     },
-    putSlot: artifactSlots.putSlot,
-    swapLosatRows: swapLosatResultRows,
+    putHeld: (drawingId, { slot, losatRows }) => {
+      if (slot) artifactSlots.putSlot(slot);
+      return swapLosatResultRows(drawingId, losatRows);
+    },
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,

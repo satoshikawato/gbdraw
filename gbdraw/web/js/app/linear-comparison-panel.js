@@ -17,6 +17,7 @@ import {
 import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
+import { losatRowsOfDrawing } from '../services/losat-cache.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { diagnosticError, losatFailureRepeats, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
@@ -350,8 +351,12 @@ export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCach
         : []
     );
   });
+  // The shown Linear drawing's rows, never another drawing's that holds the same pair (OV-3210).
   /** @returns {LosatCacheInfoEntry[]} */
-  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
+  const cacheInfoRows = () => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing === null || !Array.isArray(losatCacheInfo.value) ? [] : losatRowsOfDrawing(losatCacheInfo.value, drawing.id);
+  };
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     cacheInfoRows()
       .filter((entry) => String(entry?.edgeKey || ''))

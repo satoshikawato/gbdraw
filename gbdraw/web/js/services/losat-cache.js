@@ -90,13 +90,22 @@ export const losatRowsOnePerKey = (rows) => {
 };
 
 /**
+ * A drawing's cache-info rows, as its Generate or a Load wrote them: Linear's per-pair readers find a pair's row among
+ * them by its edge (OV-3210; two pairs of identical sequences share one key), and a Duplicate copies them (OV-3205).
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatRowsOfDrawing = (rows, drawingId) => rows.filter((row) => row.drawingId === drawingId);
+
+/**
  * The LOSAT results of a drawing: its cache-info rows, one per raw key. **Save Raw LOSAT TSV** saves them and Run
  * Info lists their runtimes (OV-3203, OV-3204).
  * @template {{ key: unknown, drawingId: DrawingId }} Row
  * @param {readonly Row[]} rows @param {DrawingId} drawingId
  * @returns {Row[]}
  */
-export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(rows.filter((row) => row.drawingId === drawingId));
+export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(losatRowsOfDrawing(rows, drawingId));
 
 /**
  * The cache-info rows of the other drawings: what a drawing's Generate or ring edit leaves.
@@ -107,16 +116,17 @@ export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(
 export const losatRowsOfOtherDrawings = (rows, drawingId) => rows.filter((row) => row.drawingId !== drawingId);
 
 /**
- * The cache-info rows with a drawing's rows replaced by `drawingRows` under its ID, and the rows it held: a Duplicate
- * gives the copy its source's results this way, and its Undo takes the copy's back (OV-3205). The cached searches
- * are shared by key, so none is copied.
+ * The cache-info rows with a drawing's rows replaced by `drawingRows` under its ID, and the rows it held: a drawing
+ * that leaves the store (Delete, the Undo of New or Duplicate) hands its rows over, and one that comes back or is
+ * made takes its own (a copy its source's), so a drawing's rows are in the state only while it is (OV-3205, OV-3209).
+ * The cached searches are shared by key, so none is copied or dropped.
  * @template {{ drawingId: DrawingId }} Row
  * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} drawingRows
  * @returns {{ rows: Row[], held: Row[] }}
  */
 export const losatRowsWithDrawing = (rows, drawingId, drawingRows) => ({
   rows: [...losatRowsOfOtherDrawings(rows, drawingId), ...drawingRows.map((row) => ({ ...row, drawingId }))],
-  held: rows.filter((row) => row.drawingId === drawingId)
+  held: losatRowsOfDrawing(rows, drawingId)
 });
 
 // The runtime identity the Web stores beside each raw entry it searches

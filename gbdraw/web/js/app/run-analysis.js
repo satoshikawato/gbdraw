@@ -198,6 +198,7 @@ import {
   isReusableLosatEntry,
   writtenLegacyProteinArtifacts,
   losatResultRowsOfDrawing,
+  losatRowsOfDrawing,
   losatRowsOfOtherDrawings,
   losatRowsOnePerKey,
   losatRowsWithDrawing,
@@ -2297,10 +2298,9 @@ export const createRunAnalysis = ({
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
-  /** @param {string | number} edgeKey An edge key, or the entry's index. */
-  const getLosatCacheInfoEntry = (edgeKey) => {
-    /** @type {LosatCacheInfoEntry[]} */
-    const entries = Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [];
+  /** @param {DrawingState} drawing @param {string | number} edgeKey An edge key, or the index, among the drawing's rows (OV-3210). */
+  const getLosatCacheInfoEntry = (drawing, edgeKey) => {
+    const entries = losatRowsOfDrawing(cacheInfoRows(), drawing.id);
     // `Number.isInteger` is true only for a number.
     if (Number.isInteger(edgeKey)) return entries[/** @type {number} */ (edgeKey)] || null;
     const normalizedKey = String(edgeKey || '').trim();
@@ -2333,7 +2333,7 @@ export const createRunAnalysis = ({
    * @param {string} edgeKey
    */
   const losatPairDefaultName = (drawing, edgeKey) => {
-    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(edgeKey);
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(drawing, edgeKey);
     const drawnSeqs = drawing.drawnLinearSeqs.value;
     const places = catalogUnitPlaces(featureCatalog.value);
     const query = places.get(String(edge?.queryUid ?? ''));
@@ -2398,7 +2398,7 @@ export const createRunAnalysis = ({
    */
   const downloadLosatPair = async (drawing, edgeKey, customName) => {
     if (drawing.mode !== 'linear') return;
-    const entry = getLosatCacheInfoEntry(edgeKey);
+    const entry = getLosatCacheInfoEntry(drawing, edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
@@ -6388,6 +6388,8 @@ export const createRunAnalysis = ({
    * @param {DrawingState} drawing
    */
   const losatResultRowsOf = (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id);
+  /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
+  const losatRowsOf = (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId);
 
   /** @param {DrawingState} drawing */
   const downloadLosatCache = async (drawing) => {
@@ -6429,9 +6431,9 @@ export const createRunAnalysis = ({
   /** The searches **Clear LOSAT results** removes: every drawing's rows, one per cache key (OV-3203), as Clear clears
    * the whole project (PD-OI-022: Clear Cache invalidates retained evidence). @returns {LosatCacheInfoEntry[]} */
   const clearableLosatResultRows = () => losatRowsOnePerKey(cacheInfoRows());
-  /** A Duplicate's copy takes its source's rows, its Undo takes them back (OV-3205). @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
+  /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
   const swapLosatResultRows = (drawingId, drawingRows) => {
-    const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows);
+    const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
     losatCacheInfo.value = rows;
     return held;
   };
@@ -6525,7 +6527,7 @@ export const createRunAnalysis = ({
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     losatResultRowsOf,
-    clearableLosatResultRows, swapLosatResultRows,
+    clearableLosatResultRows, swapLosatResultRows, losatRowsOf,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

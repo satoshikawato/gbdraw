@@ -31,20 +31,23 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
  * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
- * @typedef {readonly LosatCacheInfoEntry[]} HeldLosatRows A drawing's LOSAT result rows, held while it is out.
- * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot, losatRows: HeldLosatRows }} CopyDrawing
+ * @typedef {readonly LosatCacheInfoEntry[]} HeldLosatRows LOSAT result rows of one drawing ID.
+ * @typedef {{ slot: HeldSlot, losatRows: HeldLosatRows }} HeldDrawing What a drawing out of the store keeps for its
+ *   return: its Result slot and its LOSAT result rows. A drawing's rows are in the state only while it is (OV-3209).
+ * @typedef {{ drawing: DrawingState, held: HeldDrawing }} MadeDrawing A new drawing and what it starts with.
+ * @typedef {(sourceId: DrawingId, copyId: DrawingId) => MadeDrawing} CopyDrawing
  *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result) and its
  *   source's LOSAT result rows (OV-3205).
- * @typedef {(drawingId: DrawingId, rows: HeldLosatRows) => HeldLosatRows} SwapLosatRows
- *   Gives a drawing `rows` as its LOSAT results and hands over the rows it held.
  * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
  * @typedef {(derivation: RegionDerivation, create: { runSavedComparison: boolean }) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
  *   Reads a derived region drawing; the result makes its state under the new drawing's ID. Find in other files' Create
  *   runs its saved comparison at Generate (PD-OI-123); New drawing from a region leaves the choice to the user.
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
- * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
- *   Removes a drawing that is not shown, and hands over its slot.
- * @typedef {(slot: Readonly<ArtifactSlot>) => void} PutSlot A held slot back, with its drawing.
+ * @typedef {(drawingId: DrawingId, left?: HeldLosatRows) => HeldDrawing} RemoveDrawingFromStore
+ *   Removes a drawing that is not shown and hands over its slot and LOSAT rows; `left` are the rows its ID had
+ *   before the drawing came (none unless a History restore wrote some, OV-3207).
+ * @typedef {(drawingId: DrawingId, held: HeldDrawing) => HeldLosatRows} PutHeld
+ *   A held slot and LOSAT rows back, with their drawing; returns the rows its ID had.
  * @typedef {(drawingId: DrawingId) => boolean} ReadDrawingHas Whether a drawing has a Result, or edits.
  * @typedef {(drawingId: DrawingId) => Iterable<string>} ReadBoundFileIds The files a drawing binds.
  * @typedef {(drawingId: DrawingId, name: string) => void} RenameDrawingInStore
@@ -73,8 +76,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {RegionDrawing} regionDrawing
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
- * @property {PutSlot} putSlot
- * @property {SwapLosatRows} swapLosatRows
+ * @property {PutHeld} putHeld
  * @property {RenameDrawingInStore} renameDrawing
  * @property {MoveDrawingInStore} moveDrawing
  * @property {AddDrawingHistory} addDrawingHistory
@@ -120,7 +122,7 @@ const newTabIndex = (tabs, after) => (after === null ? tabs.length : tabs.findIn
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
-  regionDrawing, addDrawing, removeDrawing, putSlot, swapLosatRows, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
+  regionDrawing, addDrawing, removeDrawing, putHeld, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
   /** @param {string} operation @param {DrawingId} drawingId @returns {number} */
@@ -145,39 +147,41 @@ export const createDrawingList = ({
    * Its Undo shows the drawing shown before; its Redo shows it again (R16-2).
    * @param {string} label The project step's.
    * @param {ModeProfileName} mode
-   * @param {(drawingId: DrawingId) => DrawingState} make The new drawing's state.
+   * @param {(drawingId: DrawingId) => MadeDrawing} make The new drawing's state and what it starts with.
    * @param {DrawingId | null} [after]
+   * @param {(drawingId: DrawingId) => string} [nameOf]
    */
-  const addNewDrawing = (label, mode, make, after = null) => unlessBusy(() => {
+  const addNewDrawing = (label, mode, make, after = null, nameOf = (drawingId) => defaultDrawingName(mode, drawingId)) => unlessBusy(() => {
     const before = shownDrawingId();
     const drawingId = allocateDrawingId(mode, drawingTabs().map((tab) => tab.id));
-    const drawing = make(drawingId);
-    const name = defaultDrawingName(mode, drawingId);
-    // Redo gets the drawing's History back from the router, which holds it,
-    // and its slot (a Result it got before the Undo) from this step.
-    /** @type {HeldSlot} */
-    let slot = null;
+    const { drawing, held: made } = make(drawingId);
+    let held = made;
+    const name = nameOf(drawingId);
+    // Redo gets the drawing's History back from the router, which holds it, and its slot and LOSAT rows (a Result
+    // it got before the Undo) from this step; the rows its reused ID had go back on the Undo.
+    /** @type {HeldLosatRows} */
+    let left = [];
+    const add = (first = false) => {
+      addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
+      if (first) addDrawingHistory(drawingId);
+      left = putHeld(drawingId, held);
+      showDrawingNow(drawingId);
+    };
     runListStep(label, {
-      apply: () => {
-        addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
-        addDrawingHistory(drawingId);
-        showDrawingNow(drawingId);
-      },
-      redo: () => {
-        addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
-        if (slot) putSlot(slot);
-        showDrawingNow(drawingId);
-      },
+      apply: () => add(true),
+      redo: () => add(),
       undo: () => {
         showDrawingNow(before);
-        slot = removeDrawing(drawingId);
+        held = removeDrawing(drawingId, left);
       }
     });
     return drawingId;
   });
+  /** @param {DrawingState} drawing @returns {MadeDrawing} */
+  const startingEmpty = (drawing) => ({ drawing, held: { slot: null, losatRows: [] } });
 
   /** @param {ModeProfileName} mode */
-  const newDrawing = (mode) => addNewDrawing('New drawing', mode, (drawingId) => createDrawing(drawingId, mode));
+  const newDrawing = (mode) => addNewDrawing('New drawing', mode, (drawingId) => startingEmpty(createDrawing(drawingId, mode)));
 
   /**
    * A new drawing of `mode` with the style of a drawing (PD-OI-090 〔作成〕(3),
@@ -189,7 +193,7 @@ export const createDrawingList = ({
    */
   const newDrawingWithStyle = (sourceId, mode) => {
     tabIndexOf('newDrawingWithStyle', sourceId);
-    return addNewDrawing('New drawing with this style', mode, (drawingId) => styleDrawing(sourceId, drawingId, mode));
+    return addNewDrawing('New drawing with this style', mode, (drawingId) => startingEmpty(styleDrawing(sourceId, drawingId, mode)));
   };
 
   /**
@@ -204,32 +208,9 @@ export const createDrawingList = ({
   const duplicateDrawing = (sourceId) => {
     const tabs = drawingTabs();
     const index = tabIndexOf('duplicateDrawing', sourceId);
-    return unlessBusy(() => {
-      const before = shownDrawingId();
-      const { mode } = drawingOf(sourceId);
-      const drawingId = allocateDrawingId(mode, tabs.map((tab) => tab.id));
-      const name = copyDrawingName(shownDrawingName(tabs[index], mode), tabs.map((tab) => tab.name), copyNamePhrase);
-      const { drawing, slot: copied, losatRows: copiedRows } = copyDrawing(sourceId, drawingId);
-      let slot = copied;
-      let losatRows = copiedRows;
-      const add = (first = false) => {
-        addDrawing(drawing, name, drawingTabs().length);
-        if (first) addDrawingHistory(drawingId);
-        if (slot) putSlot(slot);
-        swapLosatRows(drawingId, losatRows);
-        showDrawingNow(drawingId);
-      };
-      runListStep('Duplicate drawing', {
-        apply: () => add(true),
-        redo: () => add(),
-        undo: () => {
-          showDrawingNow(before);
-          slot = removeDrawing(drawingId);
-          losatRows = swapLosatRows(drawingId, []);
-        }
-      });
-      return drawingId;
-    });
+    const { mode } = drawingOf(sourceId);
+    return addNewDrawing('Duplicate drawing', mode, (drawingId) => copyDrawing(sourceId, drawingId), null,
+      () => copyDrawingName(shownDrawingName(tabs[index], mode), tabs.map((tab) => tab.name), copyNamePhrase));
   };
 
   /**
@@ -242,7 +223,8 @@ export const createDrawingList = ({
   const newDrawingFromRegion = async (sourceId, derivation, kind = 'region') => {
     tabIndexOf('newDrawingFromRegion', sourceId);
     const make = await regionDrawing(derivation, { runSavedComparison: kind === 'search' });
-    return addNewDrawing(kind === 'region' ? 'New drawing from a region' : 'Find in other files', derivation.derived.mode, make, kind === 'region' ? null : sourceId);
+    return addNewDrawing(kind === 'region' ? 'New drawing from a region' : 'Find in other files', derivation.derived.mode,
+      (drawingId) => startingEmpty(make(drawingId)), kind === 'region' ? null : sourceId);
   };
 
   /**
@@ -284,7 +266,7 @@ export const createDrawingList = ({
   };
 
   /**
-   * Deletes a drawing, as one project step that holds it with its settings,
+   * Deletes a drawing, as one project step that holds it with its settings, LOSAT result rows,
    * edits, Result slot, and History until the step is evicted (R16-3). The
    * last drawing cannot be deleted (R11). Deleting the shown drawing first
    * shows the next tab, else the previous (R16-2).
@@ -299,8 +281,10 @@ export const createDrawingList = ({
       const after = before === drawingId ? tabs[index + 1 < tabs.length ? index + 1 : index - 1].id : before;
       const drawing = drawingOf(drawingId);
       const { name } = tabs[index];
-      /** @type {HeldSlot} */
-      let slot = null;
+      /** @type {HeldDrawing} */
+      let held = { slot: null, losatRows: [] };
+      /** @type {HeldLosatRows} */
+      let left = [];
       // The step keeps the files only this drawing binds until it is evicted.
       const fileIds = [...boundFileIdsOf(drawingId)];
       // The switch settles the drawing's open step while its History is still a member.
@@ -309,15 +293,15 @@ export const createDrawingList = ({
         apply: () => {
           showDrawingNow(after);
           removeDrawingHistory(drawingId);
-          slot = removeDrawing(drawingId);
+          held = removeDrawing(drawingId, left);
         },
         redo: () => {
           showDrawingNow(after);
-          slot = removeDrawing(drawingId);
+          held = removeDrawing(drawingId, left);
         },
         undo: () => {
           addDrawing(drawing, name, index);
-          if (slot) putSlot(slot);
+          left = putHeld(drawingId, held);
           showDrawingNow(before);
         }
       });

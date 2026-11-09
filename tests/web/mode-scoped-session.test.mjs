@@ -839,6 +839,27 @@ test('a Session 51 whose Linear drawings hold different LOSAT entries keeps each
   }
 });
 
+// #1777 round 14 (OV-3210): two Linear drawings that hold one pair's entry get a row each, and each drawing's
+// per-pair readers read its own row only: the pair once, with that drawing's row.
+test('two Linear drawings that hold one LOSAT pair each read the pair once, from their own row (OV-3210)', async () => {
+  const { createLinearLayoutReaders } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  second.losatCache.entries = structuredClone(first.losatCache.entries);
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const [{ edgeKey }] = first.losatCache.entries;
+  for (const drawing of [first, second]) {
+    const { linearLosatCacheInfoByEdgeKey } = createLinearLayoutReaders({
+      state, shownDrawingOfMode: () => state.drawingOf(drawing.id), losatCacheInfo: state.losatCacheInfo
+    });
+    assert.deepEqual(Object.values(linearLosatCacheInfoByEdgeKey.value).map((row) => [row.edgeKey, row.drawingId]),
+      [[edgeKey, drawing.id]], drawing.id);
+  }
+  state.losatCacheInfo.value = [];
+});
+
 // D-15-120: a Session 51 without a Linear drawing loads without one; the Linear drawing the app
 // held before the Load goes with the drawings the Load replaces.
 test('a Session 51 without a Linear drawing loads no Linear drawing', async () => {
