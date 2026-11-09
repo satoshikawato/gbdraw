@@ -14,7 +14,7 @@ from typing import Sequence
 from Bio.SeqFeature import CompoundLocation, Location, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
-from ..analysis.windows import keep_window_source
+from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, keep_window_source
 from ..core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
@@ -425,8 +425,8 @@ def _crop_record_to_region(
         # Capture the complete source length before the first crop; later crops
         # retain this provenance through the copied annotations.
         new_record.annotations["gbdraw_source_length"] = len(record)
-    # The crop's windows read their flanking bases from the record it is cut from (OV-2890).
-    keep_window_source(new_record, record)
+    # Set once the crop is complete (below).
+    new_record.annotations.pop(WINDOW_SOURCE_ANNOTATION, None)
 
     if getattr(source, "letter_annotations", None):
         sliced = {}
@@ -462,6 +462,8 @@ def _crop_record_to_region(
     if getattr(new_record, "annotations", None) is None:
         new_record.annotations = {}
     new_record.annotations[_REGION_APPLIED_KEY] = True
+    # The crop's windows read their flanking bases from the record it is cut from (OV-2890).
+    keep_window_source(new_record, record)
 
     return new_record
 

@@ -32,6 +32,11 @@ from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
     WINDOW_SPAN_ANNOTATION,
+    RECORD_ORIGIN_ANNOTATION,
+    RecordOrigin,
+    RecordSourceKind,
+    held_record_origin,
+    record_content_digest,
     record_window_span,
     _feature_source_index_map,
     _iter_source_features,
@@ -120,7 +125,6 @@ GenBankLoader = Callable[..., list[SeqRecord]]
 GffFastaLoader = Callable[..., list[SeqRecord]]
 FastaLoader = Callable[..., list[SeqRecord]]
 # What a record was read from: the planner's name for each record source type.
-RecordSourceKind = Literal["genbank", "gff_fasta", "fasta", "memory"]
 
 
 @dataclass(frozen=True)
@@ -286,6 +290,8 @@ class ResolvedRecordProvenance:
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
+    # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
+    origin_window_of: str | None = field(default=None, kw_only=True)
     # The record's place among the resolved records before its windows expand: labels and subtitles apply by it.
     # ``None`` reads as ``resolved_index`` (``place``).
     record_position: int | None = field(default=None, kw_only=True)
@@ -299,6 +305,24 @@ class ResolvedRecordProvenance:
     def record_identity_key(self) -> str:
         """The key of the record this unit draws: per-record edits, colours and evidence bind to it."""
         return self.window.record_key if self.window is not None else self.record_key
+
+    @property
+    def window_of(self) -> str | None:
+        """The key of the record whose window this unit draws (D-01), from this plan or the one before."""
+        return self.window.window_of if self.window is not None else self.origin_window_of
+
+    def origin(self, record: SeqRecord) -> RecordOrigin:
+        """The origin of ``record``, this unit's planned record, as the projection carries it."""
+        return RecordOrigin(
+            content_digest=record_content_digest(record),
+            source_kind=self.source_kind,
+            source_paths=self.source_paths,
+            source_record_index=self.source_record_index,
+            source_record_count=self.source_record_count,
+            source_record_id=self.source_record_id,
+            source_record_id_unique=self.source_record_id_unique,
+            window_of=self.window_of,
+        )
 
     @property
     def source_name(self) -> str:
@@ -1793,39 +1817,39 @@ def _apply_provenance_annotations(
 ) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
+    # The file the record was read from: a record given in memory names it only while its origin holds
+    # (``held_record_origin``), so an edited record names no file.
     record.annotations.update(
         {
             "gbdraw_input_index": provenance.input_index,
+            "gbdraw_source_record_index": provenance.source_record_index,
+            "gbdraw_source_record_count": provenance.source_record_count,
+            "gbdraw_source_record_id": provenance.source_record_id,
+            "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
             "gbdraw_record_key": provenance.record_key,
             "gbdraw_record_cardinality": provenance.cardinality.value,
+            "gbdraw_source_kind": provenance.source_kind,
+            "gbdraw_source_paths": provenance.source_paths,
         }
     )
-    if provenance.source_kind != "memory":
-        # The file the record was read from. A record given in memory reads none: a drawn unit of an earlier plan
-        # keeps the file, record and window that plan named (with ``WINDOW_OF_ANNOTATION``), so a Session writes it
-        # as that plan's file record with its windows.
-        record.annotations.update(
-            {
-                "gbdraw_source_record_index": provenance.source_record_index,
-                "gbdraw_source_record_count": provenance.source_record_count,
-                "gbdraw_source_record_id": provenance.source_record_id,
-                "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
-                "gbdraw_source_kind": provenance.source_kind,
-                "gbdraw_source_paths": provenance.source_paths,
-            }
-        )
     if provenance.source_length is not None:
         record.annotations["gbdraw_source_length"] = provenance.source_length
+    # The window this unit draws and the record it is a window of (D-01): this plan's window, or an earlier plan's
+    # while the record is unchanged since (``origin_window_of``). An edited unit given again is no window, so
+    # per-record readers (``record_identity_key``, Linear rows) and the Session writer agree.
     if provenance.window is not None:
         record.annotations[WINDOW_SPAN_ANNOTATION] = (provenance.window.span.start, provenance.window.span.end)
-    if provenance.window is not None and provenance.window.window_of is not None:
-        # The record this unit is a window of (D-01): per-record readers bind to it (``record_identity_key``).
-        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window.window_of
+    elif provenance.origin_window_of is None:
+        record.annotations.pop(WINDOW_SPAN_ANNOTATION, None)
+    if provenance.window_of is not None:
+        record.annotations[WINDOW_OF_ANNOTATION] = provenance.window_of
+    else:
+        record.annotations.pop(WINDOW_OF_ANNOTATION, None)
+    # The file stamps stay when this plan has no paths: the file loader writes them on records it reads
+    # (gbdraw/io/genome.py), and file-qualified region selectors of an in-memory record read them.
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
-        record.annotations["gbdraw_source_basename"] = Path(
-            provenance.source_paths[0]
-        ).name
+        record.annotations["gbdraw_source_basename"] = Path(provenance.source_paths[0]).name
 
 
 @dataclass
@@ -1908,6 +1932,7 @@ def _expand_record_windows(
             )
             _apply_record_key(unit, record_key=unit_item.record_key)
             _apply_provenance_annotations(unit, unit_item)
+            _keep_record_origin(unit, unit_item)
             records.append(unit)
             provenance.append(unit_item)
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
@@ -1927,7 +1952,17 @@ def reverse_resolved_records(
     for index in sorted(indexes):
         (records[index],) = reverse_records((records[index],), True, log=logger)
         _apply_provenance_annotations(records[index], collection.provenance[index])
+        _keep_record_origin(records[index], collection.provenance[index])
     return ResolvedRecordCollection(tuple(records), collection.provenance)
+
+
+def _keep_record_origin(record: SeqRecord, provenance: ResolvedRecordProvenance) -> None:
+    """Keep on ``record``, a planned record now complete, where it was read from (OV-2923).
+
+    A later plan of the record, or a Session writer, reads it while the record is unchanged (``held_record_origin``).
+    """
+
+    record.annotations[RECORD_ORIGIN_ANNOTATION] = provenance.origin(record)
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:
@@ -1991,6 +2026,8 @@ def resolve_record_inputs(
             input_index=input_index,
         )
         source_kind, source_paths = _source_details(record_input.source)
+        # A record planned before and unchanged since is still the record of the file it was read from (OV-2923).
+        origin = held_record_origin(record_input.source.record) if isinstance(record_input.source, InMemoryRecordSource) else None
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
@@ -2026,14 +2063,16 @@ def resolve_record_inputs(
             item = ResolvedRecordProvenance(
                 resolved_index=len(pending),
                 input_index=input_index,
-                source_record_index=source_record_index,
-                source_record_count=len(raw_records),
-                source_record_id=str(raw_records[source_record_index].id),
+                source_record_index=origin.source_record_index if origin else source_record_index,
+                source_record_count=origin.source_record_count if origin else len(raw_records),
+                source_record_id=origin.source_record_id if origin else str(raw_records[source_record_index].id),
                 source_record_id_unique=(
-                    id_counts[key][str(raw_records[source_record_index].id)] == 1
+                    origin.source_record_id_unique if origin
+                    else id_counts[key][str(raw_records[source_record_index].id)] == 1
                 ),
-                source_kind=source_kind,
-                source_paths=source_paths,
+                source_kind=origin.source_kind if origin else source_kind,
+                source_paths=origin.source_paths if origin else source_paths,
+                origin_window_of=origin.window_of if origin else None,
                 record_key=record_key,
                 cardinality=record_input.cardinality,
                 selector=selector,

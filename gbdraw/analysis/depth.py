@@ -16,7 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from gbdraw.analysis.windows import SlidingWindows, sliding_windows
+from gbdraw.analysis.windows import SlidingWindows, SourcePiece, sliding_windows
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
@@ -107,9 +107,12 @@ class DepthCoverage:
     it. Names keep the order of their first row. Each array is read-only and
     has the smallest dtype that holds every value exactly: ``uint8``,
     ``uint16`` or ``uint32`` for whole depths, ``float64`` otherwise.
+    ``extents[name]`` is the first and the last position the rows name: the
+    part of the reference the file covers.
     """
 
     depths: Mapping[str, DepthArray]
+    extents: Mapping[str, tuple[int, int]]
 
     @property
     def nbytes(self) -> int:
@@ -137,12 +140,15 @@ class _SortedDepths:
     def __init__(self) -> None:
         self.values: DepthArray = np.zeros(0, dtype=np.uint8)
         self.length = 0
+        self.first = 0
 
     def add(self, positions: NDArray[np.int64], depths: NDArray[np.float64]) -> bool:
         """Store rows that follow every earlier one; False (nothing stored) when they do not."""
 
         if positions[0] <= self.length or (positions.size > 1 and bool((np.diff(positions) <= 0).any())):
             return False
+        if not self.length:
+            self.first = int(positions[0])
         dtype = _smallest_exact_dtype(depths, self.values.dtype)
         if dtype != self.values.dtype:
             self.values = self.values.astype(dtype)
@@ -155,9 +161,9 @@ class _SortedDepths:
         self.length = last
         return True
 
-    def finish(self) -> DepthArray:
+    def finish(self) -> tuple[DepthArray, tuple[int, int]]:
         self.values.resize(self.length, refcheck=False)
-        return self.values
+        return self.values, (self.first, self.length)
 
 
 class _SummedDepths:
@@ -166,9 +172,14 @@ class _SummedDepths:
     def __init__(self) -> None:
         self.sums: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         self.counts: NDArray[np.uint32] = np.zeros(0, dtype=np.uint32)
+        self.first = 0
+        self.last = 0
 
     def add(self, positions: NDArray[np.int64], depths: NDArray[np.float64]) -> None:
         last = int(positions.max())
+        first = int(positions.min())
+        self.first = first if not self.last else min(self.first, first)
+        self.last = max(self.last, last)
         if last > self.sums.size:
             size = max(last, self.sums.size * 3 // 2)
             self.sums.resize(size, refcheck=False)
@@ -177,13 +188,13 @@ class _SummedDepths:
         np.add.at(self.sums, indexes, depths)
         np.add.at(self.counts, indexes, 1)
 
-    def finish(self) -> DepthArray:
+    def finish(self) -> tuple[DepthArray, tuple[int, int]]:
         present = self.counts > 0
         means = self.sums
         means[present] /= self.counts[present]
         self.counts = np.zeros(0, dtype=np.uint32)
         dtype = _smallest_exact_dtype(means, np.dtype(np.uint8))
-        return means if dtype == np.float64 else means.astype(dtype)
+        return (means if dtype == np.float64 else means.astype(dtype)), (self.first, self.last)
 
 
 def _reference_rows(chunk: DataFrame) -> Iterator[tuple[str, NDArray[np.int64], NDArray[np.float64]]]:
@@ -201,10 +212,13 @@ def _reference_rows(chunk: DataFrame) -> Iterator[tuple[str, NDArray[np.int64], 
         yield reference, positions[mask], depths[mask]
 
 
-def _coverage(arrays: Mapping[str, DepthArray]) -> DepthCoverage:
-    for array in arrays.values():
+def _coverage(references: Mapping[str, tuple[DepthArray, tuple[int, int]]]) -> DepthCoverage:
+    for array, _extent in references.values():
         array.flags.writeable = False
-    return DepthCoverage(dict(arrays))
+    return DepthCoverage(
+        {name: array for name, (array, _extent) in references.items()},
+        {name: extent for name, (_array, extent) in references.items()},
+    )
 
 
 def _summed_coverage(chunks: Iterable[DataFrame]) -> DepthCoverage:
@@ -386,19 +400,70 @@ def _raise_first_failed_check(failed: set[str]) -> None:
             raise ValidationError(message, diagnostic=_invalid_depth(reason))
 
 
-def _select_record_depths(record: SeqRecord, coverage: DepthCoverage) -> DepthArray:
+def _select_record_reference(record: SeqRecord, coverage: DepthCoverage) -> str:
+    """The reference of the depth rows a record draws: its own ID, else the file's only reference."""
+
     record_id = str(record.id)
-    depths = coverage.depths.get(record_id)
-    if depths is not None:
-        return depths
+    if record_id in coverage.depths:
+        return record_id
     references = list(coverage.depths)
     if len(references) == 1:
-        return coverage.depths[references[0]]
+        return references[0]
     raise ValidationError(
         "Depth file references do not match record "
         f"'{record_id}'. Available references: {', '.join(references)}",
         diagnostic=_invalid_depth("REFERENCE_MISMATCH"),
     )
+
+
+def _window_bases_read(windows: SlidingWindows, record_length: int, extent: tuple[int, int]) -> NDArray[np.int64]:
+    """How many bases each window's mean is over (D-64).
+
+    Every base of the molecule the record draws counts; a base past the drawn record or crop counts only within
+    ``extent``, the first to the last position the depth rows of the record name. A position inside both that
+    the rows leave out adds 0 to the sum and still counts. A file of the drawn region alone then reads no flank,
+    and a file of the whole record reads the true flanks.
+    """
+
+    source = windows.source
+    first, last = extent
+    if source.step > 0:
+        extent_indexes = (first - source.base, last - source.base)
+    else:
+        extent_indexes = (source.base - last, source.base - first)
+
+    def local_run(piece: SourcePiece, low: int, high: int) -> tuple[int, int]:
+        """The local positions ``[start, stop)`` of ``piece`` whose source indexes lie in ``low .. high``."""
+        if piece.direction > 0:
+            start, stop = piece.local + low - piece.index, piece.local + high - piece.index + 1
+        else:
+            start, stop = piece.local + piece.index - high, piece.local + piece.index - low + 1
+        return max(start, piece.local), min(stop, piece.local + piece.length)
+
+    # The source indexes of the drawn bases, and those the depth rows cover.
+    known = [extent_indexes]
+    for piece in windows.pieces:
+        start, stop = max(piece.local, 0), min(piece.local + piece.length, record_length)
+        if start < stop:
+            ends = (piece.index + piece.direction * (start - piece.local), piece.index + piece.direction * (stop - 1 - piece.local))
+            known.append((min(ends), max(ends)))
+    counted = [(0, record_length)]
+    for piece in windows.pieces:
+        for low, high in known:
+            start, stop = local_run(piece, low, high)
+            if start < stop:
+                counted.append((start, stop))
+    counted.sort()
+    merged: list[list[int]] = []
+    for start, stop in counted:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], stop)
+        else:
+            merged.append([start, stop])
+    bases = np.zeros(windows.starts.size, dtype=np.int64)
+    for start, stop in merged:
+        bases += np.clip(np.minimum(windows.ends, stop) - np.maximum(windows.starts, start), 0, None)
+    return bases
 
 
 def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[np.float64]:
@@ -490,8 +555,8 @@ def depth_df(
     a reverse complement. The samples (``position``, 0-based local) and their
     windows are those of :func:`gbdraw.analysis.windows.sliding_windows`, centred
     on the sample; ``circular`` says whether the molecule is circular. A crop
-    reads its flanking positions of the source; a mean is over the bases a
-    window reads.
+    reads its flanking positions of the source where the depth rows cover them;
+    a mean is over the bases a window reads (``_window_bases_read``).
     """
 
     if window <= 0:
@@ -506,8 +571,10 @@ def depth_df(
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
     windows = sliding_windows(record, int(window), int(step), circular=circular)
-    depths = _select_record_depths(record, coverage_source)
-    means = _window_depth_sums(windows, depths) / windows.bases
+    reference = _select_record_reference(record, coverage_source)
+    depths = coverage_source.depths[reference]
+    bases = _window_bases_read(windows, record_len, coverage_source.extents[reference])
+    means = _window_depth_sums(windows, depths) / bases
 
     if min_depth is not None or max_depth is not None:
         lower = float(min_depth) if min_depth is not None else None

@@ -6370,7 +6370,7 @@
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (>=10 Mb), and at most a tenth of the window.')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (>=10 Mb), and at most a tenth of the Auto window.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
                                         <input type="number" min="1" step="1" v-model.number="adv.step_size" :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>

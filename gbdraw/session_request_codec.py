@@ -36,6 +36,7 @@ from typing import (
 )
 
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame, read_csv
 
 from gbdraw.analysis.collinearity import (
@@ -57,6 +58,7 @@ from gbdraw.analysis.collinearity import (
 from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
+from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource
 from gbdraw.analysis.protein_colinearity import (
     ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS,
     ORTHOGROUP_MEMBERSHIP_MODES,
@@ -73,7 +75,6 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
-from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text, read_input_bytes
@@ -94,12 +95,13 @@ from gbdraw.features.placement import (
     FeaturePlacementTarget,
 )
 from gbdraw.io.colors import color_table_path
-from gbdraw.io.record_select import RecordSelector, parse_record_selector
+from gbdraw.io.record_select import RecordSelector, parse_record_selector, reverse_records
 from gbdraw.io.regions import RecordWindow, RegionSpec, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
-    WINDOW_OF_ANNOTATION,
+    RecordOrigin,
+    held_record_origin,
     _drawn_source_span,
     _read_coord_map,
     _source_period,
@@ -1088,43 +1090,70 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
     return None, step < 0
 
 
+def _crop_in_source(record: SeqRecord) -> tuple[SeqRecord, RecordWindow] | None:
+    """The record a crop was cut from and the crop's window in it, when a Session can redraw the crop from them.
+
+    A crop reads its flanking bases from the record it was cut from (its ``WindowSource``, OV-2890), which a
+    GenBank copy of the crop leaves out. Written as that record and the crop's window, it is cropped again on
+    replay and reads the same bases (D-64). Only a source drawn in its own coordinates (forward from base 1, as
+    read) is written so; any other record gives ``None``.
+    """
+
+    stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+    if (
+        not isinstance(stored, WindowSource)
+        or not record.annotations.get("gbdraw_region_applied")
+        or not stored.holds_for(record)
+    ):
+        return None
+    source = stored.record
+    if source.annotations.get("gbdraw_region_applied"):
+        return None
+    if (stored.base, stored.step) == (len(source), -1):
+        # A crop of a reverse-complemented whole record: the record's forward form is the record as read, and the
+        # crop's window (in those coordinates) crops and orients it again.
+        source = reverse_records((source,), True)[0]
+    elif (stored.base, stored.step) != (1, 1):
+        return None
+    found = _source_file_transform(record)
+    if found is None:
+        return None
+    span, reverse = found
+    if span is None:
+        return None
+    return source, RecordWindow(span[0], span[1], reverse)
+
+
 def _source_file_transforms(
-    records: Sequence[Any], paths: tuple[str, ...], *, per_record: bool
+    records: Sequence[SeqRecord], origins: Sequence[RecordOrigin], paths: tuple[str, ...], *, per_record: bool
 ) -> list[tuple[tuple[int, int] | None, bool]] | None:
     """Each record's crop and orientation when the records are drawn from their files.
 
-    The planner annotates each record it reads with its source kind and its
-    index among the file's records. Returns ``None`` unless each record of
-    the files is drawn once and each is the file's record. Only when
-    ``per_record`` allows it may some records of the files be left undrawn or
-    drawn by several records (each with its own selector and window, OV-2716),
-    or a record be cropped or reverse-complemented.
+    ``origins`` say which record of the files the planner read each record
+    from. Returns ``None`` unless each record of the files is drawn once and
+    each is the file's record. Only when ``per_record`` allows it may some
+    records of the files be left undrawn or drawn by several records (each
+    with its own selector and window, OV-2716), or a record be cropped or
+    reverse-complemented.
     """
 
-    annotations = [record.annotations for record in records]
-    kind = annotations[0].get("gbdraw_source_kind")
-    count = annotations[0].get("gbdraw_source_record_count")
+    kind = origins[0].source_kind
+    count = origins[0].source_record_count
     # The windows of one record draw that record once (D-01).
     indexes = sorted(
         {
-            item.get(WINDOW_OF_ANNOTATION) or position: item.get("gbdraw_source_record_index", -1)
-            for position, item in enumerate(annotations)
+            origin.window_of or position: origin.source_record_index for position, origin in enumerate(origins)
         }.values()
     )
     if not (
-        len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
-        and isinstance(count, int)
+        len(paths) == len(_SOURCE_FILE_RESOURCES.get(kind, ()))
         and all(Path(path).is_file() for path in paths)
         and (indexes == list(range(count)) or (
             per_record
             and 0 <= indexes[0]
             and indexes[-1] < count
         ))
-        and all(
-            item.get("gbdraw_source_kind") == kind
-            and item.get("gbdraw_source_record_count") == count
-            for item in annotations
-        )
+        and all(origin.source_kind == kind and origin.source_record_count == count for origin in origins)
     ):
         return None
     found = [_source_file_transform(record) for record in records]
@@ -1169,27 +1198,40 @@ def _encode_records(
     groups: dict[tuple[str, ...], list[int]] = {}
     # The positions after the first of a record's windows: their windows are written on the first (D-01).
     absorbed: set[int] = set()
-    for position, record in enumerate(records):
-        if isinstance(record.source, InMemoryRecordSource):
-            paths = record_source_paths(record.source.record)
-            if paths:
-                groups.setdefault(paths, []).append(position)
+    # Where the planner read each record, while the record is unchanged since (OV-2923).
+    origins = {
+        position: origin
+        for position, record in enumerate(records)
+        if isinstance(record.source, InMemoryRecordSource) and (origin := held_record_origin(record.source.record)) is not None
+    }
+    for position, origin in origins.items():
+        if origin.source_paths:
+            groups.setdefault(origin.source_paths, []).append(position)
     shared: dict[int, tuple[dict[str, Any], RecordSelector | None]] = {}
     transformed: dict[int, RecordInput] = {}
+    crops = {
+        position: crop
+        for position, record in enumerate(records)
+        if per_record and (crop := _in_memory_crop(record)) is not None
+    }
     for paths, members in groups.items():
-        first = members[0] + 1
         # Only in-memory sources were grouped above.
         members_records = [
             cast(InMemoryRecordSource, records[position].source).record for position in members
         ]
-        found = _source_file_transforms(members_records, paths, per_record=per_record)
-        if found is not None:
-            file_resources = _SOURCE_FILE_RESOURCES[
-                members_records[0].annotations["gbdraw_source_kind"]
+        found = _source_file_transforms(
+            members_records, [origins[position] for position in members], paths, per_record=per_record
+        )
+        if found is None:
+            # Without the file, a crop is redrawn from the record it was cut from (below).
+            members = [position for position in members if position not in crops]
+            members_records = [
+                cast(InMemoryRecordSource, records[position].source).record for position in members
             ]
-            source_payload: dict[str, Any] = {
-                "kind": _camel(members_records[0].annotations["gbdraw_source_kind"])
-            }
+        first = members[0] + 1 if members else 0
+        if found is not None:
+            file_resources = _SOURCE_FILE_RESOURCES[origins[members[0]].source_kind]
+            source_payload: dict[str, Any] = {"kind": _camel(origins[members[0]].source_kind)}
             for path, (kind, field) in zip(paths, file_resources, strict=True):
                 source_payload[field] = resources.add_bytes(
                     f"record-{first}-{kind}",
@@ -1197,25 +1239,13 @@ def _encode_records(
                     name=Path(path).name,
                     content=read_input_bytes(path),
                 )
-            ids = [str(record.annotations.get("gbdraw_source_record_id", record.id))
-                   for record in members_records]
-            record_indexes = [record.annotations["gbdraw_source_record_index"]
-                              for record in members_records]
+            ids = [origins[position].source_record_id for position in members]
+            record_indexes = [origins[position].source_record_index for position in members]
             # The file's other records may share an ID with a drawn record.
-            unique = [bool(record.annotations.get("gbdraw_source_record_id_unique"))
-                      for record in members_records]
-            single = members_records[0].annotations["gbdraw_source_record_count"] == 1
+            unique = [origins[position].source_record_id_unique for position in members]
+            single = origins[members[0]].source_record_count == 1
         elif len(members) > 1:
-            source_payload = {"kind": "genbank", "resourceId": resources.add_bytes(
-                f"record-{first}-genbank",
-                kind="genbank",
-                name=(
-                    Path(paths[0]).name
-                    if len(paths) == 1 and Path(paths[0]).name
-                    else f"record-{first}.gbk"
-                ),
-                content=_genbank_bytes(members_records, index=first),
-            )}
+            source_payload = _genbank_resource(resources, first, paths, members_records)
             ids = [str(record.id) for record in members_records]
             record_indexes = list(range(len(members)))
             unique = [ids.count(record_id) == 1 for record_id in ids]
@@ -1233,7 +1263,7 @@ def _encode_records(
             if found is not None:
                 span, reverse = found[offset]
                 record = records[position]
-                window_of = members_records[offset].annotations.get(WINDOW_OF_ANNOTATION)
+                window_of = origins[position].window_of
                 if window_of is not None:
                     # The units of a record with windows are written back as that record with its windows.
                     if position in absorbed:
@@ -1241,7 +1271,7 @@ def _encode_records(
                     units = [
                         (other, found[index])
                         for index, other in enumerate(members)
-                        if members_records[index].annotations.get(WINDOW_OF_ANNOTATION) == window_of
+                        if origins[other].window_of == window_of
                     ]
                     absorbed.update(other for other, _found in units[1:])
                     transformed[position] = _record_of_units(records, units, record_key=str(window_of))
@@ -1254,6 +1284,11 @@ def _encode_records(
                         ),
                     )
             shared[position] = (source_payload, selector)
+    _encode_crops(
+        {position: crop for position, crop in crops.items() if position not in shared and position not in absorbed},
+        {position: origin.window_of for position, origin in origins.items()},
+        records, resources, shared, transformed, absorbed,
+    )
     payloads = [
         _encode_record(
             transformed.get(position, record),
@@ -1273,6 +1308,65 @@ def _encode_records(
         for position, record in enumerate(records)
     )
     return payloads, frames
+
+
+def _genbank_resource(
+    resources: RequestResources, index: int, paths: tuple[str, ...], records: Sequence[SeqRecord]
+) -> dict[str, Any]:
+    """A GenBank resource of in-memory records, named after their one source file when they have one."""
+
+    name = Path(paths[0]).name if len(paths) == 1 and Path(paths[0]).name else f"record-{index}.gbk"
+    return {"kind": "genbank", "resourceId": resources.add_bytes(
+        f"record-{index}-genbank", kind="genbank", name=name, content=_genbank_bytes(records, index=index),
+    )}
+
+
+def _encode_crops(
+    crops: Mapping[int, tuple[SeqRecord, RecordInput]],
+    window_of: Mapping[int, str | None],
+    records: Sequence[RecordInput],
+    resources: RequestResources,
+    shared: dict[int, tuple[dict[str, Any], RecordSelector | None]],
+    transformed: dict[int, RecordInput],
+    absorbed: set[int],
+) -> None:
+    """Write each crop as the record it was cut from; the units of one record with windows share one record (D-01)."""
+
+    units: dict[tuple[str, int], list[int]] = {}
+    for position, (source, _record) in crops.items():
+        key = window_of.get(position)
+        units.setdefault((key, id(source)) if key is not None else ("", position), []).append(position)
+    for (record_key, _identity), positions in units.items():
+        source, record = crops[positions[0]]
+        shared[positions[0]] = (_genbank_resource(resources, positions[0] + 1, (), (source,)), None)
+        if len(positions) == 1:
+            transformed[positions[0]] = record
+            continue
+        windows = [crops[position][1].windows[0] for position in positions]
+        transformed[positions[0]] = _record_of_units(
+            records,
+            [(position, ((window.start, window.end), window.reverse_complement))
+             for position, window in zip(positions, windows, strict=True)],
+            record_key=record_key,
+        )
+        absorbed.update(positions[1:])
+
+
+def _in_memory_crop(record: RecordInput) -> tuple[SeqRecord, RecordInput] | None:
+    """A crop given in memory as the record it was cut from and the request record that crops it again (D-64)."""
+
+    if record.windows or not isinstance(record.source, InMemoryRecordSource):
+        return None
+    crop = _crop_in_source(record.source.record)
+    if crop is None:
+        return None
+    source, window = crop
+    reverse = window.reverse_complement != record.presentation.reverse_complement
+    return source, replace(
+        record,
+        windows=(replace(window, reverse_complement=reverse),),
+        presentation=replace(record.presentation, reverse_complement=False),
+    )
 
 
 def _record_of_units(

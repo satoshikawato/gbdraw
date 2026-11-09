@@ -11,6 +11,7 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from ..analysis.windows import reversed_window_source
 from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
@@ -198,6 +199,7 @@ def reverse_records(
             dbxrefs=True,
         )
         _write_coord_map(reversed_record, base=rc_base, step=rc_step)
+        reversed_window_source(reversed_record, rec)
         reversed_records.append(reversed_record)
     if reverse_flag and reversed_records:
         log.info("Reverse complemented %d record(s).", len(reversed_records))

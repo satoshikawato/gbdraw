@@ -54,15 +54,24 @@ write-up of a release.
   value is the mean of the bases inside), and a circular record's windows still
   run round its origin. Depth tracks follow the same rule, and now draw a
   window's mean at the window's centre instead of its start (half a Depth window,
-  2.5 kb at `--depth_window 5000`, earlier). A record whose file states no
+  2.5 kb at `--depth_window 5000`, earlier); beside a region they read only the
+  positions the depth file covers, so a file of the region alone stays flat at
+  its ends. A record whose file states no
   topology (GFF3 + FASTA, FASTA) counts as linear unless it is marked circular
   (`--record_topology circular`, or Circular record in the Web app), also in a
   Circular figure. There, the GC content, GC skew and Depth lines of a record
   that is not circular hold their last value up to 12 o'clock and step back to
   the first value there, instead of a ramp across the origin that described no
   bases (OV-2890, OV-2919, OV-2920).
+- Fixed: a Session saved in Python from records planned earlier
+  (`resolve_request`) or cut with `apply_region_specs` now replays them as
+  drawn. A crop is saved as the record it was cut from with its window, so the
+  replay reads the same bases beside it; the windows of one record stay one
+  record, as the command line writes them, so the "//" gap mark and the wider
+  gap between them return; and a record edited after it was planned or cut is
+  saved as the edited record, not as its file (OV-2923).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
-  drawn length, and the Auto step at most a tenth of the window, so figures
+  drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
   window and a 6 bp step instead of 1 kb and 100 bp. Figures of 10 kb and longer
   are unchanged, and a window or step you set is kept. The Auto Depth window and
@@ -198,12 +207,6 @@ write-up of a release.
   (for example "1.54 Mb"); for windows that overlap, touch, run backwards, or
   are not next to each other it has no length. Rows without windows draw as
   before.
-- Fixed: in the Python API, saving a Session from a resolved Linear request
-  (`resolve_request`, whose records are the drawn windows) wrote each window of
-  a file record as a record of its own, so replaying the Session lost the "//"
-  gap mark and the wider gap between them. The Session now keeps the file
-  record with its windows, as the command line writes it, and replays the
-  figure the live render drew.
 - Changed: in a Linear figure with several records in a row, the text above a
   record that a comparison ribbon reaches is no longer drawn under the ribbon:
   the ribbon ends above the text and the rows move apart by its height
