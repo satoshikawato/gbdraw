@@ -228,6 +228,24 @@ _FASTA_CASES = {
 }
 
 
+def test_a_contig_line_after_the_sequence_is_refused(tmp_path: Path) -> None:
+    """Biopython refuses a record whose sequence lines a CONTIG line follows; the reader refuses its file."""
+
+    path = tmp_path / "contig.gb"
+    path.write_text(
+        "LOCUS       X1                        20 bp    DNA     linear   BCT 01-JAN-2000\n"
+        "DEFINITION  x.\nACCESSION   X1\nVERSION     X1.1\n"
+        "FEATURES             Location/Qualifiers\n     source          1..20\n"
+        "ORIGIN\n        1 acgtacgtac gtacgtacgt\nCONTIG      join(A1.1:1..20)\n//\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError):
+        list(SeqIO.parse(path, "genbank"))
+    with pytest.raises(ParseError) as refused:
+        read_flat_file_records(str(path))
+    assert "CONTIG" in str(refused.value.__cause__)
+
+
 @pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
 @pytest.mark.parametrize("case", sorted(_FASTA_CASES))
 def test_fasta_lines_read_as_biopython_reads_them(case: str, ending: str, tmp_path: Path) -> None:

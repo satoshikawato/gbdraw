@@ -673,6 +673,11 @@ class _Scan:
                         # Biopython ends a record cut off in its sequence as if "//" followed.
                         warnings.warn("Premature end of file in sequence data", BiopythonParserWarning)
                         yield "//\n"
+                    elif self._lines.readline().startswith(b"CONTIG"):
+                        # Biopython stops at a CONTIG line after sequence lines and refuses the record there.
+                        raise ValueError("A CONTIG line follows the sequence lines of a record")
+                    else:
+                        self._lines.unread()
                     continue
                 _check_embl_first_line(text)
                 if not self._index_region(_RegionEnd((b"//",), _embl_end, anchored=False)):
