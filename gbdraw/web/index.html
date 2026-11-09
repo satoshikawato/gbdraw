@@ -8824,8 +8824,7 @@
                         </div>
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
-                            <!-- A row is keyed by its identity, so the text typed into its fields stays with it when rows move. -->
-                            <div v-for="(entry, idx) in legendEntries" :key="legendEntryKey(entry)" data-legend-drawer-row
+                            <div v-for="(entry, idx) in legendEntries" :key="idx" data-legend-drawer-row
                                  v-show="!legendEntryMerged(entry)"
                                  class="px-1.5 py-1 bg-slate-50 rounded border"
                                  :class="legendReorder.over === idx && legendReorder.from !== null && legendReorder.from !== idx ? 'border-blue-400' : 'border-slate-100'"

@@ -11,9 +11,9 @@
 //   composition is open, or the model's value is the one the field showed
 //   before and the field has focus or a commit of it is still running (the
 //   rule of Vue's own `v-model.lazy`, extended to a running commit).
-// - When a commit ends (`change`, `blur`, or Enter in an `<input>`), the field
-//   shows the model's value once the commit has settled, with or without
-//   focus: the typed text was either stored or refused. A handler whose
+// - When a commit ends (`change`, `blur`, or an Enter the field's own handler
+//   took), the field shows the model's value once the commit has settled, with
+//   or without focus: the typed text was either stored or refused. A handler whose
 //   commit ends after an `await` hands its promise over with
 //   `settleCommittedField`; a synchronous one needs nothing.
 // tests/web/committed-value.test.mjs keeps `:value` off typed fields.
@@ -122,10 +122,14 @@ export const committedValue = {
     // Vue adds the template's listeners before this hook, so a handler has run
     // (and handed its commit over) before these do.
     const onCommitEnd = () => { void settle(field, state); };
+    // An Enter the template's handler took (`@keydown.enter.prevent`) ends its
+    // commit here. Any other Enter is the browser's: it commits by the
+    // `change` of the keypress that follows, and showing the model's value at
+    // keydown would undo the typed text before that `change` reads it.
     /** @param {Event} event */
     const onKeydown = (event) => {
       const key = /** @type {KeyboardEvent} */ (event);
-      if (key.key === 'Enter' && !key.isComposing && field.tagName === 'INPUT') onCommitEnd();
+      if (key.key === 'Enter' && key.defaultPrevented && !key.isComposing) onCommitEnd();
     };
     const onCompositionStart = () => { state.composing = true; };
     const onCompositionEnd = () => { state.composing = false; };

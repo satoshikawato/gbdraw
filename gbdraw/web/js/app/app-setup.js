@@ -4181,7 +4181,7 @@ export const createAppSetup = () => {
     updateLegendEntryColor: updateLegendEntryColorShown,
     updateLegendEntryColorInPopup,
     defaultColorScopeLine,
-    renameLegendEntry, legendEntryKey,
+    renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).

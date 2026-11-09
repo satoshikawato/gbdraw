@@ -3055,19 +3055,79 @@ test('A color rule legend name committed while a rerender runs never shows the o
   await expect(name).toHaveValue('Kinases');
 });
 
+/** The Legend list's names and the History's Undo count. */
+const legendNamesAndUndoCount = (page) => page.evaluate(() => ({
+  names: window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption),
+  undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
+}));
+/** Records the text of each `change` event the field receives, as the Legend name's own handler reads it. */
+const recordChanges = (locator) => locator.evaluate((field) => {
+  field.__changes = [];
+  // A capture listener runs before the template's handler and the directive's settle.
+  field.addEventListener('change', () => { field.__changes.push(field.value); }, true);
+});
+
+// Enter in the Legend name, which has no Enter handler of its own, commits by the browser's `change`: a valid name
+// renames the row and stays in the field, which keeps focus.
+test('A Legend name committed by Enter renames the row and stays in the field', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  const name = page.getByLabel('Legend entry CDS name', { exact: true });
+  await expect(name).toHaveValue('CDS');
+  const row = (await legendNamesAndUndoCount(page)).names.indexOf('CDS');
+  const field = page.locator('[data-legend-drawer-row]').nth(row).getByRole('textbox');
+  await name.selectText();
+  await name.pressSequentially('Coding');
+  await field.press('Enter');
+  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[row], { timeout: 60000 }).toBe('Coding');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('Coding');
+});
+
 // Enter commits the Legend name; a refused (empty) name shows the stored one again at once, while the field keeps
-// focus, so the row never looks deleted.
+// focus, so the row never looks deleted. The commit ran: the field's `change` carried the empty name, and the refusal
+// left the list and the History as they were.
 test('A refused Legend name committed by Enter shows the stored name while the field keeps focus', async ({ page }) => {
   test.setTimeout(300000);
   await loadCircularSession(page);
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
   const name = page.getByLabel('Legend entry CDS name', { exact: true });
   await expect(name).toHaveValue('CDS');
+  const before = await legendNamesAndUndoCount(page);
+  await recordChanges(name);
   await name.selectText();
   await name.press('Backspace');
   await name.press('Enter');
   await expect(name).toBeFocused();
   await expect(name).toHaveValue('CDS');
+  expect(await name.evaluate((field) => field.__changes), 'the Enter committed the empty name').toEqual(['']);
+  expect(await legendNamesAndUndoCount(page)).toEqual(before);
+});
+
+// A rename of a Legend row that a color rule draws gives the row a new key and moves it; the list's rows are patched
+// in place, so the focus that Tab moved to a control of the list stays in the list.
+test('A renamed color rule row of the Legend list keeps the focus Tab moved within the list', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'product', val: 'cytochrome', color: '#112233', cap: 'Cytochrome' });
+    await app.addSpecificRule();
+    app.openRightDrawerTab('legend');
+  });
+  const name = page.getByLabel('Legend entry Cytochrome name', { exact: true });
+  await expect(name).toHaveValue('Cytochrome', { timeout: 180000 });
+  await name.click();
+  await name.press('End');
+  await name.pressSequentially('s');
+  await name.press('Tab');
+  await expect(page.getByLabel('Legend entry Cytochromes name', { exact: true })).toHaveValue('Cytochromes');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].cap)).toBe('Cytochromes');
+  await expect.poll(() => page.evaluate(() => {
+    const focused = document.activeElement;
+    return Boolean(focused?.matches('button[aria-label^="Stroke options for "]') && focused.closest('[data-legend-drawer-row]'));
+  }), 'focus stays on a Stroke options button of the Legend list').toBe(true);
 });
 
 // Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.

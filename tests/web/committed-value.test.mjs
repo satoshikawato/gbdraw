@@ -199,32 +199,57 @@ test('an asynchronous commit keeps the typed text until it settles, then shows w
   }
 });
 
-test('a commit by Enter shows the stored value with focus kept, unless the user typed on, and a textarea Enter commits nothing', async () => {
+// The browser's order for Enter in an `<input>` with no Enter handler of its own: keydown, then (in the keypress's
+// default action, a later event) `change` when the text differs from the committed one.
+test('Enter in a field without an Enter handler leaves the text to the browser\'s change, which shows what was stored or kept', async () => {
+  useVue();
+  const field = standInField();
+  committedValue.beforeMount(field, { value: 'CDS' });
+  field.focus();
+  for (const [typed, stored] of [['Coding', 'Coding'], ['', 'Coding']]) {
+    field.value = typed;
+    field.dispatch('keydown', { key: 'Enter', isComposing: false, defaultPrevented: false });
+    await flush();
+    assert.equal(field.value, typed, 'the keydown leaves the typed text for the change that follows');
+    // The handler stores the name, or refuses the empty one.
+    committedValue.updated(field, { value: stored });
+    field.dispatch('change');
+    await flush();
+    assert.equal(field.value, stored, 'after the change the focused field shows the stored value');
+  }
+});
+
+test('Enter that the field\'s own handler takes ends the commit with focus kept, unless the user typed on', async () => {
   useVue();
   const field = standInField();
   committedValue.beforeMount(field, { value: 'CDS' });
   field.focus();
   field.value = '';
-  field.dispatch('keydown', { key: 'Enter', isComposing: false });
+  field.dispatch('keydown', { key: 'Enter', isComposing: false, defaultPrevented: true });
   await flush();
   assert.equal(field.value, 'CDS', 'a refused Enter commit shows the stored name while the field keeps focus');
 
   const commit = deferred();
   field.value = 'gene';
   settleCommittedField(field, commit.promise);
-  field.dispatch('keydown', { key: 'Enter', isComposing: false });
+  field.dispatch('keydown', { key: 'Enter', isComposing: false, defaultPrevented: true });
   field.value = 'gene2';
   commit.resolve();
   await flush();
   assert.equal(field.value, 'gene2', 'text typed after the commit started stays');
 
+  field.value = 'かめ';
+  field.dispatch('keydown', { key: 'Enter', isComposing: true, defaultPrevented: true });
+  await flush();
+  assert.equal(field.value, 'かめ', 'the Enter that ends a composition commits nothing');
+
   const area = standInField('TEXTAREA');
   committedValue.beforeMount(area, { value: '>q' });
   area.focus();
   area.value = '>q\nACGT';
-  area.dispatch('keydown', { key: 'Enter', isComposing: false });
+  area.dispatch('keydown', { key: 'Enter', isComposing: false, defaultPrevented: false });
   await flush();
-  assert.equal(area.value, '>q\nACGT');
+  assert.equal(area.value, '>q\nACGT', 'a new line in a textarea commits nothing');
 });
 
 test('a field the directive has not mounted fails loudly', () => {
