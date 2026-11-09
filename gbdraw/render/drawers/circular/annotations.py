@@ -6,7 +6,7 @@ import math
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from functools import cached_property, partial
+from functools import partial
 from typing import Literal, NamedTuple, TypeAlias, TypeVar
 
 from svgwrite.base import BaseElement
@@ -135,13 +135,12 @@ class CircularAnnotationLabel:
     clockwise about that point. Curved text follows ``arc`` on its alphabetic
     baseline, its middle at ``x``, ``y``. ``parts`` are the convex shapes of
     its painted letters (the turned ink box, or an annular sector cut into
-    nearly flat parts), which the conflict count, later slots and the canvas
-    bounds read, made by ``shape`` when first read; ``ink_radii`` are how near
-    the centre and how far from it those letters come, all a label room reads.
-    ``runs`` are the styled runs it draws (``italic_markup_runs`` of the
-    region's label). A ``cut`` label is curved text longer than its circle,
-    drawn as the start of its runs and an ellipsis; one cut so far that no
-    letter is left keeps no letter (``keeps_no_letter``).
+    nearly flat parts), which the room, the conflict count, later slots and
+    the canvas bounds all read; ``ink_radii`` are how near the centre and how
+    far from it those letters come. ``runs`` are the styled runs it draws
+    (``italic_markup_runs`` of the region's label). A ``cut`` label is curved
+    text longer than its circle, drawn as the start of its runs and an ellipsis;
+    one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
     """
 
     annotation_id: str
@@ -151,15 +150,11 @@ class CircularAnnotationLabel:
     rotation: float
     font_size: float
     color: str
-    shape: Callable[[], tuple[Polygon, ...]] = field(compare=False, repr=False)
+    parts: tuple[Polygon, ...]
     ink_radii: tuple[float, float]
     label_offset: float
     arc: CircularLabelArc | None = None
     cut: bool = False
-
-    @cached_property
-    def parts(self) -> tuple[Polygon, ...]:
-        return self.shape()
 
     @property
     def ink_bounds(self) -> Aabb:
@@ -912,11 +907,19 @@ def _label_at(
     x, y = radius * math.cos(theta), radius * math.sin(theta)
     left, right, top, bottom = offsets
     cos, sin = math.cos(turn), math.sin(turn)
-    box = tuple(
-        (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
-        for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+    return label(
+        runs=runs,
+        x=x,
+        y=y,
+        rotation=rotation,
+        ink_radii=ink_radii,
+        parts=(
+            tuple(
+                (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
+                for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+            ),
+        ),
     )
-    return label(runs=runs, x=x, y=y, rotation=rotation, ink_radii=ink_radii, shape=lambda: (box,))
 
 
 def _curved_label(
@@ -991,31 +994,27 @@ def _curved_label(
     # it spans a wider turn than its arc on the baseline (OV-2851). Where no glyph is known, the ink box is measured
     # at the circle the letters come nearest the centre on.
     half_turn = 0.5 * (right - left) / radius
+    ink_turn = standing(shown).half_turn()
+    inner_turn = 0.5 * (right - left) / near if ink_turn is None else ink_turn
     # Along the reading direction an offset is an arc length on the baseline; anticlockwise when flipped.
     sign = -1.0 if flipped else 1.0
     centre = angle + sign * math.degrees(0.5 * (left + right) / radius)
     theta = math.radians(angle)
-
-    def shape() -> tuple[Polygon, ...]:
-        ink_turn = standing(shown).half_turn()
-        inner_turn = 0.5 * (right - left) / near if ink_turn is None else ink_turn
-        # Letters near the centre cover at most one turn (OV-2665: an inside lane that rooms carry past the centre).
-        return (
-            *annular_sector_parts(near, far, centre, min(180.0, math.degrees(half_turn))),
-            *(
-                annular_sector_parts(near, min(radius, far), centre, min(180.0, math.degrees(inner_turn)))
-                if inner_turn > half_turn and near < radius
-                else ()
-            ),
-        )
-
     return label(
         runs=shown,
         x=radius * math.cos(theta),
         y=radius * math.sin(theta),
         rotation=0.0,
         ink_radii=(near, far),
-        shape=shape,
+        # Letters near the centre cover at most one turn (OV-2665: an inside lane that rooms carry past the centre).
+        parts=(
+            *annular_sector_parts(near, far, centre, min(180.0, math.degrees(half_turn))),
+            *(
+                annular_sector_parts(near, min(radius, far), centre, min(180.0, math.degrees(inner_turn)))
+                if inner_turn > half_turn and near < radius
+                else ()
+            ),
+        ),
         arc=CircularLabelArc(
             radius=radius,
             angle=angle,
