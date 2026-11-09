@@ -8,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle
+from gbdraw.analysis.skew import deviation_scale
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -104,18 +105,18 @@ def circular_gc_content_line(
     if gc_df.empty or record_len <= 0:
         return None
 
+    series = gc_df[f"{dinucleotide} content"]
+    scale = deviation_scale(series)
+    if scale is None:
+        return None
     norm_radius: float = radius * norm_factor
+    # A window without a value lies on the baseline circle: the area breaks there (OV-2799).
+    diff = (series - scale.mean).fillna(0.0)
 
-    column: str = f"{dinucleotide} content"
-    mean = gc_df[column].mean()
-    max_diff = (gc_df[column] - mean).abs().max()
-
-    diff = gc_df[column] - mean
-
-    if max_diff == 0:
+    if scale.max_diff == 0:
         radius_of_coordinate = np.full(len(gc_df), norm_radius)
     else:
-        radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / max_diff))).to_numpy(dtype=float)
+        radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / scale.max_diff))).to_numpy(dtype=float)
 
     positions = gc_df.index.to_numpy(dtype=float)
     if record_transform.start_coordinate is not None:
@@ -184,17 +185,17 @@ def circular_gc_skew_line(
 
     if df.empty or total_len <= 0:
         return None
+    series = df[f"{dinucleotide} skew"]
+    scale = deviation_scale(series)
+    if scale is None:
+        return None
     norm_radius: float = radius * norm_factor
-
-    column: str = f"{dinucleotide} skew"
-    mean = df[column].mean()
-    max_diff = (df[column] - mean).abs().max()
-
-    diff = df[column] - mean
-    if max_diff == 0:
+    # A window without a value lies on the baseline circle: the areas break there (OV-2799).
+    diff = (series - scale.mean).fillna(0.0)
+    if scale.max_diff == 0:
         radius_of_coordinate = np.full(len(df), norm_radius)
     else:
-        radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
+        radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / scale.max_diff))
 
     positions = df.index
     if record_transform.start_coordinate is not None:

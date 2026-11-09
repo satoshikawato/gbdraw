@@ -14,13 +14,15 @@ from gbdraw.analysis.skew import counted_sequence
 
 
 def calculate_gc_percent(seq: object) -> float:
-    """Calculate GC percentage for a sequence-like object, counted as the GC track counts."""
+    """Calculate GC percentage for a sequence-like object, counted as the GC track counts: over its known bases
+    (A, C, G, T), 0 when it has none (OV-2799)."""
 
     sequence = counted_sequence(seq)
-    if not sequence:
+    known = len(sequence) - sequence.count(b"N")
+    if not known:
         return 0.0
     gc_count = sequence.count(b"G") + sequence.count(b"C")
-    return round(100.0 * gc_count / len(sequence), 2)
+    return round(100.0 * gc_count / known, 2)
 
 
 def gc_content_percent_df(
@@ -34,15 +36,17 @@ def gc_content_percent_df(
 
     The source GC percentage is preserved in ``percent``/``value``. Clipping is
     applied only to ``value_normalized`` so callers can inspect the unclipped
-    computed percentage.
+    computed percentage. A window without a value (unknown bases only) keeps
+    NaN there and draws on the axis minimum (``value_normalized`` 0), so the
+    area breaks; a frame with no value at all draws nothing (OV-2799).
     """
 
     column = f"{dinucleotide} content"
     columns = ["position", "percent", "value", "value_normalized"]
-    if gc_df.empty:
-        return pd.DataFrame(columns=columns)
-    if column not in gc_df.columns:
+    if column not in gc_df.columns and not gc_df.empty:
         raise ValidationError(f"gc_content data frame must include '{column}'.")
+    if gc_df.empty or not gc_df[column].notna().any():
+        return pd.DataFrame(columns=columns)
 
     axis_min = float(min_percent)
     axis_max = float(max_percent)
@@ -54,7 +58,7 @@ def gc_content_percent_df(
         normalized = np.zeros(len(percent_values), dtype=np.float64)
     else:
         clipped = np.clip(percent_values.to_numpy(dtype=np.float64), axis_min, axis_max)
-        normalized = (clipped - axis_min) / (axis_max - axis_min)
+        normalized = np.nan_to_num((clipped - axis_min) / (axis_max - axis_min), nan=0.0)
 
     if "position" in gc_df.columns:
         positions = pd.to_numeric(gc_df["position"], errors="raise").astype(float)

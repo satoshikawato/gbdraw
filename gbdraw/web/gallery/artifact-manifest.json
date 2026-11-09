@@ -23,12 +23,12 @@
       "sha256": "4f0f99ffa8db9589446befde952db0579aef69e2e3fdc8ef5789b961ce8d11ac"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
-      "bytes": 446612,
-      "sha256": "3dcae09800ece8ca523baa1bd1db0cca7026905a8baef8bb03330972dae7d727"
+      "bytes": 446601,
+      "sha256": "54cfa5ea9867e49c5a14be64ec94dee406dd34f44ef6175af03a4bf8f256940a"
     },
     "gallery/examples/HmmtDNA_basic_circular.svg": {
-      "bytes": 434441,
-      "sha256": "9e8dc01ac97b67aee2915d63093a2183e438a7d81e6e57fe398e480e1f5fb76c"
+      "bytes": 434431,
+      "sha256": "3085362b9dec6e6c18d90bcc9ff1f1679843dc805c31cbad15a71f90a6b1c413"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 27273362,
@@ -71,12 +71,12 @@
       "sha256": "8049b69b44a60363eddb94f4abaf5d90d119ac70fb4876eda98e861855e31cbe"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 278622,
-      "sha256": "28c7ffb24fc811464b3bd7ebc00cc6cd713b2a86cef7fc111f437c00d433cf4f"
+      "bytes": 278633,
+      "sha256": "c1777b0610a68b47010f7f1b868677fcb061e4ac97e2f8c882f1050687fa4e10"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 261460,
-      "sha256": "121d8a42cc05f037011929820ee05339af3937026892a3abea13e17ceb00472b"
+      "bytes": 261472,
+      "sha256": "402b643ecf44c8c18e24c7d8377dc6a4085988c57e9560d7286d805614a0a12b"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
       "bytes": 11841783,
@@ -119,12 +119,12 @@
       "sha256": "bbae3b11b6aa61ceed5e3aa77c0ad1426f935e0134980b977fc54cef9437c888"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
-      "bytes": 87237,
-      "sha256": "94a60475c41e35342b2ae7c3aafb746980895c82a1ac95c9a0e551d679ba0f95"
+      "bytes": 87226,
+      "sha256": "d599ce14e09c443794913daab2d5986ecd58fe1f572efcc3ba23a30ad1b4f53b"
     },
     "gallery/sources/HmmtDNA_basic_circular.svg": {
-      "bytes": 75050,
-      "sha256": "7d9560a3b8dd308c7eb7f89906278500e5da7c44ed046494cb9bd737eb22cfe3"
+      "bytes": 75040,
+      "sha256": "16305735dae07cc86cfc79b1f8446e296337b7171600e72bbec8fe3ad8aee4ff"
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 2626008,
@@ -167,12 +167,12 @@
       "sha256": "321a080ad026144ff1b83b1b5200d490049d8209a11ef72bc56e27ad25426f85"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
-      "bytes": 22204,
-      "sha256": "b5ad48a6914b13119d1d6f7f651ba992f597336799e503fde7dcd20e4f277357"
+      "bytes": 22172,
+      "sha256": "53eea37f62d5c00c908d5bbbcc3d4c483fe9da425fa4250d5b5592f943a3ef9f"
     },
     "gallery/thumbnails/HmmtDNA_basic_circular.webp": {
-      "bytes": 18784,
-      "sha256": "e00f19623bc81098ecb1b50798b90b7bb68374e7d16b95c1a50bf2c0fd834592"
+      "bytes": 18780,
+      "sha256": "6d0e80497af9eead731760507d38f9b5456aea8e2ec7c5768a73d9d77330e04e"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
       "bytes": 28378,
