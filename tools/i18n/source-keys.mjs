@@ -79,13 +79,14 @@ const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' 
 export const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 /**
- * The 1-based line of an index of `source`.
- * @param {string} source
+ * The 1-based line of an index of `lines` joined with newlines; the lines are
+ * those of the file (`readSource`).
+ * @param {readonly string[]} lines
  * @returns {(index: number) => number}
  */
-const lineFinder = (source) => {
+const lineFinder = (lines) => {
   const starts = [0];
-  for (let at = source.indexOf('\n'); at >= 0; at = source.indexOf('\n', at + 1)) starts.push(at + 1);
+  for (const line of lines.slice(0, -1)) starts.push(starts[starts.length - 1] + line.length + 1);
   return (index) => {
     let [low, high] = [0, starts.length - 1];
     while (low < high) {
@@ -166,12 +167,13 @@ export const skipExpression = (source, start) => {
  * the problem that keeps the key from being read.
  * @param {string} source
  * @param {string} file the name that problems report
+ * @param {readonly string[]} [lines] the lines of the file that `source` joins (`readSource`); a module's lines by default
  * @returns {SourceCall[]}
  */
-export const extractCalls = (source, file) => {
+export const extractCalls = (source, file, lines = source.split('\n')) => {
   /** @type {SourceCall[]} */
   const calls = [];
-  const lineAt = lineFinder(source);
+  const lineAt = lineFinder(lines);
   for (const match of source.matchAll(CALL_START)) {
     const name = /** @type {CallName} */ (match[1]);
     const where = `${file}:${lineAt(match.index)}`;
@@ -275,14 +277,34 @@ export const sourceFiles = () => [
 /** @param {string} path */
 export const webPath = (path) => relative(WEB_ROOT, path).split(sep).join('/');
 
-/** @param {string} path a source file; index.html is read as Vue compiles it */
-export const sourceText = (path) => {
+/**
+ * The lines of an HTML file as Vue compiles them. An entity holds no newline,
+ * so compiling line by line gives the compiled text when the lines are joined,
+ * and a newline that an entity decodes to (`&#10;`) stays inside its line.
+ * @param {string} html
+ */
+export const compiledLines = (html) => html.split('\n').map(compiledHtml);
+
+/**
+ * A source file as its keys are read, index.html as Vue compiles it, with the
+ * lines of the file.
+ * @param {string} path
+ * @returns {{ text: string, lines: string[] }}
+ */
+export const readSource = (path) => {
   const source = readFileSync(path, 'utf8');
-  return path.endsWith('.html') ? compiledHtml(source) : source;
+  const lines = path.endsWith('.html') ? compiledLines(source) : source.split('\n');
+  return { text: lines.join('\n'), lines };
 };
 
+/** @param {string} path a source file; index.html is read as Vue compiles it */
+export const sourceText = (path) => readSource(path).text;
+
 /** Every call of every source file. */
-export const sourceCalls = () => sourceFiles().flatMap((path) => extractCalls(sourceText(path), webPath(path)));
+export const sourceCalls = () => sourceFiles().flatMap((path) => {
+  const { text, lines } = readSource(path);
+  return extractCalls(text, webPath(path), lines);
+});
 
 /** @param {string} text @returns {string[]} the sorted placeholder names */
 export const placeholdersOf = (text) => [...new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]))].sort();
@@ -360,9 +382,10 @@ export const roleAt = (source, index, html) => {
  * element holds it (its title from SETTINGS_SECTIONS), a dialog, the shared
  * component templates, or the page.
  * @param {string} html
+ * @param {readonly string[]} lines the lines of the file that `html` joins
  * @returns {(line: number) => string}
  */
-const htmlAreas = (html) => {
+const htmlAreas = (html, lines) => {
   /** @type {Map<string, string>} */
   const titles = new Map();
   for (const section of SETTINGS_SECTIONS) {
@@ -371,7 +394,7 @@ const htmlAreas = (html) => {
   for (const section of SETTINGS_SECTIONS) {
     if ('dock' in section) titles.set(section.key, titles.get(section.dock) ?? section.dock);
   }
-  const lineAt = lineFinder(html);
+  const lineAt = lineFinder(lines);
   /** @type {{ from: number, to: number, area: string }[]} */
   const spans = [];
   const sections = /<([A-Za-z][\w-]*)\b(?:"[^"]*"|'[^']*'|[^'">])*?\sv-settings-section="'([a-z-]+)'"(?:"[^"]*"|'[^']*'|[^'">])*>/g;
@@ -402,8 +425,9 @@ const htmlAreas = (html) => {
 const derivedSite = (file, english) => {
   const source = readFileSync(join(WEB_ROOT, file), 'utf8');
   const at = [`'${english}'`, `"${english}"`].map((literal) => source.indexOf(literal)).find((index) => index >= 0) ?? -1;
-  const line = at < 0 ? 1 : lineFinder(source)(at);
-  return { file, line, snippet: source.split('\n')[line - 1].trim().slice(0, 220), area: `Script: ${file}` };
+  const lines = source.split('\n');
+  const line = at < 0 ? 1 : lineFinder(lines)(at);
+  return { file, line, snippet: lines[line - 1].trim().slice(0, 220), area: `Script: ${file}` };
 };
 
 /**
@@ -434,13 +458,12 @@ export const sourceKeys = async () => {
     entry.sites.push(site);
   };
   for (const path of sourceFiles()) {
-    const source = sourceText(path);
+    const { text: source, lines } = readSource(path);
     const file = webPath(path);
     const html = file.endsWith('.html');
-    const lines = source.split('\n');
-    const lineAt = lineFinder(source);
-    const area = html ? htmlAreas(source) : () => `Script: ${file}`;
-    for (const call of extractCalls(source, file)) {
+    const lineAt = lineFinder(lines);
+    const area = html ? htmlAreas(source, lines) : () => `Script: ${file}`;
+    for (const call of extractCalls(source, file, lines)) {
       if ('problem' in call) {
         problems.push(call.problem);
         continue;

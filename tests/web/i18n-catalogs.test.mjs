@@ -25,7 +25,7 @@ import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.ge
 import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import {
-  PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
+  PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, compiledLines, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
 } from '../../tools/i18n/source-keys.mjs';
 
 const jsRoot = join(webRoot, 'js');
@@ -161,6 +161,23 @@ test('index.html keys are read after Vue decodes entities, in the root and in x-
   // A module's key is read as written: an entity there is refused.
   assert.deepEqual(extractCalls('t(\'A &amp; B\')', 'module.js').map((call) => call.problem), [
     'module.js:1: t() key holds an HTML entity; write the character'
+  ]);
+});
+
+test('OV-3123: an index.html site is numbered by the lines of the file, also after an entity that decodes to a newline', async () => {
+  const fileLines = readFileSync(join(webRoot, 'index.html'), 'utf8').split('\n');
+  assert.ok(fileLines.some((line) => line.includes('&#10;')), 'index.html has an entity that decodes to a newline');
+  const { keys } = await sourceKeys();
+  const wrong = [...keys.values()].flatMap((entry) => entry.sites)
+    .filter((site) => site.file === 'index.html')
+    .filter((site) => site.snippet !== compiledHtml(fileLines[site.line - 1]).trim().slice(0, 220)
+      || !/(?<![\w$.])(?:msg|tn|tx|t)\(/.test(fileLines[site.line - 1]))
+    .map((site) => `${site.line}: ${site.snippet.slice(0, 60)}`);
+  assert.deepEqual(wrong, []);
+  // A problem is reported at the line of the file too.
+  const lines = compiledLines('<textarea placeholder="Ring A&#10;Ring B"></textarea>\n<p>{{ t(label) }}</p>');
+  assert.deepEqual(extractCalls(lines.join('\n'), 'sample', lines).map((call) => call.problem), [
+    'sample:2: argument 1 of t() is not a string literal'
   ]);
 });
 
