@@ -93,7 +93,9 @@ class _LaneBand(NamedTuple):
     a clipped set size are drawn ``lane_extent_px`` apart. ``labels_above`` as in ``LabelSizing``. ``set_px`` is
     the extent the drawer gives a slot whose size is set (that size, stopped at the centre for an inside Circular
     slot; None where the slot takes the extent its lanes and rooms need): its lanes share it less the slot's label
-    room (``width_px``)."""
+    room (``width_px``). ``counted`` is the warning count the labels the slot leaves out join
+    (``ResolvedAnnotationTrack.rooms_stop``): "clip" for a slot whose overflow is clip, even where the centre stops its
+    rooms before its set size (LBL-ROOM-CLIP-FIT-OMIT), else "centre"."""
 
     lane_extent_px: float
     lane_gap_px: float
@@ -102,6 +104,7 @@ class _LaneBand(NamedTuple):
     stop: RoomStop
     labels_above: bool
     set_px: float | None
+    counted: RoomStop
 
     def bare_px(self, lane_count: int) -> float:
         """The extent of ``lane_count`` lanes without label room, past any limit."""
@@ -244,10 +247,12 @@ class ResolvedAnnotationTrack:
     lane_rooms: tuple[LaneRoom, ...] = ()
     # Whether the labels stand toward lane 0 (``LabelSizing.labels_above``).
     labels_above: bool = False
-    # The labels (record index, annotation id) the track leaves out, and what stopped their room (``RoomStop``; None
-    # where nothing bounds the rooms): labels that would cross another lane's mark and were left without their room
-    # (an inside Circular slot adds no room past the centre, a clipped slot of set size none past that size), and
-    # labels whose letters the edge of a clipped slot would cut (``_cut_by_clip``). Their marks are drawn.
+    # The labels (record index, annotation id) the track leaves out, and the warning count they join (``RoomStop``,
+    # ``_LaneBand.counted``: in clipped slots for a slot whose overflow is clip, else for want of room before the
+    # centre; None where nothing bounds the rooms and no label is left out): labels that would cross another lane's
+    # mark and were left without their room (an inside Circular slot adds no room past the centre, a clipped slot of
+    # set size none past that size), labels whose letters the edge of a clipped slot would cut (``_cut_by_clip``), and
+    # labels drawn across the centre of the circle onto a mark (``_across_centre``). Their marks are drawn.
     without_room: tuple[tuple[int, str], ...] = ()
     rooms_stop: RoomStop | None = None
     # The font size of each label the track leaves out (record index, size; ``annotation_label_font_size``), in
@@ -810,19 +815,19 @@ def _across_centre(
     track: ResolvedAnnotationTrack, band: _LaneBand, labels: LabelSizing, params: AnnotationTrackParams, *, labelled: bool
 ) -> ResolvedAnnotationTrack:
     """``track``, leaving out (``ResolvedAnnotationTrack.without_room``) the labels whose letters the drawer draws over
-    the centre of the circle onto a mark (``LabelSizing.across_centre``; OV-2991): no room keeps such letters clear of
-    the marks they meet there, so they are left out as a label whose room would carry its lanes past the centre is
-    (LBL-ROOM-STOP-AT-CENTRE-OMIT; in a clipped slot of set size, LBL-ROOM-CLIP-FIT-OMIT), and counted where the
-    track's rooms stop (``rooms_stop``). Unchanged where the slot draws no labels of its own (not ``labelled``), its
-    letters cannot pass the centre, or its rooms have no stop (``band.limit_px``: a set size with overflow error or
-    compress, which the Contract does not name for such a label; OV-2991-B)."""
+    the centre of the circle onto a mark (``LabelSizing.across_centre``; LBL-ACROSS-CENTRE-OMIT, OV-2991, OV-3035): no
+    room keeps such letters clear of the marks they meet there. They are left out whatever the slot's width and
+    overflow (OV-2991-B), and counted with the slot's other leave-outs (``rooms_stop``, ``_LaneBand.counted``): with
+    the labels left out for want of room before the centre, or, in a slot whose overflow is clip, with those left out
+    in clipped slots. Unchanged where the slot draws no labels of its own (not ``labelled``) or its letters cannot pass
+    the centre."""
 
-    if not labelled or labels.across_centre is None or band.limit_px is None:
+    if not labelled or labels.across_centre is None:
         return track
     met = labels.across_centre(track, params, band.drawn_extent_px(lane_count_of(track.placements), track.lane_room_px))
     if not met:
         return track
-    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=band.stop)
+    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=band.counted)
 
 
 class _LanePlace(NamedTuple):
@@ -972,8 +977,8 @@ def _lane_band(
     limit: float | None = centre
     stop: RoomStop = "centre"
     set_px: float | None = None
+    clips = available_extent_px is not None and track_params.overflow == "clip" and track_params.to_slot is None
     if available_extent_px is not None:
-        clips = track_params.overflow == "clip" and track_params.to_slot is None
         if clips and (centre is None or float(available_extent_px) <= centre):
             limit, stop = float(available_extent_px), "clip"
         elif not clips:
@@ -981,7 +986,14 @@ def _lane_band(
         if track_params.to_slot is None:
             set_px = float(available_extent_px) if centre is None else min(float(available_extent_px), centre)
     return _LaneBand(
-        LANE_EXTENT_PX, float(track_params.lane_gap_px), float(track_params.padding_px), limit, stop, labels_above, set_px
+        LANE_EXTENT_PX,
+        float(track_params.lane_gap_px),
+        float(track_params.padding_px),
+        limit,
+        stop,
+        labels_above,
+        set_px,
+        "clip" if clips else "centre",
     )
 
 
@@ -1117,7 +1129,7 @@ class _SlotPacking(NamedTuple):
             slot_id=self.slot_id, set_id=self.set_id, placements=placements, required_extent_px=0.0,
             label_font_size=float(self.labels.font_size), join_origin=self.join_origin, lane_rooms=lane_rooms.rooms,
             labels_above=self.labels.labels_above, without_room=lane_rooms.without_room,
-            rooms_stop=None if self.band.limit_px is None else self.band.stop,
+            rooms_stop=None if self.band.limit_px is None else self.band.counted,
             without_letters=tuple(sorted(measures.without_letters)),
         )
 

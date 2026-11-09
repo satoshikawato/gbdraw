@@ -1090,16 +1090,35 @@ def _nested_inside(
     return _groups(drawing.tostring()), caught, drawing
 
 
-@pytest.mark.parametrize(
-    ("count", "without_room", "slot"), ((4, 2, ""), (5, 3, ""), (5, 3, ",w=1000px,overflow=clip"))
+_PAST_CENTRE = (
+    "left out for want of room before the centre",
+    "Region labels are left out: there is no room for them before the centre ({}).",
 )
-def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, without_room: int, slot: str) -> None:
+_IN_CLIPPED_SLOTS = (
+    "left out in clipped slots",
+    "Region labels are left out: their clipped slots have no room for them, would cut their letters, or hide their marks ({}).",
+)
+
+
+@pytest.mark.parametrize(
+    ("count", "without_room", "slot", "warned"),
+    (
+        (4, 2, "", _PAST_CENTRE),
+        (5, 3, "", _PAST_CENTRE),
+        # D-106: a slot whose overflow is clip counts its labels in clipped slots, even where the centre stops its rooms.
+        (5, 3, ",w=1000px,overflow=clip", _IN_CLIPPED_SLOTS),
+    ),
+)
+def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(
+    count: int, without_room: int, slot: str, warned: tuple[str, str]
+) -> None:
     # LBL-ROOM-STOP-AT-CENTRE-OMIT (OV-2665, OV-2666, Q13 X): the rooms of four or five crossing labels would carry
     # the lanes past the centre. The rooms that fit from the slot's outer edge are kept; the others are not added,
     # every band keeps its width on its own side of the centre, and every mark is drawn. The labels without room are
     # not drawn, nor the innermost label, whose letters, too wide for the circle its mark leaves them, are centred on
     # the centre and come back over the next band out (OV-2991: drawn 15.5 px into it before), and the warning counts
-    # them. A clipped slot whose set width reaches past the centre stops there too: the centre is the nearer bound.
+    # them. A clipped slot whose set width reaches past the centre stops there too: the centre is the nearer bound; its
+    # warning counts the labels left out in clipped slots (LBL-ROOM-CLIP-FIT-OMIT).
     from gbdraw.api.diagram import label_fit_report
     from gbdraw.labels.fit import label_fit_notice
     from gbdraw.web_support.label_fit import label_fit_report_payload
@@ -1114,18 +1133,16 @@ def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, witho
     assert all(_marked(items[f"r{index}"]) for index in range(count))
     assert sum(_labelled(items[f"r{index}"]) for index in range(count)) == count - without_room
     counted = "region label" if without_room == 1 else "region labels"
-    assert any(
-        f"{without_room} {counted} left out for want of room before the centre" in str(item.message) for item in caught
-    ), [str(item.message) for item in caught]
+    counts, sentence = f"{without_room} {counted} {warned[0]}", warned[1].format(without_room)
+    assert any(counts in str(item.message) for item in caught), [str(item.message) for item in caught]
     report = label_fit_report(drawing)
     assert report is not None and report.drawn
-    sentence = f"Region labels are left out: there is no room for them before the centre ({without_room})."
     assert sentence in label_fit_notice(report)
     # The Web shows the same sentence over the figure, and the region labels get no row to choose.
     payload = label_fit_report_payload(report, "circular")
     assert sentence in payload["notice"]
     (region,) = [record for record in payload["records"] if record["labelKind"] == "circular_region"]
-    assert region["counts"] == f"{without_room} {counted} left out for want of room before the centre"
+    assert region["counts"] == counts
     assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
 
 
@@ -1555,26 +1572,73 @@ def test_an_inside_label_whose_letters_pass_the_centre_onto_other_marks_is_left_
     assert not _marks_met(drawn, regions), _marks_met(drawn, regions)
 
 
-@pytest.mark.parametrize("slot", (",w=345px,overflow=error", ",w=340px,overflow=error", ",w=345px,overflow=compress"))
-def test_an_inside_label_whose_letters_pass_the_centre_in_a_set_width_that_errors_or_compresses_is_drawn(slot: str) -> None:
-    # OV-2991-B: a slot whose width is set with overflow error or compress has no room stop: the Contract leaves out a
-    # label across the centre only without a set width (LBL-ROOM-STOP-AT-CENTRE-OMIT) or in a clipped slot
-    # (LBL-ROOM-CLIP-FIT-OMIT). Seven nested bands, only r6 labelled at 24 pt, in a set width that fits before the
-    # centre: r6 is drawn across the centre, as before, until the Owner decides that case.
+@pytest.mark.parametrize(
+    ("slot", "counts"),
+    (
+        (",w=345px,overflow=error", "1 region label left out for want of room before the centre"),
+        (",w=340px,overflow=error", "1 region label left out for want of room before the centre"),
+        (",w=345px,overflow=compress", "1 region label left out for want of room before the centre"),
+        # A clipped slot whose set width passes the centre: the centre stops its rooms, and it counts the label in
+        # clipped slots, as every slot whose overflow is clip does (D-106).
+        (",w=1000px,overflow=clip", "1 region label left out in clipped slots"),
+    ),
+)
+def test_an_inside_label_whose_letters_pass_the_centre_in_a_set_width_is_left_out(slot: str, counts: str) -> None:
+    # OV-2991-B (Owner 2026-11-09: A), LBL-ACROSS-CENTRE-OMIT: whatever an inside slot's width and overflow, a label
+    # drawn across the centre whose letters come within their label offset of another mark is left out. Seven nested
+    # bands, only r6 labelled at 24 pt, in a set width that fits before the centre (or passes it, clipped): r6's
+    # letters, centred on the centre, come back over r5 and r4. It is not drawn, every mark is, the warning counts it,
+    # and the slot raises no error.
     drawn = _bands_and_left_out(_SEVEN_NESTED, slot, "horizontal", empty=frozenset(f"r{index}" for index in range(6)), size=24)
 
-    assert [label.annotation_id for label in drawn.drawn] == ["r6"], drawn.drawn
-    assert not any("left out for want of room" in message for message in drawn.messages), drawn.messages
+    assert not drawn.drawn, drawn.drawn
+    assert all(_marked(drawn.items[identity]) for identity, *_rest in _SEVEN_NESTED)
+    assert any(counts in message for message in drawn.messages), drawn.messages
 
 
-def test_an_inside_label_whose_letters_pass_the_centre_onto_no_other_mark_is_drawn() -> None:
-    # OV-2991: a label whose letters pass the centre but meet no other annotation's mark is drawn, as before (over
-    # the centre definition it is drawn and warned, Q21=A). Its letters come within their label offset of its own
-    # mark; whether that leaves it out is a question for the Owner, not this fix.
-    drawn = _bands_and_left_out(_SEVEN_NESTED[:1], "", "horizontal", size=60)
+@pytest.mark.parametrize(("size", "is_drawn"), ((60, True), (96, False)))
+@pytest.mark.parametrize(
+    ("slot", "counts"),
+    (
+        ("", "1 region label left out for want of room before the centre"),
+        (",w=20px,overflow=error", "1 region label left out for want of room before the centre"),
+        (",w=20px,overflow=compress", "1 region label left out for want of room before the centre"),
+        (",w=20px,overflow=clip", "1 region label left out in clipped slots"),
+    ),
+)
+def test_an_inside_label_whose_letters_pass_the_centre_onto_its_own_mark_is_left_out(
+    size: float, is_drawn: bool, slot: str, counts: str
+) -> None:
+    # OV-3035 (Owner 2026-11-09: C), LBL-ACROSS-CENTRE-OMIT: one band, labelled, in an inside slot without a set
+    # width or one about as wide as the band (14 px) with each overflow. Its letters are wider than the circle its band
+    # leaves them, so the drawer centres them on the centre of the circle. At 60 pt they stop short of the band, nearer
+    # it than their label offset: the label is drawn, as before. At 96 pt they cross the band: the label is left out,
+    # its band is drawn, and the warning counts it (in clipped slots where the slot clips, D-106).
+    from gbdraw.layout.text_geometry import annular_sector_parts, convex_polygons_intersect, grown_convex_polygon
 
-    (label,) = drawn.drawn
-    assert label.annotation_id == "r0" and label.ink_radii[0] == 0.0, label.ink_radii
+    drawn = _bands_and_left_out(_SEVEN_NESTED[:1], slot, "horizontal", size=size)
+
+    assert _marked(drawn.items["r0"])
+    if is_drawn:
+        (label,) = drawn.drawn
+        assert label.annotation_id == "r0" and label.ink_radii[0] == 0.0, label.ink_radii
+        # r0's paint: its band, with half its stroke on each side, over bp 1501-3500 of 10,000 (36 degrees each way
+        # of 3 o'clock). The letters come within their label offset of it (about 3.5 px) without crossing it.
+        inner, outer = drawn.bands["r0"]
+        band = annular_sector_parts(inner - _PAINT, outer + _PAINT, 0.0, 36.0)
+
+        def meets(grow: float) -> bool:
+            return any(
+                convex_polygons_intersect(grown_convex_polygon(part, grow) if grow else part, sector)
+                for part in label.parts
+                for sector in band
+            )
+
+        assert meets(label.label_offset) and not meets(0.0), label.parts
+        assert not any("region label left out" in message for message in drawn.messages), drawn.messages
+    else:
+        assert not drawn.drawn, drawn.drawn
+        assert any(counts in message for message in drawn.messages), drawn.messages
 
 
 def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:
