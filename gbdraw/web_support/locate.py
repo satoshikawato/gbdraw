@@ -284,7 +284,9 @@ def _input_file(key: str, source: RecordInputSource) -> LocateInputFile:
 
 @dataclass(frozen=True)
 class _Drawing:
-    """The source drawing's request and its Files: each request record is one File, by its record key."""
+    """The source drawing's request and its Files. A File is one source of the drawing (a Linear File card), keyed
+    by the record key of its first request record: request records that read one source (a card the request splits
+    into one record per record) are one File, with the keys of each record it draws."""
 
     request: LinearDiagramRequest
     files: dict[str, RecordInputSource]
@@ -298,12 +300,13 @@ def _drawing(request_payload: Mapping[str, object], resource_paths: Mapping[str,
     request = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("Find in other files searches from a Linear drawing.", diagnostic={"code": "INPUT_INVALID"})
-    files: dict[str, RecordInputSource] = {}
-    for record in request.records:
-        if record.record_key is None or record.record_key in files:
-            raise _protocol_error("Each File of the drawing needs its own record key.")
-        files[record.record_key] = record.source
-    keys = list(files)
+    record_keys_given = [record.record_key for record in request.records]
+    if None in record_keys_given or len(set(record_keys_given)) != len(record_keys_given):
+        raise _protocol_error("Each record of the drawing needs its own record key.")
+    key_of_source: dict[RecordInputSource, str] = {}
+    # The File key of each request record, in request order.
+    keys = [key_of_source.setdefault(record.source, str(record.record_key)) for record in request.records]
+    files = {key: source for source, key in key_of_source.items()}
     records: dict[str, tuple[str, str, str]] = {}
     record_keys: dict[str, dict[int, str]] = {}
     for unit in resolve_request_records(request).provenance:

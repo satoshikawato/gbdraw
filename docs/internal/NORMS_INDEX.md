@@ -794,7 +794,7 @@ are listed under "Cited ids without a record".
   - `tests/test_locate_web.py`
   - `tests/web/find-in-other-files.playwright.spec.js`
   - `tests/web/find-in-other-files.test.mjs`
-  - `tests/web/losat-by-file.test.mjs`
+  - `tests/web/losat-overlay-run.test.mjs`
 
 ### Cited ids without a record
 

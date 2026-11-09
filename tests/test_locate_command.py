@@ -40,6 +40,7 @@ from gbdraw.comparisons.locate import (
     LocateSearchResult,
     finish_locate,
     locate_drawing,
+    locate_file_counts,
     locate_results,
     prepare_locate_search,
 )
@@ -659,3 +660,34 @@ def test_interleaved_windows_of_a_file_are_numbered_and_drawn_in_the_order_of_th
     assert _run("--records_table P.records.tsv -o FIG".split(), monkeypatch, "linear") == 0
     drawn = re.findall(r">(D[12]:[^<]*)<", (tmp_path / "FIG.svg").read_text(encoding="utf-8"))
     assert drawn == [f"D1:{spans[0]}", f"D2:{spans[1]}", f"D1:{spans[2]}"]
+
+
+def _upstream_copy(tmp_path: Path) -> dict[str, Path]:
+    """E holds a copy of g1-g2 more than 10 kb before a whole copy of g1..g6 on one contig: the first is a window
+    the plan does not select (column 1), the second the window it keeps (column 2)."""
+
+    paths = _genomes(tmp_path)
+    reference = SeqIO.read(paths["ref"], "genbank")
+    rng = random.Random(3)
+    e = (_record("E1", _filler(rng, 1000)) + reference[1900:3400] + _record("E1", _filler(rng, 15_000))
+         + reference[1500:8000] + _record("E1", _filler(rng, 2000)))
+    paths["e"] = _write_genbank(tmp_path / "e.gb", e, "E1")
+    return paths
+
+
+def test_a_kept_window_after_one_not_selected_is_numbered_as_the_drawing_numbers_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A window's number is its place in the drawn row, found by its column in the plan (its identity there, windows
+    # not selected counted): the report and the drawing give the kept window the number 1.
+    paths = _upstream_copy(tmp_path)
+    caplog.set_level("INFO")
+    assert _run(_locate_args(paths, _fake_losat(tmp_path), tmp_path / "P", "e"), monkeypatch) == 0
+    plan = LocatePlan.from_json(json.loads((tmp_path / "P.plan.json").read_text(encoding="utf-8")))
+    [kept] = plan.files[0].windows
+    assert kept.window.column == 2 and [item.window.column for item in plan.files[0].candidates] == [1]
+    [numbers] = [counts.window_numbers for counts in locate_file_counts(plan)]
+    assert numbers == ((2, 1),)
+    span = f"{kept.window.start:,}-{kept.window.end:,}"
+    listed = [message for message in (record.getMessage() for record in caplog.records) if message.startswith("  ")]
+    assert listed[0].split(":")[0] == f"  1 E1 {span}"

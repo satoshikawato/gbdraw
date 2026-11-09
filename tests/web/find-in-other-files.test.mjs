@@ -63,10 +63,16 @@ const searchPlan = () => ({
   ]
 });
 const NAMES = { p1: 'g1', p2: 'g2', p3: 'g3', p7: 'g7' };
-/** Python's `locate_file_counts` for the plans here: the kept windows numbered by column, the genes found, the rows removed. */
+/**
+ * Python's `locate_file_counts` (gbdraw/comparisons/locate.py), step by step: the drawn row places a File's kept
+ * windows, in plan order, at columns 1..k (`_drawn_row`), the drawing numbers a window by that column, and the reply
+ * gives each number by the window's column in the plan (its identity there, windows not kept counted), in that order;
+ * then the genes found and the rows the thresholds removed.
+ */
 const countsOf = (plan) => plan.files.map((file) => ({
   fileKey: file.file_key,
-  windowNumbers: file.windows.map((item) => item.window.column).sort((a, b) => a - b).map((column, index) => ({ column, number: index + 1 })),
+  windowNumbers: file.windows.map((item, index) => ({ column: item.window.column, number: index + 1 }))
+    .sort((a, b) => a.column - b.column),
   genesFound: file.coverage.complete.length + file.coverage.partial.length,
   genesTotal: plan.reference.genes.length,
   alignmentsRemoved: file.tally.rows_read - file.tally.rows_kept
@@ -423,6 +429,8 @@ test('a tick or an edit while Python answers the last one is not taken', async (
   await pending;
   assert.equal(calls.steps.filter((step) => step.step === 'drawing').length, before + 1);
   assert.deepEqual(owner.dialog.proposal[1].windows.map((window) => window.ticked), [false, true]);
+  // The window after an unticked one moves up in the drawing: B2 is drawn first, numbered ①.
+  assert.deepEqual(owner.dialog.proposal[1].windows.map((window) => window.number), ['', '①']);
 });
 
 test('typing in Start or End counts the genes once typing pauses', async () => {

@@ -33,7 +33,7 @@ import {
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
-import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel } from '../services/losat.js';
+import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel, runUntilCanceled } from '../services/losat.js';
 import {
   requestedLosatExecutionMode, requestedLosatParallelWorkers, requestedLosatThreadsPerJob, requestedLosatTotalThreadBudget
 } from '../services/losat-thread-plan.js';
@@ -6480,11 +6480,6 @@ export const createRunAnalysis = ({
     generationCancelRequested.value = false;
     processing.value = true;
     labelCapacityNotices.value = [];
-    /** @type {Promise<never>} */
-    const canceled = new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
-    canceled.catch(() => {});
-    /** @param {string} text */
-    const status = (text) => { if (!signal.aborted) processingStatus.value = text; };
     /** @param {LosatJob[]} batch @param {Map<string, string>} sequences @param {(completed: number) => void} onProgress */
     const execute = (batch, sequences, onProgress) => executeLosatJobs(batch, {
       concurrency: requestedLosatParallelWorkers(state.losatExecution),
@@ -6496,22 +6491,21 @@ export const createRunAnalysis = ({
       onRuntimeStatus: (runtime) => { losatThreadingStatus.value = runtime; },
       onProgress: ({ completed }) => onProgress(completed)
     });
-    /** @type {LosatOverlayRun} */
-    const run = {
-      signal, status, until: (step) => Promise.race([step, canceled]),
-      losat: async ({ jobs, sequences, byFile = false }) => {
-        if (byFile) return runLosatJobsByFile(jobs, (job) => execute([job], sequences, () => {}), run);
-        /** @param {number} completed */
-        const progress = (completed) => status(tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length }));
-        progress(0);
-        return execute(jobs, sequences, progress);
-      }
-    };
     try {
-      return { status: 'ok', value: await task(run) };
-    } catch (error) {
-      if (signal.aborted) return { status: 'canceled' };
-      throw error;
+      return await runUntilCanceled(signal, (text) => { processingStatus.value = text; }, ({ until, status }) => {
+        /** @type {LosatOverlayRun} */
+        const run = {
+          signal, status, until,
+          losat: async ({ jobs, sequences, byFile = false }) => {
+            if (byFile) return runLosatJobsByFile(jobs, (job) => execute([job], sequences, () => {}), run);
+            /** @param {number} completed */
+            const progress = (completed) => status(tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length }));
+            progress(0);
+            return execute(jobs, sequences, progress);
+          }
+        };
+        return task(run);
+      });
     } finally {
       if (activeLosatAbortController === controller) activeLosatAbortController = null;
       processingStatus.value = '';

@@ -1087,6 +1087,38 @@ export const prepareLosatRuntime = async ({
  */
 
 /**
+ * The Cancel of a run under the overlay, apart from the overlay itself: the run gets `until(step)`, a step's reply or
+ * the abort reason as soon as `signal` aborts (it does not wait for the step), and `status(text)`, which writes
+ * through `write` until Cancel. A reply that arrives after Cancel is discarded: the run ends `canceled` whenever
+ * `signal` has aborted, also when the task returned or failed afterwards. An error of the task itself is rethrown.
+ * @template T
+ * @param {AbortSignal} signal
+ * @param {(text: string) => void} write
+ * @param {(run: Pick<LosatOverlayRun, 'until' | 'status'>) => Promise<T>} task
+ * @returns {Promise<{ status: 'ok', value: T } | { status: 'canceled' }>}
+ */
+export const runUntilCanceled = async (signal, write, task) => {
+  /** @type {Promise<never>} */
+  const canceled = new Promise((_resolve, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  canceled.catch(() => {});
+  /** @type {Pick<LosatOverlayRun, 'until' | 'status'>} */
+  const run = {
+    until: (step) => Promise.race([step, canceled]),
+    status: (text) => { if (!signal.aborted) write(text); }
+  };
+  try {
+    const value = await task(run);
+    return signal.aborted ? { status: 'canceled' } : { status: 'ok', value };
+  } catch (error) {
+    if (signal.aborted) return { status: 'canceled' };
+    throw error;
+  }
+};
+
+/**
  * The jobs of a search by File (Find in other files, PD-OI-123): one job per File, one after another, so the status
  * says "File k of N". A File whose job fails keeps its reason (`error`) and the next File still runs; Cancel stops
  * the run (the abort is thrown).
