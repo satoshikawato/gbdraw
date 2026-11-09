@@ -264,7 +264,7 @@ options:
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
                         1Mb, 1kb for genomes <10Mb, 10kb for genomes <100Mb,
                         100kb for genomes >=100Mb, and at most a tenth of the
-                        window)
+                        Auto window)
   --species SPECIES     Species name (optional; e.g. "<i>Escherichia
                         coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")
   --strain STRAIN       Strain/isolate name (optional; e.g. "K-12", "Av")
@@ -1456,7 +1456,7 @@ options:
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
                         1Mb, 1kb for genomes <10Mb, 10kb for genomes <100Mb,
                         100kb for genomes >=100Mb, and at most a tenth of the
-                        window)
+                        Auto window)
   --separate_strands    separate forward and reverse strands (default: False).
                         Features of undefined strands are shown on the forward
                         strand.
