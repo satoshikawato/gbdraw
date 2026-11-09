@@ -176,10 +176,12 @@ test('A Circular Session whose record has one window across the origin loads it,
   expect(drawn[0]).not.toContain('16,569 bp');
   // The drawing holds the window in its read-only list, not in the Start/End fields, which would refuse 16,000-100.
   const originWindow = { start: 16000, end: 100, reverseComplement: false, column: null };
+  // The form's window has its "Across the origin" box ticked (PD-OI-124); the request writes the four fields above.
+  const formWindow = { ...originWindow, acrossOrigin: true };
   expect(await page.evaluate(() => {
     const { circular_region_start, circular_region_end, circular_windows } = window.__GBDRAW_APP__.form;
     return { circular_region_start, circular_region_end, circular_windows };
-  })).toEqual({ circular_region_start: null, circular_region_end: null, circular_windows: [originWindow] });
+  })).toEqual({ circular_region_start: null, circular_region_end: null, circular_windows: [formWindow] });
   await page.locator('[data-circular-record-presentation] summary').click();
   await expect(page.getByLabel('Circular region start')).toHaveCount(0);
   await expect(page.locator('[data-circular-record-presentation] [data-record-window]')).toHaveText([/^16,000\u2013100\s*670 bp$/]);
@@ -200,7 +202,7 @@ test('A Circular Session whose record has one window across the origin loads it,
   expect(await page.evaluate(() => {
     const { circular_reverse, circular_windows } = window.__GBDRAW_APP__.form;
     return { circular_reverse, circular_windows };
-  })).toEqual({ circular_reverse: false, circular_windows: [{ ...originWindow, reverseComplement: true }] });
+  })).toEqual({ circular_reverse: false, circular_windows: [{ ...formWindow, reverseComplement: true }] });
   await generate(page);
   const committed = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
   expect([committed.records[0].windows, committed.records[0].presentation.reverseComplement])

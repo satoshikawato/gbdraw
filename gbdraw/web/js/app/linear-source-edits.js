@@ -13,7 +13,7 @@ import { padDepthFileSlots } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { reconcileLinearComparisonPlan } from '../services/linear-comparisons.js';
 import { placeNewLayoutWindow, planLinearSourceRowMove, reconcileLinearRecordLayout } from '../services/linear-record-layout.js';
-import { addCardWindow, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';
+import { addCardWindow, cardWindowEditKind, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';
 import {
   groupLinearSourceRecords,
   inferredDefinitionForRecord,
@@ -500,7 +500,8 @@ export const createLinearRecordEdits = ({
 
   /**
    * A field of the card's window `index` (the Region block is window 0): Start or End (blank is empty), Reverse
-   * complement, or Across the origin. One History step: the control's own.
+   * complement, or Across the origin. One History step: the control's own. A change of the span clears the alignment;
+   * Reverse complement alone is a direction the alignment keeps (`cardWindowEditKind`).
    * @param {LinearSeq} sequence @param {number} index
    * @param {'start' | 'end' | 'reverseComplement' | 'acrossOrigin'} field @param {unknown} value
    */
@@ -510,10 +511,11 @@ export const createLinearRecordEdits = ({
     if (!sequence) return false;
     const next = field === 'reverseComplement' || field === 'acrossOrigin' ? Boolean(value)
       : value === '' || value === null || value === undefined ? null : Number(value);
-    const preview = { ...sequence, windows: sequence.windows.map((window) => ({ ...window })) };
-    if (!editCardWindow(preview, index, { [field]: next })) return false;
-    clearAlignmentForMutation(msg('record crop changed.'));
-    editCardWindow(sequence, index, { [field]: next });
+    const edit = { [field]: next };
+    const kind = cardWindowEditKind(sequence, index, edit);
+    if (!kind) return false;
+    if (kind === 'crop') clearAlignmentForMutation(msg('record crop changed.'));
+    editCardWindow(sequence, index, edit);
     return true;
   };
 

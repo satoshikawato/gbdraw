@@ -56,20 +56,35 @@ export const normalizedCardWindow = (window) => (
 );
 
 /**
+ * What an edit of the card's window `index` changes: 'crop' when the window's span changes (Start, End, Across the
+ * origin, or an End typed before the Start, which also ticks Reverse complement), 'orientation' when only its Reverse
+ * complement changes (the direction an alignment records, as Align and Reset write it on the card), null when nothing
+ * changes.
+ * @param {CardCrop} card
+ * @param {number} index
+ * @param {CardWindowEdit} edit
+ * @returns {'crop' | 'orientation' | null}
+ */
+export const cardWindowEditKind = (card, index, edit) => {
+  const current = cardWindowList(card)[index];
+  if (!current) return null;
+  const next = normalizedCardWindow({ ...current, ...edit });
+  /** @param {'start' | 'end' | 'reverseComplement' | 'acrossOrigin'} field */
+  const changed = (field) => !Object.is(next[field], current[field]);
+  if (changed('start') || changed('end') || changed('acrossOrigin')) return 'crop';
+  return changed('reverseComplement') ? 'orientation' : null;
+};
+
+/**
  * Sets fields of the card's window `index` (one History step: the caller's control). False when nothing changed.
  * @param {CardCrop} card
  * @param {number} index
  * @param {CardWindowEdit} edit
  */
 export const editCardWindow = (card, index, edit) => {
+  if (!cardWindowEditKind(card, index, edit)) return false;
   const windows = cardWindowList(card);
-  const current = windows[index];
-  if (!current) return false;
-  const next = normalizedCardWindow({ ...current, ...edit });
-  if (['start', 'end', 'reverseComplement', 'acrossOrigin'].every(
-    (field) => Object.is(next[/** @type {keyof LinearSeqWindow} */ (field)], current[/** @type {keyof LinearSeqWindow} */ (field)])
-  )) return false;
-  windows[index] = next;
+  windows[index] = normalizedCardWindow({ ...windows[index], ...edit });
   storeCardWindows(card, windows);
   return true;
 };

@@ -161,11 +161,12 @@ const recordEditsOf = (cards) => {
   const drawing = { linearSeqs: cards, linearRecordRows: [], linearRecordLayoutEnabled: { value: false } };
   const applied = [];
   const steps = [];
+  const cleared = [];
   const edits = createLinearRecordEdits({
     sessionOperationAvailability: () => null,
     shownDrawingOfMode: () => drawing,
     runUndoable: (label, action) => { steps.push(label); action(); return true; },
-    clearAlignmentForMutation: () => {},
+    clearAlignmentForMutation: (reason) => { cleared.push(String(reason)); },
     linearRecordsFor: () => [],
     linearRecordStatusFor: () => ({}),
     rebindAnnotationRecords: () => {},
@@ -174,8 +175,31 @@ const recordEditsOf = (cards) => {
       target.linearSeqs = items;
     }
   });
-  return { drawing, applied, steps, edits };
+  return { drawing, applied, steps, edits, cleared };
 };
+
+test('Reverse complement turns a window, so it keeps the alignment; Start, End and Across the origin crop (OV-3026)', () => {
+  const cards = [createLinearSeq({ uid: 'a', region_start: 1, region_end: 100, region_reverse: true }),
+    createLinearSeq({ uid: 'b', windows: [span(1, 50), span(200, 300)] })];
+  const { edits, cleared } = recordEditsOf(cards);
+  // The Region block's Reverse and a listed window's Reverse are the orientation the alignment records.
+  assert.equal(edits.setLinearCardWindow(cards[0], 0, 'reverseComplement', false), true);
+  assert.equal(edits.setLinearCardWindow(cards[1], 1, 'reverseComplement', true), true);
+  assert.deepEqual([cards[0].region_reverse, cards[1].windows[1].reverseComplement], [false, true]);
+  assert.deepEqual(cleared, []);
+  // An edit that changes nothing clears nothing.
+  assert.equal(edits.setLinearCardWindow(cards[0], 0, 'start', 1), false);
+  assert.deepEqual(cleared, []);
+  // The span is the crop: each of its fields clears the alignment once.
+  edits.setLinearCardWindow(cards[0], 0, 'end', 90);
+  edits.setLinearCardWindow(cards[1], 0, 'start', 5);
+  edits.setLinearCardWindow(cards[1], 1, 'acrossOrigin', true);
+  assert.deepEqual(cleared, ['record crop changed.', 'record crop changed.', 'record crop changed.']);
+  // An End typed before the Start also ticks Reverse complement (OV-2884): still a crop.
+  edits.setLinearCardWindow(cards[1], 0, 'end', 2);
+  assert.deepEqual(cards[1].windows[0], span(2, 5, true));
+  assert.equal(cleared.length, 4);
+});
 
 test('Add window and Remove are one History step each through the record rows\' transition (F7)', () => {
   const cards = [createLinearSeq({ uid: 'a', region_start: 1, region_end: 100 }), createLinearSeq({ uid: 'b' })];
