@@ -266,6 +266,30 @@ def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_python_api_logs_a_region_set_the_track_stack_leaves_out(
+    tmp_path: Path, mode: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``draw_circular`` and ``draw_linear`` log the input summary's warnings, as the CLI does (OV-3007)."""
+    from gbdraw import CircularOptions, CircularTrackOptions, LinearOptions, LinearTrackOptions, read_genbank
+    from gbdraw.interface import AnnotationOptions
+
+    table = tmp_path / "regions.tsv"
+    table.write_text(REGION_SET_TABLE, encoding="utf-8")
+    records = read_genbank(str(QUERY))
+    annotations = AnnotationOptions(table_file=str(table))
+    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
+        if mode == "circular":
+            gbdraw.draw_circular(records, options=CircularOptions(
+                annotations=annotations, tracks=CircularTrackOptions(slots=("features:features",))))
+        else:
+            gbdraw.draw_linear(records, options=LinearOptions(
+                annotations=annotations, tracks=LinearTrackOptions(slots=("features:features",))))
+
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
+        REGION_SET_LEFT_OUT_WARNING.removeprefix("WARNING: ")
+    ]
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_web_reply_names_a_region_set_the_track_stack_leaves_out(tmp_path: Path, mode: str) -> None:
     """The Web shows the warning the CLI logs, from the same owner (OV-3007)."""
     from gbdraw.api import (

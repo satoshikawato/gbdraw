@@ -30,6 +30,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
+from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
 from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.api.options import (
@@ -1271,6 +1272,7 @@ def draw_circular(
     )
     # A CircularDiagramRequest plans a single diagram, never a batch.
     assert isinstance(prepared, _PreparedDiagramRequest)
+    _log_input_warnings(prepared.input_summary)
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,
@@ -1322,6 +1324,7 @@ def draw_linear(
     )
     # A CircularDiagramRequest plans a single diagram, never a batch.
     assert isinstance(prepared, _PreparedDiagramRequest)
+    _log_input_warnings(prepared.input_summary)
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,

@@ -414,13 +414,19 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     return tuple(warnings)
 
 
+def log_input_warnings(summary: InputSummary) -> None:
+    """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``)."""
+
+    for warning in input_warnings(summary):
+        logger.warning("%s", warning.message)
+
+
 def log_input_summary(summary: InputSummary) -> None:
     """Write the summary as CLI INFO lines and its warnings as WARNING lines."""
 
     for line in input_summary_lines(summary):
         logger.info("%s", line)
-    for warning in input_warnings(summary):
-        logger.warning("%s", warning.message)
+    log_input_warnings(summary)
 
 
 def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputSummary:
@@ -501,6 +507,7 @@ __all__ = [
     "input_summary_payload",
     "input_warnings",
     "log_input_summary",
+    "log_input_warnings",
     "summarize_inputs",
     "with_source_names",
 ]

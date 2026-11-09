@@ -97,8 +97,9 @@ write-up of a release.
   Annotations row for a Region Annotation set left the set out of the figure
   without a word. The run now says which set is not drawn and that an
   annotations track slot for it (`set_id=<set>`) draws it: a `WARNING:` line on
-  the command line, and **Part of the input was not drawn.** in the Web app
-  (OV-3007).
+  the command line, **Part of the input was not drawn.** in the Web app, and a
+  warning on the `gbdraw.api.input_summary` logger from `draw_circular()` and
+  `draw_linear()`, which now log every input summary warning (OV-3007).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which
