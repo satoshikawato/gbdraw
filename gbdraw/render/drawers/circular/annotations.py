@@ -136,11 +136,12 @@ class CircularAnnotationLabel:
     baseline, its middle at ``x``, ``y``. ``parts`` are the convex shapes of
     its painted letters (the turned ink box, or an annular sector cut into
     nearly flat parts), which the conflict count, later slots and the canvas
-    bounds read, made by ``shape`` when first read: a label room reads only
-    ``ink_radii``, how near the centre and how far from it those letters come. ``runs`` are the styled runs it draws
-    (``italic_markup_runs`` of the region's label). A ``cut`` label is curved
-    text longer than its circle, drawn as the start of its runs and an ellipsis;
-    one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
+    bounds read, made by ``shape`` when first read; ``ink_radii`` are how near
+    the centre and how far from it those letters come, all a label room reads.
+    ``runs`` are the styled runs it draws (``italic_markup_runs`` of the
+    region's label). A ``cut`` label is curved text longer than its circle,
+    drawn as the start of its runs and an ellipsis; one cut so far that no
+    letter is left keeps no letter (``keeps_no_letter``).
     """
 
     annotation_id: str
