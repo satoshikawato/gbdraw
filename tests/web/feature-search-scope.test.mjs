@@ -481,7 +481,7 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
   assert.deepEqual(spans, ['3000..3003', '11997..12000']);
   // Python reads the span on the displayed record (D5); the FASTA header names the input-file coordinates.
   assert.deepEqual(payload.sequenceBundle.entries.map(({ read }) => read), [
-    { kind: 'record', recordKey: 'rec-0', start: 1, end: 4 }, { kind: 'record', recordKey: 'rec-1', start: 4, end: 1 }
+    { kind: 'record', recordKey: 'rec-0', recordId: 'Q', start: 1, end: 4 }, { kind: 'record', recordKey: 'rec-1', recordId: 'S', start: 4, end: 1 }
   ]);
   const reply = { status: 'ok', reason: null, recordId: 'Q', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 12000 };
   assert.match(matchSpanFasta(payload.sequenceBundle.entries[0], reply), /coords=3000\.\.3003\|strand=\+\nACGT\n$/);

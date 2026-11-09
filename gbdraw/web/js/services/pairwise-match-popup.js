@@ -1976,7 +1976,7 @@ const buildMatchSpans = (element, matchKind) => {
  * a comparison source.
  * @typedef {object} MatchSequenceRecords
  * @property {readonly string[]} unitKeys
- * @property {(sourceIndex: number) => boolean} comparisonSupplied
+ * @property {(sourceIndex: number | null) => boolean} comparisonSupplied Null: any comparison source.
  */
 
 /**
@@ -1984,7 +1984,7 @@ const buildMatchSpans = (element, matchKind) => {
  * span) and where Python reads its bases when Copy or FASTA is pressed (`read`, null when the popup knows at open
  * that it cannot be read, with the reason).
  * @typedef {object} MatchSpanEntry
- * @property {{ role: 'query' | 'subject', recordId: string, start: number, end: number, displayRole: string }} span
+ * @property {{ role: 'query' | 'subject', recordId: string, start: number | string, end: number | string, displayRole: string }} span
  * @property {'+' | '-'} orientation
  * @property {number} sequenceLength The bases the span names; 0 when a coordinate is not a whole number.
  * @property {MatchSpanInput | null} read
@@ -2009,9 +2009,12 @@ const safeFilePart = (value, fallback = 'sequence') => {
 };
 
 /**
- * The drawn unit or comparison record a span reads, by identity: a drawn unit by its record key (a span's record
- * index), a drawn record by the record ID a Circular reference names (Python finds it by ID, then alias), a comparison
- * record by its source and record ID. A reason when the popup knows at open that the span cannot be read.
+ * The drawn unit or comparison record a span reads, by identity, found as the popup found it before D5 (Python
+ * judges what it cannot know here): a Linear span by the record key of its drawn unit (its record index), which must
+ * carry the record ID the match names; a drawn record by the ID or alias a span names, among every unit or only the
+ * one a Circular reference's record index names (a cropped or reversed reference), read when the band names no ID;
+ * a comparison record by ID or alias in its source, or in every source when the band names none. A reason when the
+ * popup knows at open that the span cannot be read.
  * @param {ReturnType<typeof buildMatchSpans>[number]} span
  * @param {MatchKind} matchKind
  * @param {MatchSequenceRecords | null} records
@@ -2023,22 +2026,23 @@ const matchSpanRead = (span, matchKind, records, start, end) => {
   if (!span.identityValid) return { read: null, reason: t('The sequence identifier metadata for this match is invalid.') };
   // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
   if (!records) return { read: null, reason: t('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') };
+  const { recordId } = span;
   if (matchKind === 'homology' && span.role !== span.referenceSide) {
-    if (span.sourceIndex === null) return { read: null, reason: t('The match does not identify a sequence record.') };
     if (!records.comparisonSupplied(span.sourceIndex)) {
       return { read: null, reason: t('Comparison sequence was not supplied for this BLAST source.') };
     }
-    return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start, end }, reason: '' };
+    return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId, start, end }, reason: '' };
   }
-  if (span.recordIndex === null) {
-    return span.recordId
-      ? { read: { kind: 'reference', recordId: span.recordId, start, end }, reason: '' }
-      : { read: null, reason: t('The match does not identify a sequence record.') };
+  const recordKey = span.recordIndex === null ? null : records.unitKeys[span.recordIndex] ?? null;
+  if (matchKind !== 'homology' && span.recordIndex !== null) {
+    return recordKey
+      ? { read: { kind: 'record', recordKey, recordId, start, end }, reason: '' }
+      : { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.SOURCE_UNAVAILABLE, {}) };
   }
-  const recordKey = records.unitKeys[span.recordIndex];
-  return recordKey
-    ? { read: { kind: 'record', recordKey, start, end }, reason: '' }
-    : { read: null, reason: t('The match does not identify a sequence record.') };
+  if (!recordId && !recordKey) return { read: null, reason: t('The match does not identify a sequence record.') };
+  // A record index that names no drawn unit: no record is searched, so the named one is not found.
+  if (span.recordIndex !== null && !recordKey) return { read: null, reason: tm(MATCH_SPAN_REASON_TEXTS.RECORD_UNKNOWN, { id: recordId }) };
+  return { read: { kind: 'reference', recordId, recordKey, start, end }, reason: '' };
 };
 
 /**
@@ -2059,15 +2063,15 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, records) => {
     const [shown, shownEnd] = [span.start, span.end].map(Number);
     const [start, end] = [shown, shownEnd].map((value) => (Number.isInteger(value) ? value : null));
     const { read, reason } = matchSpanRead(span, matchKind, records, start, end);
-    // The span rows and the FASTA header show input-file coordinates (PD-OI-076); the bases are read on the
-    // displayed record.
+    // The span rows and the FASTA header show input-file coordinates (PD-OI-076), or the drawing's own text where
+    // there are none, as the popup showed it before D5 ("abc..10"); the bases are read on the displayed record.
     const whole = start !== null && end !== null;
     const source = whole ? recordSourceInterval(span.sourceSpan, start, end) : null;
-    const coords = source || { start: shown, end: shownEnd };
+    const coords = source || { start: span.start, end: span.end };
     /** @type {MatchSpanEntry} */
     const entry = {
       span: { role, recordId: span.recordId, start: coords.start, end: coords.end, displayRole: span.displayRole },
-      orientation: coords.start <= coords.end ? '+' : '-',
+      orientation: (source ? source.start <= source.end : shown <= shownEnd) ? '+' : '-',
       sequenceLength: whole ? Math.abs(end - start) + 1 : 0,
       read,
       available: Boolean(read),
@@ -2102,12 +2106,13 @@ export const matchSpanFasta = (entry, read) => {
  */
 const MATCH_SPAN_REASON_TEXTS = Object.freeze({
   NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
+  SOURCE_UNAVAILABLE: msg('The sequence source for this match is unavailable.'),
+  SOURCE_KEY_CONFLICT: msg('The sequence source key conflicts with the match identity.'),
   RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
   RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
   RECORD_ALIAS_AMBIGUOUS: msg('Record alias “{id}” is ambiguous in the available sequence sources.'),
   COORDINATE_NOT_WHOLE: msg('Coordinates must be whole 1-based values.'),
   COORDINATE_BELOW_ONE: msg('Coordinates must be greater than or equal to 1.'),
-  SOURCE_EMPTY: msg('The sequence source is empty.'),
   OUT_OF_RANGE: msg('Coordinates exceed the sequence length ({length} bp).')
 });
 

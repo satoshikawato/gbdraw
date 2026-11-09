@@ -338,7 +338,7 @@ def test_a_sequence_read_replies_in_utf8_through_a_reply_buffer(
     encoded = encode_canonical_request(request)
     stage = _Stage(tmp_path / "worker", _encoded_resources(encoded))
     workspace, paths = stage.workspace("helper")
-    spans = [{"kind": "record", "recordKey": "r0", "start": 1, "end": 12}]
+    spans = [{"kind": "record", "recordKey": "r0", "recordId": "", "start": 1, "end": 12}]
     buffers: list[_ReplyBuffer] = []
 
     def new_reply_buffer() -> _ReplyBuffer:

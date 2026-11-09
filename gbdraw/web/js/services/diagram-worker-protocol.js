@@ -315,11 +315,13 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * A span of a drawn record by the record key of its drawn unit (`RecordMatchSpan`): displayed coordinates, 1-based
- * and inclusive; a start after the end is the reverse strand.
+ * A span of a drawn record by the record key of its drawn unit (`RecordMatchSpan`), with the record ID or alias the
+ * match names ('' when none), which the unit must carry: displayed coordinates, 1-based and inclusive; a start after
+ * the end is the reverse strand.
  * @typedef {object} RecordMatchSpan
  * @property {'record'} kind
  * @property {string} recordKey
+ * @property {string} recordId
  * @property {SpanCoordinate} start
  * @property {SpanCoordinate} end
  */
@@ -327,20 +329,22 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 /**
  * A span of a drawn record named by its record ID or an alias (`ReferenceMatchSpan`): a Circular comparison band
  * names its reference by the ID its hit carries, and Python finds the record among the drawn records by ID, then by
- * alias (name, accession); coordinates as in `RecordMatchSpan`.
+ * alias (name, accession), among every drawn unit or only the unit of `recordKey` (a band on a cropped or reversed
+ * reference carries its record index), which it reads when the span names no ID; coordinates as in `RecordMatchSpan`.
  * @typedef {object} ReferenceMatchSpan
  * @property {'reference'} kind
  * @property {string} recordId
+ * @property {string | null} recordKey
  * @property {SpanCoordinate} start
  * @property {SpanCoordinate} end
  */
 
 /**
- * A span of a comparison FASTA record (`ComparisonMatchSpan`), by the index of its comparison source and its record ID
- * or alias; coordinates as in `RecordMatchSpan`.
+ * A span of a comparison FASTA record (`ComparisonMatchSpan`), by the index of its comparison source (null: the match
+ * names none, and every source is searched) and its record ID or alias; coordinates as in `RecordMatchSpan`.
  * @typedef {object} ComparisonMatchSpan
  * @property {'comparison'} kind
- * @property {number} sourceIndex
+ * @property {number | null} sourceIndex
  * @property {string} recordId
  * @property {SpanCoordinate} start
  * @property {SpanCoordinate} end

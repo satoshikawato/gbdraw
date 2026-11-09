@@ -72,11 +72,13 @@ number (the page reads the value as the match popup did before D5, and Python sa
 
 @final
 class RecordMatchSpan(TypedDict):
-    """A span of a drawn record, by the record key of its drawn unit: displayed coordinates, 1-based and inclusive;
-    a start after the end is the reverse strand."""
+    """A span of a drawn record, by the record key of its drawn unit, with the record ID or alias the match names
+    ('' when it names none), which the record must carry: displayed coordinates, 1-based and inclusive; a start after
+    the end is the reverse strand."""
 
     kind: Literal["record"]
     recordKey: str
+    recordId: str
     start: SpanCoordinate
     end: SpanCoordinate
 
@@ -84,20 +86,23 @@ class RecordMatchSpan(TypedDict):
 @final
 class ReferenceMatchSpan(TypedDict):
     """A span of a drawn record named by its record ID or an alias (a Circular comparison band names its reference
-    by the ID its hit carries); coordinates as in ``RecordMatchSpan``."""
+    by the ID its hit carries), searched among every drawn unit, or only the unit of ``recordKey`` (a band on a
+    cropped or reversed reference also carries its record index); coordinates as in ``RecordMatchSpan``."""
 
     kind: Literal["reference"]
     recordId: str
+    recordKey: str | None
     start: SpanCoordinate
     end: SpanCoordinate
 
 
 @final
 class ComparisonMatchSpan(TypedDict):
-    """A span of a comparison FASTA record, by the index of its comparison source and its record ID or alias."""
+    """A span of a comparison FASTA record, by the index of its comparison source (None: the match names no source,
+    and every source is searched) and its record ID or alias."""
 
     kind: Literal["comparison"]
-    sourceIndex: int
+    sourceIndex: int | None
     recordId: str
     start: SpanCoordinate
     end: SpanCoordinate
@@ -105,8 +110,8 @@ class ComparisonMatchSpan(TypedDict):
 
 MatchSpanInput = RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan
 MatchSpanReason = Literal[
-    "NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_NOT_WHOLE",
-    "COORDINATE_BELOW_ONE", "SOURCE_EMPTY", "OUT_OF_RANGE",
+    "NEVER_SUPPLIED", "SOURCE_UNAVAILABLE", "SOURCE_KEY_CONFLICT", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS",
+    "RECORD_ALIAS_AMBIGUOUS", "COORDINATE_NOT_WHOLE", "COORDINATE_BELOW_ONE", "OUT_OF_RANGE",
 ]
 # Why a span cannot be read: the Web reads this list from here (tools/generate_web_contracts.py) and shows one text
 # per reason, the text the match popup showed for that case before D5.
@@ -171,18 +176,28 @@ def _span_inputs(value: object) -> list[MatchSpanInput]:
         if not isinstance(item, Mapping) or not {"start", "end"} <= set(item):
             raise _protocol_error("A match span needs a start and an end.")
         start, end = _span_coordinate(item["start"]), _span_coordinate(item["end"])
-        if set(item) == {"kind", "recordKey", "start", "end"} and item["kind"] == "record" and isinstance(
-            item["recordKey"], str
+        if (
+            set(item) == {"kind", "recordKey", "recordId", "start", "end"}
+            and item["kind"] == "record"
+            and isinstance(item["recordKey"], str)
+            and isinstance(item["recordId"], str)
         ):
-            spans.append({"kind": "record", "recordKey": item["recordKey"], "start": start, "end": end})
-        elif set(item) == {"kind", "recordId", "start", "end"} and item["kind"] == "reference" and isinstance(
-            item["recordId"], str
+            spans.append({
+                "kind": "record", "recordKey": item["recordKey"], "recordId": item["recordId"], "start": start, "end": end,
+            })
+        elif (
+            set(item) == {"kind", "recordId", "recordKey", "start", "end"}
+            and item["kind"] == "reference"
+            and isinstance(item["recordId"], str)
+            and (item["recordKey"] is None or isinstance(item["recordKey"], str))
         ):
-            spans.append({"kind": "reference", "recordId": item["recordId"], "start": start, "end": end})
+            spans.append({
+                "kind": "reference", "recordId": item["recordId"], "recordKey": item["recordKey"], "start": start, "end": end,
+            })
         elif (
             set(item) == {"kind", "sourceIndex", "recordId", "start", "end"}
             and item["kind"] == "comparison"
-            and type(item["sourceIndex"]) is int
+            and (item["sourceIndex"] is None or type(item["sourceIndex"]) is int)
             and isinstance(item["recordId"], str)
         ):
             spans.append({
@@ -238,33 +253,80 @@ def _aliases(source: Mapping[str, object]) -> set[str]:
     return {name for value in names if value for name in (value, value.split()[0])}
 
 
+def _registered(sources: Sequence[Mapping[str, object]]) -> list[Mapping[str, object]]:
+    """The sources the match registry held before D5: none with an empty sequence, and of the sources that share a
+    key (two comparison records with one ID), the one when they agree, else none."""
+
+    by_key: dict[object, list[Mapping[str, object]]] = {}
+    for source in sources:
+        if source["sequence"]:
+            by_key.setdefault(source["key"], []).append(source)
+    return [
+        group[0] for group in by_key.values()
+        if all(
+            (other["recordId"], other["sequence"], _aliases(other)) == (group[0]["recordId"], group[0]["sequence"], _aliases(group[0]))
+            for other in group[1:]
+        )
+    ]
+
+
 def _match_source(
     records: CatalogSequenceRecords,
     sources: Sequence[Mapping[str, object]],
     span: MatchSpanInput,
 ) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
-    """The source a span reads: a drawn unit by its record key; a drawn unit by its record ID, else an alias (the
-    record identity ``match_sequence_sources`` gives: ID, name, accessions); or a comparison record of a source by
-    its record ID, else an alias. Ambiguity and absence are reasons, never a guess."""
+    """The source a span reads among the ``_registered`` sources, found as the match popup found it before D5: a drawn
+    unit by its record key, which must carry the record ID or alias the match names; a drawn record by its record ID,
+    else an alias (the record identity ``match_sequence_sources`` gives: ID, name, accessions), among every unit or
+    the one a reference span names, which it reads when the span names no ID; or a comparison record of a source (of
+    every source when the match names none) by its record ID, else an alias. A comparison span that finds no one
+    record says its FASTA was not supplied, as the popup said for every such span. Ambiguity and absence are reasons,
+    never a guess."""
 
+    wanted = span["recordId"].strip()
+    drawn = [source for source in sources if "sourceIndex" not in source]
     if span["kind"] == "record":
-        if span["recordKey"] not in records.unit_keys:
-            return None, "RECORD_UNKNOWN"
-        unit = records.unit_keys.index(span["recordKey"])
-        return next(source for source in sources if source.get("recordIndex") == unit and "sourceIndex" not in source), None
+        keyed = _unit_sources(records, drawn, span["recordKey"])
+        if not keyed:
+            return None, "SOURCE_UNAVAILABLE"
+        if wanted and wanted not in _aliases(keyed[0]):
+            return None, "SOURCE_KEY_CONFLICT"
+        return keyed[0], None
     if span["kind"] == "reference":
-        candidates = [source for source in sources if "sourceIndex" not in source]
+        candidates = drawn if span["recordKey"] is None else _unit_sources(records, drawn, span["recordKey"])
+        if span["recordKey"] is not None and not wanted and candidates:
+            return candidates[0], None
     else:
         index = span["sourceIndex"]
-        if not 0 <= index < len(records.comparison_records) or not records.comparison_records[index]:
-            return None, "NEVER_SUPPLIED"
-        candidates = [source for source in sources if source.get("sourceIndex") == index]
-    if not span["recordId"].strip():
+        candidates = [source for source in sources if "sourceIndex" in source and index in (None, source["sourceIndex"])]
+    found, reason = _by_record_id(candidates, wanted)
+    if found is None and span["kind"] == "comparison":
+        return None, "NEVER_SUPPLIED"
+    return found, reason
+
+
+def _unit_sources(
+    records: CatalogSequenceRecords, drawn: Sequence[Mapping[str, object]], record_key: str
+) -> list[Mapping[str, object]]:
+    """The source of the drawn unit of ``record_key`` (none when no unit has that key)."""
+
+    if record_key not in records.unit_keys:
+        return []
+    unit = records.unit_keys.index(record_key)
+    return [source for source in drawn if source.get("recordIndex") == unit]
+
+
+def _by_record_id(
+    candidates: Sequence[Mapping[str, object]], wanted: str
+) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
+    """The one candidate whose record ID is ``wanted``, else the one with that alias."""
+
+    if not wanted:
         return None, "RECORD_UNKNOWN"
     reasons: tuple[MatchSpanReason, MatchSpanReason] = ("RECORD_AMBIGUOUS", "RECORD_ALIAS_AMBIGUOUS")
     for found, ambiguous in zip((
-        [source for source in candidates if source["recordId"] == span["recordId"]],
-        [source for source in candidates if span["recordId"] in _aliases(source)],
+        [source for source in candidates if source["recordId"] == wanted],
+        [source for source in candidates if wanted in _aliases(source)],
     ), reasons, strict=True):
         if len(found) == 1:
             return found[0], None
@@ -280,8 +342,6 @@ def _span_reason(sequence: str, start: SpanCoordinate, end: SpanCoordinate) -> M
         return "COORDINATE_NOT_WHOLE"
     if start < 1 or end < 1:
         return "COORDINATE_BELOW_ONE"
-    if not sequence:
-        return "SOURCE_EMPTY"
     if start > len(sequence) or end > len(sequence):
         return "OUT_OF_RANGE"
     return None
@@ -330,7 +390,7 @@ def read_match_sequences(
     asked = _span_inputs(list(spans))
     request, collection = _committed_records(request_payload, resource_paths, output_directory)
     records = _sequence_records(request, collection)
-    sources = match_sequence_sources(records)
+    sources = _registered(match_sequence_sources(records))
     read: list[MatchSpanSequence] = []
     for span in asked:
         start, end = span["start"], span["end"]

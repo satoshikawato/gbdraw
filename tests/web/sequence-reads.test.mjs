@@ -118,14 +118,14 @@ test('span Copy reads the span when pressed and copies its FASTA; FASTA download
     asked.push(spans);
     return spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 }));
   } });
-  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }), entryOf('subject', null)]);
+  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }), entryOf('subject', null)]);
   assert.equal(await reads.spanAction(bundle, [bundle.entries[0]], 'copy'), true);
-  assert.deepEqual(asked, [[{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }]]);
+  assert.deepEqual(asked, [[{ kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }]]);
   assert.equal(copied[0], '>m1_query|record=REC|coords=1..4|strand=+\nACGT\n');
   assert.equal(bundle.read.status, '');
   const both = bundleOf([
-    entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }),
-    entryOf('subject', { kind: 'record', recordKey: 'rec-2', start: 1, end: 4 })
+    entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }),
+    entryOf('subject', { kind: 'record', recordKey: 'rec-2', recordId: '', start: 1, end: 4 })
   ]);
   assert.equal(reads.spansReadable(both.entries), true);
   await reads.spanAction(both, both.entries, 'download');
@@ -139,15 +139,15 @@ test('span Copy reads the span when pressed and copies its FASTA; FASTA download
 test('both spans are offered only when every span can be read, and a span unreadable when pressed writes nothing', async () => {
   const replies = [];
   const { reads, copied, downloaded } = harness({ readSpans: async (spans) => replies.shift()(spans) });
-  const partial = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }), entryOf('subject', null)]);
+  const partial = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }), entryOf('subject', null)]);
   assert.equal(reads.spansReadable(partial.entries), false);
   assert.equal(await reads.spanAction(partial, partial.entries, 'download'), false);
   assert.deepEqual(downloaded, [], 'no file holds the query span alone');
   assert.equal(partial.entries[1].unavailableReason, 'never supplied');
 
   const both = bundleOf([
-    entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }),
-    entryOf('subject', { kind: 'record', recordKey: 'rec-2', start: 1, end: 9 })
+    entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }),
+    entryOf('subject', { kind: 'record', recordKey: 'rec-2', recordId: '', start: 1, end: 9 })
   ]);
   replies.push((spans) => spans.map((span) => (span.recordKey === 'rec-2'
     ? { status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '', sourceLength: 8 }
@@ -165,7 +165,7 @@ test('a span Python cannot read shows its reason in its row and copies nothing',
   const { reads, copied } = harness({ readSpans: async (spans) => spans.map(() => ({
     status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '', sourceLength: 8
   })) });
-  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 })]);
+  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 })]);
   assert.equal(await reads.spanAction(bundle, bundle.entries, 'copy'), false);
   assert.equal(bundle.entries[0].available, false);
   assert.equal(bundle.entries[0].unavailableReason, 'Coordinates exceed the sequence length (8 bp).');
@@ -175,19 +175,20 @@ test('a span Python cannot read shows its reason in its row and copies nothing',
 
 // Each reason Python gives shows the text the match popup showed for that case before D5, with the record and length.
 test('each reason a span cannot be read shows the match popup\'s text from before D5', () => {
-  const entry = entryOf('query', { kind: 'reference', recordId: 'NC_1', start: 1, end: 4 });
+  const entry = entryOf('query', { kind: 'reference', recordId: 'NC_1', recordKey: null, start: 1, end: 4 });
   entry.span.recordId = 'NC_1';
   const textOf = (reason) => matchSpanUnavailableReason(entry, {
     status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 12345
   });
   assert.deepEqual(Object.fromEntries(MATCH_SPAN_REASONS.map((reason) => [reason, textOf(reason)])), {
     NEVER_SUPPLIED: 'Comparison sequence was not supplied for this BLAST source.',
+    SOURCE_UNAVAILABLE: 'The sequence source for this match is unavailable.',
+    SOURCE_KEY_CONFLICT: 'The sequence source key conflicts with the match identity.',
     RECORD_UNKNOWN: 'No sequence source matched record “NC_1”.',
     RECORD_AMBIGUOUS: 'Record ID “NC_1” is ambiguous in the available sequence sources.',
     RECORD_ALIAS_AMBIGUOUS: 'Record alias “NC_1” is ambiguous in the available sequence sources.',
     COORDINATE_NOT_WHOLE: 'Coordinates must be whole 1-based values.',
     COORDINATE_BELOW_ONE: 'Coordinates must be greater than or equal to 1.',
-    SOURCE_EMPTY: 'The sequence source is empty.',
     OUT_OF_RANGE: `Coordinates exceed the sequence length (${(12345).toLocaleString()} bp).`
   });
 });
@@ -198,7 +199,7 @@ test('a discarded span read writes nothing; a failed one keeps its error and Ret
     if (reply === 'fail') throw Object.assign(new Error('x'), { code: 'RESOURCE_INVALID', stage: 'helper' });
     return reply;
   } });
-  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 })]);
+  const bundle = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 })]);
   assert.equal(await reads.spanAction(bundle, bundle.entries, 'copy'), false);
   assert.equal(bundle.read.status, '');
   assert.deepEqual(copied, []);

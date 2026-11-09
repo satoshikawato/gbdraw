@@ -32,16 +32,16 @@ const EMBED_SOURCES = [{ key: 'linear:record:0', recordIndex: 0 }, { key: 'linea
   { key: 'homology:comparison:0:C', sourceIndex: 0 }];
 // What the encoder makes of a part, and the reply that carries it as the text the file embeds.
 // An export read sends the part's item as the JSON file `embedItem`.
-const embedItemOf = (payload) => payload.item ?? JSON.parse(new TextDecoder().decode(payload.files[0].bytes));
-const embedPartObjects = (payload) => embedPartObjectsOf({ item: embedItemOf(payload), part: payload.part });
+const embedItemOf = async (payload) => payload.item ?? JSON.parse(await payload.files[0].blob.text());
+const embedPartObjects = async (payload) => embedPartObjectsOf({ item: await embedItemOf(payload), part: payload.part });
 const embedPartObjectsOf = ({ item, part }) => ({
   biologicalFeatures: item.biologicalFeatures.map((row) => ({ ...row, nucleotide_sequence: `N${row.biologicalFeatureId}` })),
   sequenceSources: EMBED_SOURCES.map((source, index) => ({ index, source })).filter(({ source }) => (
     source.recordIndex === undefined ? part.comparisonSources : part.sourcesOf.includes(item.recordKeys[source.recordIndex]))),
   sourceCount: EMBED_SOURCES.length
 });
-const embedPartReply = (payload) => {
-  const { biologicalFeatures, sequenceSources, sourceCount } = embedPartObjects(payload);
+const embedPartReply = async (payload) => {
+  const { biologicalFeatures, sequenceSources, sourceCount } = await embedPartObjects(payload);
   return { biologicalFeatures: biologicalFeatures.map((row) => JSON.stringify(row)).join(','), rowCount: biologicalFeatures.length,
     sequenceSources: sequenceSources.map(({ index, source }) => ({ index, source: JSON.stringify(source) })), sourceCount };
 };
@@ -71,7 +71,7 @@ const doorWith = (initialCommitted) => {
         length: Math.abs(span.end - span.start) + 1, sequence: 'ACGT', sourceLength: 8
       })) } };
     },
-    readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
+    readEmbedSequences: async (payload) => ({ result: await embedPartReply(payload) })
   };
   const door = createCatalogSequences({ getCommittedSession: () => committed, helpers });
   return {
@@ -108,7 +108,7 @@ test('a reply that arrives after the shown Result changed is discarded', async (
   harness.release();
   assert.equal(await pending, null);
   const spans = doorWith(committedOf());
-  const pendingSpans = spans.door.readSpans([{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }]);
+  const pendingSpans = spans.door.readSpans([{ kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }]);
   spans.setCommitted(committedOf());
   assert.equal(await pendingSpans, null);
 });
@@ -129,7 +129,7 @@ test('a failure that arrives after the shown Result changed is discarded too', a
     getCommittedSession: () => committed,
     helpers: { readMatchSequences: async () => { committed = committedOf(); throw new Error('worker restarted'); } }
   });
-  assert.equal(await spans.readSpans([{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }]), null);
+  assert.equal(await spans.readSpans([{ kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }]), null);
   const embed = createCatalogSequences({
     getCommittedSession: () => committed, featureReadBases: 25,
     helpers: { readEmbedSequences: async () => { committed = committedOf(); throw new Error('worker restarted'); } }
@@ -153,17 +153,17 @@ test('the Worker receives plain spans and features even when the popup state hol
         sent.push(structuredClone(payload));
         return { result: { spans: payload.spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 })) } };
       },
-      readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
+      readEmbedSequences: async (payload) => ({ result: await embedPartReply(payload) })
     }
   });
   const committed = committedOf();
   const proxied = (value) => new Proxy(value, {});
-  const record = proxied({ kind: 'record', recordKey: 'rec-1', start: 1, end: 4, label: 'Query', available: true });
+  const record = proxied({ kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4, label: 'Query', available: true });
   const comparison = proxied({ kind: 'comparison', sourceIndex: 0, recordId: 'REC', start: 4, end: 1, label: 'Subject' });
   await door.readSpans([record, comparison]);
   await door.readFeatures([proxied({ ...kinase, label: 'kinase' })]);
   assert.deepEqual(sent.map((payload) => payload.spans ?? payload.features), [
-    [{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }, { kind: 'comparison', sourceIndex: 0, recordId: 'REC', start: 4, end: 1 }],
+    [{ kind: 'record', recordKey: 'rec-1', recordId: '', start: 1, end: 4 }, { kind: 'comparison', sourceIndex: 0, recordId: 'REC', start: 4, end: 1 }],
     [{ recordKey: 'rec-1', biologicalFeatureId: 'kinase' }]
   ]);
 });
@@ -269,19 +269,19 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
   const committed = committedOf();
   const door = createCatalogSequences({
     getCommittedSession: () => committed, featureReadBases: 25,
-    helpers: { readEmbedSequences: async (payload) => { sent.push(payload.part); return { result: embedPartReply(payload) }; } }
+    helpers: { readEmbedSequences: async (payload) => { sent.push(payload.part); return { result: await embedPartReply(payload) }; } }
   });
   const sequences = await door.readEmbedJson(exportItem);
   const asked = [];
   await createCatalogSequences({
     getCommittedSession: () => committed, featureReadBases: 25,
-    helpers: { readEmbedSequences: async (payload) => { asked.push(payload); return { result: embedPartReply(payload) }; } }
+    helpers: { readEmbedSequences: async (payload) => { asked.push(payload); return { result: await embedPartReply(payload) }; } }
   }).readEmbedJson(exportItem);
   assert.deepEqual(asked.map((payload) => [Object.keys(payload).sort(), payload.files.map(({ role }) => role)]),
     asked.map(() => [['canonicalRequest', 'files', 'part', 'resources'], ['embedItem']]));
-  assert.ok(asked.every((payload) => payload.files[0].bytes instanceof ArrayBuffer));
+  assert.ok(asked.every(({ files: [file] }) => file.blob instanceof Blob && file.blob.type === 'application/json'));
   assert.equal(sent.length, 2);
-  const whole = embedPartObjects({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
+  const whole = embedPartObjectsOf({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
   assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
     ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source)
   }));
@@ -291,20 +291,20 @@ test('an export read the shown Result outlived gives null; a source missing or g
   let committed = committedOf();
   const outlived = createCatalogSequences({
     getCommittedSession: () => committed, featureReadBases: 25,
-    helpers: { readEmbedSequences: async (payload) => { committed = committedOf(); return { result: embedPartReply(payload) }; } }
+    helpers: { readEmbedSequences: async (payload) => { committed = committedOf(); return { result: await embedPartReply(payload) }; } }
   });
   assert.equal(await outlived.readEmbedJson(exportItem), null);
   for (const reply of [
-    (payload) => ({ ...embedPartReply(payload), sequenceSources: [] }),
-    (payload) => ({ ...embedPartReply(payload), sequenceSources: [{ index: 0, source: '{"key":"x"}' }] }),
-    (payload) => ({ ...embedPartReply(payload), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
-    (payload) => ({ ...embedPartReply(payload), rowCount: 0 }),
-    (payload) => ({ ...embedPartReply(payload), biologicalFeatures: [] })
+    async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [] }),
+    async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: '{"key":"x"}' }] }),
+    async (payload) => ({ ...(await embedPartReply(payload)), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
+    async (payload) => ({ ...(await embedPartReply(payload)), rowCount: 0 }),
+    async (payload) => ({ ...(await embedPartReply(payload)), biologicalFeatures: [] })
   ]) {
     const fixed = committedOf();
     const door = createCatalogSequences({
       getCommittedSession: () => fixed, featureReadBases: 25,
-      helpers: { readEmbedSequences: async (payload) => ({ result: reply(payload) }) }
+      helpers: { readEmbedSequences: async (payload) => ({ result: await reply(payload) }) }
     });
     const error = await door.readEmbedJson(exportItem).catch((caught) => caught);
     assert.equal(normalizeCaughtError(error).code, 'RESULT_INVALID');
@@ -318,7 +318,7 @@ test('a second export of the shown Result reads its embed from what the first ex
   let parts = 0;
   const door = createCatalogSequences({
     getCommittedSession: () => committed, featureReadBases: 25,
-    helpers: { readEmbedSequences: async (payload) => { parts += 1; return { result: embedPartReply(payload) }; } }
+    helpers: { readEmbedSequences: async (payload) => { parts += 1; return { result: await embedPartReply(payload) }; } }
   });
   const first = await door.readEmbedJson(exportItem);
   const read = parts;
@@ -334,7 +334,7 @@ test('a second export of the shown Result reads its embed from what the first ex
     getCommittedSession: () => committed, featureReadBases: 25,
     helpers: { readEmbedSequences: async (payload) => {
       if (fail) throw new Error('worker down');
-      return { result: embedPartReply(payload) };
+      return { result: await embedPartReply(payload) };
     } }
   });
   await assert.rejects(retried.readEmbedJson(exportItem), /worker down/);
@@ -352,7 +352,7 @@ test('an embed larger than the reply bound is kept for the shown Result and drop
     getCommittedSession: () => committed, featureReadBases: 25, keptCharacters: 40,
     helpers: {
       readFeatureSequences: async (payload) => { featureReads += 1; return { result: { features: payload.features.map(featureReply) } }; },
-      readEmbedSequences: async (payload) => { parts += 1; return { result: embedPartReply(payload) }; }
+      readEmbedSequences: async (payload) => { parts += 1; return { result: await embedPartReply(payload) }; }
     }
   });
   await door.readFeatures([kinase]);
@@ -365,13 +365,35 @@ test('an embed larger than the reply bound is kept for the shown Result and drop
   assert.equal(featureReads, 1, 'the feature reply kept before the export is still kept');
 });
 
+// D5 review r3: a label or colour-table rerender installs a new catalog item while the committed Session stays the
+// same, so the door keeps one embed per committed Session, the latest item's: three items keep only the third, and a
+// second export of the third reads nothing.
+test('one committed Session keeps only the embed of its latest catalog item', async () => {
+  const committed = committedOf();
+  const asked = [];
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => { asked.push(await embedItemOf(payload)); return { result: await embedPartReply(payload) }; } }
+  });
+  const items = [0, 1, 2].map(() => structuredClone(exportItem));
+  for (const item of items) await door.readEmbedJson(item);
+  const read = asked.length;
+  assert.deepEqual(await door.readEmbedJson(items[2]), await door.readEmbedJson(items[2]));
+  assert.equal(asked.length, read, 'the latest item\'s embed is not read again');
+  await door.readEmbedJson(items[0]);
+  assert.ok(asked.length > read, 'an earlier item\'s embed was not kept');
+  const again = asked.length;
+  await door.readEmbedJson(items[2]);
+  assert.ok(asked.length > again, 'reading an earlier item replaced the latest one');
+});
+
 // D5 review r1 (MEDIUM-5): the reasons a span reply may carry are Python's list (generated), so a reason Python adds
 // is read, and a reason Python does not name is refused.
 test('a span reply carries any of Python\'s span reasons and no other', () => {
-  const spans = MATCH_SPAN_REASONS.map((_, index) => ({ kind: 'record', recordKey: `rec-${index}`, start: 1, end: 2 }));
+  const spans = MATCH_SPAN_REASONS.map((_, index) => ({ kind: 'record', recordKey: `rec-${index}`, recordId: '', start: 1, end: 2 }));
   const unavailable = (reason) => ({ status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 0 });
-  assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS',
-    'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'SOURCE_EMPTY', 'OUT_OF_RANGE']);
+  assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'SOURCE_UNAVAILABLE', 'SOURCE_KEY_CONFLICT', 'RECORD_UNKNOWN',
+    'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS', 'COORDINATE_NOT_WHOLE', 'COORDINATE_BELOW_ONE', 'OUT_OF_RANGE']);
   assert.throws(() => readMatchSequencesReply({ spans: [{ ...unavailable('OUT_OF_RANGE'), sourceLength: undefined }] }, spans.slice(0, 1)),
     (error) => error.code === 'RESULT_INVALID', 'a reply without the source length is refused');
   assert.equal(readMatchSequencesReply({ spans: MATCH_SPAN_REASONS.map(unavailable) }, spans).length, spans.length);

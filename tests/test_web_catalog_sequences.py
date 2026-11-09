@@ -229,7 +229,7 @@ def test_whole_record_sources_equal_stored_sequence_sources(tmp_path: Path) -> N
 
     with _committed(path, tmp_path) as (request, paths, output):
         spans = [
-            {"kind": "record", "recordKey": key, "start": 1, "end": len(stored[f"linear:record:{index}"])}
+            {"kind": "record", "recordKey": key, "recordId": "", "start": 1, "end": len(stored[f"linear:record:{index}"])}
             for index, key in enumerate(item["recordKeys"])
             if f"linear:record:{index}" in stored
         ]
@@ -364,19 +364,19 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
     subject = SeqRecord(Seq("TTGGCCAA"), id="same-id", features=[_cds(0, 3, 1)])
     with _rendered(tmp_path, query, subject) as (request, paths, output, _item):
         read = read_match_sequences(request, paths, output, [
-            {"kind": "record", "recordKey": "key-1", "start": 2, "end": 4},
-            {"kind": "record", "recordKey": "key-0", "start": 4, "end": 2},
-            {"kind": "record", "recordKey": "key-7", "start": 1, "end": 2},
-            {"kind": "record", "recordKey": "key-0", "start": 1, "end": 9},
+            {"kind": "record", "recordKey": "key-1", "recordId": "", "start": 2, "end": 4},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": 4, "end": 2},
+            {"kind": "record", "recordKey": "key-7", "recordId": "", "start": 1, "end": 2},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": 1, "end": 9},
             {"kind": "comparison", "sourceIndex": 0, "recordId": "same-id", "start": 1, "end": 2},
-            {"kind": "record", "recordKey": "key-0", "start": 0, "end": 3},
-            {"kind": "record", "recordKey": "key-0", "start": 3, "end": -2},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": 0, "end": 3},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": 3, "end": -2},
         ])["spans"]
 
     assert [(span["status"], span["reason"], span["orientation"], span["sequence"]) for span in read] == [
         ("ok", None, "+", "TGG"),
         ("ok", None, "-", "GGT"),
-        ("unavailable", "RECORD_UNKNOWN", "+", ""),
+        ("unavailable", "SOURCE_UNAVAILABLE", "+", ""),
         ("unavailable", "OUT_OF_RANGE", "+", ""),
         ("unavailable", "NEVER_SUPPLIED", "+", ""),
         ("unavailable", "COORDINATE_BELOW_ONE", "+", ""),
@@ -388,8 +388,8 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
 
 
 def test_a_span_of_an_empty_source_and_a_coordinate_below_one_have_their_reasons() -> None:
-    """The coordinate reasons in the order the match popup checked them before D5: not a whole number, below 1, an
-    empty source, past the record's end."""
+    """The coordinate reasons in the order the match popup checked them before D5: not a whole number, below 1, past
+    the record's end (a record without bases is no source, as the match registry held none)."""
 
     from gbdraw.web_support.catalog_sequences import _span_reason
 
@@ -397,7 +397,6 @@ def test_a_span_of_an_empty_source_and_a_coordinate_below_one_have_their_reasons
     assert _span_reason("", 0, None) == "COORDINATE_NOT_WHOLE"
     assert _span_reason("ACGT", 0, 2) == "COORDINATE_BELOW_ONE"
     assert _span_reason("", 0, 2) == "COORDINATE_BELOW_ONE"
-    assert _span_reason("", 1, 2) == "SOURCE_EMPTY"
     assert _span_reason("ACGT", 2, 5) == "OUT_OF_RANGE"
     assert _span_reason("ACGT", 4, 1) is None
 
@@ -411,19 +410,19 @@ def test_a_coordinate_that_is_not_whole_is_judged_after_the_record(tmp_path: Pat
     subject = SeqRecord(Seq("TTGGCCAA"), id="subject-id", name="shared", features=[_cds(0, 3, 1)])
     with _rendered(tmp_path, query, subject) as (request, paths, output, _item):
         read = read_match_sequences(request, paths, output, [
-            {"kind": "record", "recordKey": "key-7", "start": None, "end": 4},
-            {"kind": "reference", "recordId": "missing", "start": 1, "end": None},
-            {"kind": "reference", "recordId": "shared", "start": None, "end": 4},
+            {"kind": "record", "recordKey": "key-7", "recordId": "", "start": None, "end": 4},
+            {"kind": "reference", "recordId": "missing", "recordKey": None, "start": 1, "end": None},
+            {"kind": "reference", "recordId": "shared", "recordKey": None, "start": None, "end": 4},
             {"kind": "comparison", "sourceIndex": 0, "recordId": "query-id", "start": None, "end": None},
-            {"kind": "record", "recordKey": "key-0", "start": None, "end": -2},
-            {"kind": "reference", "recordId": "subject-id", "start": 2, "end": None},
-            {"kind": "record", "recordKey": "key-0", "start": 1, "end": 1e21},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": None, "end": -2},
+            {"kind": "reference", "recordId": "subject-id", "recordKey": None, "start": 2, "end": None},
+            {"kind": "record", "recordKey": "key-0", "recordId": "", "start": 1, "end": 1e21},
         ])["spans"]
         with pytest.raises(ValidationError, match="start and an end"):
-            read_match_sequences(request, paths, output, [{"kind": "record", "recordKey": "key-0", "start": 1.5, "end": 2}])
+            read_match_sequences(request, paths, output, [{"kind": "record", "recordKey": "key-0", "recordId": "", "start": 1.5, "end": 2}])
 
     assert [(span["status"], span["reason"], span["sourceLength"]) for span in read] == [
-        ("unavailable", "RECORD_UNKNOWN", 0),
+        ("unavailable", "SOURCE_UNAVAILABLE", 0),
         ("unavailable", "RECORD_UNKNOWN", 0),
         ("unavailable", "RECORD_ALIAS_AMBIGUOUS", 0),
         ("unavailable", "NEVER_SUPPLIED", 0),
@@ -444,11 +443,11 @@ def test_a_drawn_reference_named_by_an_alias_is_read_without_catalog_rows(tmp_pa
     with _rendered(tmp_path, reference, other) as (request, paths, output, item):
         assert item["biologicalFeatures"] == []
         read = read_match_sequences(request, paths, output, [
-            {"kind": "reference", "recordId": "NC_000001.1", "start": 1, "end": 4},
-            {"kind": "reference", "recordId": "NC_000001", "start": 4, "end": 1},
-            {"kind": "reference", "recordId": "REFLOCUS", "start": 2, "end": 3},
-            {"kind": "reference", "recordId": "OTHERLOCUS", "start": 1, "end": 2},
-            {"kind": "reference", "recordId": "NC_000009", "start": 1, "end": 2},
+            {"kind": "reference", "recordId": "NC_000001.1", "recordKey": None, "start": 1, "end": 4},
+            {"kind": "reference", "recordId": "NC_000001", "recordKey": None, "start": 4, "end": 1},
+            {"kind": "reference", "recordId": "REFLOCUS", "recordKey": None, "start": 2, "end": 3},
+            {"kind": "reference", "recordId": "OTHERLOCUS", "recordKey": None, "start": 1, "end": 2},
+            {"kind": "reference", "recordId": "NC_000009", "recordKey": None, "start": 1, "end": 2},
         ])["spans"]
 
     assert [(span["status"], span["reason"], span["recordId"], span["sequence"]) for span in read] == [
@@ -460,8 +459,27 @@ def test_a_drawn_reference_named_by_an_alias_is_read_without_catalog_rows(tmp_pa
     ]
 
 
+def test_a_reference_span_that_names_its_unit_reads_that_unit_only(tmp_path: Path) -> None:
+    """A Circular band on a cropped or reversed reference carries the reference's record index: the record is
+    searched in that unit only (another record's ID is not found), and with no ID the unit is read, as the match
+    popup found it before D5 (base c75daa1de, r4fix/probe-base-reference.out)."""
+
+    reference = SeqRecord(Seq("AACCGGTT"), id="reference", name="REFLOCUS", features=[])
+    other = SeqRecord(Seq("GGGGCCCC"), id="other", name="OTHER", features=[])
+    with _rendered(tmp_path, reference, other) as (request, paths, output, _item):
+        read = read_match_sequences(request, paths, output, [
+            {"kind": "reference", "recordId": record_id, "recordKey": key, "start": 1, "end": 2}
+            for record_id, key in (
+                ("reference", "key-0"), ("REFLOCUS", "key-0"), ("other", "key-0"), ("", "key-0"), ("", "key-1"),
+                ("other", None),
+            )
+        ])["spans"]
+
+    assert [span["reason"] or span["sequence"] for span in read] == ["AA", "AA", "RECORD_UNKNOWN", "AA", "GG", "GG"]
+
+
 def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
-    from gbdraw.web_support.catalog_sequences import _match_source
+    from gbdraw.web_support.catalog_sequences import _match_source, _registered
 
     records = CatalogSequenceRecords(
         mode="circular",
@@ -474,11 +492,11 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
         ),
         unit_keys=("key-0", "key-1", "key-2", "key-3", "key-4"),
     )
-    sources = match_sequence_sources(records)
+    sources = _registered(match_sequence_sources(records))
 
     def found(record_id: str) -> tuple[object, object]:
         source, reason = _match_source(records, sources, {
-            "kind": "reference", "recordId": record_id, "start": 1, "end": 2,
+            "kind": "reference", "recordId": record_id, "recordKey": None, "start": 1, "end": 2,
         })
         return (None if source is None else source["sequence"]), reason
 
@@ -490,8 +508,13 @@ def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
     assert found("") == (None, "RECORD_UNKNOWN")
 
 
-def test_comparison_records_are_found_by_id_then_alias_and_ambiguity_is_a_reason() -> None:
-    from gbdraw.web_support.catalog_sequences import _match_source
+def test_a_comparison_span_found_as_the_match_popup_found_it_before_d5() -> None:
+    """A comparison record is found by ID, else alias, in its source or, when the match names no source, in every
+    source; two records with one ID (one registry key) count once when they agree and not at all otherwise, and a
+    record without bases is none. Every span that finds no one record says its FASTA was not supplied, as the popup
+    said for each: unknown, ambiguous ID or alias, no ID, another source (base c75daa1de, r4fix/probe-base.out)."""
+
+    from gbdraw.web_support.catalog_sequences import _match_source, _registered
 
     def record(record_id: str, name: str, sequence: str) -> SeqRecord:
         return SeqRecord(Seq(sequence), id=record_id, name=name)
@@ -501,23 +524,48 @@ def test_comparison_records_are_found_by_id_then_alias_and_ambiguity_is_a_reason
         records=(record("reference", "reference", "AAAA"),),
         unit_keys=("reference-key",),
         comparison_records=(
-            (record("contig_1 described", "c1", "CCCC"), record("dup", "x", "GGGG"), record("dup", "y", "TTTT")),
+            (
+                record("contig_1", "c1", "CCCC"), record("dup", "x", "GGGG"), record("dup", "y", "TTTT"),
+                record("twin", "z", "AAAA"), record("twin", "z", "AAAA"), record("p", "shared", "ACAC"),
+                record("q", "shared", "GTGT"), record("e", "e", ""),
+            ),
+            (record("only2", "o", "CCGG"),),
         ),
     )
-    sources = match_sequence_sources(records)
+    sources = _registered(match_sequence_sources(records))
 
-    def found(record_id: str) -> tuple[object, object]:
+    def found(record_id: str, source_index: int | None = 0) -> object:
         source, reason = _match_source(records, sources, {
-            "kind": "comparison", "sourceIndex": 0, "recordId": record_id, "start": 1, "end": 2,
+            "kind": "comparison", "sourceIndex": source_index, "recordId": record_id, "start": 1, "end": 2,
         })
-        return (None if source is None else source["sequence"]), reason
+        return reason if source is None else source["sequence"]
 
-    assert found("contig_1 described") == ("CCCC", None)
-    assert found("contig_1") == ("CCCC", None)
-    assert found("c1") == ("CCCC", None)
-    assert found("dup") == (None, "RECORD_AMBIGUOUS")
-    assert found("x") == ("GGGG", None)
-    assert found("absent") == (None, "RECORD_UNKNOWN")
+    assert [found(name) for name in ("contig_1", "c1", "twin", "z")] == ["CCCC", "CCCC", "AAAA", "AAAA"]
+    for name in ("dup", "x", "y", "shared", "absent", "", "e", "only2"):
+        assert found(name) == "NEVER_SUPPLIED", name
+    assert [found("only2", None), found("c1", None), found("absent", None), found("dup", None)] == [
+        "CCGG", "CCCC", "NEVER_SUPPLIED", "NEVER_SUPPLIED",
+    ]
+    assert found("c1", 5) == "NEVER_SUPPLIED"
+
+
+def test_a_drawn_unit_by_key_carries_the_record_the_match_names(tmp_path: Path) -> None:
+    """A drawn unit by its record key reads when the match names no record, or the unit's ID or alias; another name
+    is a key that conflicts with the match identity, and a key without a unit is an unavailable source, each before
+    the coordinates (base c75daa1de, r4fix/probe-base.out). A drawn record always has bases."""
+
+    query = SeqRecord(Seq("AACCGGTT"), id="same-id", name="LOCUS0", features=[_cds(0, 3, 1)])
+    with _rendered(tmp_path, query) as (request, paths, output, _item):
+        read = read_match_sequences(request, paths, output, [
+            {"kind": "record", "recordKey": "key-0", "recordId": record_id, "start": start, "end": 2}
+            for record_id, start in (("", 1), ("same-id", 1), ("LOCUS0", 1), ("Other", 1), ("Other", None))
+        ] + [
+            {"kind": "record", "recordKey": "key-7", "recordId": "X", "start": None, "end": 10},
+        ])["spans"]
+
+    assert [span["reason"] or span["sequence"] for span in read] == [
+        "AA", "AA", "AA", "SOURCE_KEY_CONFLICT", "SOURCE_KEY_CONFLICT", "SOURCE_UNAVAILABLE",
+    ]
 
 
 def test_the_stored_item_never_gains_references_and_the_embed_writes_them(tmp_path: Path) -> None:

@@ -400,7 +400,7 @@ const buildSyntheticCases = () => {
   };
 };
 
-const SYNTHETIC_BASELINES_GZIP = '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';
+const SYNTHETIC_BASELINES_GZIP = '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';
 const SYNTHETIC_BASELINES = SYNTHETIC_BASELINES_GZIP
   ? JSON.parse(gunzipSync(Buffer.from(SYNTHETIC_BASELINES_GZIP, 'base64')).toString('utf8'))
   : {};
@@ -611,8 +611,8 @@ test('one full payload request traverses each input once and builds no FASTA whe
   assert.deepStrictEqual(payload.group.memberRead, { status: '', error: null, retry: null });
   // The spans name their reads by the drawn unit and the displayed coordinates.
   assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => entry.read), [
-    { kind: 'record', recordKey: 'query-unit', start: 10, end: 18 },
-    { kind: 'record', recordKey: 'subject-unit', start: 30, end: 38 }
+    { kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start: 10, end: 18 },
+    { kind: 'record', recordKey: 'subject-unit', recordId: 'subject-record', start: 30, end: 38 }
   ]);
   const payloadText = JSON.stringify(payload);
   assert.doesNotMatch(payloadText, /"(?:nt|aa|member(?:Nt|Aa))Fasta"|combinedFasta|"fasta"|_sequence"|Sequence":"/);
@@ -646,7 +646,7 @@ test('a Circular comparison band reads its reference by the record ID its hit na
   const records = { unitKeys: ['unit-a', 'unit-b'], comparisonSupplied: () => true };
   const payload = popupModule.buildMatchPopupPayload(elementFrom(attributes), { matchSequenceRecords: records });
   assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => [entry.read, entry.unavailableReason]), [
-    [{ kind: 'reference', recordId: 'NC_000001', start: 10, end: 18 }, ''],
+    [{ kind: 'reference', recordId: 'NC_000001', recordKey: null, start: 10, end: 18 }, ''],
     [{ kind: 'comparison', sourceIndex: 0, recordId: 'subject-record', start: 30, end: 38 }, '']
   ]);
 });
@@ -659,7 +659,7 @@ test('a coordinate below 1 or not whole is read by Python after the record, in t
   }).sequenceBundle.entries[0];
   for (const [qstart, start] of [['0', 0], ['-5', -5], ['1.5', null], ['ten', null], ['1e21', 1e21]]) {
     const entry = spansOf(qstart);
-    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', start, end: 18 }, ''], qstart);
+    assert.deepStrictEqual([entry.read, entry.unavailableReason], [{ kind: 'record', recordKey: 'query-unit', recordId: 'query-record', start, end: 18 }, ''], qstart);
     // The popup row shows no length for a span whose coordinates are not whole (index.html hides a 0 length).
     if (start === null) assert.equal(entry.sequenceLength, 0, qstart);
   }
@@ -670,6 +670,35 @@ test('a coordinate below 1 or not whole is read by Python after the record, in t
     'data-sstart': '2.5'
   }), { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) }).sequenceBundle.entries[1];
   assert.deepStrictEqual([homology.read, homology.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+});
+
+// D5 review r3: what the popup knows at open, as base c75daa1de showed it (r4fix/probe-base.out,
+// probe-base-reference.out): a Linear record index without a drawn unit is an unavailable source; a Circular reference
+// whose record index names no unit does not find the record it names, and one that names a unit is searched there
+// only; a comparison band without a source index searches every source; the row shows the drawing's own text.
+test('the popup finds a span\'s record and shows its row as before D5', () => {
+  const entriesOf = (attributes, records = syntheticSequenceRecords()) => {
+    // A stub element reads an undefined attribute as missing.
+    const element = elementFrom({ ...commonAttributes, ...attributes });
+    return popupModule.buildMatchPopupPayload(element, { matchSequenceRecords: records }).sequenceBundle.entries;
+  };
+  const [missingUnit] = entriesOf({ 'data-query-record-index': '7' });
+  assert.deepStrictEqual([missingUnit.read, missingUnit.unavailableReason], [null, 'The sequence source for this match is unavailable.']);
+  const homology = { 'data-match-kind': 'homology', 'data-reference-side': 'query', 'data-source-index': '0' };
+  const [unitless] = entriesOf({ ...homology, 'data-query-record-index': '7' });
+  assert.deepStrictEqual([unitless.read, unitless.unavailableReason], [null, 'No sequence source matched record “query-record”.']);
+  const [reference] = entriesOf(homology);
+  assert.deepStrictEqual(reference.read, { kind: 'reference', recordId: 'query-record', recordKey: 'query-unit', start: 10, end: 18 });
+  const sourceless = { ...homology, 'data-source-index': undefined };
+  assert.deepStrictEqual(entriesOf(sourceless)[1].read,
+    { kind: 'comparison', sourceIndex: null, recordId: 'subject-record', start: 30, end: 38 });
+  const [, unsupplied] = entriesOf(sourceless, syntheticSequenceRecords({ comparisonSupplied: false }));
+  assert.deepStrictEqual([unsupplied.read, unsupplied.unavailableReason], [null, 'Comparison sequence was not supplied for this BLAST source.']);
+  for (const [qstart, row] of [['abc', 'abc..18'], ['', '..18'], ['1e1', '1e1..18']]) {
+    const [entry] = entriesOf({ 'data-qstart': qstart });
+    assert.equal(`${entry.span.start}..${entry.span.end}`, row, qstart);
+    assert.ok(!/NaN|_0-/.test(entry.filename), entry.filename);
+  }
 });
 
 // OV-1010: a member's null or blank bound is missing, not 0.
@@ -868,7 +897,7 @@ const EXACT_BASELINES = {
     // The Gallery Session uploads the pinned NZ_CP006932.1 revision (tutorial-data), whose WP_025208444.1 product
     // is "GGDEF domain-containing protein"; the earlier Session's copy read "DHH family phosphoesterase".
     // D5: the payload names the reads of the spans and the members' sequences, and holds no FASTA text.
-    digest: 'b6e1f43ee2121aabca28c4cb9db4d979f42be5f4822ae524835bfda33fd7429b',
+    digest: 'ced4e768e946a7c4b144b0e491aaf2bd760513dab3123bd19f8dac6def3e1919',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '43.9684414414' },
@@ -885,8 +914,8 @@ const EXACT_BASELINES = {
     sequenceAvailability: [true, true],
     sequenceLengths: [16791,  16405],
     sequenceReads: [
-      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', start: 61879, end: 78669 },
-      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', start: 19161, end: 35565 }
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', recordId: 'AP027078.1', start: 61879, end: 78669 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', recordId: 'AP027131.1', start: 19161, end: 35565 }
     ]
   },
   laterDistinctBlock: {
@@ -895,7 +924,7 @@ const EXACT_BASELINES = {
       blockId: 'block_0155',
       orthogroupIds: 'og_274;og_275;og_276;og_277;og_278;og_279;og_280;og_281;og_282;og_283;og_284;og_285;og_286;og_287;og_288;og_289;og_290;og_291;og_292;og_293'
     },
-    digest: '5460321d024aafb70dbc93db79e734587ab46bacd23ed58c426b17131ed71ba4',
+    digest: '8ac71b136226e4e16bdf84059dfcf98f10114cd2361cc6d59dea55c42ad42436',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '64.1326369725' },
@@ -912,8 +941,8 @@ const EXACT_BASELINES = {
     sequenceAvailability: [true, true],
     sequenceLengths: [9524,  9671],
     sequenceReads: [
-      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', start: 484749, end: 494272 },
-      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', start: 586163, end: 595833 }
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', recordId: 'AP027078.1', start: 484749, end: 494272 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', recordId: 'AP027131.1', start: 586163, end: 595833 }
     ]
   }
 };

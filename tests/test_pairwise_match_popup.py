@@ -448,8 +448,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           invalidQueryRecordLookups === 0,
           'invalid record index reached the sequence records'
         );
-        // The same span with a valid record index names its read by record key and the displayed coordinates; the
-        // FASTA is built from Python's reply, with the input-file coordinates in its header.
+        // The same span with a valid record index names its read by record key, with the record ID the match names,
+        // and the displayed coordinates; the FASTA is built from Python's reply, with the input-file coordinates in
+        // its header.
         invalidSequenceAttrs.set('data-query-record-index', '0');
         const validSequencePayload = buildMatchPopupPayload({{
           style: {{}},
@@ -458,7 +459,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         const validEntry = validSequencePayload.sequenceBundle.entries[0];
         assert(
           validEntry.available === true
-            && JSON.stringify(validEntry.read) === JSON.stringify({{ kind: 'record', recordKey: 'rec-key-a', start: 1, end: 4 }}),
+            && JSON.stringify(validEntry.read) === JSON.stringify({{ kind: 'record', recordKey: 'rec-key-a', recordId: 'recA', start: 1, end: 4 }}),
           JSON.stringify(validEntry)
         );
         assert(!('fasta' in validEntry) && !('combinedFasta' in validSequencePayload.sequenceBundle), JSON.stringify(validSequencePayload.sequenceBundle));

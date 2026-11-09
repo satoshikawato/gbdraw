@@ -155,12 +155,15 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
     query_sequence = str(record().seq.reverse_complement() if reverse and mode == "circular"
                          else record().seq)[20:60]
     subject_sequence = str(record(120, "subject").seq)[30:90]
-    # The reads the match popup names (D5): the drawn unit by its record key and the span on the displayed record
-    # (a reversed Linear record shows the source 21..60 as 80..41), or a Circular comparison source's record; Python
-    # reads the bases above from them.
-    query_read = {"kind": "record", "recordKey": "record-1",
+    # The reads the match popup names (D5): the drawn unit by its record key with the record ID the match names, or
+    # a cropped Circular reference by that ID in its unit, and the span on the displayed record (a reversed Linear
+    # record shows the source 21..60 as 80..41), or a Circular comparison source's record; Python reads the bases
+    # above from them.
+    query_read = {**({"kind": "record", "recordKey": "record-1", "recordId": "reference"} if mode == "linear" else
+                     {"kind": "reference", "recordId": "reference", "recordKey": "record-1"}),
                   "start": 80 if reverse and mode == "linear" else 21, "end": 41 if reverse and mode == "linear" else 60}
-    subject_read = ({"kind": "record", "recordKey": "record-2", "start": 31, "end": 90} if mode == "linear" else
+    subject_read = ({"kind": "record", "recordKey": "record-2", "recordId": "subject", "start": 31, "end": 90}
+                    if mode == "linear" else
                     {"kind": "comparison", "sourceIndex": 0, "recordId": "subject", "start": 31, "end": 90})
     expected_reads = [query_read, subject_read]
     requests = []
@@ -202,10 +205,13 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
             assert [entry["read"] for entry in bundle["entries"]] == expected_reads
             assert "combinedFasta" not in bundle and not any("fasta" in entry for entry in bundle["entries"])
             assert page.evaluate("fixtureSpanReads.length") == 2 * index
-            # The span rows show input-file coordinates: a Linear query is source 21..60 in every orientation.
-            assert (bundle["entries"][1]["span"]["start"], bundle["entries"][1]["span"]["end"]) == (31, 90)
+            # The span rows show input-file coordinates (a Linear query is source 21..60 in every orientation), or
+            # the drawing's own text where a span maps to none, as before D5.
+            def shown(entry: dict) -> tuple[str, str]:
+                return str(entry["span"]["start"]), str(entry["span"]["end"])
+            assert shown(bundle["entries"][1]) == ("31", "90")
             if mode == "linear":
-                assert (bundle["entries"][0]["span"]["start"], bundle["entries"][0]["span"]["end"]) == (21, 60)
+                assert shown(bundle["entries"][0]) == ("21", "60")
             # Copy of both spans reads them from Python once and copies the FASTA of the bases replied.
             copy_expression = ("fixtureReads.spanAction(fixtureState.clickedPairwiseMatch.value.sequenceBundle, "
                                "fixtureState.clickedPairwiseMatch.value.sequenceBundle.entries, 'copy')")

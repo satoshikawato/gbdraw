@@ -164,8 +164,12 @@ const featureKey = ({ recordKey, biologicalFeatureId }) => featureIdentityKey(re
  * @param {MatchSpanInput} span @returns {MatchSpanInput}
  */
 const spanInput = (span) => {
-  if (span.kind === 'record') return { kind: 'record', recordKey: span.recordKey, start: span.start, end: span.end };
-  if (span.kind === 'reference') return { kind: 'reference', recordId: span.recordId, start: span.start, end: span.end };
+  if (span.kind === 'record') {
+    return { kind: 'record', recordKey: span.recordKey, recordId: span.recordId, start: span.start, end: span.end };
+  }
+  if (span.kind === 'reference') {
+    return { kind: 'reference', recordId: span.recordId, recordKey: span.recordKey, start: span.start, end: span.end };
+  }
   return { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start: span.start, end: span.end };
 };
 /** @param {MatchSpanInput} span */
@@ -284,7 +288,8 @@ export const readRowsFasta = async (rows, kind, readFeatures) => {
 /**
  * The records the shown Result's spans are read from, as a match popup names them to Python: the drawn units in
  * drawing order (a span's record index is a place in them), and whether the committed request holds a comparison
- * source's FASTA (a never-supplied FASTA is known without reading). A span named by a record ID (a Circular comparison
+ * source's FASTA, or any comparison FASTA for a span that names no source (a never-supplied FASTA is known without
+ * reading). A span named by a record ID (a Circular comparison
  * band's reference) goes to Python by that ID, which knows each record's aliases. Null without a committed request (a
  * Result-only Session 27-39), whose spans are read after the next Generate.
  * @param {FeatureCatalogItem | null | undefined} item The shown Result's stored catalog item.
@@ -296,7 +301,8 @@ export const matchSequenceRecordsOf = (item, committed) => {
   const fastaFiles = committed.renderRequest.diagramOptions.conservationFastaFiles;
   return {
     unitKeys: item.recordKeys,
-    comparisonSupplied: (sourceIndex) => Array.isArray(fastaFiles) && fastaFiles[sourceIndex] != null
+    comparisonSupplied: (sourceIndex) => Array.isArray(fastaFiles) && (sourceIndex === null
+      ? fastaFiles.some((file) => file != null) : fastaFiles[sourceIndex] != null)
   };
 };
 
@@ -318,40 +324,21 @@ const OUTLIVED = Symbol('outlived');
 /**
  * The replies kept for one committed request; a read in flight is kept as its promise, so a second asker waits
  * for the same reply, and a failed read is forgotten, so Retry reads again. Feature and span replies share the
- * bound; an export's embed has its own place outside it, kept by its catalog item (the shown Result's stored item,
- * the same object each export), so a second export of the Result reads nothing, whatever its size, and drops no
- * other reply. Base held every sequence in the catalog while the Result was shown; the embed holds no more.
+ * bound. An export's embed has one place outside it (`embed`): the embed of the latest catalog item exported (the
+ * shown Result's stored item, the same object each export; a label or colour-table rerender installs a new one under
+ * the same committed request), replaced when another item is exported. A second export of the item reads nothing,
+ * whatever its size, and keeping it drops no other reply; base held one catalog, and this holds one embed.
+ * @typedef {{ item: object, read: Promise<EmbeddedSequencesJson> }} KeptEmbed
  * @typedef {{ committed: CommittedCanonicalSession | null, features: Map<string, Promise<FeatureSequencesOf>>,
- *   spans: Map<string, Promise<MatchSpanSequence>>, embeds: Map<string, Promise<EmbeddedSequencesJson>>,
+ *   spans: Map<string, Promise<MatchSpanSequence>>, embed: KeptEmbed | null,
  *   sizes: Map<string, number>, characters: number }} Kept
  */
 /** @returns {Kept} */
 const fresh = (/** @type {CommittedCanonicalSession | null} */ committed) => ({
-  committed, features: new Map(), spans: new Map(), embeds: new Map(), sizes: new Map(), characters: 0
+  committed, features: new Map(), spans: new Map(), embed: null, sizes: new Map(), characters: 0
 });
-/** The key of an export's catalog item among the embeds kept. @type {WeakMap<object, string>} */
-const itemKeys = new WeakMap();
-let nextItemKey = 0;
-/** @param {object} item */
-const itemKey = (item) => {
-  const key = itemKeys.get(item) ?? String(nextItemKey += 1);
-  itemKeys.set(item, key);
-  return key;
-};
 /** @param {Kept} owner @param {string} kind */
 const keptOf = (owner, kind) => /** @type {Map<string, Promise<unknown>>} */ (kind === 'f' ? owner.features : owner.spans);
-/**
- * Keeps `read` in `map` under `key` while it runs and after it settles; a failed read is forgotten.
- * @template T
- * @param {Map<string, Promise<unknown>>} map @param {string} key @param {Promise<T>} read
- * @param {(value: T) => void} [settled]
- */
-const keepIn = (map, key, read, settled = () => {}) => {
-  map.set(key, read);
-  read.then(settled, () => {
-    if (map.get(key) === read) map.delete(key);
-  });
-};
 
 /**
  * Python's encoding of one catalog item with its sequences, read part by part.
@@ -425,8 +412,13 @@ export const createCatalogSequences = ({
    * @param {Kept} owner @param {'f' | 's'} kind @param {string} key @param {Promise<T>} read
    * @param {(value: T) => number} sizeOf
    */
-  const keep = (owner, kind, key, read, sizeOf) => keepIn(keptOf(owner, kind), key, read,
-    (value) => account(owner, kind, key, sizeOf(value)));
+  const keep = (owner, kind, key, read, sizeOf) => {
+    const map = keptOf(owner, kind);
+    map.set(key, read);
+    read.then((value) => account(owner, kind, key, sizeOf(value)), () => {
+      if (map.get(key) === read) map.delete(key);
+    });
+  };
   /**
    * The answer of a read for the Result shown when it began, or null when another Result is shown when it ends,
    * whether it read or failed: a popup never shows what a Result it no longer shows read, nor why that failed.
@@ -481,19 +473,23 @@ export const createCatalogSequences = ({
       missing.forEach((span, index) => keep(owner, 's', spanKey(span), reply.then((sequences) => sequences[index]),
         (sequence) => sequence.length));
     }
-    const reads = spans.map((span) => /** @type {Promise<MatchSpanSequence>} */ (owner.spans.get(spanKey(span))));
-    return forShown(owner, () => Promise.all(reads));
+    return forShown(owner, () => Promise.all(
+      spans.map((span) => /** @type {Promise<MatchSpanSequence>} */ (owner.spans.get(spanKey(span))))));
   };
 
   /** @type {CatalogSequences['readEmbedJson']} */
   const readEmbedJson = async (item) => {
     const { owner, request } = committedOf('readEmbedSequences');
-    const key = itemKey(item);
-    if (!owner.embeds.has(key)) {
-      keepIn(owner.embeds, key, encodeEmbed(helpers.readEmbedSequences, request, item, featureReadBases,
-        () => getCommittedSession() === owner.committed));
+    if (owner.embed?.item !== item) {
+      const embed = { item, read: encodeEmbed(helpers.readEmbedSequences, request, item, featureReadBases,
+        () => getCommittedSession() === owner.committed) };
+      owner.embed = embed;
+      embed.read.catch(() => {
+        if (owner.embed === embed) owner.embed = null;
+      });
     }
-    return forShown(owner, () => /** @type {Promise<EmbeddedSequencesJson>} */ (owner.embeds.get(key)));
+    const { read } = owner.embed;
+    return forShown(owner, () => read);
   };
 
   return { readFeatures, readSpans, readEmbedJson };
