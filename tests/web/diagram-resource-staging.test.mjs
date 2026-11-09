@@ -223,11 +223,10 @@ test('two Linear cards that read one Session resource both find its committed re
   const table = adoptCurrentSessionResources({ 'record-1-genbank': descriptor('LOCUS two\nORIGIN\n//\n') });
   const firstCard = createSessionResourceFileView(table, 'record-1-genbank');
   const secondCard = createSessionResourceFileView(table, 'record-1-genbank');
-  // A Save serializes each card's view to the one source descriptor, and the last card names its owner;
-  // the request keeps one resource for both cards (`session-request.js` `addFile`).
+  // A Save serializes each card's view to the one source descriptor, and the first card names its owner
+  // (a view never replaces one); the request keeps one resource for both cards (`session-request.js` `addFile`).
   const source = sessionResourceSource(firstCard).descriptor;
   setResourcePayloadOwner(source, firstCard);
-  setResourcePayloadOwner(source, secondCard);
   const committed = {
     'record-1-genbank': setResourcePayloadOwner({ ...source }, secondCard)
   };
