@@ -26,11 +26,7 @@ const inspectResultSvg = async (page) => page.evaluate(() => {
     .filter((group) => group.getAttribute('data-gbdraw-slot-renderer') === 'features' || String(group.id || '').startsWith('record_group_'));
   return {
     axis: Boolean(svg.querySelector('[id="Axis"], [id^="Axis_"]')),
-    ticks: Boolean(
-      svg.getElementById('tick') ||
-      svg.getElementById('ticks') ||
-      svg.querySelector('[data-gbdraw-slot-renderer="ticks"]')
-    ),
+    ticks: Boolean(svg.querySelector('[data-gbdraw-slot-renderer="ticks"]')),
     lengthBar: Boolean(svg.getElementById('length_bar')),
     recordAxisCount: recordGroups.filter(
       (group) => Boolean(group.querySelector(':scope > line'))

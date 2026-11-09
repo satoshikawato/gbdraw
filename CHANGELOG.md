@@ -213,9 +213,13 @@ write-up of a release.
   track stack. Before, a figure drawn without a written stack used other group
   ids (`tick`, `gc_content`, `skew`, `record_group_...`, and a Linear id that
   changed with the slot's place in the stack), so turning **Use custom stack**
-  on in the Web app changed the group ids of an unchanged figure. Scripts and
-  styles that select the old ids select the slot tags instead; the drawing is
-  unchanged (OV-3012, OV-3083, OV-3084).
+  on in the Web app changed the group ids of an unchanged figure. A feature's
+  element ids take its slot's namespace only when two or more feature slots
+  draw, so a Circular figure with a written stack and one feature slot drops
+  it (`f…__instance_slot_3_features_<hash>` is now `f…`);
+  `data-gbdraw-feature-id` is unchanged. Scripts and styles that select the
+  old ids select the slot tags instead; the drawing is unchanged (OV-3012,
+  OV-3083, OV-3084).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

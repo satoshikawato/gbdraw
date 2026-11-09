@@ -22,7 +22,12 @@ from ...layout.linear_multi_record import (
     LinearRecordPlacement,
     linear_comparison_frame,
 )
-from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
+from ...layout.linear import (
+    LinearFeatureLaneGeometry,
+    LinearRecordRenderContext,
+    LinearResolvedTrack,
+    place_linear_definition,
+)
 from ...linear_comparison import LinearComparison
 from ...configurators import (
     BlastMatchConfigurator,
@@ -73,15 +78,11 @@ def add_record_group(
     render_context: LinearRecordRenderContext,
     feature_dom_index: LinearFeatureDomIndex,
     precalculated_labels: list[LinearLabel] | None,
-    draw_features: bool = True,
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str | int] | None = None,
     orthogroup_label_top_member_ids: set[str | int] | None = None,
     record_index: int = 0,
     record_count: int = 1,
-    group_id: str | None = None,
-    slot_id: str | None = None,
-    slot_renderer: str | None = None,
     record_local_ruler: bool = False,
     multi_record_layout: bool = False,
     feature_offset_y: float = 0.0,
@@ -94,8 +95,15 @@ def add_record_group(
     *,
     placement: LinearRecordPlacement,
     group_key: GroupKey,
+    group_id: str,
+    feature_slot: LinearResolvedTrack | None,
 ) -> Drawing:
-    """Adds a record group to the linear canvas."""
+    """Adds a record group to the linear canvas.
+
+    ``feature_slot`` is the features slot the group draws the record's features in, and the
+    group carries its slot tags; ``None`` draws the record's axis alone, for a figure whose
+    slots hold no feature track.
+    """
     content = render_stage(
         "record_content",
         build_group_content,
@@ -109,7 +117,7 @@ def add_record_group(
         axis_ruler_enabled=render_context.axis_ruler_enabled,
         feature_dom_index=feature_dom_index,
         precalculated_labels=precalculated_labels,
-        draw_features=draw_features,
+        draw_features=feature_slot is not None,
         label_font_size=label_font_size,
         orthogroup_label_member_ids=orthogroup_label_member_ids,
         orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
@@ -125,10 +133,9 @@ def add_record_group(
         feature_row_shifts=feature_row_shifts,
     )
     record_group = place_content(canvas, content, group_key)
-    if slot_id:
-        record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-    if slot_renderer:
-        record_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    if feature_slot is not None:
+        record_group.attribs["data-gbdraw-slot-id"] = str(feature_slot.id)
+        record_group.attribs["data-gbdraw-slot-renderer"] = str(feature_slot.renderer)
     if record_count > 1:
         record_group.attribs["data-record-key"] = str(placement.record_key)
         record_group.attribs["data-record-translation-x"] = str(

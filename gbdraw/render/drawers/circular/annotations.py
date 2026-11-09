@@ -1349,8 +1349,7 @@ def circular_annotation_track_content(
     use, and the clip path of a clipped track are the content's definitions.
     """
 
-    group_id = dom_group_id
-    group = Group(id=group_id)
+    group = Group(id=dom_group_id)
     definitions: dict[str, BaseElement] = {}
     group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
     group.attribs["data-gbdraw-slot-renderer"] = "annotations"
@@ -1459,11 +1458,7 @@ def circular_annotation_track_content(
     clip_paths: list[BaseElement] = []
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
-        clip_id = (
-            stable_svg_id("annotation_clip", "circular", group_id)
-            if dom_group_id
-            else f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
-        )
+        clip_id = stable_svg_id("annotation_clip", "circular", dom_group_id)
         clip_ring = Path(
             d=f"{circle_arc(ring.outer_radius_px, 0.0, -360.0)} Z {circle_arc(ring.inner_radius_px, 0.0, 360.0)} Z"
         )

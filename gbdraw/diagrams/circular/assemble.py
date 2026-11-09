@@ -2697,36 +2697,31 @@ def _draw_resolved_circular_slot(
                 FEATURE_BAND_EPSILON,
                 float(canvas_config.radius) * float(canvas_config.track_ratio),
             )
-        feature_kwargs: dict[str, Any] = {
-            "group_key": GroupKey(record_key, GroupKind.FEATURES, str(resolved_slot.id)),
-            "feature_layers": feature_layers,
-            "render_context": render_context,
-            # The record group draws the embedded labels; the legend shift moves only external ones.
-            "precalculated_labels": tuple(
-                label for label in precalculated_labels or () if label.get("is_embedded")
-            ),
-            "feature_track_ratio_factor_override": ratio_override,
-        }
-        if annotation_record_index:
-            feature_kwargs["record_index"] = annotation_record_index
-        feature_kwargs["group_id"] = track_slot_svg_id(resolved_slot.id, renderer=renderer)
-        feature_kwargs["slot_id"] = str(resolved_slot.id)
-        if several_feature_slots:
-            # Two feature slots may draw one feature: its id takes the slot's.
-            feature_kwargs["feature_dom_namespace"] = str(resolved_slot.id)
-        if use_feature_anchor_override or not math.isclose(
+        anchor_moved = use_feature_anchor_override or not math.isclose(
             float(anchor_radius_px),
             float(canvas_config.radius),
             rel_tol=1e-9,
             abs_tol=1e-9,
-        ):
-            feature_kwargs["feature_anchor_radius_px"] = float(anchor_radius_px)
+        )
         return add_record_group_on_canvas(
             canvas,
             gb_record,
             canvas_config,
             feature_config,
-            **feature_kwargs,
+            group_key=GroupKey(record_key, GroupKind.FEATURES, str(resolved_slot.id)),
+            feature_layers=feature_layers,
+            render_context=render_context,
+            # The record group draws the embedded labels; the legend shift moves only external ones.
+            precalculated_labels=tuple(
+                label for label in precalculated_labels or () if label.get("is_embedded")
+            ),
+            feature_track_ratio_factor_override=ratio_override,
+            record_index=annotation_record_index,
+            group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
+            slot_id=str(resolved_slot.id),
+            # Two feature slots may draw one feature: its id takes the slot's.
+            feature_dom_namespace=str(resolved_slot.id) if several_feature_slots else None,
+            feature_anchor_radius_px=float(anchor_radius_px) if anchor_moved else None,
         )
 
     if renderer == "ticks":
@@ -2753,22 +2748,19 @@ def _draw_resolved_circular_slot(
         if selected_depth_config is None or selected_depth_df is None:
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
-        depth_kwargs: dict[str, Any] = {
-            "group_key": GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id)),
-            "track_width_override": float(resolved_slot.draw_width_px),
-            "norm_factor_override": norm_factor_override,
-            "group_id": str(resolved_slot.id),
-            "slot_group_id": track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            "slot_id": str(resolved_slot.id),
-            "slot_renderer": renderer,
-        }
         return add_depth_group_on_canvas(
             canvas,
             gb_record,
             selected_depth_df,
             canvas_config,
             selected_depth_config,
-            **depth_kwargs,
+            group_key=GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id)),
+            track_width_override=float(resolved_slot.draw_width_px),
+            norm_factor_override=norm_factor_override,
+            group_id=str(resolved_slot.id),
+            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
+            slot_id=str(resolved_slot.id),
+            slot_renderer=renderer,
             record_transform=record_transform,
         )
 
@@ -2787,11 +2779,6 @@ def _draw_resolved_circular_slot(
                 resolved_slot.id,
             )
             return canvas
-        conservation_kwargs: dict[str, Any] = {
-            "group_key": GroupKey(record_key, GroupKind.CONSERVATION, str(resolved_slot.id)),
-            "group_id": track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            "slot_id": str(resolved_slot.id),
-        }
         return add_conservation_group_on_canvas(
             canvas,
             gb_record,
@@ -2802,7 +2789,9 @@ def _draw_resolved_circular_slot(
             min_identity=float(conservation_min_identity),
             record_index=annotation_record_index,
             record_transform=record_transform,
-            **conservation_kwargs,
+            group_key=GroupKey(record_key, GroupKind.CONSERVATION, str(resolved_slot.id)),
+            group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
+            slot_id=str(resolved_slot.id),
         )
 
     if renderer == "dinucleotide_content":
@@ -2820,22 +2809,19 @@ def _draw_resolved_circular_slot(
                 nt,
             )
             return canvas
-        gc_kwargs: dict[str, Any] = {
-            "group_key": GroupKey(record_key, GroupKind.GC_CONTENT, str(resolved_slot.id)),
-            "track_width_override": float(resolved_slot.draw_width_px),
-            "norm_factor_override": norm_factor_override,
-            "slot_id": str(resolved_slot.id),
-            "slot_renderer": renderer,
-            "group_id": str(resolved_slot.id),
-            "slot_group_id": track_slot_svg_id(resolved_slot.id, renderer=renderer),
-        }
         return add_gc_content_group_on_canvas(
             canvas,
             gb_record,
             slot_df,
             canvas_config,
             slot_gc_config,
-            **gc_kwargs,
+            group_key=GroupKey(record_key, GroupKind.GC_CONTENT, str(resolved_slot.id)),
+            track_width_override=float(resolved_slot.draw_width_px),
+            norm_factor_override=norm_factor_override,
+            slot_id=str(resolved_slot.id),
+            slot_renderer=renderer,
+            group_id=str(resolved_slot.id),
+            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
             record_transform=record_transform,
         )
 
@@ -2854,22 +2840,19 @@ def _draw_resolved_circular_slot(
                 nt,
             )
             return canvas
-        skew_kwargs: dict[str, Any] = {
-            "group_key": GroupKey(record_key, GroupKind.GC_SKEW, str(resolved_slot.id)),
-            "track_width_override": float(resolved_slot.draw_width_px),
-            "norm_factor_override": norm_factor_override,
-            "slot_id": str(resolved_slot.id),
-            "slot_renderer": renderer,
-            "group_id": str(resolved_slot.id),
-            "slot_group_id": track_slot_svg_id(resolved_slot.id, renderer=renderer),
-        }
         return add_gc_skew_group_on_canvas(
             canvas,
             gb_record,
             slot_df,
             canvas_config,
             slot_skew_config,
-            **skew_kwargs,
+            group_key=GroupKey(record_key, GroupKind.GC_SKEW, str(resolved_slot.id)),
+            track_width_override=float(resolved_slot.draw_width_px),
+            norm_factor_override=norm_factor_override,
+            slot_id=str(resolved_slot.id),
+            slot_renderer=renderer,
+            group_id=str(resolved_slot.id),
+            slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
             record_transform=record_transform,
         )
 
