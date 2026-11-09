@@ -163,7 +163,8 @@ drawn as one span has one window with a null `column` (the presentation's `gridC
 with no crop has none. A crop names its record in the record's own `selector`, not in the region. Schemas 1 to 9
 write `region`; the decoder reads it as one window and a selector inside it as the record's selector, and a stored
 `region` is read the same way wherever a payload is read undecoded (`stored_record_windows` in
-`gbdraw/session_request_codec.py`). Session 51 has not reached `main`, so the version does not change and its
+`gbdraw/session_request_codec.py`). A stored `region` has exactly the keys of `STORED_REGION_FIELDS` in that module, which the
+Web reads from `schema.generated.js`; Python refuses any other key, and so does Web Load (OV-3057). Session 51 has not reached `main`, so the version does not change and its
 requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*` and the documentation and Gallery
 Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
 refuses every Session 51 file by its version.

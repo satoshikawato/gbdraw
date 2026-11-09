@@ -142,7 +142,9 @@ record with several windows draws each as its own part of one Linear row,
 leaving out the interval between them; `column` places those windows, and a
 record drawn as one part keeps its column in `presentation.gridColumn`. A
 schema 1–9 request reads its `region` as one window, and its region's selector
-as the record's.
+as the record's. A `region` with a key other
+than `selector`, `start`, `end` and `reverseComplement` is refused at Load, as the command line
+refuses it.
 
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key

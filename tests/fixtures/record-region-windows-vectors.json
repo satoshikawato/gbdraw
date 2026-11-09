@@ -1,5 +1,5 @@
 {
-  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957. A record with a selector on itself and in its region has no reading: both sides refuse it (`refused`; OV-3000, D-99).",
+  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957. A record with a selector on itself and in its region has no reading: both sides refuse it (`refused`; OV-3000, D-99), as they refuse a region with a key outside STORED_REGION_FIELDS (OV-3057); `pythonRefusal` is the text of Python's refusal.",
   "cases": [
     {
       "name": "forward span",
@@ -177,7 +177,23 @@
           "reverseComplement": false
         }
       },
-      "refused": true
+      "refused": true,
+      "pythonRefusal": "not both"
+    },
+    {
+      "name": "a region with a key a region does not have is refused",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false,
+          "column": 3
+        }
+      },
+      "refused": true,
+      "pythonRefusal": "Unknown field"
     },
     {
       "name": "region selector with no record selector key",

@@ -149,6 +149,7 @@ import {
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
+  STORED_REGION_FIELDS,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
 import {
@@ -7523,8 +7524,9 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
  * Schema 10 writes a record's spans as `windows` (D-01): a stored `region` is
  * one window, and the record its selector names is the record's selector, as
  * Python's decoder reads it (`decode_canonical_request`, D-09). Edited in
- * place; a record that is no object is left to the repair, and one that names its record on itself and in its
- * region is refused as Python refuses it (OV-3000).
+ * place; a record that is no object is left to the repair. A form no writer stored is refused as a Session-format
+ * error, as Python refuses it: a record that names its record on itself and in its region (OV-3000), and a region
+ * with a key outside `STORED_REGION_FIELDS` (OV-3057).
  * @param {unknown} records
  */
 const promoteRecordRegionsToWindows = (records) => {
@@ -7534,6 +7536,9 @@ const promoteRecordRegionsToWindows = (records) => {
     const record = /** @type {{ selector?: unknown, region?: unknown, windows?: unknown }} */ (value);
     const region = record.region;
     delete record.region;
+    if (isPlainObject(region) && Object.keys(region).some((key) => !STORED_REGION_FIELDS.includes(key))) {
+      throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+    }
     if (isPlainObject(region) && region.selector != null) {
       // One selector names the record; Python's RecordInput refuses a record that has it twice (OV-3000).
       if (record.selector != null) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
@@ -7922,7 +7927,11 @@ const keepConservationSlotsOnTheirRings = (request, rows, path) => {
  * for what schema 5 cannot carry; (3) schemas 5 to 8 are promoted once, with
  * the Load context; (4) the request is repaired against its description. What
  * cannot be read at its root, a schema that is no integer included, is a
- * dropped request (K22).
+ * dropped request (K22). It throws `INPUT_INVALID` with reason
+ * `SESSION_FORMAT` for a schema outside the supported set, for a schema 1 or 2
+ * form no writer stored (`liftLegacyRenderRequest`), and for a schema 5 to 9
+ * record that names its record on itself and in its `region`, or whose `region`
+ * has a key outside `STORED_REGION_FIELDS` (`promoteRecordRegionsToWindows`).
  * @param {unknown} value
  * @param {StoredRequestContext} context
  * @returns {Repaired<CanonicalRenderRequest> | StoredRequestDropped}

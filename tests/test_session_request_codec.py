@@ -3791,13 +3791,12 @@ def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dic
     """The stored-region twin (tools/twins.json): tests/web/session-request.test.mjs reads the same vectors (OV-2957)."""
     region = case["record"].get("region")
     if case.get("refused"):
-        # OV-3000: the Web refuses this stored form at Load as RecordInput refuses it.
-        decoded_region = _decode_region(region, path="region")
-        with pytest.raises(ValidationError, match="not both"):
+        # The Web refuses this stored form at Load as Python refuses it (OV-3000, OV-3057).
+        with pytest.raises((ValidationError, CanonicalRequestDecodingError), match=case["pythonRefusal"]):
             RecordInput(
                 source=GenBankInputSource(Path("record.gbk")),
                 selector=_decode_selector(case["record"]["selector"], path="selector"),
-                region=decoded_region,
+                region=_decode_region(region, path="region"),
             )
         return
     assert stored_record_windows(case["record"]) == case["windows"]
