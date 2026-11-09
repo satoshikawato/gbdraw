@@ -8,7 +8,8 @@ import {
   readSessionResourceBytes,
   readSessionResourceStoredBytes,
   readSessionResourceText,
-  sessionResourceSource
+  sessionResourceSource,
+  sessionResourceStoredBytes
 } from './session-resource-backing.js';
 import {
   asBytes,
@@ -506,9 +507,10 @@ const readStoredFileStream = async (file) => {
 /**
  * What a Session file stores for a File (`StoredResourceBytes`): its bytes as
  * chosen, a gzip file's as they are (receipt session.file-container), streamed
- * one piece at a time and never held whole. Their size and token are known
- * from the File's first read; a File no read has read (no copy store) has its
- * own size, and no token until a stream of it is hashed.
+ * one piece at a time and never held whole, and staged as the File's content
+ * Blob (`inputContentBlob`). Their size and token are known from the File's
+ * first read; a File no read has read (no copy store) has its own size, and no
+ * token until a stream of it is hashed.
  * @param {FileLike} file
  * @returns {Promise<StoredResourceBytes>}
  */
@@ -516,12 +518,13 @@ export const storedFileBytes = async (file) => {
   const key = asCacheKey(file);
   const readable = /** @type {ReadableFile} */ (file);
   const open = () => readStoredFileStream(file);
+  const blob = () => inputContentBlob(file);
   const known = key ? fileContentFacts.get(key) : undefined;
   if (!known && typeof readable.stream === 'function' && typeof readable.size === 'number') {
-    return { size: readable.size, open, token: null };
+    return { size: readable.size, open, token: null, blob };
   }
   const { token, byteLength } = await (known ?? readFileContentFacts(file));
-  return { size: byteLength, open, token: async () => token };
+  return { size: byteLength, open, token: async () => token, blob };
 };
 
 /**
@@ -578,13 +581,44 @@ const startFileRead = (key, file) => {
   return pending;
 };
 
+// The reads of a Session resource's views are shared as a File's are: while a
+// hold covers them, every view of the resource takes the same read, stored or
+// plain (OV-2756), and the page drops it with the File reads once no hold is
+// left. The backing keeps a read on its own only when its bytes rest in memory.
+/** @type {WeakMap<object, { stored: object, plain: object }>} */
+const viewReadKeys = new WeakMap();
+/**
+ * @param {SessionResourceFileView} view
+ * @param {'stored' | 'plain'} kind
+ * @param {(view: SessionResourceFileView) => Promise<Uint8Array> | null} read The backing's read; a view has a
+ *   backing, so it is never null.
+ * @returns {Promise<Uint8Array>}
+ */
+const sharedViewRead = (view, kind, read) => {
+  const resource = sessionResourceSource(view)?.descriptor;
+  if (!resource) return /** @type {Promise<Uint8Array>} */ (read(view));
+  let keys = viewReadKeys.get(resource);
+  if (!keys) viewReadKeys.set(resource, keys = { stored: {}, plain: {} });
+  const key = keys[kind];
+  const shared = sharedReads.get(key);
+  if (shared) return shared;
+  const pending = /** @type {Promise<Uint8Array>} */ (read(view));
+  sharedReads.set(key, pending);
+  const settle = () => {
+    settledReads.add(pending);
+    dropSharedReads();
+  };
+  pending.then(settle, settle);
+  return pending;
+};
+
 /**
  * The stored bytes of a Session resource view (the size its descriptor
- * counts), cached in its backing; a view has a backing, so its read is never null.
+ * counts); a view has a backing, so its read is never null.
  * @param {SessionResourceFileView} view
  * @returns {Promise<Uint8Array>}
  */
-const readStoredViewBytes = (view) => /** @type {Promise<Uint8Array>} */ (readSessionResourceStoredBytes(view));
+const readStoredViewBytes = (view) => sharedViewRead(view, 'stored', readSessionResourceStoredBytes);
 
 /**
  * The bytes of an uploaded File as chosen, or of a Session resource view as
@@ -625,8 +659,7 @@ export const readStoredBytes = (file) => {
  * @returns {Promise<Uint8Array>}
  */
 export const readFileBytes = (file) => {
-  // A view has a backing, so its read is never null.
-  if (isSessionResourceFileView(file)) return /** @type {Promise<Uint8Array>} */ (readSessionResourceBytes(file));
+  if (isSessionResourceFileView(file)) return sharedViewRead(file, 'plain', readSessionResourceBytes);
   return readStoredBytes(file).then((bytes) => expandInputBytes(
     String(/** @type {{ readonly name?: unknown }} */ (file).name ?? ''), bytes));
 };
@@ -662,9 +695,14 @@ export const readFileContentFacts = (file) => {
   if (!key) return Promise.reject(new TypeError('A File-like object is required.'));
   const known = fileContentFacts.get(key);
   if (known) return known;
-  // A Session resource view's facts are hashed from the stored bytes its descriptor counts.
-  if (isSessionResourceFileView(file)) {
-    return rememberFacts(key, readStoredViewBytes(file).then(factsOfBytes));
+  // A Session resource view's facts are those of the stored bytes its descriptor counts: known when their
+  // copy was hashed as it was written (a Load's, OV-2753), else hashed from a read.
+  const stored = sessionResourceStoredBytes(file);
+  if (stored) {
+    const { size, token } = stored;
+    return rememberFacts(key, token
+      ? token().then((known) => ({ token: known, byteLength: size }))
+      : readStoredViewBytes(/** @type {SessionResourceFileView} */ (file)).then(factsOfBytes));
   }
   // A File's first read keeps its facts.
   const bytes = readStoredBytes(file);
@@ -866,13 +904,16 @@ export const releaseFileContentCache = (file) => {
  * postMessage passes as a handle whatever its size, so no input's bytes cross
  * it. They are the bytes its descriptor counts and its content token hashes;
  * a gzip input's are its gzip bytes, which Python expands under its cap. A File
- * with a copy gives the copy file (PD-OI-121), which the page does not read;
- * any other input gives the bytes `readStoredBytes` reads (a File without a
- * copy checked against its first read) in a Blob.
+ * with a copy gives the copy file (PD-OI-121), and a view whose stored bytes
+ * rest in a file gives their Blob (a Load's copy, OV-2753), neither of which
+ * the page reads; any other input gives the bytes `readStoredBytes` reads (a
+ * File without a copy checked against its first read) in a Blob.
  * @param {FileLike} file
  * @returns {Promise<Blob>}
  */
 export const inputContentBlob = async (file) => {
+  const stored = sessionResourceStoredBytes(file);
+  if (stored?.blob) return stored.blob();
   const key = asCacheKey(file);
   // A first read writes the copy: whether the File has one is known once it ends.
   // Meanwhile a hold keeps the bytes that read shares, in case there is none.
@@ -896,14 +937,15 @@ export const inputContentBlob = async (file) => {
  * The bytes a History step keeps alive by naming `file`, as the History budget
  * counts them (OV-2750): none for a File, whose bytes stay on disk (the chosen
  * file, or its copy) and whose bytes this cache holds and lets go of on its
- * own; the whole size of a Session resource view, or of any other object taken
- * for a file, whose bytes are in memory.
+ * own, nor for a Session resource view whose stored bytes rest in a file, of
+ * which the page keeps no read (OV-2754); the whole size of any other view, or
+ * of any other object taken for a file, whose bytes are in memory.
  * @param {{ readonly size?: unknown } | null | undefined} file
  * @returns {number}
  */
 export const residentBytesOf = (file) => {
   const key = asCacheKey(file);
-  if (!key || key instanceof Blob) return 0;
+  if (!key || key instanceof Blob || sessionResourceStoredBytes(key)?.blob) return 0;
   return Number(/** @type {{ readonly size?: unknown }} */ (key).size) || 0;
 };
 

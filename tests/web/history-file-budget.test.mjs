@@ -99,3 +99,25 @@ test('the project input store counts resident bytes', async () => {
   assert.equal(state.inputFiles.estimateBytes([ref.fileId]), 0);
   state.inputFiles.retainOnly(new Set());
 });
+
+// OV-2754: a Session resource view whose bytes rest in a file (a Load's input copy, or the File a Generate described)
+// counts none, as the File does; a view whose bytes the page holds (no copy could be written, a JSON Session's
+// base64 text) counts its size.
+test('a Session view counts none when its bytes rest in a file, and its size when the page holds them (OV-2754)', async () => {
+  const backing = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  const { storedFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  const bytes = new TextEncoder().encode('LOCUS x\n');
+  const fields = (name) => ({ kind: 'web-file', name, type: '', size: bytes.byteLength, lastModified: 0 });
+  const copyFile = new Blob([bytes]);
+  const copied = backing.fileBackedDescriptor(fields('copied.gb'), async () => bytes.slice(),
+    { size: bytes.byteLength, open: async () => copyFile.stream(), token: null, blob: async () => copyFile });
+  const entryRead = backing.fileBackedDescriptor(fields('entry.gb'), async () => bytes.slice(),
+    { size: bytes.byteLength, open: async () => new Blob([bytes]).stream(), token: null, blob: null });
+  const chosen = new File([bytes], 'chosen.gb');
+  const described = backing.fileBackedDescriptor(fields('chosen.gb'), async () => bytes.slice(), await storedFileBytes(chosen));
+  const encoded = { ...fields('encoded.gb'), encoding: 'base64', data: Buffer.from(bytes).toString('base64') };
+  const table = backing.adoptCurrentSessionResources({ copied, entryRead, described, encoded });
+  const view = (id) => backing.createSessionResourceFileView(table, id);
+  assert.deepEqual(['copied', 'entryRead', 'described', 'encoded'].map((id) => residentBytesOf(view(id))),
+    [0, bytes.byteLength, 0, bytes.byteLength]);
+});

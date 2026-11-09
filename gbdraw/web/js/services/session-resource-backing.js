@@ -18,6 +18,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { MAX_EXPANDED_INPUT_BYTES } from '../contracts/schema.generated.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
+/** @import { ResourceContentToken } from './file-content-cache.js' */
 
 /**
  * A Session resource as the Session file stores it, before any check: every
@@ -98,12 +99,18 @@ const fileBackedReaders = new WeakMap();
  */
 /**
  * What a Session file stores for a resource (its entry `resources/<id>`):
- * the size of the stored bytes, a stream of them, and their content token
+ * the size of the stored bytes, a stream of them, their content token
  * (`contentTokenOfBytes` in file-content-cache.js) when it is known without a
- * read, else null. A gzip input is stored as it is (receipt
+ * read, else null, and a Blob of them when they rest in a file the page does
+ * not hold (an input's copy, PD-OI-121, or the File a Generate described),
+ * else null: Generate stages that Blob, and the page keeps no read of them
+ * (OV-2753, OV-2754). A gzip input is stored as it is (receipt
  * session.file-container), so a File chosen as gzip stores its gzip bytes,
  * which the reader of its file-backed descriptor reads too and Generate sends.
- * @typedef {{ size: number, open: FileBackedStreamOpener, token: (() => Promise<string>) | null }} StoredResourceBytes
+ * @typedef {{
+ *   size: number, open: FileBackedStreamOpener, token: (() => Promise<ResourceContentToken>) | null,
+ *   blob: (() => Promise<Blob>) | null
+ * }} StoredResourceBytes
  */
 /**
  * The stored bytes of the resources a file-backed reader reads, where they
@@ -161,7 +168,7 @@ export const storedResourceBytes = (descriptor) => {
   else if (isEncodedDepthFileEntry(/** @type {DepthEntryProbe} */ (descriptor))) {
     read = async () => textToBytes(decodeDepthText(/** @type {DepthFilePayload} */ (descriptor.data)));
   } else read = () => base64ToBytesInTasks(/** @type {string} */ (descriptor.data));
-  return { size: /** @type {number} */ (descriptor.size), open: whole(read), token: null };
+  return { size: /** @type {number} */ (descriptor.size), open: whole(read), token: null, blob: null };
 };
 
 /**
@@ -614,8 +621,33 @@ const materializeBytes = (backing) => {
       }
       return bytes;
     });
+    keepWhileRunning(backing, 'bytesPromise');
   }
   return backing.bytesPromise;
+};
+
+/**
+ * What a Session file stores for a leaf resource (`storedResourceBytes`).
+ * @param {LeafBacking} backing
+ */
+const storedOf = (backing) => storedResourceBytes(backing.descriptor);
+
+/**
+ * A read of a leaf whose stored bytes rest in a file (`StoredResourceBytes.blob`)
+ * is shared while it runs and kept by nothing once it ends, as a File's is
+ * (`holdReadBytes` in file-content-cache.js): the next read reads the file
+ * again, so a History step that names a view of it keeps no bytes (OV-2754).
+ * Any other leaf keeps its reads until its content is released.
+ * @param {LeafBacking} backing
+ * @param {'bytesPromise' | 'plainPromise' | 'textPromise'} field The read just started.
+ */
+const keepWhileRunning = (backing, field) => {
+  const pending = backing[field];
+  if (!pending || !storedOf(backing).blob) return;
+  const forget = () => {
+    if (backing[field] === pending) backing[field] = null;
+  };
+  pending.then(forget, forget);
 };
 
 const MIB = 1024 * 1024;
@@ -698,6 +730,7 @@ const materializePlainBytes = (backing) => {
     return expandInputBytes(backing.name, bytes);
   });
   backing.plainPromise = plain;
+  keepWhileRunning(backing, 'plainPromise');
   return plain;
 };
 
@@ -713,11 +746,15 @@ const materializeText = (backing) => {
     resourceId: backing.resourceId,
     resourceName: backing.name
   });
+  // Started with the bytes' read, so the two share it; a failed read rejects the text.
+  const plain = materializePlainBytes(backing);
+  plain.catch(() => {});
   const text = materializeBytes(backing).then(async (bytes) => {
     if (isGzipBytes(bytes) && backing.textPromise === text) backing.textPromise = null;
-    return bytesToText(await materializePlainBytes(backing));
+    return bytesToText(await plain);
   });
   backing.textPromise = text;
+  keepWhileRunning(backing, 'textPromise');
   return text;
 };
 
@@ -853,6 +890,18 @@ export const readSessionResourceStoredBytes = (file) => {
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
   return materializeBytes(backing);
+};
+
+/**
+ * What a Session file stores for the resource of a Session resource view
+ * (`storedResourceBytes`), or null for any other value.
+ * @param {FileLike | null | undefined} file
+ * @returns {StoredResourceBytes | null}
+ */
+export const sessionResourceStoredBytes = (file) => {
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
+  return backing ? storedOf(backing) : null;
 };
 
 /** @type {WeakMap<FileLike, FileBackedReader>} */
