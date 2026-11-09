@@ -1059,7 +1059,7 @@ def test_circular_region_label_letters_fit_their_innermost_circle(text: str, sta
     # half) and away from it.
     from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
     from gbdraw.core.text import text_runs_glyph_outlines
-    from gbdraw.layout.text_geometry import glyphs_meet_on_circle
+    from gbdraw.layout.text_geometry import glyphs_along_circle
     from gbdraw.render.drawers.circular.annotations import _MAX_HALF_PATH_DEG, _label_ink, circular_annotation_labels
 
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
@@ -1088,7 +1088,7 @@ def test_circular_region_label_letters_fit_their_innermost_circle(text: str, sta
             assert max(-left, right) + font_size <= math.radians(_MAX_HALF_PATH_DEG) * near + 1e-6, (inner, label.runs, near)
             # And no two of its letters' ink overlaps where they stand.
             glyphs = text_runs_glyph_outlines(label.runs, "Liberation Sans", font_size)
-            assert not glyphs_meet_on_circle(glyphs, label.arc.radius, tops_in=label.arc.flipped), (inner, label.runs)
+            assert not glyphs_along_circle(glyphs, label.arc.radius, tops_in=label.arc.flipped).meet(), (inner, label.runs)
             # Its ink radii hold every point of its letters' outlines, each glyph upright and unbent where it stands
             # (OV-2979): a corner off the ray through a glyph's middle stands farther out than its height says.
             # Nearest at a point of an edge, farthest at a corner.

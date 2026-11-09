@@ -7,7 +7,7 @@ import pytest
 from gbdraw.core.text import GlyphOutline, glyph_outlines, text_runs_glyph_outlines
 from gbdraw.layout.text_geometry import (
     glyphs_across_circle,
-    glyphs_meet_on_circle,
+    glyphs_along_circle,
     oriented_boxes_intersect,
     oriented_text_box,
     rotate_point,
@@ -114,21 +114,21 @@ def test_letters_that_stand_apart_on_a_line_close_up_at_their_tops_on_the_inner_
     glyphs = text_runs_glyph_outlines((("xx", "normal"),), "Liberation Sans", 60.0)
 
     assert glyphs.glyph_count == 2
-    assert glyphs_meet_on_circle(glyphs, radius, tops_in=tops_in) is meet
+    assert glyphs_along_circle(glyphs, radius, tops_in=tops_in).meet() is meet
 
 
 def test_glyphs_meet_when_one_holds_the_other_or_their_turns_wrap_around() -> None:
     square = ((-10.0, 0.0), (10.0, 0.0), (10.0, 20.0), (-10.0, 20.0))
     small = ((-2.0, 5.0), (2.0, 5.0), (2.0, 9.0), (-2.0, 9.0))
     # A glyph inside another's ink with no edge crossing: they meet.
-    assert glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False)
+    assert glyphs_along_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False).meet()
     # Inside a hole of the other (even-odd): they do not.
     ring = (square, ((-5.0, 2.0), (5.0, 2.0), (5.0, 18.0), (-5.0, 18.0)))
-    assert not glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, ring), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False)
+    assert not glyphs_along_circle(glyph_outlines((GlyphOutline(0.0, ring), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False).meet()
     # Nearly a whole turn on, overlapping the first.
     turn = 2 * math.pi * 100.0
-    assert glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn - 5.0, (square,)))), 100.0, tops_in=True)
-    assert not glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn / 2, (square,)))), 100.0, tops_in=True)
+    assert glyphs_along_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn - 5.0, (square,)))), 100.0, tops_in=True).meet()
+    assert not glyphs_along_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn / 2, (square,)))), 100.0, tops_in=True).meet()
 
 
 def test_a_glyph_upright_on_a_circle_reaches_past_its_height_at_its_corners() -> None:
