@@ -1578,8 +1578,8 @@ def test_circular_region_label_over_a_feature_label_and_its_leader_counts_one_ov
     index = _ObstacleIndex(CircularLabelObstacles(labels=(feature,), clearance=0.0))
     over_both = SimpleNamespace(parts=(((8.0, 0.0), (15.0, 0.0), (15.0, 20.0), (8.0, 20.0)),))
     over_leader = SimpleNamespace(parts=(((8.0, 15.0), (15.0, 15.0), (15.0, 20.0), (8.0, 20.0)),))
-    assert (index.conflicts(over_both), index.overlaps(over_both).obstacles) == (2, 1)
-    assert (index.conflicts(over_leader), index.overlaps(over_leader).obstacles) == (1, 1)
+    assert (index.conflicts(over_both), len(index.overlaps(over_both).met)) == (2, 1)
+    assert (index.conflicts(over_leader), len(index.overlaps(over_leader).met)) == (1, 1)
 
 
 _LAMBDA_REGIONS = (
@@ -1661,6 +1661,20 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
     )
     assert covering == []
     assert placed.over_feature_letters == ()
+    # Making way adds no label to what a region label overlaps as its warning counts it (its letters, or leader lines
+    # behind them), the region labels not drawn over feature letters included. (With --labels out, "Replication"
+    # still meets the two labels whose letters left its letters, by their leader lines.)
+    from gbdraw.render.drawers.circular.annotations import _ObstacleIndex
+
+    def counts(pass_: tuple) -> dict[str, frozenset[int]]:
+        index, found = _ObstacleIndex(pass_[0]), {}
+        for label in pass_[1].drawn:
+            found[label.annotation_id] = index.overlaps(label).met
+            index.add(label)
+        return found
+
+    first, drawn_counts = counts(passes[0]), counts(passes[-1])
+    assert all(drawn_counts[id_] <= first[id_] for id_ in first), (first, drawn_counts)
     assert any(f"({overlaps} region label overlaps)" in str(warning.message) for warning in caught), [
         str(warning.message) for warning in caught
     ]
@@ -2282,3 +2296,57 @@ def test_circular_region_sets_are_drawn_with_two_depth_tracks_and_no_stack() -> 
     root = ElementTree.fromstring(drawing.tostring())
     drawn = {element.attrib.get("data-gbdraw-annotation-id") for element in root.iter()} - {None}
     assert {"tint1", "islands1"} <= drawn
+
+
+def _pinned_region_labels(made_way: tuple, obstacle_parts: tuple = (), *, start: int = 2000, end: int = 5000):
+    """One horizontal region label outside a 10 kbp record, placed with feature label letters ``obstacle_parts``
+    and the places the feature labels made way at (``made_way``)."""
+
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, CircularObstacleLabel, circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, start, end), label="Region", style=RegionAnnotationStyle(label_orientation="horizontal"))
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+    )
+    obstacles = CircularLabelObstacles(
+        labels=tuple(CircularObstacleLabel((part,), feature=True) for part in obstacle_parts), clearance=2.0, made_way=made_way
+    )
+    (label,) = circular_annotation_labels(
+        track, record_index=0, record_length=10000, inner_radius_px=200.0, outer_radius_px=210.0,
+        side="outside", font_family="Liberation Sans", params=params, obstacles=obstacles,
+    ).drawn
+    return label
+
+
+def test_circular_region_label_is_drawn_where_the_feature_labels_made_way() -> None:
+    """CIR-RGN-YIELD: a region label is drawn at the place the feature labels made way at (``made_way``), not at
+    the place its own search would take, while its letters there meet no feature label's letters."""
+
+    from gbdraw.render.drawers.circular.annotations import RegionLabelPlace
+
+    def apart(first, second) -> float:
+        return math.dist(first.parts[0][0], second.parts[0][0])
+
+    at_4500 = _pinned_region_labels((), start=4000, end=5000)
+    searched = _pinned_region_labels(())
+    pinned = _pinned_region_labels((RegionLabelPlace("r0", 4500.0),))
+    assert apart(searched, at_4500) > 20.0
+    assert apart(pinned, at_4500) < 1.0
+
+
+def test_circular_region_label_leaves_a_made_way_place_that_meets_feature_letters_again() -> None:
+    """A place the feature labels made way at is checked again when the labels are placed (a legend may move
+    feature labels after they made way): where its letters meet a feature label's letters there, the region label
+    moves along its region as it would without the place."""
+
+    from gbdraw.render.drawers.circular.annotations import RegionLabelPlace
+
+    at_4500 = _pinned_region_labels((), start=4000, end=5000)
+    over = _pinned_region_labels((RegionLabelPlace("r0", 4500.0),), at_4500.parts)
+    assert over.parts != at_4500.parts
+    assert over.parts == _pinned_region_labels((), at_4500.parts).parts

@@ -82,7 +82,7 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_repair import make_way_for_boxes
+from ...labels.circular_repair import make_way_for_region_labels
 from ...labels.circular_capacity import CircularLabelCapacity, CircularLabelCapacityExceeded
 from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
@@ -93,6 +93,7 @@ from ...labels.fit import (
     LabelFit,
     LabelFitValue,
     LabelKind,
+    Polygon,
     RegionLabelWarnings,
     region_rooms_left_out,
 )
@@ -196,6 +197,8 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_labels_across_centre,
     circular_annotation_track_content,
     circular_annotation_track_ink,
+    circular_region_label_overlaps,
+    grown_label_parts,
 )
 from ...render.group_content import GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
@@ -1153,27 +1156,53 @@ def _circular_annotation_labels_by_slot(
 
 def _feature_labels_making_way(
     labels: Sequence[CircularLabel],
+    region_labels: _SlotLabels,
     not_clear: _RegionLabelsNotClear,
     total_length: int,
     definition_text: Sequence[Aabb],
+    canvas_config: CircularCanvasConfigurator,
 ) -> tuple[list[CircularLabel], _RegionLabelsMadeWay] | None:
-    """The feature labels moved off the letters of each region label drawn over them, and the places
-    they made way for, by slot id (CIR-RGN-YIELD, OV-3017); None when they clear none. The feature label repair
-    moves them (``make_way_for_boxes``, the one owner of their positions); a region label it cannot clear is drawn
-    where it was and warns (CIR-REGION-WARN)."""
+    """The feature labels moved off the letters of each region label drawn over them, and the places they made way
+    for, by slot id (CIR-RGN-YIELD, OV-3017); None when they clear none. The feature label repair moves them
+    (``make_way_for_region_labels``, the one owner of their positions) off every drawn region label's letters, and
+    keeps no move that raises what a region label overlaps as its warning counts it
+    (``circular_region_label_overlaps``); a region label it cannot clear is drawn where it was and warns
+    (CIR-REGION-WARN)."""
 
-    blocked = [(slot_id, label) for slot_id, labels_over in not_clear.over_feature_letters.items() for label in labels_over]
-    made_way = (
-        make_way_for_boxes(labels, total_length, [label.boxes for _slot_id, label in blocked], definition_text=definition_text)
-        if labels and blocked
-        else None
+    blocked_by_id = {
+        (slot_id, over.place.annotation_id): over
+        for slot_id, labels_over in not_clear.over_feature_letters.items()
+        for over in labels_over
+    }
+    drawn = [(slot_id, label) for slot_id, slot_labels in region_labels.items() for label in slot_labels]
+    blocked = [at for at, (slot_id, label) in enumerate(drawn) if (slot_id, label.annotation_id) in blocked_by_id]
+    if not labels or not blocked:
+        return None
+    clearance = float(canvas_config.profile.config.labels.spacing.circular)
+    style = canvas_config.profile.label_style
+
+    def region_overlaps(moved: Sequence[CircularLabel]) -> tuple[frozenset[int], ...]:
+        obstacles, met = _feature_label_obstacles(moved, total_length, canvas_config), list[frozenset[int]]()
+        for slot_labels in region_labels.values():
+            met.extend(circular_region_label_overlaps(slot_labels, obstacles))
+            obstacles = obstacles.with_labels(slot_labels)
+        return tuple(met)
+
+    made_way = make_way_for_region_labels(
+        labels,
+        total_length,
+        [grown_label_parts(label.parts, clearance) for _slot_id, label in drawn],
+        blocked,
+        region_overlaps=region_overlaps,
+        definition_text=definition_text,
+        drawn_parts=lambda label: _feature_label_drawn_parts(label, total_length, style),
     )
     if made_way is None:
         return None
     moved, cleared = made_way
     places: dict[str, tuple[RegionLabelPlace, ...]] = {}
-    for slot_id, label in (blocked[index] for index in cleared):
-        places[slot_id] = (*places.get(slot_id, ()), label.place)
+    for slot_id, label in (drawn[at] for at in cleared):
+        places[slot_id] = (*places.get(slot_id, ()), blocked_by_id[slot_id, label.annotation_id].place)
     return moved, places
 
 
@@ -1181,7 +1210,8 @@ def _feature_labels_making_way(
 class _RecordRegionLabels:
     """The annotation labels of one record, placed off its feature labels and leaders, and the places along their
     regions that the feature labels made way for (CIR-RGN-YIELD): the one owner of those places across the record's
-    label passes, so every later placement draws those labels where the feature labels made way."""
+    label passes, so every later placement draws those labels where the feature labels made way. ``drawn`` holds the
+    labels its last ``place`` drew, which ``make_way`` keeps the feature labels off."""
 
     radial_layout: CircularRadialLayout
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None
@@ -1190,6 +1220,7 @@ class _RecordRegionLabels:
     font_family: str
     canvas_config: CircularCanvasConfigurator
     made_way: _RegionLabelsMadeWay = field(default_factory=dict)
+    drawn: _SlotLabels = field(default_factory=dict)
 
     def place(self, feature_labels: Sequence[CircularLabel]) -> tuple[_SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
         """The drawn labels of each slot, their ink bounds on the canvas (a legend or title avoids them), and what
@@ -1204,6 +1235,7 @@ class _RecordRegionLabels:
             obstacles=_feature_label_obstacles(feature_labels, self.record_length, self.canvas_config),
             made_way=self.made_way,
         )
+        self.drawn = labels_by_slot
         offset_x, offset_y = float(self.canvas_config.offset_x), float(self.canvas_config.offset_y)
         return labels_by_slot, tuple(
             label.ink_bounds.translated(offset_x, offset_y) for labels in labels_by_slot.values() for label in labels
@@ -1212,10 +1244,12 @@ class _RecordRegionLabels:
     def make_way(
         self, feature_labels: Sequence[CircularLabel], not_clear: _RegionLabelsNotClear, definition_text: Sequence[Aabb]
     ) -> list[CircularLabel] | None:
-        """The feature labels moved off the region labels still over their letters, keeping the places they made way
-        for; None when they clear none (``_feature_labels_making_way``)."""
+        """The feature labels moved off the region labels the last ``place`` drew still over their letters, keeping
+        the places they made way for; None when they clear none (``_feature_labels_making_way``)."""
 
-        made_way = _feature_labels_making_way(feature_labels, not_clear, self.record_length, definition_text)
+        made_way = _feature_labels_making_way(
+            feature_labels, self.drawn, not_clear, self.record_length, definition_text, self.canvas_config
+        )
         if made_way is None:
             return None
         moved, self.made_way = made_way
@@ -1472,6 +1506,16 @@ def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Se
     return sum(1 for box in definition_text if box_meets_ink(box, inks, threshold_px=REGION_TRACK_MIN_OVERLAP_PX))
 
 
+def _feature_label_drawn_parts(label: CircularLabel, total_length: int, style: FeatureLabelStyle) -> tuple[Polygon, ...]:
+    """What ``style`` draws with a feature label besides its letters, its underline and white box
+    (``feature_label_drawn_parts``); nothing for an embedded label, or when the style draws neither (its letters'
+    ink is not measured then)."""
+
+    if label.get("is_embedded") or not style.draws_from_ink:
+        return ()
+    return feature_label_drawn_parts(circular_label_ink(label, total_length, style), style)
+
+
 def _feature_label_obstacles(
     labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
 ) -> CircularLabelObstacles:
@@ -1481,13 +1525,7 @@ def _feature_label_obstacles(
 
     style = canvas_config.profile.label_style
     shapes = [
-        (
-            label,
-            shape,
-            ()
-            if label.get("is_embedded")
-            else feature_label_drawn_parts(circular_label_ink(label, total_length, style), style),
-        )
+        (label, shape, _feature_label_drawn_parts(label, total_length, style))
         for label in labels
         if (shape := circular_label_shape(label, total_length)).parts
     ]
