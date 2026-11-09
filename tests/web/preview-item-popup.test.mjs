@@ -84,7 +84,7 @@ const createPopup = ({
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
   countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
   readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
-  palettes = {}, appliedPalette = 'default', circularWindows = [], sequenceWindows = []
+  palettes = {}, appliedPalette = 'default', circularWindows = [], sequenceWindows = [], revealSetting = () => {}
 } = {}) => {
   const steps = [];
   const form = {
@@ -104,6 +104,7 @@ const createPopup = ({
   const popup = createPreviewItemPopup({
     state,
     computed: (getter) => ({ get value() { return getter(); } }),
+    revealSetting,
     readLegendEntryColor: (entry) => entry.color,
     readShownLegendName,
     readLegendRowRules: () => rules,
@@ -578,4 +579,43 @@ test('a Circular definition without line kinds reads its name, accession, and le
   assert.equal(view.title, 'Homo sapiens');
   assert.equal(view.subtitle, 'mitochondrion · NC_012920.1');
   assert.equal(view.facts.find((fact) => fact.label === 'Length').value, '16,569 bp');
+});
+
+// The Region popup's heading is the selection's; its body is the Select region owner's.
+test('a Region popup is named by its selection', () => {
+  const { popup, state } = createPopup();
+  const region = {
+    kind: 'region', resultIndex: 0, recordIndex: 0, recordKey: 'uid-1', windowIndex: null, recordId: 'R1',
+    span: { start: 10, length: 20 }, source: { start: 11, end: 30, length: 20 }
+  };
+  state.clickedPairwiseMatch.value = { previewItem: region };
+  assert.deepEqual(popup.view.value, {
+    kind: 'region', identity: 'region:0:uid-1:10:20', dialogLabel: 'Region', title: 'Region', subtitle: 'R1', span: '11-30 (20 bp)'
+  });
+});
+
+// The label fit dialog's "Edit Species / Strain…" shows the settings a click on the drawn definition of that index
+// would show, and closes the popup; Enter in a popup text field commits it as leaving the field does.
+test('the record settings of a drawn index are revealed, and Enter commits a popup field', () => {
+  const revealed = [];
+  const definitionGroup = new FakeElement({ 'data-gbdraw-record-id': 'R1' });
+  const { popup, state } = createPopup({ definitionGroup, revealSetting: (field) => { revealed.push(field); } });
+  const previous = globalThis.document;
+  const selectors = [];
+  const field = { id: 'record-name' };
+  globalThis.document = { querySelector: (selector) => { selectors.push(selector); return field; } };
+  try {
+    assert.equal(popup.showRecordTextSettings(-1), false);
+    state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+    assert.equal(popup.showRecordTextSettings(0), true);
+  } finally {
+    globalThis.document = previous;
+  }
+  assert.deepEqual(selectors, ['[data-linear-record-names="uid-1"] input[type="text"]']);
+  assert.deepEqual(revealed, [field]);
+  assert.equal(state.clickedPairwiseMatch.value, null);
+
+  const events = [];
+  popup.commitField({ target: { dispatchEvent: (event) => { events.push(event.type); } } });
+  assert.deepEqual(events, ['change']);
 });
