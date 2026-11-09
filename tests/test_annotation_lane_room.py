@@ -1927,13 +1927,10 @@ def test_the_lane_packer_measures_each_marks_paint_once_for_each_lane_width() ->
     assert asked and len(asked) == len(set(asked))
 
 
-@pytest.mark.parametrize("count", (6, 12))
-def test_the_lane_packer_counts_a_tracks_lanes_once_for_all_its_labels(
-    monkeypatch: pytest.MonkeyPatch, count: int
-) -> None:
+def test_the_lane_packer_counts_a_tracks_lanes_once_for_all_its_labels(monkeypatch: pytest.MonkeyPatch) -> None:
     # OV-2981: where the drawer puts each label's lane (``_lane_places``) reads how many lanes each record takes,
     # counted once for the track, not once for each label. Bands spaced apart share lane 0 and take no room, so the
-    # packing takes as many rounds whatever their count.
+    # packing takes as many rounds whatever their count, and twice the labels count the lanes as often.
     counted: list[int] = []
     original = packer._record_lane_counts
 
@@ -1942,21 +1939,27 @@ def test_the_lane_packer_counts_a_tracks_lanes_once_for_all_its_labels(
         return original(placements)
 
     monkeypatch.setattr(packer, "_record_lane_counts", lane_counts)
-    annotations = tuple(
-        ResolvedRegionAnnotation(
-            id=f"a{index}", set_id="s", record_index=0, segments=((500 * index + 10, 500 * index + 200),),
-            midpoint_bp=500 * index + 105.0, span_bp=190, label=f"A{index}", mark="band", lane=None,
-            style=RegionAnnotationStyle(),
-        )
-        for index in range(count)
-    )
-    layout_annotation_track(
-        "regions", "s", annotations, record_lengths={0: 10_000}, params=AnnotationTrackParams(set_id="s"),
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-5.0, 5.0, 5.0, drawn=True)),
-        join_origin=True,
-    )
 
-    assert len(counted) == 3
+    def counts_for(count: int) -> int:
+        counted.clear()
+        annotations = tuple(
+            ResolvedRegionAnnotation(
+                id=f"a{index}", set_id="s", record_index=0, segments=((500 * index + 10, 500 * index + 200),),
+                midpoint_bp=500 * index + 105.0, span_bp=190, label=f"A{index}", mark="band", lane=None,
+                style=RegionAnnotationStyle(),
+            )
+            for index in range(count)
+        )
+        layout_annotation_track(
+            "regions", "s", annotations, record_lengths={0: 10_000}, params=AnnotationTrackParams(set_id="s"),
+            labels=LabelSizing(
+                reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(-5.0, 5.0, 5.0, drawn=True)
+            ),
+            join_origin=True,
+        )
+        return len(counted)
+
+    assert counts_for(6) == counts_for(12)
 
 
 def test_the_lane_packer_finds_the_spans_a_span_meets_as_testing_each_pair_does() -> None:
@@ -1988,6 +1991,34 @@ def test_the_lane_packer_finds_the_spans_a_span_meets_as_testing_each_pair_does(
             assert spans.met(queries) == pairwise
             for q_start, q_end in queries:
                 assert spans.meets(q_start, q_end) == any(q_start < end and q_end > start for start, end, _ in kept)
+
+
+@pytest.mark.parametrize(
+    ("kept", "query", "met"),
+    (
+        (((0.0, 1.0),), (1.0, 2.0), False),  # touching after
+        (((1.0, 2.0),), (0.0, 1.0), False),  # touching before
+        (((0.0, 2.0), (0.0, 2.0)), (1.0, 3.0), True),  # repeated
+        (((0.0, 2.0),), (1.0, 1.0), True),  # an empty span inside
+        (((1.0, 1.0),), (0.0, 1.0), False),  # an empty span at the end
+        (((2.0, 1.0),), (0.0, 3.0), True),  # reversed, inside
+        (((0.0, 3.0),), (2.0, 1.0), True),  # a reversed query inside
+        (((0.0, math.nan),), (0.0, 1.0), False),  # not a number
+        (((0.0, 1.0),), (math.nan, 1.0), False),
+    ),
+)
+def test_the_lane_packer_span_index_meets_each_named_case_as_the_pair_test_does(
+    kept: tuple[tuple[float, float], ...], query: tuple[float, float], met: bool
+) -> None:
+    # OV-2981: the named edge cases of ``_Spans`` (the random test above covers mixtures of them).
+    spans = packer._Spans()
+    for owner, (start, end) in enumerate(kept):
+        spans.add(start, end, owner)
+    pairwise = [owner for owner, (start, end) in enumerate(kept) if query[0] < end and query[1] > start]
+
+    assert spans.meets(*query) is met
+    assert spans.met((query,)) == pairwise
+    assert bool(pairwise) is met
 
 
 def test_the_lane_packer_measures_a_labels_letters_only_in_lanes_its_mark_leaves_free() -> None:
