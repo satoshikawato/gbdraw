@@ -164,6 +164,18 @@ def test_a_comparison_file_that_repeats_a_record_id_draws_as_before_and_warns(
     assert not [record for record in caplog.records if "repeated.fna" in record.getMessage()]
 
 
+def test_an_empty_file_in_a_genome_of_several_files_is_refused(tmp_path: Path) -> None:
+    """Review 1 of #1777, item 4: an empty file is not dropped from a genome silently."""
+
+    empty = tmp_path / "plasmid.fna"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(ValidationError, match="plasmid.fna has no sequence record") as excinfo:
+        comparison_genome((read_comparison_sequence_file(DANIO_FASTA), read_comparison_sequence_file(empty)))
+    assert excinfo.value.diagnostic == {
+        "code": "INPUT_UNREADABLE", "field": "comparison_sequence", "reason": "SEQUENCE_MISSING",
+    }
+
+
 def test_the_genome_label_is_the_rule_applied_to_its_first_file(tmp_path: Path) -> None:
     genome = comparison_genome((read_comparison_sequence_file(DROSOPHILA), read_comparison_sequence_file(DANIO)))
     assert genome.label == "Drosophila melanogaster mitochondrion, complete genome"
@@ -232,6 +244,44 @@ def test_a_table_cell_lists_the_files_of_its_ring(tmp_path: Path) -> None:
     table.write_text(f"blast\tcomparison_sequence\n{DANIO_TSV}\ta.gb;;b.gb\n", encoding="utf-8")
     with pytest.raises(ValidationError, match="comparison_sequence"):
         read_conservation_table(str(table))
+
+
+def test_a_table_cell_that_names_one_existing_file_with_a_semicolon_is_that_file(tmp_path: Path) -> None:
+    """D-123: every released version read such a cell as one file; it still does."""
+
+    named = tmp_path / "strain;A.gb"
+    named.write_bytes(DANIO.read_bytes())
+    table = tmp_path / "rings.tsv"
+    table.write_text(f"blast\tcomparison_sequence\n{DANIO_TSV}\tstrain;A.gb\n", encoding="utf-8")
+    assert read_conservation_table(str(table)).comparison_sequence_files == [(str(named),)]
+    # A cell that names no such file lists files.
+    table.write_text(f"blast\tcomparison_sequence\n{DANIO_TSV}\tstrain;B.gb\n", encoding="utf-8")
+    assert read_conservation_table(str(table)).comparison_sequence_files == [
+        (str(tmp_path / "strain"), str(tmp_path / "B.gb"))
+    ]
+
+
+@pytest.mark.parametrize(("folder", "file", "named"), [("runs;1", "a.fna", "folder"), ("runs", "a;1.fna", "file")])
+def test_losat_output_dir_refuses_a_genome_path_with_a_semicolon_before_the_search(
+    tmp_path: Path, folder: str, file: str, named: str
+) -> None:
+    """D-123: the manifest cannot list it with other files, so the run stops before LOSAT and names the part."""
+
+    from tests.test_losat_linear_nucleotide import _fake_losat, _searches
+
+    first = tmp_path / folder / file
+    first.parent.mkdir()
+    first.write_bytes(DANIO_FASTA.read_bytes())
+    losat, log = _fake_losat(tmp_path)
+    with pytest.raises(ValidationError, match=f"{named} {(folder if named == 'folder' else file)!s}") as excinfo:
+        circular_main([
+            "--gbk", str(HUMAN), "--losat", "losatn", "--losat_bin", losat,
+            "--conservation_genome", str(first), str(DROSOPHILA),
+            "--losat_output_dir", str(tmp_path / "raw"), "-o", str(tmp_path / "ring"), "-f", "svg",
+        ])
+    assert excinfo.value.diagnostic == {"code": "INPUT_INVALID", "field": "comparison_sequence"}
+    assert not log.exists() or _searches(log) == []
+    assert not (tmp_path / "raw").exists()
 
 
 def _ring_request(sequence_files: object, *, rings: int = 2) -> object:

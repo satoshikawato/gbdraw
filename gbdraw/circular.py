@@ -16,6 +16,7 @@ from .io.cli_tables import (
     ConservationTableEntry,
     conservation_table_text,
     read_circular_track_table,
+    require_listable_comparison_sequences,
 )
 from .config.models.objects import CONSERVATION_COLOR_SCHEME_NAMES
 from .config.toml import load_config_toml
@@ -30,6 +31,8 @@ from .api.options import (
     CircularOutputOptions,
     CircularRequestTrackOptions,
     ColorOptions,
+    RingGenomeFiles,
+    _ring_genome_files,
 )
 from .api.request_render import (
     CircularBatchRenderResult,
@@ -950,6 +953,10 @@ def circular_main(cmd_args) -> None:
             (Path(args.losat_output_dir) / LOSAT_CONSERVATION_OUTPUT_NAME,),
             overwrite=bool(args.overwrite),
         )
+        # Before the search: a ring whose files the manifest cannot list stops the run here (D-123).
+        _conservation_table_genomes(
+            _ring_genome_files(_cli_conservation_genomes(args)) or (), Path(args.losat_output_dir)
+        )
     run_result = run_circular_from_namespace(args)
     if args.losat_output_dir:
         write_losat_output_files(
@@ -1027,6 +1034,30 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
         raise rewritten from exc
 
 
+def _conservation_table_genomes(
+    genomes: Sequence[RingGenomeFiles], output_dir: Path
+) -> tuple[RingGenomeFiles, ...]:
+    """Each ring's files as the ``--losat_output_dir`` manifest names them, refused when it could not list them.
+
+    A path is relative when next to the output directory, so both can move together.
+    """
+
+    resolved_dir = output_dir.resolve()
+
+    def table_path(path: str) -> str:
+        absolute = str(Path(path).resolve())
+        try:
+            relative = os.path.relpath(absolute, resolved_dir)
+        except ValueError:
+            relative = absolute
+        return relative if relative.split(os.sep).count("..") <= 1 else absolute
+
+    written = tuple(tuple(table_path(path) for path in genome) for genome in genomes)
+    for genome in written:
+        require_listable_comparison_sequences(genome)
+    return written
+
+
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
     """Per-ring tables in the search frame and a ``--conservation_table`` manifest (design 3.7)."""
 
@@ -1041,21 +1072,10 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
             "LOSAT output requested, but no ring table was produced.",
             diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
-    genomes = options.conservation_genome_files
+    genomes = _conservation_table_genomes(options.conservation_genome_files, output_dir)
     labels = tuple(options.conservation_labels or ())
     colors = tuple(options.conservation_colors or ())
     files: list[tuple[str, str]] = []
-    resolved_dir = output_dir.resolve()
-
-    def table_path(path: str) -> str:
-        # Relative when next to the output directory, so both can move together.
-        absolute = str(Path(path).resolve())
-        try:
-            relative = os.path.relpath(absolute, resolved_dir)
-        except ValueError:
-            relative = absolute
-        return relative if relative.split(os.sep).count("..") <= 1 else absolute
-
     names = unique_losat_filenames(
         [ring.name for ring in rings], reserved=(LOSAT_CONSERVATION_OUTPUT_NAME,)
     )
@@ -1065,9 +1085,7 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
         entries.append(
             ConservationTableEntry(
                 blast=candidate,
-                comparison_sequences=tuple(
-                    table_path(path) for path in (genomes[index] if index < len(genomes) else ())
-                ),
+                comparison_sequences=genomes[index] if index < len(genomes) else (),
                 label=labels[index] if index < len(labels) else "",
                 color=colors[index] if index < len(colors) else "",
             )

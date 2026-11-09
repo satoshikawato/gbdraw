@@ -448,11 +448,7 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
                     },
                 )
         comparison_sequence_raw = row.values.get("comparison_sequence", "").strip()
-        comparison_sequence_parts = (
-            [part.strip() for part in comparison_sequence_raw.split(COMPARISON_SEQUENCE_SEPARATOR)]
-            if comparison_sequence_raw
-            else []
-        )
+        comparison_sequence_parts = _comparison_sequence_cell_parts(table_path, comparison_sequence_raw)
         if not all(comparison_sequence_parts):
             raise ValidationError(
                 _cell_error(
@@ -897,6 +893,17 @@ def _cells_are_blank(cells: Sequence[str]) -> bool:
     return not cells or all(str(cell).strip() == "" for cell in cells)
 
 
+def _comparison_sequence_cell_parts(table_path: Path, raw: str) -> list[str]:
+    """The files a ``comparison_sequence`` cell names: a cell that names one existing file as a whole is that file,
+    as every released version read it (D-123); otherwise the cell lists files separated by ``;``."""
+
+    if not raw:
+        return []
+    if COMPARISON_SEQUENCE_SEPARATOR not in raw or Path(_resolve_table_path(table_path, raw)).is_file():
+        return [raw]
+    return [part.strip() for part in raw.split(COMPARISON_SEQUENCE_SEPARATOR)]
+
+
 def _resolve_table_path(table_path: Path, raw_value: str) -> str:
     candidate = Path(str(raw_value))
     if candidate.is_absolute():
@@ -1166,17 +1173,40 @@ def records_table_text(entries: Sequence[RecordsTableEntry]) -> str:
     )
 
 
+def require_listable_comparison_sequences(paths: Sequence[str]) -> None:
+    """Refuse a ``comparison_sequence`` cell that would list ``paths`` and could not be read back (D-123).
+
+    A cell of one file is read as that file even when its path holds ``;``; a
+    cell of several files is split on ``;``, so none of them may hold one. The
+    error names the file or the folder whose name holds it.
+    """
+
+    if len(paths) < 2:
+        return
+    for path in paths:
+        if COMPARISON_SEQUENCE_SEPARATOR not in path:
+            continue
+        name = Path(path).name
+        part = (
+            f"file {name}"
+            if COMPARISON_SEQUENCE_SEPARATOR in name
+            else "folder " + next(
+                component for component in Path(path).parent.parts if COMPARISON_SEQUENCE_SEPARATOR in component
+            )
+        )
+        raise ValidationError(
+            f"The conservation table cannot list {path} with the other files of its genome: a "
+            f"comparison_sequence cell separates files with {COMPARISON_SEQUENCE_SEPARATOR!r}, and the {part} "
+            f"has one in its name. Rename it, or move the file.",
+            diagnostic={"code": "INPUT_INVALID", "field": "comparison_sequence"},
+        )
+
+
 def conservation_table_text(entries: Sequence[ConservationTableEntry]) -> str:
     """A conservation table of ``entries`` in order; a ring's genome files share one ``;`` cell."""
 
     for entry in entries:
-        for path in entry.comparison_sequences:
-            if COMPARISON_SEQUENCE_SEPARATOR in path:
-                raise ValidationError(
-                    f"The conservation table cannot name {path}: a comparison_sequence cell separates "
-                    f"files with {COMPARISON_SEQUENCE_SEPARATOR!r}. Rename the file.",
-                    diagnostic={"code": "INPUT_INVALID", "field": "comparison_sequence"},
-                )
+        require_listable_comparison_sequences(entry.comparison_sequences)
     return _table_text(
         ("blast", "comparison_sequence", "label", "color"),
         [
@@ -1217,4 +1247,5 @@ __all__ = [
     "read_comparisons_table",
     "read_records_table",
     "records_table_text",
+    "require_listable_comparison_sequences",
 ]

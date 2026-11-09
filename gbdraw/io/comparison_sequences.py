@@ -244,13 +244,23 @@ def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGeno
 
     A search reports a hit by the query record ID, so an ID that names records
     of two files would make the ring's hits and its span export ambiguous
-    (``INPUT_INVALID`` / ``UNIQUE_IDS``). One file is read as before; an ID
+    (``INPUT_INVALID`` / ``UNIQUE_IDS``), and an empty file among others is
+    refused (``INPUT_UNREADABLE`` / ``SEQUENCE_MISSING``). One file is read as before; an ID
     that names two records of one file is drawn and warned about
     (:attr:`ComparisonGenome.repeated_record_ids`, Owner 2026-11-09 「Q2=C」).
     """
 
     if not files:
         raise ValueError("A comparison genome has at least one file.")
+    if len(files) > 1:
+        # One empty file is a ring without a query (a LOSAT ring rejects it); among
+        # other files it would leave the genome without saying so.
+        for file in files:
+            if not file.records:
+                raise _unreadable(
+                    f"Comparison sequence file {os.path.basename(file.path)} has no sequence record.",
+                    reason="SEQUENCE_MISSING",
+                )
     owner: dict[str, int] = {}
     for index, file in enumerate(files):
         for record in file.records:
