@@ -101,13 +101,13 @@ test('Record Layout has one cell per window with the drawing\'s circled number; 
     const cells = page.locator('[data-linear-record-layout-cell]');
     await expect(cells).toHaveCount(2);
     // Each cell shows the record's "#1" and the window's circled number in the drawing, from Python's plan.
-    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['①', '②']);
+    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['1', '2']);
     await expect(page.getByLabel('Linear record row for sequence 1, window 2', { exact: true })).toHaveValue('1');
 
-    // Up on the second window puts it first in the row: the drawing draws it first and numbers it ①.
+    // Up on the second window puts it first in the row: the drawing draws it first and numbers it 1.
     await cells.nth(1).getByRole('button', { name: 'Up' }).click();
     await expect(cells.nth(0)).toHaveAttribute('data-layout-window', '1');
-    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['①', '②']);
+    await expect(cells.locator('[data-linear-record-layout-window]')).toHaveText(['1', '2']);
     await expect(windows.locator('[data-record-window]').nth(1)).toHaveAttribute('data-window-number', '1');
     await generate(page);
     // The record groups follow the card's window order in the SVG; their places in the row follow the cells.
