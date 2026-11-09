@@ -406,6 +406,13 @@ write-up of a release.
   `N region labels left out: no letter fits their circles`. On larger circles
   labels move by a fraction of a pixel (in the tobacco chloroplast Gallery
   figure by at most 0.03 px) (OV-2979).
+- Fixed: in a region slot of set size (`w` or `h` with an `overflow`) whose
+  lanes the size squeezes, a label that crosses the mark of a lane two or more
+  lanes on was given room as if the lanes between kept their full width, so
+  its letters came within `label_offset` of that mark (by up to 3.7 px in a
+  Circular slot). Its room now counts the lanes where they are drawn, in
+  Circular and Linear. The size an `overflow=error` message names is now
+  rounded up, not down.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
