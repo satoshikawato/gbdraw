@@ -33,7 +33,8 @@ from gbdraw.api.requests import RecordPresentation
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
-from gbdraw.layout.linear_row_windows import RowWindowUnit, plan_row_windows
+from gbdraw.layout.linear_row_windows import plan_row_windows
+from gbdraw.layout.record_units import RecordUnit
 from gbdraw.session_request_codec import CanonicalRequestDecodingError, _decode_windows
 
 
@@ -234,7 +235,7 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     them: the drawn units in each row in drawing order (``grid_placement_order``; without grid rows each record is a
     row of its own), read by the row's captions (``plan_row_windows``)."""
 
-    units: list[tuple[CardWindowRecordInput, int | None, RowWindowUnit, RecordPresentation]] = []
+    units: list[tuple[CardWindowRecordInput, int | None, RecordUnit, RecordPresentation]] = []
     for position, record in enumerate(records):
         card, windows = _card_record(record, position)
         # A file card drawn whole draws each of its records as a unit of its own; a record drawn whole without a known
@@ -249,10 +250,10 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
             length = card["sourceLength"] or 1
             span = (1, length) if window is None else (window.span.start, window.span.end)
             reverse = window_drawn_reverse(window is not None and window.span.reverse_complement, card["reverseComplement"])
-            unit = RowWindowUnit(
-                record_index=len(units), identity_key=identity, record_id=identity, label="",
+            unit = RecordUnit(
+                record_index=len(units), record_key=identity, record_id=identity,
                 span=span, reverse=reverse, source_length=length, circular=card["circular"],
-                has_region=window is not None,
+                is_window=window is not None, window_index=None if window is None or len(windows) < 2 else window.index,
             )
             placement = RecordPresentation(
                 grid_row=card["gridRow"], grid_column=unit_grid_column(card["gridColumn"], window)
@@ -269,12 +270,12 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     else:
         by_record: dict[str, list[int]] = {}
         for index, (_card, _window, unit, _placement) in enumerate(units):
-            by_record.setdefault(unit.identity_key, []).append(index)
+            by_record.setdefault(unit.record_key, []).append(index)
         row_units = list(by_record.values())
     numbers: list[CardWindowNumber] = []
     gaps: list[CardWindowGap] = []
     for row in row_units:
-        plan = plan_row_windows([units[index][2] for index in row])
+        plan = plan_row_windows([units[index][2] for index in row], [""] * len(row))
         if plan is None:
             continue
         for index in row:
