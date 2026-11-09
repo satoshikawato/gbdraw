@@ -23,3 +23,11 @@ def web_result_svg(result: Mapping[str, object]) -> str:
             texts.append(piece["text"])
     texts.append(str(document["tail"]))
     return "".join(texts)
+
+
+def web_session_results(reply: Mapping[str, object]) -> list[dict[str, str]]:
+    """The Session Results the page saves for ``reply`` (a ``WebRenderReply``): each Result's name and text."""
+
+    results = reply["results"]
+    assert isinstance(results, list)
+    return [{"name": str(result["name"]), "content": web_result_svg(result)} for result in results]

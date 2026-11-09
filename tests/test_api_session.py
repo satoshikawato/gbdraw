@@ -46,7 +46,7 @@ from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
 from tests.utils.session_drawing_view import build_mode_scoped_session_document, drawing_view, upgrade_to_mode_scoped
-from tests.utils.web_render_result import web_result_svg
+from tests.utils.web_render_result import web_result_svg, web_session_results
 
 
 def _record(record_id: str = "record") -> RecordInput:
@@ -932,8 +932,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
 
     session_path = tmp_path / "mixed.gbdraw-session.json"
     saved = save_session_document(session_path, drawings=[SessionDrawingSpec(request, state={
-        # The page saves each Result's text, assembled from the reply's pieces.
-        "results": [{"name": result["name"], "content": web_result_svg(result)} for result in web["results"]],
+        "results": web_session_results(web),
         "editorState": {"featureCatalog": web["featureCatalog"]},
     })])
     reloaded = load_session_document(session_path)

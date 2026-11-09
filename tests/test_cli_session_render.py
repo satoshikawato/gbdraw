@@ -60,6 +60,7 @@ from gbdraw.web_support.request_render import render_canonical_web_request
 from tests.utils.png_chunks import png_phys, png_size
 from tests.utils.session_drawing_view import drawing_view, session_view
 from tests.utils.two_mode_session import two_mode_session
+from tests.utils.web_render_result import web_session_results
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "sessions"
@@ -207,7 +208,7 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
             ),
             SessionDrawingSpec(
                 linear,
-                state={"results": web["results"], "editorState": {"featureCatalog": web["featureCatalog"]}},
+                state={"results": web_session_results(web), "editorState": {"featureCatalog": web["featureCatalog"]}},
             ),
         ]
     )
