@@ -91,9 +91,13 @@ the whole document; tests verify it.
 Python writes the reply's byte buffers (the metadata JSON, the feature catalog
 JSON, and each Result's sent children texts) as UTF-8 chunks of about 1 MiB
 (`gbdraw/web_support/reply_buffers.py`) into buffers the Worker makes
-(`createReplyBuffer`). The Python heap holds about one chunk at a time, never a
+(`replyBufferFactory`). The Python heap holds about one chunk at a time, never a
 whole text's bytes; a children text is still a whole Python string, as the
-render made it. The Worker joins each buffer's chunks right after converting
+render made it. Each chunk crosses through a file that Python writes and the
+Worker takes out of the file system at once: Pyodide's buffer views
+(`getBuffer`, and `toJs` of bytes) read a heap address as a signed 32-bit
+number and fail or copy the wrong bytes once the chunk sits above 2 GiB of the
+heap, while a file write reads it as unsigned. The Worker joins each buffer's chunks right after converting
 Python's result, at result admission, so a reply too large to allocate fails
 there as before. The page detaches each buffer as it decodes it.
 

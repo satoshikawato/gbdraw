@@ -121,35 +121,51 @@ const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
 };
 
 /**
- * A Python bytes object handed to JavaScript for one call: Pyodide destroys
- * the proxy when the call returns.
- * @typedef {{ getBuffer(type: 'u8'): { data: Uint8Array, release(): void } }} PythonBytesChunk
+ * The Pyodide file system calls a reply buffer uses.
+ * @typedef {{ readFile(path: string): Uint8Array<ArrayBuffer>, unlink(path: string): void }} ReplyBufferFiles
  */
+
+/**
+ * The file each reply chunk crosses through. Python writes a chunk there and
+ * the buffer takes it out at once, so one path serves every buffer of a Worker.
+ */
+const REPLY_CHUNK_PATH = '/gbdraw-web-reply-chunk';
 
 /**
  * A reply buffer Python writes (gbdraw/web_support/reply_buffers.py): the
  * metadata or feature catalog JSON, or a Result's children texts, in UTF-8
- * chunks of about 1 MiB. Each `write` copies one chunk out of the Python heap
- * before Pyodide releases it. Python returns the buffer itself; the Worker
+ * chunks of about 1 MiB. Python writes each chunk to the file at `path`, and
+ * `take` moves it out of the file system. A chunk crosses through a file
+ * because Pyodide's buffer views read a heap address as a signed 32-bit number
+ * and fail once the chunk sits above 2 GiB of the heap, while a file write
+ * reads it as unsigned (OV-2800). Python returns the buffer itself; the Worker
  * joins its chunks after Python returns (`finishReplyBuffers`), so the reply
  * briefly takes about twice its size here: the chunk copies and the joined
  * buffer.
  */
 export class ReplyBuffer {
+  /** @type {ReplyBufferFiles} */
+  #files;
   /** @type {Uint8Array<ArrayBuffer>[]} */
   #chunks = [];
   #byteLength = 0;
 
-  /** @param {PythonBytesChunk} chunk */
-  write(chunk) {
-    const view = chunk.getBuffer('u8');
-    try {
-      const copy = view.data.slice();
-      this.#chunks.push(copy);
-      this.#byteLength += copy.byteLength;
-    } finally {
-      view.release();
-    }
+  /** @param {ReplyBufferFiles} files */
+  constructor(files) {
+    this.#files = files;
+  }
+
+  /** The file Python writes each chunk to before it calls `take`. */
+  get path() {
+    return REPLY_CHUNK_PATH;
+  }
+
+  /** Move the chunk Python wrote out of the file system into this buffer. */
+  take() {
+    const copy = this.#files.readFile(REPLY_CHUNK_PATH);
+    this.#files.unlink(REPLY_CHUNK_PATH);
+    this.#chunks.push(copy);
+    this.#byteLength += copy.byteLength;
   }
 
   /** The chunks, in order, as one exact-length buffer; the chunk copies are dropped. */
@@ -165,8 +181,11 @@ export class ReplyBuffer {
   }
 }
 
-/** The factory Python calls for each reply buffer. */
-export const createReplyBuffer = () => new ReplyBuffer();
+/**
+ * The factory Python calls for each reply buffer, over the Worker's file system.
+ * @param {ReplyBufferFiles} files
+ */
+export const replyBufferFactory = (files) => () => new ReplyBuffer(files);
 
 /**
  * Join the reply buffers of a converted Generate result in place: its
@@ -1423,7 +1442,7 @@ const runGeneration = async ({
       (/** @type {unknown} */ notice) => {
         self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
       },
-      createReplyBuffer
+      replyBufferFactory(pyodide.FS)
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

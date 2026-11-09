@@ -4,8 +4,12 @@ A Generate reply carries UTF-8 buffers: the metadata JSON, the feature catalog
 JSON, and each Result's sent children texts. Python writes each one into a
 buffer the Worker owns (``new_reply_buffer`` makes one) in chunks of about
 1 MiB, so the Python heap, whose WebAssembly memory never shrinks, never holds a
-whole text's bytes (or, for JSON, the whole text). The Worker joins each
-buffer's chunks after Python returns. Joined, the JSON chunks are the bytes
+whole text's bytes (or, for JSON, the whole text). Each chunk crosses through a
+file: Python writes it to the buffer's file and the Worker takes it out of the
+file system. A file write reads the chunk's heap address as unsigned, while
+Pyodide's buffer views read it as signed and fail above 2 GiB (OV-2800). The
+Worker joins each buffer's chunks after Python returns. Joined, the JSON chunks
+are the bytes
 ``json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")``
 returns.
 """
@@ -28,9 +32,13 @@ _ENCODER = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
 
 
 class ReplyBuffer(Protocol):
-    """One reply buffer: the Worker copies each chunk out of the Python heap."""
+    """One reply buffer the Worker owns: Python writes each chunk to the file at
+    ``path``, then ``take`` moves it out of the file system into the buffer."""
 
-    def write(self, chunk: bytes) -> None: ...
+    @property
+    def path(self) -> str: ...
+
+    def take(self) -> None: ...
 
 
 _Buffer = TypeVar("_Buffer", bound=ReplyBuffer)
@@ -43,8 +51,11 @@ def write_reply_buffer(new_reply_buffer: Callable[[], _Buffer], chunks: Iterable
     """
 
     buffer = new_reply_buffer()
+    path = buffer.path
     for chunk in chunks:
-        buffer.write(chunk)
+        with open(path, "wb") as file:
+            file.write(chunk)
+        buffer.take()
     return buffer
 
 
