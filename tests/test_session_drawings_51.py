@@ -77,7 +77,7 @@ def _minimal_49() -> dict[str, Any]:
                 "config": {"form": {"title": "draft"}},
                 "ui": {"inputType": "gb"},
                 "webFiles": {
-                    "bindings": {"schema": 2, "c_gb": None, "c_conservation_blasts": [], **CARDS},
+                    "bindings": {"schema": 2, "circularSources": [], "c_conservation_blasts": [], **CARDS},
                     "circularOutputPrefixExplicit": False,
                 },
             },
@@ -137,7 +137,9 @@ def test_written_drawings_read_back_with_their_bindings_and_losat_entries() -> N
     session = two_mode_session()
     session["webFiles"]["bindings"] = {
         "schema": 2,
-        "c_gb": {"resourceId": "record-1-genbank", "name": "HmmtDNA.gbk"},
+        "circularSources": [
+            {"uid": "record-1", "gb": {"resourceId": "record-1-genbank", "name": "HmmtDNA.gbk"}, "gff": None, "fasta": None}
+        ],
         "c_conservation_blasts": [],
         "linearSeqs": [{"gb": {"resourceId": "linear-record-1-genbank", "name": "NC_001416.gb"}}],
         "linearComparisons": [],
@@ -168,14 +170,14 @@ def test_written_drawings_read_back_with_their_bindings_and_losat_entries() -> N
     ]
     assert active_session_drawing(document, parts) is parts[2]
     circular_bindings = parts[0].artifacts.fields["webFiles"]["bindings"]
-    assert "c_gb" in circular_bindings and "linearSeqs" not in circular_bindings
+    assert "circularSources" in circular_bindings and "linearSeqs" not in circular_bindings
     assert circular_bindings == {
         key: value for key, value in circular["webFiles"]["bindings"].items()
         if key not in {"linearSeqs", "linearComparisons"}
     }
     for part in parts[1:]:
         assert part.artifacts.fields["webFiles"]["bindings"]["linearSeqs"] == circular["webFiles"]["bindings"]["linearSeqs"]
-        assert "c_gb" not in part.artifacts.fields["webFiles"]["bindings"]
+        assert "circularSources" not in part.artifacts.fields["webFiles"]["bindings"]
     assert parts[1].artifacts.fields["losatCache"] == {"entries": [{"key": "linear"}]}
     assert parts[2].artifacts.fields["losatCache"] == {"entries": [{"key": "linear"}, {"key": "second"}]}
     assert parts[2].artifacts.fields["webFiles"]["linearRecordMetadata"] == [{"definition": "second"}]

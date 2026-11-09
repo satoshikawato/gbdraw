@@ -117,15 +117,16 @@ export const createRecordDiscoveryRuns = ({
    * its input's upload asks for the record list.
    * @param {CircularRecordsDiscovered} discovered
    */
-  const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
+  const handleCircularRecordsDiscovered = ({ drawingId, sources }) => {
     rebindAnnotationRecords();
     const drawing = listedDrawingOf(drawingId);
     if (!drawing) return;
     const pending = pendingDiscoveryOf(drawing);
     const upload = pending.circularUpload;
-    if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
+    const card = upload ? sources.find(({ primaryFile, pairedFile }) => upload === primaryFile || upload === pairedFile) : undefined;
+    if (!card) return;
     pending.circularUpload = null;
-    requestRecordListAfterUpload(drawing, 'circular', 'circular', recordCount);
+    requestRecordListAfterUpload(drawing, 'circular', 'circular', card.recordCount);
   };
   /** @param {DrawingState} drawing */
   const materializeAutomaticLinearRecords = async (drawing) => {

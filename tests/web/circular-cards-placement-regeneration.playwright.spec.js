@@ -9,7 +9,9 @@ const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
 
-const compositeSeed = async (testInfo) => {
+// A Circular drawing of two GenBank files, one File card each: the CLI writes
+// its Session from a request of two records with their own sources.
+const twoCardSeed = async (testInfo) => {
   const single = JSON.parse(await fs.readFile(singleSeed, 'utf8'));
   const lambda = JSON.parse(await fs.readFile('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', 'utf8'));
   const singleDrawing = shownSavedDrawing(single);
@@ -36,8 +38,8 @@ const compositeSeed = async (testInfo) => {
   return output;
 };
 
-for (const composite of [false, true]) {
-  test(`Circular ${composite ? 'composite P2-P8' : 'single P1'} placement capability survives generation`, async ({ browser }, testInfo) => {
+for (const twoCards of [false, true]) {
+  test(`Circular ${twoCards ? 'two File cards P2-P8' : 'single P1'} placement capability survives generation`, async ({ browser }, testInfo) => {
     test.setTimeout(1_800_000);
     let context;
     let page;
@@ -79,7 +81,7 @@ for (const composite of [false, true]) {
     };
     const check = async (stage, enabled = allPlacements, targets = null) => {
       const selected = targets || await features();
-      expect(selected).toHaveLength(composite ? 2 : 1);
+      if (!targets) expect(selected).toHaveLength(twoCards ? 2 : 1);
       for (const feature of selected) {
         const control = await open(feature);
         const semantic = await page.evaluate((feature) => {
@@ -104,11 +106,14 @@ for (const composite of [false, true]) {
         const config = await import('./js/services/config.js');
         const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
         const session = config.getCommittedCanonicalSession();
-        const binding = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
-        return { records: state.activeDrawing().circularRecordList.value, request: session.renderRequest,
+        const drawing = state.activeDrawing();
+        return { records: drawing.circularRecordList.value, request: session.renderRequest,
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
-          source: { name: state.activeDrawing().files.c_gb.name, size: state.activeDrawing().files.c_gb.size,
-            components: binding?.descriptors?.map((part) => part.resourceId) || [] },
+          cards: drawing.circularSources.map((card) => {
+            const file = state.inputFiles.fileOf(card.gb);
+            return { uid: card.uid, name: file.name, size: file.size,
+              resourceId: getSessionResourceSource(file)?.resourceId ?? null };
+          }),
           form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
           catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
       });
@@ -116,25 +121,30 @@ for (const composite of [false, true]) {
       return { ...state, recordOrder: selected.map((feature) => [feature.record_key, feature.record_id]) };
     };
     try {
-      await load(composite ? await compositeSeed(testInfo) : singleSeed);
+      await load(twoCards ? await twoCardSeed(testInfo) : singleSeed);
       const original = await check('P1-P2-before');
-      if (composite) expect(original.source.components).toHaveLength(2);
+      expect(original.cards).toHaveLength(twoCards ? 2 : 1);
+      // Each card draws its own record, keyed by the card (a one-record file's identity is its uid).
+      expect(original.recordOrder.map(([key]) => key)).toEqual(original.cards.map((card) => card.uid));
       await generate();
       const generated = await check('P1-P2-after');
       expect(generated.recordOrder).toEqual(original.recordOrder);
-      if (composite) {
+      if (twoCards) {
         await generate();
         await check('P3-second-Generate');
         const target = (await features())[0];
         const placement = await open(target);
         await placement.selectOption('outward');
-        await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('COMPOSITE_RETAINED_LABEL');
+        await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('CARD_RETAINED_LABEL');
         await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
         await close();
         await generate();
         const edited = await check('P4-feature-edit');
         expect(Object.values(edited.placements)).toHaveLength(1);
-        expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('COMPOSITE_RETAINED_LABEL');
+        // The edit stays on the first card's record.
+        expect(Object.keys(edited.placements).map((key) => JSON.parse(key)[0])).toEqual([target.record_key]);
+        expect(target.record_key).toBe(original.cards[0].uid);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('CARD_RETAINED_LABEL');
         const download = page.waitForEvent('download');
         await page.getByRole('button', { name: 'Save Session', exact: true }).click();
         const saved = testInfo.outputPath('P5-saved.gbdraw-session.json.gz');
@@ -172,18 +182,26 @@ for (const composite of [false, true]) {
               === JSON.stringify(valid.filter((value) => value !== 'auto')))).toBe(true);
           }
         }
-        // P7: an actual new File is a replacement even with identical name and bytes.
-        const old = await features();
+        // P7: an actual new File in the first card is a replacement even with
+        // identical name and bytes: its record's features lose their placement
+        // until Generate, the other card's keep theirs.
+        const [replacedFeature, keptFeature] = await features();
         const source = await page.evaluate(async () => {
           const { state } = await import('./js/state.js');
-          return { name: state.activeDrawing().files.c_gb.name, mimeType: state.activeDrawing().files.c_gb.type,
-            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.inputFiles.fileOf(state.activeDrawing().files.c_gb))] };
+          const file = state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb);
+          return { name: file.name, mimeType: file.type,
+            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(file)] };
         });
-        await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+        const firstCard = page.locator('[data-circular-source-card]').first();
+        await firstCard.locator('summary').click({ position: { x: 8, y: 8 } });
+        await firstCard.locator('input[type=file]').setInputFiles({
           name: source.name, mimeType: source.mimeType, buffer: Buffer.from(source.bytes) });
         await expect.poll(() => page.evaluate(async () => (await import('./js/state.js'))
           .state.activeDrawing().circularRecordDiscovery.status)).toBe('ready');
-        expect((await check('P7-replaced-before-Generate', [], old)).placements).toEqual({});
+        const replaced = await check('P7-replaced-before-Generate', [], [replacedFeature]);
+        expect(replaced.cards.map((card) => card.uid)).toEqual(original.cards.map((card) => card.uid));
+        expect(replaced.placements).toEqual({});
+        await check('P7-kept-before-Generate', allPlacements, [keptFeature]);
         await generate();
         await check('P7-replaced-after-Generate');
       }

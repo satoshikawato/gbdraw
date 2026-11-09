@@ -6,14 +6,16 @@ import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from '.
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
+/** @import { InputFileRef } from './history-files.js' */
+/** @import { CircularCardMark } from './drawing/inputs.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
-// card's `uid`, or a Circular record's source selector `#N` (1-based position
-// in the input file). This module is the one place that answers "is this
-// record drawn"; it holds no state.
+// card's `uid`, or a Circular record's identity (`recordIdentity`: its source
+// card's uid and its position in that card's file). This module is the one
+// place that answers "is this record drawn"; it holds no state.
 
 /**
- * @typedef {string} RecordDrawKey A Linear card uid or a Circular source selector `#N`.
+ * @typedef {string} RecordDrawKey A Linear card uid or a Circular record identity.
  * @typedef {'file' | 'id-asc' | 'id-desc' | 'length-desc' | 'length-asc'} RecordListSort
  * @typedef {{ key: RecordDrawKey, recordId: string, length: number | null, hasSettings?: boolean }} RecordListEntry
  *   One record of a source, in file order.
@@ -24,8 +26,6 @@ import { paintOf, setFeatureStroke } from './drawing/paint.js';
 export const RECORD_LIST_SORTS = Object.freeze(
   /** @type {RecordListSort[]} */ (['file', 'id-asc', 'id-desc', 'length-desc', 'length-asc'])
 );
-
-const CIRCULAR_RECORD_KEY = /^#[1-9][0-9]*$/;
 
 /** @param {unknown} value */
 const cleanKey = (value) => String(value ?? '').trim();
@@ -60,20 +60,15 @@ export const omittedLinearUids = (sequences, recordsOff) => {
 };
 
 /**
- * The key of a discovered Circular record: its source selector.
- * @param {{ selector?: unknown, sourceIndex?: unknown }} entry
+ * The key of a discovered Circular record: its identity.
+ * @param {{ identity?: unknown }} entry
  * @returns {RecordDrawKey}
  */
-export const circularRecordDrawKey = (entry) => {
-  const selector = cleanKey(entry?.selector);
-  if (CIRCULAR_RECORD_KEY.test(selector)) return selector;
-  return Number.isInteger(entry?.sourceIndex) ? `#${Number(entry.sourceIndex) + 1}` : selector;
-};
+export const circularRecordDrawKey = (entry) => cleanKey(entry?.identity);
 
 /**
- * The Circular records a Multi-Record Canvas or separate diagrams draw; each
- * entry keeps its `sourceIndex`.
- * @template {{ selector?: unknown, sourceIndex?: unknown }} T
+ * The Circular records a Multi-Record Canvas or separate diagrams draw.
+ * @template {{ identity?: unknown }} T
  * @param {readonly T[] | null | undefined} entries
  * @param {Iterable<unknown> | null | undefined} recordsOff
  * @returns {T[]}
@@ -91,14 +86,9 @@ export const circularRecordsToDraw = (entries, recordsOff) => {
  * @param {number} position 1-based position of the record input.
  */
 export const cliRecordKey = (position) => `${CLI_RECORD_KEY_PREFIX}${position}`;
-
-/**
- * The request key of a Circular record drawn with others (a canvas or a
- * batch): its file position as the CLI keys it, so it keeps its key while
- * others go OFF.
- * @param {number} sourceIndex 0-based position in the input file.
- */
-export const circularRecordRequestKey = (sourceIndex) => cliRecordKey(sourceIndex + 1);
+const CLI_RECORD_KEY = new RegExp(`^${CLI_RECORD_KEY_PREFIX}[1-9][0-9]*$`);
+/** Whether a key is one `cliRecordKey` composes. @param {string} key */
+export const isCliRecordKey = (key) => CLI_RECORD_KEY.test(key);
 
 /**
  * The record key of the `k`-th record (1-based) of a record input keyed
@@ -159,78 +149,50 @@ export const movesARecordSideways = (stored, drawnSeqs) => {
 
 /**
  * A record's identity: the name its feature edits use in every view, from its
- * input and its position in the input's file (Owner D-02, D-04). Circular: the
- * canvas key `record-<k>`. Linear: the key the record has when its card draws
- * every record of its file, `<card uid>:<k>`, or the card uid for a file of one
- * record. A record's rows live under its request key while it is drawn and
- * under its identity while it is not (R2).
- * @param {{ mode: string, uid: string, sourceIndex: number, recordCount: number }} record
+ * input and its position in the input's file (Owner D-02, D-04), in both modes:
+ * the key the record has when its card (a Linear record card, a Circular source
+ * card) draws every record of its file, `<card uid>:<k>`, or the card uid for a
+ * file of one record. A record's rows live under its request key while it is
+ * drawn and under its identity while it is not (R2).
+ * @param {{ uid: string, sourceIndex: number, recordCount: number }} record
  *   `sourceIndex`: 0-based position in the file; `recordCount`: the file's records.
  */
-export const recordIdentity = ({ mode, uid, sourceIndex, recordCount }) => (mode === 'circular'
-  ? circularRecordRequestKey(sourceIndex)
-  : expandedRecordKey(uid, recordCount > 1 ? sourceIndex + 1 : null));
-
-/**
- * The request key of a Circular record drawn alone (a single presentation):
- * its preserved key, or one built from its record ID and selector. A preserved
- * canvas key that names another record (`record-<n>` of a CLI or Python
- * Session) is not kept: it is that record's identity (DESIGN A3).
- * @param {{ recordKey?: unknown, recordId?: unknown, selector?: unknown, sourceIndex?: unknown } | null | undefined} record
- */
-export const circularSingleRecordKey = (record) => {
-  const preserved = String(record?.recordKey || '').trim();
-  const position = preserved.startsWith(CLI_RECORD_KEY_PREFIX) ? preserved.slice(CLI_RECORD_KEY_PREFIX.length) : '';
-  const namesAnotherRecord = /^[1-9]\d*$/.test(position) && Number.isInteger(record?.sourceIndex)
-    && Number(position) !== Number(record?.sourceIndex) + 1;
-  if (preserved && !namesAnotherRecord) return preserved;
-  const recordId = downloadSafeName(record?.recordId, 'record');
-  const selector = downloadSafeName(record?.selector, '1');
-  return `circular-${recordId}-${selector}`;
-};
-
-/**
- * The request keys that can name a Circular record: the key it has when drawn
- * with others and the key it has when drawn alone.
- * @param {{ sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record
- * @returns {string[]}
- */
-export const circularRecordRequestKeys = (record) => [
-  circularRecordRequestKey(record.sourceIndex), circularSingleRecordKey(record)
-];
+export const recordIdentity = ({ uid, sourceIndex, recordCount }) => (
+  expandedRecordKey(uid, recordCount > 1 ? sourceIndex + 1 : null)
+);
 
 /**
  * The records a drawing's OFF records keep their rows under, as request
  * records a row is matched against (`rowBelongsToRequest`): a Linear card's
- * uid with its `<uid>:<k>` identities, or a Circular record's `record-N`.
- * @param {string} mode 'circular', or a Linear mode.
+ * uid with its `<uid>:<k>` identities, or a Circular record's identity.
  * @param {Iterable<unknown> | null | undefined} recordsOff
- * @returns {{ recordKey: string, cardinality: 'all' | 'exactly_one' }[]}
+ * @returns {{ recordKey: string, cardinality: 'all' }[]}
  */
-export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsOff)]
-  .map((key) => (mode !== 'circular' ? { recordKey: key, cardinality: /** @type {const} */ ('all') }
-    : { recordKey: CIRCULAR_RECORD_KEY.test(key) ? circularRecordRequestKey(Number(key.slice(1)) - 1) : '',
-      cardinality: /** @type {const} */ ('exactly_one') }))
-  .filter(({ recordKey }) => recordKey);
+export const offRecordRequestRecords = (recordsOff) => [...offSet(recordsOff)]
+  .map((key) => ({ recordKey: key, cardinality: /** @type {const} */ ('all') }));
 
 /**
  * A record of a source file as a record list names it.
  * @typedef {{ sourceIndex?: unknown, selector?: unknown, recordId?: unknown, record_id?: unknown,
  *   recordLength?: unknown }} RecordSourceEntry
- * The record lists the identities of a request's records are read from: a
- * Linear card's records by card uid, the Circular input's records; each list
- * in file order, as `buildDisambiguatedRecordEntries` (services/record-options.js)
- * gives it, so `selector` and `recordId` are those a request key is built from.
- * @typedef {{ mode: string, linear?: ReadonlyMap<string, readonly RecordSourceEntry[]>,
- *   circular?: readonly RecordSourceEntry[] }} RecordIdentitySources
+ * The record lists the identities of a request's records are read from: each
+ * card's records (a Linear record card's, a Circular source card's) by card
+ * uid, in drawing order; each list in file order, as
+ * `buildDisambiguatedRecordEntries` (services/record-options.js) gives it, so
+ * `selector` and `recordId` are those a request key is built from.
+ * `legacyOrder`: the uids of the cards whose records an older Session's flat
+ * record positions count over, in their order then (`legacyRecordOrder`);
+ * none when absent.
+ * @typedef {{ mode: string, cards: ReadonlyMap<string, readonly RecordSourceEntry[]>,
+ *   legacyOrder?: readonly string[] }} RecordIdentitySources
  * A record selector or region of a request record.
  * @typedef {{ kind?: string, index?: number, value?: string } | null | undefined} RequestRecordSelector
  * A record of a render request, as its identities are read from it.
  * @typedef {{ recordKey: string, cardinality?: string, selector?: RequestRecordSelector,
  *   windows: readonly unknown[] }} IdentityRequestRecord
  * One drawn record of a request: the record key its features have in that
- * request, its identity, and (Circular) the other keys a 0.14.2 view switch
- * may have left its rows under, and the entry of its source list it is.
+ * request, its identity, the other keys an older Session may have left its rows
+ * under (`legacyCircularRecordKeys`), and the entry of its source list it is.
  * @typedef {{ requestKey: string, identity: string, aliases: readonly string[],
  *   entry: RecordSourceEntry }} DrawnRecordIdentity
  */
@@ -265,52 +227,170 @@ const selectedPosition = (record, entries) => {
 };
 
 /**
+ * The uids of the leading cards of `marked` that `inputs` (the drawing's
+ * cards now, `circularSourceInputs`) still hold with the same files, in the
+ * order of `marked`: the walk stops at the first card gone or whose file
+ * changed, past which no position of then names a record of now.
+ * @param {readonly CircularCardMark[]} marked
+ * @param {readonly { uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }[]} inputs
+ * @returns {string[]}
+ */
+export const heldCardPrefix = (marked, inputs) => {
+  /** @type {string[]} */
+  const held = [];
+  for (const card of marked) {
+    const now = inputs.find((input) => input.uid === card.uid);
+    if (!now || now.primaryFile !== card.primaryFile || now.pairedFile !== card.pairedFile) break;
+    held.push(card.uid);
+  }
+  return held;
+};
+
+/**
+ * Whether a Session written before its Circular input was a list of File
+ * cards (Session 50 and older) named its records by their flat position over
+ * the cards it moved to (D-12): one card, or several whose uids are not the
+ * CLI's per-file record keys (`record-<n>`), whose keys are already identities.
+ * @param {readonly { uid: string }[]} cards
+ */
+export const cardsTakeLegacyRecordPositions = (cards) => cards.length === 1
+  || (cards.length > 1 && !cards.every(({ uid }) => isCliRecordKey(uid)));
+
+/**
+ * The keys a Circular record's rows may wait under from a Session written
+ * before its input was a list of File cards (Session 50 and older):
+ * `record-<n>` and `circular-<record ID>-#<n>`, `n` its 1-based position in
+ * the records of the cards that Session moved to, taken together in their
+ * order at Load (`legacyOrder`), as the one input file of then held them.
+ * The walk stops at a card whose records are not read. They are aliases
+ * only: the first Generate moves their rows to the record's key
+ * (`recordKeyMoves`), and no other reader takes them. A key that is the
+ * identity of a record of the drawing is never an alias. Without a Load-time
+ * order (a Session 51, a Session of the CLI's per-file keys) there are none.
+ * @param {RecordIdentitySources} sources
+ * @returns {Map<string, string[]>} each identity's legacy keys
+ */
+export const legacyCircularRecordKeys = (sources) => {
+  const identities = new Set([...sources.cards].flatMap(([uid, entries]) => cardIdentities(uid, entries).map(({ identity }) => identity)));
+  return new Map(legacyFlatRecords(sources).map(({ identity, entry }, position) => [identity, [
+    cliRecordKey(position + 1),
+    `circular-${downloadSafeName(entry.recordId ?? entry.record_id, 'record')}-${downloadSafeName(`#${position + 1}`, '1')}`
+  ].filter((key) => !identities.has(key))]));
+};
+
+/** The identities of a card's records. @param {string} uid @param {readonly RecordSourceEntry[]} entries */
+const cardIdentities = (uid, entries) => entries.map((entry, sourceIndex) => ({
+  identity: recordIdentity({ uid, sourceIndex, recordCount: entries.length }), entry
+}));
+
+/**
+ * The records an older Session's flat positions name, in that order: the
+ * records of the cards as loaded (`legacyOrder`), up to the first card whose
+ * records are not read. The one walk of those positions.
+ * @param {RecordIdentitySources} sources
+ * @returns {{ identity: string, entry: RecordSourceEntry }[]}
+ */
+const legacyFlatRecords = (sources) => {
+  /** @type {{ identity: string, entry: RecordSourceEntry }[]} */
+  const flat = [];
+  for (const uid of sources.legacyOrder ?? []) {
+    const entries = sources.cards.get(uid) ?? [];
+    if (entries.length === 0) break;
+    flat.push(...cardIdentities(uid, entries));
+  }
+  return flat;
+};
+
+const FLAT_RECORD_SELECTOR = /^#([1-9][0-9]*)$/;
+/**
+ * The N of a source selector `#N` (the N-th record over all the drawing's
+ * records, as a Session 46-50 wrote it), null for any other value: the one
+ * reader of that shape, for the Session move and for the `#N` it kept (OV-2869).
+ * @param {unknown} key
+ * @returns {number | null}
+ */
+export const flatRecordSelectorNumber = (key) => {
+  const match = typeof key === 'string' ? FLAT_RECORD_SELECTOR.exec(key) : null;
+  return match ? Number(match[1]) : null;
+};
+/**
+ * Whether a key is a record selector `#N` that a Session 46-50 Session move
+ * kept as it was (OV-2869): the N-th record of all the drawing's records.
+ * @param {unknown} key
+ */
+export const isFlatRecordSelector = (key) => flatRecordSelectorNumber(key) !== null;
+
+/**
+ * The Circular record choices a Session names records in: the OFF records,
+ * the Record select value, and the Record Order rows.
+ * @template {{ selector: string }} P
+ * @typedef {{ recordsOff: readonly string[], selector: string, positions: readonly P[] }} CircularRecordChoices
+ */
+
+/**
+ * The choices with each flat `#N` (`isFlatRecordSelector`) placed at the
+ * identity of the N-th record over the cards as loaded (`legacyFlatRecords`,
+ * the walk the legacy keys take): a `#N` past them names no record now, so
+ * an OFF record or a Record Order row is dropped and the Record select
+ * cleared. Other keys stay.
+ * @template {{ selector: string }} P
+ * @param {CircularRecordChoices<P>} choices
+ * @param {RecordIdentitySources} sources
+ * @returns {CircularRecordChoices<P>}
+ */
+export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, sources) => {
+  const flat = legacyFlatRecords(sources);
+  /** @param {string} key @returns {string | null} */
+  const place = (key) => (isFlatRecordSelector(key) ? flat[Number(key.slice(1)) - 1]?.identity ?? null : key);
+  return {
+    recordsOff: recordsOff.flatMap((key) => place(key) ?? []),
+    selector: place(selector) ?? '',
+    positions: positions.flatMap((row) => {
+      const placed = place(row.selector);
+      return placed === null ? [] : [{ ...row, selector: placed }];
+    })
+  };
+};
+
+/**
  * The drawn records of a request with their identities (DESIGN 3, A1): each
  * record's position comes from the request's own selector, read against the
  * record lists of that request's sources, never from a card's current
  * selection. A record whose source list is unknown has no identity, so its
- * rows keep their key. A Linear card that draws every record of a file of
- * several records draws each one under its identity.
+ * rows keep their key. A card that draws every record of a file of several
+ * records draws each one under its identity. One rule for both modes; a
+ * Circular record also brings the rows of its legacy keys.
  * @param {readonly IdentityRequestRecord[]} records
  * @param {RecordIdentitySources} sources
  * @returns {DrawnRecordIdentity[]}
  */
-export const drawnRecordIdentities = (records, sources) => records.flatMap((record) => {
-  const recordKey = cleanKey(record?.recordKey);
-  if (sources.mode === 'circular') {
-    const entries = sources.circular || [];
-    const position = selectedPosition(record, entries);
-    if (position === null) return [];
-    const entry = entries[position] || {};
-    return [{
-      requestKey: recordKey,
-      identity: recordIdentity({ mode: 'circular', uid: '', sourceIndex: position, recordCount: entries.length }),
-      aliases: circularRecordRequestKeys({
-        sourceIndex: position, recordId: entry.recordId ?? entry.record_id, selector: entry.selector
-      }),
-      entry
-    }];
-  }
-  const linear = sources.linear || new Map();
-  const base = linear.has(recordKey) ? recordKey
-    : [...linear.keys()].find((uid) => recordKeyExpansion(recordKey, uid) !== null);
-  const entries = base === undefined ? undefined : linear.get(base);
-  if (base === undefined || !entries || entries.length === 0) return [];
-  const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({
-    mode: 'linear', uid: base, sourceIndex, recordCount: entries.length
-  });
-  if (record.cardinality === 'all' && !record.selector && record.windows.length === 0) {
-    return entries.map((/** @type {RecordSourceEntry} */ entry, /** @type {number} */ sourceIndex) => {
-      const identity = identityOf(sourceIndex);
-      return { requestKey: identity, identity, aliases: [identity], entry };
+export const drawnRecordIdentities = (records, sources) => {
+  const legacy = sources.mode === 'circular' ? legacyCircularRecordKeys(sources) : new Map();
+  /** @param {string} identity */
+  const aliasesOf = (identity) => [identity, ...(legacy.get(identity) || [])];
+  return records.flatMap((record) => {
+    const recordKey = cleanKey(record?.recordKey);
+    const cards = sources.cards;
+    const base = cards.has(recordKey) ? recordKey
+      : [...cards.keys()].find((uid) => recordKeyExpansion(recordKey, uid) !== null);
+    const entries = base === undefined ? undefined : cards.get(base);
+    if (base === undefined || !entries || entries.length === 0) return [];
+    const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({
+      uid: base, sourceIndex, recordCount: entries.length
     });
-  }
-  const expansion = recordKeyExpansion(recordKey, base);
-  const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
-  if (position === null || position >= entries.length) return [];
-  const identity = identityOf(position);
-  return [{ requestKey: recordKey, identity, aliases: [identity], entry: entries[position] }];
-});
+    if (record.cardinality === 'all' && !record.selector && record.windows.length === 0) {
+      return entries.map((/** @type {RecordSourceEntry} */ entry, /** @type {number} */ sourceIndex) => {
+        const identity = identityOf(sourceIndex);
+        return { requestKey: identity, identity, aliases: aliasesOf(identity), entry };
+      });
+    }
+    const expansion = recordKeyExpansion(recordKey, base);
+    const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
+    if (position === null || position >= entries.length) return [];
+    const identity = identityOf(position);
+    return [{ requestKey: recordKey, identity, aliases: aliasesOf(identity), entry: entries[position] }];
+  });
+};
 
 /**
  * The record key changes of one Generate (DESIGN 2-3, A3): `from` key ->
@@ -325,7 +405,8 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
  * identity another record uses as its request key. The moves apply together
  * from one snapshot, so a permutation is safe. A row never leaves or enters a
  * key whose source the Generate replaces (`unbound`): the replaced source no
- * longer binds that record (#494), and the prune decides its rows.
+ * longer binds that record (#494), and the prune decides its rows. The one
+ * exception is the first record a Replace in the same card keeps (D-20).
  * @param {readonly DrawnRecordIdentity[]} previousDrawn
  * @param {readonly DrawnRecordIdentity[]} nextDrawn
  * @param {ReadonlySet<string>} [unbound]
@@ -336,12 +417,27 @@ export const recordKeyMoves = (previousDrawn, nextDrawn, unbound = new Set()) =>
   const nextKeyOf = new Map(nextDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
   const previousKeys = new Set(previousKeyOf.values());
   const nextKeys = new Set(nextKeyOf.values());
+  // D-20: a Replace in the same card keeps its first record, so the record of
+  // a one-record file (`<uid>`) and the first record of a file of several
+  // (`<uid>:1`) are one record when each request has only one of them. Its
+  // rows move although its source was replaced; the prune keeps the edits of
+  // the features the new file still has.
+  /** @type {Set<string>} */
+  const replacedFirstRecords = new Set();
+  [...nextKeyOf.keys()].filter((identity) => !previousKeyOf.has(identity)).forEach((identity) => {
+    const other = [...previousKeyOf.keys()].find((candidate) => !nextKeyOf.has(candidate)
+      && (recordKeyExpansion(identity, candidate) === 1 || recordKeyExpansion(candidate, identity) === 1));
+    if (other === undefined) return;
+    previousKeyOf.set(identity, /** @type {string} */ (previousKeyOf.get(other)));
+    previousKeyOf.delete(other);
+    replacedFirstRecords.add(identity);
+  });
   /** @type {Map<string, string>} */
   const moves = new Map();
   new Set([...previousKeyOf.keys(), ...nextKeyOf.keys()]).forEach((identity) => {
     const from = previousKeyOf.get(identity) ?? identity;
     const to = nextKeyOf.get(identity) ?? identity;
-    if (from === to || unbound.has(from) || unbound.has(to)) return;
+    if (from === to || (!replacedFirstRecords.has(identity) && (unbound.has(from) || unbound.has(to)))) return;
     // A row under another record's request key belongs to that record.
     if (!previousKeyOf.has(identity) && previousKeys.has(from)) return;
     if (!nextKeyOf.has(identity) && nextKeys.has(to)) return;
@@ -360,14 +456,53 @@ export const recordKeyMoves = (previousDrawn, nextDrawn, unbound = new Set()) =>
 };
 
 /**
- * Whether a key has the shape of its mode's record key.
- * @param {'circular' | 'linear'} mode
+ * The rows a list keeps one per record (a record-major Depth matrix) after the
+ * records of a drawing change (a source card added, removed or moved): each
+ * record of `next` takes the row its identity had in `previous`, and a record
+ * new to the list an empty row. It reads records by identity, never by place,
+ * from the same lists `recordKeyMoves` moves rows between. Rows past the end of
+ * a shorter list are the records that have none yet.
+ * @template R
+ * @param {readonly R[]} rows one per identity of `previous`, in its order
+ * @param {readonly string[]} previous
+ * @param {readonly string[]} next
+ * @param {() => R} empty
+ * @returns {R[]}
+ */
+export const resliceRecordRows = (rows, previous, next, empty) => next.map((identity) => {
+  const index = previous.indexOf(identity);
+  return index >= 0 && index < rows.length ? rows[index] : empty();
+});
+
+/**
+ * The rows of a list that keeps one row per record of a drawing's cards (a
+ * record-major Depth matrix) after its cards change: `marked` are the cards
+ * the rows stand for, in row order, `now` the drawing's cards. A record keeps
+ * the row of its card's record at the same place in the file (`<uid>:<k>`),
+ * so a card moved or removed takes its rows along, and a Replace in the same
+ * card keeps the rows of the records the new file has at those places (D-20;
+ * the record of a one-record file is the first record of a file of several).
+ * A record new to the list gets an empty row (`resliceRecordRows`).
+ * @template R
+ * @param {readonly R[]} rows
+ * @param {readonly { uid: string, recordCount: number }[]} marked
+ * @param {readonly { uid: string, recordCount: number }[]} now
+ * @param {() => R} empty
+ * @returns {R[]}
+ */
+export const resliceCardRows = (rows, marked, now, empty) => {
+  /** @param {readonly { uid: string, recordCount: number }[]} cards */
+  const keysOf = (cards) => cards.flatMap(({ uid, recordCount }) => Array.from({ length: recordCount }, (_unused, index) => expandedRecordKey(uid, index + 1)));
+  return resliceRecordRows(rows, keysOf(marked), keysOf(now), empty);
+};
+
+/**
+ * Whether a key has the shape of a record draw key: a card uid or a record
+ * identity, the same shape in both modes.
+ * @param {'circular' | 'linear'} _mode
  * @param {unknown} key
  */
-export const isRecordDrawKey = (mode, key) => (
-  typeof key === 'string' && key.trim() === key && key !== ''
-  && (mode !== 'circular' || CIRCULAR_RECORD_KEY.test(key))
-);
+export const isRecordDrawKey = (_mode, key) => typeof key === 'string' && key.trim() === key && key !== '';
 
 /**
  * `recordsOff` after turning `keys` ON (`drawn`) or OFF; order kept, no duplicates.
@@ -496,12 +631,12 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * @typedef {object} RecordSettingsOwner
  * @property {RecordDrawKey} key
  * @property {readonly string[]} requestKeys The request record keys its feature edits use: a Linear
- *   card's uid (which also owns its `<uid>:<n>` records), a Circular record's `record-N` and its
- *   single-record key.
+ *   card's uid (which also owns its `<uid>:<n>` records), a Circular record's identity and its
+ *   legacy keys (`legacyCircularRecordKeys`).
  * @property {boolean} [ownsExpansions] Linear: the key also owns `<key>:<n>`.
  * @property {readonly string[]} bindingKeys The record-catalog keys an annotation binds it by.
- * @property {string} displaySource The `sourceUid` of its record display drafts.
- * @property {string | null} displaySelector Circular: its `#N`; Linear: null (every draft of the card).
+ * @property {string} displaySource The `sourceUid` of its record display drafts: its card's uid.
+ * @property {string | null} displaySelector Circular: its `#k` in its card's file; Linear: null (every draft of the card).
  *
  * The edits of one drawing, which `removeRecordEdits` removes: its per-feature
  * edits and Feature placements through their slice (`drawing.slices.featureEdits`).

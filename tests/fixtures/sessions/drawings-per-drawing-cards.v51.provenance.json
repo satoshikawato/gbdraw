@@ -20,7 +20,8 @@
   ],
   "activeDrawingId": "circular",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
-  "decompressedSha256": "da7c43850a68e8a5828467cd7a0f9e30db3ac154f0fde65eef84c12b795ce6f3",
+  "decompressedSha256": "c8e431d5d62fec2d628962980b984909b9b9e376ee74fc9065de69769218978a",
   "sessionVersion": 51,
-  "renumbered": "V50a (D-15-175): the file written at 49 by the script below, with its top-level version set to 50 and nothing else changed; the drawings layout is Session 50. V51a (D-15-190): top-level version 50 set to 51 and nothing else changed; the drawings layout is Session 51 (0.14.5 released the flat Session 50)."
+  "renumbered": "V50a (D-15-175): the file written at 49 by the script below, with its top-level version set to 50 and nothing else changed; the drawings layout is Session 50. V51a (D-15-190): top-level version 50 set to 51 and nothing else changed; the drawings layout is Session 51 (0.14.5 released the flat Session 50).",
+  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed"
 }

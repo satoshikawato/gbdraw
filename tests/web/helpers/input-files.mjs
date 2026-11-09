@@ -14,10 +14,12 @@ export const createTestInputStore = () => createInputFileStore({
 export const boundState = (source, store = createTestInputStore()) => {
   const bound = bindLoadedInputs(store, {
     files: source.files || {}, linearSeqs: source.linearSeqs || [],
+    circularSources: source.circularSources || [],
     linearComparisonPlan: source.linearComparisonPlan || { edges: [] }, circularRecordDiscovery: {}
   });
   return {
     ...source, inputFiles: store, files: bound.files, linearSeqs: bound.linearSeqs,
+    circularSources: bound.circularSources,
     ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
   };
 };
@@ -28,9 +30,9 @@ export const boundState = (source, store = createTestInputStore()) => {
  * rows and comparison plan as the Linear drawing's.
  */
 export const bindingDrawings = (fixture) => [
-  { mode: 'circular', files: fixture.files || {}, linearSeqs: [] },
+  { mode: 'circular', files: fixture.files || {}, linearSeqs: [], circularSources: fixture.circularSources || [] },
   {
-    mode: 'linear', files: {}, linearSeqs: fixture.linearSeqs || [],
+    mode: 'linear', files: {}, linearSeqs: fixture.linearSeqs || [], circularSources: [],
     linearComparisonPlan: fixture.linearComparisonPlan || null
   }
 ];

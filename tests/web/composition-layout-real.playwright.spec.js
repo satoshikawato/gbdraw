@@ -67,7 +67,7 @@ const renderRealDiagram = async (
     });
     if (diagramMode === 'circular') {
       app.setCircularInputType('gb');
-      app.files.c_gb = bound(input);
+      await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = cardState.activeDrawing().circularSources[0] ?? inputs.createCircularSource(); if (!cardState.activeDrawing().circularSources.includes(card)) inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(input);
       app.setCircularTrackSlotsEnabled(false);
     } else {
       app.setLinearInputType('gb');

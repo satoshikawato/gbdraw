@@ -15,7 +15,7 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
 import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
-import { circularInputSlots, inputSourceFiles } from './input-types.js';
+import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, userTableRows } from './file-imports.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -35,7 +35,7 @@ import {
 } from './linear-track-slot-model.js';
 import {
   DEPTH_FILES_CHANGE, depthFileSlotsFromValue, fitDepthStateToSources, isDepthSeriesAutoLabel,
-  normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
+  isRecordMajorDepthFileMatrix, normalizeRecordMajorDepthFileRows, padDepthFileSlots, shownAfterSourceChange, syncDepthSlotLabels
 } from './depth-track-state.js';
 import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
@@ -52,7 +52,7 @@ import {
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
   readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
-import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
+import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -243,6 +243,7 @@ import {
   storedRequestSchemas,
   storedResultSets,
   validateSessionAuthorityInventory,
+  versionHoldsDrawings,
   versionKeepsModeSlices,
   withStoredResultSet
 } from './session-authority.js';
@@ -351,7 +352,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
@@ -2604,6 +2605,7 @@ const drawingProjectionInputOf = (view, {
  *   (B2-D9); null: none.
  * @property {LayoutPreferences | null} layoutPreferences The layout its request sets (`requestLayoutPreferences`),
  *   which a drawing whose draft has no layout takes at Load (OV-2493); null: the drawing holds no request.
+ * @property {boolean} circularRequest Whether `files` are the projection of the drawing's Circular request.
  */
 /**
  * @param {Session51} document
@@ -2624,7 +2626,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     return {
       files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
       restoredConfig: null, requestOverrides: null, requestFeatureEdits: null, cliOptions: cliOptionsOf(view.cliOptions),
-      layoutPreferences: null
+      layoutPreferences: null, circularRequest: false
     };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
@@ -2656,7 +2658,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
     requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
     cliOptions: cliOptionsOf(view.cliOptions),
-    layoutPreferences: projection.layoutPreferences
+    layoutPreferences: projection.layoutPreferences,
+    circularRequest: mode === 'circular'
   };
 };
 
@@ -3068,6 +3071,34 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   };
 };
 
+// The opened drawing's input inventory: a Session 46-50's is the part of its
+// one inventory the 51 document gives that drawing (`drawingViewOf`), as each
+// stored set's is, so a later projection of the committed request reads it
+// with the drawing's input slot (`circularSources`, `linearSeqs`); any other
+// Session's is its own (`webFiles`).
+/**
+ * @param {number} sourceVersion @param {Session51} upgraded @param {string} drawingId @param {unknown} webFiles
+ * @returns {unknown}
+ */
+const openedDrawingWebFiles = (sourceVersion, upgraded, drawingId, webFiles) => {
+  const entry = versionKeepsModeSlices(sourceVersion) && !versionHoldsDrawings(sourceVersion)
+    ? upgraded.drawings.find((item) => item.id === drawingId) : undefined;
+  return entry ? drawingViewOf(upgraded, entry).webFiles : webFiles;
+};
+// The committed copy of the opened drawing with its own inventory stays
+// adopted, so Save keeps its resource ids (OV-NEW-3).
+/**
+ * @template {object} T
+ * @param {T | null} committed @param {unknown} openedWebFiles @param {unknown} sessionWebFiles
+ * @returns {T | null}
+ */
+const openedCommittedSession = (committed, openedWebFiles, sessionWebFiles) => {
+  if (!committed || openedWebFiles === sessionWebFiles) return committed;
+  const opened = { ...committed, webFiles: openedWebFiles };
+  adoptRuntimeCanonicalSession(opened);
+  return opened;
+};
+
 // E1: the match-sequence sources one saved Result set (the top-level set or
 // `otherModeResult`) needs beyond its catalog's: when the catalog does not
 // cover the set's request, or a Session older than 40 has none, the sources
@@ -3075,12 +3106,13 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
 /**
  * @param {{ mode: 'circular' | 'linear', catalog: FeatureCatalog | null, renderRequest: Record<string, any> | undefined,
  *   olderSession: boolean, settingsOnly: boolean, cInputType: string, lInputType: string,
- *   files: Record<string, any>, linearSeqs: Record<string, any>[], circularConservation: Record<string, any> }} set
+ *   files: Record<string, any>, linearSeqs: Record<string, any>[], circularSources: readonly RestoredCircularSource[],
+ *   circularConservation: Record<string, any> }} set
  * @returns {Promise<{ restored: Record<string, any>[], error: unknown }>}
  */
 const restoreLoadedSetSequenceSources = async ({
   mode, catalog, renderRequest, olderSession, settingsOnly, cInputType, lInputType, files, linearSeqs,
-  circularConservation
+  circularSources, circularConservation
 }) => {
   const coverage = catalog
     ? analyzeCatalogSequenceSourceCoverage({
@@ -3098,7 +3130,7 @@ const restoreLoadedSetSequenceSources = async ({
   try {
     return {
       restored: await buildRestoredMatchSequenceSources({
-        mode, cInputType, lInputType, files, linearSeqs, circularConservation,
+        mode, cInputType, lInputType, files, linearSeqs, circularSources, circularConservation,
         // The drawn units the catalog names key the sources it lacks (review S5).
         units: mode === 'linear' && catalog ? catalogDrawnUnits(catalog) : null
       }),
@@ -4139,17 +4171,19 @@ const installGroupNames = (drawing, orthogroupState, groupIdSet) => {
  * caller passes the drawing it resolved, whose input type and record rows it
  * checks.
  * @param {{ readonly mode: string, readonly recordsOff: readonly string[], readonly linearSeqs: readonly LinearSeq[],
- *   readonly files: Readonly<DrawingInputFiles>, readonly inputType: { readonly value: string } }} drawing
+ *   readonly circularSources: readonly CircularSource[], readonly inputType: { readonly value: string } }} drawing
  */
 export const assertDrawingInputs = (drawing) => {
-  const { files } = drawing;
-  /** @param {ReturnType<typeof inputSourceFiles>} input @param {{ inputOrdinal?: number }} context */
+  /** @param {{ primaryFile: unknown, complete: boolean }} input @param {{ inputOrdinal?: number }} context */
   const requireInput = ({ primaryFile, complete }, context) => {
     if (!primaryFile) throw diagnosticError('INPUT_REQUIRED', context);
     if (!complete) throw diagnosticError('FASTA_REQUIRED', context);
   };
   if (drawing.mode === 'circular') {
-    requireInput(inputSourceFiles(drawing.inputType.value, circularInputSlots(files)), {});
+    const inputs = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
+    if (inputs.length === 0) throw diagnosticError('INPUT_REQUIRED', {});
+    // One source card names its file by its place in the list, as a Linear File does.
+    inputs.forEach((input, index) => requireInput(input, inputs.length > 1 ? { inputOrdinal: index + 1 } : {}));
     return;
   }
   const sequences = drawing.linearSeqs;
@@ -4357,9 +4391,13 @@ export const serializeActiveRenderFiles = async (
     conservationEnabled && conservationSource === 'losat';
 
   return {
-    c_gb: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_gb) : null,
-    c_gff: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_gff) : null,
-    c_fasta: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_fasta) : null,
+    // The Circular source cards, in drawing order: one request source per file, as the CLI's.
+    circularSources: mode === 'circular' ? await Promise.all(drawing.circularSources.map(async (source) => ({
+      uid: source.uid,
+      gb: await serializeFileValue(store, source.gb),
+      gff: await serializeFileValue(store, source.gff),
+      fasta: await serializeFileValue(store, source.fasta)
+    }))) : [],
     c_depth: mode === 'circular' && depthRequested
       ? await serializeFileValue(store, depthSlots[0])
       : null,
@@ -4890,12 +4928,16 @@ const readFileList = (stored, path, readable, repairs) => (Array.isArray(stored)
 const readDepthValue = (stored, readable) => (Array.isArray(stored)
   ? stored.map((entry) => readDepthValue(entry, readable)) : (readable(stored) ? stored : null));
 
-/** The single file slots of a Session's input files. */
+/**
+ * The single file slots of a Session's input files. A Session 27-44's
+ * Circular input (`c_gb`, `c_gff`, `c_fasta`) is read here before Python
+ * moves it to source cards; a Session 51 holds `circularSources`.
+ */
 const STORED_FILE_SLOTS = Object.freeze(['c_gb', 'c_gff', 'c_fasta', 'd_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
 /** The file lists, read by place. */
 const STORED_FILE_LISTS = Object.freeze(['c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources']);
-/** A Linear card's file slots. */
-const STORED_LINEAR_SEQ_SLOTS = Object.freeze(['gb', 'gff', 'fasta']);
+/** A card's file slots: a Linear record row's, a Circular source card's. */
+const STORED_CARD_FILE_SLOTS = Object.freeze(['gb', 'gff', 'fasta']);
 
 /**
  * The one stored-form reader of a Session's input files (D-15-139): the
@@ -4932,10 +4974,22 @@ const readStoredFiles = (filesData, at, readable, repairs) => {
       Object.entries(fields.value).forEach(([field, value]) => {
         if (Object.hasOwn(seq, field)) kept[field] = value;
       });
-      STORED_LINEAR_SEQ_SLOTS.forEach((slot) => {
+      STORED_CARD_FILE_SLOTS.forEach((slot) => {
         if (Object.hasOwn(seq, slot)) kept[slot] = readFileSlot(seq[slot], `${seqAt}.${slot}`, readable, repairs);
       });
       if (Object.hasOwn(seq, 'depth')) kept.depth = readDepthValue(seq.depth, readable);
+      return kept;
+    });
+  }
+  if (Array.isArray(filesData.circularSources)) {
+    read.circularSources = filesData.circularSources.map((/** @type {Record<string, unknown>} */ source, index) => {
+      /** @type {Record<string, unknown>} */
+      const kept = { ...source };
+      STORED_CARD_FILE_SLOTS.forEach((slot) => {
+        if (Object.hasOwn(source, slot)) {
+          kept[slot] = readFileSlot(source[slot], `${at}.circularSources[${index}].${slot}`, readable, repairs);
+        }
+      });
       return kept;
     });
   }
@@ -4981,6 +5035,7 @@ const withStoredComparisonPlan = (config, readFiles) => {
  *   circularRecordDiscovery: Record<string, unknown>, linearReorderNotice: { value: string }, cInputType: { value: string }
  * }} LoadCandidateInputs
  */
+/** A Circular source card as Load reads it back: each file as stored. @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} RestoredCircularSource */
 /**
  * Reads the saved inputs into the Load candidate (`targetState`).
  * `targetDrawing` holds the Linear record layout and comparison plan that the
@@ -4990,18 +5045,19 @@ const withStoredComparisonPlan = (config, readFiles) => {
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState: LoadCandidateInputs,
  *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'> & { readonly slices: { readonly settings: SettingsSlice } },
- *   repairs?: LoadRepair[] | null, at?: string
+ *   repairs?: LoadRepair[] | null, at?: string, circularRequest?: boolean, legacyRecordPositions?: boolean
  * }} options `repairs`: Load lists what it drops from the saved inputs, at
  *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
+ *   `circularRequest`: the files are the projection of a Circular request.
+ *   `legacyRecordPositions`: the Session may name records by their flat positions over its cards (a Session
+ *   50 or older, or a Session 51 that kept a flat `#N`, `loadFiles`).
  */
 const applyFiles = (filesData, {
-  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files'
+  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files',
+  circularRequest = false, legacyRecordPositions = false
 }) => {
   targetState.circularRecordList.value = [];
   Object.assign(targetState.circularRecordDiscovery, idleCircularRecordDiscovery());
-  targetState.files.c_gb = null;
-  targetState.files.c_gff = null;
-  targetState.files.c_fasta = null;
   targetState.files.c_depth = null;
   targetState.files.c_conservation_blasts = [];
   targetState.files.c_conservation_blasts_source = null;
@@ -5017,7 +5073,7 @@ const applyFiles = (filesData, {
       linearRecordRows: [],
       linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs))
     });
-    return { collapsedLinearSeqs: false, linearSeqs };
+    return { collapsedLinearSeqs: false, linearSeqs, circularSources: [] };
   }
 
   // The stored entries Load keeps, with their rows; each is deserialized below.
@@ -5027,11 +5083,35 @@ const applyFiles = (filesData, {
   /** @param {string} slot */
   const fileList = (slot) => (Array.isArray(read[slot]) ? /** @type {unknown[]} */ (read[slot]) : [])
     .map((entry) => deserializeFile(entry));
-  targetState.files.c_gb = slotFile(read.c_gb);
-  targetState.files.c_gff = slotFile(read.c_gff);
-  targetState.files.c_fasta = slotFile(read.c_fasta);
-  // A Depth slot holds a list.
+  // The Circular source cards, in drawing order, each with the files it keeps.
+  /** @type {RestoredCircularSource[]} */
+  const circularSources = (Array.isArray(read.circularSources) ? read.circularSources : [])
+    .map((/** @type {Record<string, unknown>} */ source) => ({
+      uid: String(source.uid),
+      gb: slotFile(source.gb),
+      gff: slotFile(source.gff),
+      fasta: slotFile(source.fasta)
+    }));
+  // OV-2881: the cards a Circular request draws are read when Generate needs
+  // their records (`readDrawingRecordIdentities`), not after Load, so the
+  // loaded draft (its Record Order) stays as saved until an edit.
+  const loadedInputs = circularSourceInputs(targetState.cInputType.value, circularSources);
+  if (circularRequest && circularInputComplete(loadedInputs)) {
+    Object.assign(targetState.circularRecordDiscovery, {
+      status: 'deferred', error: '', inputType: targetState.cInputType.value,
+      sources: loadedInputs.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' }))
+    });
+  }
+  // OV-2867: the cards as loaded, which an older Session's flat record
+  // positions count over (`legacyCircularRecordKeys`); refs once bound.
+  const loadedCards = /** @type {CircularCardMark[]} */ (/** @type {unknown} */ (loadedInputs
+    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
+  targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
+    ? loadedCards : null;
+  // A Depth slot holds a list. The rows of a record-major matrix stand for the
+  // records of the cards as loaded (OV-2868), however their read is deferred.
   targetState.files.c_depth = deserializeFile(read.c_depth);
+  targetState.files.c_depth_rows = isRecordMajorDepthFileMatrix(/** @type {DrawingInputFiles['c_depth']} */ (targetState.files.c_depth)) ? loadedCards : null;
   // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
   targetState.files.c_conservation_blasts = fileList('c_conservation_blasts');
   targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
@@ -5048,36 +5128,6 @@ const applyFiles = (filesData, {
   targetState.files.blacklist = slotFile(read.blacklist);
   targetState.files.whitelist = slotFile(read.whitelist);
   targetState.files.qualifier_priority = slotFile(read.qualifier_priority);
-
-  const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
-    ? filesData.circularRecords
-    : [];
-  if (canonicalCircularRecords.length > 0) {
-    targetState.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
-      .map((record, index) => {
-        const selector = record?.selector;
-        const selectorValue = selector?.kind === 'recordId'
-          ? String(selector.value || '')
-          : selector?.kind === 'recordIndex'
-            ? `#${Number(selector.index) + 1}`
-            : `#${index + 1}`;
-        return {
-          selector: selectorValue,
-          record_id: selector?.kind === 'recordId' ? selectorValue : '',
-          recordKey: String(record?.recordKey || '')
-        };
-      });
-    const { primaryFile, pairedFile, complete } = inputSourceFiles(
-      targetState.cInputType.value, circularInputSlots(targetState.files)
-    );
-    Object.assign(targetState.circularRecordDiscovery, {
-      status: complete ? 'deferred' : 'idle',
-      error: '',
-      inputType: targetState.cInputType.value,
-      primaryFile,
-      pairedFile
-    });
-  }
 
   if (Array.isArray(read.linearSeqs)) {
     const loadedLinearSeqs = read.linearSeqs.map((/** @type {Record<string, unknown>} */ seq, /** @type {number} */ index) => ({
@@ -5129,12 +5179,12 @@ const applyFiles = (filesData, {
       else setComparisonEdgeFile(edge, null);
     });
     installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, collapsed));
-    return { collapsedLinearSeqs, linearSeqs: collapsed };
+    return { collapsedLinearSeqs, linearSeqs: collapsed, circularSources };
   }
 
   const linearSeqs = normalizeLinearSeqList([]);
   installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs));
-  return { collapsedLinearSeqs: false, linearSeqs };
+  return { collapsedLinearSeqs: false, linearSeqs, circularSources };
 };
 
 // What the Depth fit of a loaded drawing turns off (B45), read before the
@@ -5241,13 +5291,14 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
  * @param {ReturnType<typeof bindLoadedInputs>} bound
  */
 const installLiveFileState = (drawing, snapshot, bound) => {
-  const { files, linearSeqs, linearComparisonPlan, circularRecordDiscovery } = bound;
+  const { files, linearSeqs, circularSources, linearComparisonPlan, circularRecordDiscovery } = bound;
   const { linearCanonicalComparisons = [], ...circularFiles } = /** @type {Partial<DrawingInputFiles>} */ (files);
   /** @type {Partial<DrawingInputFiles>} */
   const cardFiles = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, circularFiles[key] ?? null]));
   if (drawing.mode === 'circular') {
     INPUTS_SLICE.install(drawing.slices.inputs, {
       files: /** @type {DrawingInputFiles} */ (circularFiles),
+      circularSources,
       circularRecordList: snapshot.circularRecordList,
       circularRecordDiscovery: /** @type {CircularRecordDiscovery} */ (circularRecordDiscovery)
     });
@@ -6687,7 +6738,10 @@ const pathIn = (at, field) => (at ? `${at}.${field}` : field);
  * How a Load reads its files (`loadFiles`): whether it adopts the payloads a
  * current Session wrote, whether it resolves record inputs (settings only
  * does not), and the list its file rows go to.
- * @typedef {{ adoptCanonicalPayloads: boolean, resolveRecordInputs: boolean, repairs: LoadRepair[] }} LoadFilesReading
+ * @typedef {{ adoptCanonicalPayloads: boolean, resolveRecordInputs: boolean, repairs: LoadRepair[],
+ *   circularRequest?: boolean, legacyRecordPositions?: boolean }} LoadFilesReading `circularRequest`: the files
+ *   are a Circular request's projection; `legacyRecordPositions`: the Session is 50 or older (`applyFiles`), by
+ *   the file's own version (Python gives a Session 27-44 as a Session 51).
  */
 /**
  * One drawing's restored files (`loadFiles`): its file slots and record rows
@@ -6700,12 +6754,16 @@ const pathIn = (at, field) => (at ? `${at}.${field}` : field);
  * until the Load commits it. The layout is read as the drawing reads it
  * (a list of another kind failed the Load).
  * @param {unknown} restored
- * @param {{ linearRecordLayout?: { rows?: unknown } | null, linearComparisonPlan?: unknown } | null} draftConfig
- *   The drawing's draft config: the record layout and comparison plan its files reconcile.
+ * @param {{ linearRecordLayout?: { rows?: unknown } | null, linearComparisonPlan?: unknown, recordsOff?: unknown,
+ *   form?: { circular_record_selector?: unknown }, adv?: { multi_record_positions?: unknown } } | null} draftConfig
+ *   The drawing's draft config: the record layout and comparison plan its files reconcile, and the record
+ *   choices whose kept flat `#N` count over the cards as loaded (OV-2869).
  * @param {string} cInputType @param {string} at Where the files are in the file.
  * @param {LoadFilesReading} reading
  */
-const loadFiles = (restored, draftConfig, cInputType, at, { adoptCanonicalPayloads, resolveRecordInputs, repairs }) => {
+const loadFiles = (restored, draftConfig, cInputType, at, {
+  adoptCanonicalPayloads, resolveRecordInputs, repairs, circularRequest = false, legacyRecordPositions = false
+}) => {
   const layout = SETTINGS_SLICE.create({
     linearRecordRows: readLinearRecordRows(draftConfig?.linearRecordLayout?.rows).value,
     linearComparisonPlan: normalizeLinearComparisonPlan(draftConfig?.linearComparisonPlan)
@@ -6719,20 +6777,26 @@ const loadFiles = (restored, draftConfig, cInputType, at, { adoptCanonicalPayloa
     linearComparisonPlan: layout.view.linearComparisonPlan,
     slices: { settings: layout.handle }
   };
-  const { collapsedLinearSeqs, linearSeqs } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
-    adoptCanonicalPayloads, resolveRecordInputs,
+  // A Session 51 that a Save wrote before any read keeps the flat `#N` of the Session 46-50 it came from (OV-2869).
+  const positions = draftConfig?.adv?.multi_record_positions;
+  const choiceKeys = [...(Array.isArray(draftConfig?.recordsOff) ? draftConfig.recordsOff : []), draftConfig?.form?.circular_record_selector,
+    ...(Array.isArray(positions) ? positions.map((/** @type {{ selector?: unknown } | null} */ row) => row?.selector) : [])];
+  const { collapsedLinearSeqs, linearSeqs, circularSources } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
+    adoptCanonicalPayloads, resolveRecordInputs, circularRequest,
+    legacyRecordPositions: legacyRecordPositions || choiceKeys.some(isFlatRecordSelector),
     targetState: target, targetDrawing: target, repairs, at
   });
-  return { target, linearSeqs, collapsed: collapsedLinearSeqs, at };
+  return { target, linearSeqs, circularSources, collapsed: collapsedLinearSeqs, at };
 };
 /**
  * A drawing's restored files as it installs them (`installLiveFileState`).
  * @param {LoadedFiles} loaded
  * @returns {LiveFileState}
  */
-const liveFileStateOf = ({ target, linearSeqs }) => /** @type {LiveFileState} */ ({
+const liveFileStateOf = ({ target, linearSeqs, circularSources }) => /** @type {LiveFileState} */ ({
   files: target.files,
   linearSeqs,
+  circularSources,
   circularRecordList: target.circularRecordList.value,
   circularRecordDiscovery: target.circularRecordDiscovery,
   linearRecordRows: target.linearRecordRows,
@@ -6901,7 +6965,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   const repairs = [];
   const config = inputs.restoredConfig ?? overlayModeSliceConfig(null, undefined);
   const files = loadFiles(inputs.files, config, inputs.inputType, 'webFiles.bindings',
-    { adoptCanonicalPayloads: true, resolveRecordInputs: true, repairs });
+    { adoptCanonicalPayloads: true, resolveRecordInputs: true, repairs, circularRequest: inputs.circularRequest });
   const part = /** @type {LoadedDraftPart} */ ({ slice: {}, at: '' });
   const { draft } = await readStoredDrawingDraft({
     id, mode, part, config,
@@ -7590,14 +7654,14 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {LoadRepair[]} */
     const fileRows = legacyRead ? [] : repairs;
     /** How this Load's files are read (`loadFiles`). @type {LoadFilesReading} */
-    const fileReading = { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, repairs: fileRows };
+    const fileReading = { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, repairs: fileRows, legacyRecordPositions: !versionHoldsDrawings(fileDocument.version) };
     recordSessionLifecycleEvent('session-candidate-files-start');
     // The files the Load projects: a Session 51's opened drawing's, else the
     // file's one set of a Session 27-50, whose drawings each take their
     // mode's part (`installLiveFileState`).
     const filesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     const projectedFiles = loadFiles(canonicalSession ? projectionResult.restoredFiles : data.files,
-      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt, fileReading);
+      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt, { ...fileReading, circularRequest: canonicalSession && !settingsOnly && committedMode === 'circular' });
     /**
      * Every other Session 51 drawing's own files, by drawing ID (B2d-3a-2);
      * a drawing the document lacks has none (D-15-105 (5)).
@@ -7606,7 +7670,7 @@ const importSessionDocument = async (e, options = {}) => {
     const storedFiles = new Map((upgraded && projectedDrawingId !== null ? upgraded.drawings : []).flatMap((entry, index) => {
       const inputs = storedDrawingInputs.get(/** @type {DrawingId} */ (entry.id));
       return inputs ? [[/** @type {DrawingId} */ (entry.id), loadFiles(inputs.files, draftConfigOf(/** @type {DrawingId} */ (entry.id)),
-        inputs.inputType, `${drawingSetPath(index)}webFiles.bindings`, fileReading)]] : [];
+        inputs.inputType, `${drawingSetPath(index)}webFiles.bindings`, { ...fileReading, circularRequest: inputs.circularRequest })]] : [];
     }));
     const noFiles = projectedDrawingId === null ? projectedFiles : loadFiles(null, null, 'gb', filesAt, fileReading);
     /** @param {DrawingId} drawingId @returns {ReturnType<typeof loadFiles>} The drawing's files, by its ID. */
@@ -7658,7 +7722,7 @@ const importSessionDocument = async (e, options = {}) => {
     const setAsideRequestLessId = legacyStoredResults !== undefined && settingsOnly ? projectedDrawingId : null;
     /** @param {DrawingId} drawingId */
     const sequenceSourceOptionsOf = (drawingId) => {
-      const { target, linearSeqs } = filesOf(drawingId);
+      const { target, linearSeqs, circularSources } = filesOf(drawingId);
       const setAside = drawingId === setAsideRequestLessId;
       return {
         olderSession: setAside || sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
@@ -7666,7 +7730,7 @@ const importSessionDocument = async (e, options = {}) => {
         cInputType: target.cInputType.value,
         lInputType: storedDrawingInputs.get(drawingId)?.inputType ?? inputTypes.lInputType,
         files: target.files,
-        linearSeqs,
+        linearSeqs, circularSources,
         circularConservation: draftConfigOf(drawingId)?.circularConservation || {}
       };
     };
@@ -7807,7 +7871,7 @@ const importSessionDocument = async (e, options = {}) => {
     const setCharactersOf = (set) => Math.round(candidate.characters * resultCharacters(set.results) / allResultCharacters);
     const topSetCharacters = Math.max(0, candidate.characters - storedSets.reduce((sum, { set }) => sum + setCharactersOf(set), 0));
     const slotOptions = {
-      resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles
+      resources: data.resources, resourceTable: currentResourceTable, webFiles: openedDrawingWebFiles(sourceSessionVersion, upgraded, committedSetDrawingId, data.webFiles)
     };
     /** @type {Map<DrawingId, SavedResultEdits>} Each drawing's saved Result edits, by drawing ID. */
     const savedEditsOf = new Map([[committedSetDrawingId, committedSavedEdits]]);
@@ -7857,7 +7921,7 @@ const importSessionDocument = async (e, options = {}) => {
     const legacyFeatureSnapshot = {
       mode: generatedMode, cInputType: projectedFiles.target.cInputType.value,
       lInputType: inputTypes.lInputType, files: projectedFiles.target.files,
-      linearSeqs: projectedFiles.linearSeqs, results: committedImportedResults,
+      linearSeqs: projectedFiles.linearSeqs, circularSources: projectedFiles.circularSources, results: committedImportedResults,
       selectedResultIndex: ui.selectedResultIndex || 0,
       featureState: features, editorState: restoredEditorState
     };
@@ -8121,7 +8185,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.appliedPaletteName.value = artifact.appliedPaletteName;
     state.appliedPaletteColors.value = artifact.appliedPaletteColors;
     if (currentSchemaSession) {
-      setCommittedCanonicalSession(adoptedCanonicalSession, loadedConservationPairsOf(committedSetDrawingId));
+      setCommittedCanonicalSession(openedCommittedSession(adoptedCanonicalSession, slotOptions.webFiles, data.webFiles), loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = currentResourceTable;
     }
     state.sessionTitle.value = canonicalSession
@@ -8614,14 +8678,14 @@ export const exportSession = (titleOverride = null, options) => {
     // that differs from its mode's default, or a Result (R16-8, DESIGN §4.4).
     /** @param {DrawingState} saved */
     const isUsed = (saved) => Boolean(savedArtifactOf(artifacts.get(saved.id) ?? null))
-      || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })
+      || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs, circularSources: saved.circularSources })
       || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
     const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
     const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));
     // The shown drawing's inputs without a Generate are saved as its draft
     // request; another drawing's inputs are saved as its bindings.
     const shownWritesDraftRequest = !shownArtifact.committedCanonicalSession
-      && hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs });
+      && hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs, circularSources: drawing.circularSources });
     if (shownWritesDraftRequest) assertDrawingInputs(drawing);
     // App-level settings shared by every drawing.
     const projectUi = {

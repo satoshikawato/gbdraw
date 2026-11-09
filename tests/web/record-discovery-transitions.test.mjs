@@ -32,6 +32,13 @@ const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((
 const app = createAppSetup();
 const circular = modeDrawing(state, 'circular');
 const linear = modeDrawing(state, 'linear');
+// The GenBank file of the drawing's one File card: an upload into the card (a new card while there is none),
+// or, with null, a Remove (which removes the card holding no other file).
+const setCircularGenbank = (file) => {
+  const uid = circular.circularSources[0]?.uid;
+  if (uid) app.setCircularSourceFile(uid, 'gb', file);
+  else if (file) app.addCircularSourceFiles('gb', [file]);
+};
 const recordIds = (drawing) => drawing.circularRecordList.value.map((record) => record.record_id);
 
 test('a Circular upload discovers that drawing only; a switch writes no record list', async () => {
@@ -40,7 +47,7 @@ test('a Circular upload discovers that drawing only; a switch writes no record l
   await settle();
   app.selectDrawing('circular');
   const linearRecordsBefore = linear.linearSeqs.map((seq) => app.linearRecordOptions(seq).map((option) => option.value));
-  app.setCircularSourceFile('c_gb', genbank('c.gb', ['C1', 40], ['C2', 50]));
+  setCircularGenbank(genbank('c.gb', ['C1', 40], ['C2', 50]));
   await settle();
   assert.deepEqual(recordIds(circular), ['C1', 'C2'], 'the upload discovers its drawing\'s records');
   assert.deepEqual(linear.linearSeqs.map((seq) => app.linearRecordOptions(seq).map((option) => option.value)),
@@ -62,7 +69,7 @@ test('the input type change and a Circular Remove discover that drawing again', 
   app.setCircularInputType('gb');
   await settle();
   assert.deepEqual(recordIds(circular), ['C1', 'C2'], 'back to GenBank: its file is read again');
-  app.setCircularSourceFile('c_gb', null);
+  setCircularGenbank(null);
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'idle');
   assert.deepEqual(recordIds(circular), []);
@@ -75,7 +82,7 @@ test('a discovery with nothing to read leaves the idle record of a new drawing',
   const recordOf = (slice) => INPUTS_SLICE.capture(slice).circularRecordDiscovery;
   const idle = recordOf(INPUTS_SLICE.create().handle);
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('c.gb', ['C1', 40]));
+  setCircularGenbank(genbank('c.gb', ['C1', 40]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   app.setCircularInputType('gff');
@@ -83,7 +90,7 @@ test('a discovery with nothing to read leaves the idle record of a new drawing',
   assert.deepEqual(recordOf(circular.slices.inputs), idle, 'GFF without its pair');
   app.setCircularInputType('gb');
   await settle();
-  app.setCircularSourceFile('c_gb', null);
+  setCircularGenbank(null);
   await settle();
   assert.deepEqual(recordOf(circular.slices.inputs), idle, 'no file');
 });
@@ -110,7 +117,7 @@ test('no discovery starts while a Load rolls back', async () => {
   app.selectDrawing('circular');
   state.sessionImportRollbackInProgress.value = true;
   try {
-    app.setCircularSourceFile('c_gb', genbank('r.gb', ['R1', 10]));
+    setCircularGenbank(genbank('r.gb', ['R1', 10]));
     await settle();
     assert.notEqual(circular.circularRecordDiscovery.status, 'ready', 'the rollback admits no discovery');
     assert.deepEqual(recordIds(circular), []);
@@ -124,7 +131,7 @@ test('no discovery starts while a Load rolls back', async () => {
 // Linear card, so New drawing from a region offers the record before a Generate.
 test('the record identities read a Circular list still deferred after a Load', async () => {
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('d.gb', ['D1', 60]));
+  setCircularGenbank(genbank('d.gb', ['D1', 60]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   // The state a Session Load leaves: the list deferred for the current file.
@@ -146,7 +153,7 @@ test('the region dialog reads a deferred Circular list without writing Record Or
     linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
   })).envelope.renderRequest.layout.multiRecordPositions;
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('p.gb', ['P1', 70]));
+  setCircularGenbank(genbank('p.gb', ['P1', 70]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   // The state a Session Load without stored Record Order leaves.
@@ -160,7 +167,8 @@ test('the region dialog reads a deferred Circular list without writing Record Or
   assert.deepEqual(circular.adv.multi_record_positions, [], 'the read writes no Record Order');
   assert.deepEqual(await requestPositions(), before, 'the request carries the Record Order the Load left');
   await app.refreshCircularRecordOrder();
-  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: '#1', row: 1 }], 'Reload Records applies the read');
+  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: circular.circularSources[0].uid, row: 1 }],
+    'Reload Records applies the read, under the record\'s identity (the card\'s uid, a one-record file)');
 });
 
 // The region dialog's rows come from the record list the deferred read
@@ -169,7 +177,7 @@ test('the region dialog reads a deferred Circular list without writing Record Or
 // the ones of the empty list the read starts from.
 test('the region dialog offers every record of a deferred Multi-Record Canvas', async () => {
   app.selectDrawing('circular');
-  app.setCircularSourceFile('c_gb', genbank('m.gb', ['M1', 80], ['M2', 90]));
+  setCircularGenbank(genbank('m.gb', ['M1', 80], ['M2', 90]));
   await settle();
   assert.equal(circular.circularRecordDiscovery.status, 'ready');
   circular.form.multi_record_canvas = true;
@@ -179,5 +187,116 @@ test('the region dialog offers every record of a deferred Multi-Record Canvas', 
   await app.regionDrawings.open();
   assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => [row.caption, row.length]), [['M1', 80], ['M2', 90]]);
   app.regionDrawings.close();
+  circular.form.multi_record_canvas = false;
+});
+
+// OV-2868: a record-major Depth matrix keeps one row per record of the cards.
+// A card edit changes the records; the read after it moves each row with its
+// record (a card's records keep their places in its file, D-20), so a Replace
+// that changes a card's record count, a Move, and a Move made while a read
+// still runs leave every record its own row.
+test('a record-major Depth matrix follows its records through a Replace and a Move', async () => {
+  const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = false;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50])]);
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'B1']);
+  const depth = (name) => state.inputFiles.registerFile(new File(['1\t1\n'], name));
+  bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', [[depth('a.tsv')], [depth('b.tsv')]]);
+  const rows = () => circular.files.c_depth.map((row) => row.map((ref) => ref?.name ?? null));
+  const [cardA, cardB] = circular.circularSources.map((card) => card.uid);
+  await app.setCircularSourceFile(cardA, 'gb', genbank('a2.gb', ['A1', 40], ['A2', 45]));
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'A2', 'B1']);
+  assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']], 'B keeps its row; A\'s first record keeps A\'s');
+  // Three Moves, each made while the read of the one before still runs.
+  await app.moveCircularSourceCard(1, -1);
+  await app.moveCircularSourceCard(0, 1);
+  await app.moveCircularSourceCard(1, -1);
+  await settle();
+  assert.deepEqual(circular.circularSources.map((card) => card.uid), [cardB, cardA]);
+  assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  // Undo gives each Move's matrix back with the records it stood for (the
+  // test's Replace is no History step of its own: the file input makes it one).
+  for (let step = 0; step < 3; step += 1) await app.undoHistory();
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'A2', 'B1']);
+  assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']]);
+  bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', null);
+});
+
+// OV-2869, OV-2903: a Session 46-50 whose cards drew one combined source kept
+// each `#N` it named as the N-th record of all its cards' records, in card
+// order. The first settled read places it: the Record select, the OFF records
+// and the Record Order name that record's identity (a `#N` past the cards
+// still held as loaded is dropped), and a Record select value that names one
+// record by its record ID becomes that record's identity.
+test('the first settled read places a Session\'s flat #N and a record ID Record select at their records', async () => {
+  const { INPUTS_SLICE, installBoundInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
+  const { circularDrawingRecordSet } = await import('../../gbdraw/web/js/services/record-options.js');
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = false;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50], ['B2', 60])]);
+  await settle();
+  const [cardA, cardB] = circular.circularSources.map((card) => card.uid);
+  // The cards as a Load of that Session installs them (`c_legacy_record_cards`).
+  const loadedInputs = () => {
+    const captured = INPUTS_SLICE.capture(circular.slices.inputs);
+    const marks = circularSourceInputs('gb', circular.circularSources)
+      .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }));
+    installBoundInputs(state.inputFiles, circular.slices.inputs, { ...captured, files: { ...captured.files, c_legacy_record_cards: marks } });
+  };
+  loadedInputs();
+  circular.form.circular_record_selector = '#2';
+  circular.recordsOff.splice(0, Infinity, '#3');
+  circular.adv.multi_record_positions = [{ selector: '#3', row: 1 }, { selector: '#2', row: 2 }];
+  await app.refreshCircularRecordOrder();
+  await settle();
+  // Flat #2 is B's first record (A holds one), not B's second.
+  assert.deepEqual(circularDrawingRecordSet(circular.circularRecordList.value, circular).records.map((record) => record.value), [`${cardB}:1`]);
+  assert.equal(circular.form.circular_record_selector, `${cardB}:1`);
+  assert.deepEqual([...circular.recordsOff], [`${cardB}:2`]);
+  const rowOf = (key) => circular.adv.multi_record_positions.find((position) => position.selector === key)?.row;
+  assert.deepEqual([rowOf(`${cardB}:2`), rowOf(`${cardB}:1`)], [1, 2]);
+  assert.equal(circular.adv.multi_record_positions.some((position) => position.selector.startsWith('#')), false);
+  // A record ID names one record: the Record select takes its identity.
+  circular.form.circular_record_selector = 'B2';
+  circular.recordsOff.splice(0);
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.equal(circular.form.circular_record_selector, `${cardB}:2`);
+  // A #N past the cards still held as loaded names no record now: it is dropped.
+  loadedInputs();
+  await app.setCircularSourceFile(cardA, 'gb', genbank('a2.gb', ['A1', 40], ['A3', 45]));
+  await settle();
+  circular.form.circular_record_selector = '#2';
+  circular.recordsOff.splice(0, Infinity, '#3');
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.equal(circular.form.circular_record_selector, '');
+  assert.deepEqual([...circular.recordsOff], []);
+  assert.ok(cardA);
+});
+
+// OV-2906: a CLI Session of one-record files names its Record Order rows by
+// record ID (`--multi_record_position BA000007.3@1`), and its committed
+// records carry no selector to read the ID from, so Load keeps the token.
+// The first settled read places each row at the record of that ID.
+test('the first settled read places a Record Order row named by record ID at its record', async () => {
+  app.selectDrawing('circular');
+  circular.form.multi_record_canvas = true;
+  while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
+  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50]), genbank('c.gb', ['C1', 60])]);
+  await settle();
+  const [cardA, cardB, cardC] = circular.circularSources.map((card) => card.uid);
+  circular.adv.multi_record_positions = [{ selector: 'A1', row: 1 }, { selector: 'C1', row: 2 }, { selector: 'B1', row: 2 }];
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.deepEqual(circular.adv.multi_record_positions.map(({ selector, row }) => [selector, row]),
+    [[cardA, 1], [cardC, 2], [cardB, 2]]);
   circular.form.multi_record_canvas = false;
 });

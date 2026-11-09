@@ -1,6 +1,5 @@
 // @ts-check
 import {
-  base64DecodedLastByte,
   base64ToBytesInTasks,
   bytesToText,
   sha256Hex,
@@ -10,6 +9,7 @@ import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
+import { SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -69,31 +69,13 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /**
  * The backing of one resource: its descriptor and the content it decoded.
  * @typedef {BackingFields & {
- *   descriptor: SessionResourceDescriptor, kind: string, encoding: string, checksum: string | null,
- *   descriptors?: undefined, sourceBackings?: undefined, readBytes?: undefined, readText?: undefined
+ *   descriptor: SessionResourceDescriptor, kind: string, encoding: string, checksum: string | null
  * }} LeafBacking
  */
-/**
- * One component of a combined view: the part's descriptor and a reader of its bytes.
- * @typedef {Readonly<{
- *   resourceId: string, descriptor: SessionResourceDescriptor, name: string, type: string,
- *   lastModified: number, readBytes: () => Promise<Uint8Array>
- * }>} CompositePart
- */
-/**
- * The backing of a combined view of several base64 resources. Its `descriptor`
- * stays null until `matchesSessionResourceDescriptor` verifies a serialized form.
- * @typedef {BackingFields & {
- *   checksum: null, descriptor: SessionResourceDescriptor | null, descriptors: ReadonlyArray<CompositePart>,
- *   sourceBackings: LeafBacking[], readBytes?: () => Promise<Uint8Array>, readText?: () => Promise<string>
- * }} CompositeBacking
- */
-
 /** @type {WeakMap<SessionResourceTable, Map<string, LeafBacking>>} */
 const tableBackings = new WeakMap();
-/** @type {WeakMap<WeakKey, LeafBacking | CompositeBacking>} */
+/** @type {WeakMap<WeakKey, LeafBacking>} */
 const fileViewBackings = new WeakMap();
-const LF_BYTE = 0x0A;
 
 /**
  * The reader of each file-backed descriptor: a descriptor of the page, never
@@ -274,11 +256,18 @@ export const readSessionResources = (resources) => {
  * @typedef {Readonly<{ resourceId: unknown, kind?: undefined, components?: undefined, [field: string]: unknown }>} WebFileLeafBinding
  */
 /**
- * The schema 2 `c_gb` binding that reads two or more base64 resources as one file.
+ * The `c_gb` of a Session 41-50 that bound two or more GenBank files as one:
+ * Load makes one File card of each component (`circularSourcesOfModeScoped`).
  * @typedef {Readonly<{
  *   kind: 'composite', name: string, type: string, lastModified: number,
  *   components: Array<{ resourceId: string, name: string, type: string, lastModified: number }>
  * }>} WebFileCompositeBinding
+ */
+/**
+ * One Circular File card of a Session 51 drawing (`circularSources` row): a
+ * uid, distinct among the drawing's cards, and each file a leaf or null.
+ * @typedef {Readonly<{ uid: string, gb: WebFileLeafBinding | null, gff: WebFileLeafBinding | null,
+ *   fasta: WebFileLeafBinding | null }>} WebFileCircularSourceBinding
  */
 /**
  * A row of `linearSeqs` or of a comparison list: only its file slots are checked.
@@ -286,10 +275,13 @@ export const readSessionResources = (resources) => {
  */
 /**
  * `webFiles.bindings` after `validateWebFileBindings`. Each file slot holds null,
- * a leaf, or a list of them (a JSON list has no `kind`); only `c_gb` may hold a composite.
+ * a leaf, or a list of them (a JSON list has no `kind`); only the `c_gb` of a
+ * Session 41-50 may hold a composite. A Session 51 Circular drawing holds its
+ * File cards in `circularSources`.
  * @typedef {Readonly<{
  *   schema: 1 | 2,
  *   c_gb?: WebFileCompositeBinding | WebFileLeafBinding | (ReadonlyArray<unknown> & { readonly kind?: undefined }) | null,
+ *   circularSources?: ReadonlyArray<WebFileCircularSourceBinding>,
  *   [field: string]: unknown
  * }>} WebFileBindings
  */
@@ -311,6 +303,8 @@ export const readSessionResources = (resources) => {
  */
 export const webFileBindingPath = (at) => at.map((key, index) => (
   typeof key === 'number' ? `[${key}]` : `${index ? '.' : ''}${key}`)).join('');
+// The files of a Circular File card (`circularSources` row) besides its uid.
+const CIRCULAR_SOURCE_FILES = Object.freeze(['gb', 'gff', 'fasta']);
 /**
  * The binding lists whose index is a place, not an order: a Depth track
  * (`c_depth`, a Linear row's `depth`) and a Circular comparison series's
@@ -326,14 +320,18 @@ export const POSITIONAL_BINDING_LISTS = Object.freeze(new Set([
   'c_depth', 'depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'
 ]));
 /**
- * The input slot a schema-2 inventory holds (`gbdraw/session_io.py`): `c_gb`
- * for a Session 41-50, which binds both modes' inputs; a Session 51
- * drawing's own mode's (its one-drawing view names the mode in `ui.mode`).
+ * The input slot a schema-2 inventory holds (`WEB_BINDING_INPUT_SLOT`,
+ * `gbdraw/session_io.py`): `c_gb` for a Session 41-50, which binds both
+ * modes' inputs; a Session 51 drawing's own mode's (its one-drawing view
+ * names the mode in `ui.mode`): `circularSources` or `linearSeqs`.
+ * @typedef {'c_gb' | 'circularSources' | 'linearSeqs'} WebBindingInputSlot
  * @param {boolean} drawingView The inventory is a Session 51 drawing's.
  * @param {unknown} mode The view's `ui.mode`.
- * @returns {'c_gb' | 'linearSeqs'}
+ * @returns {WebBindingInputSlot}
  */
-export const webBindingInputSlot = (drawingView, mode) => (drawingView && mode === 'linear' ? 'linearSeqs' : 'c_gb');
+export const webBindingInputSlot = (drawingView, mode) => (drawingView
+  ? /** @type {WebBindingInputSlot} */ (SESSION_DRAWINGS_LAYOUT.bindingInputSlots[mode === 'linear' ? 'linear' : 'circular'])
+  : 'c_gb');
 /**
  * The one check of a Web input inventory: Load drops what it names
  * (`readWebFileBindings` in session-authority.js), Save and the runtime refuse
@@ -341,7 +339,7 @@ export const webBindingInputSlot = (drawingView, mode) => (drawingView && mode =
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
- * @param {'c_gb' | 'linearSeqs'} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-50, the
+ * @param {WebBindingInputSlot} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-50, the
  *   drawing's mode's for a Session 51 drawing's one-drawing view (`gbdraw/session_io.py`).
  * @returns {WebFileBindingFault[]}
  */
@@ -375,7 +373,7 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   /** @param {unknown} binding @param {boolean} compositeAllowed @returns {boolean} */
   const badSingle = (binding, compositeAllowed) => {
     if (!(object(binding) && Object.hasOwn(binding, 'kind'))) return badLeaf(binding);
-    // A composite is schema 2 `c_gb` only, with only its fields and two or more base64 components.
+    // A composite is the schema 2 `c_gb` of a Session 41-50 only, with only its fields and two or more base64 components.
     if (!current || !compositeAllowed || binding.kind !== 'composite') return true;
     if (Object.keys(binding).some(key => !['kind', 'components', 'name', 'type', 'lastModified'].includes(key))) return true;
     const components = binding.components;
@@ -395,17 +393,42 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
     }
     if (badSingle(binding, compositeAllowed)) faults.push({ at });
   };
+  // A Session 41-50 binds the Circular input in c_gb, c_gff and c_fasta; a
+  // Session 51 drawing in its File cards (`circularSources`).
+  const modeScoped = inputSlot === 'c_gb';
   const slots = [
-    'c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts',
+    ...(modeScoped ? SESSION_DRAWINGS_LAYOUT.modeScopedCircularInputSlots : []), 'c_depth', 'c_conservation_blasts',
     'c_conservation_fastas', 'c_conservation_sequence_sources', 'd_color',
     't_color', 'blacklist', 'whitelist', 'qualifier_priority'
   ];
   if (current) {
     Object.keys(bindings).filter(key => ![
-      'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
+      'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons',
+      ...(modeScoped ? [] : ['circularSources'])
     ].includes(key)).forEach(key => faults.push({ at: [key], field: true }));
   }
   slots.forEach(slot => value(bindings[slot], [slot], slot === 'c_gb'));
+  if (!modeScoped && Object.hasOwn(bindings, 'circularSources')) {
+    const cards = bindings.circularSources;
+    // The File cards of a Circular drawing (`_validate_circular_source_rows`):
+    // a card that is no {uid, gb, gff, fasta} row or repeats a uid is dropped;
+    // a file that cannot be read leaves its card without it.
+    if (!Array.isArray(cards)) return [{ at: null }];
+    /** @type {Set<string>} */
+    const uids = new Set();
+    cards.forEach((/** @type {unknown} */ card, index) => {
+      const uid = object(card) ? card.uid : null;
+      if (!object(card) || Object.keys(card).length !== 4 || !CIRCULAR_SOURCE_FILES.every(key => Object.hasOwn(card, key))
+          || typeof uid !== 'string' || !uid || uid !== uid.trim() || uids.has(uid)) {
+        faults.push({ at: ['circularSources', index] });
+        return;
+      }
+      uids.add(uid);
+      CIRCULAR_SOURCE_FILES.forEach(slot => {
+        if (card[slot] !== null && badLeaf(card[slot])) faults.push({ at: ['circularSources', index, slot] });
+      });
+    });
+  }
   (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence, index) => {
     ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot], ['linearSeqs', index, slot]));
   });
@@ -442,7 +465,7 @@ export const webFileBindingsWithoutDepth = (bindings, resourceIds) => {
 /**
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
- * @param {'c_gb' | 'linearSeqs'} [inputSlot] As `webFileBindingFaults`.
+ * @param {WebBindingInputSlot} [inputSlot] As `webFileBindingFaults`.
  * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
  */
 export const validateWebFileBindings = (webFiles, resources = {}, inputSlot = 'c_gb') => {
@@ -607,100 +630,6 @@ export const createSessionResourceFileView = (table, resourceId, metadata = {}) 
 };
 
 /**
- * @param {SessionResourceTable} table
- * @param {Array<SessionResourceFileMetadata & { resourceId: string }>} components
- * @param {SessionResourceFileMetadata} [metadata]
- * @returns {SessionResourceFileView | null}
- */
-export const createCombinedSessionResourceFileView = (
-  table,
-  components,
-  metadata = {}
-) => {
-  const views = (Array.isArray(components) ? components : []).map(component => (
-    createSessionResourceFileView(table, component.resourceId, component)
-  ));
-  // Each view above was created by `createSessionResourceFileView`, so it maps to a leaf backing.
-  const backings = /** @type {LeafBacking[]} */ (views.map(view => fileViewBackings.get(view)));
-  if (backings.length === 0) return null;
-  if (backings.length === 1) {
-    return createSessionResourceFileView(table, backings[0].resourceId, { ...components[0], ...metadata });
-  }
-  const appendedLineFeeds = backings.reduce((count, backing) => (
-    count + Number(
-      backing.size > 0
-      // A combined view holds base64 resources only (`validateWebFileBindings`).
-      && base64DecodedLastByte(/** @type {string} */ (backing.descriptor.data), backing.size) !== LF_BYTE
-    )
-  ), 0);
-  /** @type {CompositeBacking} */
-  const composite = {
-    resourceId: backings.map(({ resourceId }) => resourceId).join('+'),
-    name: metadata.name === undefined ? 'canonical-circular-records.gb' : String(metadata.name),
-    type: metadata.type === undefined ? 'text/plain' : String(metadata.type),
-    size: backings.reduce((total, backing) => total + backing.size, 0)
-      + appendedLineFeeds,
-    lastModified: metadata.lastModified === undefined
-      ? Math.max(0, ...views.map(view => view.lastModified))
-      : Number(metadata.lastModified) || 0,
-    checksum: null,
-    descriptor: null,
-    descriptors: Object.freeze(backings.map((backing, index) => Object.freeze({
-      resourceId: backing.resourceId,
-      descriptor: backing.descriptor,
-      name: views[index].name,
-      type: views[index].type,
-      lastModified: views[index].lastModified,
-      readBytes: () => materializeBytes(backing)
-    }))),
-    sourceBackings: backings,
-    bytesPromise: null,
-    textPromise: null,
-    filePromise: null,
-    dirty: false
-  };
-  const readParts = () => Promise.all(backings.map((backing) => materializeBytes(backing)))
-    .then((parts) => {
-      const lengths = parts.map((part) => (
-        part.byteLength > 0 && part[part.byteLength - 1] !== LF_BYTE
-          ? part.byteLength + 1
-          : part.byteLength
-      ));
-      const combined = new Uint8Array(lengths.reduce((total, length) => total + length, 0));
-      let offset = 0;
-      parts.forEach((part, index) => {
-        combined.set(part, offset);
-        offset += part.byteLength;
-        if (lengths[index] > part.byteLength) combined[offset++] = LF_BYTE;
-      });
-      return combined;
-    });
-  composite.readBytes = () => {
-    if (!composite.bytesPromise) composite.bytesPromise = readParts();
-    return composite.bytesPromise;
-  };
-  composite.readText = () => {
-    if (!composite.textPromise) {
-      recordStructuralMetric('resourceTextReadCount', 1, {
-        resourceId: composite.resourceId,
-        resourceName: composite.name
-      });
-      // `readBytes` was assigned just above.
-      composite.textPromise = /** @type {() => Promise<Uint8Array>} */ (composite.readBytes)().then((bytes) => bytesToText(bytes));
-    }
-    return composite.textPromise;
-  };
-  const view = Object.freeze({
-    name: composite.name,
-    type: composite.type,
-    size: composite.size,
-    lastModified: composite.lastModified
-  });
-  fileViewBackings.set(view, composite);
-  return view;
-};
-
-/**
  * @param {unknown} file
  * @returns {file is SessionResourceFileView}
  */
@@ -720,45 +649,8 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   // Native Files remain bound by the successful run's object identity.
   if (!backing || backing.dirty) return true;
   if (!descriptor) return false;
-  // A combined view has no descriptor of its own until one is verified below: it equals none (OV-574).
-  /** @param {SessionResourceDescriptor | null} entry */
-  const matches = (entry) => entry !== null && entry.encoding === descriptor.encoding
-    && resourcePayloadKey(entry) === resourcePayloadKey(descriptor);
-  if (matches(backing.descriptor)) return true;
-  if (!backing.sourceBackings) return false;
-  if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;
-  // The descriptor Generate made of this combined view (OV-2612) reads the view itself.
-  if (fileBackedReaderOf(descriptor) && fileBackedReaderOf(descriptor) === viewReaders.get(/** @type {FileLike} */ (file))) return true;
-  if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
-
-  /** @param {{ resourceId: string, name: string, descriptor: SessionResourceDescriptor }} entry */
-  const decode = (entry) => {
-    recordStructuralMetric('base64DecodeCount', 1, {
-      resourceId: entry.resourceId, resourceName: entry.name
-    });
-    // The parts of a combined view are base64 text (`validateWebFileBindings`).
-    const binary = atob(/** @type {string} */ (entry.descriptor.data));
-    recordStructuralMetric('decodedByteCount', binary.length, {
-      resourceId: entry.resourceId, resourceName: entry.name
-    });
-    return binary;
-  };
-  const combined = decode({ ...backing, descriptor });
-  if (combined.length !== descriptor.size) return false;
-  let offset = 0;
-  for (const part of backing.sourceBackings) {
-    const binary = decode(part);
-    if (binary.length !== part.size || !combined.startsWith(binary, offset)) return false;
-    offset += binary.length;
-    if (binary.length && binary.charCodeAt(binary.length - 1) !== LF_BYTE) {
-      if (combined.charCodeAt(offset++) !== LF_BYTE) return false;
-    }
-  }
-  if (offset !== combined.length) return false;
-  // The immutable composite's existing descriptor slot can now reference its
-  // verified serialized representation, without retaining decoded content.
-  backing.descriptor = descriptor;
-  return true;
+  return backing.descriptor.encoding === descriptor.encoding
+    && resourcePayloadKey(backing.descriptor) === resourcePayloadKey(descriptor);
 };
 
 /** @param {unknown} file A file slot's value; only a clean Session resource view has a source. */
@@ -767,14 +659,10 @@ export const sessionResourceSource = (file) => {
   // descriptor, a `File`) has no backing: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing || backing.dirty) return null;
-  if (Array.isArray(backing.descriptors)) {
-    return Object.freeze({ descriptors: backing.descriptors });
-  }
   return Object.freeze({
     resourceId: backing.resourceId,
     descriptor: backing.descriptor,
-    // Only a combined view has `descriptors`, so this is a leaf backing.
-    readBytes: () => materializeBytes(/** @type {LeafBacking} */ (backing))
+    readBytes: () => materializeBytes(backing)
   });
 };
 
@@ -786,9 +674,7 @@ export const readSessionResourceBytes = (file) => {
   // A missing file is no key: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
-  if (typeof backing.readBytes === 'function') return backing.readBytes();
-  // Every combined view defines `readBytes`, so this is a leaf backing.
-  return materializeBytes(/** @type {LeafBacking} */ (backing));
+  return materializeBytes(backing);
 };
 
 /** @type {WeakMap<FileLike, FileBackedReader>} */
@@ -818,9 +704,7 @@ export const readSessionResourceText = (file) => {
   // A missing file is no key: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
-  if (typeof backing.readText === 'function') return backing.readText();
-  // Every combined view defines `readText`, so this is a leaf backing.
-  return materializeText(/** @type {LeafBacking} */ (backing));
+  return materializeText(backing);
 };
 
 /** @param {FileLike | null | undefined} file */
@@ -828,16 +712,8 @@ export const releaseSessionResourceContent = (file) => {
   // A missing file is no key: `get` returns undefined for it.
   const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return false;
-  /**
-   * @param {LeafBacking | CompositeBacking} candidate
-   * @returns {void}
-   */
-  const releaseBacking = (candidate) => {
-    candidate.bytesPromise = null;
-    candidate.textPromise = null;
-    candidate.filePromise = null;
-    candidate.sourceBackings?.forEach(releaseBacking);
-  };
-  releaseBacking(backing);
+  backing.bytesPromise = null;
+  backing.textPromise = null;
+  backing.filePromise = null;
   return true;
 };

@@ -38,6 +38,7 @@ from flows.human_circular import (
     load_raw_human_circular,
 )
 from flows.web_capture import (
+    circular_file_card,
     assert_output_paths,
     capture_screenshot,
     expect_circular_source_status,
@@ -139,9 +140,7 @@ def capture_gui_interactive_handoff(
         wait_for_app_shell(page)
         _stabilize_static_capture_surface(page)
         load_raw_human_circular(page, output_prefix=INTERACTIVE_PREFIX)
-        page.get_by_role(
-            "group", name="GenBank/DDBJ File selection", exact=True
-        ).scroll_into_view_if_needed()
+        circular_file_card(page, 1).scroll_into_view_if_needed()
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[0]] = (
             capture_screenshot(
                 page,

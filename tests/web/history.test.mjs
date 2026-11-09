@@ -1034,9 +1034,6 @@ const createLayoutPreferences = () => ({
       ]
     },
     files: {
-      c_gb: fileStore.registerFile(file),
-      c_gff: null,
-      c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
@@ -1068,6 +1065,7 @@ const createLayoutPreferences = () => ({
         }
       ]
     },
+    circularSources: [{ uid: 'card-1', gb: fileStore.registerFile(file), gff: null, fasta: null }],
     linearSeqs: [
       { uid: 'record-a', gb: null, gff: null, fasta: null, depth: null },
       { uid: 'record-b', gb: null, gff: null, fasta: null, depth: null }
@@ -1158,7 +1156,7 @@ const createLayoutPreferences = () => ({
   state.form.show_scale = false;
   state.adv.arrow_head_length_ratio = null;
   state.adv.arrow_shaft_width_ratio = 1.0;
-  state.files.c_gb = null;
+  state.circularSources[0].gb = null;
   state.files.c_conservation_blasts_source = null;
   state.files.linearCanonicalComparisons = [];
   state.linearComparisonPlan.mode = 'none';
@@ -1169,7 +1167,7 @@ const createLayoutPreferences = () => ({
   modeProfiles.profiles.circular.values.identity = 70;
 
   assert.equal(snapshot.config.form.prefix, 'before');
-  assert.equal(snapshot.files.c_gb.name, 'restore.gb');
+  assert.equal(snapshot.files.circularSources[0].gb.name, 'restore.gb');
   await snapshots.drawingHistory('circular').applyCheckpoint(snapshot);
   state.mode.value = 'linear';
   await snapshots.drawingHistory('linear').applyCheckpoint(linearSnapshot);
@@ -1179,7 +1177,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.adv.feature_shapes.CDS, 'arrow');
   assert.equal(state.adv.arrow_head_length_ratio, 1.5);
   assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
-  assert.equal(state.files.c_gb.name, 'restore.gb');
+  assert.equal(state.circularSources[0].gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
   assert.equal(state.files.c_conservation_fastas[0], null);
@@ -1356,13 +1354,11 @@ const createLayoutPreferences = () => ({
     form: { prefix: '', legend: 'bottom' },
     adv: { features: ['CDS'], plot_title_position: 'bottom' },
     files: {
-      c_gb: null,
-      c_gff: null,
-      c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_fastas: []
     },
+    circularSources: [],
     linearSeqs: [],
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -1525,9 +1521,6 @@ const createLayoutPreferences = () => ({
     form: { setting: 1 },
     adv: {},
     files: {
-      c_gb: null,
-      c_gff: null,
-      c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
@@ -1535,6 +1528,7 @@ const createLayoutPreferences = () => ({
       c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
       linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
     },
+    circularSources: [],
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([{ name: 'large.svg', content: '<svg>' + 'x'.repeat(100_000) + '</svg>' }]),
@@ -1709,9 +1703,6 @@ const createLayoutPreferences = () => ({
   const ref = (file) => fileStore.registerFile(file);
   const state = {
     files: {
-      c_gb: ref(circularPrimary),
-      c_gff: null,
-      c_fasta: null,
       c_depth: [ref(circularDepth)],
       c_conservation_blasts: [ref(conservationBlast)],
       c_conservation_blasts_source: 'losat-cache',
@@ -1723,6 +1714,7 @@ const createLayoutPreferences = () => ({
         { kind: 'collinearityResult', file: ref(canonicalCollinearity) }
       ]
     },
+    circularSources: [{ uid: 'card-1', gb: ref(circularPrimary), gff: null, fasta: null }],
     linearSeqs: [{
       uid: 'linear-a',
       gb: ref(linearPrimary),
@@ -1775,6 +1767,7 @@ const createLayoutPreferences = () => ({
     form: {},
     adv: {},
     files: {},
+    circularSources: [],
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([]),
@@ -1891,6 +1884,7 @@ const createLayoutPreferences = () => ({
   }];
   const state = {
     files: {},
+    circularSources: [{ uid: 'card-1', gb: null, gff: null, fasta: null }],
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     mode: ref('circular'),
@@ -2135,7 +2129,7 @@ const createLayoutPreferences = () => ({
   state.losatDerivedCache.value = poisonCache;
   state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
   state.featureIdentityNotices.value = poisonNotices;
-  state.files.c_gb = poisonResource;
+  state.circularSources[0].gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({ retainedBytes: 999, payload: poisonResource }),
     restore: async () => {}
@@ -2182,7 +2176,7 @@ const createLayoutPreferences = () => ({
   });
   assert.equal(installedResults, originalOwnerSet.results);
   assert.equal(state.results.value, originalOwnerSet.results);
-  state.files.c_gb = null;
+  state.circularSources[0].gb = null;
   snapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => null,
     restore: async () => {}

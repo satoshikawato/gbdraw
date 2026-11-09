@@ -45,6 +45,7 @@ import {
   createLinearComparisonPlanWriter
 } from './linear-comparison-edits.js';
 import { createLinearFileCards } from './linear-file-cards.js';
+import { createCircularFileCards } from './circular-file-cards.js';
 import { createInputTypeEdits, createInputUploads } from './input-edits.js';
 import {
   createLinearRecordEdits,
@@ -1706,11 +1707,11 @@ export const createAppSetup = () => {
   // Circular list first (OV-2489).
   /** @param {DrawingState} drawing @returns {Promise<RecordIdentitySources>} */
   const readRecordIdentitySources = async (drawing) => {
-    if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
+    if (drawing.mode === 'circular') return circularIdentitySources(drawing);
     await awaitLinearRecordDiscovery(drawing);
     return {
       mode: drawing.mode,
-      linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
+      cards: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
     };
   };
   const {
@@ -1752,6 +1753,7 @@ export const createAppSetup = () => {
     ),
     prepareLinearRecordCatalog,
     readRecordIdentitySources,
+    placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -3060,7 +3062,7 @@ export const createAppSetup = () => {
     circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
     circularSingleRecordPresentationEnabled
   } = createCircularRecordPresentation({
-    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder
+    state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder, shownCommittedRequest
   });
 
   // The legend-entry and record-definition popups (match popup frame): views
@@ -3136,9 +3138,11 @@ export const createAppSetup = () => {
     revealSetting: settingsPaneActions.revealSetting, circularTrackSlotsPanelOpen, circularRecordPresentationPanel,
     afterPaint
   });
-  const { sourceReplacementRetiresPresentation, replaceCircularSource, setCircularSourceFile } = createCircularSourceEdits({
-    state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction
+  const { sourceReplacementRetiresPresentation, replaceCircularSourceFile, setCircularSourceFile, addCircularSourceFiles,
+    removeCircularSourceOf, removeCircularSourceCard, canMoveCircularSource, moveCircularSourceCard } = createCircularSourceEdits({
+    state, CIRCULAR_RECORD_FORM_DEFAULTS, changeRecordSources, pendingDiscoveryOf, discoverDrawingRecords, shownAction, runUndoable: history.runUndoable
   });
+  const circularFileCards = createCircularFileCards({ shownDrawingOfMode, circularRecordDiscoveryState, addCircularSourceFiles, removeCircularSourceCard });
 
   const {
     getCircularRecordRow, getCircularRecordRowOptions, setCircularRecordRow, canMoveCircularRecordOrderUp,
@@ -3183,7 +3187,7 @@ export const createAppSetup = () => {
     state, shownAction, pendingDiscoveryOf, applyLinearSeqMutation, askLinearFileRemoval, sourceReplacementRetiresPresentation
   });
   const { applyInputReplacementToDrawings, askScope } = createInputReplacementPorts({
-    state, replaceCircularSource, replaceCircularDepthFile, replaceCircularConservationBlasts, replaceLinearSourceFile,
+    state, replaceCircularSourceFile, replaceCircularDepthFile, replaceCircularConservationBlasts, replaceLinearSourceFile,
     setLinearDepthFiles, swapLinearComparisonFile, barTabs: drawingBar.tabs, askChoice
   });
   // The replacement of an input file for the shown drawing or every drawing
@@ -3211,18 +3215,18 @@ export const createAppSetup = () => {
     uploadCircularSourceFile, uploadCircularDepthFile, uploadLinearSeqPrimaryFile, uploadLinearDepthFile,
     uploadLinearSourceDepthFile, uploadLinearComparisonCardFile
   } = createInputUploads({
-    shownAction, replaceFromShownDrawing, replaceCircularSource, replaceCircularDepthFile, replaceLinearSourceFile,
+    shownAction, replaceFromShownDrawing, replaceCircularSourceFile, replaceCircularDepthFile, replaceLinearSourceFile,
     setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
-  const { circularRecordEntries, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
+  const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
     shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
   });
   const { deleteRecordSettings, removeRecordSource, askRecordFileRemoval, readShownRecords } = createRecordSettingsTransitions({
     state, shownDrawingOfMode, recordSettingsOwners, recordEditData, retireLegendStylesOfUnnamedCaptions,
-    projectPaletteAndRules, applyLinearSeqMutation, setCircularSourceFile, removeLinearSource, askLinearFileRemoval,
+    projectPaletteAndRules, applyLinearSeqMutation, removeCircularSourceOf, removeLinearSource, askLinearFileRemoval,
     dialogChoicePending: dialogChoice.pending, mutationPending: history.mutationPending,
     refreshLinearRecords: linearRecordSelector.refresh, getCircularRecordDiscoveryState, inspectCircularSourceRecords
   });
@@ -3919,7 +3923,7 @@ export const createAppSetup = () => {
     DEFAULT_LINEAR_OUTPUT_PREFIX,
     setCircularRecordPresentationSelector,
     changeCircularMultiRecordCanvas,
-    setCircularSourceFile,
+    setCircularSourceFile, addCircularSourceFiles, removeCircularSourceCard, canMoveCircularSource, moveCircularSourceCard, circularFileCards,
     replaceInputFile: inputReplacement.replaceInputFile,
     uploadCircularSourceFile,
     uploadCircularDepthFile,

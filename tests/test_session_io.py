@@ -3632,7 +3632,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert "features" not in payload and payload["modes"] == {"circular": {}}
     assert "groups" not in payload["orthogroupState"]
     assert payload["cliInvocation"]["mode"] == "circular"
-    assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"
+    assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.circularSources[0].gb"
     stored_args = payload["cliInvocation"]["args"]
     assert not {
         "--save_session",
@@ -3715,11 +3715,13 @@ def test_cli_session_binds_each_unmodified_input_file_to_its_records(
     bindings = session["webFiles"]["bindings"]
     records = session["renderRequest"]["records"]
     if mode == "circular":
+        (card,) = bindings["circularSources"]
+        assert card["uid"] == "record-1"
         assert [record["source"] for record in records] == [
-            {"kind": "genbank", "resourceId": bindings["c_gb"]["resourceId"]}
+            {"kind": "genbank", "resourceId": card["gb"]["resourceId"]}
         ]
         assert [record["selector"] for record in records] == [None]
-        files = {bindings["c_gb"]["resourceId"]: single}
+        files = {card["gb"]["resourceId"]: single}
     else:
         first, second = (sequence["gb"]["resourceId"] for sequence in bindings["linearSeqs"])
         assert [(record["source"]["resourceId"], record["selector"]) for record in records] == [
@@ -3748,16 +3750,17 @@ def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
                    "-f", "svg", "--session_output", str(session_path)])
 
     session = drawing_view(load_session(session_path))
-    bindings = session["webFiles"]["bindings"]
+    (card,) = session["webFiles"]["bindings"]["circularSources"]
+    assert (card["uid"], card["gb"]) == ("record-1", None)
     assert [record["source"] for record in session["renderRequest"]["records"]] == [{
         "kind": "gffFasta",
-        "gffResourceId": bindings["c_gff"]["resourceId"],
-        "fastaResourceId": bindings["c_fasta"]["resourceId"],
+        "gffResourceId": card["gff"]["resourceId"],
+        "fastaResourceId": card["fasta"]["resourceId"],
     }]
     assert sorted(session["resources"]) == sorted(
-        [bindings["c_gff"]["resourceId"], bindings["c_fasta"]["resourceId"]]
+        [card["gff"]["resourceId"], card["fasta"]["resourceId"]]
     )
-    assert _resource_bytes(session, bindings["c_gff"]["resourceId"]) == (
+    assert _resource_bytes(session, card["gff"]["resourceId"]) == (
         inputs / "NC_013668.gff3"
     ).read_bytes()
 
@@ -3990,9 +3993,10 @@ def test_schema1_frozen_main_writer_is_preserved(tmp_path):
 
 
 @pytest.mark.parametrize("modified", [0, 0.5])
-def test_cli_composite_inventory_preserves_equal_byte_occurrences_and_metadata(
-    tmp_path, monkeypatch, modified
-):
+def test_cli_writes_one_circular_file_card_per_gbk_input(tmp_path, monkeypatch, modified):
+    # circular-multi-file D-01, D-08 (DESIGN section 7 test 4): one File card
+    # per --gbk value, keyed by the CLI's record key of that input, even when
+    # two inputs hold the same bytes; no composite.
     import gbdraw.cli_utils.session as cli_session
 
     first, second = tmp_path / "first.gb", tmp_path / "second.gb"
@@ -4004,27 +4008,45 @@ def test_cli_composite_inventory_preserves_equal_byte_occurrences_and_metadata(
     files, provenance = collect_embedded_files_from_cli_args(
         "circular", ["--gbk", str(first), str(second), str(first)]
     )
-    composite = files["c_gb"]
-    assert len(composite["components"]) == 3
+    cards = files["circularSources"]
+    assert [card["uid"] for card in cards] == ["record-1", "record-2", "record-3"]
+    assert not {"c_gb", "c_gff", "c_fasta"} & set(files)
     assert [binding.name for binding in provenance] == ["first.gb", "second.gb", "first.gb"]
     for index, binding in enumerate(provenance):
-        assert binding.slot == f"files.c_gb.components[{index}]"
-        assert session_io_module.get_session_slot({"files": files}, binding.slot) == composite["components"][index]
+        assert binding.slot == f"files.circularSources[{index}].gb"
+        assert session_io_module.get_session_slot({"files": files}, binding.slot) == cards[index]["gb"]
     payload = build_session_json(
         SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
         svg_results=[], embedded_files=files, generated_at=datetime(2026, 9, 11),
         canonical_request=_canonical_request("circular"),
     )
-    actual = drawing_view(payload)["webFiles"]["bindings"]["c_gb"]
-    assert {key: actual[key] for key in ("name", "type", "lastModified")} == {
-        "name": "", "type": "", "lastModified": modified,
-    }
-    assert len(actual["components"]) == 3
-    for component in actual["components"]:
-        assert {key: component[key] for key in ("name", "type", "lastModified")} == {
+    bindings = drawing_view(payload)["webFiles"]["bindings"]
+    assert not {"c_gb", "c_gff", "c_fasta"} & set(bindings)
+    actual = bindings["circularSources"]
+    assert [card["uid"] for card in actual] == ["record-1", "record-2", "record-3"]
+    for card in actual:
+        assert (card["gff"], card["fasta"]) == (None, None)
+        assert {key: card["gb"][key] for key in ("name", "type", "lastModified")} == {
             "name": "", "type": "", "lastModified": modified,
         }
-        assert base64.b64decode(payload["resources"][component["resourceId"]]["data"]) == first.read_bytes()
+        assert base64.b64decode(payload["resources"][card["gb"]["resourceId"]]["data"]) == first.read_bytes()
+
+
+def test_cli_writes_one_circular_file_card_per_gff_and_fasta_pair(tmp_path):
+    for name in ("a.gff", "b.gff", "a.fa", "b.fa"):
+        (tmp_path / name).write_text(">x\nA\n")
+    files, provenance = collect_embedded_files_from_cli_args(
+        "circular",
+        ["--gff", str(tmp_path / "a.gff"), str(tmp_path / "b.gff"), "--fasta", str(tmp_path / "a.fa"), str(tmp_path / "b.fa")],
+    )
+    assert [(card["uid"], card["gb"], card["gff"]["name"], card["fasta"]["name"]) for card in files["circularSources"]] == [
+        ("record-1", None, "a.gff", "a.fa"), ("record-2", None, "b.gff", "b.fa"),
+    ]
+    assert [binding.slot for binding in provenance] == [
+        "files.circularSources[0].gff", "files.circularSources[1].gff",
+        "files.circularSources[0].fasta", "files.circularSources[1].fasta",
+    ]
+    assert files["cliInputs"] == []
 
 
 def test_schema2_composite_load_write_preserves_order_and_metadata(tmp_path):
@@ -4063,46 +4085,8 @@ def test_schema2_composite_rejects_malformed_bindings(invalid):
         session_io_module.validate_session(payload)
 
 
-def test_composite_sidecar_rebuild_preserves_draft_and_scopes_collisions():
-    source = _composite_binding_session()
-    first = source['webFiles']['bindings']['c_gb']['components'][0]
-    # The new request owns record-1-genbank for different, legitimate bytes.
-    original_id = first['resourceId']
-    source['resources']['record-1-genbank'] = source['resources'].pop(original_id)
-    for part in source['webFiles']['bindings']['c_gb']['components']:
-        part['resourceId'] = 'record-1-genbank'
-    source['renderRequest']['records'][0]['source']['resourceId'] = 'record-1-genbank'
-    before = copy.deepcopy(source)
-    result = drawing_view(build_session_json(
-        SessionBuildContext(mode='circular', output_prefix='composite', render_formats=('svg',), source_session=source),
-        svg_results=[], embedded_files={}, generated_at=datetime(2026, 9, 9),
-        canonical_request=_canonical_request('circular'),
-    ))
-    composite = result['webFiles']['bindings']['c_gb']
-    assert composite['components'][0]['resourceId'] != 'record-1-genbank'
-    assert composite['components'][0]['resourceId'] == composite['components'][1]['resourceId']
-    assert len(result['resources']) == 2
-    assert result['renderRequest']['records'][0]['source']['resourceId'] == 'record-1-genbank'
-    assert result['resources'][composite['components'][0]['resourceId']]['data'] == source['resources']['record-1-genbank']['data']
-    for actual, expected in zip(composite['components'], source['webFiles']['bindings']['c_gb']['components']):
-        assert {k: v for k, v in actual.items() if k != 'resourceId'} == {k: v for k, v in expected.items() if k != 'resourceId'}
-    assert {k: v for k, v in composite.items() if k != 'components'} == {k: v for k, v in source['webFiles']['bindings']['c_gb'].items() if k != 'components'}
-    assert source == before
 
 
-def test_composite_sidecar_rejects_contradictory_source_table():
-    source = _composite_binding_session()
-    source['resources'][' resource-0001 '] = {
-        **source['resources']['resource-0001'], 'data': 'eA==', 'size': 1,
-    }
-    before = copy.deepcopy(source)
-    with pytest.raises(ValidationError, match='Invalid canonical resource ID'):
-        build_session_json(
-            SessionBuildContext(mode='circular', output_prefix='composite', render_formats=('svg',), source_session=source),
-            svg_results=[], embedded_files={}, generated_at=datetime(2026, 9, 9),
-            canonical_request=_canonical_request('circular'),
-        )
-    assert source == before
 
 
 def test_composite_sidecar_reads_a_new_repeated_component_once_without_reencoding(monkeypatch):
@@ -4165,6 +4149,11 @@ def _draft_identity(session, value):
     }
 
 
+def _card_files(session, cards):
+    """The drafted GenBank file of each File card, in card order."""
+    return [_draft_identity(session, card['gb']) for card in cards]
+
+
 def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     source_path = tmp_path / 'source.json'
     write_session_json(source_path, source)
@@ -4192,6 +4181,8 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
 @pytest.mark.parametrize('suffix', ['.json', '.json.gz'])
 @pytest.mark.parametrize('collision', [False, True])
 def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, suffix, collision):
+    # A Session 50 whose Circular input is a composite replays to a Session 51
+    # with one File card per component, in order (circular-multi-file D-03).
     source = _cli_composite_source()
     binding = source['webFiles']['bindings']['c_gb']
     if collision:
@@ -4203,32 +4194,38 @@ def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, suffix, col
         source['resources'][committed_id] = source['resources'].pop(part['resourceId'])
         part['resourceId'] = committed_id
     source['resources'] = dict(reversed(list(source['resources'].items())))
-    expected = _draft_identity(source, binding)
+    expected = [_draft_identity(source, part) for part in binding['components']]
     result = _replay_cli_sidecar(source, tmp_path, suffix)
-    actual = result['webFiles']['bindings']['c_gb']
-    assert len(actual['components']) == 6
-    assert _draft_identity(result, actual) == expected
+    bindings = result['webFiles']['bindings']
+    assert 'c_gb' not in bindings
+    cards = bindings['circularSources']
+    # The committed records name one composite file, so the cards take uids no flat key has (D-12, OV-2843).
+    assert [card['uid'] for card in cards] == [f'source-{n}' for n in range(1, 7)]
+    assert all((card['gff'], card['fasta']) == (None, None) for card in cards)
+    assert _card_files(result, cards) == expected
     if collision:
         committed_id = result['renderRequest']['records'][0]['source']['resourceId']
-        assert actual['components'][0]['resourceId'] != committed_id
-        assert base64.b64decode(result['resources'][committed_id]['data']) != expected['components'][0]['bytes']
+        assert cards[0]['gb']['resourceId'] != committed_id
+        assert base64.b64decode(result['resources'][committed_id]['data']) != expected[0]['bytes']
 
 
 def test_cli_i24a_repeated_component_occurrences_survive_dedup(tmp_path):
     source = _cli_composite_source()
     parts = source['webFiles']['bindings']['c_gb']['components']
     parts[4] = {**parts[0], 'name': 'repeated-with-distinct-name.gb'}
-    expected = _draft_identity(source, source['webFiles']['bindings']['c_gb'])
+    expected = [_draft_identity(source, part) for part in parts]
     result = _replay_cli_sidecar(source, tmp_path)
-    actual = result['webFiles']['bindings']['c_gb']
-    assert _draft_identity(result, actual) == expected
-    assert actual['components'][0]['resourceId'] == actual['components'][4]['resourceId']
+    cards = result['webFiles']['bindings']['circularSources']
+    assert _card_files(result, cards) == expected
+    assert cards[0]['gb']['resourceId'] == cards[4]['gb']['resourceId']
 
 
 def test_cli_i24c_frozen_schema1_replay_emits_current_bindings(tmp_path):
     source = load_session(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
     result = _replay_cli_sidecar(source, tmp_path, '.json.gz')
-    assert _draft_identity(result, result['webFiles']['bindings']['c_gb']) == _draft_identity(source, source['webFiles']['bindings']['c_gb'])
+    (card,) = result['webFiles']['bindings']['circularSources']
+    assert card['uid'] == 'record-1'
+    assert _draft_identity(result, card['gb']) == _draft_identity(source, source['webFiles']['bindings']['c_gb'])
 
 
 def test_cli_i24c_schema1_defaults_and_independent_arrays(tmp_path):
@@ -4240,10 +4237,11 @@ def test_cli_i24c_schema1_defaults_and_independent_arrays(tmp_path):
     result = _replay_cli_sidecar(source, tmp_path)
     actual = result['webFiles']['bindings']
     descriptor = source['resources'][leaf['resourceId']]
-    assert actual['c_gb']['name'] == descriptor['name']
-    assert actual['c_gb']['type'] == descriptor['type']
-    assert actual['c_gb']['lastModified'] == descriptor['lastModified']
-    assert actual['c_depth'] == [None, [actual['c_gb'], None], []]
+    (card,) = actual['circularSources']
+    assert card['gb']['name'] == descriptor['name']
+    assert card['gb']['type'] == descriptor['type']
+    assert card['gb']['lastModified'] == descriptor['lastModified']
+    assert actual['c_depth'] == [None, [card['gb'], None], []]
 
 
 @pytest.mark.parametrize('modified', [0, 0.125])
@@ -4253,7 +4251,8 @@ def test_cli_i24d_schema2_ordinary_metadata_is_exact(tmp_path, modified):
     bindings['c_gb'] = {**bindings['c_gb']['components'][0], 'name': '', 'type': '', 'lastModified': modified}
     expected = _draft_identity(source, bindings['c_gb'])
     result = _replay_cli_sidecar(source, tmp_path)
-    assert _draft_identity(result, result['webFiles']['bindings']['c_gb']) == expected
+    (card,) = result['webFiles']['bindings']['circularSources']
+    assert _draft_identity(result, card['gb']) == expected
 
 
 @pytest.mark.parametrize('field,slot', [
@@ -4276,11 +4275,11 @@ def test_cli_i24e_explicit_slots_override_direct_sources(tmp_path, field, slot, 
             'ordinary': part, 'null': None, 'empty': [],
             'longer': [part, {**part, 'name': 'second-occurrence.gb'}],
         }[explicit]
-    expected = _draft_identity(source, bindings['c_gb'])
+    expected = [_draft_identity(source, component) for component in bindings['c_gb']['components']]
     result = _replay_cli_sidecar(source, tmp_path)
     rebuilt = result['webFiles']
     actual = rebuilt['bindings'][slot]
-    assert _draft_identity(result, rebuilt['bindings']['c_gb']) == expected
+    assert _card_files(result, rebuilt['bindings']['circularSources']) == expected
     if explicit != 'absent':
         assert _draft_identity(result, actual) == _draft_identity(source, bindings[slot])
     elif direct_populated:
@@ -4341,7 +4340,7 @@ def test_cli_i24_explicit_null_inventory_survives_without_direct_fields(tmp_path
     source = _cli_composite_source()
     source['webFiles']['bindings'] = {'schema': 2, 'c_gb': None}
     result = _replay_cli_sidecar(source, tmp_path)
-    assert result['webFiles']['bindings']['c_gb'] is None
+    assert result['webFiles']['bindings']['circularSources'] == []
 
 
 def test_cli_projection_request_only_session_keeps_no_inventory():
@@ -4388,8 +4387,14 @@ def _linear_session_with_cards(source_session: dict | None = None, **card_fields
 
 def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
     # Record selection D-05: each slice lists its OFF records once each, a
-    # Linear card uid bound in webFiles or a Circular source selector `#N`.
+    # Linear card uid bound in webFiles or a Circular source selector `#N`
+    # (a Session 50); the move to Session 51 makes the selectors record
+    # identities of the File card (`<uid>:<k>`).
     payload = _linear_session_with_cards()
+    payload["resources"]["record-1-genbank"] = {**_file_entry("circular.gb", b"LOCUS\n"), "encoding": "base64"}
+    payload["webFiles"]["bindings"]["c_gb"] = {
+        "resourceId": "record-1-genbank", "name": "circular.gb", "type": "", "lastModified": 0,
+    }
     modes = payload.setdefault("modes", {})
     modes.setdefault("linear", {}).setdefault("config", {})["recordsOff"] = ["seq-2"]
     modes.setdefault("circular", {}).setdefault("config", {})["recordsOff"] = ["#2", "#10"]
@@ -4416,13 +4421,28 @@ def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
     resaved = build_session_json(
         SessionBuildContext(mode="linear", output_prefix="again", render_formats=("svg",), source_session=payload),
         svg_results=(("again", "<svg></svg>"),),
-        embedded_files={"linearSeqs": payload["webFiles"]["bindings"]["linearSeqs"]},
+        embedded_files={
+            "linearSeqs": payload["webFiles"]["bindings"]["linearSeqs"],
+            "c_gb": payload["resources"]["record-1-genbank"],
+        },
         generated_at=datetime(2026, 10, 11),
         canonical_request=_canonical_request("linear"),
     )
     # The OFF Circular records make the move list an (undrawn) Circular drawing.
     assert drawing_view(resaved, mode="linear")["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
-    assert drawing_view(resaved, mode="circular")["modes"]["circular"]["config"]["recordsOff"] == ["#2", "#10"]
+    assert drawing_view(resaved, mode="circular")["modes"]["circular"]["config"]["recordsOff"] == ["record-1:2", "record-1:10"]
+    # A Session 51 Circular slice names records by identity of a bound File
+    # card, or by a source selector the move could not place (OV-2869).
+    circular = next(drawing for drawing in resaved["drawings"] if drawing["mode"] == "circular")
+    kept = copy.deepcopy(resaved)
+    next(d for d in kept["drawings"] if d["mode"] == "circular")["config"]["recordsOff"] = ["#2"]
+    validate_session(kept)
+    for records_off in (["#0"], ["record-2"], ["record-1:0"]):
+        invalid = copy.deepcopy(resaved)
+        next(d for d in invalid["drawings"] if d["mode"] == "circular")["config"]["recordsOff"] = records_off
+        with pytest.raises(ValidationError):
+            validate_session(invalid)
+    assert circular["webFiles"]["bindings"]["circularSources"][0]["uid"] == "record-1"
 
 
 def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:

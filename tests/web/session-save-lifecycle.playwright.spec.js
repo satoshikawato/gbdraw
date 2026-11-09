@@ -97,7 +97,7 @@ const captureSaveInvariant = (page) => page.evaluate(async () => {
   window.__GBDRAW_SAVE_INVARIANT__ = {
     resultRefs: [...app.results],
     selectedResultIndex: app.selectedResultIndex,
-    circularFile: state.activeDrawing().files.c_gb,
+    circularFiles: state.activeDrawing().circularSources.map((card) => card.gb),
     losatCache: state.losatCache.value,
     losatEntries: [...state.losatCache.value],
     proteinIdentityManifest: state.proteinIdentityManifest.value,
@@ -115,7 +115,8 @@ const saveInvariantIsIntact = (page) => page.evaluate(async () => {
     resultRefs: before.resultRefs.length === app.results.length
       && before.resultRefs.every((result, index) => result === app.results[index]),
     selectedResultIndex: before.selectedResultIndex === app.selectedResultIndex,
-    circularFile: before.circularFile === state.activeDrawing().files.c_gb,
+    circularFile: before.circularFiles.length === state.activeDrawing().circularSources.length
+      && before.circularFiles.every((file, index) => file === state.activeDrawing().circularSources[index].gb),
     losatCache: before.losatCache === state.losatCache.value,
     losatEntries: JSON.stringify(before.losatEntries) === JSON.stringify([...state.losatCache.value]),
     proteinIdentityManifest: before.proteinIdentityManifest === state.proteinIdentityManifest.value,

@@ -45,7 +45,7 @@ const imported = await importSession({
 });
 
 assert.equal(imported.status, 'ok');
-const circularGenome = modeDrawing(state, 'circular').files.c_gb;
+const circularGenome = modeDrawing(state, 'circular').circularSources[0].gb;
 assert.equal(circularGenome instanceof File, false);
 assert.equal(typeof circularGenome.arrayBuffer, 'undefined');
 assert.ok(Object.isFrozen(circularGenome));

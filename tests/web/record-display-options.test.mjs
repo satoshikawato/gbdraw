@@ -9,7 +9,7 @@ import { isCurrentFeature } from '../../gbdraw/web/js/services/feature-identity.
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
+import { adoptCurrentSessionResources, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
@@ -176,31 +176,41 @@ test('detected topology, nullable reset, crop lock, and RC default stay separate
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
   lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
-const compositeControls = ({ linear = false, discovered = true, createHistory = null } = {}) => {
+// Two Circular File cards, each a one-record file (`first.gb`, `second.gb`), or with `oneCard` one card holding both
+// records. Linear: one card per record.
+const circularControls = ({ linear = false, discovered = true, oneCard = false, createHistory = null } = {}) => {
   const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
   const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
   // The bindings hold the store's refs, as the app's writers bind them.
   const inputFiles = createInputFileStore();
-  const makeFile = () => inputFiles.registerFile(createCombinedSessionResourceFileView(table, components));
-  const file = makeFile();
+  const makeFile = (resourceId) => inputFiles.registerFile(createSessionResourceFileView(table, resourceId));
+  const cardUids = oneCard ? ['record-1'] : ['record-1', 'record-2'];
+  const circularSources = linear ? [] : cardUids.map((uid, index) => ({
+    uid, gb: makeFile(components[index].resourceId), gff: null, fasta: null }));
+  const recordKeys = oneCard ? ['record-1:1', 'record-1:2'] : ['record-1', 'record-2'];
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
-    recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
-    selector: null, windows: [], presentation: { reverseComplement: false } })) } };
-  const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
+    recordKey: recordKeys[i], cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
+    selector: oneCard ? { kind: 'recordIndex', index: i } : null, windows: [], presentation: { reverseComplement: false } })) } };
+  // A one-record file's record is its card's identity; a card of several records has `<uid>:<k>`.
+  const listed = components.map(({ resourceId }, i) => ({
+    uid: cardUids[oneCard ? 0 : i], k: oneCard ? i + 1 : 1, identity: recordKeys[i], record_id: resourceId, record_length: 100,
+    selector: `#${oneCard ? i + 1 : 1}`, detectedTopology: 'circular' }));
+  const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: {},
+    circularSources, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
-    circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
-      record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) : [] },
+    circularRecordList: { value: discovered ? listed : [] },
     // A loaded Session has read no record bytes, so Circular discovery is not current.
     circularRecordDiscovery: discovered
-      ? { status: 'ready', error: '', inputType: 'gb', primaryFile: file, pairedFile: null }
-      : { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
-    featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
+      ? { status: 'ready', error: '', inputType: 'gb', sources: circularSources.map((card) => (
+        { uid: card.uid, primaryFile: card.gb, pairedFile: null, error: '' })) }
+      : { status: 'idle', error: '', inputType: '', sources: [] },
+    featureCatalog: { value: { items: [{ recordKeys }] } } };
   state.form.track_type = 'middle';
   if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
-    uid:`record-${index+1}`,gb:inputFiles.registerFile(createSessionResourceFileView(table,resourceId)),region_record_id:'',region_reverse:false,windows:[]
+    uid:`record-${index+1}`,gb:makeFile(resourceId),region_record_id:'',region_reverse:false,windows:[]
   }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
@@ -213,37 +223,30 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   withSourceDrawings(withDrawings(state));
   const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
-  const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
-  return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
+  const feature = { scope: state.mode.value, record_key: recordKeys[1], biological_feature_id: 'logical-feature' };
+  // The card that holds the feature's record.
+  const featureCard = () => circularSources[oneCard ? 0 : 1];
+  return { state, actions, controls, feature, makeFile, featureCard, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     // The committed request with every record naming one saved resource id.
     recommitSources: (resourceId) => {
       committed = { ...committed, renderRequest: { ...committed.renderRequest,
         records: committed.renderRequest.records.map((record) => ({ ...record, source: { kind: 'genbank', resourceId } })) } };
     },
-    commitCombined: async () => {
-      const bytes = await readFileBytes(inputFiles.fileOf(file));
-      const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
+    // A new committed request that names the inputs bound now, as a Generate of them commits.
+    commitBound: async () => {
+      const resourceId = 'second-regenerated';
+      const bytes = await readFileBytes(inputFiles.fileOf(featureCard().gb));
+      const regenerated = { ...descriptor('second.gb', ''), size: bytes.byteLength,
         data: Buffer.from(bytes).toString('base64') };
-      committed = { resources: { combined }, renderRequest: { ...committed.renderRequest,
-        records: committed.renderRequest.records.map((record, i) => ({ ...record,
-          source: { kind: 'genbank', resourceId: 'combined' }, selector: { kind: 'recordIndex', index: i } })) } };
+      committed = { resources: { ...committed.resources, [resourceId]: regenerated }, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record, i) => (i === 1
+          ? { ...record, source: { kind: 'genbank', resourceId } } : { ...record })) } };
     } };
 };
 
-test('same composite retains semantic capability when the committed resource becomes combined', async () => {
-  const model = compositeControls();
-  const all = ['auto', 'main', 'outward', 'inward'];
-  assert.deepEqual(model.enabled(), all);
-  model.actions.setPlacement([model.feature], 'main');
-  assert.equal(model.actions.valueFor(model.feature), 'main');
-  await model.commitCombined();
-  assert.deepEqual(model.enabled(), all);
-  assert.equal(model.actions.valueFor(model.feature), 'main');
-});
-
 test('manual start and orientation edits clear feature provenance', () => {
-  const model = compositeControls();
+  const model = circularControls();
   const row = model.controls.allRows.value[0];
   model.controls.setResolvedTransform(row, {
     startCoordinate: 25, reverseComplement: true, anchorIntent
@@ -259,7 +262,7 @@ test('manual start and orientation edits clear feature provenance', () => {
 });
 
 test('explicit popup target and its draft checkpoint stay record-bound', () => {
-  const model = compositeControls();
+  const model = circularControls();
   const { row, target } = model.controls.targetForFeature(model.feature);
   assert.equal(target.recordKey, 'record-2');
   assert.equal(target.canonicalRecordKey, 'record-2');
@@ -285,14 +288,14 @@ test('explicit popup target and its draft checkpoint stay record-bound', () => {
 
 test('a popup target whose records are not read yet is not stale (Session Load, 776a2f93)', () => {
   for (const linear of [false, true]) {
-    const model = compositeControls({ linear, discovered: false });
+    const model = circularControls({ linear, discovered: false });
     assert.throws(() => model.controls.targetForFeature(model.feature), (error) => {
       assert.equal(error.kind, RECORD_TARGET_NOT_DISCOVERED);
       assert.doesNotMatch(error.message, /stale|ambiguous/);
       return true;
     });
   }
-  const failed = compositeControls({ linear: true, discovered: false });
+  const failed = circularControls({ linear: true, discovered: false });
   failed.linearDiscovery.status = 'error';
   failed.linearDiscovery.error = 'Records could not be loaded: malformed LOCUS line.';
   assert.throws(() => failed.controls.targetForFeature(failed.feature), (error) => {
@@ -300,7 +303,7 @@ test('a popup target whose records are not read yet is not stale (Session Load, 
     assert.equal(error.message, 'Records could not be loaded: malformed LOCUS line.');
     return true;
   });
-  const discovered = compositeControls({ linear: true });
+  const discovered = circularControls({ linear: true });
   assert.throws(
     () => discovered.controls.targetForFeature({ ...discovered.feature, record_key: 'missing' }),
     (error) => error.kind !== RECORD_TARGET_NOT_DISCOVERED && /stale or ambiguous/.test(error.message)
@@ -308,7 +311,7 @@ test('a popup target whose records are not read yet is not stale (Session Load, 
 });
 
 test('a Linear rotation writes the File card orientation and leaves no row override (CO-03, N-09)', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   const row = model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
   const sequence = model.state.linearSeqs[1];
   const before = model.controls.captureTargetDraft(row);
@@ -338,7 +341,7 @@ const windowedCard = (model, ...reverses) => {
 const cardOrientation = (sequence) => [sequence.region_reverse, ...sequence.windows.map((window) => window.reverseComplement)];
 
 test('Record options Reverse on a Linear card with windows writes the windows (OV-2883)', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   const sequence = windowedCard(model, true, true);
   const row = () => model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
   assert.equal(row().reverse, true, 'the row reads the orientation its windows hold');
@@ -357,7 +360,7 @@ test('Record options Reverse on a Linear card with windows writes the windows (O
 });
 
 test('an Align commit writes a windowed card\'s windows and its restore gives them back as they were (OV-2883)', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   // Windows of both orientations: the record is drawn forward (not every window is reversed).
   const sequence = windowedCard(model, false, true);
   const directions = [{ recordKey: 'record-2', reverseComplement: true }];
@@ -388,7 +391,7 @@ const draftHistory = (state) => {
 
 test('Apply on Generate is one undoable draft step, and re-staging replaces the draft (PD-OI-085)', async () => {
   for (const linear of [false, true]) {
-    const model = compositeControls({ linear, createHistory: draftHistory });
+    const model = circularControls({ linear, createHistory: draftHistory });
     const pending = () => model.controls.targetForFeature(model.feature).target.pendingTransform;
     const reverse = () => (linear ? model.state.linearSeqs[1].region_reverse : null);
     const { row } = model.controls.targetForFeature(model.feature);
@@ -426,11 +429,13 @@ test('Apply on Generate is one undoable draft step, and re-staging replaces the 
 });
 
 test('same-name, same-content source replacement does not retain old feature capability', () => {
-  const model = compositeControls();
+  const model = circularControls();
   assert.equal(model.enabled().length, 4);
-  model.state.files.c_gb = model.makeFile();
-  assert.equal(model.state.files.c_gb.name, model.file.name);
-  assert.notEqual(model.state.files.c_gb, model.file);
+  const card = model.featureCard();
+  const replaced = model.makeFile('second');
+  assert.equal(replaced.name, card.gb.name);
+  assert.notEqual(replaced, card.gb);
+  card.gb = replaced;
   assert.deepEqual(model.enabled(), []);
   assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /A selected feature is not in the displayed Result\./);
 });
@@ -495,28 +500,28 @@ test('a feature whose record key is not text is not current, with a source drawn
 });
 
 test('the record display binding is refreshed for the committed request before the check reads it', async () => {
-  const model = compositeControls();
+  const model = circularControls();
   const before = model.controls.sourceBinding();
-  assert.equal(before.boundSources[0].source, model.file);
+  const card = model.featureCard();
+  assert.equal(before.boundSources[1].source, card.gb);
   assert.equal(isCurrentFeature(model.feature, before), true);
-  model.state.files.c_gb = model.makeFile();
+  card.gb = model.makeFile('second');
   assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), false);
   // A new committed request binds the inputs it was drawn from.
-  await model.commitCombined();
+  await model.commitBound();
   const after = model.controls.sourceBinding();
   assert.notEqual(after.request, before.request);
-  assert.equal(after.boundSources[0].source, model.state.files.c_gb);
+  assert.equal(after.boundSources[1].source, card.gb);
   assert.equal(isCurrentFeature(model.feature, after), true);
 });
 
 // OV-557: a resource id is Session data. A record that names an id the Session
 // does not hold has no saved source, also when the id names an inherited member.
 test('a record that names a missing resource id matches no saved source', () => {
-  const model = compositeControls();
+  const model = circularControls();
   const { matchesSavedSource } = model.controls.sourceBinding();
-  // The combined view of two resources is no saved resource by itself.
   for (const missing of ['missing', 'constructor', 'toString', '__proto__', undefined]) {
-    assert.equal(matchesSavedSource(model.file, missing), false, String(missing));
+    assert.equal(matchesSavedSource(model.featureCard().gb, missing), false, String(missing));
   }
   assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), true);
   model.recommitSources('constructor');
@@ -526,7 +531,7 @@ test('a record that names a missing resource id matches no saved source', () => 
 });
 
 test('unsupported draft lanes remain unavailable independently of current placement value', () => {
-  const model = compositeControls();
+  const model = circularControls();
   model.actions.setPlacement([model.feature], 'outward');
   model.state.form.track_type = 'tuckin';
   assert.equal(model.actions.valueFor(model.feature), 'outward');
@@ -536,7 +541,7 @@ test('unsupported draft lanes remain unavailable independently of current placem
 
 
 test('alignment intent changes only its target direction and preserves pending display settings', () => {
-  const model=compositeControls({linear:true});
+  const model=circularControls({linear:true});
   const rows=model.controls.allRows.value.filter(row=>row.scope==='linear');
   model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
   const pending=structuredClone(model.state.recordDisplayDrafts);
@@ -559,7 +564,7 @@ test('alignment intent changes only its target direction and preserves pending d
 // OV-579: each mode has its own drawing, and a draft names no mode. The
 // alignment checkpoint is of the Linear drawing's drafts.
 test('an alignment checkpoint restores the Linear drafts and leaves the Circular drawing as it is', () => {
-  const model = compositeControls({ linear: true });
+  const model = circularControls({ linear: true });
   const inputFiles = createInputFileStore();
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), featurePlacementOverrides: {},
     // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
@@ -587,7 +592,7 @@ test('an alignment checkpoint restores the Linear drafts and leaves the Circular
 
 
 test('fresh loaded alignment binds canonical sources before discovery and restores pending orientation', () => {
-  const model = compositeControls({linear:true, discovered:false});
+  const model = circularControls({linear:true, discovered:false});
   model.state.linearSeqs[0].region_reverse = true;
   const target = {recordKey:'record-1', reverseComplement:true};
   assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
@@ -606,22 +611,23 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
   const source = {};
-  const drawing = { inputType: { value: 'gb' }, files: { c_gb: source },
-    circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
-    circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
+  const card = { uid: 'card-1', gb: source, gff: null, fasta: null };
+  const drawing = { inputType: { value: 'gb' }, circularSources: [card],
+    circularRecordList: { value: [{ uid: 'card-1', k: 1, identity: 'card-1', selector: '#1', record_id: 'committed' }] },
+    circularRecordDiscovery: { status: 'ready', inputType: 'gb', sources: [{ uid: 'card-1', primaryFile: source, pairedFile: null, error: '' }], error: '' } };
   const discovery = (inputType) => { drawing.inputType.value = inputType; return circularDiscoveryForInput(drawing); };
   assert.equal(discovery('gb').status, 'ready');
   assert.equal(discovery('gb').records.length, 1);
-  drawing.files.c_gb = {};
+  card.gb = {};
   assert.equal(discovery('gb').status, 'deferred');
   assert.deepEqual(discovery('gb').records, []);
-  drawing.files.c_gb = source;
+  card.gb = source;
   drawing.circularRecordDiscovery.status = 'deferred';
   assert.equal(discovery('gb').status, 'deferred');
   assert.deepEqual(discovery('gb').records, []);
-  drawing.files.c_gff = {};
+  card.gff = {};
   assert.equal(discovery('gff').status, 'idle');
-  drawing.files.c_fasta = {};
+  card.fasta = {};
   assert.equal(discovery('gff').status, 'deferred');
   assert.deepEqual(discovery('gff').records, []);
 });
@@ -630,8 +636,8 @@ test('Circular discovery metadata belongs only to the current source and complet
 // record ID on '#1'. The row of its record reads it, and an edit there leaves
 // one draft for that record.
 test('a loaded draft selected by record ID is read and edited on its own record row', () => {
-  const model = compositeControls();
-  const loaded = (recordId, startCoordinate) => ({ sourceUid: 'circular', selector: '#1', recordId, startCoordinate,
+  const model = circularControls({ oneCard: true });
+  const loaded = (recordId, startCoordinate) => ({ sourceUid: 'record-1', selector: '#1', recordId, startCoordinate,
     topologyOverride: null, reverseComplementOverride: null, anchorIntent: null });
   model.state.recordDisplayDrafts.push(loaded('first', 7), loaded('second', 11));
   const [first, second] = model.controls.allRows.value;
@@ -650,13 +656,13 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' }, windows: [], presentation: { reverseComplement: false } }] } };
   const inputFiles = createInputFileStore();
-  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' }, files: {}, circularSources: [], inputFiles,
     linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false, windows: [] }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
     featurePlacementOverrides: {}, circularRecordList: { value: [] },
-    circularRecordDiscovery: { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
+    circularRecordDiscovery: { status: 'idle', error: '', inputType: '', sources: [] },
     featureCatalog: { value: { items: [] } } };
   const controls = createRecordDisplayControls({ state: withSourceDrawings(withDrawings(state)), computed: (fn) => ({ get value() { return fn(); } }),
     watch: () => {}, linearRecordsFor: () => [
@@ -680,8 +686,8 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
 // Multi-Record Canvas draw whole records. Display start is unavailable exactly
 // for a cropped record (OV-1093).
 test('a Circular row is cropped, and loses Display start, where Generate crops its record', () => {
-  const model = compositeControls();
-  const circularRows = () => model.controls.rows.value.filter((row) => row.sourceUid === 'circular');
+  const model = circularControls();
+  const circularRows = () => model.controls.rows.value.filter((row) => row.scope === 'circular');
   const cropped = () => circularRows().map((row) => row.cropped);
   const startEnabled = () => circularRows().map((row) => model.controls.surfaceFor(row).startEnabled);
   const { form } = model.state.activeDrawing();
@@ -690,7 +696,7 @@ test('a Circular row is cropped, and loses Display start, where Generate crops i
   form.circular_region_end = 50;
   assert.deepEqual(cropped(), [false, false], 'two records offered: separate diagrams draw whole records');
   assert.deepEqual(startEnabled(), [true, true], 'Display start counts on the whole records');
-  form.circular_record_selector = 'first';
+  form.circular_record_selector = 'record-1';
   assert.deepEqual(cropped(), [true], 'the record chosen alone is cropped');
   assert.deepEqual(startEnabled(), [false], 'Display start is unavailable for the cropped record');
   form.circular_region_end = '';
@@ -719,8 +725,9 @@ const sourceControls = () => {
   const draft = (sourceUid) => ({ sourceUid, selector: '#1', recordId: sourceUid, topologyOverride: 'linear',
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
   const inputFiles = createInputFileStore();
-  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')],
-    files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('card-1')],
+    files: {}, circularSources: [{ uid: 'card-1', gb: inputFiles.registerFile(new File(['c'], 'c.gb')), gff: null, fasta: null }],
+    circularRecordList: { value: [] } };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false, windows: [] })) };
   const state = withModeDrawings({ sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' },
@@ -742,14 +749,14 @@ test('no watcher of the record sources drops drafts (A2 W5)', () => {
   const current = [tuple('record-1', new Blob(['x'])), previous[1]];
   callbacks.forEach((callback) => callback(current, previous));
   assert.deepEqual(uids(linear), ['record-1', 'record-2']);
-  assert.deepEqual(uids(circular), ['circular']);
+  assert.deepEqual(uids(circular), ['card-1']);
 });
 
 test('a replaced Linear source drops its own drafts only, in its transition (A2 W5)', () => {
   const { state, controls, circular, linear, uids } = sourceControls();
   controls.changeRecordSources(state.drawingOf('linear'), () => { linear.linearSeqs[0].gb = new Blob(['x']); });
   assert.deepEqual(uids(linear), ['record-2']);
-  assert.deepEqual(uids(circular), ['circular']);
+  assert.deepEqual(uids(circular), ['card-1']);
   controls.changeRecordSources(state.drawingOf('circular'), () => { state.drawingOf('circular').inputType.value = 'gff'; });
   assert.deepEqual(uids(circular), [], 'the input type switch replaced the Circular source');
   assert.deepEqual(uids(linear), ['record-2']);
@@ -760,7 +767,7 @@ test('a replaced Linear source drops its own drafts only, in its transition (A2 
 // the Linear drawing is shown (the shown drawing's form answered before).
 test('the Circular rows carry the Circular drawing crop and orientation while Linear is shown', () => {
   const { state, controls, circular } = sourceControls();
-  circular.circularRecordList.value = [{ record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
+  circular.circularRecordList.value = [{ uid: 'card-1', k: 1, identity: 'card-1', record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
   Object.assign(circular.form, { circular_reverse: true, multi_record_canvas: false, circular_region_start: 1, circular_region_end: 50 });
   const [row] = controls.allRows.value.filter((entry) => entry.scope === 'circular');
   assert.equal(row.drawingId, 'circular');

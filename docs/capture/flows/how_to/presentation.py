@@ -14,6 +14,7 @@ from playwright.sync_api import BrowserType, Page, expect
 from assertions.svg_semantics import assert_static_svg_safety, inspect_svg_file
 from config import ACTION_TIMEOUT_MS
 from flows.web_capture import (
+    expect_circular_file_card,
     fit_complete_preview,
     toggle_disclosure,
     assert_fixture_identity,
@@ -629,11 +630,7 @@ def _open_human_circular(page: Page, prefix: str) -> None:
     page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
         HUMAN_MITOCHONDRION_PATH
     )
-    expect(
-        page.get_by_role(
-            "group", name="GenBank/DDBJ File selection", exact=True
-        )
-    ).to_contain_text(HUMAN_MITOCHONDRION_PATH.name)
+    expect_circular_file_card(page, 1, HUMAN_MITOCHONDRION_PATH.name)
     output_prefix = page.get_by_label("Output Prefix", exact=True)
     output_prefix.fill(prefix)
     expect(output_prefix).to_have_value(prefix)

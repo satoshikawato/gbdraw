@@ -269,7 +269,19 @@ await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A binding holds refs of the project's file store, as the app's writers bind them.
 const bound = (value) => registerInputFileTree(state.inputFiles, value);
-const BOUND_FIELDS = ['c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'];
+const BOUND_FIELDS = ['c_depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'];
+const { createCircularSource, replaceCircularSources } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+/** The Circular drawing's File cards, one per `{ gb, gff, fasta }` given (each file bound as the app binds it). */
+const setCircularCardsOf = (drawing, ...cards) => replaceCircularSources(drawing.slices.inputs, cards.map((card, index) => (
+  createCircularSource({ uid: `record-${index + 1}`, gb: bound(card.gb ?? null), gff: bound(card.gff ?? null), fasta: bound(card.fasta ?? null) }))));
+/** A record of card `record-1` as the record list holds it (`k` of `count` records in the card's file). */
+const listedRecord = (recordId, recordLength = 10, k = 1, count = 1) => ({
+  uid: 'record-1', k, identity: count > 1 ? `record-1:${k}` : 'record-1', selector: `#${k}`,
+  record_id: recordId, record_length: recordLength, detectedTopology: 'circular'
+});
+const setCircularCards = (...cards) => setCircularCardsOf(modeDrawing(state, 'circular'), ...cards);
+/** One card holding a GenBank file, or no card for `null`. */
+const setCircularFile = (file, drawing = modeDrawing(state, 'circular')) => setCircularCardsOf(drawing, ...(file ? [{ gb: file }] : []));
 const boundFiles = (fields) => Object.fromEntries(Object.entries(fields)
   .map(([key, value]) => [key, BOUND_FIELDS.includes(key) ? bound(value) : value]));
 const {
@@ -669,9 +681,7 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 const installSimpleCircularInput = (primary, inactive) => {
   installShownDrawing('circular');
   modeDrawing(state, 'circular').inputType.value = 'gb';
-  modeDrawing(state, 'circular').files.c_gb = bound(primary);
-  modeDrawing(state, 'circular').files.c_gff = bound(null);
-  modeDrawing(state, 'circular').files.c_fasta = bound(null);
+  setCircularFile(primary);
   modeDrawing(state, 'circular').files.c_depth = bound(inactive);
   modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
   modeDrawing(state, 'circular').files.c_conservation_fastas = bound([]);
@@ -688,13 +698,12 @@ const installSimpleCircularInput = (primary, inactive) => {
   state.activeDrawing().circularConservation.enabled = false;
   state.activeDrawing().circularConservation.source = 'upload';
   state.activeDrawing().annotationSets.splice(0);
-  modeDrawing(state, 'circular').circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  modeDrawing(state, 'circular').circularRecordList.value = [listedRecord('audit')];
   Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: bound(primary),
-    pairedFile: null
+    sources: [{ uid: 'record-1', primaryFile: bound(primary), pairedFile: null, error: '' }]
   });
   state.drawingOf('linear').linearSeqs.splice(0, state.drawingOf('linear').linearSeqs.length, {
     uid: 'inactive-linear-row',
@@ -1284,13 +1293,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.activeDrawing().form.multi_record_canvas = true;
-  modeDrawing(state, 'circular').circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  modeDrawing(state, 'circular').circularRecordList.value = [listedRecord('audit')];
   Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: bound(primary),
-    pairedFile: null
+    sources: [{ uid: 'record-1', primaryFile: bound(primary), pairedFile: null, error: '' }]
   });
   const readyResult = result('ready.svg', 'ready');
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
@@ -1351,10 +1359,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     status: 'idle',
     error: '',
     inputType: '',
-    primaryFile: null,
-    pairedFile: null
+    sources: []
   });
-  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
+  setCircularFile(fallbackPrimary);
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
@@ -1398,8 +1405,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     status: 'idle',
     error: '',
     inputType: '',
-    primaryFile: null,
-    pairedFile: null
+    sources: []
   });
   workerHelperResponses.push({
     ok: false,
@@ -1421,18 +1427,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     });
   }));
   modeDrawing(state, 'circular').circularRecordList.value = [];
-  modeDrawing(state, 'circular').files.c_gb = bound(coalescedPrimary);
+  setCircularFile(coalescedPrimary);
   Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'loading',
     error: '',
     inputType: 'gb',
-    primaryFile: bound(coalescedPrimary),
-    pairedFile: null,
-    canonicalRecordIdentities: [{
-      selector: '#1',
-      record_id: 'audit',
-      recordKey: 'record-1'
-    }]
+    sources: [{ uid: 'record-1', primaryFile: bound(coalescedPrimary), pairedFile: null, error: '' }]
   });
   const firstCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   const secondCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
@@ -1440,9 +1440,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   await Promise.resolve();
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
-  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, 'record-1');
-  const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
-  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, identities);
+  // The record's identity is its card's uid (a one-record file).
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].identity, 'record-1');
 
   // IN-05 (OIPC-C06): an inactive Circular source keeps its records and the
   // Multi-Record Canvas order through a mode round trip without rereading them.
@@ -1471,29 +1470,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerMessages.filter(({ type }) => type === 'helper').length,
     helperRequestsBeforeRoundTrip
   );
-  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, 'record-1');
-  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, identities);
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].identity, 'record-1');
 
-  // Equal biological names on a different source cannot inherit the retired key,
-  // even if replacement/removal happens while Circular is inactive.
+  // A replaced or removed source is read again when Circular is shown, even if the change happened while it was inactive.
   installShownDrawing('linear');
-  modeDrawing(state, 'circular').files.c_gb = bound(new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb'));
+  setCircularFile(new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb'));
   await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].record_id, 'audit');
-  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, undefined);
-  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, []);
   installShownDrawing('linear');
-  modeDrawing(state, 'circular').files.c_gb = bound(null);
+  setCircularFile(null);
   await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].record_id, 'audit');
   installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.deepEqual(modeDrawing(state, 'circular').circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
-  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, []);
-  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
+  setCircularFile(fallbackPrimary);
 
   state.activeDrawing().form.multi_record_canvas = true;
   modeDrawing(state, 'circular').files.c_depth = bound(null);
@@ -1504,10 +1498,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     status: 'idle',
     error: '',
     inputType: '',
-    primaryFile: null,
-    pairedFile: null
+    sources: []
   });
-  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
+  setCircularFile(fallbackPrimary);
   let releaseDiscovery;
   workerHelperResponses.push(new Promise((resolve) => {
     releaseDiscovery = () => resolve({
@@ -1537,17 +1530,13 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.activeDrawing().form.multi_record_canvas = true;
-  modeDrawing(state, 'circular').files.c_gb = bound(stalePrimary);
+  setCircularFile(stalePrimary);
   state.activeDrawing().adv.multi_record_positions.splice(
     0,
     state.activeDrawing().adv.multi_record_positions.length,
     { selector: '#1', row: 2 }
   );
-  modeDrawing(state, 'circular').circularRecordList.value = [{
-    selector: '#1',
-    record_id: 'preserved-record',
-    record_length: 123
-  }];
+  modeDrawing(state, 'circular').circularRecordList.value = [listedRecord('preserved-record', 123)];
   state.semanticFileWatchersSuppressed.value = false;
   state.sessionImportRollbackInProgress.value = false;
   let releaseStaleDiscovery;
@@ -1716,9 +1705,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losat_gencode: 1
     }))
   );
-  modeDrawing(state, 'circular').files.c_gb = bound(referenceView);
-  modeDrawing(state, 'circular').files.c_gff = bound(null);
-  modeDrawing(state, 'circular').files.c_fasta = bound(null);
+  setCircularFile(referenceView);
   modeDrawing(state, 'circular').files.c_depth = bound(null);
   modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
   modeDrawing(state, 'circular').files.c_conservation_fastas = bound(comparisonViews);
@@ -1726,7 +1713,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   state.activeDrawing().annotationSets.splice(0);
   modeDrawing(state, 'circular').circularRecordList.value = [];
   Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
-    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+    status: 'idle', error: '', inputType: '', sources: []
   });
 
   const subjectCanonicalHash = await sha256Text(referenceFasta);
@@ -1903,7 +1890,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
-    modeDrawing(state, 'circular').files.c_gb = bound(bomReference);
+    setCircularFile(bomReference);
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
@@ -1930,7 +1917,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // The new subject searched once; the Linear section below counts its own searches.
     assert.equal(losatCalls, 1);
     losatCalls = 0;
-    modeDrawing(state, 'circular').files.c_gb = bound(referenceView);
+    setCircularFile(referenceView);
 
     // OV-2818: with Show Comparison Rings off, Generate reads no ring file, runs no LOSAT search (the cache is
     // empty) and sends no ring; the ring files and rows stay.
@@ -1955,16 +1942,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
     });
-    modeDrawing(state, 'circular').files.c_gb = bound(invalidFile);
+    setCircularFile(invalidFile);
     modeDrawing(state, 'circular').circularRecordList.value = [
-      { selector: '#1', record_id: 'missing', record_length: 1 }
+      listedRecord('missing', 1)
     ];
     Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
       status: 'ready',
       error: '',
       inputType: 'gb',
-      primaryFile: bound(invalidFile),
-      pairedFile: null
+      sources: [{ uid: 'record-1', primaryFile: bound(invalidFile), pairedFile: null, error: '' }]
     });
     assert.equal((await runner.runAnalysis()).status, 'error');
     assert.match(
@@ -2870,21 +2856,22 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       ]));
       const gff = Boolean(files.fasta);
       modeDrawing(state, 'circular').inputType.value = gff ? 'gff' : 'gb';
-      Object.assign(modeDrawing(state, 'circular').files, boundFiles({
-        c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
-      }));
+      setCircularCards({ gb: gff ? null : files.source, gff: gff ? files.source : null, fasta: gff ? files.fasta : null });
+      // One card holds the file: a record's identity is the card's uid, with its position in the file when it holds several.
+      const identityOf = (selector) => (testCase.recordList.length > 1 && selector ? `record-1:${selector.slice(1)}` : selector && 'record-1');
       modeDrawing(state, 'circular').circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
-        selector: `#${recordIndex + 1}`, record_id: id, record_length: length
+        uid: 'record-1', k: recordIndex + 1, identity: identityOf(`#${recordIndex + 1}`), selector: `#${recordIndex + 1}`,
+        record_id: id, record_length: length, detectedTopology: 'circular'
       }));
       Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
         status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
-        primaryFile: bound(files.source), pairedFile: bound(gff ? files.fasta : null)
+        sources: [{ uid: 'record-1', primaryFile: bound(files.source), pairedFile: bound(gff ? files.fasta : null), error: '' }]
       });
       Object.assign(drawing.form, {
-        circular_record_selector: webState.selector, multi_record_canvas: webState.multi,
+        circular_record_selector: identityOf(webState.selector), multi_record_canvas: webState.multi,
         circular_region_start: webState.region[0], circular_region_end: webState.region[1]
       });
-      drawing.recordsOff.splice(0, drawing.recordsOff.length, ...webState.off);
+      drawing.recordsOff.splice(0, drawing.recordsOff.length, ...webState.off.map(identityOf));
       state.losatCache.value = new Map();
       state.losatDerivedCache.value = new Map();
       // The page reads the file with its own reader, or, for a byte order mark, through the Worker helper.
@@ -3680,10 +3667,8 @@ test('Circular Generate gives a Depth series without settings its default color'
   drawing.annotationSets.splice(0);
   drawing.circularConservation.enabled = false;
   drawing.circularConservation.series.splice(0);
+  setCircularFile(new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'));
   Object.assign(modeDrawing(state, 'circular').files, boundFiles({
-    c_gb: new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'),
-    c_gff: null,
-    c_fasta: null,
     c_depth: [depthFile(1), depthFile(2)],
     c_conservation_blasts: [],
     c_conservation_fastas: [],
@@ -3691,7 +3676,7 @@ test('Circular Generate gives a Depth series without settings its default color'
   }));
   modeDrawing(state, 'circular').circularRecordList.value = [];
   Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
-    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+    status: 'idle', error: '', inputType: '', sources: []
   });
   const depthRow = (id, trackIndex) => ({ id, renderer: 'depth', enabled: true, side: 'inside', params: { track_index: trackIndex } });
   Object.assign(drawing.adv, {
@@ -3746,10 +3731,10 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
   try {
     installShownDrawing(second.id);
     modeDrawing(state, 'circular').inputType.value = 'gb';
-    second.files.c_gb = bound(new AuditFile(['LOCUS refresh 10 bp DNA circular\n//\n'], 'refresh-owner.gb'));
+    setCircularFile(new AuditFile(['LOCUS refresh 10 bp DNA circular\n//\n'], 'refresh-owner.gb'), second);
     second.circularRecordList.value = [];
     Object.assign(second.circularRecordDiscovery, {
-      status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
+      status: 'idle', error: '', inputType: '', sources: []
     });
     named.adv.multi_record_positions.splice(0, named.adv.multi_record_positions.length);
     const runner = createRunAnalysis({ ...generatedArtifactHandleOptions, state, resetPreviewViewport: () => {} });
@@ -3758,7 +3743,7 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
     await runner.refreshCircularRecordOrder({}, second);
     assert.deepEqual(
       [second.adv.multi_record_positions.map((position) => position.selector), named.adv.multi_record_positions],
-      [['#1'], []]
+      [['record-1'], []]
     );
 
     let release;
@@ -3785,11 +3770,11 @@ test('a drawing re-added under its ID reads its own records while the old drawin
   const file = bound(new AuditFile(['LOCUS rejoined 8 bp DNA circular\nORIGIN\n        1 acgtacgt\n//\n'], 'rejoined.gb'));
   const reply = { ok: true, result: { records: [{ selector: '#1', record_id: 'rejoined', record_length: 8 }] } };
   const runner = createRunAnalysis({ ...generatedArtifactHandleOptions, state, resetPreviewViewport: () => {} });
-  const idle = { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: [] };
+  const idle = { status: 'idle', error: '', inputType: '', sources: [] };
   const old = createDrawingState(id, 'circular');
   state.addDrawing(old, 'Old', 2);
   old.inputType.value = 'gb';
-  old.files.c_gb = file;
+  replaceCircularSources(old.slices.inputs, [createCircularSource({ uid: 'record-1', gb: file })]);
   Object.assign(old.circularRecordDiscovery, idle);
   let release = () => {};
   workerHelperResponses.splice(0, workerHelperResponses.length,
@@ -3800,7 +3785,7 @@ test('a drawing re-added under its ID reads its own records while the old drawin
   state.addDrawing(fresh, 'Fresh', 2);
   try {
     fresh.inputType.value = 'gb';
-    fresh.files.c_gb = file;
+    replaceCircularSources(fresh.slices.inputs, [createCircularSource({ uid: 'record-1', gb: file })]);
     Object.assign(fresh.circularRecordDiscovery, idle);
     const freshRead = runner.refreshCircularRecordOrder({}, fresh);
     assert.notEqual(freshRead, oldRead, 'the new drawing does not join the old drawing\'s read');
@@ -3809,7 +3794,7 @@ test('a drawing re-added under its ID reads its own records while the old drawin
     assert.deepEqual(
       [fresh.circularRecordDiscovery.status, fresh.circularRecordList.value.map(({ selector }) => selector),
         fresh.adv.multi_record_positions.map(({ selector }) => selector)],
-      ['ready', ['#1'], ['#1']],
+      ['ready', ['#1'], ['record-1']],
       'the new drawing shows its records and their Record Order'
     );
   } finally {
@@ -3829,7 +3814,7 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    readRecordIdentitySources: async () => ({}),
+    readRecordIdentitySources: async () => ({ mode: 'circular', cards: new Map() }),
     encodeSessionResources,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
     adoptCanonicalRenderArtifacts: () => {},
@@ -3844,10 +3829,10 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
   const old = createDrawingState(id, 'circular');
   state.addDrawing(old, 'Old', 2);
   old.inputType.value = 'gb';
-  old.files.c_gb = source('old');
+  setCircularFile(source('old'), old);
   // The state a Load leaves: the list deferred for the current file.
   Object.assign(old.circularRecordDiscovery, {
-    status: 'deferred', error: '', inputType: 'gb', primaryFile: old.files.c_gb, pairedFile: null, canonicalRecordIdentities: []
+    status: 'deferred', error: '', inputType: 'gb', sources: [{ uid: 'record-1', primaryFile: old.circularSources[0].gb, pairedFile: null, error: '' }]
   });
   workerHelperResponses.splice(0, workerHelperResponses.length, reply);
   // The region dialog's read: the list, no Record Order (D-15-205).
@@ -3862,10 +3847,10 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     fresh.form.prefix = 'circular-reused';
     fresh.form.multi_record_canvas = false;
     fresh.circularConservation.enabled = false;
-    fresh.files.c_gb = source('fresh');
-    fresh.circularRecordList.value = [{ selector: '#1', record_id: 'reused', record_length: 8 }];
+    setCircularFile(source('fresh'), fresh);
+    fresh.circularRecordList.value = [{ uid: 'record-1', k: 1, identity: 'record-1', selector: '#1', record_id: 'reused', record_length: 8, detectedTopology: 'circular' }];
     Object.assign(fresh.circularRecordDiscovery, {
-      status: 'ready', error: '', inputType: 'gb', primaryFile: fresh.files.c_gb, pairedFile: null, canonicalRecordIdentities: []
+      status: 'ready', error: '', inputType: 'gb', sources: [{ uid: 'record-1', primaryFile: fresh.circularSources[0].gb, pairedFile: null, error: '' }]
     });
     const generated = result('circular-reused.svg', 'circular-reused');
     workerResponses.push(response(generated, validCatalog(generated.name)));

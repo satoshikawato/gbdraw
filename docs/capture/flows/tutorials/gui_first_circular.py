@@ -38,6 +38,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     show_drawing,
+    expect_circular_file_card,
     expect_circular_source_status,
     generate_and_inspect,
     open_ancestor_details,
@@ -93,10 +94,7 @@ def capture_first_circular(
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
-        selected_file = page.get_by_role(
-            "group", name="GenBank/DDBJ File selection", exact=True
-        )
-        expect(selected_file).to_contain_text("HmmtDNA.gbk")
+        expect_circular_file_card(page, 1, "HmmtDNA.gbk")
         expect_circular_source_status(page, "1 source record inspected")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
             page, output_paths["01-input-ready.png"]

@@ -1,5 +1,5 @@
 // @ts-check
-import { CIRCULAR_INPUT_FIELDS, inputSequenceSource } from './input-types.js';
+import { inputSequenceSource } from './input-types.js';
 import { formatFastaEntry } from './feature-sequence-fasta.js';
 import { recordSourceInterval } from './record-source-coordinates.js';
 import {
@@ -1176,8 +1176,10 @@ export const catalogDrawnUnits = (catalog) => {
  *   files?: MatchSequenceFiles,
  *   linearSeqs?: Record<string, any>[],
  *   units?: LinearUnitRecords | null,
+ *   circularSources?: readonly Readonly<Partial<Record<import('./input-types.js').InputSlot, FileLike | null>>>[],
  *   circularConservation?: Record<string, any>
- * }} [options]
+ * }} [options] `circularSources`: the Circular source cards' files, in card order; their records are the
+ *   reference's, numbered over the cards as the request's flat record list is.
  */
 export const buildRestoredMatchSequenceSources = async ({
   mode,
@@ -1186,6 +1188,7 @@ export const buildRestoredMatchSequenceSources = async ({
   files,
   linearSeqs = [],
   units = null,
+  circularSources = [],
   circularConservation
 } = {}) => {
   /** @type {SequenceSourceInput[]} */
@@ -1221,8 +1224,8 @@ export const buildRestoredMatchSequenceSources = async ({
   }
 
   const circular = inputSequenceSource(text(cInputType).toLowerCase());
-  const referenceFile = files?.[CIRCULAR_INPUT_FIELDS[circular.slot]];
-  const referenceRecords = await readInputSequenceRecords(referenceFile, circular.format);
+  const referenceRecords = (await Promise.all(circularSources
+    .map((source) => readInputSequenceRecords(source[circular.slot], circular.format)))).flat();
   referenceRecords.forEach((record, recordIndex) => {
     if (!record.sequence) return;
     sources.push({

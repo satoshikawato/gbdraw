@@ -8,7 +8,7 @@
 // drawing's annotations to the catalog (`rebindAnnotationRecords`, R10) is a
 // factory of its own, which the root creates right after the catalog.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
-import { circularInputSlots, inputSourceFiles } from '../services/input-types.js';
+import { circularSourceInputs, inputSourceFiles } from '../services/input-types.js';
 import { circularDrawingRecordSet } from '../services/record-options.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { annotationSourceKey, buildAnnotationRecordCatalog } from './annotations/record-catalog.js';
@@ -49,11 +49,21 @@ export const createDrawingRecordCatalog = ({
   /** @param {DrawingState} drawing */
   const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(drawing);
   /** @param {DrawingState} drawing */
-  const circularAnnotationSourceKey = (drawing) => annotationSourceKey({
-    scope: 'circular',
-    inputType: drawing.inputType.value,
-    ...inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))
-  });
+  // One source of every card's records (OV-2880): its key names the files by
+  // their fingerprints (`annotationSourceKey`, as a Linear card's), never by a
+  // file ID of this page, so a saved and loaded Session keeps it. One card
+  // has the key of one input file; several name each card by its uid too.
+  const circularAnnotationSourceKey = (drawing) => {
+    const inputType = drawing.inputType.value;
+    const inputs = circularSourceInputs(inputType, drawing.circularSources);
+    if (inputs.length <= 1) {
+      return annotationSourceKey({ scope: 'circular', inputType, primaryFile: inputs[0]?.primaryFile ?? null, pairedFile: inputs[0]?.pairedFile ?? null });
+    }
+    return annotationSourceKey({
+      scope: 'circular', inputType,
+      uid: JSON.stringify(inputs.map(({ uid, primaryFile, pairedFile }) => annotationSourceKey({ scope: 'circular', uid, inputType, primaryFile, pairedFile })))
+    });
+  };
   /**
    * A Linear record card as the annotation record catalog reads it.
    * @param {DrawingState} drawing the drawing that holds the card

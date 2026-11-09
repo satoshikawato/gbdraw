@@ -8,8 +8,9 @@
     "HmmtDNA.fasta": "9893484675b21612dfbb92d1a655125c997f1eeacf272ec9eaa395aa8c256e92"
   },
   "values": "drawings[0].renderRequest.records[0].source {kind: fasta, fastaResourceId: record-1-fasta}; resources.record-1-fasta kind fasta; webFiles.bindings.c_fasta only",
-  "decompressedSha256": "ce684c4d39cf7e4d72039023b9fb133813a3b9d5b9ec56466cc2c8cf4590f22e",
+  "decompressedSha256": "b34d8d25a6146f1c005592542884129d2cd5152d92a3bd7f93b8f54b5c6fe9c7",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
   "sessionVersion": 51,
-  "requestSchema": 10
+  "requestSchema": 10,
+  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed"
 }

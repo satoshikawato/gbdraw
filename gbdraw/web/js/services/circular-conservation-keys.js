@@ -5,7 +5,8 @@
 // (`readOncePerFile`), so a File a Generate already hashed is not read again.
 // The hash pairs a request names (`ConservationPairs`) are recorded with the
 // request when Generate or Load installs it; Save reads that record, no file.
-import { circularInputSlots, inputSequenceSource } from './input-types.js';
+import { inputSequenceSource } from './input-types.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeFileList, orderedConservationSources } from './conservation-series.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { CIRCULAR_CONSERVATION_FLOW } from './losat-cache.js';
@@ -19,10 +20,9 @@ import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile }
  * What the key builder reads of a Circular drawing: its input type, the reference and ring files it binds, and its
  * conservation settings (the ring order and whether the rings read sequences or uploaded BLAST tables).
  * @typedef {{
- *   files: {
- *     readonly c_gb: InputFileRef | null, readonly c_fasta: InputFileRef | null,
- *     readonly c_conservation_fastas: (InputFileRef | null)[]
- *   },
+ *   files: { readonly c_conservation_fastas: (InputFileRef | null)[] },
+ *   circularSources: readonly { readonly uid: string, readonly gb: InputFileRef | null, readonly gff: InputFileRef | null,
+ *     readonly fasta: InputFileRef | null }[],
  *   inputType: { readonly value: string },
  *   circularConservation: CircularConservationLike & { readonly source?: unknown }
  * }} ConservationDrawing
@@ -41,9 +41,11 @@ const wrapFastaSequence = (sequence) => {
 export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
 
 /**
- * The conservation subject: the LOSAT FASTA of every record of the Circular reference (the records the CLI loader
- * reads, OV-1599; a record without a sequence is left out) and its SHA-256, the entry's `subjectCanonicalHash`.
- * @typedef {{ file: FileLike, fasta: string, hash: string }} ConservationSubject
+ * The conservation subject: the LOSAT FASTA of every record of the Circular reference, each source card's file
+ * whole, in card order (the records the CLI loader reads, OV-1599, as `ring_subject_records` in
+ * gbdraw/comparisons/circular_losat.py takes them; a record without a sequence is left out) and its SHA-256, the
+ * entry's `subjectCanonicalHash`, which the CLI's ring of the same files has.
+ * @typedef {{ files: readonly FileLike[], fasta: string, hash: string }} ConservationSubject
  */
 /**
  * One conservation ring in ring order: its source, its bound File and that File's query hash (the entry's
@@ -56,17 +58,42 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
  */
 
 /**
+ * One file's part of the subject: its records' IDs and LOSAT FASTA, with the FASTA's SHA-256.
  * @param {FileLike} file
+ * @param {'genbank' | 'fasta'} fmt
+ * @returns {Promise<{ ids: readonly string[], fasta: string, hash: string }>}
+ */
+const readSubjectFile = (file, fmt) => readOncePerFile([file], `ring-subject:${fmt}`, async () => {
+  const records = (await readAllSequenceRecords(file, fmt))
+    .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
+  const fasta = records.map((record) => buildFastaText(record)).join('');
+  return Object.freeze({ ids: Object.freeze(records.map(({ id }) => id)), fasta, hash: await sha256Hex(textToBytes(fasta)) });
+});
+
+/**
+ * The subject of the source cards' files. Two cards that hold a record of one ID would put a ring's hits on either
+ * record, so the subject refuses them before any search (Python refuses such a frame too, `_one_frame_per_id`).
+ * @param {readonly FileLike[]} files one per card, in card order
  * @param {'genbank' | 'fasta'} fmt
  * @returns {Promise<ConservationSubject>}
  */
-const readConservationSubject = (file, fmt) => readOncePerFile([file], `ring-subject:${fmt}`, async () => {
-  const records = (await readAllSequenceRecords(file, fmt))
-    .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
-  if (!records.length) throw new Error('No records found for circular conservation reference.');
-  const fasta = records.map((record) => buildFastaText(record)).join('');
-  return Object.freeze({ file, fasta, hash: await sha256Hex(textToBytes(fasta)) });
-});
+export const readConservationSubject = async (files, fmt) => {
+  const parts = await Promise.all(files.map((file) => readSubjectFile(file, fmt)));
+  /** @type {Map<string, number>} */
+  const cardOfId = new Map();
+  parts.forEach(({ ids }, card) => ids.forEach((recordId) => {
+    const other = cardOfId.get(recordId);
+    if (other !== undefined && other !== card) {
+      throw diagnosticError('COMPARISON_INPUT', { reason: 'UNIQUE_IDS', field: 'records', recordId });
+    }
+    cardOfId.set(recordId, card);
+  }));
+  if (cardOfId.size === 0) throw new Error('No records found for circular conservation reference.');
+  // One file's subject is its own part, whose hash is kept with it.
+  const fasta = parts.map((part) => part.fasta).join('');
+  const hash = parts.length === 1 ? parts[0].hash : await sha256Hex(textToBytes(fasta));
+  return Object.freeze({ files: Object.freeze([...files]), fasta, hash });
+};
 
 /**
  * The subject and the rings of a Circular drawing's sequence conservation (its LOSAT rings), from its bound files.
@@ -82,8 +109,9 @@ export const circularConservationKeys = async (drawing, fileOf, beforeRing = () 
   const sources = orderedConservationSources(normalizeFileList(drawing.files.c_conservation_fastas), drawing.circularConservation);
   if (!sources.length) return { subject: null, rings: [] };
   const { slot, format } = inputSequenceSource(drawing.inputType.value);
-  const subjectFile = fileOf(circularInputSlots(drawing.files)[slot]);
-  const subject = subjectFile ? await readConservationSubject(subjectFile, format) : null;
+  const subjectFiles = drawing.circularSources.map((source) => fileOf(source[slot]));
+  const subject = subjectFiles.length > 0 && subjectFiles.every(Boolean)
+    ? await readConservationSubject(/** @type {FileLike[]} */ (subjectFiles), format) : null;
   /** @type {ConservationRingKey[]} */
   const rings = [];
   for (const source of sources) {

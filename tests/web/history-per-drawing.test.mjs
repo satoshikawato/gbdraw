@@ -27,7 +27,7 @@ globalThis.File = File;
 const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
-const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { addCircularSource, bindDrawingInputFileTree, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 
 // A3 review Low 5: every slice of the drawing and its input type.
@@ -753,41 +753,51 @@ test('a card import, Remove, and Retry are steps of the shown drawing', async ()
   assert.deepEqual(uploader.filter((line) => /runProjectStep/.test(line)), []);
 });
 
+
+// The Circular drawing's File card the cases below upload into (an earlier case may have left it).
+const ensureCircularCard = () => {
+  const circular = state.drawingOf('circular');
+  if (!circular.circularSources.some((source) => source.uid === 'card-1')) {
+    addCircularSource(circular.slices.inputs, createCircularSource({ uid: 'card-1' }));
+  }
+};
+
 test('replacing a file for every drawing that uses it is one project step that leaves no drawing on the old file', async () => {
   const app = createAppSetup();
+  ensureCircularCard();
   const history = window.__GBDRAW_HISTORY__;
   const genbank = (name) => new File([`LOCUS       ${name} 40 bp DNA\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`], name);
   app.selectDrawing('circular');
   const shared = state.inputFiles.registerFile(genbank('shared.gb'));
   // The uploader's change is a step of its drawing (history-inputs).
-  await history.runUndoable('Change uploaded file', () => { app.setCircularSourceFile('c_gb', shared); });
+  await history.runUndoable('Change uploaded file', () => { app.setCircularSourceFile('card-1', 'gb', shared); });
   const { drawingId: copyId } = app.drawingList.duplicateDrawing('circular');
   const copy = state.drawingOf(copyId);
   const circular = state.drawingOf('circular');
-  assert.equal(copy.files.c_gb, shared, 'the copy binds the same file');
+  assert.equal(copy.circularSources[0].gb, shared, 'the copy binds the same file');
   const stepsBefore = history.timeline().undo[0]?.label;
   const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'), () => undefined);
   // The project step is recorded when each drawing's part has settled.
   for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(outcome.status, 'ok');
-  const replaced = circular.files.c_gb;
+  const replaced = circular.circularSources[0].gb;
   assert.notEqual(replaced?.fileId, shared.fileId);
-  assert.equal(copy.files.c_gb, replaced, 'both drawings bind the new file');
+  assert.equal(copy.circularSources[0].gb, replaced, 'both drawings bind the new file');
   const { projectInputReplacement } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const drawings = state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
   assert.deepEqual(projectInputReplacement(drawings, shared.fileId), [], 'no drawing keeps the old source');
   assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'one step');
   await app.undoHistory();
-  assert.equal(copy.files.c_gb, shared, 'one Undo from the copy restores it');
-  assert.equal(circular.files.c_gb, shared, 'and the other drawing');
+  assert.equal(copy.circularSources[0].gb, shared, 'one Undo from the copy restores it');
+  assert.equal(circular.circularSources[0].gb, shared, 'and the other drawing');
   assert.equal(history.timeline().undo[0]?.label, stepsBefore);
   await app.redoHistory();
-  assert.equal(circular.files.c_gb?.fileId, replaced?.fileId);
+  assert.equal(circular.circularSources[0].gb?.fileId, replaced?.fileId);
   app.selectDrawing('circular');
   assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'the project step is undoable from the other drawing');
   await app.undoHistory();
-  assert.equal(circular.files.c_gb, shared);
-  assert.equal(copy.files.c_gb, shared);
+  assert.equal(circular.circularSources[0].gb, shared);
+  assert.equal(copy.circularSources[0].gb, shared);
 });
 
 test('replacing a Linear row file or a comparison file for every drawing that uses it is one project step found by row uid and comparison id', async () => {
@@ -837,18 +847,19 @@ test('replacing a Linear row file or a comparison file for every drawing that us
 });
 
 test('the replacement sites are found by drawing ID, slot, row uid, and comparison id, never on a card', async () => {
-  const { projectInputReplacement, INPUTS_SLICE, bindDrawingInputFile, bindInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { projectInputReplacement, INPUTS_SLICE, addCircularSource: addCard, bindCircularSourceFile, bindInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const store = state.inputFiles;
   const one = INPUTS_SLICE.create();
-  const genome = bindDrawingInputFile(store, one.handle, 'c_gb', new File(['x'], 'g.gb'));
+  addCard(one.handle, createCircularSource({ uid: 'card-1' }));
+  const genome = bindCircularSourceFile(store, one.handle, 'card-1', 'gb', new File(['x'], 'g.gb'));
   const card = bindInputFile(store, one.handle, 'd_color', new File(['c'], 'c.tsv'));
   const rows = [{ uid: 'row-1', gb: genome, gff: null, fasta: null, depth: null }];
   const drawings = [
-    { drawingId: 'circular', drawing: { files: one.view.files, linearSeqs: [], linearComparisonPlan: null } },
-    { drawingId: 'linear', drawing: { files: {}, linearSeqs: rows, linearComparisonPlan: { edges: [{ id: 'edge-1', file: genome }] } } }
+    { drawingId: 'circular', drawing: { files: one.view.files, linearSeqs: [], circularSources: one.view.circularSources, linearComparisonPlan: null } },
+    { drawingId: 'linear', drawing: { files: {}, linearSeqs: rows, circularSources: [], linearComparisonPlan: { edges: [{ id: 'edge-1', file: genome }] } } }
   ];
   assert.deepEqual(projectInputReplacement(drawings, genome.fileId), [
-    { drawingId: 'circular', slot: 'c_gb', rowUid: null, edgeId: null },
+    { drawingId: 'circular', slot: 'source.gb', rowUid: 'card-1', edgeId: null },
     { drawingId: 'linear', slot: 'row.gb', rowUid: 'row-1', edgeId: null },
     { drawingId: 'linear', slot: 'edge', rowUid: null, edgeId: 'edge-1' }
   ]);
@@ -888,15 +899,17 @@ test('replacing a multi-record file for every drawing expands it into records in
 // Cancel records nothing; a Remove is not a replacement and never asks.
 test('an uploader asks whether to replace a file another drawing uses for this drawing only or for every drawing', async () => {
   const app = createAppSetup();
+  ensureCircularCard();
   const history = window.__GBDRAW_HISTORY__;
   const genbank = (name) => new File([`LOCUS       ${name} 40 bp DNA\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`], name);
   const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
   app.selectDrawing('circular');
   // Earlier cases leave a file that other drawings use; a Remove never asks.
-  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', null); });
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('card-1', 'gb', null); });
   assert.equal(app.choicePrompt.show, false, 'a Remove never asks');
+  ensureCircularCard(); // a Remove of the card's last file removes the card
   const shared = state.inputFiles.registerFile(genbank('asked-shared.gb'));
-  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', shared); });
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('card-1', 'gb', shared); });
   assert.equal(app.choicePrompt.show, false, 'no other drawing uses the file: no question');
   const { drawingId: copyId } = app.drawingList.duplicateDrawing('circular');
   app.selectDrawing(copyId);
@@ -904,7 +917,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   const circular = state.drawingOf('circular');
   const before = history.timeline().undo[0]?.label;
   const ask = async (name, answer) => {
-    const pending = app.uploadCircularSourceFile('c_gb', genbank(name));
+    const pending = app.uploadCircularSourceFile('card-1', 'gb', genbank(name));
     await settle();
     assert.equal(app.choicePrompt.show, true, 'another drawing uses the file: the uploader asks');
     assert.deepEqual(app.choicePrompt.actions.map((action) => action.id), ['drawing', 'all']);
@@ -913,7 +926,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
     await settle();
   };
   await ask('asked-cancel.gb', 'cancel');
-  assert.equal(copy.files.c_gb, shared, 'Cancel changes nothing');
+  assert.equal(copy.circularSources[0].gb, shared, 'Cancel changes nothing');
   assert.equal(history.timeline().undo[0]?.label, before, 'and records no step');
   // The question names the other drawings as their tabs show them: a default
   // name in the UI language, not the stored name.
@@ -922,7 +935,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   try {
     const label = app.drawingBar.tabs().find((tab) => tab.id === 'circular')?.label ?? '';
     assert.notEqual(label, state.drawingTabOf('circular').name, 'a default name shows in the UI language');
-    const pending = app.uploadCircularSourceFile('c_gb', genbank('asked-label.gb'));
+    const pending = app.uploadCircularSourceFile('card-1', 'gb', genbank('asked-label.gb'));
     await settle();
     assert.ok(app.choicePrompt.description.includes(label), app.choicePrompt.description);
     app.resolveChoicePrompt('cancel');
@@ -932,26 +945,26 @@ test('an uploader asks whether to replace a file another drawing uses for this d
     await setUiLocale('en');
   }
   await ask('asked-one.gb', 'drawing');
-  assert.notEqual(copy.files.c_gb?.fileId, shared.fileId, 'This drawing only replaces the shown drawing');
-  assert.equal(circular.files.c_gb, shared, 'and leaves the other drawing');
+  assert.notEqual(copy.circularSources[0].gb?.fileId, shared.fileId, 'This drawing only replaces the shown drawing');
+  assert.equal(circular.circularSources[0].gb, shared, 'and leaves the other drawing');
   await app.undoHistory();
-  assert.equal(copy.files.c_gb, shared);
+  assert.equal(copy.circularSources[0].gb, shared);
   await ask('asked-all.gb', 'all');
-  assert.notEqual(copy.files.c_gb?.fileId, shared.fileId);
-  assert.equal(circular.files.c_gb, copy.files.c_gb, 'Every drawing that uses this file replaces both');
+  assert.notEqual(copy.circularSources[0].gb?.fileId, shared.fileId);
+  assert.equal(circular.circularSources[0].gb, copy.circularSources[0].gb, 'Every drawing that uses this file replaces both');
   assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'as one project step');
   await app.undoHistory();
-  assert.equal(circular.files.c_gb, shared);
-  assert.equal(copy.files.c_gb, shared);
-  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', null); });
+  assert.equal(circular.circularSources[0].gb, shared);
+  assert.equal(copy.circularSources[0].gb, shared);
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('card-1', 'gb', null); });
   assert.equal(app.choicePrompt.show, false, 'a Remove never asks');
-  assert.equal(copy.files.c_gb, null);
-  assert.equal(circular.files.c_gb, shared);
+  assert.equal(copy.circularSources.length, 0, 'a Remove of the last file removes the card');
+  assert.equal(circular.circularSources[0].gb, shared);
   // Two other drawings that use the file take the counted form.
   const copies = [app.drawingList.duplicateDrawing('circular'), app.drawingList.duplicateDrawing('circular')]
     .map(({ drawingId }) => drawingId);
   app.selectDrawing('circular');
-  const twice = app.uploadCircularSourceFile('c_gb', genbank('asked-two.gb'));
+  const twice = app.uploadCircularSourceFile('card-1', 'gb', genbank('asked-two.gb'));
   await settle();
   const labels = app.drawingBar.tabs().filter((tab) => copies.includes(tab.id)).map((tab) => tab.label);
   assert.equal(app.choicePrompt.description, `asked-shared.gb is also used in 2 drawings: ${labels.join(' and ')}.`);

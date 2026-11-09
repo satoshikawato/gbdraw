@@ -174,6 +174,19 @@ test('a file that is not a gbdraw Session is refused as such before its contents
   assert.equal(await reason({ format: 'other', version: 46, bogus: 1 }), 'SESSION_FORMAT');
 });
 
+// A saved drawing's one-drawing view (a Session 51: its Circular input in `circularSources`) as the Session 46-50
+// a writer of that version saved: only its fields (`drawingViewAt`), and the input in the `c_gb` family.
+const olderView = (view, version) => {
+  const session = drawingViewAt(view, version);
+  const bindings = session.webFiles?.bindings;
+  if (bindings && Object.hasOwn(bindings, 'circularSources')) {
+    const [card] = bindings.circularSources;
+    delete bindings.circularSources;
+    Object.assign(bindings, { c_gb: card?.gb ?? null, c_gff: card?.gff ?? null, c_fasta: card?.fasta ?? null });
+  }
+  return session;
+};
+
 // S3, S4 (E-OD03, A7d, A7f): Load refuses a version it does not read; it drops
 // a Session 46's retired homes, whose place the slices fill, with no row, and a
 // key no writer wrote with one.
@@ -181,7 +194,7 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
   resetDrawings();
   // The one-drawing view of a saved drawing is the Session 46 shape this test loads.
   const current = await save('current');
-  const viewOf = (id) => drawingViewAt(savedDrawingView(current, id), 46);
+  const viewOf = (id) => olderView(savedDrawingView(current, id), 46);
   const saved = viewOf('circular');
   const rows = async (session, label) => {
     const outcome = await load(session);
@@ -213,7 +226,7 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
 test('a Session 50 slice drops the form fields only Session 51 writes, with a row each', async () => {
   resetDrawings();
   const current = await save('session 50 fields');
-  const saved = drawingViewAt(savedDrawingView(current, 'circular'), 50);
+  const saved = olderView(savedDrawingView(current, 'circular'), 50);
   const form = saved.modes.circular.config.form;
   const rows = async (session) => {
     const outcome = await load(session);
@@ -355,7 +368,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   assert.deepEqual({ ...loadedDrawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
 
   // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
-  const older = drawingViewAt(savedDrawingView(saved, 'circular'), 46);
+  const older = olderView(savedDrawingView(saved, 'circular'), 46);
   older.modes.circular.editorState.legend = {
     ...older.modes.circular.editorState.legend,
     entries: [
@@ -437,8 +450,12 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   await loaded('linear', (config) => { config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
     { linear: [], circular: ['#2'] });
   await loaded('linear', (config) => { config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
-  await loaded('circular', (config) => { config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
-    { linear: [uid], circular: [] });
+  // A record key has one shape in both modes (a card uid or a record identity), so a Circular key is no longer
+  // required to be `#N`; an entry that is no key (padded text) is dropped.
+  await loaded('circular', (config) => { config.recordsOff = ['contig_2']; }, 'Circular key of the key shape',
+    { linear: [uid], circular: ['contig_2'] });
+  await loaded('circular', (config) => { config.recordsOff = [' contig_2 ']; }, 'Circular entry that is no key',
+    { linear: [uid], circular: [], rows: [`setting-entries-dropped@drawings[${saved.drawings.findIndex(({ id }) => id === 'circular')}].config.recordsOff`] });
   // Review F8: a list of the wrong shape is listed; every record is drawn.
   await loaded('circular', (config) => { config.recordsOff = '#2'; }, 'not a list',
     { linear: [uid], circular: [], rows: [`setting-replaced@drawings[${saved.drawings.findIndex(({ id }) => id === 'circular')}].config.recordsOff`] });
@@ -777,7 +794,7 @@ const threeDrawingSession = () => {
   return session;
 };
 const filesOfDrawings = () => Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
-  c_gb: drawing.files.c_gb?.name ?? null,
+  circularSources: drawing.circularSources.map((source) => source.gb?.name ?? null),
   linearSeqs: drawing.linearSeqs.map((seq) => seq.gb?.name ?? null)
 }]));
 
@@ -789,7 +806,7 @@ test('a Session 51 gives each drawing its own files by drawing ID, the ones it d
     const outcome = await loadKeepingSlots(session);
     assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
     const files = filesOfDrawings();
-    assert.equal(files.circular.c_gb, 'cli-web-mito.gb', opened);
+    assert.deepEqual(files.circular.circularSources, ['cli-web-mito.gb'], opened);
     assert.deepEqual(files.linear.linearSeqs, ['R2c.gb', 'R3c.gb'], opened);
     assert.deepEqual(files['linear-2'].linearSeqs, ['R2c-second.gb', 'R3c.gb'], opened);
   }

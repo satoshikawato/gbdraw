@@ -28,7 +28,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  * @property {ShownAction} shownAction
  * @property {<T>(previous: InputFileRef | null, file: InputFileCandidate | InputFileRef | null, writeShown: () => T) => T | Promise<unknown>} replaceFromShownDrawing
  *   Writes `file` in place of `previous` with the uploader's own write, after asking when another drawing uses `previous`.
- * @property {(drawing: DrawingState, field: 'c_gb' | 'c_gff' | 'c_fasta', value: InputFileCandidate | InputFileRef) => void} replaceCircularSource
+ * @property {(drawing: DrawingState, uid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef | null) => void} replaceCircularSourceFile
  * @property {(drawing: DrawingState, index: number, file: InputFileCandidate | InputFileRef) => unknown} replaceCircularDepthFile
  * @property {(drawing: DrawingState, rowUid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef) => unknown} replaceLinearSourceFile
  * @property {(drawing: DrawingState, sequences: LinearSeq[], index: number, file: InputFileCandidate | InputFileRef | null) => unknown} setLinearDepthFiles
@@ -42,13 +42,14 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  * @param {InputUploadsPorts} ports
  */
 export const createInputUploads = ({
-  shownAction, replaceFromShownDrawing, replaceCircularSource, replaceCircularDepthFile, replaceLinearSourceFile,
+  shownAction, replaceFromShownDrawing, replaceCircularSourceFile, replaceCircularDepthFile, replaceLinearSourceFile,
   setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
 }) => {
-  /** @param {'c_gb' | 'c_gff' | 'c_fasta'} field @param {File | null} file */
-  const uploadCircularSourceFile = (field, file) => shownAction('circular', (drawing) => (
-    replaceFromShownDrawing(drawing.files[field], file, () => replaceCircularSource(drawing, field, file))
-  ));
+  /** One file of a Circular source card, by the card's uid. @param {string} uid @param {'gb' | 'gff' | 'fasta'} field @param {File | null} file */
+  const uploadCircularSourceFile = (uid, field, file) => shownAction('circular', (drawing) => {
+    const card = drawing.circularSources.find((source) => source.uid === uid);
+    return card ? replaceFromShownDrawing(card[field], file, () => replaceCircularSourceFile(drawing, uid, field, file)) : undefined;
+  });
   /** @param {number} index @param {File | null} file */
   const uploadCircularDepthFile = (index, file) => shownAction('circular', (drawing) => (
     replaceFromShownDrawing(circularDepthRepresentatives(drawing)[Number(index)] || null, file, () => replaceCircularDepthFile(drawing, index, file))

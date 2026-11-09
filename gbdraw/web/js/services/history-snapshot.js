@@ -162,7 +162,7 @@ const editedIntentPartOf = (path, value) => (
  * type, without the comparisons a Generate wrote (a Linear checkpoint adds
  * them), and the comparison plan's files by edge ID.
  * @typedef {Omit<DrawingInputFiles, 'linearCanonicalComparisons'> & Partial<Pick<DrawingInputFiles, 'linearCanonicalComparisons'>>
- *   & Pick<InputsData, 'linearSeqs' | 'inputType'> & { linearComparisons: { id: string, file: BoundFileValue }[] }} FilesData
+ *   & Pick<InputsData, 'linearSeqs' | 'circularSources' | 'inputType'> & { linearComparisons: { id: string, file: BoundFileValue }[] }} FilesData
  */
 /**
  * The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and its LOSAT program).
@@ -697,7 +697,7 @@ const applyFallbackResultsData = (state, results = []) => {
 };
 
 // A drawing's intent holds the file bindings of its slots by reference
-// (PD-OI-090): its inputs slice capture (S-1, DESIGN §2) — Circular's `c_*`
+// (PD-OI-090): its inputs slice capture (S-1, DESIGN §2) — Circular's source cards and `c_*`
 // inputs, including the BLAST rows and comparison sequences of a LOSAT-cache
 // replay (its ring rows and managed track slots name those rows, so Undo
 // restores them together, B23), Linear's record rows, its input type, and its
@@ -724,12 +724,13 @@ const refsOf = (value) => (
  * @returns {FilesData}
  */
 const filesDataOf = (drawing, generated) => {
-  const { files: { linearCanonicalComparisons, ...bound }, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
+  const { files: { linearCanonicalComparisons, ...bound }, linearSeqs, circularSources, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
   return {
     ...bound,
     ...(generated ? { linearCanonicalComparisons } : {}),
     inputType,
     linearSeqs,
+    circularSources,
     linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: refsOf(edge.file) }))
   };
 };
@@ -757,8 +758,8 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
   // the step's refs, which History keeps stored (a ref whose file was released
   // binds nothing). An intent leaves out the comparisons a Generate wrote; a
   // Linear checkpoint holds them.
-  const { linearSeqs = [], inputType, linearComparisons: _planFiles, ...files } = filesData;
-  installBoundInputs(fileStore, drawing.slices.inputs, { files, linearSeqs, inputType }, {
+  const { linearSeqs = [], circularSources = [], inputType, linearComparisons: _planFiles, ...files } = filesData;
+  installBoundInputs(fileStore, drawing.slices.inputs, { files, linearSeqs, circularSources, inputType }, {
     keep: Object.hasOwn(filesData, 'linearCanonicalComparisons') ? [] : ['linearCanonicalComparisons']
   });
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {

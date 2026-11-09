@@ -14,24 +14,28 @@ import { annotationRecordKeysOf } from './annotations/record-catalog.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
 import { removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
-import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
+import { circularSourceInputs } from '../services/input-types.js';
 import { groupLinearSourceRecords, planLinearSourceRemoval } from '../services/linear-sources.js';
 import {
   circularRecordDrawKey,
-  circularRecordRequestKeys,
+  heldCardPrefix,
+  legacyCircularRecordKeys,
   linearCardHasSettings,
+  placeFlatRecordSelectors,
   RECORD_SETTINGS_DEFAULTS,
   recordsWithEdits,
   removeRecordEdits
 } from '../services/record-draw-selection.js';
-import { buildDisambiguatedRecordEntries, resolveDisambiguatedRecordSelection } from '../services/record-options.js';
+import { circularRecordEntries, circularRecordSelection, resolveDisambiguatedRecordSelection } from '../services/record-options.js';
 import { msg } from '../utils/i18n.js';
+import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CircularRecordEntry } from '../services/drawing/inputs.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { CircularRecordDiscovery, SequenceRecord } from '../services/record-discovery.js' */
-/** @import { RecordDrawKey, RecordEditData, RecordSettingsOwner } from '../services/record-draw-selection.js' */
+/** @import { RecordDrawKey, RecordEditData, RecordIdentitySources, RecordSettingsOwner } from '../services/record-draw-selection.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { MultiRecordPosition } from '../services/config.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { ApplyLinearSeqMutation, AskLinearFileRemoval, RemoveLinearSource } from './linear-source-edits.js' */
 /** @import { RecordSelectionMode, RecordSource } from './record-selection.js' */
@@ -59,6 +63,36 @@ import { msg } from '../utils/i18n.js';
  */
 
 /**
+ * After a settled read of a Circular drawing's cards, the one place its
+ * record choices are named by identity (OV-2869, OV-2903): each flat `#N`
+ * an older Session kept goes to its record over the cards as loaded
+ * (`placeFlatRecordSelectors`), and a Record select value or a Record
+ * Order row that names one record otherwise (a record ID, as a CLI Session
+ * of one-record files names its rows, OV-2906; a card's `#k`) becomes that
+ * record's identity, which the Record select lists and the Record Order
+ * keeps. The read's caller writes it in its step (Generate's own read
+ * commits it with that Generate).
+ * @param {DrawingState} drawing
+ * @param {ReturnType<typeof circularRecordEntries>} entries The drawing's read records, named.
+ * @param {() => RecordIdentitySources} identitySources The drawing's record lists and its cards as loaded.
+ */
+const placeRecordChoices = (drawing, entries, identitySources) => {
+  /** @type {MultiRecordPosition[]} */
+  const positions = drawing.adv.multi_record_positions;
+  const choices = { recordsOff: [...drawing.recordsOff], selector: drawing.form.circular_record_selector, positions };
+  const placed = drawing.files.c_legacy_record_cards ? placeFlatRecordSelectors(choices, identitySources()) : choices;
+  /** @param {string} key */
+  const identityOf = (key) => circularRecordSelection(entries, key).record?.value ?? key;
+  const selector = identityOf(placed.selector);
+  if (selector !== drawing.form.circular_record_selector) drawing.form.circular_record_selector = selector;
+  const rows = placed.positions.map((row) => ({ ...row, selector: identityOf(row.selector) }));
+  /** @param {readonly unknown[]} list @param {readonly unknown[]} next */
+  const changed = (list, next) => JSON.stringify(list) !== JSON.stringify(next);
+  if (changed(drawing.recordsOff, placed.recordsOff)) drawing.recordsOff.splice(0, Infinity, ...placed.recordsOff);
+  if (changed(positions, rows)) positions.splice(0, Infinity, ...rows);
+};
+
+/**
  * Registers nothing. The root creates it with the transitions below, before
  * the record selection owner that takes `recordSourceOf`.
  * @param {RecordSettingsSourcePorts} ports
@@ -80,25 +114,46 @@ export const createRecordSettingsSources = ({
     bindingKeys: annotationRecordKeysOf(linearAnnotationSource(drawing, seq, false), seq.uid),
     displaySource: seq.uid, displaySelector: null
   });
-  /** @param {DrawingState} drawing */
-  const circularRecordEntries = (drawing) => buildDisambiguatedRecordEntries(
-    getCircularRecordDiscoveryState(drawing).records.map((record) => ({
-      ...record, recordId: record?.record_id ?? record?.recordId, recordLength: record?.record_length ?? record?.recordLength
-    }))
-  );
-  /** @returns {RecordSettingsOwner[]} */
-  /** @param {DrawingState} drawing */
+  /** The drawing's read Circular records, named (`circularRecordEntries`). @param {DrawingState} drawing */
+  const circularEntriesOf = (drawing) => circularRecordEntries(getCircularRecordDiscoveryState(drawing).records);
+  /**
+   * The read records of each Circular source card, by uid, in drawing order
+   * (the cards a record identity is read from, `RecordIdentitySources`).
+   * @param {DrawingState} drawing
+   */
+  const circularRecordCards = (drawing) => {
+    const entries = circularEntriesOf(drawing);
+    return new Map(drawing.circularSources.map((source) => [source.uid, entries.filter((entry) => entry.uid === source.uid)]));
+  };
+  /**
+   * The record lists a Circular drawing's record identities are read from,
+   * with the cards an older Session's flat record positions still count over
+   * (OV-2867): those Load installed, up to the first one gone or whose file
+   * changed (`heldCardPrefix`).
+   * @param {DrawingState} drawing
+   * @returns {RecordIdentitySources}
+   */
+  const circularIdentitySources = (drawing) => ({
+    mode: 'circular',
+    cards: circularRecordCards(drawing),
+    legacyOrder: heldCardPrefix(drawing.files.c_legacy_record_cards ?? [],
+      circularSourceInputs(drawing.inputType.value, drawing.circularSources))
+  });
+  /** OV-2869, OV-2906: see `placeRecordChoices`. @param {DrawingState} drawing */
+  const placeCircularRecordChoices = (drawing) => placeRecordChoices(drawing, circularEntriesOf(drawing), () => circularIdentitySources(drawing));
+  /** @param {DrawingState} drawing @returns {RecordSettingsOwner[]} */
   const circularRecordSettingsOwners = (drawing) => {
     const discovery = getCircularRecordDiscoveryState(drawing);
     const bindingKeys = annotationRecordKeysOf(
       { sourceKey: circularAnnotationSourceKey(drawing), hasInput: discovery.hasInput, status: discovery.status, records: discovery.records },
       'circular-source'
     );
-    return circularRecordEntries(drawing).map((entry, index) => ({
+    const legacy = legacyCircularRecordKeys(circularIdentitySources(drawing));
+    return circularEntriesOf(drawing).map((entry, index) => ({
       key: circularRecordDrawKey(entry),
-      requestKeys: circularRecordRequestKeys(entry),
+      requestKeys: [entry.identity, ...(legacy.get(entry.identity) || [])],
       bindingKeys: bindingKeys[index] ? [bindingKeys[index]] : [],
-      displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
+      displaySource: entry.uid, displaySelector: entry.selector
     }));
   };
   /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
@@ -125,19 +180,30 @@ export const createRecordSettingsSources = ({
     const drawing = shownDrawingOfMode(listMode);
     if (!drawing) return null;
     if (listMode === 'circular') {
-      if (sourceKey !== 'circular' || getCircularRecordDiscoveryState(drawing).status !== 'ready') return null;
-      const owners = circularRecordSettingsOwners(drawing);
+      // `circular`: every card's records, one list; a card's uid: that card's records.
+      const inputs = circularSourceInputs(drawing.inputType.value, drawing.circularSources)
+        .filter((input) => sourceKey === 'circular' || input.uid === sourceKey);
+      if (inputs.length === 0 || getCircularRecordDiscoveryState(drawing).status !== 'ready') return null;
+      const uids = new Set(inputs.map((input) => input.uid));
+      const entries = circularEntriesOf(drawing);
+      const owners = circularRecordSettingsOwners(drawing).filter((_owner, index) => uids.has(entries[index].uid));
       if (owners.length === 0) return null;
       const edited = recordsWithEdits(owners, recordEditData(drawing));
-      const entries = circularRecordEntries(drawing);
+      const shown = entries.filter((entry) => uids.has(entry.uid));
+      // A card's file names, as its File card's header line says them.
+      /** @param {{ uid: string }} input */
+      const fileNames = ({ uid }) => fileCardLine(drawing.inputType.value, drawing.circularSources.find((source) => source.uid === uid) ?? {});
       return {
-        key: 'circular',
-        name: (({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files)))
-          .filter(Boolean).map((file) => String(file?.name || 'Unnamed file')).join(' + '),
+        key: sourceKey,
+        name: inputs.map(fileNames).join(' + '),
         records: owners.map((owner, index) => ({
-          key: owner.key, recordId: entries[index].recordId, length: entries[index].recordLength ?? null,
+          key: owner.key, recordId: shown[index].recordId, length: shown[index].recordLength ?? null,
           hasSettings: edited.has(owner.key)
-        }))
+        })),
+        // The list of several cards groups its rows by file (circular-multi-file D-10).
+        groups: inputs.length > 1 ? inputs.map((input) => ({
+          key: input.uid, name: fileNames(input), keys: owners.filter((_owner, index) => shown[index].uid === input.uid).map((owner) => owner.key)
+        })) : []
       };
     }
     const group = linearSourceGroups.value.find((entry) => entry.uid === sourceKey);
@@ -156,7 +222,7 @@ export const createRecordSettingsSources = ({
       })
     };
   };
-  return { circularRecordEntries, recordSettingsOwners, recordEditData, recordSourceOf };
+  return { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf };
 };
 
 /**
@@ -170,8 +236,8 @@ export const createRecordSettingsSources = ({
  *   Runs `change` and retires the Legend styles of the captions it leaves unnamed.
  * @property {() => unknown} projectPaletteAndRules Projects the palette and the color rules' matches again.
  * @property {ApplyLinearSeqMutation} applyLinearSeqMutation
- * @property {(field: 'c_gb' | 'c_gff' | 'c_fasta', value: File | null) => unknown} setCircularSourceFile
- *   Writes a Circular source slot of the shown Circular drawing.
+ * @property {(drawing: DrawingState, uid: string) => boolean} removeCircularSourceOf
+ *   Removes a Circular source card, inside the open History step.
  * @property {RemoveLinearSource} removeLinearSource
  * @property {AskLinearFileRemoval} askLinearFileRemoval
  * @property {{ readonly value: boolean }} dialogChoicePending Whether a dialog choice is open.
@@ -189,7 +255,7 @@ export const createRecordSettingsSources = ({
  */
 export const createRecordSettingsTransitions = ({
   state, shownDrawingOfMode, recordSettingsOwners, recordEditData, retireLegendStylesOfUnnamedCaptions,
-  projectPaletteAndRules, applyLinearSeqMutation, setCircularSourceFile, removeLinearSource, askLinearFileRemoval,
+  projectPaletteAndRules, applyLinearSeqMutation, removeCircularSourceOf, removeLinearSource, askLinearFileRemoval,
   dialogChoicePending, mutationPending, refreshLinearRecords, getCircularRecordDiscoveryState, inspectCircularSourceRecords
 }) => {
   /**
@@ -229,12 +295,12 @@ export const createRecordSettingsTransitions = ({
    */
   const removeRecordSource = (listMode, sourceKey) => {
     if (listMode === 'circular') {
-      // The shown Circular drawing's input, which its File card removes from.
+      // The shown Circular drawing's source card the list names; the whole list
+      // (`circular`) names its one card.
       const drawing = shownDrawingOfMode('circular');
       if (drawing === null) return undefined;
-      const { primary, paired } = inputTypeSpec(drawing.inputType.value);
-      if (paired) setCircularSourceFile(CIRCULAR_INPUT_FIELDS[primary], null);
-      return setCircularSourceFile(CIRCULAR_INPUT_FIELDS[paired ?? primary], null);
+      const uid = sourceKey === 'circular' && drawing.circularSources.length === 1 ? drawing.circularSources[0].uid : sourceKey;
+      return removeCircularSourceOf(drawing, uid);
     }
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;

@@ -255,6 +255,20 @@ def run_track_slot_row_action(row: Locator, label: str, *, only_if_enabled: bool
     return True
 
 
+def circular_file_card(page: Page, number: int) -> Locator:
+    """Return Circular File card `number` (1-based), the card that holds one input file."""
+
+    return page.get_by_role("region", name=f"Circular input file {number}", exact=True)
+
+
+def expect_circular_file_card(page: Page, number: int, name: str) -> None:
+    """Wait until Circular File card `number` (1-based) names the chosen file."""
+
+    expect(
+        circular_file_card(page, number).locator(":scope > details > summary")
+    ).to_have_attribute("aria-label", f"File {number}: {name}")
+
+
 def expect_circular_source_status(page: Page, text: str) -> None:
     """Wait until the Circular Source records status shows the documented text."""
 

@@ -36,8 +36,11 @@ from functools import cache
 from importlib import resources
 from types import MappingProxyType
 import json
+import re
 from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDict, cast, get_args
 
+from gbdraw.api.record_planning import CLI_RECORD_KEY_PREFIX
+from gbdraw.api.requests import EXPANDED_RECORD_KEY_SEPARATOR
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import (
     DRAWING_ID_MAX_LENGTH,
@@ -50,9 +53,11 @@ from gbdraw.session_contract import (
 )
 from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
+    CircularSourceCard,
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
     FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+    MODE_SCOPED_CIRCULAR_INPUT_SLOTS,
     MODE_SCOPED_SESSION_MAX_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     OTHER_MODE_RESULT_EDITOR_FIELDS,
@@ -61,6 +66,7 @@ from gbdraw.session_io import (
     OTHER_MODE_RESULT_UI_FIELDS,
     WEB_BINDING_CARD_SLOTS,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
+    WEB_BINDING_INPUT_SLOT,
     WEB_BINDING_MODE_SLOTS,
     session_legend_edits_by_row_key,
     session_mode,
@@ -962,6 +968,159 @@ def _migrated_drawing_modes(
     return [shown, other]
 
 
+_SOURCE_SELECTOR = re.compile(r"#([1-9][0-9]*)")
+_CLI_RECORD_KEY = re.compile(re.escape(CLI_RECORD_KEY_PREFIX) + r"[1-9][0-9]*")
+
+
+def _request_record_file(record: object) -> object:
+    """The resource of the file a request record reads its record from."""
+
+    source = _mapping(_mapping(record).get("source"))
+    return source.get("resourceId") or source.get("fastaResourceId")
+
+
+def _card_record_counts(cards: Sequence[CircularSourceCard], records: Sequence[object]) -> list[int] | None:
+    """How many records each File card's file holds, when the request draws
+    every record of each card's own file; else None."""
+
+    files = [_mapping(card["gb"]).get("resourceId") or _mapping(card["fasta"]).get("resourceId") for card in cards]
+    if None in files or len(set(files)) != len(files):
+        return None
+    counts = [sum(_request_record_file(record) == file for record in records) for file in files]
+    return counts if 0 not in counts and sum(counts) == len(records) else None
+
+
+def _card_uids(files: Sequence[object], records: Sequence[object]) -> list[str]:
+    """The uid of each File card (D-12).
+
+    The key base of the committed request's records of each card's own file,
+    when every card's file is read by records of one key base of the CLI's
+    form (``record-<n>``) and the bases differ; else ``record-1`` for one card and
+    ``source-<n>`` for several, which no key of a Session 50 has (a composite
+    drawn as one concatenated source keyed its records ``record-<k>`` over all
+    of them).
+    """
+
+    bases: list[str] = []
+    for file in files:
+        resource_id = _mapping(file).get("resourceId")
+        keys = {
+            str(_mapping(record).get("recordKey") or "").split(EXPANDED_RECORD_KEY_SEPARATOR)[0]
+            for record in records
+            if resource_id and _request_record_file(record) == resource_id
+        }
+        base = next(iter(keys)) if len(keys) == 1 else ""
+        bases.append(base if _CLI_RECORD_KEY.fullmatch(base) else "")
+    if all(bases) and len(set(bases)) == len(bases):
+        return bases
+    return ["record-1" if len(files) == 1 else f"source-{index + 1}" for index in range(len(files))]
+
+
+def circular_sources_of_mode_scoped(data: Mapping[str, object]) -> dict[str, object]:
+    """A Session 46-50 with its Circular input as File cards (``circularSources``).
+
+    ``c_gb`` (one GenBank file, or a ``composite`` of several), ``c_gff`` and
+    ``c_fasta`` become one card per file, in order, with the uids of
+    :func:`_card_uids`. The first card
+    keeps ``c_gff`` and ``c_fasta``. The Circular slice's source selectors
+    (``#N`` over the files' records in order) in ``recordsOff``,
+    ``form.circular_record_selector`` and ``adv.multi_record_positions`` become
+    record identities (``<uid>:<k>``, or ``<uid>`` for a file of one record)
+    where the record counts can be known: one card known to hold several
+    records (the request draws two or more, a record is OFF, or a selector
+    names ``#2`` or later) or else one (its Record Order lists only ``#1``:
+    a read lists every record of the file), or cards whose own records the
+    request draws all (:func:`_card_record_counts`). A selector that cannot
+    be placed stays ``#N`` (OV-2869): the Web places it over the records of
+    the cards as they were loaded, as the one file of then held them. A
+    record ID selector stays, and a Record Order row without a selector is
+    left out. Rows keyed by request keys are not renamed: the Web moves them
+    on the first Generate. The Web's ``circularSourcesOfModeScoped``
+    (``services/session-drawings-upgrade.js``) is the twin.
+    """
+
+    web_files = _mapping(data.get("webFiles"))
+    bindings = web_files.get("bindings")
+    if not isinstance(bindings, Mapping) or not MODE_SCOPED_CIRCULAR_INPUT_SLOTS & set(bindings):
+        return dict(data)
+    gb = bindings.get("c_gb")
+    files = list(gb["components"]) if isinstance(gb, Mapping) and gb.get("kind") == "composite" else [gb]
+    gff, fasta = bindings.get("c_gff"), bindings.get("c_fasta")
+    count = len(files) if len(files) > 1 or files[0] is not None or gff is not None or fasta is not None else 0
+    circular = next((drawing for drawing in read_session_drawings(data) if drawing.mode == "circular"), None)
+    request = _mapping(circular.artifacts.fields.get("renderRequest")) if circular is not None else {}
+    records = request.get("records")
+    records = records if isinstance(records, list) else []
+    uids = _card_uids([files[index] if files[index] is not None else (fasta if index == 0 else None) for index in range(count)], records)
+    cards = [
+        CircularSourceCard(
+            uid=uids[index],
+            gb=files[index] if index < len(files) else None,
+            gff=gff if index == 0 else None,
+            fasta=fasta if index == 0 else None,
+        )
+        for index in range(count)
+    ]
+    moved: dict[str, object] = {
+        **data,
+        "webFiles": {
+            **web_files,
+            "bindings": {
+                **{key: value for key, value in bindings.items() if key not in MODE_SCOPED_CIRCULAR_INPUT_SLOTS},
+                "circularSources": cards,
+            },
+        },
+    }
+    modes = _mapping(data.get("modes"))
+    config = _mapping(_mapping(modes.get("circular")).get("config"))
+    # With no card, no source selector can be placed: each stays as it is.
+    if not config:
+        return moved
+    records_off = config.get("recordsOff")
+    records_off = records_off if isinstance(records_off, list) else []
+    form, adv = _mapping(config.get("form")), _mapping(config.get("adv"))
+    positions = adv.get("multi_record_positions")
+    positions = positions if isinstance(positions, list) else []
+    selectors = [
+        *records_off, form.get("circular_record_selector"), *(_mapping(row).get("selector") for row in positions)
+    ]
+    numbers = [int(match.group(1)) for value in selectors if isinstance(value, str) and (match := _SOURCE_SELECTOR.fullmatch(value))]
+    # One card known to hold several records holds every number given.
+    several = len(records) > 1 or bool(records_off) or any(number > 1 for number in numbers)
+    counts = (
+        ([max(2, len(records), *numbers)] if several else [1] if positions else None)
+        if len(cards) == 1
+        else _card_record_counts(cards, records)
+    )
+
+    def identity(value: object) -> object:
+        """The identity of a source selector where it can be placed; any other value as it is."""
+
+        match = _SOURCE_SELECTOR.fullmatch(value) if isinstance(value, str) else None
+        if match is None or counts is None:
+            return value
+        number = int(match.group(1))
+        for card, held in zip(cards, counts):
+            if number <= held:
+                return f"{card['uid']}:{number}" if held > 1 else card["uid"]
+            number -= held
+        return value
+
+    moved_config = dict(config)
+    # A ``recordsOff`` that is not a list is left to the reader that repairs it.
+    if isinstance(config.get("recordsOff"), list):
+        off = [identity(key) for key in records_off]
+        moved_config["recordsOff"] = list(dict.fromkeys(key for key in off if key is not None))
+    if "circular_record_selector" in form:
+        selected = identity(form["circular_record_selector"])
+        moved_config["form"] = {**form, "circular_record_selector": selected if selected is not None else ""}
+    if "multi_record_positions" in adv:
+        rows = [{**_mapping(row), "selector": identity(_mapping(row).get("selector"))} for row in positions]
+        moved_config["adv"] = {**adv, "multi_record_positions": [row for row in rows if row["selector"] is not None]}
+    moved["modes"] = {**modes, "circular": {**_mapping(modes["circular"]), "config": moved_config}}
+    return moved
+
+
 def drawings_document_from_mode_scoped(
     data: Mapping[str, object],
     *,
@@ -998,6 +1157,7 @@ def drawings_document_from_mode_scoped(
     source: Mapping[str, Any] = data
     if version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
         source, _outcomes = session_legend_edits_by_row_key(data)
+    source = circular_sources_of_mode_scoped(source)
     committed = {drawing.mode: dict(drawing.artifacts.fields) for drawing in read_session_drawings(source)}
     if not committed:
         raise ValidationError("The Session names no drawing to move.", diagnostic=_LAYOUT_INVALID)
@@ -1051,6 +1211,8 @@ class SessionDrawingsLayout(TypedDict):
     inputTypeFields: dict[str, str]
     bindingCardSlots: list[str]
     bindingModeSlots: dict[str, list[str]]
+    bindingInputSlots: dict[str, str]
+    modeScopedCircularInputSlots: list[str]
     resourceReferenceFields: list[str]
     resourceIdListFields: list[str]
     drawingResourceFields: list[str]
@@ -1089,6 +1251,8 @@ def describe_session_drawings_layout() -> SessionDrawingsLayout:
         "inputTypeFields": dict(_INPUT_TYPE_FIELDS),
         "bindingCardSlots": sorted(WEB_BINDING_CARD_SLOTS),
         "bindingModeSlots": per_mode(WEB_BINDING_MODE_SLOTS),
+        "bindingInputSlots": {mode: WEB_BINDING_INPUT_SLOT[mode] for mode in DRAWING_NAMES},
+        "modeScopedCircularInputSlots": sorted(MODE_SCOPED_CIRCULAR_INPUT_SLOTS),
         "resourceReferenceFields": sorted(_RESOURCE_REFERENCE_FIELDS),
         "resourceIdListFields": list(_RESOURCE_ID_LIST_FIELDS),
         "drawingResourceFields": list(_DRAWING_RESOURCE_FIELDS),
@@ -1113,6 +1277,7 @@ __all__ = [
     "checked_drawing_views",
     "describe_session_drawings_layout",
     "drawing_draft_config",
+    "circular_sources_of_mode_scoped",
     "drawings_document_from_mode_scoped",
     "other_mode_fields",
     "read_session_drawings",

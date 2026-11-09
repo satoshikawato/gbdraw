@@ -2670,7 +2670,13 @@ def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> Non
     assert circular["renderRequest"] is None and circular["results"] == []
     for drawing in (linear, circular):
         mode_slice = source["modes"][drawing["mode"]]
-        assert drawing["config"] == mode_slice["config"]
+        # The one Circular genome becomes the File card record-1, so the `#1` selector reads as that record.
+        moved_config = copy.deepcopy(mode_slice["config"])
+        if drawing["mode"] == "circular":
+            for row in moved_config["adv"]["multi_record_positions"]:
+                assert row["selector"] == "#1"
+                row["selector"] = "record-1"
+        assert drawing["config"] == moved_config
         assert drawing["features"] == mode_slice["features"]
         for key, value in mode_slice["editorState"]["legend"].items():
             assert drawing["editorState"]["legend"][key] == value
@@ -2685,8 +2691,19 @@ def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> Non
     bindings = source["webFiles"]["bindings"]
     for drawing in (linear, circular):
         slots = {"schema"} | WEB_BINDING_CARD_SLOTS | WEB_BINDING_MODE_SLOTS[drawing["mode"]]
-        assert drawing["webFiles"]["bindings"] == {key: value for key, value in bindings.items() if key in slots}
-    assert set(linear["webFiles"]["bindings"]) | set(circular["webFiles"]["bindings"]) == set(bindings)
+        kept = {key: value for key, value in bindings.items() if key in slots}
+        if drawing["mode"] == "circular":
+            # c_gb, c_gff and c_fasta become one File card per file.
+            assert (bindings["c_gb"]["resourceId"], bindings["c_gff"], bindings["c_fasta"]) == (
+                "record-2-genbank", None, None,
+            )
+            kept["circularSources"] = [
+                {"uid": "record-1", "gb": bindings["c_gb"], "gff": None, "fasta": None}
+            ]
+        assert drawing["webFiles"]["bindings"] == kept
+    assert set(linear["webFiles"]["bindings"]) | set(circular["webFiles"]["bindings"]) == (
+        set(bindings) - {"c_gb", "c_gff", "c_fasta"} | {"circularSources"}
+    )
     assert linear["webFiles"]["linearRecordMetadata"] == source["webFiles"]["linearRecordMetadata"]
     assert document["webFiles"] == {"resourceOriginalNames": source["webFiles"]["resourceOriginalNames"]}
     assert document["resources"] == source["resources"]

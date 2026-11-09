@@ -11,7 +11,7 @@ const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
     type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [product] }
   }));
-  const state = { extractedFeatures: { value: features }, files: { t_color: null }, manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
+  const state = { extractedFeatures: { value: features }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
   return { state, features, preparation: createRulePreparation({ state: withDrawings(state), evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });
@@ -165,20 +165,21 @@ test('derived comparison cache invalidation keeps prepared colors current while 
     await gate;
     return evaluatePythonRules(payload);
   });
-  state.files = { c_gb: {}, linearCanonicalComparisons: [] };
+  state.files = { linearCanonicalComparisons: [] };
+  state.circularSources = [{ uid: 'card-1', gb: {}, gff: null, fasta: null }];
   const pending = preparation.prepareCandidate([{ ...rule('NADH'), color: '#112233', cap: 'NADH' }]);
   state.files.linearCanonicalComparisons = [];
   release();
   const candidate = await pending;
   assert.ok(candidate, 'invalidating request-owned comparison reuse cannot invalidate color rules');
   assert.equal(preparation.isCurrent(candidate.snapshot), true);
-  state.files.c_gb = {};
+  state.circularSources[0].gb = {};
   assert.equal(preparation.isCurrent(candidate.snapshot), false, 'replaced biological sources remain guarded');
 });
 
 
 for (const replace of [
-  state => { state.files.c_gb = new File(['changed bases'], 'same.gb', { lastModified: 123 }); },
+  state => { state.circularSources[0].gb = new File(['changed bases'], 'same.gb', { lastModified: 123 }); },
   state => { state.linearSeqs[0].gb = new File(['changed bases'], 'same.gb', { lastModified: 123 }); },
   state => { state.files.c_conservation_fastas[0] = new File(['changed bases'], 'same.gb', { lastModified: 123 }); }
 ]) {
@@ -190,7 +191,8 @@ for (const replace of [
       await gate;
       return { rules: payload.rules };
     });
-    state.files = { c_gb: original, c_conservation_fastas: [original] };
+    state.files = { c_conservation_fastas: [original] };
+    state.circularSources = [{ uid: 'card-1', gb: original, gff: null, fasta: null }];
     state.linearSeqs = [{ gb: original, gff: null, fasta: null }];
     const catalog = state.extractedFeatures.value;
     const pending = preparation.prepareCandidate(TWO_COLORS);

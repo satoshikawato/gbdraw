@@ -41,7 +41,7 @@ const file = { name: 'same.gb', size: text.length, type: 'text/plain', lastModif
 const requestAfter = (mode, edit) => {
   const state = stateFor(mode);
   edit(state);
-  const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
+  const filesData = { circularSources: [{ uid: 'card', gb: file, gff: null, fasta: null }], linearSeqs: [{ uid: 'card', gb: file }] };
   return buildCanonicalRenderRequest({ state, drawing: state, filesData, comparisonPlanSnapshot: mode === 'linear'
     ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' })
     : null }).renderRequest;
@@ -78,17 +78,19 @@ test('inactive rotation retains raw intent but cannot emit an invalid effective 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} shared writer preserves rotation placement and nondefault tolerance`, () => {
     const state = stateFor(mode);
-    const sourceUid = mode === 'circular' ? 'circular' : 'card';
+    const sourceUid = 'card';
     const rows = buildRecordDisplayRows({ scope: mode, sourceUid, source: {},
       records: [1, 2].map(() => ({ recordId: 'same', recordLength: 100, detectedTopology: 'circular' })) });
-    state.circularRecordList.value = rows.map((row) => ({ ...row, record_id: row.recordId }));
+    state.circularRecordList.value = rows.map((row, index) => ({
+      ...row, uid: 'card', k: index + 1, identity: `card:${index + 1}`, selector: `#${index + 1}`, record_id: row.recordId
+    }));
     state.recordDisplayDrafts = [draft(rows[0], 1), draft(rows[1], 71)];
     state.adv.feature_overlap_tolerance_bp = 2;
-    const recordKey = mode === 'circular' ? 'record-2' : 'card:2';
+    const recordKey = 'card:2';
     const override = target(recordKey);
     const draftRow = { ...override };
     state.featurePlacementOverrides = { [featureIdentityKeyOf(draftRow)]: draftRow };
-    const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
+    const filesData = { circularSources: [{ uid: 'card', gb: file, gff: null, fasta: null }], linearSeqs: [{ uid: 'card', gb: file }] };
     const result = buildCanonicalRenderRequest({ state, drawing: state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
     assert.equal(result.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);

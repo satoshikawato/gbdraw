@@ -352,8 +352,8 @@ const extractionRegionSpec = (regionSpec) => {
  * @property {string} mode
  * @property {string} cInputType
  * @property {string} lInputType
- * @property {File | null} [circularFile]
- * @property {File | null} [circularFastaFile]
+ * @property {readonly { file: File | null, fastaFile?: File | null }[]} [circularFiles] The Circular source
+ *   cards' files, in card order (a GFF3 card's FASTA in `fastaFile`).
  * @property {Record<string, any>[]} [linearSeqs]
  * @property {Array<RegionSpecInput | null> | null} [regionSpecs]
  * @property {string[] | null} [recordSelectors]
@@ -371,8 +371,7 @@ export const extractFeatureMetadataForPreview = async ({
   mode,
   cInputType,
   lInputType,
-  circularFile,
-  circularFastaFile = null,
+  circularFiles = [],
   linearSeqs = [],
   regionSpecs = null,
   recordSelectors = null,
@@ -387,53 +386,52 @@ export const extractFeatureMetadataForPreview = async ({
   /** @type {{ inputIndex: number, message: string }[]} */
   const errors = [];
 
-  if (mode === 'circular' && ['gb', 'gff'].includes(cInputType)) {
+  if (mode === 'circular' && ['gb', 'gff'].includes(cInputType) && circularFiles.length > 0) {
     const isGff = cInputType === 'gff';
-    const featData = await readFeatureExtractionDataImpl({
-      path: isGff ? '/input.gff' : '/input.gb',
-      file: circularFile || null,
-      format: isGff ? 'gff' : 'genbank',
-      fastaPath: isGff ? '/input.fasta' : null,
-      fastaFile: isGff ? circularFastaFile : null,
-      mode: 'circular',
-      regionSpec: null,
-      recordSelector: null,
-      reverseFlag: false,
-      selectedFeatures,
-      includeBiologicalFeatures: true,
-      featureVisibilityTablePath,
-      featureVisibilityTsv,
-      timingEntries,
-      timingLabel: 'feature extraction circular input'
-    });
-    if (featData?.error) {
-      errors.push({ inputIndex: 0, message: String(featData.error) });
-      return {
-        extractedFeatures: [],
-        biologicalFeatures: [],
-        featureRecordIds: [],
-        selectedFeatureRecordIdx: 0,
-        errors
-      };
+    // The cards' records are one flat record list, as the render reads them: each card's features and records
+    // are numbered after the cards before it (`f<n>` and `record_idx` count over that list).
+    /** @type {NormalizedFeature[]} */
+    const extractedFeatures = [];
+    /** @type {NormalizedFeature[]} */
+    const biologicalFeatures = [];
+    /** @type {string[]} */
+    const featureRecordIds = [];
+    for (let card = 0; card < circularFiles.length; card += 1) {
+      const { file, fastaFile = null } = circularFiles[card];
+      const suffix = circularFiles.length > 1 ? `_${card}` : '';
+      const featData = await readFeatureExtractionDataImpl({
+        path: isGff ? `/input${suffix}.gff` : `/input${suffix}.gb`,
+        file: file || null,
+        format: isGff ? 'gff' : 'genbank',
+        fastaPath: isGff ? `/input${suffix}.fasta` : null,
+        fastaFile: isGff ? fastaFile : null,
+        mode: 'circular',
+        regionSpec: null,
+        recordSelector: null,
+        reverseFlag: false,
+        selectedFeatures,
+        includeBiologicalFeatures: true,
+        featureVisibilityTablePath,
+        featureVisibilityTsv,
+        timingEntries,
+        timingLabel: 'feature extraction circular input'
+      });
+      const features = featData?.features;
+      if (featData?.error || !Array.isArray(features)) {
+        errors.push({ inputIndex: card, message: featData?.error ? String(featData.error) : 'Feature extraction returned an unexpected payload.' });
+        return { extractedFeatures: [], biologicalFeatures: [], featureRecordIds: [], selectedFeatureRecordIdx: 0, errors };
+      }
+      const recordOffset = featureRecordIds.length;
+      /** @param {number} offset @returns {(feature: ExtractedFeature, index: number) => NormalizedFeature} */
+      const numbered = (offset) => (feature, index) => normalizeBiologicalFeature(feature, recordOffset === 0 && offset === 0 ? {} : {
+        id: `f${offset + index}`,
+        ...(typeof feature.record_idx === 'number' ? { record_idx: recordOffset + feature.record_idx } : {})
+      });
+      extractedFeatures.push(...features.map(numbered(extractedFeatures.length)));
+      biologicalFeatures.push(...biologicalFeaturesFromExtraction(featData).map(numbered(biologicalFeatures.length)));
+      featureRecordIds.push(...(featData?.record_ids || []));
     }
-    if (!Array.isArray(featData?.features)) {
-      errors.push({ inputIndex: 0, message: 'Feature extraction returned an unexpected payload.' });
-      return {
-        extractedFeatures: [],
-        biologicalFeatures: [],
-        featureRecordIds: [],
-        selectedFeatureRecordIdx: 0,
-        errors
-      };
-    }
-    return {
-      extractedFeatures: featData.features.map((feature) => normalizeBiologicalFeature(feature)),
-      biologicalFeatures: biologicalFeaturesFromExtraction(featData)
-        .map((feature) => normalizeBiologicalFeature(feature)),
-      featureRecordIds: featData?.record_ids || [],
-      selectedFeatureRecordIdx: 0,
-      errors
-    };
+    return { extractedFeatures, biologicalFeatures, featureRecordIds, selectedFeatureRecordIdx: 0, errors };
   }
 
   if (mode === 'linear' && ['gb', 'gff'].includes(lInputType) && Array.isArray(linearSeqs) && linearSeqs.length > 0) {

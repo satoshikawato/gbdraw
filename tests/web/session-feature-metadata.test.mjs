@@ -133,8 +133,7 @@ const {
     mode: 'circular',
     cInputType: 'gff',
     lInputType: 'gb',
-    circularFile: gffFile,
-    circularFastaFile: fastaFile,
+    circularFiles: [{ file: gffFile, fastaFile }],
     readFeatureExtractionDataImpl: async (request) => {
       extractionRequest = request;
       return {
@@ -820,7 +819,7 @@ for (const invalidRecordIndex of [
     snapshot: {
       mode: 'circular',
       cInputType: 'gb',
-      files: { c_gb: { name: 'c.gb' } },
+      circularSources: [{ gb: { name: 'c.gb' } }],
       selectedResultIndex: 0,
       results: committedResults('<svg><g data-gbdraw-record-id="R1" data-gbdraw-record-index="0"><path id="hc" data-gbdraw-feature-id="hc" /></g></svg>'),
       featureState: {},
@@ -887,7 +886,7 @@ for (const invalidRecordIndex of [
     snapshot: {
       mode: 'circular',
       cInputType: 'gb',
-      files: { c_gb: { name: 'c.gb' } },
+      circularSources: [{ gb: { name: 'c.gb' } }],
       selectedResultIndex: 0,
       results: committedResults('<svg><path id="drw" data-gbdraw-feature-id="drw" /></svg>'),
       featureState: {},
@@ -955,7 +954,7 @@ for (const invalidRecordIndex of [
   assert.equal(linearPlan.recoveredFeatureState, undefined);
   const circularPlan = await buildSessionFeatureRecoveryPlan({
     snapshot: {
-      mode: 'circular', cInputType: 'gb', files: { c_gb: { name: 'c.gb' } }, selectedResultIndex: 0,
+      mode: 'circular', cInputType: 'gb', circularSources: [{ gb: { name: 'c.gb' } }], selectedResultIndex: 0,
       results: committedResults('<svg><g data-gbdraw-record-index="0"><path id="h" data-gbdraw-feature-id="h" /></g>'
         + '<g data-gbdraw-record-index="1"><path id="h" data-gbdraw-feature-id="h" /></g></svg>'),
       featureState: {}, editorState: {}

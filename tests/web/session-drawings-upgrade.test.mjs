@@ -12,12 +12,40 @@ const { upgradeModeScopedSession } = await import('../../gbdraw/web/js/services/
 const root = new URL('../../', import.meta.url);
 const vectors = JSON.parse(readFileSync(new URL('tests/fixtures/sessions/drawings-vectors.json', root), 'utf8'));
 
+/**
+ * What a vector's `circular` pins of each Circular drawing (`_circular_cards`,
+ * tests/test_session_drawings_vectors.py): its File cards, files by resource
+ * ID, and the record selectors of its draft.
+ * @param {Record<string, any>} document
+ */
+const circularCards = (document) => document.drawings
+  .filter((/** @type {Record<string, any>} */ drawing) => drawing.mode === 'circular')
+  .map((/** @type {Record<string, any>} */ drawing) => {
+    const rows = drawing.webFiles?.bindings?.circularSources;
+    const config = drawing.config || {};
+    return {
+      id: drawing.id,
+      circularSources: rows === undefined ? null : rows.map((/** @type {Record<string, any>} */ row) => ({
+        uid: row.uid, gb: row.gb?.resourceId ?? null, gff: row.gff?.resourceId ?? null, fasta: row.fasta?.resourceId ?? null
+      })),
+      recordsOff: config.recordsOff ?? null,
+      circular_record_selector: config.form?.circular_record_selector ?? null,
+      multi_record_positions: config.adv?.multi_record_positions ?? null
+    };
+  });
+
 for (const vector of vectors.upgrades) {
-  test(`a Session 46-48 moves to the vector drawings: ${vector.name}`, () => {
+  test(`a Session 46-50 moves to the vector drawings: ${vector.name}`, () => {
     const input = typeof vector.input === 'string'
       ? JSON.parse(gunzipSync(readFileSync(new URL(vector.input, root))).toString('utf8'))
       : structuredClone(vector.input);
+    for (const { path: [...parents], value } of vector.edits || []) {
+      const key = parents.pop();
+      parents.reduce((holder, part) => holder[part], input)[key] = value;
+    }
     const { document, sourceFacts } = upgradeModeScopedSession(input, input.version);
+    // The Circular input moves to File cards (circular-multi-file D-01, D-08).
+    assert.deepEqual(circularCards(document), vector.circular || []);
     assert.deepEqual(
       document.drawings.map((/** @type {Record<string, unknown>} */ drawing) => (
         { id: drawing.id, mode: drawing.mode, keys: Object.keys(drawing).sort() }

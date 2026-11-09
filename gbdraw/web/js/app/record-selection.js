@@ -20,6 +20,10 @@ import { msg } from '../utils/i18n.js';
  * @property {string} key Linear: the File's uid (`linearSourceGroups`); Circular: 'circular'.
  * @property {string} name The file name(s) the dialogs show.
  * @property {RecordListEntry[]} records
+ * @property {readonly RecordListGroup[]} [groups] The files the list groups its rows under, in drawing
+ *   order: a Circular list of several File cards; none for a list of one file.
+ * @typedef {{ key: string, name: string, keys: readonly RecordDrawKey[] }} RecordListGroup One file of a list (its card's
+ *   uid) and its records.
  * @typedef {(mode: RecordSelectionMode) => RecordDrawKey[]} RecordsOffPort
  *   The reactive OFF list of the shown drawing when it is of `mode`, which this owner rewrites; an
  *   empty list when another mode's drawing is shown (the lists and checkboxes are in the shown
@@ -69,6 +73,24 @@ import { msg } from '../utils/i18n.js';
  * @typedef {{ open: boolean, mode: RecordSelectionMode, sourceKey: string, name: string }} RemoveFileDialog
  */
 
+/**
+ * The rows a list shows, under the file each is in when the source groups its
+ * records by file (circular-multi-file D-10), else in one group without a
+ * name: filtered by record ID and sorted within each file. A file with no row
+ * left after the search shows no name.
+ * @param {RecordSource} source
+ * @param {{ recordsOff: readonly RecordDrawKey[], query: string, sort: RecordListSort }} view
+ * @returns {{ key: string, name: string, rows: RecordListRow[] }[]}
+ */
+const recordListGroups = (source, view) => {
+  /** @param {readonly RecordListEntry[]} records */
+  const rowsOf = (records) => recordListRows({ records, ...view });
+  if (!source.groups?.length) return [{ key: source.key, name: '', rows: rowsOf(source.records) }];
+  return source.groups.map((group) => ({
+    key: group.key, name: group.name, rows: rowsOf(source.records.filter((record) => group.keys.includes(record.key)))
+  })).filter((group) => group.rows.length);
+};
+
 /** @param {RecordSelectionOptions} options */
 export const createRecordSelection = ({
   reactive, computed, recordsOff, source, runUndoable, withDialogChoice, closeAfterDialogChoice,
@@ -107,10 +129,8 @@ export const createRecordSelection = ({
   const recordListView = computed(() => {
     const shown = listSource.value;
     const mode = listMode();
-    /** @type {RecordListRow[]} */
-    const rows = shown ? recordListRows({
-      records: shown.records, recordsOff: recordsOff(mode), query: recordList.query, sort: recordList.sort
-    }) : [];
+    const groups = shown ? recordListGroups(shown, { recordsOff: recordsOff(mode), query: recordList.query, sort: recordList.sort }) : [];
+    const rows = groups.flatMap((group) => group.rows);
     return {
       open: Boolean(shown),
       mode,
@@ -118,7 +138,7 @@ export const createRecordSelection = ({
       name: shown?.name || '',
       total: shown?.records.length || 0,
       drawn: shown ? drawnCount(mode, shown.records.map((record) => record.key)) : 0,
-      rows,
+      rows, groups,
       offWithSettings: rows.filter((row) => !row.drawn && row.hasSettings).map((row) => row.key)
     };
   });

@@ -81,10 +81,8 @@ const sourceState = {
   linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
   losatProgram: { value: 'blastn' },
   losat: { blastp: { mode: 'pairwise' } },
+  circularSources: [{ uid: 'record-1', gb: circularInput, gff: null, fasta: null }],
   files: {
-    c_gb: circularInput,
-    c_gff: null,
-    c_fasta: null,
     c_depth: retainedDepth,
     c_conservation_blasts: [],
     c_conservation_blasts_source: null,
@@ -109,7 +107,7 @@ const sourceState = {
 
 const circular = await serializeActiveRenderFiles('circular', sourceState);
 assert.equal(circularInput.reads(), 1);
-assert.equal(circular.c_gb.name, 'active.gb');
+assert.equal(circular.circularSources[0].gb.name, 'active.gb');
 assert.equal(circular.c_depth, null);
 assert.deepEqual(circular.linearSeqs, []);
 assert.equal(circular.d_color, null);
@@ -131,18 +129,15 @@ const restoredView = createSessionResourceFileView(restoredTable, 'resource-0001
 });
 const restoredCircular = await serializeActiveRenderFiles('circular', {
   ...sourceState,
-  files: { ...sourceState.files, c_gb: restoredView }
+  circularSources: [{ uid: 'record-1', gb: restoredView, gff: null, fasta: null }]
 });
-assert.equal(restoredCircular.c_gb.name, 'original.gbk');
-assert.equal(restoredCircular.c_gb.data, Buffer.from(restoredPayload).toString('base64'));
+assert.equal(restoredCircular.circularSources[0].gb.name, 'original.gbk');
+assert.equal(restoredCircular.circularSources[0].gb.data, Buffer.from(restoredPayload).toString('base64'));
 
 const linearInput = readableFile('linear.gb', 'LOCUS linear');
 const linearState = {
   ...sourceState,
-  files: {
-    ...sourceState.files,
-    c_gb: unreadableFile('inactive-circular.gb')
-  },
+  circularSources: [{ uid: 'record-1', gb: unreadableFile('inactive-circular.gb'), gff: null, fasta: null }],
   linearSeqs: [{
     uid: 'linear-uid',
     gb: linearInput,
@@ -156,7 +151,7 @@ const linear = await serializeActiveRenderFiles('linear', linearState);
 assert.equal(linearInput.reads(), 1);
 assert.equal(linear.linearSeqs[0].gb.name, 'linear.gb');
 assert.equal(linear.linearSeqs[0].depth, null);
-assert.equal(linear.c_gb, null);
+assert.deepEqual(linear.circularSources, []);
 
 const multiRecordInput = readableFile('multi-record.gbff', 'LOCUS one\n//\nLOCUS two\n//\n');
 const sharedRecordInput = readableFile('shared.gbff', 'LOCUS one\n//\nLOCUS two\n//\n');

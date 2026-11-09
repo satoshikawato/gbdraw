@@ -317,13 +317,16 @@ const SAMPLES = {
     orthogroupDormantOverrides: { '["sample-member"]': { name: 'Dormant name', description: 'Dormant description' } }
   }),
   // A file bound in the drawing's own input fields: a Circular drawing's
-  // GenBank file, a Linear drawing's one record row. The store registers it.
+  // GenBank file in its File card, a Linear drawing's one record row. The store registers it.
   inputs: (mode) => {
     const inputs = DRAWING_SLICES.inputs.capture(modeDrawing(state, mode).slices.inputs);
     const file = state.inputFiles.registerFile(new File([`LOCUS       sample_${mode}\n//\n`], `sample-${mode}.gb`, { lastModified: 1 }));
     return mode === 'linear'
       ? { ...inputs, linearSeqs: [createLinearSeq({ uid: 'sample-row', gb: file })] }
-      : { ...inputs, files: { ...inputs.files, c_gb: file }, circularRecordDiscovery: { ...inputs.circularRecordDiscovery, primaryFile: file } };
+      // The card's record read waits, as after the Load of a Circular request (OV-2881).
+      : { ...inputs, circularSources: [{ uid: 'sample-card', gb: file, gff: null, fasta: null }],
+        circularRecordDiscovery: { status: 'deferred', error: '', inputType: inputs.inputType,
+          sources: [{ uid: 'sample-card', primaryFile: file, pairedFile: null, error: '' }] } };
   },
   canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
   // Load keeps the rows `canonicalFeatureOverrides` and the placement reader

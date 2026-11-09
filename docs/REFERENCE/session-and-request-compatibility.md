@@ -627,14 +627,21 @@ Without saved `ui.layoutPreferences`, the legend and plot-title positions come
 from the committed `diagramOptions.output` for its mode and grouping, so a CLI
 `--legend` survives loading and the first Generate.
 
-The Web file inventory uses binding schema 2. An explicit composite `c_gb`
-restores one editable GenBank File from ordered component resource bindings.
-Each component keeps its own filename, MIME type, modification time and exact
-bytes; duplicate payloads can share storage while every occurrence is kept.
-Combining appends LF to each nonempty component that lacks a final LF.
-Combining does not depend on the last committed `renderRequest`; replay still
-uses that request. Python validates and preserves the draft binding without combining
-its components for rendering.
+The Web file inventory uses binding schema 2. A Session 51 Circular drawing
+holds its input as File cards, `webFiles.bindings.circularSources` (each card
+`{uid, gb, gff, fasta}`, every file a binding or null). The Circular record
+selections (`recordsOff`, the Record select and the record positions) name a
+record by its card's uid, or `<uid>:<k>` for the `k`-th record of a file of
+several. A Session 51 does not write `c_gb`, `c_gff`, `c_fasta` or a composite.
+A Session 41 to 50 may hold an explicit composite `c_gb` (ordered component
+resource bindings, each with its own filename, MIME type, modification time and
+exact bytes; duplicate payloads can share storage while every occurrence is
+kept). Loading it makes one File card per component, in order, with uid
+`record-<n>` (`source-<n>` when the request drew the files as one source), and
+maps a `#N` record selector to that record where the record counts are known;
+otherwise the selector stays `#N`, and the Web app places it over the records of
+the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
+Session 41 to 50 without combining its components for rendering.
 
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;

@@ -4,14 +4,10 @@
 // a card's fold, and the File removal dialog's target. The composition root
 // passes the shown-drawing readers and the folded cards as ports; the removal
 // itself stays in app-setup.js.
-import { circularInputSlots, inputSourceFiles } from '../services/input-types.js';
-import {
-  groupLinearSourceRecords,
-  linearCardFileFields,
-  linearCardInputComplete,
-  setLinearSourceFolded
-} from '../services/linear-sources.js';
+import { circularInputComplete, circularSourceInputs, inputSourceFiles } from '../services/input-types.js';
+import { groupLinearSourceRecords, linearCardInputComplete, setLinearSourceFolded } from '../services/linear-sources.js';
 import { t } from '../utils/i18n.js';
+import { chosenFileName, fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { InputSlot } from '../services/input-types.js' */
 /** @import { FoldedLinearSources, LinearSourceGroup } from '../services/linear-sources.js' */
@@ -19,10 +15,6 @@ import { t } from '../utils/i18n.js';
 const { computed, reactive, ref } = window.Vue;
 
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
-
-/** @param {{ name?: string } | null} file */
-const chosenFileName = (file) => String(file?.name || t('Unnamed file'));
-const LINEAR_FILE_SLOT_NAMES = { gb: 'GenBank', gff: 'GFF3', fasta: 'FASTA' };
 
 /**
  * @typedef {object} LinearFileCardsPorts
@@ -53,30 +45,22 @@ export const createLinearFileCards = ({ shownDrawingOfMode, shownLinearSeqs, lin
     const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
     return names.length ? names.join(' + ') : t('File {n}', { n: linearSourceGroups.value.indexOf(source) + 1 });
   };
-  /**
-   * What a File card's header line says of the slots the card shows: each
-   * file's name, "no FASTA" for a slot still empty, "No file" for none.
-   * @param {LinearSourceGroup} source
-   */
+  /** A File card's header line (`fileCardLine`). @param {LinearSourceGroup} source */
   const linearCardFileLine = (source) => {
     const drawing = shownDrawingOfMode('linear');
-    if (drawing === null) return t('No file');
-    const fields = linearCardFileFields(drawing.inputType.value);
-    if (!fields.some((field) => source.sequence[field])) return t('No file');
-    return fields.map((field) => (
-      source.sequence[field] ? chosenFileName(source.sequence[field]) : t('no {file}', { file: LINEAR_FILE_SLOT_NAMES[field] })
-    )).join(' + ');
+    return drawing === null ? t('No file') : fileCardLine(drawing.inputType.value, source.sequence);
   };
   /**
    * Whether the shown drawing of a mode has every file its input type reads.
    * @param {'circular' | 'linear'} drawingMode
-   * @param {Readonly<Partial<Record<InputSlot, unknown>>>} [linearSlots] a Linear card's slots; Circular reads the drawing's own files
+   * @param {Readonly<Partial<Record<InputSlot, unknown>>>} [linearSlots] a Linear card's slots; Circular reads the drawing's own cards
    */
   const shownInputComplete = (drawingMode, linearSlots = {}) => {
     const drawing = shownDrawingOfMode(drawingMode);
     if (drawing === null) return false;
-    const slots = drawingMode === 'circular' ? circularInputSlots(drawing.files) : linearSlots;
-    return inputSourceFiles(drawing.inputType.value, slots).complete;
+    return drawingMode === 'circular'
+      ? circularInputComplete(circularSourceInputs(drawing.inputType.value, drawing.circularSources))
+      : inputSourceFiles(drawing.inputType.value, linearSlots).complete;
   };
   /** @param {LinearSourceGroup} source */
   const linearCardHoldsInput = (source) => {
@@ -84,14 +68,12 @@ export const createLinearFileCards = ({ shownDrawingOfMode, shownLinearSeqs, lin
     return drawing !== null && linearCardInputComplete(source, drawing.inputType.value);
   };
   // A File card folds to its header line. The disclosure reports every change
-  // of its own state: the user's press, and a path that opened the card to
-  // show a setting inside it.
+  // of its own state (the shell's `fold`): the user's press, and a path that
+  // opened the card to show a setting inside it.
   /** @param {LinearSourceGroup} source */
   const isLinearSourceFolded = (source) => linearFoldedSources.has(source.uid);
-  /** @param {LinearSourceGroup} source @param {Event} event */
-  const syncLinearSourceFold = (source, event) => setLinearSourceFolded(
-    linearFoldedSources, source.uid, !(/** @type {HTMLDetailsElement} */ (event.currentTarget)).open
-  );
+  /** @param {LinearSourceGroup} source @param {boolean} folded */
+  const syncLinearSourceFold = (source, folded) => setLinearSourceFolded(linearFoldedSources, source.uid, folded);
   const linearSourceRemovalTargetName = computed(() => {
     const source = linearSourceRemovalTarget.value;
     return source ? linearSourceFileName(source) : t('Unavailable File');

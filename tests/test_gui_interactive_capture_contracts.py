@@ -216,7 +216,7 @@ def test_h_gui_15_validates_every_actual_export() -> None:
         'not contents.startswith(b"%PDF-")',
         'b"%%EOF"',
         'rb"/MediaBox',
-        "PNG_DPI / 96",
+        "png_pixel_size(*svg_dimensions, PNG_DPI)",
     ):
         assert value in source
 

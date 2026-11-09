@@ -65,6 +65,8 @@ const { exportSession, importSession } = callerSession(sessionConfig, state, awa
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { readCircularSourceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
 const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
@@ -166,10 +168,10 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
         const projectedFiles = mode === 'linear' ? modeDrawing(state, 'linear').linearSeqs.map(seq => seq.gb)
-          : label === 'gff' ? [] : [modeDrawing(state, 'circular').files.c_gb];
+          : label === 'gff' ? [] : modeDrawing(state, 'circular').circularSources.map(card => card.gb);
         const sources = projectedFiles.filter(Boolean).flatMap(ref => {
           const source = getSessionResourceSource(state.inputFiles.fileOf(ref));
-          return source.descriptors || [source];
+          return [source];
         });
         assert.equal(sources.length, sourcePaths.length);
         for (const [index, source] of sources.entries()) {
@@ -177,8 +179,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
-          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_gff))), hash(await readFile(args[1])));
-          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_fasta))), hash(await readFile(args[3])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').circularSources[0].gff))), hash(await readFile(args[1])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').circularSources[0].fasta))), hash(await readFile(args[3])));
         }
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.
@@ -683,9 +685,15 @@ const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
   results: [], editorState: { featureCatalog: null }
 });
 // The request the next Generate builds (run-analysis.js), inheriting a
-// read-only CLI comparison (-b) as Inherit saved comparison does.
+// read-only CLI comparison (-b) as Inherit saved comparison does. Generate
+// reads the records of a Circular drawing's cards first (D-13).
 const nextGenerate = async () => {
   const drawing = state.activeDrawing();
+  if (state.mode.value === 'circular') {
+    const reads = await readCircularSourceRecords(circularSourceInputs(drawing.inputType.value, drawing.circularSources),
+      (ref) => state.inputFiles.fileOf(ref));
+    drawing.circularRecordList.value = reads.flatMap(read => read.records);
+  }
   const filesData = await serializeActiveRenderFiles(state, drawing);
   const inherit = drawing.importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY';
   const candidate = buildCanonicalRenderRequest({ state, drawing,

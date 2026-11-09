@@ -57,10 +57,10 @@ test('Circular single-record presentation selects, transforms, titles, and round
     app.selectDrawing('circular');
     app.setCircularInputType('gb');
     // The File transition runs the record discovery the record list waits for (R10).
-    app.setCircularSourceFile('c_gb', new File([`${first}\n${second}`], 'two-records.gbk', {
+    void app.addCircularSourceFiles('gb', [new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',
       lastModified: 1
-    }));
+    })]);
     Object.assign(app.form, {
       multi_record_canvas: false,
       suppress_gc: true,
@@ -79,7 +79,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
   const recordSelect = page.getByLabel('Circular record', { exact: true });
   await expect(recordSelect).toContainText('BGC0000708');
   await expect(recordSelect).toContainText('BGC0000709');
-  await recordSelect.selectOption('BGC0000709');
+  const chosenIdentity = await chooseRecord(recordSelect, 'BGC0000709');
   await page.getByLabel('Circular record label').fill('長い 環状ゲノム ラベル');
   await page.getByLabel('Circular record subtitle').fill('Selected second record');
 
@@ -142,7 +142,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
   await waitForAppShell(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
-  await expect(page.getByLabel('Circular record', { exact: true })).toHaveValue('BGC0000709');
+  await expect(page.getByLabel('Circular record', { exact: true })).toHaveValue(chosenIdentity);
   await expect(page.getByLabel('Circular region start')).toHaveValue('1000');
   await expect(page.getByLabel('Circular region end')).toHaveValue('12000');
   await expect(page.getByLabel('Circular reverse complement')).toBeChecked();
@@ -168,6 +168,20 @@ const panel = (page) => page.locator('[data-circular-record-presentation]');
 const ready = (page) => expect.poll(() => page.evaluate(async () => (
   (await import('./js/state.js')).state.activeDrawing().circularRecordDiscovery.status
 ))).toBe('ready');
+// The Circular record select names a record by its identity (`<card uid>`,
+// or `<card uid>:<k>` in a file of several records): the option of record ID
+// `record`, or of the k-th record of the card for `#k`.
+const chooseRecord = async (select, record) => {
+  const value = () => select.locator('option').evaluateAll((options, key) => {
+    const index = /^#(\d+)$/.exec(key);
+    const found = options.filter((option) => option.value !== '').find((option) => (index
+      ? option.value.endsWith(`:${index[1]}`) : option.textContent.includes(key)));
+    return found ? found.value : null;
+  }, record);
+  await expect.poll(value).not.toBeNull();
+  await select.selectOption(await value());
+  return value();
+};
 const nativeUpload = (page, content, name = 'presentation.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
 
@@ -178,11 +192,13 @@ for (const width of [1280, 390]) {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
     const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
     await upload.focus();
-    const uploadAnchor = await upload.boundingBox();
     await nativeUpload(page, singleSource);
     await ready(page);
-    await expect(upload).toBeFocused();
-    await expect.poll(async () => Math.abs((await upload.boundingBox()).y - uploadAnchor.y)).toBeLessThanOrEqual(2);
+    // The first file makes File card 1, which takes the place of the empty input's uploader: the focus moves to
+    // the card's file button, opened to show it (OV-2905), as a Linear card keeps it on its own.
+    const cardFile = page.locator('[data-circular-source-card]').first().getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+    await expect(cardFile).toBeFocused();
+    await expect(cardFile).toBeInViewport();
     await expect(panel(page)).toHaveAttribute('open', '');
     await expect(page.getByLabel('Circular region start')).toBeEnabled();
     const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -203,18 +219,20 @@ for (const width of [1280, 390]) {
     const selector = page.getByLabel('Circular record', { exact: true });
     await selector.focus();
     const before = await selector.boundingBox();
-    await selector.selectOption('BGC0000709');
+    await chooseRecord(selector, 'BGC0000709');
     await expect(panel(page)).toHaveAttribute('open', '');
     await expect(selector).toBeFocused();
     await expect.poll(async () => Math.abs((await selector.boundingBox()).y - before.y))
       .toBeLessThanOrEqual(2);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_selector)).toBe('BGC0000709');
+    // The Record select writes the record's identity.
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_selector)).toBe(await page.evaluate(() => (
+      window.__GBDRAW_APP__.circularRecordList.find((record) => record.record_id === 'BGC0000709').identity)));
     expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas)).toBe(false);
     await summary.focus();
     await page.keyboard.press('Enter');
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.def_font_size += 1; });
     await expect(panel(page)).not.toHaveAttribute('open', '');
-    await selector.selectOption('BGC0000708');
+    await chooseRecord(selector, 'BGC0000708');
     await expect(panel(page)).toHaveAttribute('open', '');
     if (width === 390) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
@@ -240,7 +258,7 @@ test('grid and explicit batch explain applicability outside disclosure and requi
   await expect(grid).toBeFocused();
   await expect(grid).toBeChecked();
   await page.keyboard.press('Space');
-  await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+  await chooseRecord(page.getByLabel('Circular record', { exact: true }), 'BGC0000709');
   await expect(panel(page)).toHaveAttribute('open', '');
   await expect(page.getByLabel('Circular region start')).toBeEnabled();
   // A saved one-record batch remains a batch until the user selects that record.
@@ -253,7 +271,7 @@ test('grid and explicit batch explain applicability outside disclosure and requi
   await expect(page.getByLabel('Circular region start')).toBeDisabled();
   await expect(page.getByText('Select one record to edit crop, orientation, and title lines.', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_grouping_intent)).toBe('batch');
-  await page.getByLabel('Circular record', { exact: true }).selectOption('NC_012920.1');
+  await chooseRecord(page.getByLabel('Circular record', { exact: true }), 'NC_012920.1');
   await expect(page.getByLabel('Circular region start')).toBeEnabled();
 });
 
@@ -279,7 +297,7 @@ test('History restore re-inspects sources and reconciles missing or ambiguous se
   await page.evaluate(() => { window.__GBDRAW_APP__.form.circular_record_selector = 'NC_012920.1'; });
   await expect(page.getByLabel('Circular region start')).toBeDisabled();
   await expect(page.getByText("Record selector 'NC_012920.1' is ambiguous in the current input.", { exact: true })).toBeVisible();
-  await page.getByLabel('Circular record', { exact: true }).selectOption('#2');
+  await chooseRecord(page.getByLabel('Circular record', { exact: true }), '#2');
   await expect(page.getByLabel('Circular region start')).toBeEnabled();
   await expect(page.getByLabel('Circular region start')).toHaveValue('25');
   await expect(page.getByLabel('Circular region end')).toHaveValue('100');
@@ -294,7 +312,7 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   });
   await nativeUpload(page, singleSource);
   await ready(page);
-  await page.getByLabel('Circular record', { exact: true }).selectOption('NC_012920.1');
+  const chosen = await chooseRecord(page.getByLabel('Circular record', { exact: true }), 'NC_012920.1');
   await generateAndWaitForResult(page);
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -306,7 +324,7 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 180000 });
 
   const select = page.getByLabel('Circular record', { exact: true });
-  await expect(select).toHaveValue('NC_012920.1');
+  await expect(select).toHaveValue(chosen);
   const shot = async (name) => {
     if (!process.env.OV41_SHOT_DIR) return;
     const section = page.locator('section[aria-label="Source records"]');
@@ -316,12 +334,13 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   // A Session load does not inspect the source; the saved selector is unverified, not missing.
   await expect(page.locator('[data-circular-discovery-status]')).toHaveText('Records not inspected');
   await shot('record-control-loaded.png');
-  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (not inspected)');
+  // The record of a file of one record has no record ID in the request: its file names it (OV-2949).
+  await expect(select.locator('option:checked')).toHaveText('presentation.gb (not inspected)');
 
   // Inspection resolves the selector to the real record entry.
   await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();
   await ready(page);
-  await expect(select).toHaveValue('NC_012920.1');
+  await expect(select).toHaveValue(chosen);
   await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (16,569 bp)');
   await shot('record-control-inspected.png');
 });
@@ -339,15 +358,17 @@ test('replacing or removing a multi-record source resets its one-record presenta
       form.circular_record_label, form.circular_record_subtitle, adv.circular_grouping_intent];
   });
   const clean = ['', null, null, false, '', '', 'auto'];
+  // The Record select writes the chosen record's identity.
+  let chosen = '';
   const choose = async () => {
     await nativeUpload(page, `${firstGenbank}\n${secondGenbank}`, 'two.gb');
     await ready(page);
-    await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+    chosen = await chooseRecord(page.getByLabel('Circular record', { exact: true }), 'BGC0000709');
     await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
       circular_region_start: 500, circular_region_end: 3000, circular_reverse: true,
       circular_record_label: 'Label X', circular_record_subtitle: 'Sub Y'
     }));
-    expect(await presentation()).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+    expect(await presentation()).toEqual([chosen, 500, 3000, true, 'Label X', 'Sub Y', 'single']);
   };
   await choose();
   const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -356,14 +377,15 @@ test('replacing or removing a multi-record source resets its one-record presenta
   expect(await presentation()).toEqual(clean);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect.poll(presentation).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+  await expect.poll(presentation).toEqual([chosen, 500, 3000, true, 'Label X', 'Sub Y', 'single']);
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await expect.poll(presentation).toEqual(clean);
   await ready(page);
   await generateAndWaitForResult(page);
 
   await choose();
-  await page.getByRole('button', { name: 'Remove GenBank/DDBJ File', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove File 1', exact: true }).click();
+  await page.locator('[data-circular-source-removal-dialog] [role=dialog]').getByRole('button', { name: 'Remove file', exact: true }).click();
   await expect.poll(presentation).toEqual(clean);
 });
 
@@ -376,7 +398,7 @@ test('one record replacing one record with another ID keeps the crop and still g
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
   await nativeUpload(page, firstGenbank, 'one.gb');
   await ready(page);
-  await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000708');
+  await chooseRecord(page.getByLabel('Circular record', { exact: true }), 'BGC0000708');
   await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
     circular_region_start: 500, circular_region_end: 3000, circular_record_label: 'Label X'
   }));

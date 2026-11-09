@@ -172,7 +172,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     await page.evaluate(async (content) => {
       const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
       const app = window.__GBDRAW_APP__;
-      app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
+      await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = cardState.activeDrawing().circularSources[0] ?? inputs.createCircularSource(); if (!cardState.activeDrawing().circularSources.includes(card)) inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
       // The title has its place from the start: moving it there moves the
       // records too, which builds the catalog items again.
       app.adv.plot_title_position = 'top';

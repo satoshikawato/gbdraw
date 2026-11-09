@@ -78,7 +78,7 @@ const snapshot = page => page.evaluate(async () => {
   const drawing = state.activeDrawing();
   // The drawing names its files by ref; the store holds the files.
   const refs = drawing.mode === 'linear' ? drawing.linearSeqs.map(seq => seq.gb)
-    : drawing.inputType.value === 'gff' ? [drawing.files.c_gff, drawing.files.c_fasta] : [drawing.files.c_gb];
+    : drawing.circularSources.flatMap(card => (drawing.inputType.value === 'gff' ? [card.gff, card.fasta] : [card.gb]));
   const files = refs.map(ref => state.inputFiles.fileOf(ref));
   const session = getCommittedCanonicalSession();
   return {
@@ -140,8 +140,8 @@ for (const entry of cases) {
       expect(shownSavedDrawing(session).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
       expect(shownSavedDrawing(session).webFiles.bindings.schema).toBe(2);
       if (entry.name === 'composite') {
-        expect(shownSavedDrawing(session).webFiles.bindings.c_gb.kind).toBe('composite');
-        expect(shownSavedDrawing(session).webFiles.bindings.c_gb.components).toHaveLength(2);
+        // The two files of `--gbk a b` are two Circular File cards.
+        expect(shownSavedDrawing(session).webFiles.bindings.circularSources.map(card => Boolean(card.gb))).toEqual([true, true]);
       }
       const run = await load(browser, file,
         entry.name === 'original single' ? { width: 390, height: 844 } : { width: 1600, height: 1000 });
@@ -164,7 +164,7 @@ for (const entry of cases) {
         if (!entry.args.includes('--records_table')) {
           const inventory = shownSavedDrawing(session).webFiles.bindings;
           const bindings = entry.mode === 'linear' ? inventory.linearSeqs.map(seq => seq.gb)
-            : entry.name === 'gff fasta' ? [inventory.c_gff, inventory.c_fasta] : [inventory.c_gb];
+            : inventory.circularSources.flatMap(card => (entry.name === 'gff fasta' ? [card.gff, card.fasta] : [card.gb]));
           const metadata = file => ({ name: file.name, type: file.type, lastModified: file.lastModified });
           expect(distinctFiles(before.files).map(metadata)).toEqual(distinctBindings(bindings).map(metadata));
           expect(distinctFiles(before.files).flatMap(file => file.parts.map(part => ({ resourceId: part.resourceId, ...metadata(part) }))))

@@ -13,6 +13,8 @@ from typing import Any, Mapping
 from PIL import Image
 from playwright.sync_api import BrowserType, expect
 
+from gbdraw.render.export_limits import png_pixel_size
+
 from assertions.svg_semantics import (
     assert_finished_circular_svg,
     inspect_svg_file,
@@ -211,8 +213,7 @@ def _validate_png(
     with Image.open(path) as image:
         dimensions = image.size
         mode = image.mode
-    scale = PNG_DPI / 96
-    expected = (int(svg_dimensions[0] * scale), int(svg_dimensions[1] * scale))
+    expected = png_pixel_size(*svg_dimensions, PNG_DPI)
     if dimensions != expected:
         raise AssertionError(
             f"Expected {expected} pixels at {PNG_DPI} DPI, found {dimensions}"

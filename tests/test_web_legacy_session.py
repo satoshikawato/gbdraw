@@ -241,7 +241,10 @@ def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: 
     if source["version"] < 31:
         # A Session 27-30 has no request: an undrawn drawing that keeps its bindings.
         assert drawing["renderRequest"] is None
-        assert drawing["webFiles"]["bindings"]["c_gb"]["resourceId"] in document["resources"]
+        bindings = drawing["webFiles"]["bindings"]
+        assert "c_gb" not in bindings
+        (card,) = bindings["circularSources"]
+        assert card["uid"] == "record-1" and card["gb"]["resourceId"] in document["resources"]
     # Every stored Result, byte for byte.
     assert json.dumps(stored, sort_keys=True) == json.dumps(source["results"], sort_keys=True)
 

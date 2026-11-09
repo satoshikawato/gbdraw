@@ -98,7 +98,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   const setInput = text => page.evaluate(async content => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = cardState.activeDrawing().circularSources[0] ?? inputs.createCircularSource(); if (!cardState.activeDrawing().circularSources.includes(card)) inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, text);
   await setInput(source);
@@ -297,7 +297,7 @@ const warmReady = async (page, baseURL) => {
   await page.evaluate(async content => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = cardState.activeDrawing().circularSources[0] ?? inputs.createCircularSource(); if (!cardState.activeDrawing().circularSources.includes(card)) inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, source);
   await generate(page).click();

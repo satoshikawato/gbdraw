@@ -55,7 +55,7 @@ export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
  * @property {string} mode
  * @property {string} cInputType
  * @property {string} lInputType
- * @property {{ c_gb?: File | null }} [files]
+ * @property {readonly { gb?: File | null }[]} [circularSources] The Circular source cards, in card order.
  * @property {(LinearRegionSeq & { gb?: unknown })[]} [linearSeqs]
  * @property {RecoveryResults} [results]
  * @property {unknown} [selectedResultIndex]
@@ -912,7 +912,8 @@ export const migrateFeatureOverrideState = ({
 const recoverability = (snapshot = {}) => {
   const { mode, cInputType, lInputType } = snapshot;
   if (mode === 'circular' && cInputType === 'gb') {
-    return snapshot.files?.c_gb
+    const cards = snapshot.circularSources || [];
+    return cards.length > 0 && cards.every((card) => Boolean(card.gb))
       ? { recoverable: true, reason: 'circular-gb' }
       : { recoverable: false, reason: 'missing-inputs', warning: MISSING_INPUTS_WARNING };
   }
@@ -1043,7 +1044,7 @@ const extractSnapshotFeatures = (snapshot, {
     mode: snapshot.mode,
     cInputType: snapshot.cInputType,
     lInputType: snapshot.lInputType,
-    circularFile: snapshot.files?.c_gb || null,
+    circularFiles: (snapshot.circularSources || []).map((card) => ({ file: card.gb || null })),
     linearSeqs: snapshot.linearSeqs || [],
     regionSpecs: linearContext.regionSpecs,
     recordSelectors: linearContext.recordSelectors,

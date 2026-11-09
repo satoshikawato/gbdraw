@@ -71,7 +71,8 @@ const REFERENCE_GB = `LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGI
 const restoredComparisons = (comparisonFiles) => buildRestoredMatchSequenceSources({
   mode: 'circular',
   cInputType: 'gb',
-  files: { c_gb: textFile(REFERENCE_GB), c_conservation_fastas: comparisonFiles },
+  circularSources: [{ gb: textFile(REFERENCE_GB) }],
+  files: { c_conservation_fastas: comparisonFiles },
   circularConservation: { source: 'losat', series: comparisonFiles.map((_file, sourceIndex) => ({ sourceIndex })) }
 });
 const sourceRows = (sources) => sources.map(({ key, recordId, sequence }) => ({ key, recordId, sequence }));
@@ -527,8 +528,8 @@ test('restores circular reference and display-ordered conservation sources', asy
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',
     cInputType: 'gb',
+    circularSources: [{ gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`) }],
     files: {
-      c_gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`),
       c_conservation_fastas: [
         textFile('>comparison_a\nAAAACCCC\n'),
         textFile('>comparison_b\nGGGGTTTT\n')
@@ -577,8 +578,8 @@ test('keeps missing LOSAT comparison FASTA placeholders aligned with displayed s
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',
     cInputType: 'gb',
+    circularSources: [{ gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`) }],
     files: {
-      c_gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`),
       c_conservation_fastas: [
         null,
         textFile('>comparison_b\nGGGGTTTT\n')
@@ -604,8 +605,8 @@ test('uses BLAST identity rather than stale source indexes for upload companions
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',
     cInputType: 'gb',
+    circularSources: [{ gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`) }],
     files: {
-      c_gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`),
       c_conservation_blasts: [
         namedTextFile('comparison-a.tsv', ''),
         namedTextFile('comparison-b.tsv', '')
@@ -766,7 +767,7 @@ test('a FASTA entry without an ID is read by the Python loader (OV-1599)', async
   helperCalls.splice(0);
   const fasta = namedTextFile('bare.fasta', '>A\nAAAA\n>\nCCCC\n');
   const sources = await buildRestoredMatchSequenceSources({
-    mode: 'circular', cInputType: 'gff', files: { c_fasta: fasta }
+    mode: 'circular', cInputType: 'gff', circularSources: [{ gff: null, fasta }]
   });
   assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
   assert.deepEqual(sources.map(({ recordId }) => recordId), ['A', '']);

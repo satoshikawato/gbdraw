@@ -82,7 +82,7 @@ test('real Vibrio session still projects its embedded records and presentation s
     sourceOf: (file) => sessionResourceSource(file)?.descriptor
   });
   const { linearSeqs } = bindLoadedInputs(inputFiles, {
-    files: {}, linearSeqs: projectedSession.files.linearSeqs, linearComparisonPlan: { edges: [] }, circularRecordDiscovery: {}
+    files: {}, linearSeqs: projectedSession.files.linearSeqs, circularSources: [], linearComparisonPlan: { edges: [] }, circularRecordDiscovery: {}
   });
   assert.deepEqual(
     linearSeqs.map((sequence) => [inputFiles.fileOf(sequence.gb).name, sequence.region_record_id]),

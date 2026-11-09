@@ -145,6 +145,14 @@ def _project_web_file_inventory(
         else None
     )
 
+    # A Session 51 Circular drawing's File cards.
+    circular_sources = bindings.get("circularSources")
+    if isinstance(circular_sources, list):
+        files["circularSources"] = [
+            {"uid": card.get("uid"), **{key: restore(card.get(key)) for key in ("gb", "gff", "fasta")}}
+            for card in circular_sources
+            if isinstance(card, Mapping)
+        ]
     linear_sequences = bindings.get("linearSeqs")
     if isinstance(linear_sequences, list):
         files["linearSeqs"] = [

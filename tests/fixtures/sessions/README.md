@@ -84,7 +84,8 @@ positive fixture for the retired `--conservation_fasta` flag (design D18).
 Circular CLI Session for three single-record GenBank files (see its
 `.provenance.json`). Circular has one GenBank File, so the Session binds the
 three files as one composite `c_gb` whose components keep each file's name and
-bytes. `composite-session-resources.playwright.spec.js` loads, saves, regenerates
+bytes; Load makes one Circular File card of each component.
+`circular-cards-session-resources.playwright.spec.js` loads, saves, regenerates
 and replays it. Its decompressed SHA-256 is
 `9c371d16a5b74bebffd28d9efdff16e8678d0fdecd1bfe1c07a326f33078571b`.
 

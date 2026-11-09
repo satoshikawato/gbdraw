@@ -286,6 +286,14 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
   await openFresh(page);
   await loadSessionFile(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
   await switchMode('circular');
+  // The Circular File card has the uid `record-1`, as the card of a CLI
+  // Session does (a Web upload's card has a uid of its own): its one record's
+  // key is `record-1`, as the Linear Session's is.
+  await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { addCircularSource, createCircularSource } = await import('/gbdraw/web/js/services/drawing/inputs.js');
+    addCircularSource(state.activeDrawing().slices.inputs, createCircularSource({ uid: 'record-1' }));
+  });
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   // A one-record grid names its record `record-1`, as the Linear Session does.

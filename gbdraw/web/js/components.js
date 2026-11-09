@@ -867,6 +867,8 @@ export const ColorValueControl = {
  *   an upload of it, by its ref
  * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
  *   chosen) and referenced by the zone through aria-describedby
+ * @property {boolean} [replace] a chosen file shows Replace (choose another file for this slot) in
+ *   place of Remove: the slot's file leaves only with its File card (Circular File cards)
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -875,7 +877,7 @@ export const ColorValueControl = {
 export const FileUploader = {
   template: '#file-uploader-template',
   components: { HelpTip },
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help', 'replace'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -1040,9 +1042,11 @@ export const RecordName = {
  * @property {(row: unknown) => unknown} draftFor
  */
 
+// `place`: what the card names the record by beside its length (a Circular
+// record's file, circular-multi-file D-10); the record's `#k` without it.
 export const RecordDisplayControl = {
   template: '#record-display-control-template',
-  props: ['row', 'controller'],
+  props: ['row', 'controller', 'place'],
   /** @param {{ row: unknown, controller: RecordDisplayControlPort }} props */
   setup(props) {
     const error = ref('');

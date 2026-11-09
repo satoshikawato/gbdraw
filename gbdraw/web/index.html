@@ -2702,16 +2702,57 @@
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setCircularInputType('fasta')" value="fasta" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
-                        <div v-if="inputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                        <!-- The source files: one File card per file (or GFF3 + FASTA pair), in drawing order, in the Linear File card shell. -->
+                        <template v-if="circularFileCards.cards.value.length">
+                        <div data-circular-file-list class="min-w-0 space-y-3">
+                            <file-card
+                                v-for="card in circularFileCards.cards.value"
+                                :key="card.uid"
+                                mode="circular"
+                                :uid="card.uid"
+                                :index="card.index"
+                                :count="circularFileCards.cards.value.length"
+                                :label="t('Circular input file {n}', { n: card.index + 1 })"
+                                :line="card.line"
+                                :ready="card.ready"
+                                :failed="card.failed"
+                                :folded="circularFileCards.isFolded(card.uid)"
+                                :disabled="!semanticMutationAvailable"
+                                :can-move-up="canMoveCircularSource(card.index, -1)"
+                                :can-move-down="canMoveCircularSource(card.index, 1)"
+                                removable
+                                @fold="circularFileCards.setFolded(card.uid, $event)"
+                                @move="moveCircularSourceCard(card.index, $event)"
+                                @remove="circularFileCards.requestRemoval(card.uid)"
+                            >
+                            <div class="space-y-2 pt-1">
+                                <file-uploader v-if="inputType === 'gb'" :label="t('GenBank/DDBJ File')" :model-value="card.source.gb" @update:model-value="uploadCircularSourceFile(card.uid, 'gb', $event)" file-kind="genbank" :inspection-failed="card.failed" :replace="true" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                                <file-uploader v-else-if="inputType === 'fasta'" :label="t('FASTA File')" :model-value="card.source.fasta" @update:model-value="uploadCircularSourceFile(card.uid, 'fasta', $event)" file-kind="fasta" :inspection-failed="card.failed" :replace="true" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                                <template v-else>
+                                    <file-uploader :label="t('GFF3 File')" :model-value="card.source.gff" @update:model-value="uploadCircularSourceFile(card.uid, 'gff', $event)" file-kind="gff" :inspection-failed="card.failed" :replace="true" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                                    <file-uploader :label="t('FASTA File')" :model-value="card.source.fasta" @update:model-value="uploadCircularSourceFile(card.uid, 'fasta', $event)" file-kind="fasta" :inspection-failed="card.failed" :replace="true" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                                </template>
+                                <p v-if="card.recordsLine" data-circular-file-records class="text-xs text-slate-500">{{ card.recordsLine }}</p>
+                            </div>
+                            </file-card>
+                        </div>
+                        <input type="file" data-history-managed data-circular-file-add-input class="hidden" :aria-label="t('Add file')" :disabled="!semanticMutationAvailable"
+                               :accept="inputType === 'gb' ? '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip' : inputType === 'gff' ? '.gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip' : '.fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip'"
+                               @change="circularFileCards.addPickedFiles($event)">
+                        <button type="button" data-history-ignore data-circular-file-add @click="$event.currentTarget.previousElementSibling.click()" class="btn btn-secondary w-full text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
+                        <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
+                        </template>
+                        <!-- No file yet: the uploaders of the input type; a file chosen in one makes the first File card. -->
+                        <div v-else-if="inputType === 'gb'">
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="null" @update:model-value="circularFileCards.addFiles('gb', [$event])" file-kind="genbank" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
                         </div>
                         <div v-else-if="inputType === 'fasta'">
-                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                            <file-uploader :label="t('FASTA File')" :model-value="null" @update:model-value="circularFileCards.addFiles('fasta', [$event])" file-kind="fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
                             <p class="ui-hint mt-1">{{ t('Records are drawn without features.') }}</p>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
-                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                            <file-uploader :label="t('GFF3 File')" :model-value="null" @update:model-value="circularFileCards.addFiles('gff', [$event])" file-kind="gff" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                            <file-uploader :label="t('FASTA File')" :model-value="null" @update:model-value="circularFileCards.addFiles('fasta', [$event])" file-kind="fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
                         </div>
                         <section :aria-label="t('Source records')" class="space-y-2">
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -2754,9 +2795,9 @@
                                 <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">{{ t('Select one record to edit crop, orientation, and title lines.') }}</p>
                             </div>
                         </section>
-                        <section v-if="recordDisplayControls.rowsFor('circular').length" :aria-label="t('Record rotation')" class="space-y-2">
+                        <section v-if="recordDisplayControls.rows.value.length" :aria-label="t('Record rotation')" class="space-y-2">
                             <div class="flex items-center justify-between gap-2"><span class="input-label text-[10px]">{{ t('Topology and display start') }}</span></div>
-                            <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
+                            <record-display-control v-for="row in recordDisplayControls.rows.value" :key="row.key" :row="row" :place="circularFileCards.recordPlace(row)" :controller="recordDisplayControls"></record-display-control>
                         </section>
                         <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary :aria-label="t('Circular record presentation')" data-history-ignore>
@@ -3004,71 +3045,27 @@
                             <span>{{ linearSourceMoveBlockedReason }}</span>
                         </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
-                            <section
+                            <file-card
                                 v-for="(source, sourceIndex) in linearSourceGroups"
                                 :key="source.uid"
-                                :data-linear-source-card="source.uid"
-                                class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
-                                :aria-label="t('Linear input file {n}', { n: sourceIndex + 1 })"
+                                mode="linear"
+                                :uid="source.uid"
+                                :index="sourceIndex"
+                                :count="linearSourceGroups.length"
+                                :label="t('Linear input file {n}', { n: sourceIndex + 1 })"
+                                :line="linearCardFileLine(source)"
+                                :ready="linearCardHoldsInput(source)"
+                                :failed="linearSourceInspectionFailed(source)"
+                                :folded="isLinearSourceFolded(source)"
+                                :disabled="!semanticMutationAvailable"
+                                :can-move-up="canMoveLinearSource(sourceIndex, -1)"
+                                :can-move-down="canMoveLinearSource(sourceIndex, 1)"
+                                :move-blocked-reason="linearSourceMoveBlockedReason || ''"
+                                :describedby="linearSourceGencodeRequired(source) ? `linear-file-gencode-${source.uid}` : ''"
+                                @fold="syncLinearSourceFold(source, $event)"
+                                @move="moveLinearSource(sourceIndex, $event)"
                             >
-                            <details
-                                class="linear-file-fold min-w-0"
-                                :data-linear-source-fold="source.uid"
-                                :open="!isLinearSourceFolded(source)"
-                                @toggle="syncLinearSourceFold(source, $event)"
-                            >
-                                <summary
-                                    class="min-w-0 text-[10px] font-semibold text-slate-500"
-                                    :aria-label="t('File {n}: {line}', { n: sourceIndex + 1, line: linearCardFileLine(source) })"
-                                    :aria-describedby="[
-                                        linearSourceInspectionFailed(source) && `linear-file-failed-${source.uid}`,
-                                        linearSourceGencodeRequired(source) && `linear-file-gencode-${source.uid}`
-                                    ].filter(Boolean).join(' ') || null"
-                                >
-                                    <span class="shrink-0">{{ t('File {n}', { n: sourceIndex + 1 }) }}</span>
-                                    <span class="linear-file-fold-line">
-                                        <span class="linear-file-fold-names">
-                                            <!-- The ready look only when every slot the card shows holds a file. -->
-                                            <span
-                                                v-if="linearCardHoldsInput(source)"
-                                                class="linear-file-chip"
-                                                :class="{ failed: linearSourceInspectionFailed(source) }"
-                                                :title="linearCardFileLine(source)"
-                                            >
-                                                <i :class="linearSourceInspectionFailed(source) ? 'ph ph-warning-circle' : 'ph ph-check-circle'" aria-hidden="true"></i>
-                                                <span class="truncate">{{ linearCardFileLine(source) }}</span>
-                                            </span>
-                                            <span v-else class="truncate font-normal" :title="linearCardFileLine(source)">{{ linearCardFileLine(source) }}</span>
-                                        </span>
-                                        <span v-if="linearSourceInspectionFailed(source)" :id="`linear-file-failed-${source.uid}`" class="sr-only">{{ t('This file could not be read.') }}</span>
-                                        <span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="font-normal text-red-700">{{ t('Gencode required') }}</span>
-                                    </span>
-                                    <!-- A press on or between the move buttons never folds the card. -->
-                                    <div v-if="linearSourceGroups.length > 1" class="flex shrink-0 items-center gap-1" @click.prevent>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
-                                            @click="moveLinearSource(sourceIndex, -1)"
-                                            :disabled="!semanticMutationAvailable || (!canMoveLinearSource(sourceIndex, -1))"
-                                            :aria-label="t('Move File {n} up', { n: sourceIndex + 1 })"
-                                            :title="linearSourceMoveBlockedReason || t('Move File {n} up', { n: sourceIndex + 1 })"
-                                            data-linear-source-move="up"
-                                        >
-                                            <i class="ph ph-arrow-up" aria-hidden="true"></i>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
-                                            @click="moveLinearSource(sourceIndex, 1)"
-                                            :disabled="!semanticMutationAvailable || (!canMoveLinearSource(sourceIndex, 1))"
-                                            :aria-label="t('Move File {n} down', { n: sourceIndex + 1 })"
-                                            :title="linearSourceMoveBlockedReason || t('Move File {n} down', { n: sourceIndex + 1 })"
-                                            data-linear-source-move="down"
-                                        >
-                                            <i class="ph ph-arrow-down" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                </summary>
+                                <template #status><span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="font-normal text-red-700">{{ t('Gencode required') }}</span></template>
                             <div v-if="inputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
@@ -3371,8 +3368,7 @@
                                 </div>
                             </details>
                             </div>
-                            </details>
-                            </section>
+                            </file-card>
                         </div>
                         <div :class="linearSourceGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'" class="grid min-w-0 gap-2" role="group" :aria-label="t('Linear File actions')">
                             <button type="button" :aria-label="t('Add sequence')" data-linear-file-add @click="addLinearSeq()" class="btn btn-primary min-w-0 w-full bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add sequence') }}</button>
@@ -9369,6 +9365,23 @@
                 </p>
             </section>
         </div>
+        <!-- A Circular File card's Remove: the file and the records it holds leave the drawing (one History step) -->
+        <choice-dialog v-if="circularFileCards.removal.open" labelledby="circular-source-removal-title" describedby="circular-source-removal-description"
+             data-circular-source-removal-dialog
+             @cancel="circularFileCards.cancelRemoval()" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="circular-source-removal-title" class="break-all text-base font-bold text-slate-800">{{ t('Remove {name}?', { name: circularFileCards.removalTarget.value ? circularFileCards.removalTarget.value.line : t('Unavailable File') }) }}</h2>
+            <p id="circular-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                <template v-if="!circularFileCards.removalTarget.value">{{ t('This File is no longer available. Cancel and try again.') }}</template>
+                <template v-else-if="circularFileCards.removalTarget.value.records.length">{{ tn(circularFileCards.removalTarget.value.records.length, 'It contains {count} record.', 'It contains {count} records.') }}</template>
+            </p>
+            <div class="mt-4 flex min-w-0 flex-wrap justify-end gap-2">
+                <button type="button" data-history-ignore @click="circularFileCards.cancelRemoval()" class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold">{{ t('Cancel') }}</button>
+                <button type="button" data-history-managed data-circular-source-removal-primary :disabled="!semanticMutationAvailable || !circularFileCards.removalTarget.value"
+                        @click="circularFileCards.applyRemoval()"
+                        class="btn min-w-0 border border-red-600 bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">{{ t('Remove file') }}</button>
+            </div>
+        </choice-dialog>
         <!-- Generate asks about pairs set to Upload BLAST TSV without a file: one row per pair -->
         <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
@@ -9483,7 +9496,9 @@
                 <button type="button" data-history-managed data-record-list-select="none" @click="recordSelection.selectShown(false)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">{{ t('Select none') }}</button>
             </div>
             <ul data-record-list-rows class="mt-2 max-h-[50vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
-                <li v-for="row in recordSelection.recordListView.value.rows" :key="row.key" class="flex items-center gap-2 px-2 py-1 text-xs" :class="{ 'text-slate-400': !row.drawn }">
+                <template v-for="group in recordSelection.recordListView.value.groups" :key="group.key">
+                <li v-if="group.name" data-record-list-group class="flex min-w-0 items-center gap-1 bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600"><i class="ph ph-file-text shrink-0" aria-hidden="true"></i><span class="min-w-0 truncate" :title="group.name">{{ group.name }}</span></li>
+                <li v-for="row in group.rows" :key="row.key" class="flex items-center gap-2 px-2 py-1 text-xs" :class="{ 'text-slate-400': !row.drawn }">
                     <label class="flex min-w-0 flex-1 items-center gap-2">
                         <input type="checkbox" data-history-managed :data-record-list-row="row.key" class="form-checkbox shrink-0"
                                :checked="row.drawn" :disabled="!semanticMutationAvailable"
@@ -9493,6 +9508,7 @@
                     <span v-if="row.hasSettings" data-record-list-settings class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">{{ t('settings') }}</span>
                     <span class="shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
                 </li>
+                </template>
                 <li v-if="!recordSelection.recordListView.value.rows.length" class="px-2 py-2 text-xs text-slate-500">{{ t('No record ID matches the search.') }}</li>
             </ul>
             <div class="mt-3 flex flex-wrap justify-between gap-2">
@@ -9820,11 +9836,52 @@
   </div>
 </script>
 
+<!-- The File card shell of the Linear and the Circular input lists (app/file-card.js): it folds to its header line. -->
+<script type="text/x-template" id="file-card-template">
+    <section v-bind="dataOf('card')" class="file-card min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm" :aria-label="label">
+    <details class="file-card-fold min-w-0" v-bind="dataOf('fold')" :open="!folded" @toggle="$emit('fold', !$event.currentTarget.open)">
+        <summary class="min-w-0 text-[10px] font-semibold text-slate-500" :aria-label="t('File {n}: {line}', { n: index + 1, line })" :aria-describedby="describedIds()">
+            <span class="shrink-0">{{ t('File {n}', { n: index + 1 }) }}</span>
+            <span class="file-card-fold-line">
+                <span class="file-card-fold-names">
+                    <!-- The ready look only when every slot the card shows holds a file. -->
+                    <span v-if="ready" class="file-card-chip" :class="{ failed }" :title="line">
+                        <i :class="failed ? 'ph ph-warning-circle' : 'ph ph-check-circle'" aria-hidden="true"></i>
+                        <span class="truncate">{{ line }}</span>
+                    </span>
+                    <span v-else class="truncate font-normal" :title="line">{{ line }}</span>
+                </span>
+                <span v-if="failed" :id="failedId()" class="sr-only">{{ t('This file could not be read.') }}</span>
+                <slot name="status"></slot>
+            </span>
+        </summary>
+        <slot></slot>
+    </details>
+    <!-- The header's buttons follow the disclosure, outside its summary; tailwind.input.css lays them over the header line. -->
+    <div v-if="count > 1 || removable" class="file-card-actions">
+        <template v-if="count > 1">
+            <button type="button" class="btn btn-secondary p-0 text-xs" @click="$emit('move', -1)" :disabled="disabled || !canMoveUp"
+                    :aria-label="t('Move File {n} up', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} up', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'up' }">
+                <i class="ph ph-arrow-up" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="btn btn-secondary p-0 text-xs" @click="$emit('move', 1)" :disabled="disabled || !canMoveDown"
+                    :aria-label="t('Move File {n} down', { n: index + 1 })" :title="moveBlockedReason || t('Move File {n} down', { n: index + 1 })" v-bind="{ [`data-${mode}-source-move`]: 'down' }">
+                <i class="ph ph-arrow-down" aria-hidden="true"></i>
+            </button>
+        </template>
+        <button v-if="removable" type="button" data-history-managed class="btn btn-secondary p-0 text-xs" @click="$emit('remove', $event.currentTarget)" :disabled="disabled"
+                :aria-label="t('Remove File {n}', { n: index + 1 })" :title="t('Remove File {n}', { n: index + 1 })" v-bind="dataOf('remove')">
+            <i class="ph ph-trash" aria-hidden="true"></i>
+        </button>
+    </div>
+    </section>
+</script>
+
 <script type="text/x-template" id="record-display-control-template">
   <div class="rounded border border-slate-200 bg-white/70 p-2 text-xs space-y-1.5" :data-record-rotation="row.key">
     <div class="flex min-w-0 items-baseline justify-between gap-2">
       <span class="min-w-0 truncate font-semibold text-slate-700" :title="row.recordId">{{ row.recordId }}</span>
-      <span class="shrink-0 text-[10px] text-slate-500">{{ row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
+      <span class="text-[10px] text-slate-500" :class="place ? 'min-w-0 truncate' : 'shrink-0'" :title="place || null">{{ place || row.selector }} · {{ Number(row.recordLength).toLocaleString('en-US') }} bp</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="t('Circular record {record} {selector}', { record: row.recordId, selector: row.selector })"> {{ t('Circular record') }}</label>
@@ -9927,7 +9984,8 @@
     <div ref="root" class="w-full" data-history-managed role="group" :aria-label="t('{name} selection', { name: $attrs['data-input-aria-label'] || label })">
         <div v-if="hasSelection" class="flex justify-between items-end mb-1">
             <label class="input-label mb-0">{{ label }}</label>
-            <button @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
+            <button v-if="replace" type="button" @click.stop="uploadAvailable && $refs.input.click()" :disabled="!uploadAvailable" :aria-label="t('Replace {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Replace') }}</button>
+            <button v-else @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
         </div>
         <div class="flex items-center gap-1">
         <div

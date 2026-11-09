@@ -388,7 +388,8 @@ for (const mode of ['circular', 'linear']) {
       const fold = page.locator('[data-linear-source-fold]').first();
       await fold.locator(':scope > summary').click();
       await expect(fold).toHaveJSProperty('open', false);
-      await expect(fold.locator(':scope > summary button')).toHaveCount(2);
+      // The header line's move buttons follow its disclosure (outside the summary).
+      await expect(fold.locator('xpath=following-sibling::div[contains(concat(" ", @class, " "), " file-card-actions ")]//button[@data-linear-source-move]')).toHaveCount(2);
       enabledFolded = await enabledControls();
     }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
@@ -403,12 +404,13 @@ for (const mode of ['circular', 'linear']) {
 test('an upload zone whose file failed inspection does not look ready (UI-08)', async ({ page }) => {
   test.setTimeout(240_000);
   await openApp(page);
-  const zone = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+  // A Circular file is shown by its File card, which folds to its header line:
+  // the chip there shows the file's state.
+  const zone = page.locator('[data-circular-source-card]').first().locator('.file-card-chip');
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: 'bad.gbk', mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
   await expect(page.locator('[data-circular-discovery-status]')).toContainText('No records were found', { timeout: 120_000 });
   await expect(zone).toHaveClass(/\bfailed\b/);
-  await expect(zone).not.toHaveClass(/\bready\b/);
   await expect(zone.locator('.ph-check-circle')).toHaveCount(0);
   await expect(zone).toContainText('bad.gbk');
   // The zone animates its colors; the final border is the danger line color.
@@ -417,7 +419,6 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
   await expect(page.locator('[data-circular-discovery-status]')).toContainText(/source records? inspected/, { timeout: 120_000 });
-  await expect(zone).toHaveClass(/\bready\b/);
   await expect(zone).not.toHaveClass(/\bfailed\b/);
   await expect(zone.locator('.ph-check-circle')).toHaveCount(1);
 
@@ -444,12 +445,13 @@ test('an upload zone cuts a long file name at its end and keeps its icon (OV-600
     const name = element.querySelector('i + span');
     return {
       icon: inside(element.querySelector('i')), name: inside(name), cut: name.scrollWidth > name.clientWidth,
-      overflow: getComputedStyle(name).textOverflow, title: name.getAttribute('title')
+      overflow: getComputedStyle(name).textOverflow, title: name.closest('[title]')?.getAttribute('title') ?? null
     };
   });
   const cutAtTheEnd = { icon: true, name: true, cut: true, overflow: 'ellipsis', title: longName };
 
-  const zone = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+  // A Circular file is shown by the chip on its File card's header line.
+  const zone = page.locator('[data-circular-source-card]').first().locator('.file-card-chip');
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
   await expect(zone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
@@ -457,7 +459,8 @@ test('an upload zone cuts a long file name at its end and keeps its icon (OV-600
   expect(await shown(zone), 'Circular, failed').toEqual(cutAtTheEnd);
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
     .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
-  await expect(zone).toHaveClass(/\bready\b/, { timeout: 120_000 });
+  await expect(zone.locator('.ph-check-circle')).toHaveCount(1, { timeout: 120_000 });
+  await expect(zone).not.toHaveClass(/\bfailed\b/);
   expect(await shown(zone), 'Circular, ready').toEqual(cutAtTheEnd);
 
   await showDrawing(page, { kind: 'linear' });
