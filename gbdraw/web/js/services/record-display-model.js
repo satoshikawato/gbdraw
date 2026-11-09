@@ -317,7 +317,7 @@ export const storedRegionWindows = (region) => {
   // A missing field reads as null, and only two integers can be the reversed span, as Python reads them.
   const start = region.start ?? null;
   const end = region.end ?? null;
-  const reversed = Number.isInteger(start) && Number.isInteger(end) && start > end;
+  const reversed = Number.isInteger(start) && Number.isInteger(end) && /** @type {number} */ (start) > /** @type {number} */ (end); // both integers here
   return [reversed
     ? { start: end, end: start, reverseComplement: true, column: null }
     : { start, end, reverseComplement: region.reverseComplement ?? null, column: null }];
