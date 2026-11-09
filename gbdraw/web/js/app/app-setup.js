@@ -1754,7 +1754,7 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    losatResultRowsOf, clearableLosatResultRows,
+    losatResultRowsOf, clearableLosatResultRows, swapLosatResultRows,
     downloadLosatCache: downloadLosatCacheOfDrawing,
     downloadLosatPair: downloadLosatPairOfDrawing,
     clearLosatCache,
@@ -2559,7 +2559,7 @@ export const createAppSetup = () => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
+      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatResultRowsOf(state.drawingOf(sourceId)) };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
@@ -2572,6 +2572,7 @@ export const createAppSetup = () => {
       return state.removeDrawing(drawingId, artifactSlots);
     },
     putSlot: artifactSlots.putSlot,
+    swapLosatRows: swapLosatResultRows,
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,

@@ -106,6 +106,19 @@ export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(
  */
 export const losatRowsOfOtherDrawings = (rows, drawingId) => rows.filter((row) => row.drawingId !== drawingId);
 
+/**
+ * The cache-info rows with a drawing's rows replaced by `drawingRows` under its ID, and the rows it held: a Duplicate
+ * gives the copy its source's results this way, and its Undo takes the copy's back (OV-3205). The cached searches
+ * are shared by key, so none is copied.
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} drawingRows
+ * @returns {{ rows: Row[], held: Row[] }}
+ */
+export const losatRowsWithDrawing = (rows, drawingId, drawingRows) => ({
+  rows: [...losatRowsOfOtherDrawings(rows, drawingId), ...drawingRows.map((row) => ({ ...row, drawingId }))],
+  held: rows.filter((row) => row.drawingId === drawingId)
+});
+
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
 // key. Its version is the shipped Wasm's build (gbdraw/web/wasm/losat/losat-build.json).

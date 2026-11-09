@@ -1651,7 +1651,13 @@ test('Save Raw LOSAT TSV reads the shown drawing\'s results and both Clear butto
   assert.equal(html.includes('losatCacheInfo'), false);
   assert.equal(html.match(/tn\(clearableLosatResults\.length, 'Clear \{count\} LOSAT result'/g)?.length, 2);
   assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="!semanticMutationAvailable \|\| \(clearableLosatResults\.length === 0\)"/g)?.length, 2);
-  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0"/);
+  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" :aria-describedby="losatResultRows\.length === 0 \? 'circular-losat-cache-reason' : null"/);
+  // Round 13 (OV-3206): each reason is true. The Circular hint gives Save Raw's reason: dev's hint while the project
+  // has no LOSAT results (Clear is disabled too and points at it), else that the shown drawing has none (Clear is
+  // enabled and points at nothing). The Linear hint gives Clear's reason.
+  assert.ok(html.includes(`<p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResults.length === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>`));
+  assert.ok(html.includes(`<p v-if="clearableLosatResults.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>`));
+  assert.equal(html.match(/:aria-describedby="clearableLosatResults\.length === 0 \? '(circular|linear)-losat-cache-reason' : null"/g)?.length, 2);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {

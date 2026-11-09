@@ -1035,3 +1035,51 @@ test('Every drawing while the drawing switch is busy writes nothing and shows th
   assert.equal(outcome.status, 'busy');
   waiting = null;
 });
+
+// #1777 round 13 (OV-3205): a copy draws its source's rings from the source's Result, so it holds the source's LOSAT
+// results, one row per drawing as a Session Load gives them: Save Raw LOSAT TSV saves the same tables in the copy,
+// Clear still counts each search once (the searches are shared, never copied), and Undo and Redo of the Duplicate
+// take the copy's rows away and back with the copy.
+test('Duplicate gives the copy its source\'s LOSAT results; its Undo and Redo take them away and back', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { webLosatRuntimeRecord } = await import('../../gbdraw/web/js/services/losat-cache.js');
+  const source = modeDrawing(state, 'circular').id;
+  app.selectDrawing(source);
+  const keys = ['ring-a', 'ring-b', 'ring-c'];
+  const files = keys.map((key) => `${key}.tsv`);
+  state.losatCache.value = new Map(keys.map((key) => [key, {
+    schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', key, text: `${key}\n`, program: 'blastn', outfmt: '6',
+    args: [], queryCanonicalHash: `q-${key}`, subjectCanonicalHash: `s-${key}`, runtime: webLosatRuntimeRecord('blastn')
+  }]));
+  state.losatCacheInfo.value = keys.map((key, index) => ({ key, filename: files[index], display: true, drawingId: source }));
+  const createElement = document.createElement;
+  const saved = async () => {
+    const names = [];
+    document.createElement = () => ({ click() { names.push(this.download); } });
+    try { await app.downloadLosatCache(); } finally { document.createElement = createElement; }
+    return names;
+  };
+  const rowsOf = (drawingId) => state.losatCacheInfo.value.filter((row) => row.drawingId === drawingId).map(({ key }) => key);
+  try {
+    assert.deepEqual(await saved(), files);
+    const { drawingId: copyId } = app.drawingList.duplicateDrawing(source);
+    assert.equal(state.activeDrawingId.value, copyId);
+    assert.deepEqual(await saved(), files, 'the copy saves the tables its rings draw');
+    assert.equal(app.clearableLosatResults.value.length, 3, 'Clear still counts 3 searches');
+    assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys], 'one row per drawing that holds a search');
+    assert.equal(state.losatCache.value.size, 3, 'the searches are shared, never copied');
+
+    await history.undo();
+    assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, []], 'Undo takes the copy\'s rows with the copy');
+    await history.redo();
+    assert.equal(state.activeDrawingId.value, copyId);
+    assert.deepEqual(await saved(), files, 'Redo brings them back');
+    assert.deepEqual([rowsOf(source), rowsOf(copyId)], [keys, keys]);
+    await history.undo();
+  } finally {
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    app.selectDrawing(source);
+  }
+});

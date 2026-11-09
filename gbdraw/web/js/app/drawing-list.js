@@ -16,6 +16,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { AskChoice, AskText } from './app-messages.js' */
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
@@ -30,12 +31,16 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
  * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
- * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot }} CopyDrawing
+ * @typedef {readonly LosatCacheInfoEntry[]} HeldLosatRows A drawing's LOSAT result rows, held while it is out.
+ * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot, losatRows: HeldLosatRows }} CopyDrawing
+ *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result) and its
+ *   source's LOSAT result rows (OV-3205).
+ * @typedef {(drawingId: DrawingId, rows: HeldLosatRows) => HeldLosatRows} SwapLosatRows
+ *   Gives a drawing `rows` as its LOSAT results and hands over the rows it held.
  * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
  * @typedef {(derivation: RegionDerivation, create: { runSavedComparison: boolean }) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
  *   Reads a derived region drawing; the result makes its state under the new drawing's ID. Find in other files' Create
  *   runs its saved comparison at Generate (PD-OI-123); New drawing from a region leaves the choice to the user.
- *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
  * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
  *   Removes a drawing that is not shown, and hands over its slot.
@@ -69,6 +74,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
  * @property {PutSlot} putSlot
+ * @property {SwapLosatRows} swapLosatRows
  * @property {RenameDrawingInStore} renameDrawing
  * @property {MoveDrawingInStore} moveDrawing
  * @property {AddDrawingHistory} addDrawingHistory
@@ -114,7 +120,7 @@ const newTabIndex = (tabs, after) => (after === null ? tabs.length : tabs.findIn
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
-  regionDrawing,   addDrawing, removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
+  regionDrawing, addDrawing, removeDrawing, putSlot, swapLosatRows, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
   /** @param {string} operation @param {DrawingId} drawingId @returns {number} */
@@ -189,8 +195,8 @@ export const createDrawingList = ({
   /**
    * A copy of a drawing at the end of the tabs (PD-OI-090 〔作成〕): the ID of
    * its kind, the source tab's shown name with the copy phrase in the UI
-   * language ("<name> copy", `copyDrawingName`), the source's files,
-   * settings, edits, and Result, and an empty History, shown (R11). Its Undo
+   * language ("<name> copy", `copyDrawingName`), the source's files, settings,
+   * edits, Result and LOSAT results (OV-3205), and an empty History, shown (R11). Its Undo
    * shows the drawing shown before; its Redo shows the copy again (R16-2).
    * @param {DrawingId} sourceId
    * @returns {DrawingListOutcome}
@@ -203,24 +209,23 @@ export const createDrawingList = ({
       const { mode } = drawingOf(sourceId);
       const drawingId = allocateDrawingId(mode, tabs.map((tab) => tab.id));
       const name = copyDrawingName(shownDrawingName(tabs[index], mode), tabs.map((tab) => tab.name), copyNamePhrase);
-      const { drawing, slot: copied } = copyDrawing(sourceId, drawingId);
-      /** @type {HeldSlot} */
+      const { drawing, slot: copied, losatRows: copiedRows } = copyDrawing(sourceId, drawingId);
       let slot = copied;
+      let losatRows = copiedRows;
+      const add = (first = false) => {
+        addDrawing(drawing, name, drawingTabs().length);
+        if (first) addDrawingHistory(drawingId);
+        if (slot) putSlot(slot);
+        swapLosatRows(drawingId, losatRows);
+        showDrawingNow(drawingId);
+      };
       runListStep('Duplicate drawing', {
-        apply: () => {
-          addDrawing(drawing, name, drawingTabs().length);
-          addDrawingHistory(drawingId);
-          if (slot) putSlot(slot);
-          showDrawingNow(drawingId);
-        },
-        redo: () => {
-          addDrawing(drawing, name, drawingTabs().length);
-          if (slot) putSlot(slot);
-          showDrawingNow(drawingId);
-        },
+        apply: () => add(true),
+        redo: () => add(),
         undo: () => {
           showDrawingNow(before);
           slot = removeDrawing(drawingId);
+          losatRows = swapLosatRows(drawingId, []);
         }
       });
       return drawingId;

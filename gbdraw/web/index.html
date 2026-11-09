@@ -4461,7 +4461,7 @@
                                         <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResults.length === 0 ? t('Clear LOSAT results') : tn(clearableLosatResults.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
-                                <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResults.length === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
