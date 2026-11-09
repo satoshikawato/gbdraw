@@ -657,9 +657,9 @@ def _lane_rooms(
             )
             for width in widths[annotation.record_index]
         ]
-        # The letters cover the circle as at any of the widths, and take the depth they take at the first.
+        # The letters cover the circle and take the depth they take at any of the widths where they are drawn.
         hull = _hull(extents)
-        extent = extents[0] if hull is None else hull._replace(depth_px=next(e for e in extents if e.drawn).depth_px)
+        extent = extents[0] if hull is None else hull
         length = int(record_lengths[annotation.record_index])
         return extent, _letters_at(place.bp, extent.low_bp, extent.high_bp, record_length=length, join_origin=join_origin)
 
@@ -989,13 +989,13 @@ class _SlotPacking(NamedTuple):
 
         lane_count = lane_count_of(placements)
 
-        def rooms(at_least: Sequence[LaneRoom], drawn_room_px: float | None) -> _LaneRooms:
-            # Each record's lanes are measured at the extent they take and, given ``drawn_room_px``, also at the width
-            # the drawer draws them with that label room (``_LaneBand.width_px``).
+        def rooms(at_least: Sequence[LaneRoom], drawn_rooms_px: Sequence[float]) -> _LaneRooms:
+            # Each record's lanes are measured at the extent they take and at the width the drawer draws them with
+            # each label room of ``drawn_rooms_px`` (``_LaneBand.width_px``).
             widths = {
                 record: tuple(dict.fromkeys((
                     self.band.width_px(lanes, lane_count),
-                    *(() if drawn_room_px is None else (self.band.width_px(lanes, lane_count, room_px=drawn_room_px),)),
+                    *(self.band.width_px(lanes, lane_count, room_px=room) for room in drawn_rooms_px),
                 )))
                 for record, lanes in _record_lane_counts(placements).items()
             }
@@ -1006,14 +1006,19 @@ class _SlotPacking(NamedTuple):
                 join_origin=self.join_origin, at_least=at_least, widths=widths,
             )
 
-        lane_rooms = rooms(self.room_bounds.at_least, None)
-        set_px = self.band.set_px
-        if set_px is not None and lane_rooms.rooms and self.band.bare_px(lane_count) + _largest_room(lane_rooms.rooms) <= set_px:
-            # A slot of set size that holds its lanes and rooms draws the lanes in the size less the rooms, wider than
-            # the extent they take: the rooms are measured again, at least as large, where the lanes with the first
-            # rooms lie as well. More room only narrows the lanes, so the letters lie between the two places measured
-            # (OV-2849).
-            lane_rooms = rooms((*self.room_bounds.at_least, *lane_rooms.rooms), _largest_room(lane_rooms.rooms))
+        lane_rooms = rooms(self.room_bounds.at_least, ())
+        # A slot of set size draws its lanes in that size less the slot's label room, whether they and the rooms fit
+        # it or not, not at the extent they take (OV-2849): where they do not fit, it draws them narrower, and a label
+        # that keeps no letter at that extent may keep letters where its lane is drawn (OV-2989). The rooms are
+        # measured again, each round also where the drawer draws the lanes with the room of every round before, while
+        # a round's room is larger than every room before. A round keeps the rooms of the one before, so the room of a
+        # slot that does not clip only grows, and the round whose room does not grow measured the lanes where the
+        # drawer draws them with it; a clipped slot keeps only the rooms that fit its set size. The rooms are bounded
+        # by the labels' letters, and finitely many numbers lie below that bound, so the rounds end.
+        drawn_rooms: list[float] = []
+        while self.band.set_px is not None and (room := _largest_room(lane_rooms.rooms)) > max(drawn_rooms, default=-1.0):
+            drawn_rooms.append(room)
+            lane_rooms = rooms((*self.room_bounds.at_least, *lane_rooms.rooms), drawn_rooms)
         return ResolvedAnnotationTrack(
             slot_id=self.slot_id, set_id=self.set_id, placements=placements, required_extent_px=0.0,
             label_font_size=float(self.labels.font_size), join_origin=self.join_origin, lane_rooms=lane_rooms.rooms,

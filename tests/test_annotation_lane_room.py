@@ -1264,6 +1264,31 @@ def test_labels_that_share_a_lane_stay_apart_where_the_rooms_carry_that_lane(
     assert len(drawn) > 1 and not met, met
 
 
+def test_a_label_drawn_where_a_set_width_squeezes_the_lanes_gets_its_room() -> None:
+    # OV-2989: ten nested bands at 24 pt along their circles in an inside slot whose set width reaches past the centre
+    # (``w=600px,overflow=error``). The lanes and their rooms take more than the centre leaves, so the drawer shares
+    # the band up to the centre less the rooms among the lanes, narrower than the extent they take. r6's label keeps
+    # no letter beside its mark where the lanes stand at that extent, but keeps letters where the drawer draws its
+    # lane: it gets its room there, as every label drawn does, and no drawn label's letters come within its label
+    # offset of another lane's painted mark.
+    regions = tuple(
+        (f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)
+    )
+    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", size=24)
+
+    assert "r6" in {label.annotation_id for label in drawn.drawn}, drawn.messages
+    met = [
+        (label.annotation_id, identity, label.ink_radii, band)
+        for label in drawn.drawn
+        for identity, band in drawn.bands.items()
+        if identity != label.annotation_id
+        # The band radii are written to 0.001 px.
+        and label.ink_radii[0] < band[1] + _EDGE - 0.002
+        and band[0] - _EDGE + 0.002 < label.ink_radii[1]
+    ]
+    assert not met, met
+
+
 def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gives_it_letters() -> None:
     # OV-2850: r4 keeps no letter in the lane an early packing round puts it in, so that round packs it without text;
     # the last packing puts it in the outer lane, where its letters fit, and it is drawn there, as before.
