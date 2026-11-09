@@ -190,7 +190,8 @@ def test_circular_ring_and_gradient_captions_draw_in_italics() -> None:
     ]
     layout = measurement.circular_layout
     assert layout is not None and layout.gradient is not None
-    assert layout.gradient.width >= layout.gradient.rows[0].text_x + _run_sum(DANIO)
+    # A ring's name starts at the block's left edge.
+    assert layout.gradient.width >= _run_sum(DANIO)
 
 
 def test_linear_gradient_title_draws_in_italics() -> None:

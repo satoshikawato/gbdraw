@@ -28,7 +28,6 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator, CircularCanvasGeometry
 from ...analysis.conservation import (
-    CONSERVATION_MIXED_BAND_COLOR,
     ConservationLegendSource,
     ConservationTrack,
     conservation_legend_sources,
@@ -2377,10 +2376,11 @@ def _add_conservation_ring_rows(
     default_colors: tuple[str, str],
     domain: IdentityColorDomain,
 ) -> None:
-    """One row per drawn ring, outermost first, with the identity band they share (PD-OI-110).
+    """One row per drawn ring, outermost first (PD-OI-110, scenario revision 2).
 
-    A row shows its ring's color (no color = the configured max) only when the drawn rings differ in color; the
-    band is then the neutral grey gradient, else the first drawn ring's gradient.
+    When the drawn rings differ in color (a ring without a color counts as the configured max), each row carries
+    its ring's color (``fill``) and its ring's own identity gradient, which its ramp draws; otherwise no row has a
+    ``fill`` and every row carries the first drawn ring's gradient, which the one band draws.
     """
 
     def gradient(color: str | None) -> tuple[str, str]:
@@ -2388,19 +2388,19 @@ def _add_conservation_ring_rows(
             color, default_min_color=default_colors[0], default_max_color=default_colors[1]
         )
 
-    colors = [gradient(ring.track_color)[1] for ring in rings]
-    one_color = len(set(colors)) == 1
-    band_min, band_max = gradient(rings[0].track_color if one_color else CONSERVATION_MIXED_BAND_COLOR)
-    for ring, color in zip(rings, colors):
+    gradients = [gradient(ring.track_color) for ring in rings]
+    one_color = len({max_color for _, max_color in gradients}) == 1
+    for ring, (min_color, max_color) in zip(rings, gradients):
+        ramp_min, ramp_max = gradients[0] if one_color else (min_color, max_color)
         out.add_source(ring.track_label, {
             "type": "ring",
             "source_index": ring.source_index,
             "track_index": ring.track_index,
-            "fill": None if one_color else color,
+            "fill": None if one_color else max_color,
             "stroke": "none",
             "width": 0,
-            "min_color": band_min,
-            "max_color": band_max,
+            "min_color": ramp_min,
+            "max_color": ramp_max,
             "min_value": domain.minimum,
             "max_value": domain.maximum,
         })

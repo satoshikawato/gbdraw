@@ -228,7 +228,8 @@ def test_circular_ring_block_and_annotation_gradient_rows_are_both_drawn(legend:
     assert rows_top > ring.scale_label_y
     bounds = measurement.local_bounds
     gx, gy = layout.gradient_x, layout.gradient_y
-    band = Aabb(gx, gy + ring.band_y - rect / 2, gx + ring.bar_width, gy + ring.band_y + rect / 2)
+    band_x = gx + ring.bar_x
+    band = Aabb(band_x, gy + ring.band_y - rect / 2, band_x + ring.bar_width, gy + ring.band_y + rect / 2)
     entry = rows.single_entries[0]
     bar = Aabb(
         gx + rows.bar_x, gy + entry.bar_y - rect / 2, gx + rows.bar_x + rows.bar_width, gy + entry.bar_y + rect / 2,

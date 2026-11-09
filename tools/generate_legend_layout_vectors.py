@@ -64,6 +64,9 @@ from gbdraw.legend.metrics import legend_caption_box  # noqa: E402
 SVG = "{http://www.w3.org/2000/svg}"
 NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 LONG_CAPTION = "A much longer Legend caption for this row"
+# The colors of ring rows whose rings differ in color (Python's ``fill``; the Web reads its ramp's end).
+RING_COLORS = ("#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb", "#77b26f", "#be92b2", "#f0d369", "#ae8e7c",
+               "#ffafb7")
 # A gradient title wider than its bar: the bar and scale move under it.
 LONG_GRADIENT_TITLE = "Pairwise match identity of every compared genome pair"
 OVERLAY_POLICY = {
@@ -346,7 +349,7 @@ def _annotation_gradient_cases(
     query = {"key": "Query position", "type": "gradient", "stroke": "none", "strokeWidth": 0.0,
              "minLabel": "start", "maxLabel": "end"}
     ring = {"key": "AF332093 (China)", "type": "ring", "stroke": "none", "strokeWidth": 0.0, "minValue": 90,
-            "swatch": False}
+            "color": None}
     cases = []
     for mode in ("circular", "linear"):
         for side in ("left", "top"):
@@ -383,7 +386,7 @@ def _caption_markup_cases(
     solids = [row(name) for name in names] + solid[:2]
     one_gradient = [row("<i>Danio rerio</i> identity", "gradient", minValue=70)]
     two_gradients = [row(name, "gradient", minValue=70) for name in names[:2]]
-    rings = [row(name, "ring", minValue=90, swatch=True) for name in names]
+    rings = [row(name, "ring", minValue=90, color=color) for name, color in zip(names, RING_COLORS)]
     cases = []
     for mode in ("circular", "linear"):
         variants = [
@@ -407,23 +410,25 @@ def _caption_markup_cases(
 def _ring_cases(
     options: dict[str, Any], composition: dict[str, Any], solid: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """The Circular similarity-ring block (PD-OI-110): one color (names only) and colors that differ (a swatch
-    per row), beside or below the solid rows and alone."""
+    """The Circular similarity-ring block (PD-OI-110, scenario revision 2): one color (names only), colors that
+    all differ (each row's own ramp, no captions) and colors some rings share (ramps and captions), beside or below
+    the solid rows and alone."""
 
-    def rings(count: int, swatch: bool) -> list[dict[str, Any]]:
+    def rings(colors: list[str | None]) -> list[dict[str, Any]]:
         names = ["AF332093 (China)", "AF369029 (Thailand)", "A much longer similarity ring name (KT995472)", "B"]
         return [
             {"key": names[index % len(names)] + (f" {index}" if index >= len(names) else ""), "type": "ring",
-             "stroke": "none", "strokeWidth": 0.0, "minValue": 90, "swatch": swatch}
-            for index in range(count)
+             "stroke": "none", "strokeWidth": 0.0, "minValue": 90, "color": color}
+            for index, color in enumerate(colors)
         ]
 
     cases = []
     for side in ("left", "top", "upper_right", "lower_left"):
         for label, rows in (
-            ("solid rows and one-color rings", solid + rings(3, False)),
-            ("solid rows and rings of several colors", solid + rings(12, True)),
-            ("rings only", rings(1, False)),
+            ("solid rows and one-color rings", solid + rings([None] * 3)),
+            ("solid rows and rings of several colors", solid + rings([*RING_COLORS, "#000001", "#000002"])),
+            ("solid rows and rings that share colors", solid + rings([RING_COLORS[0]] * 5 + [RING_COLORS[1]])),
+            ("rings only", rings([None])),
         ):
             cases.append({
                 "name": "synthetic circular", "mode": "circular", "edit": f"{label}, {side}", "rows": rows,
@@ -474,7 +479,7 @@ def _table(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if "minLabel" in row:
             properties.update({"min_label": row["minLabel"], "max_label": row["maxLabel"]})
         if row["type"] == "ring":
-            properties.update({"track_index": index + 1, "fill": "#000000" if row["swatch"] else None})
+            properties.update({"track_index": index + 1, "fill": row["color"]})
         table[row["key"]] = properties
     return table
 
@@ -557,12 +562,12 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
         "xMargin": layout.x_margin, "numLines": layout.num_lines, "numColumns": layout.num_columns,
         "numItemsPerLine": layout.num_items_per_line, "entries": _entries(layout.solid_entries),
         "rings": None if gradient is None else {
-            "width": gradient.width, "height": gradient.height, "showSwatches": gradient.show_swatches,
+            "width": gradient.width, "height": gradient.height, "showCaptions": gradient.show_captions,
             "outerCaptionY": gradient.outer_caption_y, "innerCaptionY": gradient.inner_caption_y,
-            "rows": [
-                {"key": row.key, "swatchX": row.swatch_x, "textX": row.text_x, "y": row.y} for row in gradient.rows
-            ],
-            "barWidth": gradient.bar_width, "bandY": gradient.band_y, "bandLabelX": gradient.band_label_x,
+            "rows": [{"key": row.key, "y": row.y} for row in gradient.rows],
+            "namesX": gradient.names_x, "barX": gradient.bar_x, "barWidth": gradient.bar_width,
+            "bandY": gradient.band_y,
+            "identityLabelX": gradient.identity_label_x, "identityLabelY": gradient.identity_label_y,
             "minLabelText": gradient.min_label_text, "minLabelX": gradient.min_label_x,
             "maxLabelX": gradient.max_label_x, "scaleLabelY": gradient.scale_label_y,
         },

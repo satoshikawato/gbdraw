@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Mapping
+
 from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
@@ -79,66 +81,79 @@ class LegendGroup:
         path.translate(x, y)
         return path
 
-    def _add_ring_legend(self, group: Group, layout: CircularRingLegendLayout) -> None:
-        """The similarity-ring block (PD-OI-110): ``outer``, one row per drawn ring (``data-source-index``,
-        ``data-track-index``), ``inner``, and the identity band; the band and captions are not Legend rows."""
+    def _bar_path(self, bar_width: float) -> str:
+        """A gradient bar ``bar_width`` long, its left edge at x 0 and centred on y 0."""
 
-        group.add(self._text(RING_OUTER_CAPTION, 0, layout.outer_caption_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
-        swatch_path = self.create_rectangle_path_for_legend()
+        half = self.color_rect_size / 2
+        return (
+            f"M 0,{path_number(-half)} L {path_point(bar_width, -half)} "
+            f"L {path_point(bar_width, half)} L 0,{path_number(half)} z"
+        )
+
+    def _gradient_bar(self, parent: Group, gradient_id: str, properties: Mapping[str, object], bar: str) -> Path:
+        """Add to ``parent`` the gradient from ``min_color`` to ``max_color`` and a bar ``bar`` filled with it."""
+
+        gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+        gradient.add_stop_color(offset="0%", color=properties["min_color"])
+        gradient.add_stop_color(offset="100%", color=properties["max_color"])
+        parent.add(gradient)
+        path = Path(d=bar, fill=f"url(#{gradient_id})", stroke="none", stroke_width=0)
+        parent.add(path)
+        return path
+
+    def _add_ring_legend(self, group: Group, layout: CircularRingLegendLayout) -> None:
+        """The similarity-ring block (PD-OI-110, scenario revision 2): ``outer`` (when the layout shows the
+        captions), one row per drawn ring (``data-source-index``, ``data-track-index``) with its name and, when the
+        rings differ in colour, its own identity ramp, ``inner``, then the identity scale
+        (``conservation-identity-band``): the one band (one colour), and the scale line under the bars (the
+        minimum, ``identity`` and 100%). The captions and the scale are not Legend rows."""
+
+        muted = {"fill": RING_LEGEND_MUTED_TEXT_COLOR}
+        if layout.show_captions:
+            group.add(self._text(RING_OUTER_CAPTION, layout.names_x, layout.outer_caption_y, **muted))
+        bar = self._bar_path(layout.bar_width)
         for row in layout.rows:
             row_group = Group()
             drawn_name = self._name_entry(row_group.attribs, row.key)
             row_group.attribs["data-source-index"] = str(row.properties["source_index"])
             row_group.attribs["data-track-index"] = str(row.properties["track_index"])
-            if layout.show_swatches:
-                swatch = Path(d=swatch_path, fill=row.properties["fill"], stroke="none", stroke_width=0)
-                swatch.translate(row.swatch_x, row.y)
-                row_group.add(swatch)
-            row_group.add(self._text(drawn_name, row.text_x, row.y))
+            if layout.per_ring_ramps:
+                ramp_id = stable_svg_id(
+                    "circular_legend_grad",
+                    "circular-ring-row",
+                    row.key,
+                    row.properties["min_color"],
+                    row.properties["max_color"],
+                )
+                self._gradient_bar(row_group, ramp_id, row.properties, bar).translate(layout.bar_x, row.y)
+            row_group.add(self._text(drawn_name, layout.names_x, row.y))
             group.add(row_group)
-        group.add(self._text(RING_INNER_CAPTION, 0, layout.inner_caption_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
+        if layout.show_captions:
+            group.add(self._text(RING_INNER_CAPTION, layout.names_x, layout.inner_caption_y, **muted))
 
-        band = Group()
-        band.attribs["data-gbdraw-role"] = "conservation-identity-band"
-        properties = layout.rows[0].properties
-        gradient_id = stable_svg_id(
-            "circular_legend_grad",
-            "circular-conservation-gradient",
-            RING_BAND_LABEL,
-            properties["min_color"],
-            properties["max_color"],
-        )
-        gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-        gradient.add_stop_color(offset="0%", color=properties["min_color"])
-        gradient.add_stop_color(offset="100%", color=properties["max_color"])
-        band.add(gradient)
-        half = self.color_rect_size / 2
-        bar = Path(
-            d=(
-                f"M 0,{path_number(-half)} L {path_point(layout.bar_width, -half)} "
-                f"L {path_point(layout.bar_width, half)} L 0,{path_number(half)} z"
-            ),
-            fill=f"url(#{gradient_id})",
-            stroke="none",
-            stroke_width=0,
-        )
-        bar.translate(0, layout.band_y)
-        band.add(bar)
-        band.add(self._text(RING_BAND_LABEL, layout.band_label_x, layout.band_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
-        scale = {"baseline": "hanging", "fill": RING_LEGEND_MUTED_TEXT_COLOR}
-        band.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, **scale))
-        band.add(self._text(layout.max_label_text, layout.max_label_x, layout.scale_label_y, anchor="end", **scale))
-        group.add(band)
+        scale = Group()
+        scale.attribs["data-gbdraw-role"] = "conservation-identity-band"
+        if layout.band_y is not None:
+            properties = layout.rows[0].properties
+            band_id = stable_svg_id(
+                "circular_legend_grad",
+                "circular-conservation-gradient",
+                RING_BAND_LABEL,
+                properties["min_color"],
+                properties["max_color"],
+            )
+            self._gradient_bar(scale, band_id, properties, bar).translate(layout.bar_x, layout.band_y)
+        labels = {"baseline": "hanging", **muted}
+        scale.add(self._text(RING_BAND_LABEL, layout.identity_label_x, layout.identity_label_y, anchor="middle", **labels))
+        scale.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, **labels))
+        scale.add(self._text(layout.max_label_text, layout.max_label_x, layout.scale_label_y, anchor="end", **labels))
+        group.add(scale)
 
     def _add_gradient_rows(self, group: Group, layout: CircularGradientLegendLayout) -> None:
         """The gradient rows: each row's caption and bar, then one scale line per group of rows that share scale
         texts (a compact block), or one row's centred title, its bar and its scale line."""
 
-        half = self.color_rect_size / 2
-        bar_path = (
-            f"M 0,{path_number(-half)} L {path_point(layout.bar_width, -half)} "
-            f"L {path_point(layout.bar_width, half)} L 0,{path_number(half)} z"
-        )
+        bar_path = self._bar_path(layout.bar_width)
         rows = [
             (entry.key, entry.properties, entry.label_x, entry.label_y, layout.bar_x, entry.bar_y)
             for entry in layout.compact_entries
