@@ -938,6 +938,39 @@ def _lane_band(
     )
 
 
+class _SetSizeFit(NamedTuple):
+    """How a slot's lanes and label room take its set size (``_set_size_fit``): the extent they take, the gap between
+    the lanes, and whether the drawer draws them (False where it raises instead)."""
+
+    required_px: float
+    lane_gap_px: float
+    draws: bool
+
+
+def _set_size_fit(
+    params: AnnotationTrackParams, band: _LaneBand, available_px: float | None, lane_count: int, room_px: float
+) -> _SetSizeFit:
+    """How ``lane_count`` lanes and the label room ``room_px`` take a slot's set size (``available_px``): a slot whose
+    overflow is error is not drawn where they pass it, and one whose overflow is compress narrows the gaps between the
+    lanes to fit it and is not drawn where they pass it with no gap. A span over other slots (``to_slot``) takes its
+    extent from them, not from the slot's own size."""
+
+    lane_gap = float(params.lane_gap_px)
+    required = band.bare_px(lane_count) + room_px
+    if params.to_slot is not None or available_px is None or not required > available_px:
+        return _SetSizeFit(required, lane_gap, True)
+    if params.overflow == "error":
+        return _SetSizeFit(required, lane_gap, False)
+    if params.overflow == "compress" and lane_count > 1:
+        lane_gap = max(
+            0.0,
+            min(lane_gap, (available_px - 2.0 * params.padding_px - lane_count * band.lane_extent_px - room_px) / (lane_count - 1)),
+        )
+        required = 2.0 * params.padding_px + lane_count * band.lane_extent_px + (lane_count - 1) * lane_gap + room_px
+        return _SetSizeFit(required, lane_gap, not required > available_px)
+    return _SetSizeFit(required, lane_gap, True)
+
+
 class _SlotPacking(NamedTuple):
     """One slot's annotations and what packs them (``layout_annotation_track``): its lanes, their rooms and the
     labels left out, for a set of labels left out for want of a letter (``settled``)."""
@@ -950,6 +983,8 @@ class _SlotPacking(NamedTuple):
     labels: LabelSizing
     join_origin: bool
     band: _LaneBand
+    # The slot's set size (``layout_annotation_track``'s ``available_extent_px``), or None.
+    available_px: float | None
     room_bounds: RoomBounds
     # Whether the slot draws labels of its own and gives them room (not a span over other slots).
     labelled: bool
@@ -1021,9 +1056,16 @@ class _SlotPacking(NamedTuple):
         # slot that does not clip only grows, and its last round measured the lanes where the drawer draws them. A
         # clipped slot keeps only the rooms that fit its set size: a room that grows can leave no space for one further
         # on, which is then dropped, and the slot can end at a room no round measured. The rooms are bounded by the
-        # labels' letters, and finitely many numbers lie below that bound, so the rounds end.
+        # labels' letters, and finitely many numbers lie below that bound, so the rounds end. A slot the drawer does not
+        # draw (``_set_size_fit``) is not measured again: its rooms stay where its lanes keep their extent, as at the
+        # size it then names.
         drawn_rooms: list[float] = []
-        while self.band.set_px is not None and (room := _largest_room(lane_rooms.rooms)) > max(drawn_rooms, default=-1.0):
+        lane_count = lane_count_of(placements)
+        while (
+            self.band.set_px is not None
+            and (room := _largest_room(lane_rooms.rooms)) > max(drawn_rooms, default=-1.0)
+            and _set_size_fit(self.params, self.band, self.available_px, lane_count, room).draws
+        ):
             drawn_rooms.append(room)
             lane_rooms = rooms((*self.room_bounds.at_least, *lane_rooms.rooms), drawn_rooms)
         return ResolvedAnnotationTrack(
@@ -1181,6 +1223,7 @@ def layout_annotation_track(
         labels,
         join_origin,
         band,
+        None if available_extent_px is None else float(available_extent_px),
         room_bounds,
         track_params.show_labels and not (track_params.to_slot is not None or track_params.cover_anchor),
         {},
@@ -1189,39 +1232,25 @@ def layout_annotation_track(
     placements = track.placements
     room = track.lane_room_px
     lane_count = lane_count_of(placements)
-    lane_gap = float(track_params.lane_gap_px)
-    required = band.bare_px(lane_count) + room
-    clipped = False
-    # A to_slot span takes its extent from the two slots, not from the slot's own size.
-    if (
-        track_params.to_slot is None
-        and available_extent_px is not None
-        and required > float(available_extent_px)
-    ):
+    available = packing.available_px
+    fit = _set_size_fit(track_params, band, available, lane_count, room)
+    if not fit.draws and available is not None:
         if track_params.overflow == "error":
             raise ValidationError(
                 # Rounded up, so the size printed holds the lanes.
-                f"Annotation slot {slot_id!r} requires {math.ceil(required * 100.0) / 100.0:.2f}px but only "
-                f"{float(available_extent_px):.2f}px is available."
+                f"Annotation slot {slot_id!r} requires {math.ceil(fit.required_px * 100.0) / 100.0:.2f}px but only "
+                f"{available:.2f}px is available."
             )
-        if track_params.overflow == "compress" and lane_count > 1:
-            lane_gap = max(
-                0.0,
-                min(
-                    lane_gap,
-                    (float(available_extent_px) - 2.0 * track_params.padding_px - lane_count * band.lane_extent_px - room)
-                    / (lane_count - 1),
-                ),
-            )
-            required = 2.0 * track_params.padding_px + lane_count * band.lane_extent_px + (lane_count - 1) * lane_gap + room
-            if required > float(available_extent_px):
-                raise ValidationError(
-                    f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {available_extent_px:.2f}px."
-                )
-        elif track_params.overflow == "clip":
-            # Its rooms fit within the set size (``_lane_rooms``), so only lanes that pass it alone are clipped.
-            clipped = band.passes(lane_count)
-    track = replace(track, required_extent_px=float(required), clipped=clipped, lane_gap_px=lane_gap)
+        raise ValidationError(f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {available:.2f}px.")
+    # Its rooms fit within the set size (``_lane_rooms``), so only lanes that pass it alone are clipped.
+    clipped = (
+        track_params.overflow == "clip"
+        and track_params.to_slot is None
+        and available is not None
+        and band.bare_px(lane_count) + room > available
+        and band.passes(lane_count)
+    )
+    track = replace(track, required_extent_px=float(fit.required_px), clipped=clipped, lane_gap_px=fit.lane_gap_px)
     track = _cut_by_clip(track, band, labelled=packing.labelled, measures=measures)
     return replace(track, without_room_font_sizes=measures.left_out_font_sizes(track))
 

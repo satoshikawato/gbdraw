@@ -615,6 +615,23 @@ def test_a_fixed_slot_with_overflow_error_rejects_the_room() -> None:
         _packed(available=_BASE + 1.0)
 
 
+def test_a_slot_that_raises_names_the_smallest_size_that_draws_its_lanes() -> None:
+    # Six nested bands labelled above in a Linear slot 40 px high: the lanes and their rooms do not fit, so the slot
+    # raises without drawing. Its rooms are measured where the lanes keep their extent, as at the size it names, not
+    # where a narrower size would squeeze them: the slot draws at that size and not 0.01 px below it.
+    regions = tuple(_region(f"r{index}", 1501 + 120 * index, 3500 - 120 * index, f"Region {index + 1} label text") for index in range(6))
+    slot = "regions:annotations@side=above,set_id=regions,h={}px,overflow=error"
+    with pytest.raises(ValidationError, match="requires") as raised:
+        _svg("linear", regions, slot.format(40))
+    match = re.search(r"requires ([0-9.]+)px", str(raised.value))
+    assert match is not None
+    named = float(match.group(1))
+
+    _svg("linear", regions, slot.format(f"{named:.2f}"))
+    with pytest.raises(ValidationError, match="requires"):
+        _svg("linear", regions, slot.format(f"{named - 0.01:.2f}"))
+
+
 def test_a_fixed_slot_with_overflow_compress_narrows_the_lane_gap() -> None:
     track = _packed(overflow="compress", available=_BASE + _ROOM - 2.0)
 
