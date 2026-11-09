@@ -239,8 +239,6 @@ def test_python_diagnostic_vocabulary_matches_the_web_wording_owner():
     assert error_adapter.FIELDS <= web_fields
     # The engine-stage fallback (B9) and its bounded exception-class context.
     assert "RENDER_FAILED" in web_codes
-    # The memory refusal (OV-3027), classified by the MemoryError class.
-    assert error_adapter.MEMORY_REFUSAL_CODE in web_codes
     assert "exceptionType" in web_context_keys
     web_exception_types = set(re.findall(r"[A-Za-z]+", text[text.index("const EXCEPTION_TYPES") : text.index("const ORDINAL_LABELS")]))
     assert error_adapter.EXCEPTION_TYPE_NAMES <= web_exception_types

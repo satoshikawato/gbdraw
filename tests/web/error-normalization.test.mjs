@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
-import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle, OUT_OF_MEMORY_CODE } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { MODE_PROFILE_DATA } from '../../gbdraw/web/js/mode-profiles.generated.js';
 globalThis.self = {};
@@ -246,12 +246,15 @@ exact = list(a._EXACT.values())
 print(json.dumps(dict(
     operations=sorted(a.OPERATIONS), stages=sorted(a.STAGES), fields=sorted(a.FIELDS),
     codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES} | {a.MEMORY_REFUSAL_CODE}),
+    memoryRefusal=a.MEMORY_REFUSAL_CODE,
     reasons=sorted(a.DIAGNOSTIC_REASONS | {ctx["reason"] for _, ctx in exact if "reason" in ctx}
         | {row[2] for row in a._TEMPLATES} | set(a._CONSTRAINTS.values())),
     contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}),
     exceptionTypes=sorted(a.EXCEPTION_TYPE_NAMES))))
 `], { encoding: 'utf8' }));
 for (const code of pythonContract.codes) assert.equal(roundtrip({ code }).code, code, code);
+// The code on which services/diagram-generation.js replaces the engine is Python's memory refusal (OV-3027).
+assert.equal(OUT_OF_MEMORY_CODE, pythonContract.memoryRefusal);
 for (const reason of pythonContract.reasons) {
   const model = roundtrip({ code: 'INPUT_INVALID', context: { reason } });
   assert.equal(model.context.reason, reason, reason);
