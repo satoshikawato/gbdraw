@@ -158,6 +158,10 @@ write-up of a release.
   the command line, **Part of the input was not drawn.** in the Web app, and a
   warning on the `gbdraw.api.input_summary` logger from `draw_circular()` and
   `draw_linear()`, which now log every input summary warning (OV-3007).
+- Changed (Web app): turning **Use custom stack** on, and **Reset**, now give
+  each Region Annotation set that no row names its Annotations rows, placed
+  where the figure draws the set without a stack, so turning the stack on no
+  longer leaves the set out of the figure (OV-3007).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

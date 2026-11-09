@@ -397,12 +397,21 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await accession.selectOption('hide');
   await focusAfterHistoryCapture(page, length);
   await length.selectOption('show');
-  const resultBeforeReset = (await snapshot()).results;
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
   await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(accession).toHaveValue('auto');
   await expect(length).toHaveValue('auto');
-  expect((await snapshot()).results).toEqual(resultBeforeReset);
+  // Reset asks for one rerender, so the shown Result is the one the next
+  // Generate draws from the reset settings (PD-OI-066, OV-287); it lands a
+  // moment after the click.
+  const idle = () => page.waitForFunction(() => !window.__GBDRAW_APP__.processing
+    && !window.__GBDRAW_APP__.labelReflowProcessing);
+  await idle();
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await idle();
+  const resultAfterReset = (await snapshot()).results;
+  expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
+  expect((await snapshot()).results).toEqual(resultAfterReset);
 });
 
 test('independent Linear typography follows linked, imported, and History journeys', async ({ page }, testInfo) => {

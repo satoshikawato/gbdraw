@@ -121,6 +121,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).
     ("WRITTEN_RESOURCE_MEDIA_TYPES", "gbdraw.session_io", "WRITTEN_RESOURCE_MEDIA_TYPES"),
     ("INPUT_FILE_MEDIA_TYPE", "gbdraw.session_io", "INPUT_FILE_MEDIA_TYPE"),
+    ("AUTOMATIC_ANNOTATION_LANE_SIDES", "gbdraw.annotations.planning", "AUTOMATIC_ANNOTATION_LANE_SIDES"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

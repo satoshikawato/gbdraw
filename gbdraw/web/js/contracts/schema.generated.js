@@ -229,6 +229,13 @@ export const WRITTEN_RESOURCE_MEDIA_TYPES = Object.freeze({
 // gbdraw/session_io.py: INPUT_FILE_MEDIA_TYPE
 export const INPUT_FILE_MEDIA_TYPE = 'application/octet-stream';
 
+// gbdraw/annotations/planning.py: AUTOMATIC_ANNOTATION_LANE_SIDES
+/** @type {Readonly<Record<'circular' | 'linear', string>>} */
+export const AUTOMATIC_ANNOTATION_LANE_SIDES = Object.freeze({
+  circular: 'outside',
+  linear: 'above'
+});
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

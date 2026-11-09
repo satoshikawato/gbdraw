@@ -15,6 +15,10 @@ from .resolve import resolve_annotations
 
 SlotT = TypeVar("SlotT")
 
+# The side of the lane slot that a set without a stack gets, by mode. The Web's stack builders give a set the same row
+# (generated into the Web contracts), so turning Use custom stack on does not move it.
+AUTOMATIC_ANNOTATION_LANE_SIDES: dict[str, str] = {"circular": "outside", "linear": "above"}
+
 
 def _renderer(slot: object) -> str:
     return str(getattr(slot, "renderer", "")).strip().lower()
@@ -162,7 +166,7 @@ def prepare_annotation_track_slots(
                     slot_factory(
                         id=f"annotations_{index}",
                         renderer="annotations",
-                        side="outside" if mode == "circular" else "above",
+                        side=AUTOMATIC_ANNOTATION_LANE_SIDES[mode],
                         params={"set_id": set_id, "marks": lane_marks},
                     )
                 )

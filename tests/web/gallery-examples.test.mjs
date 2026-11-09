@@ -4,11 +4,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { gunzipSync } from 'node:zlib';
 
 import {
   galleryExamplesFromCatalog,
   galleryTitleParts
 } from '../../gbdraw/web/js/services/gallery-examples.js';
+import { normalizeConservationSeriesColor } from '../../gbdraw/web/js/services/conservation-series.js';
 
 const CATALOG_URL = new URL('https://gbdraw.app/gallery/examples.json');
 const catalog = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/examples.json', import.meta.url), 'utf8'));
@@ -74,4 +76,30 @@ test('an unusable catalog or entry gives no example', () => {
     { id: 'a', mode: '', thumbnailUrl: '' },
     { id: 'b', mode: 'Linear', thumbnailUrl: '' }
   ]);
+});
+
+// OV-3073: a tutorial replays its steps from Reset Settings, so a ring the
+// reader adds takes the Web's automatic colour of its row. The published
+// Session must draw the same colours unless the tutorial sets one, or the
+// tutorial's previews and the Gallery figure disagree (as after #1803).
+test('a Gallery Session whose tutorial sets no ring colour draws the automatic ring colours', () => {
+  const galleryFile = (path) => new URL(`../../gbdraw/web/gallery/${path.replace(/^\.\//, '')}`, import.meta.url);
+  let checked = 0;
+  for (const entry of catalog) {
+    const tutorial = JSON.parse(readFileSync(galleryFile(entry.tutorial), 'utf8'));
+    const setsColour = (tutorial.manualSteps ?? []).some((step) => (step.replay ?? [])
+      .some((action) => /ring colou?r/i.test(String(action.selector ?? ''))));
+    if (setsColour) continue;
+    const bytes = readFileSync(galleryFile(entry.session));
+    const session = JSON.parse((entry.session.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8'));
+    for (const drawing of session.drawings ?? []) {
+      const series = drawing.config?.circularConservation?.series ?? [];
+      series.forEach((row, index) => {
+        assert.equal(normalizeConservationSeriesColor(row.color, index), normalizeConservationSeriesColor('', index),
+          `${entry.id}: comparison ring ${index + 1}`);
+        checked += 1;
+      });
+    }
+  }
+  assert.ok(checked > 0, 'no Gallery Session has comparison rings');
 });

@@ -403,6 +403,45 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
   });
 }
 
+// OV-3007 option A (Owner D-35, 2026-11-09): turning Use custom stack on gives each Region Annotation set the rows
+// Python's automatic placement draws it in, so the live Result and the next Generate draw the set as before.
+// The drawn figure: the Result SVG without the group IDs and slot tags that only name its groups (OV-3012).
+const figure = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML
+  .replace(/ data-gbdraw-slot-(?:id|renderer)="[^"]*"/g, '')
+  .replace(/ id="(?:track_slot_|gbdraw-annotation-track-|record_group_)[^"]*"/g, ''));
+for (const mode of ['circular', 'linear']) {
+  test(`Use custom stack turned on draws the Region Annotation sets where Generate drew them (${mode})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const set = app.addAnnotationSet('regions');
+      app.addCoordinateAnnotation(set, { start: 100, end: 400 });
+      app.addCoordinateAnnotation(set, { start: 900, end: 1500 }).mark = 'band';
+    });
+    await settleLive(page);
+    await generate(page);
+    const drawn = await figure(page);
+    expect(drawn, 'the set is drawn').toContain('data-gbdraw-annotation-set-id="regions"');
+
+    const rows = await page.evaluate((linear) => {
+      const app = window.__GBDRAW_APP__;
+      if (linear) app.setLinearTrackSlotsEnabled(true);
+      else app.setCircularTrackSlotsEnabled(true);
+      return (linear ? app.adv.linear_track_slots : app.adv.circular_track_slots)
+        .filter((slot) => slot.renderer === 'annotations').map((slot) => slot.id);
+    }, mode === 'linear');
+    expect(rows).toEqual(['annotations_1', 'annotations_1_highlight']);
+    await settleLive(page);
+    expect(await figure(page), 'live, stack on').toBe(drawn);
+    // OV-3012: a Linear Generate tags its slot groups only with a stack, so the live Result keeps the untagged groups
+    // until Generate; `figure` leaves those tags out, and the live check runs where the tags agree.
+    if (mode === 'circular') await expectLiveEqualsGenerate(page, { label: `${mode}: stack on` });
+    else await generate(page);
+    expect(await figure(page), 'Generate, stack on').toBe(drawn);
+  });
+}
+
 // R3-M-A (OV-1198): a Circular custom stack without an enabled Depth slot draws no Depth whatever the
 // Show Depth checkbox it disables says, so a Depth series without a file does not stop Generate (the build used its own copy of the rule).
 test('A Circular custom stack without a Depth slot generates with a Depth series that has no file', async ({ page }) => {

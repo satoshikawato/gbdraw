@@ -13,25 +13,31 @@ app (NZ_CP008957.1, NC_000913.3, NC_004431.1, named O157:H7 EDL933, K-12
 MG1655 and CFT073 (UPEC)) and six islands from a region table
 (`gallery/files/ecoli_o157_sakai_islands.tsv`, sets `islands_tint` and
 `islands`). The tutorial starts from the Web defaults and Generates four
-times: the defaults, the three rings, the region table, and a custom stack
-with two Annotations rows (`annotations` lays `islands_tint` over the
-features and extends it to the innermost ring; `annotations_2` draws
-`islands` outside the Axis). The Gallery Session was saved from a fresh
+times: the defaults, the three rings, the region table, and a custom stack.
+Use custom stack starts the stack with one Annotations row per region set,
+placed as the figure without a stack draws it (`annotations_1` lays
+`islands_tint` behind the features; `annotations_2` draws `islands` outside
+the Axis). Step 6 extends `annotations_1` to the innermost ring and sets its
+layer to Foreground and its padding to 2, as the published figure has it. The Gallery Session was saved from a fresh
 upload followed by these steps and published with
 `tools/refresh_gallery_sessions.py`. **Reset Settings** keeps the three
 comparison files with Show Comparison Rings off and their names back to the
 accessions, removes both region sets, and turns the custom stack off; the
 replay of step 4 turns the rings on and types the names again, step 5
-imports the table again, and step 6 builds the stack again. A Generate with
+imports the table again, and step 6 turns the stack on and edits its
+`annotations_1` row. A Generate with
 the rings off empties the LOSAT cache, so the capture replay of step 4
-searches again (about 30 s). The rings keep the Web's per-ring default
-colors; when the Web takes over the ring color scheme, the replay from
-Reset needs a color step, and `--check` shows it.
+searches again (about 30 s). The rings keep the Web's automatic colors, and
+the Gallery recipe passes the same colors (`#81a5cc` `#e5a972` `#7cb075`).
+`capture_gallery_tutorial_screenshots.py --check` does not render, so it
+cannot see a color change; `tests/web/gallery-examples.test.mjs` fails when
+a Gallery Session's ring colors differ from the automatic colors and its
+tutorial sets none (OV-3073).
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
 | `ecoli_o157_sakai_rings` | `manual-03-01-default-preview.webp`, `manual-04-02-rings-preview.webp`, `manual-05-02-regions-preview.webp`, `manual-06-03-final-preview.webp` | Add | Replay through steps 3, 4, 5, 6; SVG at up to 1000 px in a 1400x1400 viewport; no rings at step 3, the three ring names from step 4, the six island names from step 5, the custom stack on at step 6 | Captured at DSF 3; accepted |
-| `ecoli_o157_sakai_rings` | `manual-04-01-comparison-files.webp`, `manual-05-01-region-sets.webp`, `manual-06-01-label-row.webp`, `manual-06-02-tint-row.webp` | Add | Replay through steps 4, 5 and 6; the three named comparison rows (`visibleControls`), the Region Annotations card with both sets, the `annotations_2` row above the Axis row, and the `annotations` row with its overlay settings (`visibleControls`) | Captured at DSF 3; accepted |
+| `ecoli_o157_sakai_rings` | `manual-04-01-comparison-files.webp`, `manual-05-01-region-sets.webp`, `manual-06-01-label-row.webp`, `manual-06-02-tint-row.webp` | Add | Replay through steps 4, 5 and 6; the three named comparison rows (`visibleControls`), the Region Annotations card with both sets, the `annotations_2` row above the Axis row, and the `annotations_1` row with its overlay settings (`visibleControls`) | Captured at DSF 3; accepted |
 | `ecoli_o157_sakai_rings` | `manual-01-01-circular-mode.webp`, `manual-02-01-genbank-upload.webp`, `manual-02-02-output-prefix.webp` | Add | Fresh page for the drawing bar; replay through step 2 for the uploader and Output Prefix | Captured at DSF 3; accepted |
 
 ## Progressive hepatoplasma_scabrum_depth tutorial (2026-11-08)

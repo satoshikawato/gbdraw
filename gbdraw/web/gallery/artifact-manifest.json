@@ -16,7 +16,7 @@
   "files": {
     "gallery/examples.json": {
       "bytes": 31340,
-      "sha256": "c93afffe6f703ec018e3dd3bc254a2c3282ccc5c268fac817361fbd1b8de1005"
+      "sha256": "ee1e65bf766df3d236538f5b66be5efd878eb72698b7d759b49ed162d1811779"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1319101,
@@ -35,8 +35,8 @@
       "sha256": "6fab6e9d8a3116a063d18e812dfbbe90ab5386a12795ab425cbb680d691ea425"
     },
     "gallery/examples/ecoli_o157_sakai_rings.svg": {
-      "bytes": 26117693,
-      "sha256": "f61adb829e60473c7c072aa307e609e83043cd0c64862e32fff4dacc88eefbf1"
+      "bytes": 26117153,
+      "sha256": "7808dd4b80e61d39a4334c4b6963ba20cd8d6372f6c949a77a76395e1b7eab23"
     },
     "gallery/examples/hepatoplasma_scabrum_depth.svg": {
       "bytes": 2881904,
@@ -83,8 +83,8 @@
       "sha256": "a286df00d81a8734310cb52dd8c1425b89e0a093744938491532853cc3aa733b"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz": {
-      "bytes": 21212273,
-      "sha256": "0ab9c38a80fd3f6e5952d3b8734a1bfb0118a5ccaa7c112254820396cad410c7"
+      "bytes": 21206211,
+      "sha256": "9ad13c25a88a94b983fe2beb93b49c459979e91ab3327527f30e7da3eef59025"
     },
     "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz": {
       "bytes": 1071923,
@@ -131,8 +131,8 @@
       "sha256": "bea60bf05ad11703240e24a214d9d1413a71a2d82d7fb67e66d63d9fcde5ae18"
     },
     "gallery/sources/ecoli_o157_sakai_rings.svg": {
-      "bytes": 13681902,
-      "sha256": "2f9fef4867b24369ad7b437d1b587dc950fdd587c556708fdff68fc044caa136"
+      "bytes": 13681930,
+      "sha256": "19fcf7aed4632fd26a298e8a182398be519fd94e0554a47c57944324cfeda943"
     },
     "gallery/sources/hepatoplasma_scabrum_depth.svg": {
       "bytes": 505902,
@@ -179,8 +179,8 @@
       "sha256": "ea0b8c581dddee7b7385b4ad8e8805496b7413eea8d1400e7da96a7740b40fa5"
     },
     "gallery/thumbnails/ecoli_o157_sakai_rings.webp": {
-      "bytes": 25972,
-      "sha256": "777ef97f883e826c1569f81b19c4fe4e698d05204bb25d2a1af633db456b5e9a"
+      "bytes": 25402,
+      "sha256": "3debc8498746f7fc03ede77188e13c78b0326d0c454a63e89d7727c0051261a9"
     },
     "gallery/thumbnails/hepatoplasma_scabrum_depth.webp": {
       "bytes": 20990,

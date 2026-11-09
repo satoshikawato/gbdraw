@@ -39,6 +39,7 @@ import {
   SUPPRESS_FORM_KEY_BY_RENDERER,
   SUPPRESS_KEY_BY_RENDERER,
   SUPPRESS_RENDERER_BY_KEY,
+  CIRCULAR_SLOT_SIZE_FIELDS,
   applyCircularSuppressControlsToSlots,
   circularTrackSlotHiddenBySuppressForm,
   slotUsesDrawingDinucleotide
@@ -47,12 +48,14 @@ import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
+  automaticAnnotationTrackSlots,
   nextCopyId,
   nextNumberedId,
   overlayAnnotationZ,
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
   parseOptionalPixel,
+  prependMissingAnnotationTrackSlots,
   setOverlayAnnotationParam,
   trackAddBlockReason,
   validateCustomTrackPlan
@@ -505,6 +508,28 @@ const circularGeometryShortcutsForState = (drawing) => ({
   gcSkewWidth: drawing?.adv?.gc_skew_width_circular,
   gcSkewRadius: drawing?.adv?.gc_skew_radius_circular
 });
+
+/**
+ * The rows Reset and Reset to preset build: the Region Annotation sets' rows
+ * first, as Python places a set without a stack (D-35), then the preset's.
+ * @param {DrawingState} drawing @param {string} preset A normalized preset.
+ */
+const presetTemplateSlots = (drawing, preset) => {
+  // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
+  const depthTrackCount = circularAvailableDepthTrackCount(drawing);
+  return [
+    ...automaticAnnotationTrackSlots(drawing.annotationSets, 'circular', CIRCULAR_SLOT_SIZE_FIELDS),
+    ...applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
+      nt: drawing.adv.nt,
+      showDepth: depthTrackCount > 0,
+      depthTrackCount,
+      showGc: !drawing.form.suppress_gc,
+      showSkew: !drawing.form.suppress_skew,
+      showTicks: drawing.form.show_scale !== false,
+      preset
+    }), circularGeometryShortcutsForState(drawing))
+  ];
+};
 
 /**
  * @typedef {object} CircularTrackSlotEditorOptions
@@ -1094,17 +1119,7 @@ export const createCircularTrackSlotEditor = ({
   /** @param {DrawingState} drawing @param {unknown} preset */
   const resetSlotsToPreset = (drawing, preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
-    // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
-    const depthTrackCount = circularAvailableDepthTrackCount(drawing);
-    const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
-      nt: drawing.adv.nt,
-      showDepth: depthTrackCount > 0,
-      depthTrackCount,
-      showGc: !drawing.form.suppress_gc,
-      showSkew: !drawing.form.suppress_skew,
-      showTicks: drawing.form.show_scale !== false,
-      preset: normalizedPreset
-    }), circularGeometryShortcutsForState(drawing));
+    const templateSlots = presetTemplateSlots(drawing, normalizedPreset);
     drawing.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
       normalizeCircularTrackSlots(templateSlots, drawing.adv.nt, normalizedPreset),
       normalizedPreset
@@ -1138,8 +1153,11 @@ export const createCircularTrackSlotEditor = ({
     if (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0) {
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
-      // The stack it turns on holds the managed comparison ring rows.
+      // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it does not name (D-35).
       syncConservationSlots(drawing);
+      const rows = drawing.adv.circular_track_slots;
+      drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentSlots(drawing, rows),
+        drawing.annotationSets, 'circular', (added) => normalizeCircularTrackSlots(added, drawing.adv.nt, drawing.form.track_type), CIRCULAR_SLOT_SIZE_FIELDS);
     }
   };
 

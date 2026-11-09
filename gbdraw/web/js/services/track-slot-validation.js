@@ -3,6 +3,7 @@ import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
+import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
@@ -321,6 +322,92 @@ const OVERLAY_SLOT_REFERENCES = Object.freeze([
 export const overlaySlotReference = (params, key) => (
   params && typeof params === 'object' ? String(/** @type {Record<string, unknown>} */ (params)[key] || '').trim() : ''
 );
+/**
+ * A slot of Python's automatic placement of Region Annotation sets.
+ * @typedef {{ id: string, renderer: 'annotations', enabled: true, side: string, z: number,
+ *   params: { set_id: string, marks: string[], anchor_slot?: string, layer?: string, cover_anchor?: boolean, padding_px?: number } }} AutomaticAnnotationSlot
+ */
+/**
+ * The slots Python's automatic placement draws for the Region Annotation sets
+ * when no stack is given (`prepare_annotation_track_slots`): for the n-th set,
+ * `annotations_<n>` with its lane marks on the mode's lane side, and its
+ * highlights as an overlay behind the feature track. A set that keeps its
+ * highlight overlay (a sequence search's, PD-OI-117) gets that overlay from
+ * Python in any stack, so it gets none here. `slotFields` are the mode's empty
+ * size fields, placed after `enabled`.
+ * @param {readonly { id?: unknown, annotations?: readonly ({ mark?: unknown } | null)[], keepHighlightOverlay?: boolean }[] | null | undefined} sets
+ * @param {'circular' | 'linear'} mode
+ * @param {Readonly<Record<string, null>>} [slotFields]
+ * @returns {AutomaticAnnotationSlot[]}
+ */
+export const automaticAnnotationTrackSlots = (sets, mode, slotFields = {}) => {
+  /** @type {AutomaticAnnotationSlot[]} */
+  const slots = [];
+  (Array.isArray(sets) ? sets : []).forEach((set, index) => {
+    const setId = String(set?.id || '').trim();
+    if (!setId) return;
+    const marks = Array.from(new Set(
+      (Array.isArray(set.annotations) ? set.annotations : [])
+        .map((/** @type {{ mark?: unknown } | null} */ annotation) => String(annotation?.mark || '').trim().toLowerCase())
+        .filter(Boolean)
+    ));
+    const laneMarks = marks.filter((mark) => mark !== 'highlight');
+    const id = `annotations_${index + 1}`;
+    if (laneMarks.length > 0) {
+      slots.push({ id, renderer: 'annotations', enabled: true, ...slotFields,
+        side: AUTOMATIC_ANNOTATION_LANE_SIDES[mode], z: 0, params: { set_id: setId, marks: laneMarks } });
+    }
+    if (marks.includes('highlight') && set.keepHighlightOverlay !== true) {
+      slots.push({ id: `${id}${laneMarks.length > 0 ? '_highlight' : ''}`, renderer: 'annotations', enabled: true, ...slotFields,
+        side: 'overlay', z: -1, params: {
+          set_id: setId, marks: ['highlight'], anchor_slot: 'features', layer: 'underlay', cover_anchor: true, padding_px: 0
+        } });
+    }
+  });
+  return slots;
+};
+
+/**
+ * The automatic slots of the sets that no row of `rows` names (also a row
+ * turned off), the rows a stack gets so that it draws every set as Python's
+ * automatic placement does.
+ * @param {readonly { renderer?: unknown, params?: unknown }[]} rows
+ * @param {Parameters<typeof automaticAnnotationTrackSlots>[0]} sets
+ * @param {'circular' | 'linear'} mode
+ * @param {Readonly<Record<string, null>>} [slotFields]
+ */
+const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
+  const named = new Set(rows.filter((row) => row?.renderer === 'annotations')
+    .map((row) => String(/** @type {{ set_id?: unknown } | null | undefined} */ (row.params)?.set_id || '').trim()).filter(Boolean));
+  const taken = new Set(rows.map((row) => String(/** @type {{ id?: unknown }} */ (row)?.id || '').trim()));
+  return automaticAnnotationTrackSlots(sets, mode, slotFields)
+    .filter((slot) => !named.has(slot.params.set_id))
+    .map((slot) => {
+      let id = slot.id;
+      for (let suffix = 2; taken.has(id); suffix += 1) id = `${slot.id}_${suffix}`;
+      taken.add(id);
+      return { ...slot, id };
+    });
+};
+
+/**
+ * Puts the automatic rows of the sets no row of `rows` names at the top of
+ * `rows`, where Python places a set without a stack, and returns the Axis index
+ * that keeps the Axis on its row.
+ * @template T
+ * @param {T[]} rows
+ * @param {number} axisIndex
+ * @param {Parameters<typeof automaticAnnotationTrackSlots>[0]} sets
+ * @param {'circular' | 'linear'} mode
+ * @param {(slots: AutomaticAnnotationSlot[]) => T[]} normalize The mode's row normalizer.
+ * @param {Readonly<Record<string, null>>} [slotFields]
+ */
+export const prependMissingAnnotationTrackSlots = (rows, axisIndex, sets, mode, normalize, slotFields = {}) => {
+  const added = missingAnnotationTrackSlots(/** @type {readonly { renderer?: unknown, params?: unknown }[]} */ (rows), sets, mode, slotFields);
+  if (added.length > 0) rows.splice(0, 0, ...normalize(added));
+  return axisIndex + added.length;
+};
+
 /** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
 export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
 

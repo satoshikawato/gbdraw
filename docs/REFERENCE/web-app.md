@@ -611,6 +611,12 @@ is, including its **Ticks** row. **Reset**
 and, in Circular, the **Tuckin**, **Middle**, or **Spreadout** button under
 **Reset to preset** rebuild the stack from **Show Coordinate Scale**,
 **Hide GC Content**, **Hide GC Skew**, and the loaded Depth series.
+Turning the stack on, and **Reset**, also give each Region Annotation set
+that no row names its Annotations rows at the top of the stack, where the
+figure draws the set without a stack: a row for its lines, brackets, and
+bands, and an Overlay row behind the feature track for its highlights. The
+figure then stays as it was. A sequence search's set gets no row; it is drawn
+as before.
 
 Depth rows follow Depth files the same way in Circular and Linear. When a
 logical Depth series gets its first file, the stack gains one Depth row for it,
