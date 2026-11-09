@@ -33,6 +33,7 @@ from flows.how_to.interactive_sessions import (
     _reset_finished_preview_viewport,
 )
 from flows.web_capture import (
+    circular_file_input,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
@@ -91,7 +92,7 @@ def capture_first_circular(
         genbank.check()
         expect(genbank).to_be_checked()
 
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
         expect_circular_file_card(page, 1, "HmmtDNA.gbk")

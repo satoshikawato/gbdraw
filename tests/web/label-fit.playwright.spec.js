@@ -10,6 +10,7 @@ const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'smaller_font', 'tighter_rows', 'combination'];
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
@@ -20,7 +21,7 @@ const LAMBDA = () => readFileSync(join(process.cwd(), 'tests/test_inputs/NC_0014
 const openWithOuterLabels = async (page, { name, text, fontSize = null, rendering = 'auto' }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
   await page.evaluate(({ size, labelRendering }) => {
@@ -173,7 +174,7 @@ test('the definition text over a track: the notice offers a smaller font and the
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: 'MERS-CoV.gbk', mimeType: 'text/plain',
     buffer: readFileSync(join(process.cwd(), 'tests/test_inputs/MERS-CoV.gbk'))
   });
@@ -353,7 +354,7 @@ test('a Circular region label longer than its circle: the notice counts it as cu
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'cut.gb', mimeType: 'text/plain',
+  await circularFileInput(page, 'gb').setInputFiles({ name: 'cut.gb', mimeType: 'text/plain',
     buffer: Buffer.from(genbank('cut', [['3000..3300', 'photosystem II protein D1']])) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
   await annotationsPanel(page).locator('input[type=file]').setInputFiles({ name: 'regions.tsv',

@@ -7,6 +7,7 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test, expect } = require('@playwright/test');
 const A = require('./helpers/audit-common.cjs');
+const { circularFileInput } = require('../../tests/web/helpers/circular-inputs.cjs');
 
 const P = (tag) => `<img src=x onerror=alert('XSS-${tag}')>`;
 const sequence = (length) => {
@@ -65,7 +66,7 @@ test('crafted qualifiers stay inert in preview, popup, search, Run info, and exp
   page.on('dialog', (d) => { dialogs.push({ page: 'app', msg: d.message() }); d.dismiss(); });
   const { openApp, generateAndWaitForResult } = A.helpers();
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gb').setInputFiles({
     name: FILE_NAME, mimeType: 'text/plain', buffer: payload
   });
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });

@@ -872,7 +872,24 @@ export const ColorValueControl = {
  *   chosen) and referenced by the zone through aria-describedby
  * @property {boolean} [replace] a chosen file shows Replace (choose another file for this slot) in
  *   place of Remove: the slot's file leaves only with its File card (Circular File cards)
+ * @property {boolean} [drop] the zone also takes files dropped on it, as one selection of them, and says so
+ *   (the Circular Add files zone)
+ * @property {boolean} [parentStep] the parent's `update:modelValue` handler records the History step itself
+ *   (the Circular Add files writer's "Add File"): the uploader opens none
  */
+
+/**
+ * A file dragged over the page outside a zone that takes drops would open in
+ * the tab when dropped, and the page with its unsaved work would leave
+ * (OV-3098): the window refuses such a drag and its drop. A zone's own
+ * handler (`FileUploader` with `drop`) runs first and takes its drop.
+ * @param {DragEvent} event
+ */
+export const refuseStrayFileDrop = (event) => {
+  if (event.defaultPrevented || !event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'none';
+};
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
 // parent that shows its message (for example "No records were found"): a
@@ -880,7 +897,7 @@ export const ColorValueControl = {
 export const FileUploader = {
   template: '#file-uploader-template',
   components: { HelpTip },
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help', 'replace'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help', 'replace', 'drop', 'parentStep'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -973,7 +990,9 @@ export const FileUploader = {
         await nextTick();
         return await props.afterChange?.(nextFiles[0]);
       };
-      if (props.importStep) {
+      if (props.parentStep) {
+        update();
+      } else if (props.importStep) {
         void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
         void history.runUndoable(msg('Change uploaded file'), apply);
@@ -986,6 +1005,27 @@ export const FileUploader = {
       if (busy) { e.target.value = ''; return busy; }
       select(Array.from(e.target.files || []), pickTopNow());
       e.target.value = '';
+    };
+    // A zone that takes drops (`drop`) shows a file dragged over it as a press would, and
+    // takes the dropped files as one selection; a drop elsewhere opens nothing (`refuseStrayFileDrop`).
+    const dragging = ref(false);
+    /** @param {DragEvent} event */
+    const dragOver = (event) => {
+      if (!props.drop || !uploadAvailable.value || !event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      dragging.value = true;
+    };
+    /** @param {DragEvent} event */
+    const dropFiles = (event) => {
+      dragging.value = false;
+      if (!props.drop || !uploadAvailable.value) return undefined;
+      event.preventDefault();
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
+      const dropped = Array.from(event.dataTransfer?.files || []);
+      if (dropped.length) select(dropped, null);
+      return undefined;
     };
     const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
       const chosen = sessionFiles.value.find((/** @type {InputFileRef} */ ref) => ref.fileId === e.target.value);
@@ -1019,7 +1059,10 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable };
+    return {
+      input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable,
+      dragging, dragOver, dropFiles
+    };
   }
 };
 

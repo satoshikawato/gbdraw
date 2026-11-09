@@ -25,6 +25,7 @@ const {
 } = require('./helpers/live-generate-parity-steps.cjs');
 const { WORK_ALLOWLIST } = require('./helpers/live-work-allowlist.mjs');
 const { drawnAnnotationMarks, fasta, genbankBases, reverseComplement, searchByAction, span } = require('./helpers/sequence-search.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -1284,7 +1285,7 @@ test.describe('a Result displayed after its intent changed', () => {
     await page.evaluate(() => { Object.assign(window.__GBDRAW_APP__.linearSeqs[0], { region_start: 1, region_end: 1000 }); });
     await generate(page);
     await switchDrawing(page, 'circular');
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE_FIXTURE);
+    await circularFileInput(page, 'gb').setInputFiles(SINGLE_FIXTURE);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);
     await settleLive(page);
     await generate(page);

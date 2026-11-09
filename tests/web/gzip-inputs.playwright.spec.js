@@ -5,6 +5,7 @@ const { gunzipSync, gzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 // Every Session resource descriptor (`encoding: base64`) anywhere in the document.
 const base64Resources = (value, found = []) => {
@@ -24,7 +25,7 @@ test('a gzip GenBank upload lists its record, generates, and saves the plain fil
   const plain = fs.readFileSync(path.resolve('tests/test_inputs/NC_001416.gb'));
   fs.writeFileSync(gzipped, gzipSync(plain));
   await openFresh(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(gzipped);
+  await circularFileInput(page, 'gb').setInputFiles(gzipped);
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.circularRecordList.map((record) => record.record_id)
   )), { timeout: 60_000 }).toEqual(['NC_001416.1']);
@@ -58,7 +59,7 @@ test('a gzip upload past the expanded cap is refused with its name and the cap',
     window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxExpandedInputBytes };
   }, cap);
   await openFresh(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(gzipped);
+  await circularFileInput(page, 'gb').setInputFiles(gzipped);
   await expect(page.getByText('An input could not be read. Replace or reselect it. File: big genome.gb.gz. '
     + 'gbdraw reads gzip files that expand to at most 1 MiB. Decompress the gzip file and choose the plain file.'))
     .toBeVisible({ timeout: 60_000 });

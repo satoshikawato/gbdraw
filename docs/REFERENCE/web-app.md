@@ -694,11 +694,19 @@ readability. Use preview zoom and pan to inspect individual features.
 ## Circular source records and one-record settings
 
 The Circular input is a list of File cards, one per file (or per GFF3 and FASTA
-pair), in drawing order, as the command line takes `--gbk a.gb b.gb`. With no
-file yet, **Input Genomes** shows the uploader of the chosen input type; the
-first file you choose there becomes **File 1**. **Add file** adds a card with
-the next file, so a genome whose chromosome and plasmids are in separate files
-is drawn from those files as they are. A card folds to one line: **File N**,
+pair), in drawing order, as the command line takes `--gbk a.gb b.gb`. Above
+the cards, the **Add files** zone of the chosen input type, such as **Add
+GenBank/DDBJ files: choose several or drop them here**, adds cards; with no
+file yet, it is all that **Input Genomes** shows. Choose several files at once
+in its file picker, or drop them on it: each file becomes a File card, in the
+order the picker or the drop gives them, and the whole pick is one step that
+Undo reverses. A genome whose chromosome and plasmids are in separate files is
+drawn from those files as they are. With **GFF3 + FASTA**, a GFF3 file (named
+`.gff` or `.gff3`, also with `.gz`) and a FASTA file of the same name before
+the extension, such as `a.gff3` and `a.fasta`, make one card, whatever the
+letter case. A file with no partner makes a card that waits for the other file
+(`a.gff3 + no FASTA`) and shows open; choose that file in the card. With
+**GenBank** or **FASTA**, every file of a pick is read as that input type. A card folds to one line: **File N**,
 the file name (with a check once it is read, or a warning when it cannot be
 read), **Move File N up**, **Move File N down**, and **Remove File N**. Open a
 card to see its uploader, **Replace** its file, and read what it holds, such
@@ -720,7 +728,9 @@ To draw it, add a `region` row to the GFF3.
 
 If a source cannot be inspected, **Source records** reports the failure and
 offers **Retry source inspection**, and that file's card shows its warning;
-the records of the other cards are still listed. Replace or remove the file to
+the records of the other cards are still listed. With several cards, the report
+starts with that card's file name, as for a FASTA file chosen among GenBank
+files (`b.fasta: No records were found. …`). Replace or remove the file to
 continue. The
 current Result stays in the Preview until the next successful Generate.
 
@@ -777,8 +787,9 @@ disclosure, whose summary names the mark and label, holds the mark, label, lane,
 
 Turn on **Multi-Record Canvas** to place every selected record of the Circular
 input on a shared canvas: every record of every File card, in card order and
-then in file order. Add each file of a genome split over several files, such as
-a chromosome and its plasmids, as its own File card; the files need no joining.
+then in file order. Add the files of a genome split over several files, such as
+a chromosome and its plasmids, in one pick or drop: each becomes its own File
+card, and the files need no joining.
 **Record Order** lists each record once. Use Circular layout only for complete
 records whose biological topology is circular.
 

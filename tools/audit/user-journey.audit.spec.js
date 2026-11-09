@@ -27,6 +27,7 @@ const {
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require(repo('tests/web/helpers/live-generate-parity.cjs'));
 const { colorLegendRow, generate, history, renameRow } = require(repo('tests/web/helpers/live-generate-parity-steps.cjs'));
 const { compareSvgFiles } = require(repo('tests/web/helpers/svg-semantic-compare.cjs'));
+const { circularFileInput } = require('../../tests/web/helpers/circular-inputs.cjs');
 
 // Journey -> the capabilities (tools/ci-impact-policy.mjs classifyChanges) it
 // exercises. A changed capability that no journey lists is printed as uncovered.
@@ -178,10 +179,10 @@ const loadSession = async (page, file) => {
 const uploadCircular = async (page, path, { viaChooser = false } = {}) => {
   if (viaChooser) {
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
     await (await chooser).setFiles(path);
   } else {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(path);
+    await circularFileInput(page, 'gb').setInputFiles(path);
   }
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
     .toBeGreaterThan(0);
@@ -320,7 +321,7 @@ const inputGenerateExport = async (page, steps, dir, { phone = false } = {}) => 
     return check('open');
   }, { limitMs: 240_000 });
   await steps.step('upload HmmtDNA.gbk (Circular)', async () => {
-    await check('before upload', [['Choose GenBank/DDBJ File', page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true })]]);
+    await check('before upload', [['Choose GenBank/DDBJ files', page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true })]]);
     await uploadCircular(page, HMMT_GBK, { viaChooser: true });
     return check('after upload');
   });

@@ -1,8 +1,9 @@
 // The Circular File card list (app/circular-file-cards.js, circular-multi-file
 // D-01, D-10): one card per source file in drawing order, each card's header
-// line, state, records line and fold; Add file and the File removal dialog
+// line, state, records line and fold; Add files and the File removal dialog
 // call the source card writers (fakes here); a record's Topology card names its
-// file. The shell's header line is the one the Linear File cards show
+// file. One pick or drop of GFF3 and FASTA files pairs them by file-name stem
+// (`pickedFileCards`, circular-multi-file D-07). The shell's header line is the one the Linear File cards show
 // (app/file-card.js), and the Choose records list of several cards groups its
 // rows by file (app/record-selection.js). tests/web/circular-file-card-list.playwright.spec.js
 // runs the list in the browser.
@@ -12,11 +13,10 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const Vue = loadPageVue();
 globalThis.window = { Vue };
-// No element has focus here, so an add moves none (`keepFocusInFileCard`; the browser spec checks the move).
-globalThis.document = { activeElement: null, body: null };
 const { reactive } = Vue;
 const { createCircularFileCards } = await import('../../gbdraw/web/js/app/circular-file-cards.js');
 const { fileCardLine } = await import('../../gbdraw/web/js/app/file-card.js');
+const { pickedFileCards } = await import('../../gbdraw/web/js/services/input-types.js');
 const { createRecordSelection } = await import('../../gbdraw/web/js/app/record-selection.js');
 
 const file = (name) => ({ fileId: `id-${name}`, name });
@@ -24,20 +24,21 @@ const record = (uid, k, recordId, length, identity = uid) => ({
   uid, k, identity, selector: `#${k}`, record_id: recordId, record_length: length, detectedTopology: 'circular'
 });
 
-const makeCards = ({ inputType = 'gb', sources, records = [], status = 'ready', failedSources = [] }) => {
+const makeCards = ({ inputType = 'gb', sources, records = [], status = 'ready', failedSources = [], error = '' }) => {
   const drawing = reactive({
     inputType: { value: inputType },
     circularSources: sources,
     circularRecordList: { value: records }
   });
-  const discovery = reactive({ status, failedSources });
+  const discovery = reactive({ status, failedSources, error });
   const calls = [];
   const cards = createCircularFileCards({
     shownDrawingOfMode: (mode) => (mode === 'circular' ? drawing : null),
     circularRecordDiscoveryState: { get value() { return discovery; } },
-    addCircularSourceFiles: async (field, files) => {
-      calls.push(['add', field, files.map((entry) => entry.name)]);
-      files.forEach((entry, index) => drawing.circularSources.push({ uid: `new-${index}`, gb: null, gff: null, fasta: null, [field]: entry }));
+    addCircularSourceFiles: async (files) => {
+      calls.push(['add', files.map((entry) => entry.name)]);
+      pickedFileCards(drawing.inputType.value, files).forEach((slots, index) => (
+        drawing.circularSources.push({ uid: `new-${index}`, gb: null, gff: null, fasta: null, ...slots })));
     },
     removeCircularSourceCard: async (uid) => {
       calls.push(['remove', uid]);
@@ -84,6 +85,17 @@ test('a card whose read failed shows its warning and no records; the other cards
   ]);
 });
 
+test('the read error names the failed card by its files when the list holds several cards', () => {
+  const error = { summaryParts: [{ text: 'No records were found.' }, { text: 'This file looks like FASTA.' }] };
+  const several = makeCards({ sources: SAKAI(), records: SAKAI_RECORDS, status: 'error', failedSources: ['record-2'], error });
+  assert.equal(several.cards.readError.value, 'AB011549.2.gb: No records were found. This file looks like FASTA.');
+  const one = makeCards({ sources: SAKAI().slice(1, 2), status: 'error', failedSources: ['record-2'], error });
+  assert.equal(one.cards.readError.value, 'No records were found. This file looks like FASTA.');
+  const unknown = makeCards({ sources: SAKAI().slice(1, 2), status: 'error', failedSources: ['record-2'] });
+  assert.equal(unknown.cards.readError.value, 'Source inspection failed. Retry or replace the input.');
+  assert.equal(makeCards({ sources: SAKAI(), records: SAKAI_RECORDS }).cards.readError.value, '');
+});
+
 test('records not read yet give no records line', () => {
   const { cards } = makeCards({ sources: SAKAI(), records: SAKAI_RECORDS, status: 'deferred' });
   assert.deepEqual(cards.cards.value.map((card) => card.recordsLine), ['', '', '']);
@@ -99,18 +111,53 @@ test('a file of several records: the records line counts them and a Topology car
   assert.equal(cards.recordPlace({ sourceUid: 'record-2', selector: '#1' }), 'mito.gb');
 });
 
-test('Add file adds cards in the slot the input type reads first; a card still waiting for its FASTA shows open', async () => {
+test('one pick or drop of GenBank or FASTA files is one card per file, in the order given, whatever the names say', () => {
+  const names = (cards) => cards.map((slots) => Object.fromEntries(Object.entries(slots).map(([slot, entry]) => [slot, entry.name])));
+  const picked = [file('BA000007.3.gb'), file('AB011549.2.gb'), file('pOSAK1.fasta')];
+  assert.deepEqual(names(pickedFileCards('gb', picked)), [{ gb: 'BA000007.3.gb' }, { gb: 'AB011549.2.gb' }, { gb: 'pOSAK1.fasta' }]);
+  assert.deepEqual(names(pickedFileCards('fasta', picked)), [{ fasta: 'BA000007.3.gb' }, { fasta: 'AB011549.2.gb' }, { fasta: 'pOSAK1.fasta' }]);
+  assert.deepEqual(pickedFileCards('gb', []), []);
+});
+
+test('GFF3 and FASTA files of one pick pair by file-name stem; an unpaired file makes a card with the other slot empty', () => {
+  const names = (cards) => cards.map((slots) => [slots.gff?.name ?? null, slots.fasta?.name ?? null]);
+  // The picker's order: the card stands where its first file stood.
+  assert.deepEqual(names(pickedFileCards('gff', [
+    file('NC_013668.fasta'), file('NC_013668.gff3'), file('NC_013668-reannotated.gff3'), file('pX.fa')
+  ])), [['NC_013668.gff3', 'NC_013668.fasta'], ['NC_013668-reannotated.gff3', null], [null, 'pX.fa']]);
+  // The stem ignores letter case and a .gz ending; a name that is not .gff or .gff3 is the FASTA.
+  assert.deepEqual(names(pickedFileCards('gff', [file('Chr1.GFF.gz'), file('chr1.fna.gz'), file('chr2.txt'), file('chr2.gff3')])),
+    [['Chr1.GFF.gz', 'chr1.fna.gz'], ['chr2.gff3', 'chr2.txt']]);
+  // Two GFF3 files of one stem: the first takes the FASTA, the second is a card of its own.
+  assert.deepEqual(names(pickedFileCards('gff', [file('a.gff'), file('a.gff3'), file('a.fasta')])),
+    [['a.gff', 'a.fasta'], ['a.gff3', null]]);
+});
+
+test('Add files: one call of the writer for every file of a pick; a card still waiting for its FASTA shows open', async () => {
   const gb = makeCards({ sources: SAKAI().slice(0, 1) });
-  await gb.cards.addPickedFiles({ target: { files: [file('AB011549.2.gb')], value: 'x' } });
-  assert.deepEqual(gb.calls, [['add', 'gb', ['AB011549.2.gb']]]);
+  await gb.cards.addFiles([file('AB011549.2.gb'), file('AB011548.2.gb')]);
+  assert.deepEqual(gb.calls, [['add', ['AB011549.2.gb', 'AB011548.2.gb']]]);
+  assert.deepEqual(gb.cards.cards.value.map((card) => card.line), ['BA000007.3.gb', 'AB011549.2.gb', 'AB011548.2.gb']);
   assert.equal(gb.cards.isFolded('new-0'), true);
 
   const gff = makeCards({ inputType: 'gff', sources: [] });
-  await gff.cards.addFiles('gff', [file('a.gff3')]);
-  assert.deepEqual(gff.calls, [['add', 'gff', ['a.gff3']]]);
-  assert.equal(gff.cards.cards.value[0].line, 'a.gff3 + no FASTA');
-  assert.equal(gff.cards.cards.value[0].ready, false);
-  assert.equal(gff.cards.isFolded('new-0'), false);
+  await gff.cards.addFiles([file('a.fasta'), file('a.gff3'), file('b.gff3')]);
+  assert.deepEqual(gff.cards.cards.value.map((card) => [card.line, card.ready, gff.cards.isFolded(card.uid)]), [
+    ['a.gff3 + a.fasta', true, true], ['b.gff3 + no FASTA', false, false]
+  ]);
+  await gff.cards.addFiles([]);
+  assert.equal(gff.calls.length, 1);
+});
+
+test('the Add files zone names, accepts and offers the files of the input type', () => {
+  const zoneOf = (inputType) => {
+    const { cards } = makeCards({ inputType, sources: [] });
+    const { label, fileKind, accept } = cards.addZone.value;
+    return [label, fileKind, accept.split(',').filter((entry) => entry.startsWith('.')).join(' ')];
+  };
+  assert.deepEqual(zoneOf('gb'), ['GenBank/DDBJ files', 'genbank', '.gb .gbk .gbff .genbank .ddbj .embl .emb .txt .gz']);
+  assert.deepEqual(zoneOf('gff'), ['GFF3 and FASTA files', 'gff', '.gff .gff3 .fa .fas .fasta .fna .ffn .faa .txt .gz']);
+  assert.deepEqual(zoneOf('fasta'), ['FASTA files', 'fasta', '.fa .fas .fasta .fna .ffn .txt .gz']);
 });
 
 test('Remove asks first: the dialog names the card and its records, Cancel removes nothing, Remove file removes that card', async () => {

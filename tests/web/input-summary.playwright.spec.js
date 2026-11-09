@@ -4,13 +4,14 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const ZERO_FEATURES = () => readFileSync(join(process.cwd(), 'tests/fixtures/input_variants/zero_features_record.gb'));
 
 test('a record with no feature to draw: the status area says so and Run Info lists the summary', async ({ page }) => {
   test.setTimeout(300000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'zero_features_record.gb', mimeType: 'text/plain', buffer: ZERO_FEATURES() });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
   await generateAndWaitForResult(page);
@@ -84,7 +85,7 @@ const history = (page, step) => evaluateWithRetainedPromise(page, (name) => wind
 const openRecords = async (page, file) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
+  await circularFileInput(page, 'gb').setInputFiles(file);
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length > 0);
 };
 

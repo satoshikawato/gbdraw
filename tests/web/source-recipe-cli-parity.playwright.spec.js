@@ -14,6 +14,7 @@ const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -111,7 +112,7 @@ const MODES = [
       const input = testInfo.outputPath('testa.gb');
       writeFileSync(input, TESTA);
       await openFresh(page);
-      await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(input);
+      await circularFileInput(page, 'gb').setInputFiles(input);
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
       // Labels on, so the label probes change the drawing.
       await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });

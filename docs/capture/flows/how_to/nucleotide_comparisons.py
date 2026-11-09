@@ -43,6 +43,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    circular_file_input,
     expect_circular_file_card,
     toggle_disclosure,
     assert_fixture_identity,
@@ -857,7 +858,7 @@ def capture_gui_circular_rings(
         wait_for_app_shell(page)
         show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
         )
         expect_circular_file_card(page, 1, "HmmtDNA.gbk")

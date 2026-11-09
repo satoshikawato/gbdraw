@@ -17,6 +17,7 @@ from flows.tutorials.gui_annotated_chloroplast import (
     _validate_complete_record, _validate_annotation_fixture, CaptureResult,
 )
 from flows.web_capture import (
+    circular_file_input,
     assert_fixture_identity, assert_output_paths, generate_and_inspect,
     open_ancestor_details, open_browser_capture, toggle_disclosure,
     wait_for_app_shell,
@@ -46,7 +47,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
     try:
         page.goto(base_url, wait_until='domcontentloaded')
         wait_for_app_shell(page)
-        page.get_by_label('GenBank/DDBJ File', exact=True).set_input_files(GUI_ANNOTATION_GENBANK_PATH)
+        circular_file_input(page).set_input_files(GUI_ANNOTATION_GENBANK_PATH)
         _configure_gallery_presentation(page)
         page.get_by_label('Separate Strands', exact=True).uncheck()
         page.get_by_label('Resolve Overlaps', exact=True).check()

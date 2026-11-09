@@ -8,6 +8,7 @@ const {
   waitForAppShell,
   expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const firstGenbank = readFileSync(
@@ -57,7 +58,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
     app.selectDrawing('circular');
     app.setCircularInputType('gb');
     // The File transition runs the record discovery the record list waits for (R10).
-    void app.addCircularSourceFiles('gb', [new File([`${first}\n${second}`], 'two-records.gbk', {
+    void app.addCircularSourceFiles([new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',
       lastModified: 1
     })]);
@@ -182,7 +183,7 @@ const chooseRecord = async (select, record) => {
   await select.selectOption(await value());
   return value();
 };
-const nativeUpload = (page, content, name = 'presentation.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
+const nativeUpload = (page, content, name = 'presentation.gb') => circularFileInput(page, 'gb')
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
 
 for (const width of [1280, 390]) {
@@ -190,15 +191,13 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await openApp(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
-    const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+    const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true });
     await upload.focus();
     await nativeUpload(page, singleSource);
     await ready(page);
-    // The first file makes File card 1, which takes the place of the empty input's uploader: the focus moves to
-    // the card's file button, opened to show it (OV-2905), as a Linear card keeps it on its own.
-    const cardFile = page.locator('[data-circular-source-card]').first().getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
-    await expect(cardFile).toBeFocused();
-    await expect(cardFile).toBeInViewport();
+    // The first file makes File card 1 under the Add files zone, which stays: the focus stays on the zone (OV-2905).
+    await expect(upload).toBeFocused();
+    await expect(upload).toBeInViewport();
     await expect(panel(page)).toHaveAttribute('open', '');
     await expect(page.getByLabel('Circular region start')).toBeEnabled();
     const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());

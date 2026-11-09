@@ -2703,9 +2703,13 @@
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setCircularInputType('fasta')" value="fasta" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
+                        <!-- Add files: a pick or a drop of several files at once; each file (or GFF3 + FASTA pair by file-name stem) becomes a File card. -->
+                        <file-uploader data-circular-file-add :label="circularFileCards.addZone.value.label" :model-value="[]" multiple drop parent-step
+                                       :file-kind="circularFileCards.addZone.value.fileKind" :accept="circularFileCards.addZone.value.accept"
+                                       @update:model-value="circularFileCards.addFiles($event)"></file-uploader>
+                        <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
                         <!-- The source files: one File card per file (or GFF3 + FASTA pair), in drawing order, in the Linear File card shell. -->
-                        <template v-if="circularFileCards.cards.value.length">
-                        <div data-circular-file-list class="min-w-0 space-y-3">
+                        <div v-if="circularFileCards.cards.value.length" data-circular-file-list class="min-w-0 space-y-3">
                             <file-card
                                 v-for="card in circularFileCards.cards.value"
                                 :key="card.uid"
@@ -2737,31 +2741,13 @@
                             </div>
                             </file-card>
                         </div>
-                        <input type="file" data-history-managed data-circular-file-add-input class="hidden" :aria-label="t('Add file')" :disabled="!semanticMutationAvailable"
-                               :accept="inputType === 'gb' ? '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip' : inputType === 'gff' ? '.gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip' : '.fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip'"
-                               @change="circularFileCards.addPickedFiles($event)">
-                        <button type="button" data-history-ignore data-circular-file-add @click="$event.currentTarget.previousElementSibling.click()" class="btn btn-secondary w-full text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
-                        <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
-                        </template>
-                        <!-- No file yet: the uploaders of the input type; a file chosen in one makes the first File card. -->
-                        <div v-else-if="inputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="null" @update:model-value="circularFileCards.addFiles('gb', [$event])" file-kind="genbank" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
-                        </div>
-                        <div v-else-if="inputType === 'fasta'">
-                            <file-uploader :label="t('FASTA File')" :model-value="null" @update:model-value="circularFileCards.addFiles('fasta', [$event])" file-kind="fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
-                            <p class="ui-hint mt-1">{{ t('Records are drawn without features.') }}</p>
-                        </div>
-                        <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader :label="t('GFF3 File')" :model-value="null" @update:model-value="circularFileCards.addFiles('gff', [$event])" file-kind="gff" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
-                            <file-uploader :label="t('FASTA File')" :model-value="null" @update:model-value="circularFileCards.addFiles('fasta', [$event])" file-kind="fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
-                        </div>
                         <section :aria-label="t('Source records')" class="space-y-2">
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
                                 <span v-if="circularRecordDiscoveryState.status === 'deferred'">{{ t('Records not inspected') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ tn(circularRecordDiscoveryState.records.length, '{count} source record inspected', '{count} source records inspected') }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ tn(circularRecordDiscoveryState.records.length, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount }) }}</span></template></span>
-                                <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ circularFileCards.readError.value }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect again') : t('Inspect source records') }}</button>
                             </div>
@@ -10269,7 +10255,7 @@
         <div
             ref="zone"
             class="upload-zone flex-1 min-w-0"
-            :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed}"
+            :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed, 'drag-over': dragging}"
             role="button"
             :aria-describedby="help ? helpId : undefined"
             :tabindex="uploadAvailable ? 0 : -1"
@@ -10278,11 +10264,14 @@
             @click="uploadAvailable && $refs.input.click()"
             @keydown.enter.prevent="uploadAvailable && $refs.input.click()"
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
+            @dragover="dragOver"
+            @dragleave="dragging = false"
+            @drop="dropFiles"
         >
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
-                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Choose {name}', { name: label }) }}</span>
+                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ drop ? t('Add {name}: choose several or drop them here', { name: label }) : t('Choose {name}', { name: label }) }}</span>
             </div>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>

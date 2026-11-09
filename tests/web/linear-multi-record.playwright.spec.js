@@ -4081,7 +4081,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   }, circularId)).toBe(true);
   await page.evaluate(async (content) => {
     const app = window.__GBDRAW_APP__;
-    void app.addCircularSourceFiles('gb', [new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 })]);
+    void app.addCircularSourceFiles([new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
   }, makeComparisonGenbank('CircularA') + makeComparisonGenbank('CircularB'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);

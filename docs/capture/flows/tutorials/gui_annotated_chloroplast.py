@@ -25,6 +25,7 @@ from flows.how_to.tracks import (
     CaptureResult,
 )
 from flows.web_capture import (
+    circular_file_input,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -473,7 +474,7 @@ def capture_gui_annotated_chloroplast(
 
         show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             GUI_ANNOTATION_GENBANK_PATH
         )
         expect_circular_file_card(page, 1, "NC_001879.gbk")

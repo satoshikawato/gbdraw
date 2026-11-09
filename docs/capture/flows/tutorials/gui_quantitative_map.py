@@ -22,6 +22,7 @@ from flows.how_to.tracks import (
     CaptureResult,
 )
 from flows.web_capture import (
+    circular_file_input,
     run_track_slot_row_action,
     toggle_disclosure,
     assert_output_paths,
@@ -300,7 +301,7 @@ def capture_gui_quantitative_map(
             "checkbox", name="Multi-Record Canvas", exact=True, include_hidden=True
         )).uncheck()
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
+        circular_file_input(page).set_input_files(
             GUI_QUANTITATIVE_GENBANK_PATH
         )
         page.get_by_label("Output Prefix", exact=True).fill(OUTPUT_PREFIX)

@@ -21,6 +21,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const genbank = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'));
 const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_012920.1\t8000\t20', ''].join('\n');
@@ -43,7 +44,7 @@ const prepare = async (page) => {
   await page.evaluate((text) => {
     window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'sample.depth.tsv', { type: 'text/plain' }));
   }, depthTsv);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
     { timeout: 120_000 }).toBeGreaterThan(0);
@@ -75,7 +76,7 @@ const stackWithEveryRowKind = async (page, mode) => {
     }
   }, { mode, genbank: genbank.toString('utf8'), depthTsv });
   if (mode === 'circular') {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    await circularFileInput(page, 'gb')
       .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
       { timeout: 120_000 }).toBeGreaterThan(0);
@@ -407,7 +408,7 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   // A Circular file is shown by its File card, which folds to its header line:
   // the chip there shows the file's state.
   const zone = page.locator('[data-circular-source-card]').first().locator('.file-card-chip');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'bad.gbk', mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
   await expect(page.locator('[data-circular-discovery-status]')).toContainText('No records were found', { timeout: 120_000 });
   await expect(zone).toHaveClass(/\bfailed\b/);
@@ -416,7 +417,7 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   // The zone animates its colors; the final border is the danger line color.
   await expect(zone).toHaveCSS('border-top-color', 'rgb(252, 165, 165)');
 
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
   await expect(page.locator('[data-circular-discovery-status]')).toContainText(/source records? inspected/, { timeout: 120_000 });
   await expect(zone).not.toHaveClass(/\bfailed\b/);
@@ -452,12 +453,12 @@ test('an upload zone cuts a long file name at its end and keeps its icon (OV-600
 
   // A Circular file is shown by the chip on its File card's header line.
   const zone = page.locator('[data-circular-source-card]').first().locator('.file-card-chip');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
   await expect(zone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
   await expect(zone).toContainText(longName);
   expect(await shown(zone), 'Circular, failed').toEqual(cutAtTheEnd);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
   await expect(zone.locator('.ph-check-circle')).toHaveCount(1, { timeout: 120_000 });
   await expect(zone).not.toHaveClass(/\bfailed\b/);

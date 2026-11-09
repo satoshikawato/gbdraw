@@ -13,6 +13,7 @@ const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.
 const { download } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
 const LAMBDA = 'tests/test_inputs/NC_001416.gb';
@@ -49,7 +50,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
     const { addCircularSource, createCircularSource } = await import('./js/services/drawing/inputs.js');
     addCircularSource(state.activeDrawing().slices.inputs, createCircularSource({ uid: 'record-1' }));
   });
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(LAMBDA);
+  await circularFileInput(page, 'gb').setInputFiles(LAMBDA);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   // A one-record grid names its record `record-1`, as the Linear Session does.
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
@@ -119,7 +120,7 @@ const STROKE = { strokeColor: '#ff0000', strokeWidth: 3 };
 
 const loadStrokeInput = async (page, mode, path = STROKE_FIXTURE) => {
   if (mode === 'circular') {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(path);
+    await circularFileInput(page, 'gb').setInputFiles(path);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   } else {
     await page.evaluate(async ({ text, name }) => {

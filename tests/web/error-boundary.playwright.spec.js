@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, fetchRoute } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -517,10 +518,10 @@ test('a GFF3 without features names the GFF3 file, and replacing an input ends t
   test.setTimeout(180000);
   await openApp(page);
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'gff').setInputFiles({
     name: 'header-only.gff3', mimeType: 'text/plain', buffer: Buffer.from('##gff-version 3\n')
   });
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.fasta');
+  await circularFileInput(page, 'fasta').setInputFiles('tests/test_inputs/NC_013668.fasta');
   const status = page.locator('[data-circular-discovery-status]');
   await expect(status).toContainText('The GFF3 file has no feature lines.', { timeout: 120000 });
   const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
@@ -529,13 +530,13 @@ test('a GFF3 without features names the GFF3 file, and replacing an input ends t
   await expect(alert).toContainText('The GFF3 file has no feature lines.');
   // The inputs change and are read again, still without records: the
   // inspection line says why, and the failure of the earlier Generate ends.
-  await page.getByLabel('FASTA File', { exact: true }).setInputFiles({
+  await circularFileInput(page, 'fasta').setInputFiles({
     name: 'notes.fasta', mimeType: 'text/plain', buffer: Buffer.from('plain notes\n')
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status), { timeout: 120000 })
     .toBe('error');
   await expect(alert).toHaveCount(0);
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.gff3');
+  await circularFileInput(page, 'gff').setInputFiles('tests/test_inputs/NC_013668.gff3');
   await expect(status).toContainText('The FASTA file has no sequence entry', { timeout: 120000 });
 });
 
@@ -564,7 +565,7 @@ test('a Linear Generate failure about a File card ends when its file is read aga
 test('a gzip GenBank is inspected and a GenBank record without sequence names its cause', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
-  const genbank = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const genbank = circularFileInput(page, 'gb');
   await genbank.setInputFiles({
     name: 'HmmtDNA.gbk.gz', mimeType: 'application/gzip',
     buffer: require('node:zlib').gzipSync(require('node:fs').readFileSync('tests/test_inputs/HmmtDNA.gbk'))

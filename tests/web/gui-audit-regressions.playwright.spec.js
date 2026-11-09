@@ -5,6 +5,7 @@ const { readPdfText } = require('./helpers/pdf-text.cjs');
 const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -149,7 +150,7 @@ for (const { method, delayedAsset, extension } of [
   test.setTimeout(180000);
   await openApp(page);
   const source = ['BGC0000708', 'BGC0000709'].map((id) => readFileSync(join(process.cwd(), 'tests/test_inputs', `${id}.gbk`), 'utf8')).join('\n');
-  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'two-records.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
+  await circularFileInput(page, 'gb').setInputFiles({ name: 'two-records.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 2);
   await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
   await generateAndWaitForResult(page);

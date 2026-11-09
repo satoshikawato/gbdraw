@@ -48,7 +48,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.setCircularInputType('gb');
-    await app.addCircularSourceFiles('gb', [bound(new File([genbankText], 'HmmtDNA.gbk', {
+    await app.addCircularSourceFiles([bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 1
     }))]);
@@ -168,7 +168,7 @@ test('Numbered Ticks in the GC Percent settings draws a number on each large tic
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.setCircularInputType('gb');
-    await app.addCircularSourceFiles('gb', [bound(new File([genbankText], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1 }))]);
+    await app.addCircularSourceFiles([bound(new File([genbankText], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1 }))]);
     app.form.labels_mode = 'none';
     app.adv.gc_content_mode = 'percent';
     await window.Vue.nextTick();
@@ -238,7 +238,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.setCircularInputType('gb');
-    await app.addCircularSourceFiles('gb', [bound(new File([genbankText], 'HmmtDNA.gbk', {
+    await app.addCircularSourceFiles([bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 31
     }))]);

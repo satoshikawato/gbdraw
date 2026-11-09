@@ -111,7 +111,7 @@ test('Fit shows the whole Circular diagram centred at 1280x800 and 1920x1080, al
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
   await (await chooser).setFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(hmmt) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
     { timeout: 60000 }).toBeGreaterThan(0);
@@ -302,7 +302,7 @@ test('a legacy configuration Load keeps the zoom of the figure already shown', a
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose GenBank/DDBJ files', exact: true }).click();
   await (await chooser).setFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(hmmt) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
     { timeout: 60000 }).toBeGreaterThan(0);

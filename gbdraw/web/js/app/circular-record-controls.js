@@ -13,7 +13,7 @@ import {
   removeCircularSource
 } from '../services/drawing/inputs.js';
 import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
-import { inputSourceFiles } from '../services/input-types.js';
+import { inputSourceFiles, pickedFileCards } from '../services/input-types.js';
 import { settledCircularCardMarks } from '../services/record-discovery.js';
 import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
 import { cardCropWindow } from '../services/drawing/inputs.js';
@@ -241,21 +241,24 @@ export const createCircularSourceEdits = ({
     }));
   };
   /**
-   * New source cards at the end of the drawing's list, one per file, each with
-   * its file in `field`: one History step for every file of one pick.
-   * @param {'gb' | 'gff' | 'fasta'} field
+   * New source cards at the end of the drawing's list from the files of one
+   * pick or drop, in their order, as the drawing's input type makes cards of
+   * them (`pickedFileCards`: one per file; GFF3 + FASTA pairs by file-name
+   * stem): one History step for every file.
    * @param {readonly (InputFileCandidate | InputFileRef)[]} files
    */
-  const addCircularSourceFiles = (field, files) => shownAction('circular', (drawing) => (files.length === 0 ? undefined
+  const addCircularSourceFiles = (files) => shownAction('circular', (drawing) => (files.length === 0 ? undefined
     : runUndoable(msg('Add File'), () => {
       /** @type {InputFileRef | null} */
       let first = null;
       markDepthRowsBeforeEdit(drawing);
-      changeRecordSources(drawing, () => files.forEach((file) => {
+      changeRecordSources(drawing, () => pickedFileCards(drawing.inputType.value, files).forEach((slots) => {
         const card = createCircularSource();
         addCircularSource(drawing.slices.inputs, card);
-        const ref = bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, card.uid, field, file);
-        first ??= ref;
+        for (const [field, file] of /** @type {['gb' | 'gff' | 'fasta', InputFileCandidate | InputFileRef][]} */ (Object.entries(slots))) {
+          const ref = bindCircularSourceFile(state.inputFiles, drawing.slices.inputs, card.uid, field, file);
+          first ??= ref;
+        }
       }));
       readUpload(drawing, first);
     })));

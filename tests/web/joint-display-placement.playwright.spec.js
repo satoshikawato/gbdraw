@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -93,7 +94,7 @@ for (const mode of ['circular', 'linear']) {
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
-      : page.getByLabel('GenBank/DDBJ File', { exact: true });
+      : circularFileInput(page, 'gb');
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
     const start = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
@@ -226,7 +227,7 @@ for (const mode of ['circular', 'linear']) {
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
-      : page.getByLabel('GenBank/DDBJ File', { exact: true });
+      : circularFileInput(page, 'gb');
     const bytes = Buffer.from(source + source);
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: bytes });
     if (mode === 'linear') await expandLinearRecordControls(page);
@@ -277,7 +278,7 @@ for (const mode of ['circular', 'linear']) {
     test.setTimeout(180000);
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
-    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
+    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : circularFileInput(page, 'gb');
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
     const start = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
@@ -342,9 +343,9 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
   const gff = '##gff-version 3\n##sequence-region shared 1 360\nshared\t.\tCDS\t21\t105\t.\t+\t0\tID=chosen.full.source;product=chosen protein\n';
   const fasta = '>shared\n' + 'ACGT'.repeat(90) + '\n';
-  const gffUpload = page.getByLabel('GFF3 File', { exact: true });
+  const gffUpload = circularFileInput(page, 'gff');
   await gffUpload.setInputFiles({ name: 'same.gff', mimeType: 'text/plain', buffer: Buffer.from(gff) });
-  const upload = page.getByLabel('FASTA File', { exact: true });
+  const upload = circularFileInput(page, 'fasta');
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta) });
   const start = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
   await page.getByRole('checkbox', { name: 'Circular record shared #1', exact: true }).check();
@@ -390,7 +391,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
     test.setTimeout(180000);
     await openApp(page);
     if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
-    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
+    const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : circularFileInput(page, 'gb');
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (intent === 'rotation') {
       if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
@@ -426,7 +427,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
 test('loaded replacement draft cannot place or take shortcuts from the prior Result source', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await openApp(page);
-  const upload = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const upload = circularFileInput(page, 'gb');
   await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
   await generateFromControl(page);
   await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source.replace('chosen protein', 'replacement protein')) });

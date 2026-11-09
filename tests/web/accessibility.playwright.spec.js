@@ -12,6 +12,7 @@ const { join } = require('node:path');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { seeds, load, popup } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const genbank = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_012920.1\t8000\t20', ''].join('\n');
@@ -32,7 +33,7 @@ const loadMode = async (page, mode) => {
     }
   }, { mode, genbank, depthTsv });
   if (mode === 'circular') {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    await circularFileInput(page, 'gb')
       .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank) });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
       { timeout: 120_000 }).toBeGreaterThan(0);
@@ -611,7 +612,7 @@ test('the icon rail buttons have stable author-provided names', async ({ page })
 test('disabled Single-record and LOSAT cache controls reference a visible reason', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
-  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+  await circularFileInput(page, 'gb')
     .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank) });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
     { timeout: 120_000 }).toBeGreaterThan(0);

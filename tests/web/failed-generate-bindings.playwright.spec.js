@@ -257,7 +257,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await openApp(page);
   await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    void app.addCircularSourceFiles('gb', [new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 })]);
+    void app.addCircularSourceFiles([new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 })]);
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
     const set = app.addAnnotationSet('s04');
     const annotation = app.addCoordinateAnnotation(set, { start: 1, end: 10 });

@@ -37,7 +37,7 @@ const linear = modeDrawing(state, 'linear');
 const setCircularGenbank = (file) => {
   const uid = circular.circularSources[0]?.uid;
   if (uid) app.setCircularSourceFile(uid, 'gb', file);
-  else if (file) app.addCircularSourceFiles('gb', [file]);
+  else if (file) app.addCircularSourceFiles([file]);
 };
 const recordIds = (drawing) => drawing.circularRecordList.value.map((record) => record.record_id);
 
@@ -200,7 +200,7 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   app.selectDrawing('circular');
   circular.form.multi_record_canvas = false;
   while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
-  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50])]);
+  await app.addCircularSourceFiles([genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50])]);
   await settle();
   assert.deepEqual(recordIds(circular), ['A1', 'B1']);
   const depth = (name) => state.inputFiles.registerFile(new File(['1\t1\n'], name));
@@ -240,7 +240,7 @@ test('the first settled read places a Session\'s flat #N and a record ID Record 
   app.selectDrawing('circular');
   circular.form.multi_record_canvas = false;
   while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
-  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50], ['B2', 60])]);
+  await app.addCircularSourceFiles([genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50], ['B2', 60])]);
   await settle();
   const [cardA, cardB] = circular.circularSources.map((card) => card.uid);
   // The cards as a Load of that Session installs them (`c_legacy_record_cards`).
@@ -290,7 +290,7 @@ test('the first settled read places a Record Order row named by record ID at its
   app.selectDrawing('circular');
   circular.form.multi_record_canvas = true;
   while (circular.circularSources.length > 0) await app.removeCircularSourceCard(circular.circularSources[0].uid);
-  await app.addCircularSourceFiles('gb', [genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50]), genbank('c.gb', ['C1', 60])]);
+  await app.addCircularSourceFiles([genbank('a.gb', ['A1', 40]), genbank('b.gb', ['B1', 50]), genbank('c.gb', ['C1', 60])]);
   await settle();
   const [cardA, cardB, cardC] = circular.circularSources.map((card) => card.uid);
   circular.adv.multi_record_positions = [{ selector: 'A1', row: 1 }, { selector: 'C1', row: 2 }, { selector: 'B1', row: 2 }];

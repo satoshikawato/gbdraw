@@ -9,6 +9,7 @@ const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.c
 const { settleLive } = require('./live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./mode-transition.cjs');
 const { showDrawing } = require('./drawing-bar.cjs');
+const { circularFileInput } = require('./circular-inputs.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
@@ -83,7 +84,7 @@ const openBothDrawings = async (page, { mode, results, reflow }) => {
     await settleLive(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'all'; });
   } else {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE_FIXTURE);
+    await circularFileInput(page, 'gb').setInputFiles(SINGLE_FIXTURE);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
       .toBeGreaterThan(0);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });

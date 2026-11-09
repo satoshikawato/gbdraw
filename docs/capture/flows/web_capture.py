@@ -255,6 +255,19 @@ def run_track_slot_row_action(row: Locator, label: str, *, only_if_enabled: bool
     return True
 
 
+def circular_file_input(page: Page, slot: str = "gb") -> Locator:
+    """Return the file input that chooses File 1's file of `slot` ("gb", "gff" or "fasta").
+
+    It is the card's uploader of that slot once there is a card, else the Add
+    files zone, whose pick makes the first cards.
+    """
+
+    return page.locator(
+        f'[data-circular-source-slot="{slot}"] input[type=file], '
+        "[data-setting=inputs]:not(:has([data-circular-source-card])) [data-circular-file-add] input[type=file]"
+    ).first
+
+
 def circular_file_card(page: Page, number: int) -> Locator:
     """Return Circular File card `number` (1-based), the card that holds one input file."""
 

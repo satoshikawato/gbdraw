@@ -5,6 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const external = new WeakMap();
@@ -194,7 +195,7 @@ for (const operation of ['replacement', 'removal']) {
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');
-      const upload = page.getByLabel('GenBank/DDBJ File', { exact: true });
+      const upload = circularFileInput(page, 'gb');
       const discovered = () => expect.poll(() => page.evaluate(async () =>
         (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).toBe('ready');
       if (operation === 'replacement') {
@@ -285,7 +286,7 @@ const regionPanel = page => page.locator('details').filter({ has: page.locator('
 const recordSelect = page => regionPanel(page).getByLabel('Annotation target record');
 const loadInMode = async (page, mode) => {
   if (mode === 'circular') {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(TWO_RECORDS);
+    await circularFileInput(page, 'gb').setInputFiles(TWO_RECORDS);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60000 }).toBe(2);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
     return;

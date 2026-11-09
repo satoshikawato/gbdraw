@@ -105,7 +105,7 @@ def main():
               const slow=new File([text],'slow-old.gb');
               const pending=new Promise(resolve=>window.__s01ReleaseOld=()=>resolve(new TextEncoder().encode(text).buffer));
               slow.arrayBuffer=()=>pending;
-              await window.__GBDRAW_APP__.addCircularSourceFiles('gb',[slow]);
+              await window.__GBDRAW_APP__.addCircularSourceFiles([slow]);
             }""",
                 source.decode(),
             )

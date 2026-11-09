@@ -13,6 +13,7 @@ import {
   HelpTip,
   I18nText,
   FileUploader,
+  refuseStrayFileDrop,
   GbdrawLoader,
   LinearRecordNames,
   MarkupPreview,
@@ -77,4 +78,6 @@ app.config.throwUnhandledErrorInProduction = true;
 // fails to load leaves English.
 await showStoredUiLanguage();
 const mountedApp = app.mount('#app');
+window.addEventListener('dragover', refuseStrayFileDrop);
+window.addEventListener('drop', refuseStrayFileDrop);
 window.__GBDRAW_APP__ = mountedApp;

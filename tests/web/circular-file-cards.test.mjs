@@ -264,9 +264,16 @@ await test('one pick of several files is one History step that adds a card per f
     runUndoable: async (label, fn) => { steps.push(label); return fn(); }
   });
   const before = drawing.circularSources.length;
-  await edits.addCircularSourceFiles('gb', ['a.gb', 'b.gb', 'c.gb'].map((name) => new File(['LOCUS'], name)));
+  await edits.addCircularSourceFiles(['a.gb', 'b.gb', 'c.gb'].map((name) => new File(['LOCUS'], name)));
   assert.deepEqual(steps, ['Add File']);
   assert.deepEqual(drawing.circularSources.slice(before).map((card) => card.gb?.name), ['a.gb', 'b.gb', 'c.gb']);
+  // GFF3 + FASTA: the files of one pick pair by stem (D-07), still one step.
+  drawing.inputType.value = 'gff';
+  const gffBefore = drawing.circularSources.length;
+  await edits.addCircularSourceFiles(['a.fasta', 'a.gff3', 'b.gff3'].map((name) => new File(['x'], name)));
+  assert.deepEqual(steps, ['Add File', 'Add File']);
+  assert.deepEqual(drawing.circularSources.slice(gffBefore).map((card) => [card.gb, card.gff?.name ?? null, card.fasta?.name ?? null]),
+    [[null, 'a.gff3', 'a.fasta'], [null, 'b.gff3', null]]);
 });
 
 await test('rows an older Session left under record-<n> move to their record on the first Generate', () => {
