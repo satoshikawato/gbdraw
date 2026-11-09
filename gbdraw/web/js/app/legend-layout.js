@@ -9,6 +9,7 @@ import {
   compositionUserDeltas,
   resetCompositionUserDeltas
 } from './legend-layout/composition-actions.js';
+/** @import { WebState } from '../state.js' */
 
 /**
  * One Result's composition offsets: the primary groups', the Legend's, and the title's.
@@ -31,7 +32,7 @@ import {
 
 /**
  * @typedef {object} LegendLayoutOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {WebState} state The app state; this root passes it to the drag, canvas, and position owners.
  * @property {(svg: SVGSVGElement, options?: { side?: string }) => import('../services/legend-layout.js').LayoutBox | null} layOutLegend
  *   The Legend manager's layout of the Legend for a side as Python lays it out.
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
