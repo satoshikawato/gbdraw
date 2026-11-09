@@ -197,7 +197,8 @@ import {
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
 import { cloneFileBytesForTransfer, holdReadBytes } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
@@ -225,6 +226,7 @@ import {
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
+/** A job's rows, or why it failed (`runLosatJobsInOverlay` by File). @typedef {LosatJobResult & { error?: string }} LosatJobOutcome */
 /** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
@@ -6462,14 +6464,16 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = [];
   };
 
-  // LOSAT jobs of a run that is not a Generate (a Sequence search, PD-OI-117), with the LOSAT settings Generate uses,
-  // under the full-window overlay with their progress and Cancel. They draw nothing. Busy (with the reason) while a
-  // Generate or a Session load or save runs, whose overlay they would replace.
+  // LOSAT jobs of a run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123), with
+  // the LOSAT settings Generate uses, under the full-window overlay with their progress and Cancel. They draw
+  // nothing. Busy (with the reason) while a Generate or a Session load or save runs, whose overlay they would
+  // replace. `byFile`: one job per File, run one after another so the overlay says "File k of N"; a File whose job
+  // fails keeps its reason (`error`) and the others still run.
   /**
-   * @param {{ jobs: LosatJob[], sequences: Map<string, string> }} plan
-   * @returns {Promise<{ status: 'ok', results: LosatJobResult[] } | { status: 'canceled' } | { status: 'busy', reason: string }>}
+   * @param {{ jobs: LosatJob[], sequences: Map<string, string>, byFile?: boolean }} plan
+   * @returns {Promise<{ status: 'ok', results: LosatJobOutcome[] } | { status: 'canceled' } | { status: 'busy', reason: string }>}
    */
-  const runLosatJobsInOverlay = async ({ jobs, sequences }) => {
+  const runLosatJobsInOverlay = async ({ jobs, sequences, byFile = false }) => {
     const busy = state.sessionOperationAvailability?.('not-during-run');
     if (busy) return busy;
     const controller = new AbortController();
@@ -6480,20 +6484,36 @@ export const createRunAnalysis = ({
     /** @param {number} completed */
     const progress = (completed) => {
       if (controller.signal.aborted) return;
-      processingStatus.value = tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length });
+      processingStatus.value = byFile
+        ? t('Running LOSAT: File {k} of {total}', { k: Math.min(completed + 1, jobs.length), total: jobs.length })
+        : tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length });
     };
     progress(0);
+    /** @param {LosatJob[]} batch @param {(completed: number) => void} onProgress */
+    const execute = (batch, onProgress) => executeLosatJobs(batch, {
+      concurrency: requestedLosatParallelWorkers(state.losatExecution),
+      executionMode: requestedLosatExecutionMode(state.losatExecution),
+      totalThreadBudget: requestedLosatTotalThreadBudget(state.losatExecution),
+      threadsPerJob: requestedLosatThreadsPerJob(state.losatExecution, batch[0]?.program),
+      sequences,
+      signal: controller.signal,
+      onRuntimeStatus: (status) => { losatThreadingStatus.value = status; },
+      onProgress: ({ completed }) => onProgress(completed)
+    });
     try {
-      const results = await executeLosatJobs(jobs, {
-        concurrency: requestedLosatParallelWorkers(state.losatExecution),
-        executionMode: requestedLosatExecutionMode(state.losatExecution),
-        totalThreadBudget: requestedLosatTotalThreadBudget(state.losatExecution),
-        threadsPerJob: requestedLosatThreadsPerJob(state.losatExecution, jobs[0]?.program),
-        sequences,
-        signal: controller.signal,
-        onRuntimeStatus: (status) => { losatThreadingStatus.value = status; },
-        onProgress: ({ completed }) => progress(completed)
-      });
+      if (!byFile) return { status: 'ok', results: await execute(jobs, progress) };
+      /** @type {LosatJobOutcome[]} */
+      const results = [];
+      for (const job of jobs) {
+        try {
+          results.push(...await execute([job], () => {}));
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          const failure = normalizeCaughtError(error, { stage: 'losat' });
+          results.push({ ...job, text: '', error: errorText(failure.summaryParts) });
+        }
+        progress(results.length);
+      }
       return { status: 'ok', results };
     } catch (error) {
       if (controller.signal.aborted) return { status: 'canceled' };

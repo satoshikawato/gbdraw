@@ -62,6 +62,8 @@ const framePoint = (frame, clientX, clientY) => {
  *   bound by the record catalog's key; it reads the drawing's records first when a Load left them unread, and adds
  *   nothing (it rejects) when they cannot be read.
  * @property {(region: RegionTarget) => Promise<unknown>} newDrawingFromRegion The region drawing owner's derivation.
+ * @property {(region: RegionTarget) => Promise<unknown>} findInOtherFiles The Find in other files dialog, opened on the
+ *   region as the reference (Linear drawings). It and New drawing from region open their dialog; then the popup closes.
  * @property {(region: RegionTarget) => Promise<string>} readRegionFasta The FASTA text of the region, which Python
  *   reads from the request the shown Result was made from (a Worker helper, started by Copy FASTA only).
  * @property {(region: RegionTarget) => Promise<unknown>} useAsSearchQuery Use as search query: the Sequence search
@@ -126,7 +128,7 @@ const dragSpan = (axis, start, current, sweep) => (axis.kind === 'circular'
  */
 export const createRegionSelect = ({
   readAxisRecords, shownRoot, layoutEdit, openSelection, openRegionPopup, closeRegionPopup, drawnFeatures,
-  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta, useAsSearchQuery, panStart, panMove, panEnd
+  selectFeatures, addRegionAnnotation, newDrawingFromRegion, findInOtherFiles, readRegionFasta, useAsSearchQuery, panStart, panMove, panEnd
 }) => {
   const on = ref(false);
   /** Whether the shown Result has an axis to select on (one predicate for the toggle and the gesture). */
@@ -491,14 +493,14 @@ export const createRegionSelect = ({
   };
   /** Add to annotation set: the annotation owner adds one "Region N" row (after reading the records, when needed). */
   const addToAnnotationSet = () => runAction('add', (chosen) => addRegionAnnotation(targetOf(chosen)), '', 'addRegionAnnotation');
-  /** New drawing from region: a span across the origin of a circular record is one window across it (Python's). */
-  const newDrawing = async () => {
+  const openOnRegion = (/** @type {(region: RegionTarget) => Promise<unknown>} */ openDialog) => async () => {
     const chosen = openSelection();
     if (!chosen || selectionBusy(chosen)) return null;
-    const outcome = await newDrawingFromRegion(targetOf(chosen));
+    const outcome = await openDialog(targetOf(chosen));
     closeRegionPopup();
     return outcome;
   };
+  const [newDrawing, findInFiles] = [newDrawingFromRegion, findInOtherFiles].map(openOnRegion);
   /**
    * Copy FASTA: Python reads the region's bases on the source strand; the clipboard write starts with the click, so it
    * is allowed when the bases arrive.
@@ -517,6 +519,6 @@ export const createRegionSelect = ({
     on, available, active, unavailableReason, toggle, toggleLayoutEdit,
     pointerDown, pointerMove, pointerUp, pointerCancel,
     overlay, overlayMatrix, bindOverlay, bindBand, popup,
-    selectFeaturesInside, addToAnnotationSet, newDrawing, copyFasta, useAsQuery
+    selectFeaturesInside, addToAnnotationSet, newDrawing, findInFiles, copyFasta, useAsQuery
   };
 };

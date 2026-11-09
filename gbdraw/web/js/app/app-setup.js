@@ -70,6 +70,7 @@ import { createDrawingSwitch } from './drawing-switch.js';
 import { createInputReplacementPorts } from './input-replacement-ports.js';
 import { createDrawingReset, createResetSettings } from './reset-settings.js';
 import { createRegionDrawing } from './region-drawing.js';
+import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords } from '../services/region-axis.js';
 import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
@@ -3278,7 +3279,7 @@ export const createAppSetup = () => {
     state, linearComparisonGlobalAction, userDefaultColorRows: resultsManager.userDefaultColorRows
   });
 
-  // New drawing from a region: the shown drawing's draft request, as Save stores it, goes to Python.
+  // New drawing from a region and Find in other files: the shown drawing's draft request, as Save stores it, goes to Python.
   const projectShownRequest = async () => {
     const drawing = state.activeDrawing();
     const { catalog, error } = drawing.mode === 'linear'
@@ -3300,6 +3301,11 @@ export const createAppSetup = () => {
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
+  });
+  const findInOtherFiles = createFindInOtherFiles({
+    shownDrawingId: () => state.activeDrawingId.value, projectShownRequest, runLosatJobs: runLosatJobsInOverlay,
+    runLocateStep: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES, payload),
+    shownDrawing: () => state.activeDrawing(), newDrawingFromSearch: drawingList.newDrawingFromRegion
   });
   /** Reads the record catalog of `drawing` when it is unread (OV-373); one that cannot be read throws (OV-2562). @param {DrawingState} drawing */
   const readRecordCatalog = async (drawing) => {
@@ -3345,7 +3351,7 @@ export const createAppSetup = () => {
       if (drawing !== state.activeDrawing()) return null;
       return history.runUndoable(msg('Add to annotation set'), () => annotationEditor.addRegionAnnotation({ record: resultRecordBinding(shownResultRecordBindings(), recordKey), start, end }));
     },
-    newDrawingFromRegion: regionDrawings.openWithRegion,
+    newDrawingFromRegion: regionDrawings.openWithRegion, findInOtherFiles: findInOtherFiles.open,
     // Python reads the bases from the committed request, the one the shown Result was made from.
     readRegionFasta: async ({ recordKey, start, end }) => (await readShownRecordSpans([{ recordKey, start, end }])).fasta,
     useAsSearchQuery: sequenceSearch.useSpanAsQuery,
@@ -3411,9 +3417,7 @@ export const createAppSetup = () => {
     errorDisplay,
     canRetryInteractiveSvgExport,
     reloadAfterOperationError,
-    selectDrawing,
-    drawingList,
-    regionDrawings,
+    selectDrawing, drawingList, regionDrawings, findInOtherFiles,
     regionSelect,
     regionSelectOn: regionSelect.active,
     regionSelectAvailable: regionSelect.available,
@@ -3421,10 +3425,7 @@ export const createAppSetup = () => {
     regionOverlay: regionSelect.overlay,
     regionOverlayMatrix: regionSelect.overlayMatrix,
     regionPopup: regionSelect.popup,
-    drawingBar,
-    drawingBarTabs,
-    moveTabFocus,
-    drawingSwitchAvailable,
+    drawingBar, drawingBarTabs, moveTabFocus, drawingSwitchAvailable,
     drawingSwitchBusyReason,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,

@@ -27,6 +27,7 @@ from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
 from gbdraw.web_support.linear_units import plan_linear_units_json
 from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
@@ -1837,6 +1838,7 @@ _WEB_JSON_HELPERS = {
         _with_prepared_input_lookup(derive_web_region_drawing_json, 1), "deriveRegionDrawing"
     ),
     # Copy FASTA of Select region reads the records of the shown Result's request that Generate prepared.
+    "locate_web_json": (_with_prepared_input_lookup(locate_web_json, 1), "findInOtherFiles"),
     "read_record_span_sequences_json": (
         _with_prepared_input_lookup(read_record_span_sequences_json, 1), "readRecordSpanSequences"
     ),

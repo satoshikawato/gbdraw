@@ -716,6 +716,15 @@ def test_locate_query_writes_protein_or_coding_sequence_queries() -> None:
     assert nucleotide.fasta == f">{ids[0]}\nATGAAAGTTTAA\n>{ids[1]}\nATGAAAGTTTAA\n"
 
 
+def test_a_gene_without_a_gene_name_or_locus_tag_is_named_by_the_record_protein_id() -> None:
+    # MIBiG records name many CDS only by /protein_id; the report and the dialog name them so, never by gbdraw's own ID.
+    record = _protein_record("REF", REFERENCE_SEQUENCE, [(0, 12, 1, "A1"), (20, 32, -1, "A2")])
+    record.features[1].qualifiers = {"protein_id": ["CAG38690.1"], "translation": ["MKV"]}
+    reference = locate_query(record, file_key="ref.gbk", record_key="ref", windows=[RecordWindow(1, 40)], program="tlosatn").reference
+
+    assert [gene.cds.name for gene in reference.genes] == ["A1", "CAG38690.1"]
+
+
 def test_search_plan_runs_one_job_per_target_file_and_restores_record_ids() -> None:
     reference = locate_query(
         _protein_record("REF", REFERENCE_SEQUENCE, [(0, 12, 1, "A1")]),

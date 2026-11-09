@@ -55,6 +55,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   DERIVE_REGION_DRAWING: 'deriveRegionDrawing',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
+  FIND_IN_OTHER_FILES: 'findInOtherFiles',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
@@ -101,6 +102,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
@@ -149,37 +151,12 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {boolean} adaptSizes
  */
 
-/**
- * A hand-set size that returned to Auto (`ReturnedSize`).
- * @typedef {object} RegionReturnedSize
- * @property {string} setting
- * @property {number} explicit
- * @property {number | null} auto
+/*
+ * The derived drawing (`DerivedRegionDrawing`: its mode, its canonical request as a Session stores a committed one,
+ * the source drawing's resource each resource ID reads, the sizes that returned to Auto, and what is not carried) is
+ * declared once, in Python (gbdraw/web_support/region_drawing.py), and generated into contracts/locate.generated.js.
  */
-
-/**
- * A part of the source drawing the new drawing does not carry (`NotCarriedItem`).
- * @typedef {object} RegionNotCarriedItem
- * @property {'OTHER_MODE_SETTINGS' | 'FEATURE_PLACEMENTS' | 'FEATURE_PLACEMENT_TABLE' | 'SIMILARITY_ALIGNMENT'
- *   | 'CONSERVATION_RINGS' | 'CONSERVATION_RING_TABLES' | 'LINEAR_COMPARISONS' | 'COMPARISON_TABLES'
- *   | 'LOSAT_NO_PAIR' | 'ANNOTATION_TABLE' | 'ANNOTATION_CROSSES_ORIGIN' | 'ANNOTATION_DRAWN_COORDINATES'
- *   | 'ANNOTATIONS_OUTSIDE'} kind
- * @property {number} count
- * @property {readonly string[]} items
- */
-
-/**
- * The derived drawing (`DerivedRegionDrawing`): its mode, its canonical
- * request as a Session stores a committed one, and, for each resource ID the
- * request names, the source drawing's resource whose file it reads.
- * @typedef {object} DerivedRegionDrawing
- * @property {'derived'} status
- * @property {'circular' | 'linear'} mode
- * @property {CanonicalRenderRequest} renderRequest
- * @property {Readonly<Record<string, string>>} resourceSources
- * @property {readonly RegionReturnedSize[]} returnedToAuto
- * @property {readonly RegionNotCarriedItem[]} notCarried
- */
+/** @import { DerivedRegionDrawing } from '../contracts/locate.generated.js' */
 
 /**
  * A refused region (`RefusedRegionDrawing`): a region of a linear record whose

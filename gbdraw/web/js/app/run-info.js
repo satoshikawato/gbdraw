@@ -56,8 +56,8 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
  *   The resource ids that one record needs, in source order, the CLI option and the fallback file extension of each,
  *   and the format its records are counted in.
  * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
- * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} LosatRuntimeRecord
- * @typedef {LosatRuntimeRecord & { text: string, textParts: ErrorTextPart[] }} LosatRuntimeLine A runtime record and its line: the English `text` and the parts it is made of.
+ * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} SavedLosatRuntime
+ * @typedef {SavedLosatRuntime & { text: string, textParts: ErrorTextPart[] }} LosatRuntimeLine A runtime record and its line: the English `text` and the parts it is made of.
  * @typedef {object} SourceRecipe
  * @property {boolean} available
  * @property {'circular' | 'linear'} mode
@@ -2243,7 +2243,7 @@ const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI 
 // One line per search runtime: program, runtime kind, version and source, plus
 // the executable path that CLI Sessions record (design D9/D10).
 /**
- * @param {LosatRuntimeRecord} runtime
+ * @param {SavedLosatRuntime} runtime
  * @returns {ErrorTextPart[]}
  */
 const losatRuntimeParts = ({ program, kind, version, source, path }) => {

@@ -9,7 +9,8 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { DerivedRegionDrawing, RefusedRegionDrawing, RegionNotCarriedItem, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
+/** @import { DerivedRegionDrawing, NotCarriedItem } from '../contracts/locate.generated.js' */
+/** @import { RefusedRegionDrawing, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
 /** @import { IdentityRequestRecord, RecordIdentitySources } from '../services/record-draw-selection.js' */
 
@@ -155,7 +156,7 @@ export const adaptableSettingLabel = (mode, setting) => {
  * `NotCarriedKind`; wording owner); a kind worded per mode is keyed,
  * as `ADAPTABLE_SETTING_TEXT` is, by the new drawing's mode. The other mode's
  * settings are those of the mode the new drawing is not.
- * @type {Readonly<Record<RegionNotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
+ * @type {Readonly<Record<NotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
  */
 const NOT_CARRIED_TEXT = Object.freeze({
   OTHER_MODE_SETTINGS: Object.freeze({
@@ -178,7 +179,7 @@ const NOT_CARRIED_TEXT = Object.freeze({
 /**
  * A not-carried line in the UI language, as a drawing of `mode` words it.
  * @param {DerivedRegionDrawing['mode']} mode
- * @param {RegionNotCarriedItem['kind']} kind
+ * @param {NotCarriedItem['kind']} kind
  * @returns {string}
  */
 export const notCarriedLine = (mode, kind) => {
@@ -191,6 +192,19 @@ const shownValue = (value) => {
   if (value === null || value === undefined) return t('Auto');
   return typeof value === 'number' ? formatGroupedNumber(value) : String(value);
 };
+
+/**
+ * What a derived drawing's dialog lists: the sizes that return to Auto and the lines of what is not carried.
+ * New drawing from a region and Find in other files word them alike.
+ * @param {Pick<DerivedRegionDrawing, 'mode' | 'returnedToAuto' | 'notCarried'>} derived
+ * @returns {Pick<RegionDialogView, 'returnedToAuto' | 'notCarried'>}
+ */
+export const derivedDrawingNotes = ({ mode, returnedToAuto, notCarried }) => ({
+  returnedToAuto: returnedToAuto.map((item) => ({
+    setting: item.setting, label: adaptableSettingLabel(mode, item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
+  })),
+  notCarried: notCarried.map((item) => notCarriedLine(mode, item.kind))
+});
 
 /** @param {string} text @returns {number | null} */
 const wholeNumber = (text) => (/^\s*[1-9]\d*\s*$/.test(text) ? Number(text) : null);
@@ -314,14 +328,7 @@ export const createRegionDrawing = ({
       if (mine !== request) return undefined;
       // The reason alone, from the wording owner of diagnostic reasons: the dialog's rows are the region.
       if (offer.status === 'refused') return showStatus('refused', tm(/** @type {string} */ (reasonText(offer.reason))));
-      Object.assign(dialog, {
-        status: 'derived',
-        message: '',
-        returnedToAuto: offer.returnedToAuto.map((item) => ({
-          setting: item.setting, label: adaptableSettingLabel(offer.mode, item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
-        })),
-        notCarried: offer.notCarried.map((item) => notCarriedLine(offer.mode, item.kind))
-      });
+      Object.assign(dialog, { status: 'derived', message: '', ...derivedDrawingNotes(offer) });
       create = offer.create;
     } catch (error) {
       if (mine !== request) return undefined;

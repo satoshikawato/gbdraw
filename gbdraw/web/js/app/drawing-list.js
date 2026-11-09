@@ -104,6 +104,12 @@ const copyNamePhrase = (name, number) => (
   number > 1 ? t('{name} copy {number}', { name, number }) : t('{name} copy', { name })
 );
 
+/**
+ * Where a new drawing's tab goes: right after the tab of `after`, or at the end of the tabs without it.
+ * @param {readonly DrawingTab[]} tabs @param {DrawingId | null} after
+ */
+const newTabIndex = (tabs, after) => (after === null ? tabs.length : tabs.findIndex((tab) => tab.id === after) + 1);
+
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
@@ -127,14 +133,15 @@ export const createDrawingList = ({
   };
 
   /**
-   * A new drawing of `mode` at the end of the tabs, with the ID and name of
+   * A new drawing of `mode` at the end of the tabs (or after the tab of `after`), with the ID and name of
    * its kind (`linear-2` is "Linear 2") and an empty History, shown (R11).
    * Its Undo shows the drawing shown before; its Redo shows it again (R16-2).
    * @param {string} label The project step's.
    * @param {ModeProfileName} mode
    * @param {(drawingId: DrawingId) => DrawingState} make The new drawing's state.
+   * @param {DrawingId | null} [after]
    */
-  const addNewDrawing = (label, mode, make) => unlessBusy(() => {
+  const addNewDrawing = (label, mode, make, after = null) => unlessBusy(() => {
     const before = shownDrawingId();
     const drawingId = allocateDrawingId(mode, drawingTabs().map((tab) => tab.id));
     const drawing = make(drawingId);
@@ -145,12 +152,12 @@ export const createDrawingList = ({
     let slot = null;
     runListStep(label, {
       apply: () => {
-        addDrawing(drawing, name, drawingTabs().length);
+        addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
         addDrawingHistory(drawingId);
         showDrawingNow(drawingId);
       },
       redo: () => {
-        addDrawing(drawing, name, drawingTabs().length);
+        addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
         if (slot) putSlot(slot);
         showDrawingNow(drawingId);
       },
@@ -220,17 +227,16 @@ export const createDrawingList = ({
   };
 
   /**
-   * A new drawing from a region of a drawing (PD-OI-090 〔作成〕(4)): the
-   * derived drawing read as Load reads a stored one, added as New adds one.
-   * The source drawing does not change.
-   * @param {DrawingId} sourceId The drawing the region was chosen in.
-   * @param {RegionDerivation} derivation
+   * A new drawing from a region of a drawing (PD-OI-090 〔作成〕(4)), or of Find in other files (`search`, PD-OI-123:
+   * right after the source's tab): the derived drawing read as Load reads a stored one, added as New adds one. The
+   * source drawing (where the region was chosen) does not change.
+   * @param {DrawingId} sourceId @param {RegionDerivation} derivation @param {'region' | 'search'} [kind]
    * @returns {Promise<DrawingListOutcome>}
    */
-  const newDrawingFromRegion = async (sourceId, derivation) => {
+  const newDrawingFromRegion = async (sourceId, derivation, kind = 'region') => {
     tabIndexOf('newDrawingFromRegion', sourceId);
     const make = await regionDrawing(derivation);
-    return addNewDrawing('New drawing from a region', derivation.derived.mode, make);
+    return addNewDrawing(kind === 'region' ? 'New drawing from a region' : 'Find in other files', derivation.derived.mode, make, kind === 'region' ? null : sourceId);
   };
 
   /**

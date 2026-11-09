@@ -46,10 +46,13 @@ over a sorted sequence):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 import io
 import math
-from typing import Literal, Mapping, NamedTuple, Sequence, TypedDict, Union, cast, get_args
+import types
+from typing import (
+    Literal, Mapping, NamedTuple, Sequence, TypedDict, Union, cast, get_args, get_origin, get_type_hints, is_typeddict,
+)
 
 from Bio.SeqRecord import SeqRecord
 
@@ -97,6 +100,13 @@ LocateWarningCode = Literal[
     "TARGET_NOT_ANNOTATED",
 ]
 LocateArg = Union[str, int, float]
+# Why a window cannot be a reference window or a window of the drawing (:class:`LocateWindowRefusal`).
+LocateWindowRefusalReason = Literal[
+    "WINDOW_PAST_END",
+    "WINDOW_ACROSS_LINEAR_ORIGIN",
+    "WINDOWS_OVERLAP",
+    "WINDOW_WITHOUT_CDS",
+]
 
 # A gene found with at least this share of its query aligned, away from a record end, is complete.
 COMPLETE_QUERY_COVERAGE = 0.9
@@ -110,6 +120,43 @@ def _require(condition: bool, message: str) -> None:
 
 def _positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+class LocateWindowRefusal(ValidationError):
+    """A window a locate plan cannot take, by the rule it breaks (``reason``), with the window's span, and for a
+    window of a File the File key and column that name it (``place``)."""
+
+    def __init__(
+        self, message: str, reason: LocateWindowRefusalReason, start: int, end: int,
+        place: tuple[str, int] | None = None,
+    ) -> None:
+        super().__init__(message, diagnostic=_INVALID)
+        self.reason: LocateWindowRefusalReason = reason
+        self.start = start
+        self.end = end
+        self.place = place
+
+
+def _refuse_window(condition: bool, message: str, reason: LocateWindowRefusalReason, window: RecordWindow) -> None:
+    if not condition:
+        raise LocateWindowRefusal(message, reason, window.start, window.end)
+
+
+def check_record_window(window: RecordWindow, record_length: int, circular: bool) -> None:
+    """Refuse a window that runs past the record end, or that crosses the origin of a linear record."""
+
+    _refuse_window(
+        max(window.start, window.end) <= record_length,
+        f"Reference window {window.start}-{window.end} runs past the record end ({record_length}).",
+        "WINDOW_PAST_END",
+        window,
+    )
+    _refuse_window(
+        circular or window.start <= window.end,
+        f"Reference window {window.start}-{window.end} crosses the origin of a linear record.",
+        "WINDOW_ACROSS_LINEAR_ORIGIN",
+        window,
+    )
 
 
 def locate_default_thresholds(program: LocateProgramName) -> ComparisonThresholds:
@@ -132,7 +179,8 @@ class ReferenceCds:
 
     ``start > end`` is a CDS across the origin of a circular record.
     ``protein_id`` names its query in the search rows; ``length_aa`` and
-    ``length_nt`` are its protein and coding lengths.
+    ``length_nt`` are its protein and coding lengths; ``source_protein_id`` is
+    the record's own ``/protein_id`` qualifier, if any.
     """
 
     protein_id: str
@@ -144,12 +192,14 @@ class ReferenceCds:
     strand: Strand
     length_aa: int
     length_nt: int
+    source_protein_id: str | None = None
 
     @property
     def name(self) -> str:
-        """The name a report gives the CDS: its gene name, else its locus tag, else its protein ID."""
+        """The name a report gives the CDS: its gene name, else its locus tag, else the record's protein ID, else
+        gbdraw's query ID."""
 
-        return self.gene or self.locus_tag or self.protein_id
+        return self.gene or self.locus_tag or self.source_protein_id or self.protein_id
 
     def __post_init__(self) -> None:
         _require(bool(str(self.protein_id).strip()), "A reference CDS needs a protein ID.")
@@ -251,17 +301,13 @@ def locate_reference(
     )
     arcs = [_arc(window.start, window.end, record_length) for window in ordered]
     for window in ordered:
-        _require(
-            max(window.start, window.end) <= record_length,
-            f"Reference window {window.start}-{window.end} runs past the record end ({record_length}).",
-        )
-        _require(
-            circular or window.start <= window.end,
-            f"Reference window {window.start}-{window.end} crosses the origin of a linear record.",
-        )
+        check_record_window(window, record_length, circular)
     for index, arc in enumerate(arcs):
-        for other in arcs[index + 1:]:
-            _require(not _overlaps(arc, other, record_length), "Reference windows overlap.")
+        for other_index, other in enumerate(arcs[index + 1:], start=index + 1):
+            _refuse_window(
+                not _overlaps(arc, other, record_length), "Reference windows overlap.", "WINDOWS_OVERLAP",
+                ordered[other_index],
+            )
     genes: list[ReferenceGene] = []
     cut: dict[str, ReferenceCds] = {}
     for window_index, (window, arc) in enumerate(zip(ordered, arcs)):
@@ -272,7 +318,9 @@ def locate_reference(
                 inside.append(item)
             elif _overlaps(arc, span, record_length):
                 cut[item.protein_id] = item
-        _require(bool(inside), f"Reference window {window.start}-{window.end} holds no whole CDS.")
+        _refuse_window(
+            bool(inside), f"Reference window {window.start}-{window.end} holds no whole CDS.", "WINDOW_WITHOUT_CDS", window
+        )
         # Positions along the window: a CDS after the origin follows the record end.
         inside.sort(key=lambda item: (item.start + (record_length if item.start < window.start else 0), item.protein_id))
         if window.reverse_complement:
@@ -405,13 +453,14 @@ class PlannedWindow:
     (0 when they abut), else None. ``ref_span`` is the first and last
     reference coordinate of its genes. ``touches_start`` and ``touches_end``
     say the window reaches the start or end of a linear record (a contig
-    end); a circular record has none.
+    end); a circular record (``record_circular``) has none.
     """
 
     record_key: str
     record_id: str
     record_index: int
     record_length: int
+    record_circular: bool
     window: RecordWindow
     selected: bool
     reason: CandidateReason | None
@@ -473,6 +522,14 @@ class LocatePlan:
         assert isinstance(value, dict)
         return cast("LocatePlanJson", value)
 
+    @classmethod
+    def from_json(cls, value: LocatePlanJson) -> LocatePlan:
+        """The plan that :meth:`to_json` wrote as ``value``; a value of another shape is refused."""
+
+        plan = _from_json(cls, value, "plan")
+        assert isinstance(plan, LocatePlan)
+        return plan
+
 
 # The plan as JSON (``LocatePlan.to_json``): one object type per dataclass, with its field names.
 
@@ -494,6 +551,7 @@ class ReferenceCdsJson(TypedDict):
     strand: Strand
     length_aa: int
     length_nt: int
+    source_protein_id: str | None
 
 
 class ReferenceGeneJson(TypedDict):
@@ -550,6 +608,7 @@ class PlannedWindowJson(TypedDict):
     record_id: str
     record_index: int
     record_length: int
+    record_circular: bool
     window: RecordWindowJson
     selected: bool
     reason: CandidateReason | None
@@ -615,6 +674,138 @@ def _json_value(value: object) -> object:
     if isinstance(value, (tuple, list)):
         return [_json_value(item) for item in value]
     return value
+
+
+def _from_json(hint: object, value: object, path: str) -> object:
+    """A value of type ``hint`` from the JSON :func:`_json_value` wrote for it."""
+
+    if hint is LocateWarning:
+        _require(isinstance(value, Mapping) and isinstance(value.get("args"), Mapping), f"{path} is no locate warning.")
+        assert isinstance(value, Mapping)
+        return LocateWarning(
+            cast(LocateWarningCode, _from_json(LocateWarningCode, value.get("code"), f"{path}.code")),
+            tuple((str(key), cast(LocateArg, item)) for key, item in value["args"].items()),
+        )
+    if isinstance(hint, type) and is_dataclass(hint):
+        _require(isinstance(value, Mapping), f"{path} must be an object.")
+        assert isinstance(value, Mapping)
+        hints = get_type_hints(hint)
+        names = [item.name for item in fields(hint) if item.init]
+        _require(sorted(value) == sorted(names), f"{path} must hold the fields {sorted(names)}.")
+        return hint(**{name: _from_json(hints[name], value[name], f"{path}.{name}") for name in names})
+    if isinstance(hint, type) and is_typeddict(hint):
+        _require(isinstance(value, Mapping), f"{path} must be an object.")
+        return dict(cast(Mapping[str, object], value))
+    origin, args = get_origin(hint), get_args(hint)
+    if origin in (Union, types.UnionType):
+        if value is None and type(None) in args:
+            return None
+        [branch] = [item for item in args if item is not type(None)]
+        return _from_json(branch, value, path)
+    if origin is Literal:
+        _require(value in args, f"{path} must be one of {list(args)}.")
+        return value
+    if origin is tuple:
+        _require(isinstance(value, list), f"{path} must be a list.")
+        assert isinstance(value, list)
+        if len(args) == 2 and args[1] is Ellipsis:
+            return tuple(_from_json(args[0], item, f"{path}[{index}]") for index, item in enumerate(value))
+        _require(len(value) == len(args), f"{path} must hold {len(args)} items.")
+        return tuple(_from_json(kind, item, f"{path}[{index}]") for index, (kind, item) in enumerate(zip(args, value)))
+    if hint is float:
+        _require(isinstance(value, (int, float)) and not isinstance(value, bool), f"{path} must be a number.")
+        return float(cast(float, value))
+    if hint in (int, str, bool):
+        _require(type(value) is hint, f"{path} must be of type {cast(type, hint).__name__}.")
+        return value
+    raise TypeError(f"No JSON reading is defined for {hint!r}.")
+
+
+# Choices on a plan: the windows the user keeps and their edits.
+
+
+@dataclass(frozen=True)
+class LocateWindowChoice:
+    """A window the user keeps for the drawing: its File, its ``column`` among the File's windows and candidates
+    (its identity in the plan), and its span and orientation (the search's, or the user's edit).
+
+    ``start > end`` is a window across the origin of a circular record.
+    """
+
+    file_key: str
+    column: int
+    start: int
+    end: int
+    reverse_complement: bool
+
+
+def _chosen_window(planned: PlannedWindow, choice: LocateWindowChoice | None) -> PlannedWindow:
+    if choice is None:
+        return replace(planned, selected=False, gap_to_next_same_record=None)
+    window = RecordWindow(choice.start, choice.end, choice.reverse_complement, planned.window.column)
+    try:
+        check_record_window(window, planned.record_length, planned.record_circular)
+    except LocateWindowRefusal as refusal:
+        raise LocateWindowRefusal(
+            str(refusal), refusal.reason, refusal.start, refusal.end, (choice.file_key, choice.column)
+        ) from None
+    touches_start, touches_end = _record_ends(window, planned.record_length, planned.record_circular)
+    return replace(
+        planned,
+        window=window,
+        selected=True,
+        gap_to_next_same_record=None,
+        touches_start=touches_start,
+        touches_end=touches_end,
+        across_origin=window.crosses_origin,
+    )
+
+
+def _genes_warnings(warnings: Sequence[LocateWarning], coverage: GeneCoverage, has_windows: bool) -> tuple[LocateWarning, ...]:
+    """The search's warnings with the gene counts of ``coverage`` (no gene warnings for a File without windows)."""
+
+    kept = [warning for warning in warnings if warning.code not in ("GENES_PARTIAL", "GENES_ABSENT")]
+    if has_windows and coverage.partial:
+        kept.append(LocateWarning("GENES_PARTIAL", (("count", len(coverage.partial)),)))
+    if has_windows and coverage.absent:
+        kept.append(LocateWarning("GENES_ABSENT", (("count", len(coverage.absent)),)))
+    return tuple(kept)
+
+
+def choose_locate_windows(plan: LocatePlan, choices: Sequence[LocateWindowChoice]) -> LocatePlan:
+    """``plan`` with the windows the user keeps: each window of ``choices`` is selected with its span and
+    orientation; every other window of the plan is not. A window across the origin of a linear record, or past
+    its end, is refused (:class:`LocateWindowRefusal`).
+
+    A window keeps the genes the search found in it (an edit does not count them again, PD-OI-123); ``reason``
+    stays the search's. Coverage and the gene warnings follow the windows kept.
+    """
+
+    by_place = {(choice.file_key, choice.column): choice for choice in choices}
+    _require(len(by_place) == len(choices), "A locate window is chosen twice.")
+    columns = {(file.file_key, item.window.column) for file in plan.files for item in (*file.windows, *file.candidates)}
+    _require(set(by_place) <= columns, "A chosen locate window is not in the plan.")
+    files = []
+    for file in plan.files:
+        every = sorted((*file.windows, *file.candidates), key=lambda item: item.window.column or 0)
+        chosen = [_chosen_window(item, by_place.get((file.file_key, item.window.column or 0))) for item in every]
+        selected = [item for item in chosen if item.selected]
+        gaps = {
+            id(item): _gap(item.window, following.window)
+            for item, following in zip(selected, selected[1:])
+            if item.record_index == following.record_index
+        }
+        chosen = [replace(item, gap_to_next_same_record=gaps.get(id(item))) for item in chosen]
+        windows = tuple(item for item in chosen if item.selected)
+        coverage = _coverage(plan.reference, windows)
+        files.append(replace(
+            file,
+            windows=windows,
+            candidates=tuple(item for item in chosen if not item.selected),
+            coverage=coverage,
+            warnings=_genes_warnings(file.warnings, coverage, bool(windows)),
+        ))
+    return replace(plan, files=tuple(files))
 
 
 # Algorithm.
@@ -1030,16 +1221,22 @@ def _select(
     return chosen, capped
 
 
-def _gap(piece: _Piece, following: _Piece) -> int | None:
+def _gap(first: RecordWindow, second: RecordWindow) -> int | None:
     """The bases left out between two windows of one record (0 when they abut), or None."""
 
-    if piece.across_origin or following.across_origin:
+    if first.crosses_origin or second.crosses_origin:
         return None
-    if piece.end < following.start:
-        return following.start - piece.end - 1
-    if following.end < piece.start:
-        return piece.start - following.end - 1
+    if first.end < second.start:
+        return second.start - first.end - 1
+    if second.end < first.start:
+        return first.start - second.end - 1
     return None
+
+
+def _record_ends(window: RecordWindow, length: int, circular: bool) -> tuple[bool, bool]:
+    """Whether ``window`` reaches the start and the end of its record; a circular record has none (D-28)."""
+
+    return (not circular and window.start == 1, not circular and window.end == length)
 
 
 def _planned_windows(
@@ -1053,24 +1250,26 @@ def _planned_windows(
     gaps: dict[int, int | None] = {}
     for piece, following in zip(selected, selected[1:]):
         if piece.cluster.record.index == following.cluster.record.index:
-            gaps[id(piece)] = _gap(piece, following)
+            gaps[id(piece)] = _gap(RecordWindow(piece.start, piece.end), RecordWindow(following.start, following.end))
     by_order = {gene.order: gene for gene in reference.genes}
     planned = []
     for column, piece in enumerate(ordered, start=1):
         record = piece.cluster.record
         genes = [by_order[anchor.order].cds for anchor in piece.anchors]
+        window = RecordWindow(piece.start, piece.end, piece.reverse, column)
+        touches_start, touches_end = _record_ends(window, record.length, record.circular)
         planned.append(PlannedWindow(
             record_key=record.record_key,
             record_id=record.record_id,
             record_index=record.index,
             record_length=record.length,
-            window=RecordWindow(piece.start, piece.end, piece.reverse, column),
+            record_circular=record.circular,
+            window=window,
             selected=reasons[piece.cluster_rank] is None,
             reason=reasons[piece.cluster_rank],
             cluster=piece.cluster_rank + 1,
-            # A circular record has no ends (D-28).
-            touches_start=not record.circular and piece.start == 1,
-            touches_end=not record.circular and piece.end == record.length,
+            touches_start=touches_start,
+            touches_end=touches_end,
             across_origin=piece.across_origin,
             gap_to_next_same_record=gaps.get(id(piece)),
             evidence_bits=math.fsum(anchor.locus.bits for anchor in piece.anchors),
@@ -1396,6 +1595,7 @@ def locate_query(
         ReferenceCds(
             protein_id=protein.protein_id,
             locus_tag=protein.locus_tag,
+            source_protein_id=protein.source_protein_id,
             gene=protein.gene,
             product=protein.product,
             start=int(protein.arc[0]) + 1,
@@ -1582,12 +1782,15 @@ def prepare_locate_search(
     record_key: str,
     windows: Sequence[RecordWindow],
     program: LocateProgramName,
+    target_record_keys: Mapping[str, Mapping[int, str]] | None = None,
 ) -> LocateSearch:
     """Read the reference record (``record``: an ID or ``#index``, required when the file holds several) and its
     windows (none: the whole record), and plan one search per target File.
 
     ``record_key`` is the reference record's key in the drawing it was chosen from, so the new drawing carries
-    that record's edits (:func:`gbdraw.api.locate_drawing.derive_locate_request`).
+    that record's edits (:func:`gbdraw.api.locate_drawing.derive_locate_request`). ``target_record_keys`` gives,
+    by File key and 1-based record index, the keys that a target record has in that drawing; any other record of a
+    target File is ``FILE#index``.
     """
 
     chosen = _reference_record(read_locate_file(reference), record, reference.key)
@@ -1595,8 +1798,13 @@ def prepare_locate_search(
         chosen, file_key=reference.key, record_key=record_key,
         windows=windows or [RecordWindow(1, len(chosen.seq))], program=program,
     )
+    keys = target_record_keys or {}
     files = [
-        (file.key, records, [f"{file.key}#{index}" for index in range(1, len(records) + 1)])
+        (
+            file.key,
+            records,
+            [keys.get(file.key, {}).get(index, f"{file.key}#{index}") for index in range(1, len(records) + 1)],
+        )
         for file in targets
         for records in [read_locate_file(file)]
     ]
@@ -1638,6 +1846,11 @@ __all__ = [
     "GeneCoverage",
     "GeneStatus",
     "LOCATE_PROGRAMS",
+    "LocateWindowChoice",
+    "LocateWindowRefusal",
+    "LocateWindowRefusalReason",
+    "check_record_window",
+    "choose_locate_windows",
     "LocateDrawing",
     "LocateInputFile",
     "LocateSearch",
