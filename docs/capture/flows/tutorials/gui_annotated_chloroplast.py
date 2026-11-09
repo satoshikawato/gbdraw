@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from playwright.sync_api import BrowserType, Page, expect
+from playwright.sync_api import BrowserType, Locator, Page, expect
 
 from flows.how_to.tracks import (
     GUI_ANNOTATION_GENBANK_PATH,
@@ -329,7 +329,7 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
         run_track_slot_row_action(group, "Remove")
 
 
-def _rename_slot(page: Page, slot_id: str, new_id: str) -> Any:
+def _rename_slot(page: Page, slot_id: str, new_id: str) -> Locator:
     group = page.get_by_role("group", name=f"Circular track slot {slot_id}", exact=True)
     group.get_by_label(f"Circular track slot id {slot_id}", exact=True).fill(new_id)
     return page.get_by_role("group", name=f"Circular track slot {new_id}", exact=True)

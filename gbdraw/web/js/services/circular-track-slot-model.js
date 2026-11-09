@@ -533,9 +533,9 @@ export const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
   const resolvedAxis = axis === null ? inferLegacyAxisIndexFromFeature(slots, preset) : axis;
   slots.forEach((slot, index) => {
     if (!slot) return;
-    if (slot.renderer === 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay') return;
     if (effectiveSlotPlacement(slot, preset) === 'overlay') {
-      syncSlotPlacementFromSide(slot, 'overlay');
+      // An Overlay Annotations row keeps its own placement fields.
+      if (isOnAxisSlot(slot, preset)) syncSlotPlacementFromSide(slot, 'overlay');
       return;
     }
     if (slot.renderer === 'features' && featureLaneForSlot(slot, preset) === 'split') {

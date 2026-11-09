@@ -118,6 +118,7 @@ are unchanged.
 | `tobacco-chloroplast` | `manual-06-02-region-ring-slots.webp` | Recapture; recipe changed | Replay through step 6 in a 1400x2200 viewport (the sticky Generate button stays below the panel): annotations_2, features, plastome_regions, gc_content | Captured at DSF 3; accepted |
 | `tobacco-chloroplast` | `manual-06-03-regions-preview.webp` | Recapture | Replay through step 6; plastome_regions is row 2 | Captured at DSF 3; accepted |
 | `tobacco-chloroplast` | `manual-07-01-custom-track-slots.webp` | Recapture; recipe changed | Replay through step 7 (it read the Session's stack, whose listing order a reader no longer gets) in a 1400x2200 viewport: plastome_tint, features, plastome_regions, gc_content | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-08-01-layout-options.webp` | Recapture; crop changed (OV-3154) | Replay through step 8; the crop is the layout checkboxes alone, because the Figure size block now sits between the Layout heading and them and a heading-to-checkboxes crop grew to 942x1035 | Captured at DSF 3; accepted |
 | `tobacco-chloroplast` | `manual-07-02-tint-preview.webp`, `manual-08-02-chloroplast-preview.webp` | Keep | Replay through steps 7 and 8; the recapture differed only by encoding noise | Kept |
 
 ## Progressive HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 tutorials (2026-10-23)

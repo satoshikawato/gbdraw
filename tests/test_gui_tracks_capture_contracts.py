@@ -16,6 +16,9 @@ pytestmark = pytest.mark.recipe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "how_to" / "tracks.py"
+CHLOROPLAST_FLOW_PATH = (
+    REPO_ROOT / "docs" / "capture" / "flows" / "tutorials" / "gui_annotated_chloroplast.py"
+)
 INDEX_PATH = REPO_ROOT / "gbdraw" / "web" / "index.html"
 DEPTH_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "depth-1kb"
 TOBACCO_ROOT = (
@@ -151,10 +154,20 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         "region_start",
         "region_end",
         "part_",
-        # A second Annotations row would draw the set twice (OV-3151).
-        'select_option("annotations")',
     ):
         assert forbidden not in source
+
+
+@pytest.mark.parametrize(
+    "flow_path",
+    (FLOW_PATH, CHLOROPLAST_FLOW_PATH),
+    ids=("H-GUI-10", "T-GUI-05"),
+)
+def test_region_flows_edit_the_rows_use_custom_stack_gives_each_set(flow_path: Path) -> None:
+    source = flow_path.read_text(encoding="utf-8")
+    # Use custom stack already gives each region set a row; adding another
+    # Annotations row draws that set twice (OV-3151).
+    assert 'select_option("annotations")' not in source
 
 
 def test_track_capture_accessibility_labels_are_part_of_the_public_ui() -> None:

@@ -394,7 +394,7 @@ test('circular: Reset to preset keeps the Depth row while Show Depth is off', ()
 });
 
 test('circular: putting the features on the Axis keeps an Overlay Annotations row on them as it is', () => {
-  // The tint row Use custom stack gives a set of highlights sits right after the features it covers.
+  // The tint row Use custom stack gives a set of highlights is listed just above the features it covers.
   const tint = circularRow('annotations_2', 'annotations', { set_id: 'tint', marks: ['highlight'], anchor_slot: 'features',
     layer: 'underlay', cover_anchor: true, padding_px: 0 }, 'overlay');
   tint.z = -1;

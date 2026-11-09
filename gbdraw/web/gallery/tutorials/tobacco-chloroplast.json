@@ -538,7 +538,7 @@
           [
             "plastome_regions",
             "Annotations",
-            "Inside",
+            "Inside axis",
             "0.65 ×R",
             "20 px",
             "Annotation set: plastome_regions; Show annotation labels: on; Overflow: Compress; Padding: 1; Inner and Outer gap: 1"
@@ -546,7 +546,7 @@
           [
             "gc_content",
             "Dinucleotide content",
-            "Inside",
+            "Inside axis",
             "0.56 ×R",
             "0.08 ×R",
             "Dinucleotide: GC"
@@ -892,7 +892,7 @@
           [
             "plastome_tint",
             "Annotations",
-            "Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Extend to: gc_content; Show annotation labels: off; Padding: 0"
+            "Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Cover anchor: on; Extend to: gc_content; Show annotation labels: off; Padding: 0"
           ]
         ]
       },
@@ -1172,11 +1172,10 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options'; card.scrollIntoView({ block: 'start' });"
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!options) throw new Error('Circular layout options not found.'); options.dataset.capture = 'chloroplast-layout-options'; options.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": [
-              "[data-capture='chloroplast-layout-summary']",
               "[data-capture='chloroplast-layout-options']"
             ],
             "cropPadding": 14,

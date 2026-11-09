@@ -922,13 +922,7 @@ export const createCircularTrackSlotEditor = ({
         ? /** @type {number} */ (preferredInsertIndex)
         : axis;
       const insideFloor = committed.reduce((floor, slot, index) => {
-        if (
-          index < axis ||
-          slot?.renderer === 'annotations' ||
-          effectiveSlotPlacement(slot, drawing.form.track_type) !== 'overlay'
-        ) {
-          return floor;
-        }
+        if (index < axis || !isOnAxisSlot(slot, drawing.form.track_type)) return floor;
         return Math.max(floor, index + 1);
       }, axis);
       const insertIndex = Math.max(
