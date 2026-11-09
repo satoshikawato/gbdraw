@@ -228,3 +228,27 @@ def test_the_new_drawing_draws_the_kept_windows_from_the_source_drawing(tmp_path
         "status": "refused", "reason": "WINDOW_ACROSS_LINEAR_ORIGIN", "start": 3000, "end": 100,
         "fileKey": "b", "column": kept[2]["column"],
     }
+
+
+def test_a_span_picked_in_a_window_of_a_record_drawn_in_several_is_a_reference_of_that_record(tmp_path: Path) -> None:
+    # The Region popup names the picked span by the drawn unit's geometry entry: its record's key and the span in
+    # source coordinates. The dialog lists the record under the same key and takes the span as the reference.
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.api.requests import GenBankInputSource as Source
+    from gbdraw.io.regions import RecordWindow
+
+    mito = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    request = LinearDiagramRequest(records=(
+        RecordInput(Source(mito), windows=(RecordWindow(100, 3000), RecordWindow(5000, 9000)), record_key="mito"),
+        RecordInput(Source(mito), record_key="other"),
+    ))
+    geometry = plan_linear_request(request).build().drawing._gbdraw_track_slot_geometry["records"]
+    units = [(entry["recordKey"], entry.get("windowIndex")) for entry in geometry]
+    assert units[:2] == [("mito", 0), ("mito", 1)]
+    encoded = encode_canonical_request(request)
+    source = (encoded.payload, {resource.resource_id: str(resource.source_path) for resource in encoded.resources})
+
+    files = _call("files", source, tmp_path, {})
+    assert [record["recordKey"] for record in files["files"][0]["records"]] == ["mito"]
+    ready = _call("reference", source, tmp_path, {"recordKey": units[1][0], "windows": _windows((5200, 8800))})
+    assert (ready["status"], ready["fileKey"], ready["recordId"]) == ("ready", "mito", "NC_012920.1")

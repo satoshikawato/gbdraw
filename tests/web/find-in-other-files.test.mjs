@@ -136,6 +136,16 @@ test('the dialog opens on the drawing\'s Files with the picked span as the refer
   assert.deepEqual(calls.steps.map((step) => step.step), ['files', 'reference']);
 });
 
+test('a span picked across the origin of a circular record opens as a window across the origin', async () => {
+  // The Region popup gives the span in source coordinates on the source strand, so Start > End is a span across the
+  // origin (a window of a record drawn in several windows included); the row reads it so, not as reverse-complemented.
+  const { owner, calls } = harness({ files: [{ fileKey: 'ref', records: [record('ref', 'REF', 12000, true)] }, ...FILES.slice(1)] });
+  await owner.open({ recordKey: 'ref', start: 11001, end: 500 });
+  assert.deepEqual(owner.dialog.rows.map(({ recordKey, start, end, acrossOrigin }) => [recordKey, start, end, acrossOrigin]),
+    [['ref', '11001', '500', true]]);
+  assert.deepEqual(calls.steps.at(-1).reference.windows, [{ start: 11001, end: 500, reverseComplement: false }]);
+});
+
 test('the Drawing menu opens one empty row, and Search says why it is disabled', async () => {
   const { owner } = harness();
   await owner.open();

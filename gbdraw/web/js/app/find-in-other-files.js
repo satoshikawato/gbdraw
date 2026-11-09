@@ -243,12 +243,17 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
       if (current(mine)) fail(error);
     }
   };
-  /** @param {{ recordKey: string, start: number, end: number } | null} region */
+  /**
+   * The row of the picked span: the Region popup names its record by key and gives the span in source coordinates on
+   * the source strand, so on a circular record a Start after the End is a span across the origin.
+   * @param {{ recordKey: string, start: number, end: number } | null} region
+   */
   const firstRow = (region) => {
-    const picked = region !== null && recordOf(dialog, region.recordKey) !== null;
+    const found = region === null ? null : recordOf(dialog, region.recordKey);
+    const picked = found ? region : null;
     dialog.rows = [{
-      id: ++rowId, recordKey: picked ? region.recordKey : '', start: picked ? String(region.start) : '',
-      end: picked ? String(region.end) : '', acrossOrigin: false
+      id: ++rowId, recordKey: picked ? picked.recordKey : '', start: picked ? String(picked.start) : '',
+      end: picked ? String(picked.end) : '', acrossOrigin: Boolean(picked && found?.record.circular && picked.start > picked.end)
     }];
     return checkReference();
   };
